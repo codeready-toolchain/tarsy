@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package llm.v1;
+
+option go_package = "github.com/codeready-toolchain/tarsy/proto;llmv1";
+
+// LLMService provides gRPC interface to Python LLM clients
+service LLMService {
+  // GenerateWithThinking streams Gemini native thinking responses
+  rpc GenerateWithThinking(ThinkingRequest) returns (stream ThinkingChunk);
+}
+
+// ThinkingRequest contains the conversation and configuration
+message ThinkingRequest {
+  string session_id = 1;
+  repeated Message messages = 2;
+  string model = 3;
+  optional float temperature = 4;
+  optional int32 max_tokens = 5;
+}
+
+// Message represents a single conversation message
+message Message {
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_SYSTEM = 1;
+    ROLE_USER = 2;
+    ROLE_ASSISTANT = 3;
+  }
+  Role role = 1;
+  string content = 2;
+}
+
+// ThinkingChunk is a streaming response chunk
+message ThinkingChunk {
+  oneof chunk_type {
+    ThinkingContent thinking = 1;
+    ResponseContent response = 2;
+    ErrorContent error = 3;
+  }
+}
+
+// ThinkingContent contains thinking/reasoning text
+message ThinkingContent {
+  string content = 1;
+  bool is_complete = 2;
+}
+
+// ResponseContent contains the actual response text
+message ResponseContent {
+  string content = 1;
+  bool is_complete = 2;
+  bool is_final = 3;  // No more tool calls expected
+}
+
+// ErrorContent contains error information
+message ErrorContent {
+  string message = 1;
+  bool retryable = 2;
+}

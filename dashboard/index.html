@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARSy PoC</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TARSy Go-Python PoC</h1>
+            <div class="status" id="ws-status">Disconnected</div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sessions list -->
+            <aside class="sessions-panel">
+                <h2>Sessions</h2>
+                <div id="sessions-list"></div>
+            </aside>
+
+            <!-- Chat area -->
+            <main class="chat-area">
+                <div class="messages" id="messages"></div>
+                
+                <form class="input-form" id="alert-form">
+                    <input 
+                        type="text" 
+                        id="message-input" 
+                        placeholder="Enter your message..." 
+                        required
+                        autocomplete="off"
+                    >
+                    <button type="submit">Send</button>
+                </form>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
