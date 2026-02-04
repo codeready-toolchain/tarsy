@@ -2,13 +2,20 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/llm"
 	"github.com/codeready-toolchain/tarsy/pkg/session"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	// AlertProcessingTimeout is the maximum time allowed for processing an alert
+	AlertProcessingTimeout = 10 * time.Second // Set to 10s for testing
 )
 
 // Server represents the HTTP server
@@ -60,9 +67,14 @@ func (s *Server) CreateAlert(c *gin.Context) {
 
 // processSession processes a session with LLM streaming
 func (s *Server) processSession(sess *session.Session) {
-	ctx := context.Background()
+	// Create context with timeout (also allows manual cancellation)
+	ctx, cancel := context.WithTimeout(context.Background(), AlertProcessingTimeout)
+	defer cancel()
 
-	log.Printf("Starting LLM processing for session %s", sess.ID)
+	// Store cancel function for manual cancellation
+	sess.SetCancelFunc(cancel)
+
+	log.Printf("Starting LLM processing for session %s (timeout: %v)", sess.ID, AlertProcessingTimeout)
 	sess.SetStatus(session.StatusProcessing)
 
 	// Broadcast status update
@@ -79,7 +91,28 @@ func (s *Server) processSession(sess *session.Session) {
 		select {
 		case chunk, ok := <-chunks:
 			if !ok {
-				// Stream closed
+				// Stream closed - check if it was due to timeout or cancellation
+				if ctx.Err() == context.DeadlineExceeded {
+					timeoutMsg := fmt.Sprintf("Processing timed out after %v", AlertProcessingTimeout)
+					log.Printf("Session %s timed out", sess.ID)
+					sess.SetTimedOut(timeoutMsg)
+					s.wsHub.Broadcast("session.timeout", sess.ID, map[string]interface{}{
+						"message":   timeoutMsg,
+						"timeout_s": int(AlertProcessingTimeout.Seconds()),
+					})
+					return
+				}
+
+				if ctx.Err() == context.Canceled {
+					log.Printf("Session %s was cancelled by user", sess.ID)
+					sess.SetStatus(session.StatusCancelled)
+					s.wsHub.Broadcast("session.cancelled", sess.ID, map[string]interface{}{
+						"message": "Session was cancelled by user",
+					})
+					return
+				}
+
+				// Normal completion
 				if accumulatedResponse != "" {
 					sess.AddMessage(session.RoleAssistant, accumulatedResponse)
 					sess.SetStatus(session.StatusCompleted)
@@ -115,6 +148,29 @@ func (s *Server) processSession(sess *session.Session) {
 
 		case err := <-errs:
 			if err != nil {
+				// Check if it was a timeout
+				if ctx.Err() == context.DeadlineExceeded {
+					timeoutMsg := fmt.Sprintf("Processing timed out after %v", AlertProcessingTimeout)
+					log.Printf("Session %s timed out", sess.ID)
+					sess.SetTimedOut(timeoutMsg)
+					s.wsHub.Broadcast("session.timeout", sess.ID, map[string]interface{}{
+						"message":   timeoutMsg,
+						"timeout_s": int(AlertProcessingTimeout.Seconds()),
+					})
+					return
+				}
+
+				// Check if it was a manual cancellation
+				if ctx.Err() == context.Canceled {
+					log.Printf("Session %s was cancelled by user", sess.ID)
+					sess.SetStatus(session.StatusCancelled)
+					s.wsHub.Broadcast("session.cancelled", sess.ID, map[string]interface{}{
+						"message": "Session was cancelled by user",
+					})
+					return
+				}
+
+				// Other errors
 				log.Printf("Error processing session %s: %v", sess.ID, err)
 				sess.SetError(err.Error())
 				s.wsHub.Broadcast("session.error", sess.ID, map[string]interface{}{
@@ -143,6 +199,20 @@ func (s *Server) GetSession(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, sess.Clone())
+}
+
+// CancelSession handles POST /api/sessions/:id/cancel
+func (s *Server) CancelSession(c *gin.Context) {
+	sessionID := c.Param("id")
+
+	err := s.sessionMgr.Cancel(sessionID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("Cancelled session %s", sessionID)
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})
 }
 
 // Health handles GET /health

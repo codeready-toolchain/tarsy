@@ -39,6 +39,17 @@ Minimal HTML/CSS/JS interface.
 - Real-time streaming updates via WebSocket
 - Session list and message display
 - Auto-reconnection logic
+- Cancel button to stop active processing
+
+## Features
+
+- **Streaming**: Real-time thinking and response streaming from Gemini API
+- **Concurrent Sessions**: Handle multiple parallel LLM requests
+- **Cancellation**: Stop active processing via cancel button or API
+- **Timeout Protection**: Automatic timeout after 60 seconds to prevent runaway processing
+- **Clear Status Indicators**: Distinct visual status for cancelled vs timed-out vs failed sessions
+- **In-Memory Storage**: No database required for PoC
+- **WebSocket Fan-out**: Broadcast updates to all connected clients
 
 ## Prerequisites
 
@@ -146,6 +157,9 @@ curl http://localhost:8080/api/sessions
 
 # Get specific session
 curl http://localhost:8080/api/sessions/<session-id>
+
+# Cancel a processing session
+curl -X POST http://localhost:8080/api/sessions/<session-id>/cancel
 ```
 
 ### 3. WebSocket Testing

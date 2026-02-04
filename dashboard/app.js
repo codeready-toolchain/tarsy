@@ -111,6 +111,14 @@ class TARSyApp {
                 this.handleSessionError(message);
                 break;
                 
+            case 'session.cancelled':
+                this.handleSessionCancelled(message);
+                break;
+                
+            case 'session.timeout':
+                this.handleSessionTimeout(message);
+                break;
+                
             default:
                 console.log('Unknown message type:', message.type);
         }
@@ -128,6 +136,7 @@ class TARSyApp {
         if (session) {
             session.status = message.data.status;
             this.renderSessionsList();
+            this.updateCancelButton();
         }
     }
 
@@ -146,6 +155,7 @@ class TARSyApp {
             session.messages = message.data.messages;
             this.renderSessionsList();
             this.renderMessages();
+            this.updateCancelButton();
         }
     }
 
@@ -156,6 +166,28 @@ class TARSyApp {
             session.error = message.data.error;
             this.renderSessionsList();
             this.addMessage(message.session_id, 'system', `Error: ${message.data.error}`);
+            this.updateCancelButton();
+        }
+    }
+
+    handleSessionCancelled(message) {
+        const session = this.sessions.get(message.session_id);
+        if (session) {
+            session.status = 'cancelled';
+            this.renderSessionsList();
+            this.addMessage(message.session_id, 'system', '❌ Processing was cancelled by user');
+            this.updateCancelButton();
+        }
+    }
+
+    handleSessionTimeout(message) {
+        const session = this.sessions.get(message.session_id);
+        if (session) {
+            session.status = 'timed_out';
+            this.renderSessionsList();
+            const timeoutMsg = message.data.message || 'Processing timed out';
+            this.addMessage(message.session_id, 'system', `⏱️ ${timeoutMsg}`);
+            this.updateCancelButton();
         }
     }
 
@@ -190,6 +222,7 @@ class TARSyApp {
     setupEventListeners() {
         const form = document.getElementById('alert-form');
         const input = document.getElementById('message-input');
+        const cancelBtn = document.getElementById('cancel-btn');
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -223,6 +256,10 @@ class TARSyApp {
                 input.disabled = false;
                 input.focus();
             }
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            this.cancelCurrentSession();
         });
     }
 
@@ -272,6 +309,43 @@ class TARSyApp {
         this.currentSessionId = sessionId;
         this.renderSessionsList();
         this.renderMessages();
+        this.updateCancelButton();
+    }
+
+    async cancelCurrentSession() {
+        if (!this.currentSessionId) return;
+        
+        const session = this.sessions.get(this.currentSessionId);
+        if (!session || session.status !== 'processing') {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/sessions/${this.currentSessionId}/cancel`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to cancel session');
+            }
+
+            console.log('Cancelled session:', this.currentSessionId);
+        } catch (error) {
+            console.error('Error cancelling session:', error);
+            alert('Failed to cancel session: ' + error.message);
+        }
+    }
+
+    updateCancelButton() {
+        const cancelBtn = document.getElementById('cancel-btn');
+        const session = this.sessions.get(this.currentSessionId);
+        
+        // Only show cancel button for processing sessions
+        if (session && session.status === 'processing') {
+            cancelBtn.style.display = 'block';
+        } else {
+            cancelBtn.style.display = 'none';
+        }
     }
 
     renderMessages() {

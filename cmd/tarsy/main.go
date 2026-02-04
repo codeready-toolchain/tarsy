@@ -86,6 +86,7 @@ func main() {
 		apiGroup.POST("/alerts", server.CreateAlert)
 		apiGroup.GET("/sessions", server.ListSessions)
 		apiGroup.GET("/sessions/:id", server.GetSession)
+		apiGroup.POST("/sessions/:id/cancel", server.CancelSession)
 	}
 
 	// WebSocket endpoint

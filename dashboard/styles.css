@@ -123,6 +123,17 @@ header h1 {
     color: #991b1b;
 }
 
+.session-status.cancelled {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.session-status.timed_out {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
 .chat-area {
     flex: 1;
     display: flex;
@@ -186,6 +197,37 @@ header h1 {
 .message-content {
     line-height: 1.6;
     white-space: pre-wrap;
+}
+
+.controls {
+    padding: 12px 20px;
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid #e5e7eb;
+}
+
+.cancel-btn {
+    padding: 10px 20px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.cancel-btn:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+}
+
+.cancel-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
 }
 
 .input-form {

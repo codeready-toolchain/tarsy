@@ -91,3 +91,17 @@ func (m *Manager) Delete(sessionID string) error {
 	delete(m.sessions, sessionID)
 	return nil
 }
+
+// Cancel cancels a session's processing
+func (m *Manager) Cancel(sessionID string) error {
+	session, err := m.Get(sessionID)
+	if err != nil {
+		return err
+	}
+
+	if !session.Cancel() {
+		return fmt.Errorf("session cannot be cancelled (not processing or no cancel function)")
+	}
+
+	return nil
+}
