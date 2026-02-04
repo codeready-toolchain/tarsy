@@ -728,73 +728,63 @@ user_question (chat):
 
 ---
 
-### Q2: Alert Data Extraction for Query Performance
+### Q2: Alert Data Storage & Search
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- `alert_data` JSON blob contains everything
-- Queries like `WHERE alert_data->>'severity' = 'critical'` are slow
-- Dashboard filters have to do expensive JSON extraction
+**Context:**
+- Alert data is passed as-is to LLM (no parsing or structure required)
+- Need ability to search/filter by alert content in dashboard
+- No need for structured field extraction (severity, cluster, etc.)
 
-**Common Query Examples:**
-```sql
--- Slow (full table scan with JSON extraction):
-SELECT * FROM alert_sessions 
-WHERE alert_data->>'severity' = 'critical'
-  AND alert_data->>'cluster' = 'prod-us-east'
-  AND alert_data->>'namespace' LIKE 'app-%';
-```
+**Decision:**
 
-**Proposed Solution:**
-Extract commonly-queried fields to top-level columns:
 ```
 AlertSession:
-- alert_data          JSON      Keep full payload for completeness
-+ severity            *string   Indexed (critical, warning, info, etc.)
-+ cluster             *string   Indexed (prod-us-east, staging-eu, etc.)
-+ namespace           *string   Indexed
-+ alert_source        *string   Indexed (prometheus, kubernetes, custom)
-+ environment         *string   Indexed (prod, staging, dev)
-+ resource_type       *string   (pod, deployment, node, etc.)
-+ resource_name       *string
+- alert_data          TEXT      Raw alert string (as received)
 ```
 
-**Questions for You:**
+**Full-Text Search Implementation:**
+Use PostgreSQL's built-in full-text search with GIN index:
 
-**Q2.1**: What are the most common filters you use in the dashboard?
-List in order of frequency:
-1. 
-2. 
-3. 
-4. 
-5. 
+```sql
+-- Ent schema definition:
+CREATE INDEX idx_alert_sessions_fts 
+ON alert_sessions 
+USING GIN(to_tsvector('english', alert_data));
 
-**Answer:**
+-- Query examples:
+-- Simple keyword search:
+WHERE to_tsvector('english', alert_data) @@ to_tsquery('error');
 
----
+-- Boolean operators (AND, OR, NOT):
+WHERE to_tsvector('english', alert_data) @@ to_tsquery('error & critical');
+WHERE to_tsvector('english', alert_data) @@ to_tsquery('error | warning');
+WHERE to_tsvector('english', alert_data) @@ to_tsquery('error & !timeout');
 
-**Q2.2**: Which fields from `alert_data` do you search/filter by regularly?
-(e.g., severity, cluster, namespace, alert_type, etc.)
+-- Phrase search:
+WHERE to_tsvector('english', alert_data) @@ phraseto_tsquery('out of memory');
 
-**Answer:**
+-- With ranking:
+SELECT *, ts_rank(to_tsvector('english', alert_data), to_tsquery('error')) as rank
+FROM alert_sessions
+WHERE to_tsvector('english', alert_data) @@ to_tsquery('error')
+ORDER BY rank DESC;
+```
 
----
+**Benefits:**
+- ✅ Very fast even on large datasets (GIN index)
+- ✅ Supports stemming (search "running" finds "run", "runs", etc.)
+- ✅ Boolean operators (AND, OR, NOT)
+- ✅ Relevance ranking
+- ✅ No complex parsing or field extraction needed
+- ✅ Ent supports GIN indexes natively
 
-**Q2.3**: Is the alert structure consistent across different alert types?
-- All alerts have same structure? 
-- Each alert type has different fields?
-- Some common fields + type-specific fields?
-
-**Answer:**
-
----
-
-**Q2.4**: Do you need full-text search on alert content?
-- Search in alert messages/descriptions?
-- Search in final analysis text?
-
-**Answer:**
+**Optional Future Extension:**
+If specific structured filtering becomes important later, can add:
+```
++ alert_source        *string   Optional: filter by source (prometheus, k8s, custom)
+```
 
 ---
 
@@ -814,338 +804,219 @@ List in order of frequency:
 - ✅ Context generated on-demand from artifacts (Messages, TimelineEvents)
 - ✅ No large JSON blobs stored in Stage or AgentExecution tables
 
-**Original Proposed Solutions (no longer needed):**
-
-**Option A: Size Limit + Overflow Storage**
-```
-StageExecution:
-- stage_output        JSON      Limited to 10KB
-- stage_output_overflow_id *string  FK → BlobStorage (for >10KB outputs)
-
-BlobStorage:
-- blob_id             string    PK
-- content_type        string    'application/json'
-- size_bytes          int
-- storage_url         string    S3/MinIO URL or file path
-- created_at          time.Time
-```
-
-**Option B: Summary + Full Split**
-```
-StageExecution:
-- stage_output_summary  JSON    1KB limit, key results only
-- stage_output_full_url *string External storage URL
-```
-
-**Option C: Keep Current (No Limits)**
-- Accept that some rows will be large
-- Rely on PostgreSQL TOAST for compression
-- Monitor table bloat
-
-**Questions for You:**
-
-**Q3.1**: How large do stage outputs typically get in old TARSy?
-- Usually under 1KB?
-- Sometimes 10-100KB?
-- Often over 100KB?
-- Ever hit MB range?
-
-**Answer:**
-
----
-
-**Q3.2**: When viewing session history, do you need full stage output or just summary?
-- **List view**: Just summary/status?
-- **Detail view**: Full output?
-- **Always full output**?
-
-**Answer:**
-
----
-
-**Q3.3**: Are you willing to use object storage (S3/MinIO/filesystem) for large outputs?
-- Yes, S3-compatible storage is fine
-- Yes, but prefer filesystem for simplicity
-- No, keep everything in PostgreSQL
-
-**Answer:**
-
----
-
-**Q3.4**: What's an acceptable size limit for inline storage before moving to external?
-- 10KB?
-- 50KB?
-- 100KB?
-- No limit?
-
-**Answer:**
-
----
-
 ---
 
 ## 📋 High Priority (Architecture Decisions)
 
-### Q4: Chain Configuration - Versioning & Duplication
+### Q4: Chain Configuration Storage
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- Every `AlertSession` stores full `chain_definition` JSON
-- 1000 sessions with same chain = 1000 copies
-- No way to track "which sessions used chain version X"
+**Context:**
+In old TARSy, `AlertSession` stored both `chain_id` and full `chain_definition` JSON snapshot. The snapshot was used for:
+1. **Pause/Resume** - **DROPPED in new TARSy** ✂️
+2. **Chat configuration** - Check if chat enabled, get agent config, iteration strategy, LLM provider
 
-**Proposed Solutions:**
+**Analysis:**
 
-**Option A: Chain Entity (Normalized)**
-```
-Chain:
-- chain_id            string    PK
-- name                string    Indexed
-- version             string    Semantic version (e.g., "1.2.3")
-- definition          JSON      Chain config
-- created_at          time.Time
-- deprecated_at       *time.Time
+For chat specifically, using a **live lookup** from registry makes more sense than snapshot:
+- Chat happens **after** the investigation is complete (not part of immutable investigation record)
+- Chat is a separate, optional interaction
+- Using latest config means bug fixes and improvements apply to all chats
+- No historical consistency requirement (unlike the investigation itself)
 
-AlertSession:
-- chain_id            string    FK → Chain
-- chain_overrides     JSON      Session-specific tweaks (optional)
-```
+**Decision:**
 
-**Option B: Version Reference + Snapshot**
 ```
 AlertSession:
-- chain_name          string    Indexed (e.g., "kubernetes-investigation")
-- chain_version       string    Indexed (e.g., "v2.1.0")
-- chain_definition    JSON      Full snapshot (for immutability)
+- chain_id            string    Chain identifier (indexed)
 ```
 
-**Option C: Keep Current (Just Snapshot)**
-- No normalization
-- Accept duplication
-- Simple, immutable
+**No `chain_definition` snapshot stored in database.**
 
-**Questions for You:**
+**Rationale:**
+- ✅ **No duplication**: 1000 sessions = 1 chain_id string each, not 1000 JSON copies
+- ✅ **Always current**: Chat and other features use latest chain configuration
+- ✅ **Simpler schema**: One less JSON field to manage
+- ✅ **Bug fixes propagate**: Chain config improvements benefit all sessions
+- ✅ **Pause/resume dropped**: No need to restore exact historical chain state
 
-**Q4.1**: How often do chain definitions change?
-- Rarely (every few months)?
-- Regularly (weekly)?
-- Frequently (multiple times per week)?
+**Chain lookup:**
+When chat (or other features) needs chain config:
+```go
+// Look up current chain definition from registry
+chainConfig := chainRegistry.GetChain(session.ChainID)
+if chainConfig.Chat != nil && !chainConfig.Chat.Enabled {
+    return ErrChatDisabled
+}
+```
 
-**Answer:**
-
----
-
-**Q4.2**: Do you need to query "all sessions that used chain X version Y"?
-- Yes, for impact analysis when chains change
-- No, not really needed
-- Would be nice to have
-
-**Answer:**
-
----
-
-**Q4.3**: Are chain definitions large?
-- Small (~1-5KB)?
-- Medium (~10-50KB)?
-- Large (>50KB)?
-
-**Answer:**
-
----
-
-**Q4.4**: Do you ever need to update chain config retroactively for old sessions?
-- No, sessions are immutable
-- Yes, for bug fixes (but keep history)
-- Sometimes, for reprocessing
-
-**Answer:**
+**Note:** Chain definitions are stored in code/config files (e.g., `agents.yaml`), loaded at startup into in-memory registry. Not stored in database.
 
 ---
 
 ### Q5: Integration/Notification Data Modeling
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- `slack_message_fingerprint` field directly in `AlertSession`
-- Couples core domain to specific integration
+**Context:**
+Old TARSy has `slack_message_fingerprint` field directly in `AlertSession` for Slack threading support.
 
-**The Problem:**
-- What about Email, PagerDuty, webhooks, etc.?
-- Can't have multiple notifications per session
-- Hard to add new notification types
+**Decision:**
 
-**Proposed Solution:**
-Separate `Notification` entity:
+Keep it simple - **Slack only** for now:
+
+```
+AlertSession:
+- slack_message_fingerprint  *string  Optional: for Slack message threading
+```
+
+**Rationale:**
+- ✅ **Simple**: No additional tables or complexity
+- ✅ **Sufficient**: Slack is the only notification channel currently needed
+- ✅ **Pragmatic**: Avoid premature abstraction
+- ✅ **Refactorable**: Easy to extract to separate `Notification` entity later if needed
+
+**Future Extension:**
+If additional notification channels (Email, PagerDuty, webhooks) become necessary, refactor to:
 ```
 Notification:
 - notification_id     string    PK
 - session_id          string    FK → AlertSession (indexed)
-- notification_type   enum      slack, email, pagerduty, webhook, msteams
-- status              enum      pending, sent, delivered, failed
-- integration_data    JSON      Type-specific data
-- sent_at             *time.Time
-- delivered_at        *time.Time
-- error_message       *string
-- retry_count         int
+- notification_type   enum      slack, email, pagerduty, webhook
+- integration_data    JSON      Type-specific data (channel, thread_ts, etc.)
+- created_at          time.Time
+```
 
-For Slack specifically:
-integration_data = {
-  "channel": "#alerts",
-  "thread_ts": "1234567890.123456",
-  "message_fingerprint": "abc123",
-  "permalink": "https://..."
+For now: **Keep it simple, refactor when needed.**
+
+---
+
+### Q6: Timeline & Debug View Performance
+
+**Status**: ✅ **RESOLVED**
+
+**Context:**
+Two different views with different requirements:
+
+1. **Main Session Page** (UX-focused): Uses `TimelineEvent` entities (from Q1)
+2. **Debug Page** (Observability): Uses `LLMInteraction` and `MCPInteraction` entities
+
+**Architecture Decision: Separate Pages (Not Tabs)**
+
+Split into two independent pages for better performance and separation of concerns.
+
+---
+
+### Main Session Page: `/sessions/{session_id}`
+
+**What it shows:**
+- Session metadata (status, duration, summary)
+- Reasoning timeline (TimelineEvents)
+- Real-time progress during active session
+
+**API Endpoints:**
+```
+GET /api/sessions/{id}  → Session metadata + TimelineEvents
+```
+
+**WebSocket:**
+```
+/ws/sessions/{id}  → TimelineEvent updates (create/update)
+```
+
+**Performance:**
+- ✅ Single table query (no joins/merging needed)
+- ✅ Indexed by `(session_id, sequence_number)`
+- ✅ Real-time streaming via WebSocket during active session
+- ✅ Fast initial page load (no debug data)
+- ✅ Serves 95% of users' needs
+
+---
+
+### Debug Page: `/sessions/{session_id}/debug`
+
+**What it shows:**
+- LLM Interactions (collapsed list)
+- MCP Interactions (collapsed list)
+- Detailed request/response data on expand
+
+**Two-level loading pattern:**
+
+**Level 1: List View (Initial Page Load)**
+```sql
+-- Just metadata for collapsed view
+SELECT 
+  interaction_id, 
+  interaction_type, 
+  created_at,
+  model_name,           -- for LLM
+  server_name,          -- for MCP
+  duration_ms,
+  error_message
+FROM llm_interactions 
+WHERE session_id = ? 
+ORDER BY created_at ASC;
+```
+
+**Level 2: Detail View (On User Expand)**
+```sql
+-- Full data when user expands an interaction
+SELECT * FROM llm_interactions 
+WHERE interaction_id = ?;
+```
+
+**API Endpoints:**
+```
+GET /api/sessions/{id}/debug                      → Interaction list (metadata only)
+GET /api/sessions/{id}/debug/llm/{interaction_id} → Full LLM interaction details
+GET /api/sessions/{id}/debug/mcp/{interaction_id} → Full MCP interaction details
+```
+
+**WebSocket:**
+```
+/ws/sessions/{id}/debug  → Lightweight interaction.created events
+```
+
+**WebSocket Event Example:**
+```json
+{
+  "type": "interaction.created",
+  "interaction_id": "abc123",
+  "interaction_type": "iteration",
+  "created_at": "2026-02-03T10:30:00Z"
 }
 ```
+- Frontend adds collapsed item to list
+- Full interaction data loaded from API when user expands
 
-**Questions for You:**
-
-**Q5.1**: Do you plan to support multiple notification channels beyond Slack?
-- Yes, definitely (which ones?)
-- Maybe in the future
-- No, Slack only for now
-
-**Answer:**
-
----
-
-**Q5.2**: Can one session have notifications to multiple destinations?
-- Yes (e.g., Slack + Email + PagerDuty)
-- No, one notification per session
-- One per type (one Slack, one Email, etc.)
-
-**Answer:**
+**Performance:**
+- ✅ **List view**: Very fast (no large JSON fields, just metadata)
+- ✅ **Detail view**: Lazy loaded only when needed (user expands interaction)
+- ✅ **Bandwidth**: Only load full request/response JSON when user wants to see it
+- ✅ **Only loaded when needed**: Most users never visit debug page
 
 ---
 
-**Q5.3**: Should chat responses also trigger notifications?
-- Yes, notify on chat responses
-- No, only investigation completion
-- Configurable per user/chat
-
-**Answer:**
-
----
-
-**Q5.4**: Do you need notification delivery status tracking?
-- Yes, critical (sent/delivered/failed/retry)
-- Basic (sent/failed)
-- No, fire-and-forget
-
-**Answer:**
-
----
-
-### Q6: Timeline Reconstruction Performance
-
-**Status**: ⏸️
-
-**Current Design:**
-To build session timeline:
-1. Query session
-2. Query all stage executions
-3. Query all LLM interactions
-4. Query all MCP interactions  
-5. Merge and sort in application code
-
-**The Problem:**
-- 4+ database queries per timeline view
-- No pagination support
-- Expensive for sessions with 100+ interactions
-- Timeline is read-heavy, write-once
-
-**Proposed Solutions:**
-
-**Option A: Materialized View (PostgreSQL)**
+**Database Indexes:**
 ```sql
-CREATE MATERIALIZED VIEW session_timeline AS
-SELECT 
-  session_id,
-  event_id,
-  'llm' as event_type,
-  timestamp,
-  stage_execution_id,
-  jsonb_build_object(
-    'model', model_name,
-    'duration_ms', duration_ms
-  ) as summary
-FROM llm_interactions
-UNION ALL
-SELECT 
-  session_id,
-  interaction_id as event_id,
-  'mcp' as event_type,
-  timestamp,
-  stage_execution_id,
-  jsonb_build_object(
-    'tool', tool_name,
-    'server', server_name
-  ) as summary
-FROM mcp_interactions
-UNION ALL ...;
+-- Main Session Page
+CREATE INDEX idx_timeline_events_session ON timeline_events(session_id, sequence_number);
 
-CREATE INDEX idx_timeline_session ON session_timeline(session_id, timestamp);
-REFRESH MATERIALIZED VIEW CONCURRENTLY session_timeline;
+-- Debug Page (list view)
+CREATE INDEX idx_llm_interactions_session ON llm_interactions(session_id, created_at);
+CREATE INDEX idx_mcp_interactions_session ON mcp_interactions(session_id, created_at);
 ```
 
-**Option B: Timeline Cache Table (Updated in Real-Time)**
-```
-TimelineEvent:
-- event_id            string    PK
-- session_id          string    FK → AlertSession (indexed)
-- event_type          enum      llm, mcp, stage_start, stage_end, status_change
-- timestamp           time.Time Indexed
-- stage_execution_id  *string   FK → StageExecution
-- summary_data        JSON      Small, denormalized summary
-- source_table        string    'llm_interactions', 'mcp_interactions', etc.
-- source_id           string    FK to source table
-
-Index: (session_id, timestamp) for fast timeline retrieval
-```
-
-**Option C: Keep Current + Add Pagination**
-- Keep separate queries
-- Add cursor-based pagination (by timestamp)
-- Use Ent's eager loading to minimize queries
-
-**Questions for You:**
-
-**Q6.1**: How often is timeline viewed compared to session creation?
-- Very frequent (every session viewed multiple times)
-- Moderate (sessions viewed 1-2 times)
-- Rare (only for debugging/deep analysis)
-
-**Answer:**
-
 ---
 
-**Q6.2**: Is real-time timeline updates critical during active session?
-- Yes, need instant updates (WebSocket already provides this)
-- No, eventual consistency is fine (can refresh)
-
-**Answer:**
-
----
-
-**Q6.3**: What's typical session interaction count?
-- Usually <20 interactions
-- Often 20-50 interactions
-- Sometimes 50-100 interactions
-- Can exceed 100 interactions
-
-**Answer:**
-
----
-
-**Q6.4**: Do you paginate timeline display in the UI?
-- Yes, show 20-50 at a time
-- No, load all interactions at once
-- Load incrementally as user scrolls
-
-**Answer:**
-
----
+**Benefits of Separate Pages:**
+- ✅ **Much faster main page load**: Only loads what 95% of users need
+- ✅ **Cleaner separation**: Reasoning and Debug are truly independent
+- ✅ **Better performance**: Only pay for what you use
+- ✅ **Simpler implementation**: No tab state management, clear API endpoints
+- ✅ **Better for most users**: Debug data only loaded when explicitly navigated to
+- ✅ **Independent WebSocket subscriptions**: Each page subscribes to only what it needs
 
 ---
 
@@ -1153,310 +1024,326 @@ Index: (session_id, timestamp) for fast timeline retrieval
 
 ### Q7: Audit Trail / Change Tracking
 
-**Status**: ⏸️
+**Status**: ⏸️ **DEFERRED**
 
-**Current Design:**
-- No audit trail
-- Can't see who cancelled a session, when status changed, etc.
+**Decision:**
+Drop audit trail for now. Can implement later if needed.
 
-**Use Cases:**
-- Security: "Who manually cancelled session X?"
-- Debugging: "When did this session fail? What changed?"
-- Compliance: "Show all manual interventions"
-
-**Proposed Solution:**
-```
-AuditLog:
-- log_id              string    PK
-- entity_type         string    'AlertSession', 'StageExecution', etc.
-- entity_id           string    ID of the entity
-- action              enum      created, updated, deleted, status_changed, cancelled
-- user_id             *string   From oauth2-proxy (null = system)
-- changes             JSON      Before/after snapshot
-- reason              *string   User-provided reason for change
-- timestamp           time.Time Indexed
-- ip_address          *string
-- user_agent          *string
-```
-
-**Questions for You:**
-
-**Q7.1**: Do you need audit trail for security/compliance reasons?
-- Yes, required
-- Nice to have
-- Not needed
-
-**Answer:**
-
----
-
-**Q7.2**: Which entities need auditing?
-- Just AlertSession (status changes, cancellation)
-- AlertSession + StageExecution
-- All entities
-- Configuration changes (chains, MCP servers)
-
-**Answer:**
-
----
-
-**Q7.3**: How long to retain audit logs?
-- Same as session data
-- Longer (for compliance)
-- Forever
-- Not applicable
-
-**Answer:**
+**Options for future implementation:**
+1. **Entity-level auditing**: Track DB changes (before/after snapshots)
+2. **API request logging**: Log all API calls (simpler, captures intent + failures)
 
 ---
 
 ### Q8: LLM Cost Tracking
 
-**Status**: ⏸️
+**Status**: ⏸️ **DEFERRED**
+
+**Decision:**
+No cost tracking for now. Store token counts only.
 
 **Current Design:**
-- Token counts stored (`input_tokens`, `output_tokens`)
-- No cost calculation
-- No model pricing data
-
-**The Problem:**
-- Can't answer: "How much did this investigation cost?"
-- Can't track costs over time
-- Can't compare cost across models/chains
-
-**Proposed Solution:**
-
-**Option A: Add Cost Fields to LLMInteraction**
 ```
 LLMInteraction:
-+ input_cost_usd      *decimal  Calculated cost for input tokens
-+ output_cost_usd     *decimal  Calculated cost for output tokens
-+ total_cost_usd      *decimal  Total cost
-+ pricing_snapshot    JSON      Model rates at time of call
-  {
-    "model": "gemini-2.0-flash-thinking-exp",
-    "input_price_per_1m": 0.10,
-    "output_price_per_1m": 0.40,
-    "pricing_date": "2026-02-01"
-  }
+- input_tokens        *int
+- output_tokens       *int
+- total_tokens        *int
 ```
-
-**Option B: Separate Cost Tracking Table**
-```
-LLMCost:
-- cost_id             string    PK
-- interaction_id      string    FK → LLMInteraction
-- model_name          string
-- input_cost_usd      decimal
-- output_cost_usd     decimal
-- total_cost_usd      decimal
-- pricing_tier        string    Account tier/pricing plan
-- calculated_at       time.Time
-```
-
-**Option C: No Cost Tracking**
-- Calculate on-demand from token counts
-- Keep pricing in application config
-
-**Questions for You:**
-
-**Q8.1**: Do you need cost tracking and reporting?
-- Yes, critical for budget management
-- Nice to have for visibility
-- Not needed
-
-**Answer:**
-
----
-
-**Q8.2**: Should costs be calculated real-time or batch?
-- Real-time (during LLM call)
-- Batch (daily/weekly job)
-- On-demand (when viewing reports)
-
-**Answer:**
-
----
-
-**Q8.3**: Do you need historical cost data if pricing changes?
-- Yes, need to see actual costs paid
-- No, current pricing is fine
-- Need both (actual + estimated at current rates)
-
-**Answer:**
-
----
-
-**Q8.4**: Different pricing for different users/accounts?
-- No, same pricing for all
-- Yes, different tiers/accounts
-- Not applicable
-
-**Answer:**
 
 ---
 
 ### Q9: Event Table Retention & Cleanup
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- `Event` table for WebSocket event distribution
-- Auto-incrementing ID
-- No explicit cleanup strategy
+**Context:**
+`Event` table used for WebSocket event distribution to live clients during active sessions.
 
-**The Problem:**
-- Events accumulate forever
-- Table grows unbounded
-- Old events never useful after session completes
+**Decision:**
 
-**Questions for You:**
+**Retention:**
+- Events only needed for **active sessions**
+- Used **only for live updates** (not historical replay)
+- No need to retain after session completes
 
-**Q9.1**: How long do events need to be retained?
-- Only while session is active
-- 1 day after session completes
-- 1 week after session completes
-- Indefinitely (for replay)
+**Cleanup Strategy:**
 
-**Answer:**
+**Option A: Automatic Cleanup on Session Completion (Ent)**
+```go
+// When session reaches terminal state (completed, failed, cancelled, timed_out)
+func (s *SessionService) CompleteSession(ctx context.Context, sessionID string) error {
+    // Update session status
+    err := s.client.AlertSession.
+        UpdateOneID(sessionID).
+        SetStatus(alertsession.StatusCompleted).
+        SetCompletedAt(time.Now()).
+        Exec(ctx)
+    
+    if err != nil {
+        return err
+    }
+    
+    // Clean up events for this session
+    _, err = s.client.Event.
+        Delete().
+        Where(event.SessionIDEQ(sessionID)).
+        Exec(ctx)
+    
+    return err
+}
+```
 
----
+**Option B: TTL-based Cleanup (PostgreSQL + Ent)**
+```go
+// Add created_at timestamp to Event schema
+Event:
++ created_at          time.Time Indexed
 
-**Q9.2**: Are events used for historical replay, or only live sessions?
-- Only for live WebSocket clients (catchup on reconnect)
-- Also for historical "replay investigation" feature
-- Both
+// Scheduled cleanup job (e.g., every hour via cron)
+func cleanupOldEvents(ctx context.Context, client *ent.Client) error {
+    cutoff := time.Now().Add(-24 * time.Hour)
+    
+    deleted, err := client.Event.
+        Delete().
+        Where(event.CreatedAtLT(cutoff)).
+        Exec(ctx)
+    
+    log.Printf("Cleaned up %d old events", deleted)
+    return err
+}
+```
 
-**Answer:**
+**Recommendation: Option A (Session Completion Cleanup)**
+- ✅ Simpler: Clean up exactly when no longer needed
+- ✅ Efficient: Delete specific session's events
+- ✅ Predictable: Events removed immediately on session completion
+- ✅ No orphaned events: Handles edge cases (crashes, abandoned sessions)
 
----
+**Fallback: Add TTL cleanup** as backup to handle edge cases where session completion hook doesn't run.
 
-**Q9.3**: Should cleanup be automatic or manual?
-- Automatic (PostgreSQL trigger/cron)
-- Manual (admin cleanup command)
-- No cleanup needed
+**Implementation (Ent):**
+```go
+// Primary: Clean on session completion
+func cleanupSessionEvents(ctx context.Context, client *ent.Client, sessionID string) error {
+    _, err := client.Event.
+        Delete().
+        Where(event.SessionIDEQ(sessionID)).
+        Exec(ctx)
+    return err
+}
 
-**Answer:**
+// Fallback: Periodic cleanup of old events (safety net)
+// Cron job runs daily
+func cleanupOrphanedEvents(ctx context.Context, client *ent.Client) error {
+    cutoff := time.Now().Add(-7 * 24 * time.Hour)
+    
+    deleted, err := client.Event.
+        Delete().
+        Where(event.CreatedAtLT(cutoff)).
+        Exec(ctx)
+    
+    log.Printf("Cleaned up %d orphaned events older than 7 days", deleted)
+    return err
+}
+```
 
----
-
-**Q9.4**: What's an acceptable event table size?
-- Keep small (< 10K rows)
-- Medium (< 100K rows)
-- Large (< 1M rows)
-- Unlimited
-
-**Answer:**
-
----
+**Expected Size:**
+- Active sessions at any time: ~10-100
+- Events per session: ~50-200
+- Total events in table: < 20K rows (very manageable)
 
 ---
 
 ## 💡 Low Priority (Nice-to-Have)
 
-### Q10: Chat Conversation History Duplication
+### Q10: Chat Conversation History Storage
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- `Chat.conversation_history` stores formatted investigation text
-- This duplicates data from session's LLM interactions and stage outputs
+**Context:**
+Old TARSy stored `conversation_history` in `Chat` table - a formatted snapshot of the investigation for chat context.
 
-**Questions for You:**
+**Q1 Impact:**
+With **lazy context building** (Q1), we don't pre-generate or store `stage_output` or `agent_output`. Instead, context is built on-demand from artifacts.
 
-**Q10.1**: Is `conversation_history` just a formatted version of the investigation?
-- Yes, generated from stage outputs
-- No, it includes additional formatting/summaries
-- It's a mix
+**Decision:**
 
-**Answer:**
+**No `conversation_history` field in `Chat` table.**
 
----
+**Chat Context Building (On Chat Creation):**
+```go
+// When user starts a chat, build context on-demand
+func (s *ChatService) CreateChat(ctx context.Context, sessionID string) (*Chat, error) {
+    // Query session artifacts
+    timelineEvents := s.getTimelineEvents(ctx, sessionID)
+    messages := s.getMessages(ctx, sessionID)
+    
+    // Build chat context using ChatAgent's context builder
+    // (each agent type knows how to build context from its artifacts)
+    chatContext := s.chatAgent.BuildContextForChat(timelineEvents, messages)
+    
+    // Create chat record (no conversation_history stored)
+    chat := &Chat{
+        SessionID:  sessionID,
+        CreatedBy:  userID,
+        // No conversation_history field
+    }
+    
+    return s.client.Chat.Create().SetChat(chat).Save(ctx)
+}
+```
 
-**Q10.2**: Can it be reliably reconstructed from stage outputs?
-- Yes, easy to regenerate
-- Yes, but expensive computation
-- No, has manual edits/additions
+**Chat Schema (Simplified):**
+```
+Chat:
+- chat_id             string    PK
+- session_id          string    FK → AlertSession (indexed)
+- created_by          string    User who initiated chat
+- created_at          time.Time
+- mcp_selection       JSON      Optional MCP override
+```
 
-**Answer:**
+**Benefits:**
+- ✅ **No duplication**: Don't store data that exists in TimelineEvents/Messages
+- ✅ **Always current**: Context built from latest artifacts (if artifacts update, chat sees it)
+- ✅ **Consistent with Q1**: Lazy evaluation pattern throughout
+- ✅ **Less storage**: One less large TEXT/JSON field per chat
 
----
-
-**Q10.3**: Is it expensive to generate, justifying caching?
-- Yes, expensive (keep cached)
-- No, quick (regenerate on demand)
-- Moderate
-
-**Answer:**
-
----
-
-### Q11: Common Field Extraction (Additional)
-
-**Status**: ⏸️
-
-**Questions for Dashboard Usage:**
-
-**Q11.1**: Do you need full-text search on final analysis?
-- Yes, search within analysis text
-- No, just filter by metadata
-- Would be nice to have
-
-**Answer:**
-
----
-
-**Q11.2**: Are there common aggregations you need?
-Examples:
-- Count by severity per day
-- Average duration by alert type
-- Token usage by chain
-- Success/failure rate by agent
-
-**Answer:**
+**When chat message sent:**
+Context is already in memory from chat creation, or rebuilt from artifacts if needed (e.g., server restart, long-running chat).
 
 ---
 
-**Q11.3**: Do you export data for external analytics (BI tools)?
-- Yes, need periodic exports
-- Yes, real-time BI integration
-- No, built-in dashboard is enough
+### Q11: Search & Analytics Support
 
-**Answer:**
+**Status**: ✅ **RESOLVED**
+
+**Decisions:**
+
+**Q11.1: Full-text search on final analysis**
+- **Decision**: Support it (nice to have)
+- **Implementation**: Same as Q2 (alert_data)
+
+```
+AlertSession:
+- final_analysis      TEXT      Investigation summary
+
+-- Add GIN index for full-text search
+CREATE INDEX idx_alert_sessions_final_analysis_fts 
+ON alert_sessions 
+USING GIN(to_tsvector('english', final_analysis));
+
+-- Query examples:
+WHERE to_tsvector('english', final_analysis) @@ to_tsquery('memory & leak');
+WHERE to_tsvector('english', final_analysis) @@ to_tsquery('error | failure');
+```
+
+**Benefits:**
+- ✅ Search within investigation summaries
+- ✅ Find sessions by analysis keywords
+- ✅ Same pattern as alert_data full-text search
+
+---
+
+**Q11.2: Common aggregations**
+- **Decision**: Not needed for now
+- **Rationale**: Built-in dashboard queries sufficient
+- **Future**: Can add materialized views or aggregation tables if performance becomes an issue
+
+---
+
+**Q11.3: BI/Analytics export**
+- **Decision**: Out of scope for now
+- **Future**: Direct PostgreSQL access or export APIs if needed
 
 ---
 
 ### Q12: Soft Deletes vs Hard Deletes
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED**
 
-**Current Design:**
-- Hard deletes with CASCADE
+**Context:**
+- No manual deletion support for now
+- Need retention policy for old sessions
+- May need to restore soft-deleted sessions if needed
 
-**Options:**
-- **Hard Delete**: Data is gone (use retention policy)
-- **Soft Delete**: Add `deleted_at` field, hide from queries
-- **Archive**: Move to separate archive tables
+**Decision: Soft Delete for Retention Policy**
 
-**Questions for You:**
+**Schema:**
+```
+AlertSession:
++ deleted_at          *time.Time  Soft delete timestamp (null = active)
+```
 
-**Q12.1**: Do you ever need to "undelete" sessions?
-- Yes, accidental deletions happen
-- No, deletion is final
-- Only for retention policy (not manual deletes)
+**Implementation (Ent):**
 
-**Answer:**
+```go
+// Soft delete via retention policy (e.g., sessions older than 90 days)
+func softDeleteOldSessions(ctx context.Context, client *ent.Client) error {
+    cutoff := time.Now().Add(-90 * 24 * time.Hour)
+    
+    updated, err := client.AlertSession.
+        Update().
+        Where(
+            alertsession.CompletedAtLT(cutoff),
+            alertsession.DeletedAtIsNil(), // Only non-deleted
+        ).
+        SetDeletedAt(time.Now()).
+        Save(ctx)
+    
+    log.Printf("Soft deleted %d sessions older than 90 days", updated)
+    return err
+}
 
----
+// Default queries exclude soft-deleted
+func (r *Repository) GetActiveSessions(ctx context.Context) ([]*ent.AlertSession, error) {
+    return r.client.AlertSession.
+        Query().
+        Where(alertsession.DeletedAtIsNil()). // Exclude soft-deleted
+        All(ctx)
+}
 
-**Q12.2**: Should deleted sessions be hidden or fully removed?
-- Hidden (soft delete) - can restore
-- Removed (hard delete) - better for GDPR
-- Archived (separate table)
+// Restore if needed
+func (r *Repository) RestoreSession(ctx context.Context, sessionID string) error {
+    return r.client.AlertSession.
+        UpdateOneID(sessionID).
+        ClearDeletedAt().
+        Exec(ctx)
+}
 
-**Answer:**
+// Hard delete (final cleanup, e.g., after 1 year)
+func hardDeleteOldSessions(ctx context.Context, client *ent.Client) error {
+    cutoff := time.Now().Add(-365 * 24 * time.Hour)
+    
+    deleted, err := client.AlertSession.
+        Delete().
+        Where(
+            alertsession.DeletedAtNotNil(),      // Only soft-deleted
+            alertsession.DeletedAtLT(cutoff),    // Older than 1 year
+        ).
+        Exec(ctx)
+    
+    log.Printf("Hard deleted %d soft-deleted sessions older than 1 year", deleted)
+    return err
+}
+```
 
----
+**Retention Policy Example:**
+1. **Day 0-90**: Active sessions (visible in dashboard)
+2. **Day 90-365**: Soft-deleted (hidden, but restorable if needed)
+3. **Day 365+**: Hard-deleted (permanently removed via CASCADE)
+
+**Benefits:**
+- ✅ **Safety net**: Can restore accidentally removed sessions
+- ✅ **Gradual cleanup**: Two-phase deletion (soft → hard)
+- ✅ **Simple queries**: Just add `WHERE deleted_at IS NULL` for active data
+- ✅ **Ent support**: Native Ent mixin for soft deletes
+
+**Index:**
+```sql
+CREATE INDEX idx_alert_sessions_deleted_at ON alert_sessions(deleted_at) 
+WHERE deleted_at IS NOT NULL;
+```
 
 ---
 
@@ -1466,23 +1353,23 @@ Track which questions we've addressed:
 
 ### Critical Priority
 - [x] Q1: Database Schema Architecture - Multi-Layer Model (Stage + AgentExecution + TimelineEvent + Message + LLM/MCPInteraction + Lazy Context Building) ✅ **DECIDED**
-- [ ] Q2: Alert Data Extraction  
+- [x] Q2: Alert Data Storage & Search (TEXT field + PostgreSQL full-text search with GIN index) ✅ **RESOLVED**
 - [x] Q3: Stage Output Size Management ✅ **RESOLVED** (by Q1 - no output fields)
 
 ### High Priority
-- [ ] Q4: Chain Configuration Versioning
-- [ ] Q5: Integration/Notification Modeling
-- [ ] Q6: Timeline Reconstruction Performance
+- [x] Q4: Chain Configuration Storage (Just `chain_id`, no snapshot - live lookup from registry) ✅ **RESOLVED**
+- [x] Q5: Integration/Notification Modeling (Keep simple: `slack_message_fingerprint` in AlertSession, refactor later if needed) ✅ **RESOLVED**
+- [x] Q6: Timeline & Debug View Performance (Reasoning: TimelineEvent query; Debug: 2-level loading with lazy expansion) ✅ **RESOLVED**
 
 ### Medium Priority
-- [ ] Q7: Audit Trail
-- [ ] Q8: LLM Cost Tracking
-- [ ] Q9: Event Retention
+- [x] Q7: Audit Trail ⏸️ **DEFERRED** (Can implement later if needed)
+- [x] Q8: LLM Cost Tracking ⏸️ **DEFERRED** (Token counts stored, no cost calculation for now)
+- [x] Q9: Event Retention (Active sessions only, automatic cleanup on completion + TTL fallback) ✅ **RESOLVED**
 
 ### Low Priority
-- [ ] Q10: Chat History Duplication
-- [ ] Q11: Common Field Extraction
-- [ ] Q12: Soft Deletes
+- [x] Q10: Chat Conversation History Storage (No storage - build on-demand from artifacts, consistent with Q1 lazy evaluation) ✅ **RESOLVED**
+- [x] Q11: Search & Analytics Support (Full-text search on final_analysis, no special aggregations/BI for now) ✅ **RESOLVED**
+- [x] Q12: Soft Deletes (Soft delete with `deleted_at` for retention policy, two-phase cleanup) ✅ **RESOLVED**
 
 ---
 
