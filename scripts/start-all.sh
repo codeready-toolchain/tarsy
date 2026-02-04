@@ -59,6 +59,44 @@ fi
 
 echo -e "${GREEN}✓ Go is installed${NC}\n"
 
+# Check if podman or docker is installed
+if command -v podman &> /dev/null; then
+    CONTAINER_CMD="podman"
+elif command -v docker &> /dev/null; then
+    CONTAINER_CMD="docker"
+else
+    echo -e "${RED}ERROR: Neither podman nor docker is installed${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Container runtime: $CONTAINER_CMD${NC}"
+
+# Start PostgreSQL
+echo -e "${YELLOW}Starting PostgreSQL...${NC}"
+cd deploy
+if [ "$CONTAINER_CMD" = "podman" ]; then
+    podman-compose up -d
+else
+    docker-compose up -d
+fi
+cd ..
+
+# Wait for PostgreSQL to be ready
+echo "Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+    if $CONTAINER_CMD exec tarsy-postgres pg_isready -U tarsy > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+if ! $CONTAINER_CMD exec tarsy-postgres pg_isready -U tarsy > /dev/null 2>&1; then
+    echo -e "${RED}ERROR: PostgreSQL failed to start${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ PostgreSQL is ready${NC}\n"
+
 # Build Go orchestrator if needed
 if [ ! -f "bin/tarsy" ]; then
     echo -e "${YELLOW}Building Go orchestrator...${NC}"
@@ -113,7 +151,8 @@ echo -e "${GREEN}✓ Go orchestrator started (PID: $GO_PID)${NC}\n"
 echo $LLM_PID > logs/llm.pid
 echo $GO_PID > logs/go.pid
 
-echo -e "${GREEN}=== TARSy PoC is running ===${NC}\n"
+echo -e "${GREEN}=== TARSy is running ===${NC}\n"
+echo "PostgreSQL:         localhost:5432"
 echo "LLM Service:        http://localhost:50051 (gRPC)"
 echo "Go Orchestrator:    http://localhost:$HTTP_PORT"
 echo "Dashboard:          http://localhost:$HTTP_PORT"

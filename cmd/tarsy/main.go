@@ -1,16 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/codeready-toolchain/tarsy/pkg/api"
-	"github.com/codeready-toolchain/tarsy/pkg/llm"
-	"github.com/codeready-toolchain/tarsy/pkg/session"
+	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/joho/godotenv"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,12 +23,7 @@ func main() {
 		log.Printf("Loaded configuration from %s", envPath)
 	}
 
-	// Get configuration from environment (with defaults)
-	grpcAddr := os.Getenv("GRPC_ADDR")
-	if grpcAddr == "" {
-		grpcAddr = "localhost:50051"
-	}
-
+	// Get HTTP port from environment (with default)
 	httpPort := os.Getenv("HTTP_PORT")
 	if httpPort == "" {
 		httpPort = "8080"
@@ -41,63 +35,39 @@ func main() {
 	}
 	gin.SetMode(ginMode)
 
-	log.Printf("Starting TARSy Go Orchestrator")
-	log.Printf("gRPC LLM Service: %s", grpcAddr)
+	log.Printf("Starting TARSy - Phase 2.1: Schema & Migrations")
 	log.Printf("HTTP Port: %s", httpPort)
-	log.Printf("Gin Mode: %s", ginMode)
 
-	// Initialize components
-	sessionMgr := session.NewManager()
-	log.Println("Initialized session manager")
-
-	llmClient, err := llm.NewClient(grpcAddr)
+	// Initialize database
+	dbConfig, err := database.LoadConfigFromEnv()
 	if err != nil {
-		log.Fatalf("Failed to create LLM client: %v", err)
+		log.Fatalf("Failed to load database config: %v", err)
 	}
-	defer llmClient.Close()
-	log.Println("Connected to LLM service")
 
-	// Initialize WebSocket hub
-	wsHub := api.NewWSHub()
-	go wsHub.Run()
-	log.Println("Started WebSocket hub")
+	ctx := context.Background()
+	dbClient, err := database.NewClient(ctx, dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbClient.Close()
+	log.Println("✓ Connected to PostgreSQL database")
+	log.Println("✓ Database schema initialized")
 
-	// Create API server
-	server := api.NewServer(sessionMgr, llmClient, wsHub)
-
-	// Setup Gin router
+	// Setup minimal Gin router
 	router := gin.Default()
 
-	// CORS for PoC (allow all origins)
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-	}))
-
-	// Health check
-	router.GET("/health", server.Health)
-
-	// API routes
-	apiGroup := router.Group("/api")
-	{
-		apiGroup.POST("/alerts", server.CreateAlert)
-		apiGroup.GET("/sessions", server.ListSessions)
-		apiGroup.GET("/sessions/:id", server.GetSession)
-		apiGroup.POST("/sessions/:id/cancel", server.CancelSession)
-	}
-
-	// WebSocket endpoint
-	router.GET("/ws", gin.WrapF(wsHub.HandleWS))
-
-	// Static files (will serve dashboard)
-	router.Static("/static", "./dashboard")
-	router.StaticFile("/", "./dashboard/index.html")
+	// Health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "healthy",
+			"database": "connected",
+			"phase":    "2.1 - Schema & Migrations Complete",
+		})
+	})
 
 	// Start server
 	log.Printf("HTTP server listening on :%s", httpPort)
+	log.Printf("Health check available at: http://localhost:%s/health", httpPort)
 	if err := router.Run(":" + httpPort); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

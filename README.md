@@ -1,16 +1,21 @@
-# TARSy Go-Python PoC
+# TARSy
 
-A minimal proof-of-concept demonstrating the Go orchestrator + Python LLM client architecture split.
+New TARSy implementation with Go orchestrator + Python LLM service architecture.
+
+## Current Status
+
+**Phase 2.1 Complete**: Database schema and persistence layer implemented with Ent ORM and PostgreSQL.
 
 ## Architecture
 
 ```
-┌─────────┐    WebSocket    ┌────────────┐    gRPC     ┌─────────────┐
-│ Browser │ ←─────────────→ │ Go         │ ←─────────→ │ Python LLM  │
+┌─────────┐    WebSocket    ┌─────────────┐    gRPC     ┌─────────────┐
+│ Browser │ ←─────────────→ │ Go          │ ←─────────→ │ Python LLM  │
 │         │    HTTP/WS      │ Orchestrator│   Stream    │ Service     │
-└─────────┘                 └────────────┘             └─────────────┘
+└─────────┘                 └─────────────┘             └─────────────┘
                                   │                           │
-                            In-Memory Store            Gemini API
+                             PostgreSQL                 Gemini API
+                            (Ent ORM)
 ```
 
 ## Components
@@ -23,40 +28,24 @@ Thin gRPC service wrapping Gemini native thinking client (Python-based).
 - **Client**: Simplified Gemini native thinking client
 - **Servicer**: gRPC server streaming responses
 
-### 2. Go Orchestrator (`cmd/tarsy/`, `pkg/`)
+### 2. Go Orchestrator (`cmd/tarsy/`, `pkg/`, `ent/`)
 
-HTTP API + WebSocket server with in-memory session management.
+HTTP API + WebSocket server with PostgreSQL persistence.
 
-- **Session Manager**: Thread-safe in-memory session storage
+- **Database Layer**: Ent ORM with five-layer architecture
 - **LLM Client**: gRPC client to Python service
-- **API Handlers**: REST endpoints + WebSocket
+- **API Handlers**: REST endpoints + WebSocket  
 - **Streaming**: Fan-out from gRPC to WebSocket clients
 
 ### 3. Frontend (`dashboard/`)
 
-Minimal HTML/CSS/JS interface.
-
-- Real-time streaming updates via WebSocket
-- Session list and message display
-- Auto-reconnection logic
-- Cancel button to stop active processing
-
-## Features
-
-- **Streaming**: Real-time thinking and response streaming from Gemini API
-- **Concurrent Sessions**: Handle multiple parallel LLM requests
-- **Cancellation**: Stop active processing via cancel button or API
-- **Timeout Protection**: Automatic timeout after 60 seconds to prevent runaway processing
-- **Clear Status Indicators**: Distinct visual status for cancelled vs timed-out vs failed sessions
-- **In-Memory Storage**: No database required for PoC
-- **WebSocket Fan-out**: Broadcast updates to all connected clients
 
 ## Prerequisites
 
 - Python 3.11+ with `uv` installed
-- Go 1.21+ 
+- Go 1.21+
+- PostgreSQL 16+ (or podman/docker for local development)
 - `protoc` (Protocol Buffers compiler)
-- Google API key for Gemini
 
 ## Setup
 
@@ -66,12 +55,33 @@ Minimal HTML/CSS/JS interface.
 # Copy the example configuration
 cp deploy/.env.example deploy/.env
 
-# Edit deploy/.env and set your API key
-# Required: GOOGLE_API_KEY
+# Edit deploy/.env and set your configuration
+# Required: GOOGLE_API_KEY, DB_PASSWORD
 # Optional: Adjust other settings as needed
 ```
 
-### 2. LLM Service
+### 2. Start PostgreSQL
+
+```bash
+# Using podman (recommended)
+podman run -d --name tarsy-postgres \
+  -e POSTGRES_USER=tarsy \
+  -e POSTGRES_PASSWORD=tarsy_dev_password \
+  -e POSTGRES_DB=tarsy \
+  -p 5432:5432 \
+  -v tarsy-postgres-data:/var/lib/postgresql/data \
+  docker.io/library/postgres:16-alpine
+
+# Or using podman-compose
+cd deploy
+podman-compose up -d
+cd ..
+
+# Wait for PostgreSQL to be ready
+podman exec tarsy-postgres pg_isready -U tarsy
+```
+
+### 3. LLM Service
 
 ```bash
 cd llm-service
@@ -80,7 +90,7 @@ cd llm-service
 uv sync
 ```
 
-### 3. Go Orchestrator
+### 4. Go Orchestrator
 
 ```bash
 # Install dependencies (from project root)
@@ -205,7 +215,14 @@ grpcurl -plaintext -d '{
 ├── pkg/                    # Go packages
 │   ├── api/                # HTTP handlers + WebSocket
 │   ├── llm/                # gRPC client to LLM service
-│   └── session/            # In-memory session management
+│   └── database/           # Database client configuration
+├── ent/                    # Ent ORM (generated)
+│   ├── schema/             # Schema definitions
+│   │   ├── alertsession.go
+│   │   ├── stage.go
+│   │   ├── agentexecution.go
+│   │   └── ...
+│   └── README.md           # Ent documentation
 ├── proto/                  # Protocol Buffers definitions
 │   ├── llm_service.proto
 │   ├── llm_service.pb.go       # Generated
@@ -242,6 +259,16 @@ cp deploy/.env.example deploy/.env
 - `GEMINI_MAX_TOKENS` (optional): Maximum tokens for generation
 - `GRPC_PORT` (optional): gRPC port, defaults to `50051`
 
+**Database** (Phase 2.1+):
+- `DB_HOST` (optional): PostgreSQL host, defaults to `localhost`
+- `DB_PORT` (optional): PostgreSQL port, defaults to `5432`
+- `DB_USER` (optional): Database user, defaults to `tarsy`
+- `DB_PASSWORD` (required): Database password
+- `DB_NAME` (optional): Database name, defaults to `tarsy`
+- `DB_SSLMODE` (optional): SSL mode, defaults to `disable`
+- `DB_MAX_OPEN_CONNS` (optional): Max open connections, defaults to `10`
+- `DB_MAX_IDLE_CONNS` (optional): Max idle connections, defaults to `5`
+
 **Go Orchestrator**:
 - `GRPC_ADDR` (optional): LLM service address, defaults to `localhost:50051`
 - `HTTP_PORT` (optional): HTTP server port, defaults to `8080`
@@ -276,24 +303,39 @@ cp deploy/.env.example deploy/.env
 - Verify LLM service is receiving requests (check logs)
 - Check `GOOGLE_API_KEY` is valid
 
-## Next Steps (Beyond PoC)
+## Development Status
 
-- [ ] Add PostgreSQL for persistent storage
-- [ ] Implement MCP tool integration
-- [ ] Add multi-stage agent chains
-- [ ] Implement pause/resume functionality
-- [ ] Add authentication/authorization
-- [ ] Create Kubernetes deployment configs
-- [ ] Add observability (metrics, tracing)
-- [ ] Multiple LLM provider support
+See [`docs/project-plan.md`](docs/project-plan.md) for full roadmap.
 
-## Key Learnings
+### Completed
+- ✅ Phase 1: Proof of Concept - Go-Python integration
+- ✅ Phase 2.1: Schema & Migrations - Database persistence layer
 
-This PoC validates:
+### Next Steps
+- [ ] Phase 2.2: Service Layer - Business logic implementation
+- [ ] Phase 2.3: Queue & Worker System - Background processing
+- [ ] Phase 3: Agent Framework - Multi-stage agent chains
+- [ ] Phase 4: MCP Integration - Tool system
+- [ ] Phase 5+: Advanced features (see project plan)
 
-1. **Go-Python split is viable**: Clean separation via gRPC
-2. **Streaming works smoothly**: gRPC → Go → WebSocket chain
-3. **Go concurrency patterns excel**: goroutines + channels handle fan-out naturally
-4. **Simple architecture**: Minimal components, clear responsibilities
+## Documentation
 
-The architecture shows promise for scaling to full TARSy implementation.
+- **Project Plan**: [`docs/project-plan.md`](docs/project-plan.md) - Full development roadmap
+- **Phase 2 Design**: [`docs/phase2-database-persistence-design.md`](docs/phase2-database-persistence-design.md) - Database architecture
+- **Ent ORM Guide**: [`ent/README.md`](ent/README.md) - Schema documentation
+
+## Key Design Decisions
+
+### Five-Layer Architecture
+Clean separation of concerns across 5 data layers:
+- **Layer 0a**: Stage (configuration + coordination)
+- **Layer 0b**: AgentExecution (individual agent work)  
+- **Layer 1**: TimelineEvent (UX-focused timeline)
+- **Layer 2**: Message (LLM conversation context)
+- **Layer 3-4**: LLMInteraction/MCPInteraction (debug data)
+
+### Lazy Context Building
+No `stage_output` or `agent_output` fields in database. Context generated on-demand when needed via `Agent.BuildStageContext()` method.
+
+### WebSocket-Friendly
+TimelineEvent with `event_id` tracking eliminates frontend de-duplication logic. Frontend simply updates existing events by ID during streaming.

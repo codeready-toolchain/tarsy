@@ -36,4 +36,23 @@ if [ -f "logs/llm.pid" ]; then
     rm logs/llm.pid
 fi
 
+# Stop PostgreSQL
+if command -v podman &> /dev/null; then
+    CONTAINER_CMD="podman"
+elif command -v docker &> /dev/null; then
+    CONTAINER_CMD="docker"
+fi
+
+if [ -n "$CONTAINER_CMD" ]; then
+    echo "Stopping PostgreSQL..."
+    cd deploy
+    if [ "$CONTAINER_CMD" = "podman" ]; then
+        podman-compose down
+    else
+        docker-compose down
+    fi
+    cd ..
+    echo -e "${GREEN}✓ Stopped PostgreSQL${NC}"
+fi
+
 echo -e "\n${GREEN}All services stopped${NC}"
