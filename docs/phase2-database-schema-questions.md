@@ -74,22 +74,16 @@ Stage:
 - stage_index           int       Position in chain: 0, 1, 2... (indexed)
 
 // Execution Mode
-- is_parallel           bool      false = single agent, true = multiple agents
 - expected_agent_count  int       How many agents (1 for single, N for parallel)
-- parallel_type         *enum     null for single, "multi_agent"/"replica" for parallel
-- success_policy        *enum     null for single, "all"/"any" for parallel
+- parallel_type         *enum     null if count=1, "multi_agent"/"replica" if count>1
+- success_policy        *enum     null if count=1, "all"/"any" if count>1
 
 // Stage-Level Status & Timing (aggregated from agent executions)
-- status                enum      pending, active, completed, failed, cancelled, timed_out
+- status                enum      pending, active, completed, failed, timed_out, cancelled
 - started_at            *time.Time  When first agent started
-- completed_at          *time.Time  When stage finished
+- completed_at          *time.Time  When stage finished (any terminal state)
 - duration_ms           *int        Total stage duration
-
-// Stage Results (aggregated from agent executions)
-- stage_output          JSON      AgentExecutionResult or ParallelStageResult
-                                  Contains: result_summary, investigation_history,
-                                  final_analysis, synthesis (parallel), metadata
-- error_message         *string   Aggregated error if stage failed
+- error_message         *string   Aggregated error if stage failed/timed_out/cancelled
 
 // Chat Context (if applicable)
 - chat_id               *string   FK → Chat
@@ -100,27 +94,38 @@ Indexes:
 - stage_id - Primary lookups
 ```
 
-**stage_output Contents (JSON):**
-```json
-{
-  "status": "completed",
-  "agent_name": "KubernetesAgent",
-  "stage_name": "initial-analysis",
-  "result_summary": "Found 3 failing pods...",
-  "complete_conversation_history": "Last LLM response for next stage",
-  "investigation_history": "Full thinking process",
-  "final_analysis": "Clean summary for end user",
-  "duration_ms": 45000,
-  "iteration_strategy": "react",
-  "llm_provider": "gemini-2.0-flash"
-}
-```
-
 **Stage Status Aggregation Logic:**
-- `success_policy = "all"`: Stage completed when ALL agents completed
-- `success_policy = "any"`: Stage completed when ANY agent completed
-- Stage paused if ANY agent paused
-- Stage failed based on policy (all failed vs any failed)
+
+**Key Rule:** Stage remains `active` while ANY agent is `pending` or `active`. Stage status is only determined when ALL agents have terminated.
+
+**Agent Statuses:**
+- `pending`: Not yet started (initial state)
+- `active`: Currently executing
+- `completed`: Finished successfully
+- `failed`: Failed with error
+- `timed_out`: Exceeded timeout limit
+- `cancelled`: Manually cancelled
+
+**Terminal States:** `completed`, `failed`, `timed_out`, `cancelled`
+
+**Aggregation Rules (when all agents terminated):**
+
+**For `success_policy = "all"`** (all agents must succeed):
+1. If ALL agents `completed` → Stage `completed`
+2. Otherwise:
+   - If ALL agents `timed_out` → Stage `timed_out`
+   - If ALL agents `cancelled` → Stage `cancelled`
+   - Mixed failures → We will define the logic of picking the overall session status later.
+
+**For `success_policy = "any"`** (at least one agent must succeed):
+1. If ANY agent `completed` → Stage `completed` (even if others failed/timed_out/cancelled)
+2. Otherwise (all failed):
+   - If ALL agents `timed_out` → Stage `timed_out`
+   - If ALL agents `cancelled` → Stage `cancelled`
+   - If at least one agent `completed` → Stage `completed`
+   - Mixed failures (no agent `completed`) → We will define the logic of picking the overall session status later.
+
+**Stage stays `active`** while ANY agent is `pending` or `active`
 
 ---
 
@@ -142,16 +147,12 @@ AgentExecution:
 // Execution Status & Timing
 - status                enum      pending, active, completed, failed, cancelled, timed_out
 - started_at            *time.Time
-- paused_at             *time.Time
 - completed_at          *time.Time
 - duration_ms           *int
-
-// Execution Results
-- agent_output          JSON      AgentExecutionResult for this specific agent
-                                  Contains: result_summary, error_message, metadata
 - error_message         *string   Error details if failed
-- current_iteration     *int      For pause/resume
-- iteration_strategy    string    "react", "native_thinking", etc.
+
+// Agent Configuration
+- iteration_strategy    string    "react", "native_thinking", etc. (for observability)
 
 Indexes:
 - (stage_id, agent_index) - Unique, agent ordering within stage
@@ -162,6 +163,181 @@ Indexes:
 **Why both stage_id and session_id?**
 - `stage_id`: Required for stage-scoped queries (get all executions for a stage)
 - `session_id`: Optimization for session-wide queries (avoid joins)
+
+---
+
+## Context Building Pattern (Lazy Evaluation)
+
+**Design Decision:** No `stage_output` or `agent_output` fields in the database!
+
+### Why No Output Fields?
+
+**Problems with storing output:**
+1. ❌ **Premature generation**: Stage doesn't know what next stage needs
+2. ❌ **Wasted computation**: Generated even if no next stage exists
+3. ❌ **One-size-fits-all**: Can't customize for different consumers
+
+**Solution: Lazy Context Building**
+
+Each agent type implements a `BuildStageContext()` method that:
+- Queries its own artifacts (Messages, TimelineEvents, LLMInteractions)
+- Formats them appropriately for consumption by next stage
+- Called **on-demand** only when next stage actually needs it
+
+### Agent Interface
+
+```go
+type Agent interface {
+    // Execute the agent
+    Execute(ctx context.Context, sessionCtx SessionContext, prevStageContext string) error
+    
+    // Build context from THIS agent's completed stage
+    // Called by next stage when it needs context (lazy evaluation)
+    BuildStageContext(ctx context.Context, stageID string) (string, error)
+}
+```
+
+### Single Agent Example
+
+```go
+// KubernetesAgent knows its own structure
+func (a *KubernetesAgent) BuildStageContext(ctx context.Context, stageID string) (string, error) {
+    // Query this stage's artifacts
+    events := a.db.TimelineEvent.Query().
+        Where(timelineevent.StageIDEQ(stageID)).
+        Order(ent.Asc(timelineevent.FieldSequenceNumber)).
+        All(ctx)
+    
+    messages := a.db.Message.Query().
+        Where(message.StageIDEQ(stageID)).
+        Order(ent.Asc(message.FieldSequenceNumber)).
+        All(ctx)
+    
+    // Format in KubernetesAgent's own way
+    var sb strings.Builder
+    sb.WriteString("=== Kubernetes Analysis Results ===\n\n")
+    
+    // Extract thinking
+    for _, event := range events {
+        if event.EventType == "llm_thinking" {
+            sb.WriteString(fmt.Sprintf("Thinking: %s\n", event.Content))
+        }
+    }
+    
+    // Extract tool calls
+    for _, event := range events {
+        if event.EventType == "mcp_tool_call" {
+            sb.WriteString(fmt.Sprintf("Tool %s: %s\n", 
+                event.Metadata["tool_name"], event.Content))
+        }
+    }
+    
+    // Extract final analysis
+    for _, event := range events {
+        if event.EventType == "final_analysis" {
+            sb.WriteString(fmt.Sprintf("\nConclusion: %s\n", event.Content))
+        }
+    }
+    
+    return sb.String(), nil
+}
+```
+
+### Parallel Agents Example
+
+**When stage has multiple parallel agents, aggregate all their outputs:**
+
+```go
+// SynthesisAgent builds context from stage with parallel agents
+func (a *SynthesisAgent) BuildStageContext(ctx context.Context, stageID string) (string, error) {
+    // Get all agent executions for this stage
+    executions := a.db.AgentExecution.Query().
+        Where(agentexecution.StageIDEQ(stageID)).
+        Order(ent.Asc(agentexecution.FieldAgentIndex)).
+        All(ctx)
+    
+    var sb strings.Builder
+    sb.WriteString("=== Synthesis of Parallel Analysis ===\n\n")
+    
+    // Aggregate context from each agent execution
+    for _, exec := range executions {
+        sb.WriteString(fmt.Sprintf("--- %s (Agent %d) ---\n", exec.AgentName, exec.AgentIndex))
+        
+        // Get this agent's timeline events
+        events := a.db.TimelineEvent.Query().
+            Where(timelineevent.ExecutionIDEQ(exec.ExecutionID)).
+            Order(ent.Asc(timelineevent.FieldSequenceNumber)).
+            All(ctx)
+        
+        // Extract final analysis from each agent
+        for _, event := range events {
+            if event.EventType == "final_analysis" {
+                sb.WriteString(fmt.Sprintf("%s\n\n", event.Content))
+            }
+        }
+    }
+    
+    return sb.String(), nil
+}
+```
+
+**Key Points for Parallel Agents:**
+- Query all `AgentExecution` records for the stage
+- Loop through each execution and extract its artifacts
+- Aggregate/synthesize into unified context
+- Each agent formats its own data appropriately
+
+### Chain Orchestrator Usage
+
+```go
+func (c *ChainOrchestrator) ExecuteStage(ctx context.Context, stage StageConfig, prevStageID *string) error {
+    var prevContext string
+    
+    if prevStageID != nil {
+        // Lookup which agent type ran previous stage
+        prevStage := c.db.Stage.Query().Where(stage.StageIDEQ(*prevStageID)).Only(ctx)
+        
+        // Get any execution from that stage to determine agent type
+        prevExecution := c.db.AgentExecution.Query().
+            Where(agentexecution.StageIDEQ(*prevStageID)).
+            First(ctx)
+        
+        // Create agent instance to use its context builder
+        prevAgent := c.CreateAgent(prevExecution.AgentName)
+        
+        // Lazy evaluation - generate context NOW (not at stage completion!)
+        prevContext, _ = prevAgent.BuildStageContext(ctx, *prevStageID)
+    }
+    
+    // Execute current stage with context from previous
+    agent := c.CreateAgent(stage.AgentName)
+    return agent.Execute(ctx, sessionCtx, prevContext)
+}
+```
+
+### Benefits
+
+✅ **No wasted computation**: Only generate when actually needed  
+✅ **No premature decisions**: Next stage specifies what it needs  
+✅ **Encapsulation**: Each agent knows its own structure  
+✅ **Flexibility**: Can change formatting without schema changes  
+✅ **Simpler schema**: No JSON output fields to maintain  
+✅ **Works with parallel agents**: Aggregate multiple executions seamlessly
+
+### Future: Optional Caching
+
+If performance becomes a concern, cache generated contexts:
+
+```go
+// Optional: Cache formatted context
+cacheKey := fmt.Sprintf("stage_context:%s", stageID)
+if cached := cache.Get(cacheKey); cached != "" {
+    return cached, nil
+}
+context, _ := agent.BuildStageContext(ctx, stageID)
+cache.Set(cacheKey, context, 1*time.Hour)
+return context, nil
+```
 
 ---
 
@@ -331,8 +507,7 @@ LLMInteraction:
 
 // Conversation Context (links to Message table)
 - REMOVED: conversation field (use Message table instead)
-+ first_message_id    *string   FK → Message (conversation range start)
-+ last_message_id     *string   FK → Message (conversation range end)
++ last_message_id     *string   FK → Message (last message sent to LLM)
 
 // Full API Details
 - llm_request         JSON      Full API request payload
@@ -340,14 +515,12 @@ LLMInteraction:
 - thinking_content    *string   Native thinking (Gemini)
 - response_metadata   JSON      Grounding, tool usage, etc.
 
-// Metrics
+// Metrics & Result
 - input_tokens        *int
 - output_tokens       *int
 - total_tokens        *int
-- input_cost_usd      *decimal  (future)
-- output_cost_usd     *decimal  (future)
 - duration_ms         *int
-- error_message       *string
+- error_message       *string   null = success, not-null = failed
 
 Indexes:
 - (execution_id, created_at) - Agent's LLM calls chronologically
@@ -357,12 +530,25 @@ Indexes:
 
 **Conversation Reconstruction:**
 ```go
-// Get conversation for LLM interaction
-messages := service.GetMessageRange(ctx, 
-    interaction.FirstMessageID,
-    interaction.LastMessageID,
-)
+// Get the last message that was sent to LLM
+lastMessage := client.Message.Get(ctx, interaction.LastMessageID)
+
+// Get all messages up to and including that sequence number
+messages := client.Message.Query().
+    Where(message.ExecutionIDEQ(interaction.ExecutionID)).
+    Where(message.SequenceNumberLTE(lastMessage.SequenceNumber)).
+    Order(ent.Asc(message.FieldSequenceNumber)).
+    All(ctx)
+
+// These are the exact messages sent as input to this LLM call
 ```
+
+**Key Features:**
+- ✅ **Created on completion** (not during streaming)
+- ✅ **Immutable**: Full technical record for audit
+- ✅ **Links to Messages**: Conversation reconstructed via `last_message_id`
+- ✅ **Full API payloads**: Request/response for debugging
+- ✅ **Success/Failure**: Determined by `error_message` (null = success, not-null = failed)
 
 ---
 
@@ -373,7 +559,7 @@ messages := service.GetMessageRange(ctx,
 ```
 MCPInteraction:
 // Identity & Hierarchy
-- communication_id    string    PK
+- interaction_id      string    PK
 - session_id          string    FK → AlertSession (indexed)
 - stage_id            string    FK → Stage (indexed)
 - execution_id        string    FK → AgentExecution (indexed) - Which agent
@@ -381,8 +567,8 @@ MCPInteraction:
 // Timing
 - created_at          time.Time Indexed
 
-// Communication Details
-- communication_type  enum      tool_call, tool_list, server_init
+// Interaction Details
+- interaction_type    enum      tool_call, tool_list
 - server_name         string    "kubernetes", "argocd", etc.
 - tool_name           *string   "kubectl_get_pods", etc.
 
@@ -391,21 +577,21 @@ MCPInteraction:
 - tool_result         JSON      Tool output
 - available_tools     JSON      For tool_list type
 
-// Status
-- success             bool
+// Result & Timing
 - duration_ms         *int
-- error_message       *string
+- error_message       *string   null = success, not-null = failed
 
 Indexes:
 - (execution_id, created_at) - Agent's MCP calls chronologically
 - (stage_id, created_at) - Stage's MCP calls
-- communication_id - Primary lookups
+- interaction_id - Primary lookups
 ```
 
 **Key Features:**
 - ✅ **Created on completion** (not during streaming)
 - ✅ **Immutable**: Full technical record for audit
 - ✅ **Full API payloads**: Request/response for debugging
+- ✅ **Success/Failure**: Determined by `error_message` (null = success, not-null = failed)
 
 ---
 
@@ -446,7 +632,16 @@ New: Create TimelineEvent → Stream with event_id → Update same event ✓
 Reasoning Tab → Query TimelineEvents (fast, clean UX, stage/agent grouping)
 Debug Tab     → Query LLMInteraction + MCPInteraction (full technical details)
 LLM Context   → Query Messages for execution (conversation building)
-Chain Logic   → Read Stage.stage_output, write AgentExecution.agent_output
+Chain Logic   → Agent.BuildStageContext() generates context on-demand (lazy evaluation)
+```
+
+### ✅ Lazy Context Building
+```
+No stage_output or agent_output in database!
+Context generated on-demand when next stage needs it
+Each agent knows its own structure and formats appropriately
+No wasted computation if no next stage exists
+Works seamlessly with parallel agents (aggregate multiple executions)
 ```
 
 ### ✅ Flexible Queries
@@ -503,38 +698,6 @@ executions := client.AgentExecution.Query().
 
 ## Implementation Notes
 
-### Stage Status Aggregation
-
-```go
-func UpdateStageStatus(stage *Stage, executions []*AgentExecution) {
-    if stage.SuccessPolicy == "all" {
-        // All agents must succeed
-        if allCompleted(executions) {
-            stage.Status = "completed"
-        } else if anyFailed(executions) {
-            stage.Status = "failed"
-        }
-    } else if stage.SuccessPolicy == "any" {
-        // At least one agent must succeed
-        if anyCompleted(executions) {
-            stage.Status = "completed"
-        } else if allFailed(executions) {
-            stage.Status = "failed"
-        }
-    }
-    
-    // Paused if any agent paused
-    if anyPaused(executions) {
-        stage.Status = "paused"
-    }
-    
-    // Timed out if any agent timed out
-    if anyTimedOut(executions) {
-        stage.Status = "timed_out"
-    }
-}
-```
-
 ### Event Lifecycle Examples
 
 ```
@@ -555,23 +718,13 @@ user_question (chat):
 - No optimistic locking needed
 - Multiple agents can run concurrently, each writing their own events
 
-### Storage Savings
+### Key Architectural Changes from Old TARSy
 
-```
-Session with 20 LLM iterations, each building on previous context:
-
-Old schema:
-  LLMInteraction.conversation stores full history each time
-  Iteration 1: 2 messages
-  Iteration 2: 4 messages (2 duplicated)
-  ...
-  Total: 2+4+6+...+40 = 420 messages stored
-
-New schema:
-  Message table stores each message once
-  Total: 40 messages stored
-  Savings: ~90% reduction! ✓
-```
+**✅ Two-table hierarchy:** Stage (coordination) + AgentExecution (actual work)  
+**✅ Lazy context building:** No pre-generated output fields, context built on-demand  
+**✅ Parallel agent support:** Uniform model, no special "parent execution" entities  
+**✅ No pause feature:** Removed pause/resume complexity (using forced_conclusion instead)  
+**✅ Clean separation:** Timeline (UX) / Messages (LLM) / Interactions (Debug) all separate  
 
 ---
 
@@ -647,19 +800,21 @@ List in order of frequency:
 
 ### Q3: Stage Output Size Management
 
-**Status**: ⏸️
+**Status**: ✅ **RESOLVED** (by Q1 decision)
 
-**Current Design:**
+**Original Problem:**
 - `stage_output` JSON stored inline in database
 - No size limits or constraints
-- Large analysis outputs can bloat database rows
+- Large analysis outputs could bloat database rows
+- PostgreSQL 1GB row size limit concern
 
-**The Problem:**
-- PostgreSQL has 1GB row size limit (rarely hit, but possible)
-- Large JSON fields slow down queries that don't need them
-- Backup/restore becomes expensive
+**Resolution:**
+- ✅ **No stage_output or agent_output fields** in the new schema!
+- ✅ **Lazy context building** pattern eliminates this concern entirely
+- ✅ Context generated on-demand from artifacts (Messages, TimelineEvents)
+- ✅ No large JSON blobs stored in Stage or AgentExecution tables
 
-**Proposed Solutions:**
+**Original Proposed Solutions (no longer needed):**
 
 **Option A: Size Limit + Overflow Storage**
 ```
@@ -919,7 +1074,7 @@ FROM llm_interactions
 UNION ALL
 SELECT 
   session_id,
-  communication_id as event_id,
+  interaction_id as event_id,
   'mcp' as event_type,
   timestamp,
   stage_execution_id,
@@ -1310,9 +1465,9 @@ Examples:
 Track which questions we've addressed:
 
 ### Critical Priority
-- [x] Q1: Database Schema Architecture - Multi-Layer Model (Stage + AgentExecution + TimelineEvent + Message + LLM/MCPInteraction) ✅ **DECIDED**
+- [x] Q1: Database Schema Architecture - Multi-Layer Model (Stage + AgentExecution + TimelineEvent + Message + LLM/MCPInteraction + Lazy Context Building) ✅ **DECIDED**
 - [ ] Q2: Alert Data Extraction  
-- [ ] Q3: Stage Output Size Management
+- [x] Q3: Stage Output Size Management ✅ **RESOLVED** (by Q1 - no output fields)
 
 ### High Priority
 - [ ] Q4: Chain Configuration Versioning
