@@ -1200,14 +1200,16 @@ Chat:
 - session_id          string    FK → AlertSession (indexed)
 - created_by          string    User who initiated chat
 - created_at          time.Time
-- mcp_selection       JSON      Optional MCP override
+
+Note: mcp_selection queried from session.mcp_selection (not duplicated)
 ```
 
 **Benefits:**
-- ✅ **No duplication**: Don't store data that exists in TimelineEvents/Messages
+- ✅ **No duplication**: Don't store data that exists in TimelineEvents/Messages or Session
 - ✅ **Always current**: Context built from latest artifacts (if artifacts update, chat sees it)
 - ✅ **Consistent with Q1**: Lazy evaluation pattern throughout
 - ✅ **Less storage**: One less large TEXT/JSON field per chat
+- ✅ **Single source of truth**: MCP selection inherited from session via FK
 
 **When chat message sent:**
 Context is already in memory from chat creation, or rebuilt from artifacts if needed (e.g., server restart, long-running chat).
@@ -1258,7 +1260,7 @@ WHERE to_tsvector('english', final_analysis) @@ to_tsquery('error | failure');
 
 ---
 
-### Q12: Soft Deletes vs Hard Deletes
+### Q12: Soft Deletes
 
 **Status**: ✅ **RESOLVED**
 
@@ -1311,31 +1313,19 @@ func (r *Repository) RestoreSession(ctx context.Context, sessionID string) error
         Exec(ctx)
 }
 
-// Hard delete (final cleanup, e.g., after 1 year)
-func hardDeleteOldSessions(ctx context.Context, client *ent.Client) error {
-    cutoff := time.Now().Add(-365 * 24 * time.Hour)
-    
-    deleted, err := client.AlertSession.
-        Delete().
-        Where(
-            alertsession.DeletedAtNotNil(),      // Only soft-deleted
-            alertsession.DeletedAtLT(cutoff),    // Older than 1 year
-        ).
-        Exec(ctx)
-    
-    log.Printf("Hard deleted %d soft-deleted sessions older than 1 year", deleted)
-    return err
-}
 ```
 
-**Retention Policy Example:**
+**Retention Policy:**
 1. **Day 0-90**: Active sessions (visible in dashboard)
-2. **Day 90-365**: Soft-deleted (hidden, but restorable if needed)
-3. **Day 365+**: Hard-deleted (permanently removed via CASCADE)
+2. **Day 90+**: Soft-deleted (hidden, but restorable if needed)
+
+**Future Extension:**
+Hard delete can be added later without schema changes if permanent removal is needed.
 
 **Benefits:**
 - ✅ **Safety net**: Can restore accidentally removed sessions
-- ✅ **Gradual cleanup**: Two-phase deletion (soft → hard)
+- ✅ **Simple**: One cleanup job (soft delete only)
+- ✅ **Flexible schema**: Can add hard delete later without schema changes
 - ✅ **Simple queries**: Just add `WHERE deleted_at IS NULL` for active data
 - ✅ **Ent support**: Native Ent mixin for soft deletes
 
@@ -1369,7 +1359,7 @@ Track which questions we've addressed:
 ### Low Priority
 - [x] Q10: Chat Conversation History Storage (No storage - build on-demand from artifacts, consistent with Q1 lazy evaluation) ✅ **RESOLVED**
 - [x] Q11: Search & Analytics Support (Full-text search on final_analysis, no special aggregations/BI for now) ✅ **RESOLVED**
-- [x] Q12: Soft Deletes (Soft delete with `deleted_at` for retention policy, two-phase cleanup) ✅ **RESOLVED**
+- [x] Q12: Soft Deletes (Soft delete with `deleted_at` for retention policy, hard delete can be added later) ✅ **RESOLVED**
 
 ---
 
