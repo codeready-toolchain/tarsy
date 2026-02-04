@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"time"
 )
 
 // MCPInteraction holds the schema definition for the MCPInteraction entity (Layer 4).
@@ -28,12 +29,12 @@ func (MCPInteraction) Fields() []ent.Field {
 		field.String("execution_id").
 			Immutable().
 			Comment("Which agent"),
-		
+
 		// Timing
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
-		
+
 		// Interaction Details
 		field.Enum("interaction_type").
 			Values("tool_call", "tool_list"),
@@ -43,7 +44,7 @@ func (MCPInteraction) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("e.g., 'kubectl_get_pods'"),
-		
+
 		// Full Details
 		field.JSON("tool_arguments", map[string]interface{}{}).
 			Optional().
@@ -54,7 +55,7 @@ func (MCPInteraction) Fields() []ent.Field {
 		field.JSON("available_tools", []interface{}{}).
 			Optional().
 			Comment("For tool_list type"),
-		
+
 		// Result & Timing
 		field.Int("duration_ms").
 			Optional().

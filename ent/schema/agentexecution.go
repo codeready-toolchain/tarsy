@@ -26,13 +26,13 @@ func (AgentExecution) Fields() []ent.Field {
 		field.String("session_id").
 			Immutable().
 			Comment("Denormalized for performance"),
-		
+
 		// Agent Details
 		field.String("agent_name").
 			Comment("e.g., 'KubernetesAgent', 'ArgoCDAgent'"),
 		field.Int("agent_index").
 			Comment("1 for single, 1-N for parallel"),
-		
+
 		// Execution Status & Timing
 		field.Enum("status").
 			Values("pending", "active", "completed", "failed", "cancelled", "timed_out").
@@ -50,7 +50,7 @@ func (AgentExecution) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Error details if failed"),
-		
+
 		// Agent Configuration
 		field.String("iteration_strategy").
 			Comment("e.g., 'react', 'native_thinking' (for observability)"),

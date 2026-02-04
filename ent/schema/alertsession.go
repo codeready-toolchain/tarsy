@@ -1,13 +1,14 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"time"
 )
 
 // AlertSession holds the schema definition for the AlertSession entity.
@@ -126,11 +127,11 @@ func (AlertSession) Indexes() []ent.Index {
 		index.Fields("agent_type"),
 		index.Fields("alert_type"),
 		index.Fields("chain_id"),
-		
+
 		// Composite indexes
 		index.Fields("status", "started_at"),
 		index.Fields("status", "last_interaction_at"),
-		
+
 		// Partial index for soft deletes
 		index.Fields("deleted_at").
 			Annotations(entsql.IndexWhere("deleted_at IS NOT NULL")),
@@ -143,7 +144,7 @@ func (AlertSession) Annotations() []schema.Annotation {
 		entsql.Annotation{
 			// GIN indexes for full-text search
 			Checks: map[string]string{
-				"alert_data_fts": "to_tsvector('english', alert_data) @@ to_tsquery('english', '')",
+				"alert_data_fts":     "to_tsvector('english', alert_data) @@ to_tsquery('english', '')",
 				"final_analysis_fts": "to_tsvector('english', COALESCE(final_analysis, '')) @@ to_tsquery('english', '')",
 			},
 		},

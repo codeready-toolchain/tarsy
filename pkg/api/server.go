@@ -12,9 +12,9 @@ import (
 // NOTE: This is a minimal stub for Phase 2.1
 // Will be properly implemented in Phase 2.3 (Service Layer)
 type Server struct {
-	db     *ent.Client
-	llm    *llm.Client
-	wsHub  *WSHub
+	db    *ent.Client
+	llm   *llm.Client
+	wsHub *WSHub
 }
 
 // NewServer creates a new API server

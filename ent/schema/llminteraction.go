@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"time"
 )
 
 // LLMInteraction holds the schema definition for the LLMInteraction entity (Layer 3).
@@ -28,24 +29,24 @@ func (LLMInteraction) Fields() []ent.Field {
 		field.String("execution_id").
 			Immutable().
 			Comment("Which agent"),
-		
+
 		// Timing
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
-		
+
 		// Interaction Details
 		field.Enum("interaction_type").
 			Values("iteration", "final_analysis", "executive_summary", "chat_response"),
 		field.String("model_name").
 			Comment("e.g., 'gemini-2.0-flash-thinking-exp'"),
-		
+
 		// Conversation Context (links to Message table)
 		field.String("last_message_id").
 			Optional().
 			Nillable().
 			Comment("Last message sent to LLM"),
-		
+
 		// Full API Details
 		field.JSON("llm_request", map[string]interface{}{}).
 			Comment("Full API request payload"),
@@ -58,7 +59,7 @@ func (LLMInteraction) Fields() []ent.Field {
 		field.JSON("response_metadata", map[string]interface{}{}).
 			Optional().
 			Comment("Grounding, tool usage, etc."),
-		
+
 		// Metrics & Result
 		field.Int("input_tokens").
 			Optional().

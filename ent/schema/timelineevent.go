@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"time"
 )
 
 // TimelineEvent holds the schema definition for the TimelineEvent entity (Layer 1).
@@ -29,11 +30,11 @@ func (TimelineEvent) Fields() []ent.Field {
 		field.String("execution_id").
 			Immutable().
 			Comment("Which agent"),
-		
+
 		// Timeline Ordering
 		field.Int("sequence_number").
 			Comment("Order in timeline"),
-		
+
 		// Timestamps
 		field.Time("created_at").
 			Default(time.Now).
@@ -43,7 +44,7 @@ func (TimelineEvent) Fields() []ent.Field {
 			Default(time.Now).
 			UpdateDefault(time.Now).
 			Comment("Last update (for streaming)"),
-		
+
 		// Event Details
 		field.Enum("event_type").
 			Values(
@@ -64,7 +65,7 @@ func (TimelineEvent) Fields() []ent.Field {
 		field.JSON("metadata", map[string]interface{}{}).
 			Optional().
 			Comment("Type-specific data (tool_name, server_name, etc.)"),
-		
+
 		// Debug Links (set on completion)
 		field.String("llm_interaction_id").
 			Optional().

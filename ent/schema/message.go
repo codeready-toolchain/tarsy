@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"time"
 )
 
 // Message holds the schema definition for the Message entity (Layer 2).
@@ -29,7 +30,7 @@ func (Message) Fields() []ent.Field {
 		field.String("execution_id").
 			Immutable().
 			Comment("Agent conversation"),
-		
+
 		// Message Details
 		field.Int("sequence_number").
 			Comment("Execution-scoped order"),

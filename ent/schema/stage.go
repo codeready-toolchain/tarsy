@@ -23,13 +23,13 @@ func (Stage) Fields() []ent.Field {
 			Immutable(),
 		field.String("session_id").
 			Immutable(),
-		
+
 		// Stage Configuration
 		field.String("stage_name").
 			Comment("e.g., 'Initial Analysis', 'Deep Dive'"),
 		field.Int("stage_index").
 			Comment("Position in chain: 0, 1, 2..."),
-		
+
 		// Execution Mode
 		field.Int("expected_agent_count").
 			Comment("How many agents (1 for single, N for parallel)"),
@@ -43,7 +43,7 @@ func (Stage) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("null if count=1, 'all'/'any' if count>1"),
-		
+
 		// Stage-Level Status & Timing (aggregated from agent executions)
 		field.Enum("status").
 			Values("pending", "active", "completed", "failed", "timed_out", "cancelled").
@@ -64,7 +64,7 @@ func (Stage) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Aggregated error if stage failed/timed_out/cancelled"),
-		
+
 		// Chat Context (if applicable)
 		field.String("chat_id").
 			Optional().

@@ -63,22 +63,13 @@ cp deploy/.env.example deploy/.env
 ### 2. Start PostgreSQL
 
 ```bash
-# Using podman (recommended)
-podman run -d --name tarsy-postgres \
-  -e POSTGRES_USER=tarsy \
-  -e POSTGRES_PASSWORD=tarsy_dev_password \
-  -e POSTGRES_DB=tarsy \
-  -p 5432:5432 \
-  -v tarsy-postgres-data:/var/lib/postgresql/data \
-  docker.io/library/postgres:16-alpine
+# Start PostgreSQL container (waits until ready)
+make db-start
 
-# Or using podman-compose
+# Or manually using podman-compose
 cd deploy
 podman-compose up -d
 cd ..
-
-# Wait for PostgreSQL to be ready
-podman exec tarsy-postgres pg_isready -U tarsy
 ```
 
 ### 3. LLM Service
@@ -94,10 +85,13 @@ uv sync
 
 ```bash
 # Install dependencies (from project root)
-go mod tidy
+make deps-install
+
+# Generate Ent code
+make ent-generate
 
 # Build
-go build -o bin/tarsy ./cmd/tarsy
+make build
 ```
 
 ## Running
@@ -276,7 +270,46 @@ cp deploy/.env.example deploy/.env
 
 **Note**: Environment variables will override values in `.env` file.
 
+## Makefile Commands
+
+TARSy uses a modular Makefile structure (see `make/` directory for organization).
+
+Quick reference for common development tasks:
+
+```bash
+# Quick start
+make help             # Show all available commands
+make dev-setup        # Complete setup (DB + code generation)
+make build            # Build the application
+
+# Database operations
+make db-start         # Start PostgreSQL container
+make db-stop          # Stop PostgreSQL container
+make db-status        # Check container status
+make db-psql          # Connect to PostgreSQL shell
+make db-tables        # List all tables
+make db-indexes       # List all indexes
+
+# Code generation
+make ent-generate     # Generate Ent ORM code
+make proto-generate   # Generate protobuf code
+
+# Development
+make fmt              # Format code
+make test             # Run tests
+make lint             # Run linter
+```
+
+For the complete list of commands, run `make help`.
+
 ## Troubleshooting
+
+### Database connection issues
+
+- Verify PostgreSQL is running: `make db-status`
+- Check PostgreSQL logs: `make db-logs`
+- Connect to verify manually: `make db-psql`
+- Reset if corrupted: `make db-reset`
 
 ### LLM service won't start
 
@@ -287,6 +320,7 @@ cp deploy/.env.example deploy/.env
 
 ### Go orchestrator connection error
 
+- Ensure PostgreSQL is running: `make db-status`
 - Ensure LLM service is running first
 - Check `GRPC_ADDR` matches LLM service address
 - Verify no firewall blocking port 50051
@@ -302,6 +336,12 @@ cp deploy/.env.example deploy/.env
 - Check browser Network tab → WS connection active
 - Verify LLM service is receiving requests (check logs)
 - Check `GOOGLE_API_KEY` is valid
+
+### Ent code generation errors
+
+- Run `make ent-clean` then `make ent-generate`
+- Verify all schema files are valid Go code
+- Check for circular dependencies in edges
 
 ## Development Status
 
