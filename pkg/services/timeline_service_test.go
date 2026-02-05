@@ -20,27 +20,30 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates event with streaming status", func(t *testing.T) {
 		req := models.CreateTimelineEventRequest{
@@ -70,29 +73,32 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
-	event, _ := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
 		StageID:        stg.ID,
 		ExecutionID:    exec.ID,
@@ -100,6 +106,7 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 		EventType:      "llm_thinking",
 		Content:        "Starting...",
 	})
+	require.NoError(t, err)
 
 	t.Run("updates content during streaming", func(t *testing.T) {
 		err := timelineService.UpdateTimelineEvent(ctx, event.ID, "Processing... found issue")
@@ -126,29 +133,32 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
-	event, _ := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
 		StageID:        stg.ID,
 		ExecutionID:    exec.ID,
@@ -156,6 +166,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		EventType:      "llm_thinking",
 		Content:        "Streaming...",
 	})
+	require.NoError(t, err)
 
 	t.Run("completes event without links", func(t *testing.T) {
 		err := timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
@@ -171,7 +182,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 	t.Run("completes event with links", func(t *testing.T) {
 		// Create another event
-		event2, _ := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		event2, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
@@ -179,12 +190,13 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 			EventType:      "llm_thinking",
 			Content:        "Streaming...",
 		})
+		require.NoError(t, err)
 
 		// Create real interaction entities for foreign key constraints
 		messageService := NewMessageService(client.Client)
 		interactionService := NewInteractionService(client.Client, messageService)
 
-		llmInt, _ := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
 			StageID:         stg.ID,
 			ExecutionID:     exec.ID,
@@ -193,9 +205,10 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 			LLMRequest:      map[string]any{},
 			LLMResponse:     map[string]any{},
 		})
+		require.NoError(t, err)
 
 		toolName := "test-tool"
-		mcpInt, _ := interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
+		mcpInt, err := interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
 			SessionID:       session.ID,
 			StageID:         stg.ID,
 			ExecutionID:     exec.ID,
@@ -205,8 +218,9 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 			ToolArguments:   map[string]any{},
 			ToolResult:      map[string]any{},
 		})
+		require.NoError(t, err)
 
-		err := timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
+		err = timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
 			Content:          "Final analysis complete",
 			LLMInteractionID: &llmInt.ID,
 			MCPInteractionID: &mcpInt.ID,
@@ -220,6 +234,22 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		assert.Equal(t, llmInt.ID, *updated.LlmInteractionID)
 		assert.Equal(t, mcpInt.ID, *updated.McpInteractionID)
 	})
+
+	t.Run("validates required fields", func(t *testing.T) {
+		// Test empty eventID
+		err := timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
+			Content: "Final content",
+		}, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Test empty Content
+		err = timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
+			Content: "",
+		}, event.ID)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
 }
 
 func TestTimelineService_GetTimelines(t *testing.T) {
@@ -230,31 +260,34 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	// Create events
 	for i := 1; i <= 3; i++ {
-		_, _ = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		_, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
@@ -262,6 +295,7 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 			EventType:      "llm_thinking",
 			Content:        "Event",
 		})
+		require.NoError(t, err)
 	}
 
 	t.Run("gets session timeline", func(t *testing.T) {
@@ -274,15 +308,33 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 		assert.Equal(t, 3, events[2].SequenceNumber)
 	})
 
+	t.Run("validates empty sessionID", func(t *testing.T) {
+		_, err := timelineService.GetSessionTimeline(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
 	t.Run("gets stage timeline", func(t *testing.T) {
 		events, err := timelineService.GetStageTimeline(ctx, stg.ID)
 		require.NoError(t, err)
 		assert.Len(t, events, 3)
 	})
 
+	t.Run("validates empty stageID", func(t *testing.T) {
+		_, err := timelineService.GetStageTimeline(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
 	t.Run("gets agent timeline", func(t *testing.T) {
 		events, err := timelineService.GetAgentTimeline(ctx, exec.ID)
 		require.NoError(t, err)
 		assert.Len(t, events, 3)
+	})
+
+	t.Run("validates empty executionID", func(t *testing.T) {
+		_, err := timelineService.GetAgentTimeline(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
 	})
 }

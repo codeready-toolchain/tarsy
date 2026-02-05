@@ -190,6 +190,9 @@ func (s *InteractionService) ReconstructConversation(ctx context.Context, intera
 	// Get the last message
 	lastMessage, err := s.client.Message.Get(ctx, *interaction.LastMessageID)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("last message %s not found: %w", *interaction.LastMessageID, ErrNotFound)
+		}
 		return nil, fmt.Errorf("failed to get last message: %w", err)
 	}
 

@@ -93,6 +93,59 @@ func TestChatService_AddChatMessage(t *testing.T) {
 		assert.Equal(t, req.Author, msg.Author)
 		assert.NotNil(t, msg.CreatedAt)
 	})
+
+	t.Run("validates required fields", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			req     models.AddChatMessageRequest
+			wantErr string
+		}{
+			{
+				name: "missing chat_id",
+				req: models.AddChatMessageRequest{
+					Content: "test message",
+					Author:  "test@example.com",
+				},
+				wantErr: "chat_id",
+			},
+			{
+				name: "missing content",
+				req: models.AddChatMessageRequest{
+					ChatID: chat.ID,
+					Author: "test@example.com",
+				},
+				wantErr: "content",
+			},
+			{
+				name: "missing author",
+				req: models.AddChatMessageRequest{
+					ChatID:  chat.ID,
+					Content: "test message",
+				},
+				wantErr: "author",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := chatService.AddChatMessage(ctx, tt.req)
+				require.Error(t, err)
+				assert.True(t, IsValidationError(err))
+			})
+		}
+	})
+
+	t.Run("returns error for nonexistent chat", func(t *testing.T) {
+		req := models.AddChatMessageRequest{
+			ChatID:  "nonexistent-chat-id",
+			Content: "test message",
+			Author:  "test@example.com",
+		}
+
+		_, err := chatService.AddChatMessage(ctx, req)
+		require.Error(t, err)
+		// Foreign key constraint violation is returned as a constraint error, not NotFound
+	})
 }
 
 func TestChatService_GetChatHistory(t *testing.T) {
@@ -171,10 +224,10 @@ func TestChatService_BuildChatContext(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("builds context from parent session", func(t *testing.T) {
-		context, err := chatService.BuildChatContext(ctx, chat.ID)
+		chatContext, err := chatService.BuildChatContext(ctx, chat.ID)
 		require.NoError(t, err)
-		assert.Contains(t, context, "Pod crashed in production")
-		assert.Contains(t, context, "Root cause: OOM killed the pod")
+		assert.Contains(t, chatContext, "Pod crashed in production")
+		assert.Contains(t, chatContext, "Root cause: OOM killed the pod")
 	})
 
 	t.Run("returns ErrNotFound for missing chat", func(t *testing.T) {

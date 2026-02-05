@@ -553,8 +553,8 @@ func TestSessionService_SearchSessions(t *testing.T) {
 		session, err := service.CreateSession(ctx, req)
 		require.NoError(t, err)
 
-		// Search for "critical & error"
-		results, err := service.SearchSessions(ctx, "critical & error", 10)
+		// Search for "critical error" (plain text query)
+		results, err := service.SearchSessions(ctx, "critical error", 10)
 		require.NoError(t, err)
 
 		found := false
@@ -583,8 +583,8 @@ func TestSessionService_SearchSessions(t *testing.T) {
 			Exec(ctx)
 		require.NoError(t, err)
 
-		// Search
-		results, err := service.SearchSessions(ctx, "memory & leak", 10)
+		// Search (plain text query)
+		results, err := service.SearchSessions(ctx, "memory leak", 10)
 		require.NoError(t, err)
 
 		found := false

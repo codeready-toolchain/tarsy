@@ -18,12 +18,13 @@ func TestEventService_CreateEvent(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates event successfully", func(t *testing.T) {
 		req := models.CreateEventRequest{
@@ -46,29 +47,32 @@ func TestEventService_GetEventsSince(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	channel := "session:" + session.ID
 
 	// Create events
-	evt1, _ := eventService.CreateEvent(ctx, models.CreateEventRequest{
+	evt1, err := eventService.CreateEvent(ctx, models.CreateEventRequest{
 		SessionID: session.ID,
 		Channel:   channel,
 		Payload:   map[string]any{"seq": 1},
 	})
+	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
 
-	evt2, _ := eventService.CreateEvent(ctx, models.CreateEventRequest{
+	evt2, err := eventService.CreateEvent(ctx, models.CreateEventRequest{
 		SessionID: session.ID,
 		Channel:   channel,
 		Payload:   map[string]any{"seq": 2},
 	})
+	require.NoError(t, err)
 
 	t.Run("retrieves events since ID", func(t *testing.T) {
 		events, err := eventService.GetEventsSince(ctx, channel, evt1.ID)
@@ -90,20 +94,22 @@ func TestEventService_CleanupSessionEvents(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	// Create events
 	for i := 0; i < 3; i++ {
-		_, _ = eventService.CreateEvent(ctx, models.CreateEventRequest{
+		_, err := eventService.CreateEvent(ctx, models.CreateEventRequest{
 			SessionID: session.ID,
 			Channel:   "session:" + session.ID,
 			Payload:   map[string]any{"seq": i},
 		})
+		require.NoError(t, err)
 	}
 
 	t.Run("cleans up all session events", func(t *testing.T) {
@@ -112,7 +118,8 @@ func TestEventService_CleanupSessionEvents(t *testing.T) {
 		assert.Equal(t, 3, count)
 
 		// Verify deleted
-		events, _ := eventService.GetEventsSince(ctx, "session:"+session.ID, 0)
+		events, err := eventService.GetEventsSince(ctx, "session:"+session.ID, 0)
+		require.NoError(t, err)
 		assert.Len(t, events, 0)
 	})
 }
@@ -123,21 +130,23 @@ func TestEventService_CleanupOrphanedEvents(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	// Create event directly with old created_at (bypassing service)
 	oldTime := time.Now().Add(-8 * 24 * time.Hour)
-	_, _ = client.Event.Create().
+	_, err = client.Event.Create().
 		SetSessionID(session.ID).
 		SetChannel("test").
 		SetPayload(map[string]any{}).
 		SetCreatedAt(oldTime).
 		Save(ctx)
+	require.NoError(t, err)
 
 	t.Run("cleans up old events", func(t *testing.T) {
 		count, err := eventService.CleanupOrphanedEvents(ctx, 7)

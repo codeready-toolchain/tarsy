@@ -27,7 +27,7 @@ func (s *ChatService) CreateChat(httpCtx context.Context, req models.CreateChatR
 		return nil, NewValidationError("session_id", "required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	// Get session to inherit chain_id
@@ -56,7 +56,18 @@ func (s *ChatService) CreateChat(httpCtx context.Context, req models.CreateChatR
 
 // AddChatMessage adds a user message to the chat
 func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChatMessageRequest) (*ent.ChatUserMessage, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Validate input
+	if req.ChatID == "" {
+		return nil, NewValidationError("chat_id", "required")
+	}
+	if req.Content == "" {
+		return nil, NewValidationError("content", "required")
+	}
+	if req.Author == "" {
+		return nil, NewValidationError("author", "required")
+	}
+
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	messageID := uuid.New().String()

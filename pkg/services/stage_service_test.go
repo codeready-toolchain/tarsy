@@ -53,6 +53,7 @@ func TestStageService_CreateStage(t *testing.T) {
 	})
 
 	t.Run("validates required fields", func(t *testing.T) {
+		invalidParallelType := "invalid_type"
 		tests := []struct {
 			name    string
 			req     models.CreateStageRequest
@@ -73,6 +74,16 @@ func TestStageService_CreateStage(t *testing.T) {
 				req:     models.CreateStageRequest{SessionID: session.ID, StageName: "test", ExpectedAgentCount: 0},
 				wantErr: "expected_agent_count",
 			},
+			{
+				name: "invalid parallel_type",
+				req: models.CreateStageRequest{
+					SessionID:          session.ID,
+					StageName:          "test",
+					ExpectedAgentCount: 1,
+					ParallelType:       &invalidParallelType,
+				},
+				wantErr: "parallel_type",
+			},
 		}
 
 		for _, tt := range tests {
@@ -81,6 +92,22 @@ func TestStageService_CreateStage(t *testing.T) {
 				require.Error(t, err)
 				assert.True(t, IsValidationError(err))
 			})
+		}
+	})
+
+	t.Run("accepts valid parallel_type values", func(t *testing.T) {
+		validTypes := []string{"multi_agent", "replica"}
+		for _, pt := range validTypes {
+			parallelType := pt
+			req := models.CreateStageRequest{
+				SessionID:          session.ID,
+				StageName:          "test " + pt,
+				StageIndex:         10 + len(pt), // Ensure unique index
+				ExpectedAgentCount: 1,
+				ParallelType:       &parallelType,
+			}
+			_, err := stageService.CreateStage(ctx, req)
+			require.NoError(t, err)
 		}
 	})
 }
@@ -178,7 +205,8 @@ func TestStageService_UpdateAgentStatus(t *testing.T) {
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	}
-	session, _ := sessionService.CreateSession(ctx, sessionReq)
+	session, err := sessionService.CreateSession(ctx, sessionReq)
+	require.NoError(t, err)
 
 	stageReq := models.CreateStageRequest{
 		SessionID:          session.ID,
@@ -196,13 +224,15 @@ func TestStageService_UpdateAgentStatus(t *testing.T) {
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	}
-	exec, _ := stageService.CreateAgentExecution(ctx, execReq)
+	exec, err := stageService.CreateAgentExecution(ctx, execReq)
+	require.NoError(t, err)
 
 	t.Run("updates status successfully", func(t *testing.T) {
 		err := stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusActive, "")
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		updated, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		require.NoError(t, err)
 		assert.Equal(t, agentexecution.StatusActive, updated.Status)
 		assert.NotNil(t, updated.StartedAt)
 	})
@@ -211,7 +241,8 @@ func TestStageService_UpdateAgentStatus(t *testing.T) {
 		err := stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusCompleted, "")
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		updated, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		require.NoError(t, err)
 		assert.Equal(t, agentexecution.StatusCompleted, updated.Status)
 		assert.NotNil(t, updated.CompletedAt)
 		assert.NotNil(t, updated.DurationMs)
@@ -232,12 +263,13 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		ctx := context.Background()
 
 		// Setup
-		session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 			SessionID: uuid.New().String(),
 			AlertData: "test",
 			AgentType: "kubernetes",
 			ChainID:   "k8s-analysis",
 		})
+		require.NoError(t, err)
 
 		successPolicy := "all"
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
@@ -252,27 +284,31 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		// Create 3 agent executions
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
-			exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 				StageID:           stg.ID,
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
 				IterationStrategy: "react",
 			})
+			require.NoError(t, err)
 			executions = append(executions, exec)
 		}
 
 		// Complete all agents
 		for _, exec := range executions {
-			_ = stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusActive, "")
-			_ = stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusCompleted, "")
+			err = stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusActive, "")
+			require.NoError(t, err)
+			err = stageService.UpdateAgentStatus(ctx, exec.ID, agentexecution.StatusCompleted, "")
+			require.NoError(t, err)
 		}
 
 		// Aggregate should set stage to completed
 		err = stageService.AggregateStageStatus(ctx, stg.ID)
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetStageByID(ctx, stg.ID, false)
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
 		assert.Equal(t, stage.StatusCompleted, updated.Status)
 		assert.NotNil(t, updated.CompletedAt)
 	})
@@ -283,12 +319,13 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		sessionService := NewSessionService(client.Client)
 		ctx := context.Background()
 
-		session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 			SessionID: uuid.New().String(),
 			AlertData: "test",
 			AgentType: "kubernetes",
 			ChainID:   "k8s-analysis",
 		})
+		require.NoError(t, err)
 
 		successPolicy := "all"
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
@@ -302,29 +339,37 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
-			exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 				StageID:           stg.ID,
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
 				IterationStrategy: "react",
 			})
+			require.NoError(t, err)
 			executions = append(executions, exec)
 		}
 
 		// Complete 2, fail 1
-		_ = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusCompleted, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusCompleted, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusFailed, "test error")
+		err = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusCompleted, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusCompleted, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusFailed, "test error")
+		require.NoError(t, err)
 
 		// Aggregate should set stage to failed
 		err = stageService.AggregateStageStatus(ctx, stg.ID)
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetStageByID(ctx, stg.ID, false)
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
 		assert.Equal(t, stage.StatusFailed, updated.Status)
 		assert.NotNil(t, updated.ErrorMessage)
 	})
@@ -335,12 +380,13 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		sessionService := NewSessionService(client.Client)
 		ctx := context.Background()
 
-		session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 			SessionID: uuid.New().String(),
 			AlertData: "test",
 			AgentType: "kubernetes",
 			ChainID:   "k8s-analysis",
 		})
+		require.NoError(t, err)
 
 		successPolicy := "any"
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
@@ -354,29 +400,37 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
-			exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 				StageID:           stg.ID,
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
 				IterationStrategy: "react",
 			})
+			require.NoError(t, err)
 			executions = append(executions, exec)
 		}
 
 		// Complete 1, fail 2
-		_ = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusCompleted, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusFailed, "error")
-		_ = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusFailed, "error")
+		err = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[0].ID, agentexecution.StatusCompleted, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[1].ID, agentexecution.StatusFailed, "error")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, executions[2].ID, agentexecution.StatusFailed, "error")
+		require.NoError(t, err)
 
 		// Aggregate should set stage to completed (one succeeded)
 		err = stageService.AggregateStageStatus(ctx, stg.ID)
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetStageByID(ctx, stg.ID, false)
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
 		assert.Equal(t, stage.StatusCompleted, updated.Status)
 	})
 
@@ -386,12 +440,13 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		sessionService := NewSessionService(client.Client)
 		ctx := context.Background()
 
-		session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 			SessionID: uuid.New().String(),
 			AlertData: "test",
 			AgentType: "kubernetes",
 			ChainID:   "k8s-analysis",
 		})
+		require.NoError(t, err)
 
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 			SessionID:          session.ID,
@@ -401,32 +456,38 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		exec1, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 			StageID:           stg.ID,
 			SessionID:         session.ID,
 			AgentName:         "Agent1",
 			AgentIndex:        1,
 			IterationStrategy: "react",
 		})
+		require.NoError(t, err)
 
-		exec2, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 			StageID:           stg.ID,
 			SessionID:         session.ID,
 			AgentName:         "Agent2",
 			AgentIndex:        2,
 			IterationStrategy: "react",
 		})
+		require.NoError(t, err)
 
 		// Complete one, leave one active
-		_ = stageService.UpdateAgentStatus(ctx, exec1.ID, agentexecution.StatusActive, "")
-		_ = stageService.UpdateAgentStatus(ctx, exec1.ID, agentexecution.StatusCompleted, "")
-		_ = stageService.UpdateAgentStatus(ctx, exec2.ID, agentexecution.StatusActive, "")
+		err = stageService.UpdateAgentStatus(ctx, exec1.ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, exec1.ID, agentexecution.StatusCompleted, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentStatus(ctx, exec2.ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
 
 		// Stage should remain active
 		err = stageService.AggregateStageStatus(ctx, stg.ID)
 		require.NoError(t, err)
 
-		updated, _ := stageService.GetStageByID(ctx, stg.ID, false)
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
 		assert.Equal(t, stage.StatusActive, updated.Status)
 	})
 }
@@ -437,21 +498,23 @@ func TestStageService_GetStagesBySession(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	// Create multiple stages
 	for i := 1; i <= 3; i++ {
-		_, _ = stageService.CreateStage(ctx, models.CreateStageRequest{
+		_, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 			SessionID:          session.ID,
 			StageName:          "Stage",
 			StageIndex:         i,
 			ExpectedAgentCount: 1,
 		})
+		require.NoError(t, err)
 	}
 
 	t.Run("retrieves stages in order", func(t *testing.T) {

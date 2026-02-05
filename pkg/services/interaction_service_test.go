@@ -20,27 +20,30 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates LLM interaction with all fields", func(t *testing.T) {
 		thinking := "Thinking content"
@@ -82,27 +85,30 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates MCP tool_call interaction", func(t *testing.T) {
 		toolName := "kubectl-get-pods"
@@ -152,30 +158,33 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	// Create interactions
-	_, _ = interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	_, err = interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
 		StageID:         stg.ID,
 		ExecutionID:     exec.ID,
@@ -184,9 +193,10 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 		LLMRequest:      map[string]any{},
 		LLMResponse:     map[string]any{},
 	})
+	require.NoError(t, err)
 
 	toolName := "kubectl-get"
-	_, _ = interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
+	_, err = interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
 		SessionID:       session.ID,
 		StageID:         stg.ID,
 		ExecutionID:     exec.ID,
@@ -196,6 +206,7 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 		ToolArguments:   map[string]any{},
 		ToolResult:      map[string]any{},
 	})
+	require.NoError(t, err)
 
 	t.Run("retrieves LLM interactions list", func(t *testing.T) {
 		interactions, err := interactionService.GetLLMInteractionsList(ctx, session.ID)
@@ -219,29 +230,32 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
-	llmInt, _ := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
 		StageID:         stg.ID,
 		ExecutionID:     exec.ID,
@@ -250,9 +264,10 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 		LLMRequest:      map[string]any{"key": "value"},
 		LLMResponse:     map[string]any{"result": "data"},
 	})
+	require.NoError(t, err)
 
 	toolName := "kubectl"
-	mcpInt, _ := interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
+	mcpInt, err := interactionService.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
 		SessionID:       session.ID,
 		StageID:         stg.ID,
 		ExecutionID:     exec.ID,
@@ -262,6 +277,7 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 		ToolArguments:   map[string]any{},
 		ToolResult:      map[string]any{},
 	})
+	require.NoError(t, err)
 
 	t.Run("gets LLM interaction detail", func(t *testing.T) {
 		detail, err := interactionService.GetLLMInteractionDetail(ctx, llmInt.ID)
@@ -298,31 +314,34 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	t.Run("reconstructs conversation from last_message_id", func(t *testing.T) {
 		// Create messages
-		_, _ = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
 			SessionID:      session.ID,
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
@@ -330,8 +349,9 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			Role:           "system",
 			Content:        "System prompt",
 		})
+		require.NoError(t, err)
 
-		msg2, _ := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+		msg2, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
 			SessionID:      session.ID,
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
@@ -339,8 +359,9 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			Role:           "user",
 			Content:        "User message",
 		})
+		require.NoError(t, err)
 
-		_, _ = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
 			SessionID:      session.ID,
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
@@ -348,9 +369,10 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			Role:           "assistant",
 			Content:        "Assistant response",
 		})
+		require.NoError(t, err)
 
 		// Create interaction pointing to msg2
-		interaction, _ := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
 			StageID:         stg.ID,
 			ExecutionID:     exec.ID,
@@ -360,6 +382,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			LLMRequest:      map[string]any{},
 			LLMResponse:     map[string]any{},
 		})
+		require.NoError(t, err)
 
 		// Reconstruct should get messages 1 and 2 only
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
@@ -370,7 +393,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	})
 
 	t.Run("returns empty conversation when no last_message_id", func(t *testing.T) {
-		interaction, _ := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
 			StageID:         stg.ID,
 			ExecutionID:     exec.ID,
@@ -379,6 +402,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			LLMRequest:      map[string]any{},
 			LLMResponse:     map[string]any{},
 		})
+		require.NoError(t, err)
 
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)

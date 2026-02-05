@@ -40,9 +40,15 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 			return nil, NewValidationError("success_policy", "invalid: must be 'all' or 'any'")
 		}
 	}
+	if req.ParallelType != nil {
+		parallelType := *req.ParallelType
+		if parallelType != "multi_agent" && parallelType != "replica" {
+			return nil, NewValidationError("parallel_type", "invalid: must be 'multi_agent' or 'replica'")
+		}
+	}
 
-	// Use background context with timeout for critical write
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Use timeout context derived from incoming context
+	ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
 	defer cancel()
 
 	stageID := uuid.New().String()
@@ -91,8 +97,8 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 		return nil, NewValidationError("agent_index", "must be positive")
 	}
 
-	// Use background context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Use timeout context derived from incoming context
+	ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
 	defer cancel()
 
 	executionID := uuid.New().String()
@@ -114,12 +120,12 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 
 // UpdateAgentStatus updates an agent execution's status
 func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string, status agentexecution.Status, errorMsg string) error {
-	// Use background context with timeout
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Use timeout context derived from incoming context
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Fetch the execution first to check current state
-	exec, err := s.client.AgentExecution.Get(ctx, executionID)
+	exec, err := s.client.AgentExecution.Get(writeCtx, executionID)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return ErrNotFound
@@ -165,8 +171,8 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 
 // AggregateStageStatus aggregates stage status from all agent executions
 func (s *StageService) AggregateStageStatus(ctx context.Context, stageID string) error {
-	// Use background context with timeout
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Use timeout context derived from incoming context
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Get stage with agent executions

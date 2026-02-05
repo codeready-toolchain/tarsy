@@ -389,8 +389,8 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 		Where(alertsession.DeletedAtIsNil()).
 		Where(func(sel *sql.Selector) {
 			sel.Where(sql.Or(
-				sql.ExprP("to_tsvector('english', alert_data) @@ to_tsquery($1)", query),
-				sql.ExprP("to_tsvector('english', COALESCE(final_analysis, '')) @@ to_tsquery($2)", query),
+				sql.ExprP("to_tsvector('english', alert_data) @@ plainto_tsquery($1)", query),
+				sql.ExprP("to_tsvector('english', COALESCE(final_analysis, '')) @@ plainto_tsquery($2)", query),
 			))
 		}).
 		Limit(limit).

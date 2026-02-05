@@ -43,7 +43,7 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 		return nil, NewValidationError("Content", "required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	eventID := uuid.New().String()
@@ -69,7 +69,7 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 
 // UpdateTimelineEvent updates event content during streaming
 func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID string, content string) error {
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	err := s.client.TimelineEvent.UpdateOneID(eventID).
@@ -88,7 +88,14 @@ func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID strin
 
 // CompleteTimelineEvent marks an event as completed and sets debug links
 func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, req models.CompleteTimelineEventRequest, eventID string) error {
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if eventID == "" {
+		return NewValidationError("eventID", "required")
+	}
+	if req.Content == "" {
+		return NewValidationError("Content", "required")
+	}
+
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	update := s.client.TimelineEvent.UpdateOneID(eventID).
@@ -116,6 +123,10 @@ func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, req models.
 
 // GetSessionTimeline retrieves all events for a session
 func (s *TimelineService) GetSessionTimeline(ctx context.Context, sessionID string) ([]*ent.TimelineEvent, error) {
+	if sessionID == "" {
+		return nil, NewValidationError("sessionID", "required")
+	}
+
 	events, err := s.client.TimelineEvent.Query().
 		Where(timelineevent.SessionIDEQ(sessionID)).
 		Order(ent.Asc(timelineevent.FieldSequenceNumber)).
@@ -129,6 +140,10 @@ func (s *TimelineService) GetSessionTimeline(ctx context.Context, sessionID stri
 
 // GetStageTimeline retrieves all events for a stage
 func (s *TimelineService) GetStageTimeline(ctx context.Context, stageID string) ([]*ent.TimelineEvent, error) {
+	if stageID == "" {
+		return nil, NewValidationError("stageID", "required")
+	}
+
 	events, err := s.client.TimelineEvent.Query().
 		Where(timelineevent.StageIDEQ(stageID)).
 		Order(ent.Asc(timelineevent.FieldSequenceNumber)).
@@ -142,6 +157,10 @@ func (s *TimelineService) GetStageTimeline(ctx context.Context, stageID string) 
 
 // GetAgentTimeline retrieves all events for an agent execution
 func (s *TimelineService) GetAgentTimeline(ctx context.Context, executionID string) ([]*ent.TimelineEvent, error) {
+	if executionID == "" {
+		return nil, NewValidationError("executionID", "required")
+	}
+
 	events, err := s.client.TimelineEvent.Query().
 		Where(timelineevent.ExecutionIDEQ(executionID)).
 		Order(ent.Asc(timelineevent.FieldSequenceNumber)).
