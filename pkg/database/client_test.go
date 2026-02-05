@@ -18,33 +18,48 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// newTestClient creates a test database client inline (avoiding import cycle with test/database)
+// newTestClient creates a test database client with CI/local environment detection.
+// In CI (when CI_DATABASE_URL is set): connects to external PostgreSQL service container.
+// In local dev: spins up a testcontainer with PostgreSQL.
 func newTestClient(t *testing.T) *Client {
 	ctx := context.Background()
 
-	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.WithInitScripts("../../deploy/postgres-init/01-init.sql"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second)),
-	)
-	require.NoError(t, err)
+	// Check if we're in CI with an external database
+	ciDatabaseURL := os.Getenv("CI_DATABASE_URL")
+	
+	var connStr string
+	
+	if ciDatabaseURL != "" {
+		// CI mode: use external PostgreSQL service container
+		t.Log("Using external PostgreSQL from CI_DATABASE_URL")
+		connStr = ciDatabaseURL
+	} else {
+		// Local dev mode: use testcontainers
+		t.Log("Using testcontainers for PostgreSQL")
+		pgContainer, err := postgres.Run(ctx,
+			"postgres:16-alpine",
+			postgres.WithDatabase("test"),
+			postgres.WithUsername("test"),
+			postgres.WithPassword("test"),
+			postgres.WithInitScripts("../../deploy/postgres-init/01-init.sql"),
+			testcontainers.WithWaitStrategy(
+				wait.ForLog("database system is ready to accept connections").
+					WithOccurrence(2).
+					WithStartupTimeout(30*time.Second)),
+		)
+		require.NoError(t, err)
 
-	t.Cleanup(func() {
-		if err := testcontainers.TerminateContainer(pgContainer); err != nil {
-			t.Logf("failed to terminate container: %v", err)
-		}
-	})
+		t.Cleanup(func() {
+			if err := testcontainers.TerminateContainer(pgContainer); err != nil {
+				t.Logf("failed to terminate container: %v", err)
+			}
+		})
 
-	// Get connection string
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
+		// Get connection string from container
+		var err2 error
+		connStr, err2 = pgContainer.ConnectionString(ctx, "sslmode=disable")
+		require.NoError(t, err2)
+	}
 
 	// Open database connection using pgx driver
 	db, err := stdsql.Open("pgx", connStr)
