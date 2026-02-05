@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect"
-	"entgo.io/ent/dialect/sql"
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 //go:embed migrations
@@ -57,19 +57,19 @@ func NewClientFromEnt(entClient *ent.Client, db *stdsql.DB) *Client {
 
 // NewClient creates a new database client with connection pooling and migrations
 func NewClient(ctx context.Context, cfg Config) (*Client, error) {
+	// Build pgx-compatible connection string
 	dsn := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
 	)
 
-	// Open connection with driver
-	drv, err := sql.Open(dialect.Postgres, dsn)
+	// Open database connection using pgx driver
+	db, err := stdsql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database driver: %w", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	// Configure connection pool
-	db := drv.DB()
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
@@ -80,6 +80,10 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
+
+	// Create Ent driver from existing database connection
+	// Use dialect.Postgres for Ent compatibility while pgx handles the actual connection
+	drv := entsql.OpenDB(dialect.Postgres, db)
 
 	// Create Ent client with configured driver
 	entClient := ent.NewClient(ent.Driver(drv))
@@ -117,7 +121,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 // For initial setup (before first migration is generated):
 //   - Uses Ent's Schema.Create() to initialize database from schema definitions
 //   - This is the standard Ent approach and matches test behavior
-func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *sql.Driver, entClient *ent.Client) error {
+func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.Driver, entClient *ent.Client) error {
 	// Check if embedded migrations exist
 	hasMigrations, err := hasEmbeddedMigrations()
 	if err != nil {

@@ -1240,7 +1240,7 @@ import (
     
     "github.com/codeready-toolchain/tarsy/ent"
     "github.com/codeready-toolchain/tarsy/ent/migrate"
-    _ "github.com/lib/pq" // PostgreSQL driver
+    _ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver (pgx via database/sql compatibility)
 )
 
 type Config struct {

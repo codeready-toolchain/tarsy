@@ -2,13 +2,14 @@ package database
 
 import (
 	"context"
+	stdsql "database/sql"
 	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
 	"entgo.io/ent/dialect"
-	"entgo.io/ent/dialect/sql"
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,14 +46,17 @@ func newTestClient(t *testing.T) *Client {
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	// Open connection with driver
-	drv, err := sql.Open(dialect.Postgres, connStr)
+	// Open database connection using pgx driver
+	db, err := stdsql.Open("pgx", connStr)
 	require.NoError(t, err)
 
 	// Configure connection pool for tests
-	db := drv.DB()
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
+
+	// Create Ent driver from existing database connection
+	// Use dialect.Postgres for Ent compatibility while pgx handles the actual connection
+	drv := entsql.OpenDB(dialect.Postgres, db)
 
 	// Create Ent client
 	entClient := ent.NewClient(ent.Driver(drv))
