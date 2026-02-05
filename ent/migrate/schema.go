@@ -581,11 +581,6 @@ var (
 func init() {
 	AgentExecutionsTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	AgentExecutionsTable.ForeignKeys[1].RefTable = StagesTable
-	AlertSessionsTable.Annotation = &entsql.Annotation{}
-	AlertSessionsTable.Annotation.Checks = map[string]string{
-		"alert_data_fts":     "to_tsvector('english', alert_data) @@ to_tsquery('english', '')",
-		"final_analysis_fts": "to_tsvector('english', COALESCE(final_analysis, '')) @@ to_tsquery('english', '')",
-	}
 	ChatsTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	ChatUserMessagesTable.ForeignKeys[0].RefTable = ChatsTable
 	EventsTable.ForeignKeys[0].RefTable = AlertSessionsTable

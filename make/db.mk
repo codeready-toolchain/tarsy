@@ -156,3 +156,22 @@ ent-clean: ## Clean generated Ent code (keeps schemas)
 	@find ./ent -mindepth 1 -maxdepth 1 -type d ! -name 'schema' -exec rm -rf {} +
 	@find ./ent -mindepth 1 -maxdepth 1 -type f ! -name 'generate.go' ! -name 'README.md' -delete
 	@echo -e "$(GREEN)✅ Ent code cleaned!$(NC)"
+
+# =============================================================================
+# Database Migrations
+# =============================================================================
+# Uses Atlas CLI to generate migrations, golang-migrate to apply them
+
+.PHONY: migrate-create
+migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_feature)
+	@if [ -z "$(NAME)" ]; then \
+		echo -e "$(RED)Error: Please specify NAME=migration_name$(NC)"; \
+		exit 1; \
+	fi
+	@echo -e "$(YELLOW)Creating migration: $(NAME)...$(NC)"
+	@atlas migrate diff $(NAME) \
+		--dir "file://ent/migrate/migrations" \
+		--to "ent://ent/schema" \
+		--dev-url "$(DB_DSN)"
+	@echo -e "$(GREEN)✅ Migration created in ent/migrate/migrations/$(NC)"
+	@echo -e "$(BLUE)Review the SQL files, then commit to git$(NC)"

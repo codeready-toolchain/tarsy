@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
-	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/llm"
 	"github.com/gin-gonic/gin"
 )
@@ -12,13 +14,13 @@ import (
 // NOTE: This is a minimal stub for Phase 2.1
 // Will be properly implemented in Phase 2.3 (Service Layer)
 type Server struct {
-	db    *ent.Client
+	db    *database.Client
 	llm   *llm.Client
 	wsHub *WSHub
 }
 
 // NewServer creates a new API server
-func NewServer(db *ent.Client, llm *llm.Client, wsHub *WSHub) *Server {
+func NewServer(db *database.Client, llm *llm.Client, wsHub *WSHub) *Server {
 	return &Server{
 		db:    db,
 		llm:   llm,
@@ -28,12 +30,23 @@ func NewServer(db *ent.Client, llm *llm.Client, wsHub *WSHub) *Server {
 
 // Health returns the health status
 func (s *Server) Health(c *gin.Context) {
-	// Simple health check - just return OK if we got here
-	// Database connection is tested on startup
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	dbHealth, err := database.Health(ctx, s.db.DB())
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":   "unhealthy",
+			"database": "disconnected",
+			"error":    err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":   "healthy",
-		"database": "connected",
-		"phase":    "2.1 - Schema & Migrations Complete",
+		"database": dbHealth,
+		"phase":    "2.2 - Database Client Complete",
 	})
 }
 

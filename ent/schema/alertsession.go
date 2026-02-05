@@ -139,14 +139,8 @@ func (AlertSession) Indexes() []ent.Index {
 }
 
 // Annotations for PostgreSQL-specific features.
+// Note: GIN indexes for full-text search are created via migration hooks
+// in pkg/database/migrations.go
 func (AlertSession) Annotations() []schema.Annotation {
-	return []schema.Annotation{
-		entsql.Annotation{
-			// GIN indexes for full-text search
-			Checks: map[string]string{
-				"alert_data_fts":     "to_tsvector('english', alert_data) @@ to_tsquery('english', '')",
-				"final_analysis_fts": "to_tsvector('english', COALESCE(final_analysis, '')) @@ to_tsquery('english', '')",
-			},
-		},
-	}
+	return []schema.Annotation{}
 }

@@ -2281,22 +2281,22 @@ err := client.AlertSession.
 ## Implementation Checklist
 
 ### Phase 2.1: Schema & Migrations
-- [ ] Define Ent schemas for all entities
-  - [ ] AlertSession (with full-text search, soft delete)
-  - [ ] Stage (Layer 0a - Configuration + Coordination)
-  - [ ] AgentExecution (Layer 0b - Individual Agent Work)
-  - [ ] TimelineEvent (Layer 1 - UX Timeline)
-  - [ ] Message (Layer 2 - LLM Conversation)
-  - [ ] LLMInteraction (Layer 3 - Debug)
-  - [ ] MCPInteraction (Layer 4 - Debug)
-  - [ ] Event (with session_id for cleanup)
-  - [ ] Chat (without conversation_history)
-  - [ ] ChatUserMessage
-- [ ] Configure enum types
-- [ ] Set up edges/relationships
-- [ ] Generate initial migration
-- [ ] Test migration on fresh database
-- [ ] Document schema in generated docs
+- [x] Define Ent schemas for all entities
+  - [x] AlertSession (with full-text search, soft delete)
+  - [x] Stage (Layer 0a - Configuration + Coordination)
+  - [x] AgentExecution (Layer 0b - Individual Agent Work)
+  - [x] TimelineEvent (Layer 1 - UX Timeline)
+  - [x] Message (Layer 2 - LLM Conversation)
+  - [x] LLMInteraction (Layer 3 - Debug)
+  - [x] MCPInteraction (Layer 4 - Debug)
+  - [x] Event (with session_id for cleanup)
+  - [x] Chat (without conversation_history)
+  - [x] ChatUserMessage
+- [x] Configure enum types
+- [x] Set up edges/relationships
+- [x] Generate initial migration
+- [x] Test migration on fresh database
+- [x] Document schema in generated docs
 
 ### Phase 2.2: Database Client
 - [ ] Implement database client initialization
