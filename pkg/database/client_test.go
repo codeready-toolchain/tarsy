@@ -28,11 +28,8 @@ func newTestClient(t *testing.T) *Client {
 	require.NoError(t, err)
 
 	// Wrap in our client type
+	// Note: cleanup (schema drop and connection close) is handled by SetupTestDatabase
 	client := NewClientFromEnt(entClient, db)
-
-	t.Cleanup(func() {
-		client.Close()
-	})
 
 	return client
 }

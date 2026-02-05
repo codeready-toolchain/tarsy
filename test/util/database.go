@@ -43,7 +43,7 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 	// Generate unique schema name for this test
 	schemaName := generateSchemaName(t)
 
-	// Connect to the base database
+	// Connect to the base database to create the schema
 	db, err := stdsql.Open("pgx", connStr)
 	require.NoError(t, err)
 
@@ -53,15 +53,19 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 
 	t.Logf("Created test schema: %s", schemaName)
 
-	// Set search_path to the test schema
-	_, err = db.ExecContext(ctx, fmt.Sprintf("SET search_path TO %s", schemaName))
+	// Close the initial connection
+	db.Close()
+
+	// Reconnect with search_path set in connection string for all pooled connections
+	connStrWithSchema := addSearchPathToConnString(connStr, schemaName)
+	db, err = stdsql.Open("pgx", connStrWithSchema)
 	require.NoError(t, err)
 
 	// Configure connection pool for tests
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
-	// Create Ent driver
+	// Create Ent driver with search_path already set for all connections
 	drv := entsql.OpenDB(dialect.Postgres, db)
 
 	// Create Ent client
@@ -151,8 +155,23 @@ func generateSchemaName(t *testing.T) string {
 	
 	// Add random suffix for uniqueness
 	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		// crypto/rand.Read should never fail, but handle it defensively
+		t.Fatalf("failed to generate random bytes for schema name: %v", err)
+	}
 	randomHex := hex.EncodeToString(randomBytes)
 	
 	return fmt.Sprintf("test_%s_%s", testName, randomHex)
+}
+
+// addSearchPathToConnString appends search_path parameter to a PostgreSQL connection string.
+// This ensures all connections in the pool use the specified schema.
+func addSearchPathToConnString(connStr, schemaName string) string {
+	// Add search_path as a connection parameter
+	separator := "?"
+	if strings.Contains(connStr, "?") {
+		separator = "&"
+	}
+	return fmt.Sprintf("%s%ssearch_path=%s", connStr, separator, schemaName)
 }
