@@ -34,6 +34,12 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 	if req.ExpectedAgentCount <= 0 {
 		return nil, NewValidationError("expected_agent_count", "must be positive")
 	}
+	if req.SuccessPolicy != nil {
+		policy := *req.SuccessPolicy
+		if policy != "all" && policy != "any" {
+			return nil, NewValidationError("success_policy", "invalid: must be 'all' or 'any'")
+		}
+	}
 
 	// Use background context with timeout for critical write
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -112,10 +118,19 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Fetch the execution first to check current state
+	exec, err := s.client.AgentExecution.Get(ctx, executionID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to get agent execution: %w", err)
+	}
+
 	update := s.client.AgentExecution.UpdateOneID(executionID).
 		SetStatus(status)
 
-	if status == agentexecution.StatusActive && s.client.AgentExecution.GetX(ctx, executionID).StartedAt == nil {
+	if status == agentexecution.StatusActive && exec.StartedAt == nil {
 		update = update.SetStartedAt(time.Now())
 	}
 
@@ -127,8 +142,7 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 		update = update.SetCompletedAt(now)
 		
 		// Calculate duration if started_at exists
-		exec, err := s.client.AgentExecution.Get(ctx, executionID)
-		if err == nil && exec.StartedAt != nil {
+		if exec.StartedAt != nil {
 			durationMs := int(now.Sub(*exec.StartedAt).Milliseconds())
 			update = update.SetDurationMs(durationMs)
 		}
@@ -138,7 +152,7 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 		update = update.SetErrorMessage(errorMsg)
 	}
 
-	err := update.Exec(writeCtx)
+	err = update.Exec(writeCtx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return ErrNotFound

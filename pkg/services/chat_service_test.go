@@ -17,12 +17,13 @@ func TestChatService_CreateChat(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test alert",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates chat successfully", func(t *testing.T) {
 		req := models.CreateChatRequest{
@@ -65,17 +66,19 @@ func TestChatService_AddChatMessage(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	chat, _ := chatService.CreateChat(ctx, models.CreateChatRequest{
+	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
 		SessionID: session.ID,
 		CreatedBy: "test@example.com",
 	})
+	require.NoError(t, err)
 
 	t.Run("adds message successfully", func(t *testing.T) {
 		req := models.AddChatMessageRequest{
@@ -98,30 +101,34 @@ func TestChatService_GetChatHistory(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	chat, _ := chatService.CreateChat(ctx, models.CreateChatRequest{
+	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
 		SessionID: session.ID,
 		CreatedBy: "test@example.com",
 	})
+	require.NoError(t, err)
 
 	// Add messages
-	_, _ = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+	_, err = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
 		ChatID:  chat.ID,
 		Content: "Question 1",
 		Author:  "test@example.com",
 	})
+	require.NoError(t, err)
 
-	_, _ = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+	_, err = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
 		ChatID:  chat.ID,
 		Content: "Question 2",
 		Author:  "test@example.com",
 	})
+	require.NoError(t, err)
 
 	t.Run("retrieves chat history", func(t *testing.T) {
 		history, err := chatService.GetChatHistory(ctx, chat.ID)
@@ -143,22 +150,25 @@ func TestChatService_BuildChatContext(t *testing.T) {
 	sessionService := NewSessionService(client.Client)
 	ctx := context.Background()
 
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "Pod crashed in production",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
 	// Add final analysis to session
-	_ = client.AlertSession.UpdateOneID(session.ID).
+	err = client.AlertSession.UpdateOneID(session.ID).
 		SetFinalAnalysis("Root cause: OOM killed the pod").
 		Exec(ctx)
+	require.NoError(t, err)
 
-	chat, _ := chatService.CreateChat(ctx, models.CreateChatRequest{
+	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
 		SessionID: session.ID,
 		CreatedBy: "test@example.com",
 	})
+	require.NoError(t, err)
 
 	t.Run("builds context from parent session", func(t *testing.T) {
 		context, err := chatService.BuildChatContext(ctx, chat.ID)

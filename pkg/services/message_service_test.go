@@ -19,27 +19,30 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup
-	session, _ := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
 		SessionID: uuid.New().String(),
 		AlertData: "test",
 		AgentType: "kubernetes",
 		ChainID:   "k8s-analysis",
 	})
+	require.NoError(t, err)
 
-	stg, _ := stageService.CreateStage(ctx, models.CreateStageRequest{
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Test",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 	})
+	require.NoError(t, err)
 
-	exec, _ := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
 		IterationStrategy: "react",
 	})
+	require.NoError(t, err)
 
 	t.Run("creates and retrieves messages", func(t *testing.T) {
 		// Create messages

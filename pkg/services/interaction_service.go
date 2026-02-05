@@ -28,7 +28,7 @@ func NewInteractionService(client *ent.Client, messageService *MessageService) *
 
 // CreateLLMInteraction creates a new LLM interaction
 func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req models.CreateLLMInteractionRequest) (*ent.LLMInteraction, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	interactionID := uuid.New().String()
@@ -78,7 +78,7 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 
 // CreateMCPInteraction creates a new MCP interaction
 func (s *InteractionService) CreateMCPInteraction(httpCtx context.Context, req models.CreateMCPInteractionRequest) (*ent.MCPInteraction, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	interactionID := uuid.New().String()
@@ -101,8 +101,11 @@ func (s *InteractionService) CreateMCPInteraction(httpCtx context.Context, req m
 		builder = builder.SetToolResult(req.ToolResult)
 	}
 	if req.AvailableTools != nil {
-		// Convert map[string]any to []interface{} by creating a slice with the map
-		tools := []interface{}{req.AvailableTools}
+		// Convert map[string]any to []interface{} by iterating over the map
+		tools := make([]interface{}, 0, len(req.AvailableTools))
+		for _, tool := range req.AvailableTools {
+			tools = append(tools, tool)
+		}
 		builder = builder.SetAvailableTools(tools)
 	}
 	if req.DurationMs != nil {

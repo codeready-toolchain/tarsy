@@ -22,7 +22,7 @@ func NewEventService(client *ent.Client) *EventService {
 
 // CreateEvent creates a new event
 func (s *EventService) CreateEvent(httpCtx context.Context, req models.CreateEventRequest) (*ent.Event, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
 	evt, err := s.client.Event.Create().
@@ -56,7 +56,7 @@ func (s *EventService) GetEventsSince(ctx context.Context, channel string, since
 
 // CleanupSessionEvents removes all events for a session
 func (s *EventService) CleanupSessionEvents(ctx context.Context, sessionID string) (int, error) {
-	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	count, err := s.client.Event.Delete().
@@ -71,9 +71,13 @@ func (s *EventService) CleanupSessionEvents(ctx context.Context, sessionID strin
 
 // CleanupOrphanedEvents removes events older than TTL
 func (s *EventService) CleanupOrphanedEvents(ctx context.Context, ttlDays int) (int, error) {
+	if ttlDays <= 0 {
+		return 0, fmt.Errorf("ttl_days must be positive, got %d", ttlDays)
+	}
+
 	cutoff := time.Now().Add(-time.Duration(ttlDays) * 24 * time.Hour)
 
-	writeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	count, err := s.client.Event.Delete().

@@ -283,14 +283,30 @@ func (s *SessionService) ClaimNextPendingSession(ctx context.Context, podID stri
 		return nil, fmt.Errorf("failed to query pending session: %w", err)
 	}
 
-	// Update to claimed status
-	session, err = session.Update().
+	// Conditional update: only update if still pending
+	count, err := tx.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(session.ID),
+			alertsession.StatusEQ(alertsession.StatusPending),
+		).
 		SetStatus(alertsession.StatusInProgress).
 		SetPodID(podID).
 		SetLastInteractionAt(time.Now()).
 		Save(claimCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to claim session: %w", err)
+	}
+
+	// Check if the update actually claimed the row
+	if count == 0 {
+		// Session was already claimed by another process
+		return nil, nil
+	}
+
+	// Refetch the updated session
+	session, err = tx.AlertSession.Get(claimCtx, session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refetch claimed session: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -320,6 +336,10 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 
 // SoftDeleteOldSessions soft deletes sessions older than retention period
 func (s *SessionService) SoftDeleteOldSessions(ctx context.Context, retentionDays int) (int, error) {
+	if retentionDays <= 0 {
+		return 0, fmt.Errorf("retention_days must be positive, got %d", retentionDays)
+	}
+
 	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
 
 	// Use background context with timeout

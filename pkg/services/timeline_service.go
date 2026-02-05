@@ -23,6 +23,26 @@ func NewTimelineService(client *ent.Client) *TimelineService {
 
 // CreateTimelineEvent creates a new timeline event
 func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req models.CreateTimelineEventRequest) (*ent.TimelineEvent, error) {
+	// Validate request
+	if req.SessionID == "" {
+		return nil, NewValidationError("SessionID", "required")
+	}
+	if req.StageID == "" {
+		return nil, NewValidationError("StageID", "required")
+	}
+	if req.ExecutionID == "" {
+		return nil, NewValidationError("ExecutionID", "required")
+	}
+	if req.SequenceNumber <= 0 {
+		return nil, NewValidationError("SequenceNumber", "must be positive")
+	}
+	if req.EventType == "" {
+		return nil, NewValidationError("EventType", "required")
+	}
+	if req.Content == "" {
+		return nil, NewValidationError("Content", "required")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
