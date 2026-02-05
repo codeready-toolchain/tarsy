@@ -1,3 +1,4 @@
+// Package llm provides gRPC client for LLM service communication.
 package llm
 
 import (

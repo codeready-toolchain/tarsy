@@ -1,3 +1,4 @@
+// TARSy orchestrator server - provides HTTP/WebSocket API and manages LLM interactions.
 package main
 
 import (
@@ -6,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +38,7 @@ func main() {
 	}
 	gin.SetMode(ginMode)
 
-	log.Printf("Starting TARSy - Phase 2.1: Schema & Migrations")
+	log.Printf("Starting TARSy")
 	log.Printf("HTTP Port: %s", httpPort)
 
 	// Initialize database
@@ -49,19 +52,65 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer dbClient.Close()
+	defer func() {
+		if err := dbClient.Close(); err != nil {
+			log.Printf("Error closing database client: %v", err)
+		}
+	}()
 	log.Println("✓ Connected to PostgreSQL database")
 	log.Println("✓ Database schema initialized")
+
+	// Initialize services
+	sessionService := services.NewSessionService(dbClient.Client)
+	stageService := services.NewStageService(dbClient.Client)
+	messageService := services.NewMessageService(dbClient.Client)
+	timelineService := services.NewTimelineService(dbClient.Client)
+	interactionService := services.NewInteractionService(dbClient.Client, messageService)
+	eventService := services.NewEventService(dbClient.Client)
+	chatService := services.NewChatService(dbClient.Client)
+
+	// Mark as used (will be passed to API handlers in Phase 3)
+	_ = sessionService
+	_ = stageService
+	_ = timelineService
+	_ = interactionService
+	_ = eventService
+	_ = chatService
+
+	log.Println("✓ Services initialized")
 
 	// Setup minimal Gin router
 	router := gin.Default()
 
-	// Health check endpoint
+	// Health check endpoint using services
 	router.GET("/health", func(c *gin.Context) {
+		reqCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+
+		dbHealth, err := database.Health(reqCtx, dbClient.DB())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":   "unhealthy",
+				"database": dbHealth,
+				"phase":    "2.3 - Service Layer Complete",
+				"error":    err.Error(),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"status":   "healthy",
-			"database": "connected",
-			"phase":    "2.1 - Schema & Migrations Complete",
+			"database": dbHealth,
+			"phase":    "2.3 - Service Layer Complete",
+			"services": gin.H{
+				"session":     "ready",
+				"stage":       "ready",
+				"message":     "ready",
+				"timeline":    "ready",
+				"interaction": "ready",
+				"event":       "ready",
+				"chat":        "ready",
+			},
 		})
 	})
 

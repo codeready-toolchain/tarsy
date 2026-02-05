@@ -1,3 +1,4 @@
+// Package database provides test database utilities and helpers.
 package database
 
 import (

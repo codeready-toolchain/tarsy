@@ -1,3 +1,4 @@
+// Package util provides test utilities and helper functions for database testing.
 package util
 
 import (
@@ -22,11 +23,10 @@ import (
 )
 
 var (
-	// Shared testcontainer for all tests in local dev
-	sharedContainer testcontainers.Container
-	sharedConnStr   string
-	containerOnce   sync.Once
-	containerErr    error
+	// Shared connection string for all tests in local dev
+	sharedConnStr string
+	containerOnce sync.Once
+	containerErr  error
 )
 
 // SetupTestDatabase creates a test database and returns the raw components.
@@ -54,7 +54,7 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 	t.Logf("Created test schema: %s", schemaName)
 
 	// Close the initial connection
-	db.Close()
+	_ = db.Close()
 
 	// Reconnect with search_path set in connection string for all pooled connections
 	connStrWithSchema := addSearchPathToConnString(connStr, schemaName)
@@ -82,8 +82,8 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 		if err != nil {
 			t.Logf("Warning: failed to drop schema %s: %v", schemaName, err)
 		}
-		entClient.Close()
-		db.Close()
+		_ = entClient.Close()
+		_ = db.Close()
 	})
 
 	return entClient, db
@@ -119,8 +119,6 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 			return
 		}
 
-		sharedContainer = pgContainer
-
 		// Get connection string
 		connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 		if err != nil {
@@ -147,12 +145,12 @@ func generateSchemaName(t *testing.T) string {
 		}
 		return '_'
 	}, testName)
-	
+
 	// Limit length to avoid PostgreSQL's 63 char identifier limit
 	if len(testName) > 40 {
 		testName = testName[:40]
 	}
-	
+
 	// Add random suffix for uniqueness
 	randomBytes := make([]byte, 4)
 	_, err := rand.Read(randomBytes)
@@ -161,7 +159,7 @@ func generateSchemaName(t *testing.T) string {
 		t.Fatalf("failed to generate random bytes for schema name: %v", err)
 	}
 	randomHex := hex.EncodeToString(randomBytes)
-	
+
 	return fmt.Sprintf("test_%s_%s", testName, randomHex)
 }
 

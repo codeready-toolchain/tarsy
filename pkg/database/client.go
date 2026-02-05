@@ -1,3 +1,4 @@
+// Package database provides PostgreSQL database client and migration utilities.
 package database
 
 import (
@@ -15,7 +16,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 )
 
 //go:embed migrations
@@ -91,7 +92,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 
 	// Run migrations
 	if err := runMigrations(ctx, db, cfg, drv, entClient); err != nil {
-		entClient.Close()
+		_ = entClient.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
@@ -111,13 +112,13 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 // in production deployments without requiring external files.
 //
 // Migration workflow (once migrations are generated):
-//   1. Developer changes schema: Edit ent/schema/*.go
-//   2. Generate migration: make migrate-create NAME=add_feature
-//   3. Migrations saved to pkg/database/migrations/*.sql
-//   4. Files embedded into binary at compile time
-//   5. Review & commit: Check SQL files, commit to git
-//   6. Deploy: Build binary (migrations embedded automatically)
-//   7. Auto-apply: App applies pending migrations on startup (this function)
+//  1. Developer changes schema: Edit ent/schema/*.go
+//  2. Generate migration: make migrate-create NAME=add_feature
+//  3. Migrations saved to pkg/database/migrations/*.sql
+//  4. Files embedded into binary at compile time
+//  5. Review & commit: Check SQL files, commit to git
+//  6. Deploy: Build binary (migrations embedded automatically)
+//  7. Auto-apply: App applies pending migrations on startup (this function)
 //
 // For initial setup (before first migration is generated):
 //   - Uses Ent's Schema.Create() to initialize database from schema definitions
@@ -142,24 +143,24 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.D
 			return fmt.Errorf("failed to create migration source: %w", err)
 		}
 
-	m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
-	if err != nil {
-		return fmt.Errorf("failed to create migrate instance: %w", err)
-	}
-
-	// Apply all pending migrations
-	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
-	// Close the migrate instance to avoid resource leaks
-	if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
-		if srcErr != nil {
-			return fmt.Errorf("failed to close migration source: %w", srcErr)
+		m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
+		if err != nil {
+			return fmt.Errorf("failed to create migrate instance: %w", err)
 		}
-		return fmt.Errorf("failed to close migration database: %w", dbErr)
-	}
+
+		// Apply all pending migrations
+		err = m.Up()
+		if err != nil && err != migrate.ErrNoChange {
+			return fmt.Errorf("failed to apply migrations: %w", err)
+		}
+
+		// Close the migrate instance to avoid resource leaks
+		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+			if srcErr != nil {
+				return fmt.Errorf("failed to close migration source: %w", srcErr)
+			}
+			return fmt.Errorf("failed to close migration database: %w", dbErr)
+		}
 	} else {
 		// Fall back to auto-migration for initial setup
 		// This is safe when no migration files exist yet
