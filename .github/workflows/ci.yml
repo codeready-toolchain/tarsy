@@ -23,7 +23,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.62.2
           args: --timeout=5m
 
   build:
@@ -84,6 +84,9 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Initialize PostgreSQL extensions
         run: |
           PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
@@ -91,6 +94,7 @@ jobs:
 
       - name: Run tests
         env:
+          # checkov:skip=CKV_SECRET_4 - test-only credentials for ephemeral CI postgres
           CI_DATABASE_URL: postgresql://test:test@localhost:5432/test?sslmode=disable
         run: make test
 

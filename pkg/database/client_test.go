@@ -2,86 +2,29 @@ package database
 
 import (
 	"context"
-	stdsql "database/sql"
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/test/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// newTestClient creates a test database client with CI/local environment detection.
-// In CI (when CI_DATABASE_URL is set): connects to external PostgreSQL service container.
-// In local dev: spins up a testcontainer with PostgreSQL.
+// newTestClient creates a test database client using the shared test utility
 func newTestClient(t *testing.T) *Client {
 	ctx := context.Background()
 
-	// Check if we're in CI with an external database
-	ciDatabaseURL := os.Getenv("CI_DATABASE_URL")
-	
-	var connStr string
-	
-	if ciDatabaseURL != "" {
-		// CI mode: use external PostgreSQL service container
-		t.Log("Using external PostgreSQL from CI_DATABASE_URL")
-		connStr = ciDatabaseURL
-	} else {
-		// Local dev mode: use testcontainers
-		t.Log("Using testcontainers for PostgreSQL")
-		pgContainer, err := postgres.Run(ctx,
-			"postgres:16-alpine",
-			postgres.WithDatabase("test"),
-			postgres.WithUsername("test"),
-			postgres.WithPassword("test"),
-			postgres.WithInitScripts("../../deploy/postgres-init/01-init.sql"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(30*time.Second)),
-		)
-		require.NoError(t, err)
+	// Use shared test database setup
+	entClient, db := util.SetupTestDatabase(t)
 
-		t.Cleanup(func() {
-			if err := testcontainers.TerminateContainer(pgContainer); err != nil {
-				t.Logf("failed to terminate container: %v", err)
-			}
-		})
-
-		// Get connection string from container
-		var err2 error
-		connStr, err2 = pgContainer.ConnectionString(ctx, "sslmode=disable")
-		require.NoError(t, err2)
-	}
-
-	// Open database connection using pgx driver
-	db, err := stdsql.Open("pgx", connStr)
-	require.NoError(t, err)
-
-	// Configure connection pool for tests
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-
-	// Create Ent driver from existing database connection
-	// Use dialect.Postgres for Ent compatibility while pgx handles the actual connection
+	// Get the driver for GIN index creation
 	drv := entsql.OpenDB(dialect.Postgres, db)
 
-	// Create Ent client
-	entClient := ent.NewClient(ent.Driver(drv))
-
-	// Run migrations (auto-migration for tests)
-	err = entClient.Schema.Create(ctx)
-	require.NoError(t, err)
-
 	// Create GIN indexes
-	err = CreateGINIndexes(ctx, drv)
+	err := CreateGINIndexes(ctx, drv)
 	require.NoError(t, err)
 
 	// Wrap in our client type
@@ -190,14 +133,14 @@ func TestLoadConfigFromEnv(t *testing.T) {
 		{
 			name: "valid config with custom values",
 			envVars: map[string]string{
-				"DB_HOST":            "db.example.com",
-				"DB_PORT":            "5433",
-				"DB_USER":            "admin",
-				"DB_PASSWORD":        "secret",
-				"DB_NAME":            "production",
-				"DB_SSLMODE":         "require",
-				"DB_MAX_OPEN_CONNS":  "50",
-				"DB_MAX_IDLE_CONNS":  "20",
+				"DB_HOST":           "db.example.com",
+				"DB_PORT":           "5433",
+				"DB_USER":           "admin",
+				"DB_PASSWORD":       "secret",
+				"DB_NAME":           "production",
+				"DB_SSLMODE":        "require",
+				"DB_MAX_OPEN_CONNS": "50",
+				"DB_MAX_IDLE_CONNS": "20",
 			},
 			wantErr: false,
 		},
