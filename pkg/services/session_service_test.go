@@ -435,8 +435,7 @@ func TestSessionService_ConcurrentClaiming(t *testing.T) {
 
 		// Verify we claimed all available sessions (workers might return nil if no sessions left)
 		// The key is that all sessions get claimed, even if not all workers succeed
-		assert.LessOrEqual(t, len(claimedSessions), numSessions, "should not claim more than available")
-		assert.GreaterOrEqual(t, len(claimedSessions), 1, "should claim at least one session")
+		assert.Equal(t, numSessions, len(claimedSessions), "should claim all available sessions")
 
 		// The critical test: verify no duplicate claims - all session IDs must be unique
 		seenIDs := make(map[string]bool)
@@ -500,9 +499,8 @@ func TestSessionService_ConcurrentClaiming(t *testing.T) {
 		// Verify no errors occurred
 		require.Empty(t, errors, "concurrent claiming should not produce errors")
 
-		// Verify we claimed at most the available sessions (some workers may get nil)
-		assert.LessOrEqual(t, len(claimedSessions), numSessions, "should not claim more than available")
-		assert.GreaterOrEqual(t, len(claimedSessions), 1, "should claim at least one session")
+		// Verify we claimed all available sessions (some workers may get nil)
+		assert.Equal(t, numSessions, len(claimedSessions), "should claim all available sessions")
 
 		// Verify no duplicate claims - this is the critical concurrent safety test
 		seenIDs := make(map[string]bool)

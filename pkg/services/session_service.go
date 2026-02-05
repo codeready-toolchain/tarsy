@@ -256,64 +256,73 @@ func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string
 	return nil
 }
 
-// ClaimNextPendingSession atomically claims a pending session
-// Note: This uses a simple transaction approach. In production with high concurrency,
-// consider using UPDATE ... WHERE ... RETURNING with FOR UPDATE SKIP LOCKED via raw SQL.
+// ClaimNextPendingSession atomically claims a pending session with retry logic
+// Retries on conflicts to ensure all available sessions are claimed in high-concurrency scenarios
 func (s *SessionService) ClaimNextPendingSession(_ context.Context, podID string) (*ent.AlertSession, error) {
 	// Use background context with timeout
 	claimCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	tx, err := s.client.Tx(claimCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Find first pending session
-	session, err := tx.AlertSession.Query().
-		Where(alertsession.StatusEQ(alertsession.StatusPending)).
-		Order(ent.Asc(alertsession.FieldStartedAt)).
-		First(claimCtx)
-
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, nil // No pending sessions
+	// Retry up to 10 times to claim a session (handles high-concurrency conflicts)
+	const maxRetries = 10
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		tx, err := s.client.Tx(claimCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start transaction: %w", err)
 		}
-		return nil, fmt.Errorf("failed to query pending session: %w", err)
+
+		// Find first pending session
+		session, err := tx.AlertSession.Query().
+			Where(alertsession.StatusEQ(alertsession.StatusPending)).
+			Order(ent.Asc(alertsession.FieldStartedAt)).
+			First(claimCtx)
+
+		if err != nil {
+			_ = tx.Rollback()
+			if ent.IsNotFound(err) {
+				return nil, nil // No pending sessions
+			}
+			return nil, fmt.Errorf("failed to query pending session: %w", err)
+		}
+
+		// Conditional update: only update if still pending
+		count, err := tx.AlertSession.Update().
+			Where(
+				alertsession.IDEQ(session.ID),
+				alertsession.StatusEQ(alertsession.StatusPending),
+			).
+			SetStatus(alertsession.StatusInProgress).
+			SetPodID(podID).
+			SetLastInteractionAt(time.Now()).
+			Save(claimCtx)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("failed to claim session: %w", err)
+		}
+
+		// Check if the update actually claimed the row
+		if count == 0 {
+			// Session was already claimed by another process, retry
+			_ = tx.Rollback()
+			continue
+		}
+
+		// Refetch the updated session
+		session, err = tx.AlertSession.Get(claimCtx, session.ID)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("failed to refetch claimed session: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit claim: %w", err)
+		}
+
+		return session, nil
 	}
 
-	// Conditional update: only update if still pending
-	count, err := tx.AlertSession.Update().
-		Where(
-			alertsession.IDEQ(session.ID),
-			alertsession.StatusEQ(alertsession.StatusPending),
-		).
-		SetStatus(alertsession.StatusInProgress).
-		SetPodID(podID).
-		SetLastInteractionAt(time.Now()).
-		Save(claimCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to claim session: %w", err)
-	}
-
-	// Check if the update actually claimed the row
-	if count == 0 {
-		// Session was already claimed by another process
-		return nil, nil
-	}
-
-	// Refetch the updated session
-	session, err = tx.AlertSession.Get(claimCtx, session.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to refetch claimed session: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit claim: %w", err)
-	}
-
-	return session, nil
+	// After max retries, return nil (all sessions were likely claimed by other workers)
+	return nil, nil
 }
 
 // FindOrphanedSessions finds sessions stuck in-progress past timeout
