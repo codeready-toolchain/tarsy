@@ -8,7 +8,7 @@ type CreateStageRequest struct {
 	StageName          string  `json:"stage_name"`
 	StageIndex         int     `json:"stage_index"`
 	ExpectedAgentCount int     `json:"expected_agent_count"`
-	ParallelType       *string `json:"parallel_type,omitempty"` // "multi_agent" or "replica"
+	ParallelType       *string `json:"parallel_type,omitempty"`  // "multi_agent" or "replica"
 	SuccessPolicy      *string `json:"success_policy,omitempty"` // "all" or "any"
 	ChatID             *string `json:"chat_id,omitempty"`
 	ChatUserMessageID  *string `json:"chat_user_message_id,omitempty"`

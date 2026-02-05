@@ -146,7 +146,7 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 		status == agentexecution.StatusTimedOut {
 		now := time.Now()
 		update = update.SetCompletedAt(now)
-		
+
 		// Calculate duration if started_at exists
 		if exec.StartedAt != nil {
 			durationMs := int(now.Sub(*exec.StartedAt).Milliseconds())

@@ -8,9 +8,9 @@ type MCPServerSelection struct {
 
 // NativeToolsConfig configures native LLM provider tools
 type NativeToolsConfig struct {
-	GoogleSearch  *bool `json:"google_search,omitempty"`   // nil = provider default
-	CodeExecution *bool `json:"code_execution,omitempty"`  // nil = provider default
-	URLContext    *bool `json:"url_context,omitempty"`     // nil = provider default
+	GoogleSearch  *bool `json:"google_search,omitempty"`  // nil = provider default
+	CodeExecution *bool `json:"code_execution,omitempty"` // nil = provider default
+	URLContext    *bool `json:"url_context,omitempty"`    // nil = provider default
 }
 
 // MCPSelectionConfig is the per-alert MCP override configuration

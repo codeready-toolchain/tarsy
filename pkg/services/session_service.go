@@ -26,7 +26,7 @@ func NewSessionService(client *ent.Client) *SessionService {
 }
 
 // CreateSession creates a new alert session with initial stage and agent execution
-func (s *SessionService) CreateSession(httpCtx context.Context, req models.CreateSessionRequest) (*ent.AlertSession, error) {
+func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessionRequest) (*ent.AlertSession, error) {
 	// Validate input
 	if req.SessionID == "" {
 		return nil, NewValidationError("session_id", "required")
@@ -49,7 +49,7 @@ func (s *SessionService) CreateSession(httpCtx context.Context, req models.Creat
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Convert MCP selection to JSON if provided
 	var mcpSelectionJSON map[string]any
@@ -229,7 +229,7 @@ func (s *SessionService) ListSessions(ctx context.Context, filters models.Sessio
 }
 
 // UpdateSessionStatus updates a session's status
-func (s *SessionService) UpdateSessionStatus(ctx context.Context, sessionID string, status alertsession.Status) error {
+func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string, status alertsession.Status) error {
 	// Use background context with timeout for critical write
 	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -259,7 +259,7 @@ func (s *SessionService) UpdateSessionStatus(ctx context.Context, sessionID stri
 // ClaimNextPendingSession atomically claims a pending session
 // Note: This uses a simple transaction approach. In production with high concurrency,
 // consider using UPDATE ... WHERE ... RETURNING with FOR UPDATE SKIP LOCKED via raw SQL.
-func (s *SessionService) ClaimNextPendingSession(ctx context.Context, podID string) (*ent.AlertSession, error) {
+func (s *SessionService) ClaimNextPendingSession(_ context.Context, podID string) (*ent.AlertSession, error) {
 	// Use background context with timeout
 	claimCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -268,7 +268,7 @@ func (s *SessionService) ClaimNextPendingSession(ctx context.Context, podID stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Find first pending session
 	session, err := tx.AlertSession.Query().
@@ -335,7 +335,7 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 }
 
 // SoftDeleteOldSessions soft deletes sessions older than retention period
-func (s *SessionService) SoftDeleteOldSessions(ctx context.Context, retentionDays int) (int, error) {
+func (s *SessionService) SoftDeleteOldSessions(_ context.Context, retentionDays int) (int, error) {
 	if retentionDays <= 0 {
 		return 0, fmt.Errorf("retention_days must be positive, got %d", retentionDays)
 	}
@@ -361,7 +361,7 @@ func (s *SessionService) SoftDeleteOldSessions(ctx context.Context, retentionDay
 }
 
 // RestoreSession restores a soft-deleted session
-func (s *SessionService) RestoreSession(ctx context.Context, sessionID string) error {
+func (s *SessionService) RestoreSession(_ context.Context, sessionID string) error {
 	// Use background context with timeout
 	restoreCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

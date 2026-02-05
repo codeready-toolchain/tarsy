@@ -21,16 +21,16 @@ type CreateSessionRequest struct {
 
 // SessionFilters contains filtering options for listing sessions
 type SessionFilters struct {
-	Status     string     `json:"status,omitempty"`
-	AgentType  string     `json:"agent_type,omitempty"`
-	AlertType  string     `json:"alert_type,omitempty"`
-	ChainID    string     `json:"chain_id,omitempty"`
-	Author     string     `json:"author,omitempty"`
-	StartedAt  *time.Time `json:"started_at,omitempty"`
-	StartedBefore *time.Time `json:"started_before,omitempty"`
-	Limit      int        `json:"limit,omitempty"`
-	Offset     int        `json:"offset,omitempty"`
-	IncludeDeleted bool   `json:"include_deleted,omitempty"`
+	Status         string     `json:"status,omitempty"`
+	AgentType      string     `json:"agent_type,omitempty"`
+	AlertType      string     `json:"alert_type,omitempty"`
+	ChainID        string     `json:"chain_id,omitempty"`
+	Author         string     `json:"author,omitempty"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	StartedBefore  *time.Time `json:"started_before,omitempty"`
+	Limit          int        `json:"limit,omitempty"`
+	Offset         int        `json:"offset,omitempty"`
+	IncludeDeleted bool       `json:"include_deleted,omitempty"`
 }
 
 // SessionResponse wraps an AlertSession with optional loaded edges

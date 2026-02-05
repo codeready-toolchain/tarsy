@@ -1,3 +1,4 @@
+// TARSy orchestrator server - provides HTTP/WebSocket API and manages LLM interactions.
 package main
 
 import (
@@ -51,7 +52,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer dbClient.Close()
+	defer func() {
+		if err := dbClient.Close(); err != nil {
+			log.Printf("Error closing database client: %v", err)
+		}
+	}()
 	log.Println("✓ Connected to PostgreSQL database")
 	log.Println("✓ Database schema initialized")
 

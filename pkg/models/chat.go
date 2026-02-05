@@ -1,3 +1,4 @@
+// Package models contains request/response models and business domain types.
 package models
 
 import "github.com/codeready-toolchain/tarsy/ent"

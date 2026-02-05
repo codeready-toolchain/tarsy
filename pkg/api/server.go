@@ -1,3 +1,4 @@
+// Package api provides HTTP and WebSocket API handlers.
 package api
 
 import (
@@ -16,7 +17,7 @@ type Server struct {
 	db    *database.Client
 	llm   *llm.Client
 	wsHub *WSHub
-	
+
 	// Services
 	sessionService     *services.SessionService
 	stageService       *services.StageService

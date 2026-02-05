@@ -1,3 +1,4 @@
+// Package services contains business logic service layer implementations.
 package services
 
 import (
@@ -7,8 +8,8 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/chat"
-	"github.com/google/uuid"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/google/uuid"
 )
 
 // ChatService manages follow-up chat conversations
@@ -145,7 +146,7 @@ func (s *ChatService) BuildChatContext(ctx context.Context, chatID string) (stri
 	// Build context from parent session's artifacts
 	// This is a simplified implementation - in production, this would be more sophisticated
 	chatContext := fmt.Sprintf("Original Alert: %s\n\n", chatObj.Edges.Session.AlertData)
-	
+
 	if chatObj.Edges.Session.FinalAnalysis != nil {
 		chatContext += fmt.Sprintf("Investigation Summary: %s\n\n", *chatObj.Edges.Session.FinalAnalysis)
 	}

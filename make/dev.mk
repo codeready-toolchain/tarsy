@@ -40,7 +40,18 @@ test-coverage: test ## Run tests and show coverage report
 .PHONY: lint
 lint: ## Run golangci-lint
 	@echo -e "$(YELLOW)Running linter...$(NC)"
-	@golangci-lint run ./...
+	@golangci-lint run --timeout=5m
+
+.PHONY: lint-fix
+lint-fix: ## Run golangci-lint with auto-fix
+	@echo -e "$(YELLOW)Running linter with auto-fix...$(NC)"
+	@golangci-lint run --timeout=5m --fix
+
+.PHONY: lint-config
+lint-config: ## Verify golangci-lint configuration
+	@echo -e "$(YELLOW)Verifying linter configuration...$(NC)"
+	@golangci-lint config verify
+	@echo -e "$(GREEN)✅ Configuration is valid$(NC)"
 
 .PHONY: fmt
 fmt: ## Format Go code

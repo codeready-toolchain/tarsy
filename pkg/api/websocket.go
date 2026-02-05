@@ -21,6 +21,6 @@ func (h *WSHub) Run() {
 }
 
 // HandleWS handles WebSocket connections
-func (h *WSHub) HandleWS(w http.ResponseWriter, r *http.Request) {
+func (h *WSHub) HandleWS(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "WebSocket not implemented yet - Phase 2.3", http.StatusNotImplemented)
 }

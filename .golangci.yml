@@ -20,7 +20,8 @@ linters:
       check-blank: false
       check-type-assertions: false
     govet:
-      check-shadowing: false
+      disable:
+        - shadow
     staticcheck:
       checks: ["all"]
   exclusions:
@@ -38,6 +39,10 @@ linters:
         linters:
           - revive
           - staticcheck
+      # Allow common package names 'api' and 'util'
+      - linters:
+          - revive
+        text: "var-naming: avoid meaningless package names"
 
 formatters:
   enable:

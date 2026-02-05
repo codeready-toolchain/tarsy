@@ -22,7 +22,7 @@ func NewMessageService(client *ent.Client) *MessageService {
 }
 
 // CreateMessage creates a new message
-func (s *MessageService) CreateMessage(httpCtx context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
+func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
 	// Validate input
 	if req.SessionID == "" {
 		return nil, NewValidationError("session_id", "required")
