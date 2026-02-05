@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -379,6 +381,133 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 
 		// Should be different sessions
 		assert.NotEqual(t, claimed1.ID, claimed2.ID)
+	})
+}
+
+func TestSessionService_ConcurrentClaiming(t *testing.T) {
+	t.Run("multiple workers claim different sessions without conflict", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		service := NewSessionService(client.Client)
+		ctx := context.Background()
+		// Create 10 pending sessions
+		numSessions := 10
+		for i := 0; i < numSessions; i++ {
+			req := models.CreateSessionRequest{
+				SessionID: uuid.New().String(),
+				AlertData: "test alert",
+				AgentType: "kubernetes",
+				ChainID:   "k8s-analysis",
+			}
+			_, err := service.CreateSession(ctx, req)
+			require.NoError(t, err)
+		}
+
+		// Launch 10 goroutines claiming sessions concurrently
+		numWorkers := 10
+		type result struct {
+			session *ent.AlertSession
+			err     error
+		}
+		results := make(chan result, numWorkers)
+
+		for i := 0; i < numWorkers; i++ {
+			go func(workerID int) {
+				podID := fmt.Sprintf("pod-%d", workerID)
+				session, err := service.ClaimNextPendingSession(ctx, podID)
+				results <- result{session: session, err: err}
+			}(i)
+		}
+
+		// Collect all results
+		var claimedSessions []*ent.AlertSession
+		var errors []error
+		for i := 0; i < numWorkers; i++ {
+			res := <-results
+			if res.err != nil {
+				errors = append(errors, res.err)
+			} else if res.session != nil {
+				claimedSessions = append(claimedSessions, res.session)
+			}
+		}
+
+		// Verify no errors occurred
+		require.Empty(t, errors, "concurrent claiming should not produce errors")
+
+		// Verify we claimed all available sessions (workers might return nil if no sessions left)
+		// The key is that all sessions get claimed, even if not all workers succeed
+		assert.Equal(t, numSessions, len(claimedSessions), "should claim all available sessions")
+
+		// The critical test: verify no duplicate claims - all session IDs must be unique
+		seenIDs := make(map[string]bool)
+		for _, session := range claimedSessions {
+			assert.False(t, seenIDs[session.ID], "session %s was claimed multiple times", session.ID)
+			seenIDs[session.ID] = true
+		}
+
+		// Verify all claimed sessions are in_progress status with correct pod_id
+		for _, session := range claimedSessions {
+			assert.Equal(t, alertsession.StatusInProgress, session.Status)
+			assert.NotNil(t, session.PodID, "claimed session should have pod_id set")
+		}
+	})
+
+	t.Run("workers claiming more sessions than available", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		service := NewSessionService(client.Client)
+		ctx := context.Background()
+		// Create only 3 pending sessions
+		numSessions := 3
+		for i := 0; i < numSessions; i++ {
+			req := models.CreateSessionRequest{
+				SessionID: uuid.New().String(),
+				AlertData: "test alert",
+				AgentType: "kubernetes",
+				ChainID:   "k8s-analysis",
+			}
+			_, err := service.CreateSession(ctx, req)
+			require.NoError(t, err)
+		}
+
+		// Launch 10 workers (more than available sessions)
+		numWorkers := 10
+		type result struct {
+			session *ent.AlertSession
+			err     error
+		}
+		results := make(chan result, numWorkers)
+
+		for i := 0; i < numWorkers; i++ {
+			go func(workerID int) {
+				podID := fmt.Sprintf("pod-%d", workerID)
+				session, err := service.ClaimNextPendingSession(ctx, podID)
+				results <- result{session: session, err: err}
+			}(i)
+		}
+
+		// Collect all results
+		var claimedSessions []*ent.AlertSession
+		var errors []error
+		for i := 0; i < numWorkers; i++ {
+			res := <-results
+			if res.err != nil {
+				errors = append(errors, res.err)
+			} else if res.session != nil {
+				claimedSessions = append(claimedSessions, res.session)
+			}
+		}
+
+		// Verify no errors occurred
+		require.Empty(t, errors, "concurrent claiming should not produce errors")
+
+		// Verify we claimed all available sessions (some workers may get nil)
+		assert.Equal(t, numSessions, len(claimedSessions), "should claim all available sessions")
+
+		// Verify no duplicate claims - this is the critical concurrent safety test
+		seenIDs := make(map[string]bool)
+		for _, session := range claimedSessions {
+			assert.False(t, seenIDs[session.ID], "session %s was claimed multiple times", session.ID)
+			seenIDs[session.ID] = true
+		}
 	})
 }
 

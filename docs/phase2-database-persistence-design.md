@@ -2440,13 +2440,13 @@ err := client.AlertSession.
   - [x] CleanupOrphanedEvents (TTL fallback)
 
 ### Phase 2.4: Testing
-- [ ] Set up testcontainers integration
-- [ ] Write service layer unit tests
-- [ ] Write integration tests
-- [ ] Test migration rollback scenarios
-- [ ] Test full-text search functionality
-- [ ] Test soft delete retention policies
-- [ ] Test event cleanup strategies
+- [x] Set up testcontainers integration
+- [x] Write service layer unit tests
+- [x] Write integration tests
+- [ ] Test migration rollback scenarios (deferred - migrations use auto-migration currently)
+- [x] Test full-text search functionality
+- [x] Test soft delete retention policies
+- [x] Test event cleanup strategies
 
 ---
 

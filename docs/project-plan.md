@@ -48,10 +48,10 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 ### Phase 2: Core Infrastructure
 
 **Database & Persistence**
-- [ ] PostgreSQL integration (Go)
-- [ ] Database models & repositories (Go)
-- [ ] Alembic-style migrations (Go)
-- [ ] Session/alert persistence
+- [x] PostgreSQL integration (Go)
+- [x] Database models & repositories (Go)
+- [x] Alembic-style migrations (Go)
+- [x] Session/alert persistence
 
 **Configuration System**
 - [ ] YAML-based agent definitions
