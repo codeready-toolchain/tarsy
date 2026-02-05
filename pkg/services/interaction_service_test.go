@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -404,6 +406,134 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+		require.NoError(t, err)
+		assert.Len(t, conversation, 0)
+	})
+
+	t.Run("handles last_message_id pointing to first message", func(t *testing.T) {
+		// Create a new execution for isolated test
+		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "TestAgent2",
+			AgentIndex:        2,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+
+		// Create only one message
+		msg1, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec2.ID,
+			SequenceNumber: 1,
+			Role:           "system",
+			Content:        "First message",
+		})
+		require.NoError(t, err)
+
+		// Create interaction pointing to first message
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			StageID:         stg.ID,
+			ExecutionID:     exec2.ID,
+			InteractionType: "iteration",
+			ModelName:       "test-model",
+			LastMessageID:   &msg1.ID,
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+
+		// Should get exactly one message
+		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+		require.NoError(t, err)
+		assert.Len(t, conversation, 1)
+		assert.Equal(t, "system", string(conversation[0].Role))
+	})
+
+	t.Run("handles last_message_id pointing to middle of long conversation", func(t *testing.T) {
+		// Create a new execution for isolated test
+		exec3, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "TestAgent3",
+			AgentIndex:        3,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+
+		// Create 10 messages
+		var messages []*ent.Message
+		for i := 1; i <= 10; i++ {
+			role := "user"
+			if i%2 == 0 {
+				role = "assistant"
+			}
+			msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+				SessionID:      session.ID,
+				StageID:        stg.ID,
+				ExecutionID:    exec3.ID,
+				SequenceNumber: i,
+				Role:           role,
+				Content:        fmt.Sprintf("Message %d", i),
+			})
+			require.NoError(t, err)
+			messages = append(messages, msg)
+		}
+
+		// Create interaction pointing to message 5 (middle)
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			StageID:         stg.ID,
+			ExecutionID:     exec3.ID,
+			InteractionType: "iteration",
+			ModelName:       "test-model",
+			LastMessageID:   &messages[4].ID, // Message 5 (index 4)
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+
+		// Should get messages 1-5 only (not 6-10)
+		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+		require.NoError(t, err)
+		assert.Len(t, conversation, 5)
+		assert.Equal(t, "Message 1", conversation[0].Content)
+		assert.Equal(t, "Message 5", conversation[4].Content)
+	})
+
+	t.Run("returns error for nonexistent interaction", func(t *testing.T) {
+		_, err := interactionService.ReconstructConversation(ctx, "nonexistent-id")
+		require.Error(t, err)
+		assert.Equal(t, ErrNotFound, err)
+	})
+
+	t.Run("handles execution with no messages at all", func(t *testing.T) {
+		// Create a new execution with no messages
+		exec4, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "TestAgent4",
+			AgentIndex:        4,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+
+		// Create interaction with no last_message_id (no messages created)
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			StageID:         stg.ID,
+			ExecutionID:     exec4.ID,
+			InteractionType: "iteration",
+			ModelName:       "test-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+
+		// Should get empty conversation
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)
 		assert.Len(t, conversation, 0)
