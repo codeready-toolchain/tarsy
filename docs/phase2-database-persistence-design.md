@@ -2299,12 +2299,12 @@ err := client.AlertSession.
 - [x] Document schema in generated docs
 
 ### Phase 2.2: Database Client
-- [ ] Implement database client initialization
-- [ ] Add connection pool configuration
-- [ ] Implement migration runner
-- [ ] Add health check endpoint
-- [ ] Set up connection metrics
-- [ ] Configure GIN indexes for full-text search
+- [x] Implement database client initialization
+- [x] Add connection pool configuration
+- [x] Implement migration runner
+- [x] Add health check endpoint
+- [x] Set up connection metrics
+- [x] Configure GIN indexes for full-text search
 
 ### Phase 2.3: Service Layer
 - [ ] Implement `SessionService`
