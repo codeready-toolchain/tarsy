@@ -4,6 +4,7 @@ import (
 	"context"
 	stdsql "database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"time"
@@ -141,16 +142,24 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.D
 			return fmt.Errorf("failed to create migration source: %w", err)
 		}
 
-		m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
-		if err != nil {
-			return fmt.Errorf("failed to create migrate instance: %w", err)
-		}
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
 
-		// Apply all pending migrations
-		err = m.Up()
-		if err != nil && err != migrate.ErrNoChange {
-			return fmt.Errorf("failed to apply migrations: %w", err)
+	// Apply all pending migrations
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+
+	// Close the migrate instance to avoid resource leaks
+	if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+		if srcErr != nil {
+			return fmt.Errorf("failed to close migration source: %w", srcErr)
 		}
+		return fmt.Errorf("failed to close migration database: %w", dbErr)
+	}
 	} else {
 		// Fall back to auto-migration for initial setup
 		// This is safe when no migration files exist yet
@@ -172,7 +181,7 @@ func hasEmbeddedMigrations() (bool, error) {
 	entries, err := fs.ReadDir(migrationsFS, "migrations")
 	if err != nil {
 		// If the migrations directory doesn't exist in the embed, no migrations
-		if err == fs.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to read embedded migrations: %w", err)
