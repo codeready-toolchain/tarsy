@@ -48,6 +48,16 @@ func TestChatService_CreateChat(t *testing.T) {
 		assert.True(t, IsValidationError(err))
 	})
 
+	t.Run("validates created_by required", func(t *testing.T) {
+		req := models.CreateChatRequest{
+			SessionID: session.ID,
+		}
+
+		_, err := chatService.CreateChat(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
 	t.Run("returns ErrNotFound for missing session", func(t *testing.T) {
 		req := models.CreateChatRequest{
 			SessionID: "nonexistent",
@@ -135,7 +145,7 @@ func TestChatService_AddChatMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("returns error for nonexistent chat", func(t *testing.T) {
+	t.Run("returns ErrNotFound for nonexistent chat", func(t *testing.T) {
 		req := models.AddChatMessageRequest{
 			ChatID:  "nonexistent-chat-id",
 			Content: "test message",
@@ -144,7 +154,7 @@ func TestChatService_AddChatMessage(t *testing.T) {
 
 		_, err := chatService.AddChatMessage(ctx, req)
 		require.Error(t, err)
-		// Foreign key constraint violation is returned as a constraint error, not NotFound
+		assert.Equal(t, ErrNotFound, err)
 	})
 }
 
@@ -195,6 +205,12 @@ func TestChatService_GetChatHistory(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, ErrNotFound, err)
 	})
+
+	t.Run("validates empty chatID", func(t *testing.T) {
+		_, err := chatService.GetChatHistory(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
 }
 
 func TestChatService_BuildChatContext(t *testing.T) {
@@ -234,5 +250,11 @@ func TestChatService_BuildChatContext(t *testing.T) {
 		_, err := chatService.BuildChatContext(ctx, "nonexistent")
 		require.Error(t, err)
 		assert.Equal(t, ErrNotFound, err)
+	})
+
+	t.Run("validates empty chatID", func(t *testing.T) {
+		_, err := chatService.BuildChatContext(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
 	})
 }

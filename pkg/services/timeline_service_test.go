@@ -123,6 +123,18 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, ErrNotFound, err)
 	})
+
+	t.Run("validates empty eventID", func(t *testing.T) {
+		err := timelineService.UpdateTimelineEvent(ctx, "", "content")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
+	t.Run("validates empty content", func(t *testing.T) {
+		err := timelineService.UpdateTimelineEvent(ctx, event.ID, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
 }
 
 func TestTimelineService_CompleteTimelineEvent(t *testing.T) {

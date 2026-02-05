@@ -26,6 +26,9 @@ func (s *ChatService) CreateChat(httpCtx context.Context, req models.CreateChatR
 	if req.SessionID == "" {
 		return nil, NewValidationError("session_id", "required")
 	}
+	if req.CreatedBy == "" {
+		return nil, NewValidationError("created_by", "required")
+	}
 
 	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
@@ -70,6 +73,15 @@ func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChat
 	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
 
+	// Verify chat exists before creating message (consistent with CreateChat pattern)
+	_, err := s.client.Chat.Get(ctx, req.ChatID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to verify chat existence: %w", err)
+	}
+
 	messageID := uuid.New().String()
 	msg, err := s.client.ChatUserMessage.Create().
 		SetID(messageID).
@@ -87,6 +99,10 @@ func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChat
 
 // GetChatHistory retrieves all messages and response stages for a chat
 func (s *ChatService) GetChatHistory(ctx context.Context, chatID string) (*models.ChatHistoryResponse, error) {
+	if chatID == "" {
+		return nil, NewValidationError("chatID", "required")
+	}
+
 	chatObj, err := s.client.Chat.Query().
 		Where(chat.IDEQ(chatID)).
 		WithUserMessages().
@@ -108,6 +124,10 @@ func (s *ChatService) GetChatHistory(ctx context.Context, chatID string) (*model
 
 // BuildChatContext builds context from parent session artifacts
 func (s *ChatService) BuildChatContext(ctx context.Context, chatID string) (string, error) {
+	if chatID == "" {
+		return "", NewValidationError("chatID", "required")
+	}
+
 	// Get chat with parent session
 	chatObj, err := s.client.Chat.Query().
 		Where(chat.IDEQ(chatID)).
@@ -124,11 +144,11 @@ func (s *ChatService) BuildChatContext(ctx context.Context, chatID string) (stri
 
 	// Build context from parent session's artifacts
 	// This is a simplified implementation - in production, this would be more sophisticated
-	context := fmt.Sprintf("Original Alert: %s\n\n", chatObj.Edges.Session.AlertData)
+	chatContext := fmt.Sprintf("Original Alert: %s\n\n", chatObj.Edges.Session.AlertData)
 	
 	if chatObj.Edges.Session.FinalAnalysis != nil {
-		context += fmt.Sprintf("Investigation Summary: %s\n\n", *chatObj.Edges.Session.FinalAnalysis)
+		chatContext += fmt.Sprintf("Investigation Summary: %s\n\n", *chatObj.Edges.Session.FinalAnalysis)
 	}
 
-	return context, nil
+	return chatContext, nil
 }

@@ -69,6 +69,13 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 
 // UpdateTimelineEvent updates event content during streaming
 func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID string, content string) error {
+	if eventID == "" {
+		return NewValidationError("eventID", "required")
+	}
+	if content == "" {
+		return NewValidationError("content", "required")
+	}
+
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
