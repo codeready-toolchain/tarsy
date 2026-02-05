@@ -437,7 +437,7 @@ func TestSessionService_ConcurrentClaiming(t *testing.T) {
 		// The key is that all sessions get claimed, even if not all workers succeed
 		assert.LessOrEqual(t, len(claimedSessions), numSessions, "should not claim more than available")
 		assert.GreaterOrEqual(t, len(claimedSessions), 1, "should claim at least one session")
-		
+
 		// The critical test: verify no duplicate claims - all session IDs must be unique
 		seenIDs := make(map[string]bool)
 		for _, session := range claimedSessions {
