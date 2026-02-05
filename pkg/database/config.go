@@ -16,8 +16,15 @@ func LoadConfigFromEnv() (Config, error) {
 	}
 
 	// Production defaults: 25 max open, 10 max idle
-	maxOpen, _ := strconv.Atoi(getEnvOrDefault("DB_MAX_OPEN_CONNS", "25"))
-	maxIdle, _ := strconv.Atoi(getEnvOrDefault("DB_MAX_IDLE_CONNS", "10"))
+	maxOpen, err := strconv.Atoi(getEnvOrDefault("DB_MAX_OPEN_CONNS", "25"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid DB_MAX_OPEN_CONNS: %w", err)
+	}
+
+	maxIdle, err := strconv.Atoi(getEnvOrDefault("DB_MAX_IDLE_CONNS", "10"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid DB_MAX_IDLE_CONNS: %w", err)
+	}
 
 	// Parse durations with production defaults
 	maxLifetime, err := parseDuration(getEnvOrDefault("DB_CONN_MAX_LIFETIME", "1h"))

@@ -3,7 +3,9 @@ package database
 import (
 	"context"
 	stdsql "database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"time"
 
 	"entgo.io/ent/dialect"
@@ -11,9 +13,12 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/lib/pq"
 )
+
+//go:embed migrations
+var migrationsFS embed.FS
 
 // Config holds database configuration
 type Config struct {
@@ -72,6 +77,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 
 	// Test connection
 	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -79,7 +85,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	entClient := ent.NewClient(ent.Driver(drv))
 
 	// Run migrations
-	if err := runMigrations(ctx, db, cfg, drv); err != nil {
+	if err := runMigrations(ctx, db, cfg, drv, entClient); err != nil {
 		entClient.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
@@ -93,37 +99,60 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	return client, nil
 }
 
-// runMigrations runs database migrations using golang-migrate.
-// This implements the versioned migration workflow:
+// runMigrations runs database migrations using golang-migrate with embedded migration files,
+// or falls back to Ent's auto-migration for initial setup.
+//
+// Migration files are embedded into the binary using go:embed, ensuring they're available
+// in production deployments without requiring external files.
+//
+// Migration workflow (once migrations are generated):
 //   1. Developer changes schema: Edit ent/schema/*.go
 //   2. Generate migration: make migrate-create NAME=add_feature
-//   3. Review & commit: Check SQL files, commit to git
-//   4. Deploy: New code pushed
-//   5. Auto-apply: App applies pending migrations on startup (this function)
+//   3. Migrations saved to pkg/database/migrations/*.sql
+//   4. Files embedded into binary at compile time
+//   5. Review & commit: Check SQL files, commit to git
+//   6. Deploy: Build binary (migrations embedded automatically)
+//   7. Auto-apply: App applies pending migrations on startup (this function)
 //
-// Migrations are applied sequentially from ent/migrate/migrations/ directory.
-// Already-applied migrations are skipped automatically.
-func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *sql.Driver) error {
-	// Create postgres driver instance for golang-migrate
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+// For initial setup (before first migration is generated):
+//   - Uses Ent's Schema.Create() to initialize database from schema definitions
+//   - This is the standard Ent approach and matches test behavior
+func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *sql.Driver, entClient *ent.Client) error {
+	// Check if embedded migrations exist
+	hasMigrations, err := hasEmbeddedMigrations()
 	if err != nil {
-		return fmt.Errorf("failed to create postgres driver: %w", err)
+		return fmt.Errorf("failed to check embedded migrations: %w", err)
 	}
 
-	// Create migrate instance with migration files
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://ent/migrate/migrations",
-		cfg.Database, // database name
-		driver,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create migrate instance: %w", err)
-	}
+	if hasMigrations {
+		// Use golang-migrate with embedded migrations
+		driver, err := postgres.WithInstance(db, &postgres.Config{})
+		if err != nil {
+			return fmt.Errorf("failed to create postgres driver: %w", err)
+		}
 
-	// Apply all pending migrations
-	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("failed to apply migrations: %w", err)
+		// Create source from embedded FS
+		sourceDriver, err := iofs.New(migrationsFS, "migrations")
+		if err != nil {
+			return fmt.Errorf("failed to create migration source: %w", err)
+		}
+
+		m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
+		if err != nil {
+			return fmt.Errorf("failed to create migrate instance: %w", err)
+		}
+
+		// Apply all pending migrations
+		err = m.Up()
+		if err != nil && err != migrate.ErrNoChange {
+			return fmt.Errorf("failed to apply migrations: %w", err)
+		}
+	} else {
+		// Fall back to auto-migration for initial setup
+		// This is safe when no migration files exist yet
+		if err := entClient.Schema.Create(ctx); err != nil {
+			return fmt.Errorf("failed to create schema: %w", err)
+		}
 	}
 
 	// Create GIN indexes (custom SQL not handled by Ent schema)
@@ -132,4 +161,25 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *sql.Driv
 	}
 
 	return nil
+}
+
+// hasEmbeddedMigrations checks if the embedded FS contains any .sql migration files
+func hasEmbeddedMigrations() (bool, error) {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		// If the migrations directory doesn't exist in the embed, no migrations
+		if err == fs.ErrNotExist {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to read embedded migrations: %w", err)
+	}
+
+	// Check if there are any .sql files
+	for _, entry := range entries {
+		if !entry.IsDir() && len(entry.Name()) > 4 && entry.Name()[len(entry.Name())-4:] == ".sql" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

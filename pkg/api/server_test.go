@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 )
@@ -14,6 +14,6 @@ func TestDatabaseImport(t *testing.T) {
 	// Full integration tests will be added in Phase 2.3
 	dbClient := testdb.NewTestClient(t)
 	
-	assert.NotNil(t, dbClient)
-	assert.NotNil(t, dbClient.DB())
+	require.NotNil(t, dbClient)
+	require.NotNil(t, dbClient.DB())
 }

@@ -2346,15 +2346,7 @@ err := client.AlertSession.
   - [ ] CleanupSessionEvents (on session completion)
   - [ ] CleanupOrphanedEvents (TTL fallback)
 
-### Phase 2.4: Agent Context Building
-- [ ] Define Agent interface with BuildStageContext method
-- [ ] Implement context builders for each agent type
-  - [ ] Single agent context building
-  - [ ] Parallel agents context aggregation
-- [ ] Implement chain orchestrator context passing
-- [ ] Test lazy context building patterns
-
-### Phase 2.5: Testing
+### Phase 2.4: Testing
 - [ ] Set up testcontainers integration
 - [ ] Write service layer unit tests
 - [ ] Write integration tests
@@ -2362,16 +2354,6 @@ err := client.AlertSession.
 - [ ] Test full-text search functionality
 - [ ] Test soft delete retention policies
 - [ ] Test event cleanup strategies
-- [ ] Test lazy context building
-- [ ] Test parallel agent execution flows
-- [ ] Load testing with realistic data
-
-### Phase 2.6: Documentation
-- [ ] Generate Ent schema documentation
-- [ ] Write service layer API docs
-- [ ] Document migration procedures
-- [ ] Document lazy context building pattern
-- [ ] Document retention policies
 
 ---
 

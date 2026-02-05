@@ -161,6 +161,7 @@ ent-clean: ## Clean generated Ent code (keeps schemas)
 # Database Migrations
 # =============================================================================
 # Uses Atlas CLI to generate migrations, golang-migrate to apply them
+# Migrations are stored in pkg/database/migrations/ and embedded into the binary
 
 .PHONY: migrate-create
 migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_feature)
@@ -170,8 +171,9 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 	fi
 	@echo -e "$(YELLOW)Creating migration: $(NAME)...$(NC)"
 	@atlas migrate diff $(NAME) \
-		--dir "file://ent/migrate/migrations" \
+		--dir "file://pkg/database/migrations" \
 		--to "ent://ent/schema" \
 		--dev-url "$(DB_DSN)"
-	@echo -e "$(GREEN)✅ Migration created in ent/migrate/migrations/$(NC)"
+	@echo -e "$(GREEN)✅ Migration created in pkg/database/migrations/$(NC)"
 	@echo -e "$(BLUE)Review the SQL files, then commit to git$(NC)"
+	@echo -e "$(BLUE)Note: Migrations are embedded into binary at compile time$(NC)"

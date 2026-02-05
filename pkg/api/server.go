@@ -37,7 +37,8 @@ func (s *Server) Health(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":   "unhealthy",
-			"database": "disconnected",
+			"database": dbHealth,
+			"phase":    "2.2 - Database Client Complete",
 			"error":    err.Error(),
 		})
 		return

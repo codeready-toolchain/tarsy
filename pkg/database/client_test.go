@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -150,6 +152,177 @@ func TestFullTextSearch(t *testing.T) {
 
 	assert.Len(t, results2, 1)
 	assert.Equal(t, session2.ID, results2[0])
+}
+
+func TestLoadConfigFromEnv(t *testing.T) {
+	tests := []struct {
+		name        string
+		envVars     map[string]string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid config with defaults",
+			envVars: map[string]string{
+				"DB_PASSWORD": "test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config with custom values",
+			envVars: map[string]string{
+				"DB_HOST":            "db.example.com",
+				"DB_PORT":            "5433",
+				"DB_USER":            "admin",
+				"DB_PASSWORD":        "secret",
+				"DB_NAME":            "production",
+				"DB_SSLMODE":         "require",
+				"DB_MAX_OPEN_CONNS":  "50",
+				"DB_MAX_IDLE_CONNS":  "20",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid DB_PORT",
+			envVars: map[string]string{
+				"DB_PORT":     "invalid",
+				"DB_PASSWORD": "test",
+			},
+			wantErr:     true,
+			errContains: "invalid DB_PORT",
+		},
+		{
+			name: "invalid DB_MAX_OPEN_CONNS",
+			envVars: map[string]string{
+				"DB_MAX_OPEN_CONNS": "not_a_number",
+				"DB_PASSWORD":       "test",
+			},
+			wantErr:     true,
+			errContains: "invalid DB_MAX_OPEN_CONNS",
+		},
+		{
+			name: "invalid DB_MAX_IDLE_CONNS",
+			envVars: map[string]string{
+				"DB_MAX_IDLE_CONNS": "abc123",
+				"DB_PASSWORD":       "test",
+			},
+			wantErr:     true,
+			errContains: "invalid DB_MAX_IDLE_CONNS",
+		},
+		{
+			name: "invalid DB_CONN_MAX_LIFETIME",
+			envVars: map[string]string{
+				"DB_CONN_MAX_LIFETIME": "invalid_duration",
+				"DB_PASSWORD":          "test",
+			},
+			wantErr:     true,
+			errContains: "invalid DB_CONN_MAX_LIFETIME",
+		},
+		{
+			name: "invalid DB_CONN_MAX_IDLE_TIME",
+			envVars: map[string]string{
+				"DB_CONN_MAX_IDLE_TIME": "not_a_duration",
+				"DB_PASSWORD":           "test",
+			},
+			wantErr:     true,
+			errContains: "invalid DB_CONN_MAX_IDLE_TIME",
+		},
+		{
+			name: "missing password",
+			envVars: map[string]string{
+				"DB_PASSWORD": "",
+			},
+			wantErr:     true,
+			errContains: "DB_PASSWORD is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear all DB-related env vars
+			envKeys := []string{
+				"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
+				"DB_MAX_OPEN_CONNS", "DB_MAX_IDLE_CONNS",
+				"DB_CONN_MAX_LIFETIME", "DB_CONN_MAX_IDLE_TIME",
+			}
+			for _, key := range envKeys {
+				os.Unsetenv(key)
+			}
+
+			// Set test env vars
+			for key, val := range tt.envVars {
+				if val != "" {
+					os.Setenv(key, val)
+				}
+			}
+
+			// Cleanup after test
+			t.Cleanup(func() {
+				for _, key := range envKeys {
+					os.Unsetenv(key)
+				}
+			})
+
+			// Test LoadConfigFromEnv
+			cfg, err := LoadConfigFromEnv()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, cfg)
+				// Verify defaults are applied
+				if tt.name == "valid config with defaults" {
+					assert.Equal(t, "localhost", cfg.Host)
+					assert.Equal(t, 5432, cfg.Port)
+					assert.Equal(t, 25, cfg.MaxOpenConns)
+					assert.Equal(t, 10, cfg.MaxIdleConns)
+				}
+			}
+		})
+	}
+}
+
+func TestHealthStatus_JSONMilliseconds(t *testing.T) {
+	client := newTestClient(t)
+	ctx := context.Background()
+
+	// Get health status
+	health, err := Health(ctx, client.DB())
+	require.NoError(t, err)
+	require.NotNil(t, health)
+
+	// Verify response time is in milliseconds (can be 0 for very fast local pings)
+	assert.GreaterOrEqual(t, health.ResponseTime, int64(0), "response time should be non-negative")
+	assert.Less(t, health.ResponseTime, int64(1000), "response time should be less than 1 second for a local ping")
+
+	// Marshal to JSON to verify the output format
+	jsonBytes, err := json.Marshal(health)
+	require.NoError(t, err)
+
+	// Parse JSON to verify millisecond values
+	var jsonData map[string]interface{}
+	err = json.Unmarshal(jsonBytes, &jsonData)
+	require.NoError(t, err)
+
+	// Verify response_time_ms is a number (not a huge nanosecond value)
+	responseTime, ok := jsonData["response_time_ms"].(float64)
+	require.True(t, ok, "response_time_ms should be a number")
+	assert.GreaterOrEqual(t, responseTime, float64(0), "response_time_ms should be non-negative")
+	// If this were nanoseconds, it would be > 1,000,000 (1ms in nanoseconds)
+	assert.Less(t, responseTime, float64(1000000), "response_time_ms should be in milliseconds, not nanoseconds")
+
+	// Verify wait_duration_ms is present and is a number
+	waitDuration, ok := jsonData["wait_duration_ms"].(float64)
+	require.True(t, ok, "wait_duration_ms should be a number")
+	assert.GreaterOrEqual(t, waitDuration, float64(0), "wait_duration_ms should be non-negative")
+	assert.Less(t, waitDuration, float64(1000000), "wait_duration_ms should be in milliseconds, not nanoseconds")
+
+	t.Logf("Health JSON: %s", string(jsonBytes))
+	t.Logf("Response time: %d ms (if this were nanoseconds, it would be > 1,000,000)", health.ResponseTime)
 }
 
 func TestConfig_Validate(t *testing.T) {
