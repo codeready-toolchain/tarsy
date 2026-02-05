@@ -2400,44 +2400,44 @@ err := client.AlertSession.
 - [x] Configure GIN indexes for full-text search
 
 ### Phase 2.3: Service Layer
-- [ ] Implement `SessionService`
-  - [ ] CreateSession (with initial stage + agent execution)
-  - [ ] GetSession
-  - [ ] UpdateSession
-  - [ ] ClaimNextPendingSession
-  - [ ] FindOrphanedSessions
-  - [ ] SoftDeleteOldSessions (retention policy)
-- [ ] Implement `StageService`
-  - [ ] CreateStage (with agent executions)
-  - [ ] UpdateStageStatus (aggregated from agents)
-  - [ ] GetStages
-  - [ ] GetAgentExecutions
-- [ ] Implement `TimelineService`
-  - [ ] CreateTimelineEvent
-  - [ ] UpdateTimelineEvent (streaming support)
-  - [ ] GetSessionTimeline
-  - [ ] GetStageTimeline
-  - [ ] GetAgentTimeline
-- [ ] Implement `MessageService`
-  - [ ] CreateMessage
-  - [ ] GetExecutionMessages (for LLM context)
-  - [ ] GetStageMessages
-- [ ] Implement `InteractionService`
-  - [ ] CreateLLMInteraction (with last_message_id)
-  - [ ] CreateMCPInteraction
-  - [ ] GetLLMInteractions (list + detail views)
-  - [ ] GetMCPInteractions (list + detail views)
-  - [ ] ReconstructConversation (from Message table)
-- [ ] Implement `ChatService`
-  - [ ] CreateChat (with lazy context building)
-  - [ ] AddChatMessage
-  - [ ] GetChatHistory
-  - [ ] BuildChatContext (lazy evaluation)
-- [ ] Implement `EventService`
-  - [ ] CreateEvent
-  - [ ] GetEvents (polling)
-  - [ ] CleanupSessionEvents (on session completion)
-  - [ ] CleanupOrphanedEvents (TTL fallback)
+- [x] Implement `SessionService`
+  - [x] CreateSession (with initial stage + agent execution)
+  - [x] GetSession
+  - [x] UpdateSession
+  - [x] ClaimNextPendingSession
+  - [x] FindOrphanedSessions
+  - [x] SoftDeleteOldSessions (retention policy)
+- [x] Implement `StageService`
+  - [x] CreateStage (with agent executions)
+  - [x] UpdateStageStatus (aggregated from agents)
+  - [x] GetStages
+  - [x] GetAgentExecutions
+- [x] Implement `TimelineService`
+  - [x] CreateTimelineEvent
+  - [x] UpdateTimelineEvent (streaming support)
+  - [x] GetSessionTimeline
+  - [x] GetStageTimeline
+  - [x] GetAgentTimeline
+- [x] Implement `MessageService`
+  - [x] CreateMessage
+  - [x] GetExecutionMessages (for LLM context)
+  - [x] GetStageMessages
+- [x] Implement `InteractionService`
+  - [x] CreateLLMInteraction (with last_message_id)
+  - [x] CreateMCPInteraction
+  - [x] GetLLMInteractions (list + detail views)
+  - [x] GetMCPInteractions (list + detail views)
+  - [x] ReconstructConversation (from Message table)
+- [x] Implement `ChatService`
+  - [x] CreateChat (with lazy context building)
+  - [x] AddChatMessage
+  - [x] GetChatHistory
+  - [x] BuildChatContext (lazy evaluation)
+- [x] Implement `EventService`
+  - [x] CreateEvent
+  - [x] GetEvents (polling)
+  - [x] CleanupSessionEvents (on session completion)
+  - [x] CleanupOrphanedEvents (TTL fallback)
 
 ### Phase 2.4: Testing
 - [ ] Set up testcontainers integration

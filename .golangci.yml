@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   go: '1.25'
@@ -5,46 +7,54 @@ run:
 linters:
   enable:
     - errcheck        # Check for unchecked errors
-    - gosimple        # Simplify code
     - govet           # Go vet checks
     - ineffassign     # Detect ineffectual assignments
-    - staticcheck     # Static analysis
+    - staticcheck     # Static analysis (includes gosimple in v2)
     - unused          # Check for unused code
-    - gofmt           # Format code
-    - goimports       # Check import formatting
     - misspell        # Check for spelling errors
     - revive          # Fast, configurable linter
     - typecheck       # Type checking
     - goprintffuncname # Check printf-like function names
     - nolintlint      # Check nolint directives
+  settings:
+    errcheck:
+      check-blank: false
+      check-type-assertions: false
+    govet:
+      check-shadowing: false
+    staticcheck:
+      checks: ["all"]
+  exclusions:
+    paths:
+      - ent/           # Exclude generated Ent code
+      - proto/         # Exclude generated protobuf code
+      - github.com/    # Exclude vendored/copied code
+    rules:
+      # Exclude some linters from running on test files
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Exclude migration files from certain checks
+      - path: pkg/database/migrations/
+        linters:
+          - revive
+          - staticcheck
 
-linters-settings:
-  errcheck:
-    check-blank: false
-    check-type-assertions: false
-  govet:
-    check-shadowing: false
-  staticcheck:
-    checks: ["all"]
-
-issues:
-  exclude-dirs:
-    - ent              # Exclude generated Ent code
-    - proto            # Exclude generated protobuf code
-    - github.com       # Exclude vendored/copied code
-  exclude-rules:
-    # Exclude some linters from running on test files
-    - path: _test\.go
-      linters:
-        - errcheck
-    # Exclude migration files from certain checks
-    - path: pkg/database/migrations/
-      linters:
-        - revive
-        - staticcheck
+formatters:
+  enable:
+    - gofmt          # Format code
+    - goimports      # Fix imports
+  exclusions:
+    paths:
+      - ent/           # Exclude generated Ent code
+      - proto/         # Exclude generated protobuf code
+      - github.com/    # Exclude vendored/copied code
 
 output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  sort-results: true
+  formats:
+    text:
+      print-issued-lines: true
+      print-linter-name: true
+  sort-order:
+    - linter
+    - file
