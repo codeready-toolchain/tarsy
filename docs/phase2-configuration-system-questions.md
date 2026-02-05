@@ -24,7 +24,7 @@ Add your answers inline under each question, then we'll update the main design d
 
 ### Q1: Configuration Reload Strategy
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Old TARSy required restart for configuration changes. The design proposes the same approach (no hot-reload).
@@ -32,122 +32,26 @@ Old TARSy required restart for configuration changes. The design proposes the sa
 **Question:**
 Should we support hot-reload of configuration or require restart?
 
-**Options:**
+**Decision**: **Option A - No Hot-Reload (Restart Required)**
 
-**Option A: No Hot-Reload (Restart Required)**
-```
-Pros:
-✅ Simpler implementation
-✅ No partial configuration states
-✅ Clear deployment process
-✅ Easier to test and reason about
-✅ Atomic configuration updates
+**Rationale:**
+- Keep it simple like the old TARSy
+- Configuration changes require service restart
+- Simpler implementation and easier to reason about
+- No risk of partial configuration states
+- Clear deployment process with atomic configuration updates
 
-Cons:
-❌ Requires service restart for config changes
-❌ Brief downtime during restart
-❌ Slower iteration during development
-```
-
-**Option B: Hot-Reload Support**
-```
-Pros:
-✅ No downtime for config changes
-✅ Faster iteration during development
-✅ Can update MCP servers without restart
-✅ Can enable/disable agents dynamically
-
-Cons:
-❌ More complex implementation
-❌ Must handle partial configuration states
-❌ Risk of inconsistent state during reload
-❌ Complex validation (old vs new config)
-❌ Agent/chain registry invalidation logic
-❌ In-flight sessions might use old config
-```
-
-**Option C: Hybrid Approach**
-```
-Pros:
-✅ Hot-reload for safe changes (enable/disable, MCP servers)
-✅ Restart required for structural changes (new agents, chains)
-
-Cons:
-❌ Most complex to implement
-❌ Unclear boundaries between hot-reload and restart
-❌ May confuse operators
-```
-
-**Implementation Considerations for Option B:**
-
-```go
-// pkg/config/reloader.go
-
-type ConfigReloader struct {
-    loader     *ConfigLoader
-    registries *Registries
-    mu         sync.RWMutex
-}
-
-func (r *ConfigReloader) Reload(ctx context.Context) error {
-    r.mu.Lock()
-    defer r.mu.Unlock()
-    
-    // Load new configuration
-    newConfig, err := r.loader.Load(ctx)
-    if err != nil {
-        return fmt.Errorf("failed to load new config: %w", err)
-    }
-    
-    // Validate new configuration
-    validator := NewValidator(newConfig.Registries)
-    if err := validator.ValidateAll(); err != nil {
-        return fmt.Errorf("new config validation failed: %w", err)
-    }
-    
-    // Atomic swap (all or nothing)
-    r.registries.Agents = newConfig.AgentRegistry
-    r.registries.Chains = newConfig.ChainRegistry
-    r.registries.MCPServers = newConfig.MCPServerRegistry
-    r.registries.LLMProviders = newConfig.LLMProviderRegistry
-    
-    log.Info("Configuration reloaded successfully")
-    return nil
-}
-
-// Watch for file changes (optional)
-func (r *ConfigReloader) Watch(ctx context.Context) {
-    watcher, _ := fsnotify.NewWatcher()
-    watcher.Add("./config")
-    
-    for {
-        select {
-        case event := <-watcher.Events:
-            if event.Op&fsnotify.Write == fsnotify.Write {
-                log.Info("Config file changed, reloading", "file", event.Name)
-                if err := r.Reload(ctx); err != nil {
-                    log.Error("Failed to reload config", "error", err)
-                }
-            }
-        case <-ctx.Done():
-            return
-        }
-    }
-}
-```
-
-**Question for Discussion:**
-1. Is hot-reload important enough to justify the complexity?
-2. Do we expect frequent configuration changes in production?
-3. Can we tolerate brief downtime for configuration updates?
-
-**Recommendation**: Start with **Option A (No Hot-Reload)** for simplicity. Can add hot-reload later if needed.
+**Implementation:**
+- Configuration is loaded once at startup
+- Configuration changes require service restart
+- No file watching or hot-reload logic needed
+- Validation happens only at startup time
 
 ---
 
 ### Q2: Configuration File Structure
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Design proposes separate files for agents, chains, MCP servers, and LLM providers.
@@ -155,186 +59,180 @@ Design proposes separate files for agents, chains, MCP servers, and LLM provider
 **Question:**
 Should configuration be split into multiple files or use a single file?
 
-**Current Proposal (Multiple Files):**
-```
-config/
-├── agents.yaml
-├── chains.yaml
-├── mcp-servers.yaml
-├── llm-providers.yaml
-└── defaults.yaml
-```
+**Decision**: **Two YAML files + .env + OAuth2 config**
 
-**Alternative (Single File):**
 ```
-config/
-└── tarsy.yaml  # Contains all configuration
-```
+deploy/
+└── config/
+    ├── tarsy.yaml.example                # Example main config (tracked in git)
+    ├── llm-providers.yaml.example        # Example LLM providers (tracked in git)
+    ├── .env.example                      # Example environment variables (tracked in git)
+    ├── oauth2-proxy.cfg.template         # OAuth2 proxy template (tracked in git)
+    ├── tarsy.yaml                        # User's actual config (gitignored)
+    ├── llm-providers.yaml                # User's actual config (gitignored)
+    ├── .env                              # User's actual env vars (gitignored)
+    └── oauth2-proxy.cfg                  # Generated OAuth2 config (gitignored)
 
-**Pros/Cons:**
-
-**Multiple Files:**
-```
-Pros:
-✅ Clear separation of concerns
-✅ Easier to find specific configuration
-✅ Can edit one file without affecting others
-✅ Better for large configurations
-✅ Parallel editing by different team members
-
-Cons:
-❌ More files to manage
-❌ Cross-file references (agent → LLM provider)
-❌ Must load and merge multiple files
+# Users copy and customize:
+cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
 ```
 
-**Single File:**
-```
-Pros:
-✅ One file to manage
-✅ All configuration in one place
-✅ Easier to copy/share full configuration
-✅ No cross-file reference issues
+**Rationale:**
 
-Cons:
-❌ Large file (harder to navigate)
-❌ All-or-nothing editing
-❌ Higher risk of merge conflicts
-❌ Harder to find specific configuration
-```
+1. **Readability**: When editing agents (frequent), don't want LLM provider noise cluttering the file
+2. **Proven pattern**: Old TARSy used `agents.yaml` + `llm-providers.yaml` successfully
+3. **Conceptual separation**: "What agents do" vs "What LLMs to use"
+4. **Size is manageable**: ~1000 total lines is well within limits (1MB = ~17,000 lines)
+5. **Secrets in .env**: Standard practice, works with Docker, follows 12-factor app
+6. **OAuth2 as template**: OAuth2 proxy uses `.cfg` format (not YAML), template with env var substitution
 
-**Question for Discussion:**
-1. Do we expect configuration to grow large over time?
-2. Will different team members edit different parts?
-3. Is ease of navigation more important than single-file simplicity?
-
-**Recommendation**: Use **multiple files** for better organization and scalability.
+**File naming:**
+- `tarsy.yaml` (not `agents.yaml`) - more accurate since it contains agents + chains + MCP + defaults
+- `llm-providers.yaml` - clear and specific
+- `.env` - industry standard for secrets
+- `oauth2-proxy.cfg.template` - template file (tracked in git), generates `oauth2-proxy.cfg` (ignored)
 
 ---
 
 ### Q3: Environment-Specific Configuration
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
-Design proposes optional environment overrides in `config/environments/{env}.yaml`.
+Need to support 4 deployment environments:
+1. Local dev (host-based, fast iteration) - postgres in container, no OAuth2
+2. Podman-compose local dev (all containers) - test OAuth2 proxy, same config as #1
+3. K8s/OpenShift dev (manual testing) - deploy/test in cluster, some config differences
+4. Production (OpenShift) - user-managed, not in source code
 
 **Question:**
 How should environment-specific configuration be handled?
 
-**Options:**
+**Decision**: **Environment Variables Only + .env.example**
 
-**Option A: Environment Override Files**
+**Environment Setup:**
+
 ```
-config/
-├── agents.yaml             # Base configuration
-├── chains.yaml
-├── mcp-servers.yaml
-├── llm-providers.yaml
-├── defaults.yaml
-└── environments/
-    ├── development.yaml    # Dev overrides
-    ├── staging.yaml        # Staging overrides
-    └── production.yaml     # Production overrides
+deploy/
+└── config/
+    ├── tarsy.yaml.example            # Example main config (tracked in git)
+    ├── llm-providers.yaml.example    # Example LLM providers (tracked in git)
+    ├── .env.example                  # Example environment variables with comments (tracked in git)
+    ├── oauth2-proxy.cfg.template     # OAuth2 template (tracked in git)
+    ├── tarsy.yaml                    # User's actual config (gitignored)
+    ├── llm-providers.yaml            # User's actual config (gitignored)
+    ├── .env                          # User's actual env vars (gitignored)
+    └── oauth2-proxy.cfg              # Generated OAuth2 config (gitignored)
 
-# Start service with environment flag
-./tarsy --environment=production
+# Users copy and customize:
+cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
+# Edit deploy/config/.env based on your environment
 ```
 
-**Example Override:**
+**Configuration with Environment Variables:**
+
 ```yaml
-# config/environments/development.yaml
+# deploy/config/tarsy.yaml (environment-agnostic)
+agents:
+  - id: kubernetes-agent
+    max_iterations: ${MAX_ITERATIONS:-20}  # Override per environment
+
+# deploy/config/llm-providers.yaml
 llm_providers:
   - id: gemini-thinking
-    parameters:
-      temperature: 1.0  # Higher temperature for dev testing
-    rate_limit:
-      requests_per_minute: 1000  # Higher limits for dev
-```
-
-**Option B: Environment Variables Only**
-```
-config/
-├── agents.yaml
-├── chains.yaml
-├── mcp-servers.yaml
-├── llm-providers.yaml
-└── defaults.yaml
-
-# Use environment variables for all environment-specific config
-# agents.yaml
-llm_providers:
-  - id: gemini-thinking
-    parameters:
-      temperature: ${LLM_TEMPERATURE:-0.7}
+    api:
+      endpoint: ${GEMINI_API_ENDPOINT}
+      api_key: ${GEMINI_API_KEY}           # Secret from .env
     rate_limit:
       requests_per_minute: ${LLM_RATE_LIMIT:-60}
 ```
 
-**Option C: Separate Config Directories**
-```
-config/
-├── development/
-│   ├── agents.yaml
-│   ├── chains.yaml
-│   └── ...
-├── staging/
-│   └── ...
-└── production/
-    └── ...
+**Example .env file:**
 
-# Start service with config directory
-./tarsy --config-dir=./config/production
-```
+```bash
+# deploy/config/.env.example
+# TARSy Configuration - Environment Variables
+# Copy this file to .env and customize for your environment
 
-**Comparison:**
+# =============================================================================
+# Database Configuration
+# =============================================================================
+# Local dev:        DB_HOST=localhost
+# Podman dev:       DB_HOST=postgres
+# K8s/OpenShift:    DB_HOST=postgres-service
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=tarsy
+DB_PASSWORD=your-db-password
+DB_NAME=tarsy
 
-**Override Files:**
-```
-Pros:
-✅ Clear separation of base and overrides
-✅ Easy to see what changes per environment
-✅ Shared base configuration
-✅ Can override specific fields only
+# =============================================================================
+# Service Configuration
+# =============================================================================
+# Local dev:        HTTP_PORT=8080, GRPC_ADDR=localhost:50051
+# Podman dev:       HTTP_PORT=8000, GRPC_ADDR=llm-service:50051
+# K8s/OpenShift:    HTTP_PORT=8000, GRPC_ADDR=llm-service:50051
+HTTP_PORT=8080
+GRPC_ADDR=localhost:50051
 
-Cons:
-❌ Merge logic required
-❌ Two places to look for configuration
-❌ Potential confusion about precedence
-```
+# =============================================================================
+# LLM Provider Secrets
+# =============================================================================
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_ENDPOINT=https://generativelanguage.googleapis.com
 
-**Environment Variables:**
-```
-Pros:
-✅ Simple implementation
-✅ Standard practice (12-factor app)
-✅ Easy to override in deployment
+# =============================================================================
+# LLM Configuration
+# =============================================================================
+# Dev: higher limits for testing
+# Prod: conservative limits
+LLM_RATE_LIMIT=100
+MAX_ITERATIONS=30
 
-Cons:
-❌ Limited to simple values (not complex structures)
-❌ Hard to override nested configuration
-❌ Environment variables can be verbose
-```
-
-**Separate Directories:**
-```
-Pros:
-✅ Complete separation
-✅ No merge logic needed
-✅ Easy to see full config for environment
-
-Cons:
-❌ Configuration duplication
-❌ Hard to maintain consistency
-❌ Changes to base must be replicated
+# =============================================================================
+# OAuth2 Proxy Configuration (Optional - for Podman/K8s environments)
+# =============================================================================
+# Uncomment for Podman or K8s environments with OAuth2 authentication
+# OAUTH2_CLIENT_ID=your-github-oauth-id
+# OAUTH2_CLIENT_SECRET=your-github-oauth-secret
+# GITHUB_ORG=your-org
+# GITHUB_TEAM=your-team
+# ROUTE_HOST=localhost:8080           # Podman: localhost:8080, K8s: tarsy-dev.apps.cluster.example.com
+# COOKIE_SECURE=false                 # Podman: false, K8s: true
 ```
 
-**Question for Discussion:**
-1. How much configuration varies between environments?
-2. Do we need to override complex nested structures?
-3. Is it important to see full configuration for an environment?
+**Production Configuration:**
+- **NOT in source code**
+- Users create their own K8s manifests (ConfigMaps, Secrets, Deployments)
+- K8s dev environment serves as documentation/reference
+- Provided: Example manifests in `deploy/` directory (not production secrets)
 
-**Recommendation**: Use **Option A (Override Files)** for flexibility + **Option B (Environment Variables)** for secrets and simple values.
+**Rationale:**
+
+1. **Simplicity**: No merge logic, no override files, no complex precedence rules
+2. **12-factor app**: Standard practice for cloud-native applications
+3. **Kubernetes-native**: ConfigMaps/Secrets map directly to environment variables
+4. **Flexibility**: Easy to override any value without touching YAML files
+5. **Reusable config**: Same tarsy.yaml works across all environments (only .env changes)
+6. **Security**: Secrets stay in .env (gitignored) or K8s Secrets (never in repo)
+7. **No duplication**: Don't need separate config directories or override files
+
+**What varies between environments:**
+- Database connection (host, port)
+- Service endpoints (localhost vs service names)
+- Secrets (API keys, OAuth2 credentials)
+- Rate limits and timeouts
+- OAuth2 proxy settings (HTTPS vs HTTP)
+
+**What stays the same:**
+- Agent definitions and instructions
+- Chain configurations
+- MCP server definitions (commands, args use env vars)
+- LLM provider definitions (endpoints, keys use env vars)
 
 ---
 
@@ -342,7 +240,7 @@ Cons:
 
 ### Q4: Configuration Validation Timing
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Design proposes validation on startup. Should we also validate when writing configuration files?
@@ -350,125 +248,25 @@ Design proposes validation on startup. Should we also validate when writing conf
 **Question:**
 When should configuration validation occur?
 
-**Options:**
+**Decision:** **Startup Only**
 
-**Option A: Startup Only**
-```
-Pros:
-✅ Simple implementation
-✅ Clear error messages
-✅ No additional tooling needed
+**Rationale:**
+- Keep it simple - validation happens when the service starts
+- Clear, immediate error messages during startup
+- No additional tooling or developer setup required
+- Aligns with the simplicity principle established in other decisions
 
-Cons:
-❌ Only find errors when service starts
-❌ Long feedback loop
-❌ May deploy broken configuration
-```
-
-**Option B: Startup + Pre-Commit Hook**
-```
-# .git/hooks/pre-commit
-#!/bin/bash
-./scripts/validate-config.sh
-
-# scripts/validate-config.sh
-#!/bin/bash
-go run cmd/validate-config/main.go --config-dir=./config
-
-Pros:
-✅ Catch errors before commit
-✅ Fast feedback loop
-✅ Prevent broken config in git
-
-Cons:
-❌ Requires developer setup
-❌ Can be bypassed (--no-verify)
-❌ Extra tooling needed
-```
-
-**Option C: Startup + CI Pipeline**
-```
-# .github/workflows/ci.yml
-- name: Validate Configuration
-  run: go run cmd/validate-config/main.go --config-dir=./config
-
-Pros:
-✅ Catch errors before merge
-✅ Enforced in CI (can't bypass)
-✅ Works for all contributors
-
-Cons:
-❌ Slower feedback than pre-commit
-❌ Requires CI setup
-```
-
-**Option D: All Three (Startup + Pre-Commit + CI)**
-```
-Pros:
-✅ Multiple safety layers
-✅ Fast feedback (pre-commit)
-✅ Enforced in CI
-✅ Runtime safety (startup)
-
-Cons:
-❌ Most complex setup
-❌ Redundant validation
-```
-
-**Implementation Example:**
-
-```go
-// cmd/validate-config/main.go
-
-func main() {
-    configDir := flag.String("config-dir", "./config", "Configuration directory")
-    flag.Parse()
-    
-    // Load configuration (without starting service)
-    cfg, err := config.Load(context.Background(), config.LoadOptions{
-        ConfigDir: *configDir,
-    })
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "❌ Configuration loading failed:\n%v\n", err)
-        os.Exit(1)
-    }
-    
-    // Validate configuration
-    validator := config.NewValidator(&config.Registries{
-        Agents:       cfg.AgentRegistry,
-        Chains:       cfg.ChainRegistry,
-        MCPServers:   cfg.MCPServerRegistry,
-        LLMProviders: cfg.LLMProviderRegistry,
-    })
-    
-    if err := validator.ValidateAll(); err != nil {
-        fmt.Fprintf(os.Stderr, "❌ Configuration validation failed:\n%v\n", err)
-        os.Exit(1)
-    }
-    
-    fmt.Println("✅ Configuration valid!")
-    
-    // Print summary
-    fmt.Printf("\nConfiguration Summary:\n")
-    fmt.Printf("  Agents: %d\n", len(cfg.AgentRegistry.GetAll()))
-    fmt.Printf("  Chains: %d\n", len(cfg.ChainRegistry.GetAll()))
-    fmt.Printf("  MCP Servers: %d\n", len(cfg.MCPServerRegistry.GetAll()))
-    fmt.Printf("  LLM Providers: %d\n", len(cfg.LLMProviderRegistry.GetAll()))
-}
-```
-
-**Question for Discussion:**
-1. How important is fast feedback for configuration errors?
-2. Can we rely on developers to run validation manually?
-3. Is CI validation sufficient?
-
-**Recommendation**: Use **Option D (All Three)** for maximum safety with minimal overhead.
+**Implementation:**
+- Configuration is validated once at startup
+- Service fails to start if configuration is invalid
+- Validation uses Go struct tags (`validate`) and custom business logic
+- Clear error messages indicate which configuration is invalid and why
 
 ---
 
 ### Q5: Configuration Schema Documentation
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 YAML configuration needs schema documentation for editors and validation.
@@ -476,82 +274,37 @@ YAML configuration needs schema documentation for editors and validation.
 **Question:**
 Should we generate JSON Schema for configuration files?
 
-**Options:**
+**Decision:** **Comments Only (No Schema)**
 
-**Option A: No Schema (Comments Only)**
+**Rationale:**
+- Keep it simple - inline comments in YAML files
+- Go struct tags provide validation at runtime
+- No extra tooling or maintenance overhead
+- Configuration is primarily edited by developers who can read the Go structs
+- Aligns with the simplicity principle
+
+**Implementation:**
 ```yaml
-# config/agents.yaml
+# deploy/config/tarsy.yaml
 
 agents:
-  - id: kubernetes-agent  # Required: unique agent identifier
+  - id: kubernetes-agent  # Required: unique agent identifier (lowercase, kebab-case)
     name: "Kubernetes Agent"  # Required: human-readable name
-    # ... more fields with comments
+    system_prompt: "..."  # Optional: custom system prompt
+    max_iterations: 20  # Optional: max iterations (default: 20)
+    # ... more fields with descriptive comments
 ```
 
-**Option B: JSON Schema**
-```json
-// config/schema/agents.schema.json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "agents": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]*$"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "name"]
-      }
-    }
-  }
-}
-```
-
-**Option C: Go Struct Tags + Generated Schema**
-```go
-// pkg/config/agent.go
-
-type AgentConfig struct {
-    ID   string `yaml:"id" json:"id" validate:"required" jsonschema:"pattern=^[a-z][a-z0-9-]*$,description=Unique agent identifier"`
-    Name string `yaml:"name" json:"name" validate:"required" jsonschema:"description=Human-readable agent name"`
-}
-
-// Generate JSON Schema from Go structs
-//go:generate go run tools/generate-schema/main.go
-```
-
-**Benefits of JSON Schema:**
-- ✅ IDE autocomplete and validation (VS Code, IntelliJ)
-- ✅ Automatic documentation generation
-- ✅ Language-agnostic validation
-- ✅ Clear field descriptions and constraints
-- ✅ Reusable in other tools (Terraform, Ansible)
-
-**Drawbacks:**
-- ❌ Extra maintenance (keep schema in sync with code)
-- ❌ Schema generation tooling needed
-- ❌ Overhead for simple configurations
-
-**Question for Discussion:**
-1. How often do we expect configuration to be edited?
-2. Will non-developers edit configuration files?
-3. Is IDE support important?
-
-**Recommendation**: Use **Option C (Generate from Go Structs)** for consistency and IDE support.
+**Validation:**
+- Go struct tags (`yaml`, `validate`) provide runtime validation
+- Startup validation catches configuration errors immediately
+- Go code is the source of truth for configuration structure
 
 ---
 
 ### Q6: Configuration Validation - Fail Fast vs Collect All Errors
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 When validating configuration, should we stop at first error or collect all errors?
@@ -559,136 +312,40 @@ When validating configuration, should we stop at first error or collect all erro
 **Question:**
 Should validation stop at first error or collect all validation errors?
 
-**Options:**
+**Decision:** **Fail Fast (Stop at First Error)**
 
-**Option A: Fail Fast (Stop at First Error)**
+**Rationale:**
+- Simpler implementation
+- Clear first error to fix
+- Faster validation (stops early)
+- Aligns with the simplicity principle
+
+**Implementation:**
 ```go
 func (v *ConfigValidator) ValidateAll() error {
     if err := v.validateAgents(); err != nil {
-        return err  // Stop here
+        return fmt.Errorf("agent validation failed: %w", err)
     }
     
     if err := v.validateChains(); err != nil {
-        return err  // Stop here
+        return fmt.Errorf("chain validation failed: %w", err)
+    }
+    
+    if err := v.validateMCPServers(); err != nil {
+        return fmt.Errorf("MCP server validation failed: %w", err)
+    }
+    
+    if err := v.validateLLMProviders(); err != nil {
+        return fmt.Errorf("LLM provider validation failed: %w", err)
     }
     
     return nil
 }
 
-// Output:
-// ❌ Agent 'kubernetes-agent': LLM provider 'invalid' not found
+// Example output:
+// ❌ Configuration loading failed:
+// agent validation failed: agent 'kubernetes-agent': LLM provider 'invalid' not found
 ```
-
-**Option B: Collect All Errors**
-```go
-func (v *ConfigValidator) ValidateAll() error {
-    var errs []error
-    
-    if err := v.validateAgents(); err != nil {
-        errs = append(errs, err)  // Continue
-    }
-    
-    if err := v.validateChains(); err != nil {
-        errs = append(errs, err)  // Continue
-    }
-    
-    if len(errs) > 0 {
-        return fmt.Errorf("validation failed:\n%v", errs)
-    }
-    
-    return nil
-}
-
-// Output:
-// ❌ Configuration validation failed:
-//   - Agent 'kubernetes-agent': LLM provider 'invalid' not found
-//   - Chain 'k8s-analysis': agent 'nonexistent-agent' not found
-//   - MCP server 'prometheus': invalid transport type
-```
-
-**Comparison:**
-
-**Fail Fast:**
-```
-Pros:
-✅ Simpler implementation
-✅ Clear first error to fix
-✅ Faster validation (stops early)
-
-Cons:
-❌ Slow feedback loop (fix one error, find next)
-❌ Must run validation multiple times
-❌ Hard to see full extent of issues
-```
-
-**Collect All:**
-```
-Pros:
-✅ See all errors at once
-✅ Fix multiple issues in one iteration
-✅ Better for batch changes
-✅ Clearer picture of configuration health
-
-Cons:
-❌ More complex implementation
-❌ May be overwhelming if many errors
-❌ Harder to prioritize which error to fix first
-```
-
-**Implementation Example:**
-
-```go
-// pkg/config/validator.go
-
-type ValidationError struct {
-    Component string  // "agent", "chain", "mcp_server", "llm_provider"
-    ID        string  // Component ID
-    Field     string  // Field that failed validation
-    Message   string  // Error message
-}
-
-func (v ValidationError) Error() string {
-    return fmt.Sprintf("%s '%s': %s: %s", v.Component, v.ID, v.Field, v.Message)
-}
-
-type ValidationErrors []ValidationError
-
-func (e ValidationErrors) Error() string {
-    if len(e) == 0 {
-        return "no errors"
-    }
-    
-    var sb strings.Builder
-    sb.WriteString("Configuration validation failed:\n")
-    for _, err := range e {
-        sb.WriteString(fmt.Sprintf("  - %s\n", err.Error()))
-    }
-    return sb.String()
-}
-
-func (v *ConfigValidator) ValidateAll() error {
-    var errs ValidationErrors
-    
-    // Validate each component and collect errors
-    errs = append(errs, v.validateAgents()...)
-    errs = append(errs, v.validateChains()...)
-    errs = append(errs, v.validateMCPServers()...)
-    errs = append(errs, v.validateLLMProviders()...)
-    
-    if len(errs) > 0 {
-        return errs
-    }
-    
-    return nil
-}
-```
-
-**Question for Discussion:**
-1. How important is seeing all errors at once?
-2. Do we expect many validation errors typically?
-3. Is simplicity more important than comprehensive error reporting?
-
-**Recommendation**: Use **Option B (Collect All Errors)** for better developer experience.
 
 ---
 
@@ -696,151 +353,81 @@ func (v *ConfigValidator) ValidateAll() error {
 
 ### Q7: Configuration Precedence and Merging
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
-With multiple configuration sources (defaults, files, overrides, env vars), need clear precedence rules.
+With multiple configuration sources (defaults, component configs, env vars, API overrides), need clear precedence rules.
 
 **Question:**
 How should configuration precedence and merging work?
 
-**Proposed Precedence (Lowest to Highest):**
-1. System defaults (`defaults.yaml`)
-2. Component configuration (`agents.yaml`, `chains.yaml`, etc.)
-3. Environment overrides (`environments/{env}.yaml`)
-4. Environment variables (`${VAR}`)
-5. Per-alert overrides (API request - runtime only)
+**Decision:** **Agreed Precedence Order (Lowest to Highest)**
 
-**Merging Strategies:**
+1. System defaults (`tarsy.yaml` - defaults section)
+2. Component configuration (`tarsy.yaml` - agents/chains/mcp_servers sections + `llm-providers.yaml`)
+3. Environment variables (`${VAR}` interpolation)
+4. Per-alert overrides (API request - runtime only)
 
-**Option A: Deep Merge**
-```yaml
-# defaults.yaml
-llm_providers:
-  - id: gemini-thinking
-    parameters:
-      temperature: 0.7
-      top_p: 0.95
-      top_k: 40
+**Rationale:**
+- Clear hierarchy: defaults → components → env vars → runtime
+- Environment variables interpolated at startup using `${VAR}` or `${VAR:-default}` syntax
+- No environment override YAML files (decided in Q3)
+- Per-alert API overrides are transient (not persisted)
 
-# environments/production.yaml
-llm_providers:
-  - id: gemini-thinking
-    parameters:
-      temperature: 0.5  # Override only temperature
+**How It Works:**
 
-# Result: Deep merge
-llm_providers:
-  - id: gemini-thinking
-    parameters:
-      temperature: 0.5  # From production.yaml
-      top_p: 0.95       # From defaults.yaml
-      top_k: 40         # From defaults.yaml
-```
-
-**Option B: Replace Merge**
-```yaml
-# Same inputs as above
-
-# Result: Replace entire parameters object
-llm_providers:
-  - id: gemini-thinking
-    parameters:
-      temperature: 0.5  # From production.yaml
-      # top_p and top_k lost!
-```
-
-**Deep Merge Considerations:**
-
-```go
-// pkg/config/merge.go
-
-func DeepMerge(base, override interface{}) interface{} {
-    // Handle different types
-    switch baseVal := base.(type) {
-    case map[string]interface{}:
-        overrideMap := override.(map[string]interface{})
-        result := make(map[string]interface{})
-        
-        // Copy base
-        for k, v := range baseVal {
-            result[k] = v
-        }
-        
-        // Merge override (recursively)
-        for k, v := range overrideMap {
-            if baseV, exists := result[k]; exists {
-                // Recursively merge nested maps
-                result[k] = DeepMerge(baseV, v)
-            } else {
-                result[k] = v
-            }
-        }
-        
-        return result
-        
-    case []interface{}:
-        // Arrays: replace entirely (don't merge arrays)
-        return override
-        
-    default:
-        // Primitives: replace
-        return override
-    }
-}
-```
-
-**Edge Cases:**
-
-1. **Array Merging:**
+1. **Defaults Apply to Components:**
    ```yaml
-   # Base
-   mcp_servers: [server1, server2]
+   # tarsy.yaml - defaults section
+   defaults:
+     llm:
+       temperature: 0.7
+       top_p: 0.95
+       max_tokens: 4096
    
-   # Override
-   mcp_servers: [server3]
-   
-   # Deep merge: Replace? Append? Merge by ID?
-   # Recommendation: Replace arrays entirely
-   mcp_servers: [server3]
+   # tarsy.yaml - agent overrides specific values
+   agents:
+     - id: kubernetes-agent
+       llm_config:
+         temperature: 0.5  # Override only temperature
+         # top_p and max_tokens inherit from defaults
    ```
 
-2. **Null Values:**
+2. **Environment Variable Interpolation:**
    ```yaml
-   # Base
-   max_iterations: 20
-   
-   # Override (intentionally disable)
-   max_iterations: null
-   
-   # Should null remove the field or set it to null?
-   # Recommendation: null removes the field
+   # llm-providers.yaml
+   llm_providers:
+     - id: gemini-thinking
+       api:
+         api_key: ${GEMINI_API_KEY}        # From .env
+         endpoint: ${GEMINI_ENDPOINT:-https://generativelanguage.googleapis.com}
+       parameters:
+         temperature: ${LLM_TEMP:-0.7}     # Default if not set
    ```
 
-3. **Type Conflicts:**
-   ```yaml
-   # Base
-   timeout: 30s
-   
-   # Override (wrong type)
-   timeout: "invalid"
-   
-   # Should fail validation or ignore override?
-   # Recommendation: Fail validation
+3. **Per-Alert API Overrides (Runtime):**
+   ```go
+   // API request can override MCP servers and native tools
+   POST /api/v1/sessions/:id/interactions
+   {
+     "message": "...",
+     "mcp_server_ids": ["custom-server"],  // Override
+     "native_tool_ids": ["kubectl"]        // Override
+   }
    ```
 
-**Question for Discussion:**
-1. Should we support deep merge or just replace?
-2. How should arrays be merged?
-3. How should null values be handled?
-
-**Recommendation**: Use **Deep Merge for Maps, Replace for Arrays**, with clear documentation.
+**Implementation:**
+- Defaults are applied at configuration load time
+- Environment variables are interpolated during YAML parsing
+- Component configs can explicitly override any default value
+- Missing fields inherit from defaults
+- Per-alert overrides are applied at runtime (not persisted)
 
 ---
 
 ### Q8: Configuration Versioning
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Configuration may evolve over time. Should we support version field and migration?
@@ -848,164 +435,33 @@ Configuration may evolve over time. Should we support version field and migratio
 **Question:**
 Should configuration files have a version field and migration support?
 
-**Options:**
+**Decision:** **No Versioning (For Now)**
 
-**Option A: No Versioning**
+**Rationale:**
+- Keep it simple - no version field or migration logic
+- Breaking changes can be handled manually with documentation
+- Can add versioning later if needed
+- Aligns with the simplicity principle
+
+**Implementation:**
 ```yaml
-# config/agents.yaml
+# deploy/config/tarsy.yaml
 agents:
   - id: kubernetes-agent
     name: "Kubernetes Agent"
     # No version field
 ```
 
-**Option B: File-Level Versioning**
-```yaml
-# config/agents.yaml
-version: "1.0"
-
-agents:
-  - id: kubernetes-agent
-    name: "Kubernetes Agent"
-```
-
-**Option C: Per-Component Versioning**
-```yaml
-# config/agents.yaml
-agents:
-  - id: kubernetes-agent
-    name: "Kubernetes Agent"
-    version: "1.0"  # Component version
-```
-
-**Use Cases for Versioning:**
-
-1. **Breaking Changes:**
-   ```
-   v1.0: iteration_strategy: "react"
-   v2.0: iteration_controller: "react"  # Field renamed
-   
-   Migration: Rename field, preserve values
-   ```
-
-2. **Deprecation Warnings:**
-   ```go
-   if agent.Version == "1.0" {
-       log.Warn("Agent config v1.0 is deprecated, please upgrade to v2.0")
-   }
-   ```
-
-3. **Compatibility Checks:**
-   ```go
-   func (l *ConfigLoader) validateVersion(version string) error {
-       if version < "1.0" || version > "2.0" {
-           return fmt.Errorf("unsupported config version: %s", version)
-       }
-       return nil
-   }
-   ```
-
-**Migration Support:**
-
-```go
-// pkg/config/migration.go
-
-type ConfigMigrator struct {
-    migrations map[string]MigrationFunc
-}
-
-type MigrationFunc func(data map[string]interface{}) (map[string]interface{}, error)
-
-func (m *ConfigMigrator) Migrate(data map[string]interface{}, fromVersion, toVersion string) (map[string]interface{}, error) {
-    currentVersion := fromVersion
-    
-    for currentVersion != toVersion {
-        migration, exists := m.migrations[currentVersion]
-        if !exists {
-            return nil, fmt.Errorf("no migration from %s", currentVersion)
-        }
-        
-        var err error
-        data, err = migration(data)
-        if err != nil {
-            return nil, fmt.Errorf("migration from %s failed: %w", currentVersion, err)
-        }
-        
-        // Update version
-        currentVersion = nextVersion(currentVersion)
-    }
-    
-    return data, nil
-}
-
-// Example migration
-func migrateAgentsV1ToV2(data map[string]interface{}) (map[string]interface{}, error) {
-    // Rename iteration_strategy -> iteration_controller
-    for _, agent := range data["agents"].([]interface{}) {
-        agentMap := agent.(map[string]interface{})
-        if strategy, exists := agentMap["iteration_strategy"]; exists {
-            agentMap["iteration_controller"] = strategy
-            delete(agentMap, "iteration_strategy")
-        }
-    }
-    
-    data["version"] = "2.0"
-    return data, nil
-}
-```
-
-**Pros/Cons:**
-
-**No Versioning:**
-```
-Pros:
-✅ Simpler configuration
-✅ No migration logic needed
-✅ Less overhead
-
-Cons:
-❌ Hard to handle breaking changes
-❌ No deprecation warnings
-❌ Manual updates required
-```
-
-**File-Level Versioning:**
-```
-Pros:
-✅ Single version per file
-✅ Clear compatibility checks
-✅ Easier to migrate entire file
-
-Cons:
-❌ All components must use same version
-❌ Can't deprecate individual components
-```
-
-**Per-Component Versioning:**
-```
-Pros:
-✅ Granular versioning
-✅ Independent component evolution
-✅ Gradual migration possible
-
-Cons:
-❌ More complex
-❌ Harder to track compatibility
-❌ More migration logic needed
-```
-
-**Question for Discussion:**
-1. Do we expect breaking changes to configuration?
-2. How important is backward compatibility?
-3. Can we handle migrations manually (documentation)?
-
-**Recommendation**: Start with **Option B (File-Level Versioning)** for basic compatibility checks. Add migration support if needed later.
+**Future Consideration:**
+- If we need versioning later, we can add it
+- Breaking changes will be documented in release notes
+- Users responsible for updating configuration based on documentation
 
 ---
 
 ### Q9: Configuration Testing Utilities
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Developers and operators need to test configuration changes before deploying.
@@ -1013,107 +469,21 @@ Developers and operators need to test configuration changes before deploying.
 **Question:**
 What testing utilities should we provide for configuration?
 
-**Proposed Utilities:**
+**Decision:** **No Additional Validation Tools**
 
-**1. Configuration Validator CLI:**
-```bash
-# Validate configuration
-./tarsy validate-config --config-dir=./config
+**Rationale:**
+- Developers can test configuration in dev environment (same as prod)
+- Service validates configuration at startup - won't start if config is broken
+- Failed deployment is safe - service simply won't start/restart
+- Keeps tooling simple and minimal
+- Aligns with the simplicity principle
 
-# Output:
-# ✅ Configuration valid!
-# 
-# Configuration Summary:
-#   Agents: 5
-#   Chains: 3
-#   MCP Servers: 4
-#   LLM Providers: 2
-```
-
-**2. Configuration Diff Tool:**
-```bash
-# Compare two configurations
-./tarsy config-diff \
-    --config-dir=./config \
-    --compare-dir=./config-new
-
-# Output:
-# Agents:
-#   + Added: new-agent
-#   - Removed: old-agent
-#   ~ Modified: kubernetes-agent
-#     - max_iterations: 20 → 30
-# 
-# Chains:
-#   ~ Modified: k8s-deep-analysis
-#     + Added stage: "Final Recommendations"
-```
-
-**3. Configuration Dry-Run:**
-```bash
-# Test configuration without starting service
-./tarsy dry-run \
-    --config-dir=./config \
-    --chain=k8s-deep-analysis
-
-# Output:
-# Chain: k8s-deep-analysis
-#   Stage 0: Initial Analysis
-#     Agent: kubernetes-agent
-#     LLM: gemini-thinking
-#     MCP Servers: kubernetes-server, prometheus-server
-#   
-#   Stage 1: Deep Dive (parallel)
-#     Agent 1: kubernetes-agent
-#     Agent 2: argocd-agent
-#     Agent 3: prometheus-agent
-#   
-#   Stage 2: Synthesis
-#     Agent: synthesis-agent
-```
-
-**4. Configuration Export:**
-```bash
-# Export resolved configuration (with env vars interpolated)
-./tarsy export-config \
-    --config-dir=./config \
-    --environment=production \
-    --output=config-resolved.yaml
-
-# Useful for:
-# - Debugging environment variable issues
-# - Documentation
-# - Auditing deployed configuration
-```
-
-**5. Configuration Playground (Web UI - Optional):**
-```
-Interactive web UI for:
-- Live configuration editing
-- Instant validation feedback
-- Visual chain designer
-- Configuration templates
-```
-
-**Implementation Priority:**
-
-**High Priority:**
-- ✅ Configuration Validator CLI (essential)
-- ✅ Configuration Dry-Run (helpful for testing)
-
-**Medium Priority:**
-- 🔄 Configuration Diff Tool (useful for reviews)
-- 🔄 Configuration Export (debugging)
-
-**Low Priority:**
-- ⏸️ Configuration Playground (nice-to-have)
-
-**Question for Discussion:**
-1. Which utilities are most important?
-2. Should we build CLI tools or web UI?
-3. How much investment in tooling is worthwhile?
-
-**Recommendation**: Implement **Validator CLI** and **Dry-Run** first. Add others based on user feedback.
+**Testing Strategy:**
+1. **Local Dev Testing:** Test configuration changes in local dev environment
+2. **Podman Dev Testing:** Test in containerized environment before K8s
+3. **K8s Dev Testing:** Test in K8s dev environment before production
+4. **Startup Validation:** Service validates configuration on startup
+5. **Safe Failure:** If configuration is broken, service fails to start (safe state)
 
 ---
 
@@ -1121,7 +491,7 @@ Interactive web UI for:
 
 ### Q10: Configuration Templates and Examples
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Need examples to help users understand configuration patterns.
@@ -1129,92 +499,44 @@ Need examples to help users understand configuration patterns.
 **Question:**
 What configuration templates and examples should we provide?
 
-**Proposed Templates:**
+**Decision:** **Simple Examples with Prefixes**
 
-**1. Quick Start Template (Minimal):**
-```yaml
-# config/templates/quickstart/agents.yaml
-agents:
-  - id: simple-agent
-    name: "Simple Investigation Agent"
-    iteration_strategy: react
-    max_iterations: 10
-    llm_provider: gemini-thinking
-    system_prompt: "You are a helpful investigation assistant."
-    enabled: true
+**Rationale:**
+- Keep it simple - one example per configuration file
+- Use "example" or "template" prefix in filename
+- Keep examples alongside actual config files for easy discovery
+- Users copy and customize the examples
 
-# config/templates/quickstart/chains.yaml
-chains:
-  - id: simple-investigation
-    name: "Simple Investigation"
-    stages:
-      - name: "Investigate"
-        index: 0
-        agent: simple-agent
-        execution_mode: single
-    enabled: true
+**File Structure:**
+```
+deploy/
+└── config/
+    ├── tarsy.yaml.example           # Example main config (tracked in git)
+    ├── llm-providers.yaml.example   # Example LLM providers (tracked in git)
+    ├── .env.example                 # Example environment variables (tracked in git)
+    ├── oauth2-proxy.cfg.template    # OAuth2 proxy template (tracked in git)
+    ├── tarsy.yaml                   # User's actual config (gitignored)
+    ├── llm-providers.yaml           # User's actual config (gitignored)
+    ├── .env                         # User's actual env vars (gitignored)
+    └── oauth2-proxy.cfg             # Generated OAuth2 config (gitignored)
+
+# Users copy and customize:
+cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
 ```
 
-**2. Production Template (Comprehensive):**
-```yaml
-# Full production-ready configuration with:
-- Multiple agents (Kubernetes, ArgoCD, Prometheus)
-- Complex multi-stage chains
-- Parallel execution examples
-- Chat configuration
-- MCP server integrations
-- Production LLM settings
-```
-
-**3. Development Template:**
-```yaml
-# Development-friendly configuration with:
-- Higher iteration limits for testing
-- More verbose logging
-- Relaxed rate limits
-- Development LLM settings
-```
-
-**4. Example Patterns:**
-```
-config/examples/
-├── single-agent-chain.yaml          # Simple chain
-├── parallel-agents-chain.yaml       # Multi-agent parallel
-├── replica-comparison-chain.yaml    # Replica pattern
-├── multi-stage-chain.yaml           # Complex multi-stage
-└── custom-mcp-server.yaml           # Custom MCP integration
-```
-
-**Documentation Structure:**
-```
-docs/configuration/
-├── getting-started.md
-├── agents.md
-├── chains.md
-├── mcp-servers.md
-├── llm-providers.md
-├── environment-variables.md
-├── examples/
-│   ├── simple-chain.md
-│   ├── parallel-agents.md
-│   └── custom-mcp.md
-└── reference/
-    ├── schema.md
-    └── validation-rules.md
-```
-
-**Question for Discussion:**
-1. How much documentation is needed upfront?
-2. Should templates be in main repo or separate docs repo?
-3. Are examples important for initial release?
-
-**Recommendation**: Provide **Quick Start** and **Production** templates, plus basic documentation. Expand examples based on user needs.
+**What Examples Include:**
+- **`tarsy.yaml.example`**: Complete example with agents, chains, MCP servers, defaults, and comments
+- **`llm-providers.yaml.example`**: Example LLM provider configurations with comments
+- **`.env.example`**: All required environment variables with placeholder values
+- **`oauth2-proxy.cfg.template`**: OAuth2 proxy template with env var placeholders
 
 ---
 
 ### Q11: Configuration Management API
 
-**Status**: 🔄 **IN DISCUSSION**
+**Status**: ✅ **DECIDED**
 
 **Context:**
 Should we expose configuration management via API (read-only or read-write)?
@@ -1222,120 +544,27 @@ Should we expose configuration management via API (read-only or read-write)?
 **Question:**
 Should we provide an API for configuration management?
 
-**Options:**
+**Decision:** **No API (File-Based Only)**
 
-**Option A: No API (File-Based Only)**
-```
-Pros:
-✅ Simple implementation
-✅ GitOps workflow (config in git)
-✅ Clear audit trail (git history)
-✅ Code review for changes
+**Rationale:**
+- Simple implementation
+- GitOps workflow (config in git)
+- Clear audit trail (git history)
+- Code review for configuration changes
+- Aligns with the simplicity principle
 
-Cons:
-❌ Requires file system access
-❌ Manual deployment process
-❌ No programmatic configuration
-```
-
-**Option B: Read-Only API**
-```
-GET /api/config/agents
-GET /api/config/chains
-GET /api/config/mcp-servers
-GET /api/config/llm-providers
-
-Pros:
-✅ Visibility into loaded configuration
-✅ Debugging and troubleshooting
-✅ No risk of runtime modification
-
-Cons:
-❌ No programmatic updates
-❌ Still requires file access for changes
-```
-
-**Option C: Read-Write API**
-```
-GET    /api/config/agents
-POST   /api/config/agents
-PUT    /api/config/agents/{id}
-DELETE /api/config/agents/{id}
-
-Pros:
-✅ Full programmatic control
-✅ Web UI for configuration
-✅ API-driven workflows
-
-Cons:
-❌ Complex implementation
-❌ Configuration drift (DB vs files)
-❌ Harder to audit
-❌ Security concerns (who can modify?)
-❌ Conflicts with GitOps workflow
-```
-
-**Option D: Read-Only API + Config Management Service (Separate)**
-```
-TARSy Service: Read-only config API
-Config Manager Service: Manages files, git commits, restarts
-
-Pros:
-✅ Separation of concerns
-✅ Maintains GitOps workflow
-✅ Audit trail via git
-✅ Programmatic updates possible
-
-Cons:
-❌ More complex architecture
-❌ Two services to maintain
-❌ May be overkill for simple deployments
-```
-
-**Read-Only API Example:**
-
-```go
-// pkg/api/config_handler.go
-
-func (h *ConfigHandler) GetAgents(w http.ResponseWriter, r *http.Request) {
-    agents := h.agentRegistry.GetAll()
-    
-    response := struct {
-        Agents []AgentConfig `json:"agents"`
-        Count  int           `json:"count"`
-    }{
-        Agents: agents,
-        Count:  len(agents),
-    }
-    
-    json.NewEncoder(w).Encode(response)
-}
-
-func (h *ConfigHandler) GetChain(w http.ResponseWriter, r *http.Request) {
-    chainID := chi.URLParam(r, "id")
-    
-    chain, err := h.chainRegistry.Get(chainID)
-    if err != nil {
-        http.Error(w, "Chain not found", http.StatusNotFound)
-        return
-    }
-    
-    json.NewEncoder(w).Encode(chain)
-}
-```
-
-**Question for Discussion:**
-1. Do we need programmatic configuration access?
-2. Is GitOps workflow sufficient?
-3. Who would use a configuration API?
-
-**Recommendation**: Start with **Option B (Read-Only API)** for visibility. Add write capabilities later if needed.
+**Configuration Management:**
+- Configuration stored in YAML files in `deploy/config/`
+- Changes made by editing files
+- Configuration tracked in git
+- Service restart required for changes to take effect
+- No runtime configuration API (neither read nor write)
 
 ---
 
 ### Q12: Configuration Change Notifications
 
-**Status**: ⏸️ **DEFERRED**
+**Status**: ❌ **NOT APPLICABLE**
 
 **Context:**
 If hot-reload is supported, how should services be notified of configuration changes?
@@ -1343,43 +572,13 @@ If hot-reload is supported, how should services be notified of configuration cha
 **Question:**
 How should configuration changes be communicated to running services?
 
-**Options:**
+**Decision:** **Not Applicable**
 
-**Option A: No Notifications (Restart Required)**
-- Services restart to pick up new configuration
-- No runtime notification needed
-
-**Option B: Internal Event System**
-```go
-type ConfigChangeEvent struct {
-    Component string  // "agent", "chain", etc.
-    ChangeType string // "added", "modified", "deleted"
-    ID string         // Component ID
-}
-
-// Subscribe to config changes
-configEvents := config.Subscribe()
-for event := range configEvents {
-    log.Info("Config changed", "component", event.Component, "id", event.ID)
-    // Handle change
-}
-```
-
-**Option C: WebHooks**
-```yaml
-# config/defaults.yaml
-notifications:
-  webhooks:
-    - url: https://monitoring.example.com/config-changed
-      events: ["agent.modified", "chain.added"]
-```
-
-**Question for Discussion:**
-1. Is this needed if no hot-reload?
-2. What would consume these notifications?
-3. Is internal event system sufficient?
-
-**Recommendation**: **Defer** until hot-reload decision is made (Q1).
+**Rationale:**
+- Q1 decided: No hot-reload, restart required
+- Since configuration changes require restart, no notification system needed
+- Service picks up new configuration on startup
+- This question is only relevant if hot-reload is implemented in the future
 
 ---
 
@@ -1388,32 +587,32 @@ notifications:
 Track which questions we've addressed:
 
 ### Critical Priority
-- [ ] Q1: Configuration Reload Strategy (restart vs hot-reload vs hybrid) 🔄
-- [ ] Q2: Configuration File Structure (multiple files vs single file) 🔄
-- [ ] Q3: Environment-Specific Configuration (override files vs env vars vs separate dirs) 🔄
+- [x] Q1: Configuration Reload Strategy → **No hot-reload, restart required** ✅
+- [x] Q2: Configuration File Structure → **tarsy.yaml + llm-providers.yaml + .env** ✅
+- [x] Q3: Environment-Specific Configuration → **Environment variables only (.env)** ✅
 
 ### High Priority
-- [ ] Q4: Configuration Validation Timing (startup only vs pre-commit vs CI vs all) 🔄
-- [ ] Q5: Configuration Schema Documentation (comments vs JSON Schema vs generated) 🔄
-- [ ] Q6: Configuration Validation - Fail Fast vs Collect All Errors 🔄
+- [x] Q4: Configuration Validation Timing → **Startup only** ✅
+- [x] Q5: Configuration Schema Documentation → **Comments only** ✅
+- [x] Q6: Configuration Validation → **Fail fast** ✅
 
 ### Medium Priority
-- [ ] Q7: Configuration Precedence and Merging (deep merge vs replace, array handling) 🔄
-- [ ] Q8: Configuration Versioning (no version vs file-level vs per-component) 🔄
-- [ ] Q9: Configuration Testing Utilities (validator, diff, dry-run, export) 🔄
+- [x] Q7: Configuration Precedence and Merging → **Defaults → Components → Env Vars → API** ✅
+- [x] Q8: Configuration Versioning → **No versioning (for now)** ✅
+- [x] Q9: Configuration Testing Utilities → **No additional tools** ✅
 
 ### Low Priority
-- [ ] Q10: Configuration Templates and Examples 🔄
-- [ ] Q11: Configuration Management API (no API vs read-only vs read-write) 🔄
-- [ ] Q12: Configuration Change Notifications ⏸️ **DEFERRED**
+- [x] Q10: Configuration Templates and Examples → **Simple .example files** ✅
+- [x] Q11: Configuration Management API → **No API, file-based only** ✅
+- [x] Q12: Configuration Change Notifications → **N/A (no hot-reload)** ❌
 
 ---
 
 ## Next Steps
 
-1. Review and discuss each question in order
-2. Make decisions and mark status (✅/❌/⏸️)
-3. Update main design document based on decisions
+1. ~~Review and discuss each question in order~~ ✅ **COMPLETE**
+2. ~~Make decisions and mark status (✅/❌/⏸️)~~ ✅ **COMPLETE**
+3. **Update main design document based on decisions** ⬅️ NEXT
 4. Begin implementation of agreed-upon design
 5. Create example configuration files
 6. Write configuration documentation

@@ -1,5 +1,9 @@
 # Phase 2: Configuration System - Detailed Design
 
+**Status**: ✅ Design Complete - All questions decided  
+**Questions Document**: See `phase2-configuration-system-questions.md` for decision rationale  
+**Last Updated**: 2026-02-04
+
 ## Overview
 
 This document details the configuration system design for the new TARSy implementation. The configuration system manages agent definitions, chain configurations, MCP server registry, and LLM provider settings through YAML files with hierarchical resolution.
@@ -27,20 +31,74 @@ This document details the configuration system design for the new TARSy implemen
 ### Configuration File Structure
 
 ```
-config/
-├── agents.yaml           # Agent definitions
-├── chains.yaml           # Chain configurations
-├── mcp-servers.yaml      # MCP server registry
-├── llm-providers.yaml    # LLM provider configurations
-└── defaults.yaml         # System-wide defaults
+deploy/
+└── config/
+    ├── tarsy.yaml.example            # Example main config (tracked in git)
+    ├── llm-providers.yaml.example    # Example LLM providers (tracked in git)
+    ├── .env.example                  # Example environment variables (tracked in git)
+    ├── oauth2-proxy.cfg.template     # OAuth2 proxy template (tracked in git)
+    ├── tarsy.yaml                    # User's actual config (gitignored)
+    ├── llm-providers.yaml            # User's actual config (gitignored)
+    ├── .env                          # User's actual env vars (gitignored)
+    └── oauth2-proxy.cfg              # Generated OAuth2 config (gitignored)
 
-# Environment-specific overrides (optional)
-config/
-├── environments/
-│   ├── development.yaml
-│   ├── staging.yaml
-│   └── production.yaml
+# Setup: Users copy and customize
+cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
 ```
+
+**File Descriptions:**
+
+- **`deploy/config/tarsy.yaml.example`**: Example main configuration (tracked in git, ~800-1000 lines)
+  - Agent definitions with custom instructions
+  - Chain configurations (single/parallel/replica stages)
+  - MCP server registry and transport configurations
+  - System-wide defaults
+  - Environment-agnostic (uses `${VAR}` placeholders for environment-specific values)
+  - Users copy to `tarsy.yaml` and customize
+
+- **`deploy/config/llm-providers.yaml.example`**: Example LLM provider configurations (tracked in git, ~50 lines)
+  - API endpoints and authentication (via env vars: `${GEMINI_API_KEY}`)
+  - Model parameters (can be overridden via env vars: `${LLM_TEMPERATURE:-0.7}`)
+  - Rate limits and retry policies
+  - Native tools configuration (Google-specific)
+  - Environment-agnostic
+  - Users copy to `llm-providers.yaml` and customize
+
+- **`deploy/config/.env.example`**: Example environment variables (tracked in git)
+  - Template for users to create their `.env`
+  - Contains all required and optional variables with comments
+  - Includes examples for different environments (local dev, Podman, K8s)
+  - No real secrets (placeholder values only)
+  - Users copy to `.env` and customize
+
+- **`deploy/config/oauth2-proxy.cfg.template`**: OAuth2 proxy configuration template (tracked in git)
+  - Uses placeholder syntax: `{{OAUTH2_CLIENT_ID}}`
+  - Makefile replaces placeholders with environment variables
+  - Generates `oauth2-proxy.cfg` (gitignored)
+  - Same pattern as old TARSy
+
+- **`deploy/config/tarsy.yaml`**: User's actual configuration (gitignored)
+  - Copied from `tarsy.yaml.example` and customized
+
+- **`deploy/config/llm-providers.yaml`**: User's LLM provider configuration (gitignored)
+  - Copied from `llm-providers.yaml.example` and customized
+
+- **`deploy/config/.env`**: User's secrets and environment-specific values (gitignored)
+  - API keys (GEMINI_API_KEY, etc.)
+  - Database credentials (DB_HOST, DB_PORT, DB_PASSWORD)
+  - Service endpoints (GRPC_ADDR, HTTP_PORT)
+  - OAuth2 credentials (OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET)
+  - Environment-specific overrides (LLM_RATE_LIMIT, MAX_ITERATIONS)
+  - Copied from `.env.example` and customized
+
+**Environment Strategy:**
+- **All environments use the same YAML files** (tarsy.yaml, llm-providers.yaml)
+- **Environment differences handled via .env files** (database hosts, service endpoints, secrets)
+- **No environment override YAML files** (simpler, follows 12-factor app principles)
+- **Production config NOT in source code** (users create their own K8s ConfigMaps/Secrets)
+- **Podman-compose integration**: `env_file: ./config/.env` in `podman-compose.yml` for explicit path
 
 ### Configuration Loading Flow
 
@@ -52,10 +110,7 @@ config/
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  1. Load & Parse YAML Files                             │
-│     - defaults.yaml                                      │
-│     - agents.yaml                                        │
-│     - chains.yaml                                        │
-│     - mcp-servers.yaml                                   │
+│     - tarsy.yaml (agents, chains, MCP servers, defaults)│
 │     - llm-providers.yaml                                 │
 │     - environment override (if specified)                │
 └────────────────────────┬────────────────────────────────┘
@@ -130,14 +185,14 @@ config/
 
 ## Configuration Files
 
-### 1. Agent Definitions (`agents.yaml`)
+### 1. Agent Definitions (`tarsy.yaml` - agents section)
 
 Defines available agent types with their default configurations.
 
 **Schema:**
 
 ```yaml
-# config/agents.yaml
+# deploy/config/tarsy.yaml
 
 agents:
   - id: kubernetes-agent
@@ -328,14 +383,14 @@ func (r *AgentRegistry) Get(id string) (*AgentConfig, error) {
 
 ---
 
-### 2. Chain Definitions (`chains.yaml`)
+### 2. Chain Definitions (`tarsy.yaml` - chains section)
 
 Defines multi-stage agent chains for different alert types.
 
 **Schema:**
 
 ```yaml
-# config/chains.yaml
+# deploy/config/tarsy.yaml (chains section)
 
 chains:
   - id: k8s-quick-analysis
@@ -524,14 +579,14 @@ func (r *ChainRegistry) Get(id string) (*ChainConfig, error) {
 
 ---
 
-### 3. MCP Server Registry (`mcp-servers.yaml`)
+### 3. MCP Server Registry (`tarsy.yaml` - mcp_servers section)
 
 Defines available MCP servers and their configurations.
 
 **Schema:**
 
 ```yaml
-# config/mcp-servers.yaml
+# deploy/config/tarsy.yaml (mcp_servers section)
 
 mcp_servers:
   - id: kubernetes-server
@@ -745,7 +800,7 @@ Defines LLM providers and their configurations.
 **Schema:**
 
 ```yaml
-# config/llm-providers.yaml
+# deploy/config/llm-providers.yaml
 
 llm_providers:
   - id: gemini-thinking
@@ -978,14 +1033,14 @@ func (r *LLMProviderRegistry) Get(id string) (*LLMProviderConfig, error) {
 
 ---
 
-### 5. System Defaults (`defaults.yaml`)
+### 5. System Defaults (`tarsy.yaml` - defaults section)
 
 System-wide default configurations.
 
 **Schema:**
 
 ```yaml
-# config/defaults.yaml
+# deploy/config/tarsy.yaml (defaults section)
 
 defaults:
   # Session defaults
@@ -1093,8 +1148,8 @@ type RetentionDefaults struct {
 
 ### Resolution Order
 
-1. **System Defaults** (`defaults.yaml`) - Base configuration
-2. **Component Configuration** - Agent/chain/MCP/LLM specific files
+1. **System Defaults** (tarsy.yaml - defaults section) - Base configuration
+2. **Component Configuration** (tarsy.yaml - agents/chains/mcp_servers sections + llm-providers.yaml)
 3. **Environment Override** (optional) - `environments/{env}.yaml`
 4. **Environment Variables** - Interpolated values (highest priority)
 5. **Per-Alert Override** - MCP selection via API (runtime only)
@@ -1102,18 +1157,18 @@ type RetentionDefaults struct {
 ### Configuration Override Example
 
 ```yaml
-# defaults.yaml
+# tarsy.yaml - defaults section
 defaults:
   llm:
     temperature: 0.7
 
-# agents.yaml
+# tarsy.yaml - agents section
 agents:
   - id: kubernetes-agent
     llm_provider: gemini-thinking
     # Uses default temperature: 0.7
 
-# chains.yaml (override at stage level)
+# tarsy.yaml - chains section (override at stage level)
 chains:
   - id: k8s-deep-analysis
     stages:
@@ -1246,30 +1301,26 @@ type ConfigValidator struct {
 }
 
 func (v *ConfigValidator) ValidateAll() error {
-    var errs []error
+    // Fail fast - stop at first error
     
     // Validate agents
     if err := v.validateAgents(); err != nil {
-        errs = append(errs, err)
+        return fmt.Errorf("agent validation failed: %w", err)
     }
     
     // Validate chains (with cross-references)
     if err := v.validateChains(); err != nil {
-        errs = append(errs, err)
+        return fmt.Errorf("chain validation failed: %w", err)
     }
     
     // Validate MCP servers
     if err := v.validateMCPServers(); err != nil {
-        errs = append(errs, err)
+        return fmt.Errorf("MCP server validation failed: %w", err)
     }
     
     // Validate LLM providers
     if err := v.validateLLMProviders(); err != nil {
-        errs = append(errs, err)
-    }
-    
-    if len(errs) > 0 {
-        return fmt.Errorf("configuration validation failed: %v", errs)
+        return fmt.Errorf("LLM provider validation failed: %w", err)
     }
     
     return nil
@@ -1322,16 +1373,224 @@ func (v *ConfigValidator) validateChains() error {
 
 ### Validation Error Messages
 
-Clear, actionable error messages:
+Clear, actionable error messages (fail fast - shows first error only):
 
 ```
-✗ Configuration validation failed:
-  - Agent 'kubernetes-agent': LLM provider 'gemini-invalid' not found
-  - Chain 'k8s-deep-analysis' stage 1: agent 'invalid-agent' not found
-  - MCP server 'prometheus-server': invalid transport type 'invalid'
-  - LLM provider 'gemini-thinking': temperature 3.0 out of range (0.0-2.0)
-  - Required environment variable not set: GEMINI_API_KEY
+# Example 1: Agent validation failure
+✗ Configuration loading failed:
+agent validation failed: agent 'kubernetes-agent': LLM provider 'gemini-invalid' not found
+
+# Example 2: Chain validation failure  
+✗ Configuration loading failed:
+chain validation failed: chain 'k8s-deep-analysis' stage 1: agent 'invalid-agent' not found
+
+# Example 3: Environment variable missing
+✗ Configuration loading failed:
+agent validation failed: required environment variable not set: GEMINI_API_KEY
 ```
+
+**Validation Strategy**: Fail fast - validation stops at the first error and displays a clear, actionable message. Developers fix one issue at a time.
+
+---
+
+## Configuration Loading Strategy
+
+### Go Binary Configuration Loading
+
+The Go orchestrator binary loads configuration files from the filesystem. The config directory path is configurable via command-line flag or environment variable:
+
+```bash
+# Three ways to specify config directory:
+# 1. Command-line flag (highest priority)
+./tarsy --config-dir=/path/to/config
+
+# 2. Environment variable
+export CONFIG_DIR=/path/to/config
+./tarsy
+
+# 3. Default (if not specified)
+./tarsy  # Uses ./deploy/config
+```
+
+**Configuration File Deployment by Environment:**
+
+| Environment | Config File Source | How |
+|-------------|-------------------|-----|
+| **Local Dev (host)** | Host filesystem | Files in `./deploy/config/` directory |
+| **Podman-compose** | Mounted or baked | Volume mount: `./deploy/config:/app/config` OR baked into image during build |
+| **K8s/OpenShift Dev** | ConfigMap + Secret | Mount ConfigMap for YAML files, Secret for OAuth2 template |
+| **Production** | ConfigMap + Secret | User creates ConfigMaps/Secrets, mounts to pod |
+
+**Example Kubernetes Deployment:**
+
+```yaml
+# ConfigMap for YAML files
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tarsy-config
+data:
+  tarsy.yaml: |
+    agents:
+      - id: kubernetes-agent
+        name: "Kubernetes Agent"
+        # ... agent config
+  llm-providers.yaml: |
+    llm_providers:
+      - id: gemini-thinking
+        api:
+          endpoint: ${GEMINI_API_ENDPOINT}
+          api_key: ${GEMINI_API_KEY}
+        # ... LLM config
+
+---
+# Secret for OAuth2 template
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tarsy-oauth2
+type: Opaque
+stringData:
+  oauth2-proxy.cfg.template: |
+    client_id = "{{OAUTH2_CLIENT_ID}}"
+    client_secret = "{{OAUTH2_CLIENT_SECRET}}"
+    # ... oauth2 config
+
+---
+# Deployment with config mounts
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tarsy-backend
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        image: tarsy-backend:latest
+        args:
+          - --config-dir=/etc/tarsy/config
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tarsy-secrets
+              key: gemini-api-key
+        volumeMounts:
+        - name: config
+          mountPath: /etc/tarsy/config
+          readOnly: true
+      volumes:
+      - name: config
+        projected:
+          sources:
+          - configMap:
+              name: tarsy-config
+          - secret:
+              name: tarsy-oauth2
+```
+
+### Python LLM Service Configuration
+
+The Python LLM service **does not** read configuration files or environment variables directly. Instead:
+
+1. **Go orchestrator** loads and validates all configuration
+2. **Go orchestrator** passes LLM provider configuration to Python via gRPC
+3. **Python service** receives configuration as gRPC request parameters
+
+This approach:
+- Centralizes configuration in Go (single source of truth)
+- Simplifies Python service (no file I/O or env var parsing)
+- Ensures configuration consistency (validated once in Go)
+- Makes Python service stateless (configuration per request)
+
+**Example gRPC Configuration Passing:**
+
+```protobuf
+// proto/llm_service.proto
+
+message LLMConfig {
+  string provider = 1;           // "google", "openai", "anthropic"
+  string model = 2;              // "gemini-2.0-flash-thinking-exp-1219"
+  string api_key = 3;            // From environment variable (resolved in Go)
+  string endpoint = 4;           // API endpoint
+  float temperature = 5;
+  int32 max_tokens = 6;
+  // ... other LLM parameters
+}
+
+message GenerateRequest {
+  LLMConfig llm_config = 1;      // Go passes config per request
+  repeated Message messages = 2;
+  repeated Tool tools = 3;
+  // ... other request parameters
+}
+```
+
+```go
+// Go: Load config and pass to Python
+func (s *StageExecutor) executeLLMRequest(ctx context.Context, stage *ent.Stage) error {
+    // 1. Resolve LLM provider from registry (loaded from config files)
+    llmProvider, err := s.config.LLMProviders.Get(stage.LLMProviderID)
+    if err != nil {
+        return err
+    }
+    
+    // 2. Build gRPC request with LLM config
+    req := &pb.GenerateRequest{
+        LlmConfig: &pb.LLMConfig{
+            Provider:    llmProvider.Provider,
+            Model:       llmProvider.Model,
+            ApiKey:      os.Getenv(llmProvider.API.APIKeyEnv),  // Resolve from env
+            Endpoint:    llmProvider.API.Endpoint,
+            Temperature: llmProvider.Parameters.Temperature,
+            MaxTokens:   llmProvider.Parameters.MaxOutputTokens,
+        },
+        Messages: convertMessages(stage.Messages),
+        Tools:    convertTools(stage.Tools),
+    }
+    
+    // 3. Call Python LLM service
+    stream, err := s.llmClient.Generate(ctx, req)
+    // ...
+}
+```
+
+```python
+# Python: Receive config from Go, no file reading
+def Generate(self, request, context):
+    # Configuration comes from Go via gRPC request
+    llm_config = request.llm_config
+    
+    # Initialize LLM client with provided config
+    if llm_config.provider == "google":
+        client = genai.Client(
+            api_key=llm_config.api_key,
+            http_options={'api_version': 'v1beta'}
+        )
+        model_name = llm_config.model
+    elif llm_config.provider == "openai":
+        client = openai.OpenAI(api_key=llm_config.api_key)
+        model_name = llm_config.model
+    # ... handle other providers
+    
+    # Use config parameters
+    response = client.generate(
+        model=model_name,
+        messages=request.messages,
+        temperature=llm_config.temperature,
+        max_tokens=llm_config.max_tokens,
+    )
+    # ...
+```
+
+**Benefits of This Approach:**
+- ✅ Single source of truth (Go owns configuration)
+- ✅ Configuration validated once (in Go)
+- ✅ Python service remains stateless
+- ✅ No file I/O or env var parsing in Python
+- ✅ Easier to test Python service (mock gRPC requests)
+- ✅ Configuration changes only require Go service restart
 
 ---
 
@@ -1345,10 +1604,17 @@ Clear, actionable error messages:
 func main() {
     ctx := context.Background()
     
-    // 1. Load configuration
+    // 0. Parse command-line flags
+    configDir := flag.String("config-dir", 
+        getEnv("CONFIG_DIR", "./deploy/config"), 
+        "Path to configuration directory")
+    flag.Parse()
+    
+    log.Info("Loading configuration", "config_dir", *configDir)
+    
+    // 1. Load configuration from filesystem
     cfg, err := config.Load(ctx, config.LoadOptions{
-        ConfigDir:   "./config",
-        Environment: os.Getenv("ENVIRONMENT"), // dev, staging, prod
+        ConfigDir: *configDir,
     })
     if err != nil {
         log.Fatal("Failed to load configuration", "error", err)
@@ -1377,6 +1643,13 @@ func main() {
     
     // 4. Continue with service initialization...
 }
+
+func getEnv(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
 ```
 
 ### Configuration Loader Implementation
@@ -1385,8 +1658,7 @@ func main() {
 // pkg/config/loader.go
 
 type LoadOptions struct {
-    ConfigDir   string
-    Environment string // Optional: dev, staging, prod
+    ConfigDir string  // Path to configuration directory (required)
 }
 
 type Config struct {
@@ -1433,13 +1705,6 @@ func Load(ctx context.Context, opts LoadOptions) (*Config, error) {
         return nil, fmt.Errorf("failed to load LLM providers: %w", err)
     }
     
-    // Apply environment overrides if specified
-    if opts.Environment != "" {
-        if err := loader.applyEnvironmentOverrides(agents, chains, mcpServers, llmProviders); err != nil {
-            return nil, fmt.Errorf("failed to apply environment overrides: %w", err)
-        }
-    }
-    
     return &Config{
         Defaults:            defaults,
         AgentRegistry:       agents,
@@ -1451,7 +1716,6 @@ func Load(ctx context.Context, opts LoadOptions) (*Config, error) {
 
 type configLoader struct {
     configDir string
-    env       string
 }
 
 func (l *configLoader) loadYAML(filename string, target interface{}) error {
@@ -1482,7 +1746,7 @@ func (l *configLoader) loadAgents() (*AgentRegistry, error) {
         Agents []AgentConfig `yaml:"agents"`
     }
     
-    if err := l.loadYAML("agents.yaml", &data); err != nil {
+    if err := l.loadYAML("tarsy.yaml", &data); err != nil {
         return nil, err
     }
     
@@ -1811,11 +2075,8 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
     tempDir := t.TempDir()
     
     // Write test configuration files
-    writeTestConfig(t, tempDir, "agents.yaml", testAgentsYAML)
-    writeTestConfig(t, tempDir, "chains.yaml", testChainsYAML)
-    writeTestConfig(t, tempDir, "mcp-servers.yaml", testMCPServersYAML)
+    writeTestConfig(t, tempDir, "tarsy.yaml", testTarsyYAML)
     writeTestConfig(t, tempDir, "llm-providers.yaml", testLLMProvidersYAML)
-    writeTestConfig(t, tempDir, "defaults.yaml", testDefaultsYAML)
     
     // Set required environment variables
     os.Setenv("GEMINI_API_KEY", "test-key")
@@ -1861,11 +2122,8 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ### Phase 2.2: Configuration System
 - [ ] Define YAML schemas for all configuration files
-  - [ ] agents.yaml schema
-  - [ ] chains.yaml schema
-  - [ ] mcp-servers.yaml schema
+  - [ ] tarsy.yaml schema (agents, chains, mcp_servers, defaults sections)
   - [ ] llm-providers.yaml schema
-  - [ ] defaults.yaml schema
 - [ ] Implement Go structs with validation tags
   - [ ] AgentConfig
   - [ ] ChainConfig
@@ -1893,13 +2151,35 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
   - [ ] Interpolation tests
   - [ ] Loading tests
   - [ ] Integration tests
+- [ ] Update proto file for configuration passing
+  - [ ] Add LLMConfig message
+  - [ ] Update GenerateRequest to include llm_config
+  - [ ] Add Tool and other message types
+  - [ ] Regenerate Go and Python code
+- [ ] Implement configuration passing to Python
+  - [ ] Resolve LLM config from registry in Go
+  - [ ] Build LLMConfig proto message
+  - [ ] Pass config in each gRPC request
+  - [ ] Update Python to use config from request
+- [ ] Add command-line flags
+  - [ ] --config-dir flag
+  - [ ] CONFIG_DIR environment variable support
+  - [ ] Default to ./config
 - [ ] Create example configuration files
-  - [ ] Development environment
-  - [ ] Production environment
+  - [ ] deploy/config/tarsy.yaml.example (main config with env var placeholders)
+  - [ ] deploy/config/llm-providers.yaml.example (with env var placeholders)
+  - [ ] deploy/config/.env.example (all required/optional variables with comments for different environments)
+  - [ ] deploy/config/oauth2-proxy.cfg.template
+- [ ] Create deployment examples
+  - [ ] Kubernetes ConfigMap example
+  - [ ] Kubernetes Secret example
+  - [ ] Deployment manifest with volume mounts
+  - [ ] Podman-compose volume mount example
 - [ ] Document configuration system
   - [ ] Configuration file reference
   - [ ] Environment variable reference
-  - [ ] Override examples
+  - [ ] Deployment guide (local/podman/k8s)
+  - [ ] Configuration loading strategy
 
 ---
 
@@ -1907,11 +2187,19 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 **File-Based Configuration**: Configuration stored in YAML files (not database) for version control, code review, and deployment simplicity.
 
-**In-Memory Registries**: Configuration loaded at startup into in-memory registries. Changes require restart (no hot-reload for now).
+**In-Memory Registries**: Configuration loaded once at startup into in-memory registries. Configuration changes require service restart (no hot-reload support).
 
 **Strong Validation**: Comprehensive validation on startup with clear error messages. Fail fast if configuration invalid.
 
 **Environment Variable Interpolation**: Supports `${VAR}` and `${VAR:-default}` syntax for secrets and environment-specific values.
+
+**Environment-Agnostic YAML**: YAML config files work across all environments (local dev, podman, k8s). Environment differences handled via .env files only.
+
+**OAuth2 Proxy Configuration**: Template-based OAuth2 proxy config (same as old TARSy). Template tracked in git, generated file gitignored.
+
+**Configurable Config Directory**: Go binary accepts `--config-dir` flag or `CONFIG_DIR` env var for flexible config file location. Enables different deployment strategies (host filesystem, container mounts, ConfigMaps).
+
+**Python Configuration via gRPC**: Python LLM service receives configuration from Go via gRPC requests (not from files or env vars). Centralizes configuration in Go, simplifies Python service, ensures single source of truth.
 
 **Per-Alert Overrides**: MCP selection can be overridden per alert via API (stored in database, not config files).
 
@@ -1919,30 +2207,47 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ## Decided Against
 
-**Hot Reload**: Not implementing configuration hot-reload. Configuration changes require restart. Rationale: Simpler implementation, clearer deployment process, no partial configuration states.
+**Hot Reload**: Not implementing configuration hot-reload. Configuration changes require service restart. Rationale: Keep it simple like old TARSy - simpler implementation, clearer deployment process, no partial configuration states, atomic configuration updates.
 
 **Database-Stored Configuration**: Not storing configuration in database. Rationale: Version control, code review, infrastructure-as-code best practices.
 
 **Dynamic Agent Registration**: Not supporting runtime agent registration. All agents defined in configuration files. Rationale: Clear inventory, better validation, simpler architecture.
+
+**Environment Override YAML Files**: Not using environment-specific override YAML files (e.g., `environments/production.yaml`). Rationale: Simpler implementation, follows 12-factor app principles, Kubernetes-native (ConfigMaps/Secrets map directly to environment variables), no merge logic needed.
+
+**Configuration Management API**: No API for reading or writing configuration. File-based only. Rationale: Maintains GitOps workflow, clear audit trail via git, code review for changes, simpler implementation.
+
+**Configuration Versioning**: No version field in configuration files (for now). Rationale: Keep it simple, breaking changes handled manually with documentation, can add versioning later if needed.
+
+**Additional Validation Tools**: No separate CLI tools for validation, diff, dry-run, or export. Rationale: Developers can test in dev environments, service validates on startup and fails safely, keeps tooling minimal.
+
+**JSON Schema Documentation**: No JSON Schema generation for YAML files. Rationale: Comments in YAML files are sufficient, Go struct tags provide runtime validation, simpler maintenance.
 
 ---
 
 ## Summary of Key Design Points
 
 ### ✅ Configuration Files
-- **agents.yaml**: Agent definitions with iteration strategies, LLM providers, MCP servers
-- **chains.yaml**: Multi-stage agent chains with single/parallel execution
-- **mcp-servers.yaml**: MCP server registry with transport configurations
-- **llm-providers.yaml**: LLM provider configurations with API settings
-- **defaults.yaml**: System-wide defaults
+- **tarsy.yaml**: Main orchestration configuration (~800-1000 lines)
+  - Agents: Agent definitions with iteration strategies, LLM providers, MCP servers
+  - Chains: Multi-stage agent chains with single/parallel execution
+  - MCP Servers: MCP server registry with transport configurations
+  - Defaults: System-wide defaults
+- **llm-providers.yaml**: LLM provider configurations (~50 lines)
+- **.env**: Environment-specific values and secrets (gitignored)
+- **oauth2-proxy.cfg.template**: OAuth2 proxy template (generates oauth2-proxy.cfg)
 
 ### ✅ Key Features
 - **YAML-based**: Human-readable, easy to edit, version controlled
 - **Environment variable interpolation**: `${VAR}` and `${VAR:-default}` support
-- **Hierarchical resolution**: defaults → files → overrides
-- **Strong validation**: Comprehensive validation on startup
+- **Environment-agnostic**: Same YAML works across all environments (local, podman, k8s, prod)
+- **12-factor app compliance**: Environment-specific config via environment variables
+- **Startup validation**: Fail-fast validation on startup with clear error messages
+- **File-based only**: No configuration API, changes via git + restart
 - **In-memory registries**: Fast lookups, type-safe access
-- **Per-alert overrides**: MCP selection via API
+- **Per-alert overrides**: MCP server selection via API (runtime only)
+- **OAuth2 integration**: Template-based OAuth2 proxy configuration
+- **Simple examples**: `.example` suffixed files for easy setup
 
 ### ✅ Go Implementation
 - **Type-safe structs**: Go structs with validation tags
@@ -1954,21 +2259,23 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ## Next Steps
 
-After approval of this design:
+Design phase complete ✅. Ready for implementation:
 
-1. Review questions document (`phase2-configuration-system-questions.md`)
-2. Implement configuration loader
+1. ~~Review questions document~~ ✅ **All questions decided** (`phase2-configuration-system-questions.md`)
+2. **Implement configuration loader** ⬅️ NEXT
    - YAML parsing
    - Environment variable interpolation
-   - Validation logic
+   - Validation logic (fail-fast)
 3. Implement in-memory registries
    - AgentRegistry
    - ChainRegistry
    - MCPServerRegistry
    - LLMProviderRegistry
 4. Create example configuration files
-   - Development environment
-   - Production templates
+   - deploy/config/tarsy.yaml.example
+   - deploy/config/llm-providers.yaml.example
+   - deploy/config/.env.example
+   - deploy/config/oauth2-proxy.cfg.template
 5. Write comprehensive tests
    - Validation tests
    - Loading tests
