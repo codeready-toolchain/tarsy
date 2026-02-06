@@ -66,7 +66,7 @@ var (
 		{Name: "alert_data", Type: field.TypeString, Size: 2147483647},
 		{Name: "agent_type", Type: field.TypeString},
 		{Name: "alert_type", Type: field.TypeString, Nullable: true},
-		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "completed", "failed", "cancelled", "timed_out"}, Default: "pending"},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "cancelling", "completed", "failed", "cancelled", "timed_out"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime},
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},

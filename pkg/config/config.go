@@ -9,6 +9,9 @@ type Config struct {
 	// System-wide defaults
 	Defaults *Defaults
 
+	// Queue and worker pool configuration
+	Queue *QueueConfig
+
 	// Component registries
 	AgentRegistry       *AgentRegistry
 	ChainRegistry       *ChainRegistry

@@ -10,6 +10,34 @@
 # - Built-in agents/MCP servers/chains can be overridden by defining same name/ID
 
 # =============================================================================
+# QUEUE & WORKER POOL CONFIGURATION
+# =============================================================================
+# Controls how sessions are polled, claimed, and processed by workers.
+# All values below are defaults — override as needed for your deployment.
+
+queue:
+  # Number of worker goroutines per replica/pod
+  worker_count: 5
+
+  # Maximum concurrent sessions across ALL replicas (global DB-based limit)
+  max_concurrent_sessions: 5
+
+  # Poll interval for checking pending sessions (with jitter to prevent thundering herd)
+  poll_interval: 1s
+  poll_interval_jitter: 500ms
+
+  # Session processing timeout (max time per session)
+  session_timeout: 15m
+
+  # Graceful shutdown timeout (should match session_timeout)
+  # Kubernetes terminationGracePeriodSeconds must be >= this value
+  graceful_shutdown_timeout: 15m
+
+  # Orphan detection: scans for stuck in_progress sessions with stale heartbeats
+  orphan_detection_interval: 5m
+  orphan_threshold: 5m
+
+# =============================================================================
 # SYSTEM-WIDE DEFAULTS
 # =============================================================================
 # These values are used when components don't specify their own values

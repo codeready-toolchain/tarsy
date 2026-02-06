@@ -365,6 +365,34 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 	return sessions, nil
 }
 
+// CancelSession requests cancellation of an in-progress session.
+// Sets the DB status to "cancelling" (intermediate state).
+// The owning worker detects this and propagates cancellation.
+func (s *SessionService) CancelSession(ctx context.Context, sessionID string) error {
+	session, err := s.client.AlertSession.Get(ctx, sessionID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Only in_progress sessions can be cancelled
+	if session.Status != alertsession.StatusInProgress {
+		return ErrNotCancellable
+	}
+
+	// Set status to cancelling (intermediate)
+	err = s.client.AlertSession.UpdateOneID(sessionID).
+		SetStatus(alertsession.StatusCancelling).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to set session to cancelling: %w", err)
+	}
+
+	return nil
+}
+
 // SoftDeleteOldSessions soft deletes sessions older than retention period
 func (s *SessionService) SoftDeleteOldSessions(_ context.Context, retentionDays int) (int, error) {
 	if retentionDays <= 0 {

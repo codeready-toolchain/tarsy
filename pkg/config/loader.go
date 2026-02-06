@@ -16,6 +16,7 @@ type TarsyYAMLConfig struct {
 	Agents      map[string]AgentConfig     `yaml:"agents"`
 	AgentChains map[string]ChainConfig     `yaml:"agent_chains"`
 	Defaults    *Defaults                  `yaml:"defaults"`
+	Queue       *QueueConfig               `yaml:"queue"`
 }
 
 // LLMProvidersYAMLConfig represents the complete llm-providers.yaml file structure
@@ -107,9 +108,16 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		defaults.Runbook = builtin.DefaultRunbook
 	}
 
+	// Resolve queue config (YAML overrides built-in defaults)
+	queueConfig := tarsyConfig.Queue
+	if queueConfig == nil {
+		queueConfig = DefaultQueueConfig()
+	}
+
 	return &Config{
 		configDir:           configDir,
 		Defaults:            defaults,
+		Queue:               queueConfig,
 		AgentRegistry:       agentRegistry,
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,

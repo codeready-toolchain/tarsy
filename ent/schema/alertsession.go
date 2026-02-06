@@ -36,7 +36,7 @@ func (AlertSession) Fields() []ent.Field {
 			Optional().
 			Comment("Alert classification"),
 		field.Enum("status").
-			Values("pending", "in_progress", "completed", "failed", "cancelled", "timed_out").
+			Values("pending", "in_progress", "cancelling", "completed", "failed", "cancelled", "timed_out").
 			Default("pending"),
 		field.Time("started_at").
 			Default(time.Now),

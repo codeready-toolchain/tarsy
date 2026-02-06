@@ -45,7 +45,7 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ---
 
-### Phase 2: Core Infrastructure
+### ✅ Phase 2: Core Infrastructure
 
 **Database & Persistence** ✅
 - [x] PostgreSQL integration (Go)
@@ -70,12 +70,12 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 **Web Framework**: Echo v5 (labstack/echo) — chosen over Gin for cleaner error-return handlers, lighter dependency tree, built-in middleware (CORS, RequestID, Timeout), and consistency with other team projects. WebSocket via coder/websocket.
 
-**Queue & Worker System** 🚧
-- [ ] Database-backed job queue (Go)
-- [ ] Session claim worker pattern (Go)
-- [ ] Concurrency limits & backpressure
-- [ ] Background worker lifecycle
-- [ ] Session cancellation API (Go) — `POST /api/v1/sessions/{id}/cancel`, context-based cancellation propagation
+**Queue & Worker System** ✅
+- [x] Database-backed job queue (Go)
+- [x] Session claim worker pattern (Go)
+- [x] Concurrency limits & backpressure
+- [x] Background worker lifecycle
+- [x] Session cancellation API (Go) — `POST /api/v1/sessions/{id}/cancel`, context-based cancellation propagation
 - **Design Phase**: ✅ Complete — See `docs/phase2-queue-worker-system-design.md` and `docs/phase2-queue-worker-system-questions.md`
 
 ---

@@ -1,21 +1,23 @@
-// TARSy orchestrator server - provides HTTP/WebSocket API and manages LLM interactions.
+// TARSy orchestrator server — provides HTTP API, manages queue workers,
+// and orchestrates session processing.
 package main
 
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"time"
+	"syscall"
 
+	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
-
-	"github.com/gin-gonic/gin"
 )
 
 func getEnv(key, defaultValue string) string {
@@ -23,6 +25,18 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// resolvePodID determines the pod identifier for multi-replica coordination.
+// Priority: POD_ID env > HOSTNAME env > "local"
+func resolvePodID() string {
+	if id := os.Getenv("POD_ID"); id != "" {
+		return id
+	}
+	if hostname := os.Getenv("HOSTNAME"); hostname != "" {
+		return hostname
+	}
+	return "local"
 }
 
 func main() {
@@ -35,112 +49,114 @@ func main() {
 	// Load .env file from config directory
 	envPath := filepath.Join(*configDir, ".env")
 	if err := godotenv.Load(envPath); err != nil {
-		log.Printf("Warning: Could not load %s file: %v", envPath, err)
-		log.Printf("Continuing with existing environment variables...")
+		slog.Warn("Could not load .env file, continuing with existing environment",
+			"path", envPath, "error", err)
 	} else {
-		log.Printf("Loaded environment from %s", envPath)
+		slog.Info("Loaded environment", "path", envPath)
 	}
 
-	// Get HTTP port from environment (with default)
 	httpPort := getEnv("HTTP_PORT", "8080")
-	ginMode := getEnv("GIN_MODE", "debug")
-	gin.SetMode(ginMode)
+	podID := resolvePodID()
 
-	log.Printf("Starting TARSy")
-	log.Printf("HTTP Port: %s", httpPort)
-	log.Printf("Config Directory: %s", *configDir)
+	slog.Info("Starting TARSy",
+		"http_port", httpPort,
+		"pod_id", podID,
+		"config_dir", *configDir)
 
 	ctx := context.Background()
 
-	// Initialize configuration system (NEW)
+	// 1. Initialize configuration
 	cfg, err := config.Initialize(ctx, *configDir)
 	if err != nil {
-		log.Fatalf("Failed to initialize configuration: %v", err)
+		slog.Error("Failed to initialize configuration", "error", err)
+		os.Exit(1)
 	}
-	stats := cfg.Stats() // For health check endpoint
 
-	// Initialize database
+	// 2. Initialize database
 	dbConfig, err := database.LoadConfigFromEnv()
 	if err != nil {
-		log.Fatalf("Failed to load database config: %v", err)
+		slog.Error("Failed to load database config", "error", err)
+		os.Exit(1)
 	}
 
 	dbClient, err := database.NewClient(ctx, dbConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := dbClient.Close(); err != nil {
-			log.Printf("Error closing database client: %v", err)
+			slog.Error("Error closing database client", "error", err)
 		}
 	}()
-	log.Println("✓ Connected to PostgreSQL database")
-	log.Println("✓ Database schema initialized")
+	slog.Info("Connected to PostgreSQL database")
 
-	// Initialize services with configuration (UPDATED)
-	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
-	stageService := services.NewStageService(dbClient.Client)
-	messageService := services.NewMessageService(dbClient.Client)
-	timelineService := services.NewTimelineService(dbClient.Client)
-	interactionService := services.NewInteractionService(dbClient.Client, messageService)
-	eventService := services.NewEventService(dbClient.Client)
-	chatService := services.NewChatService(dbClient.Client)
-
-	// Mark as used (will be passed to API handlers in Phase 3)
-	_ = sessionService
-	_ = stageService
-	_ = timelineService
-	_ = interactionService
-	_ = eventService
-	_ = chatService
-
-	log.Println("✓ Services initialized")
-
-	// Setup minimal Gin router
-	router := gin.Default()
-
-	// Health check endpoint using services
-	router.GET("/health", func(c *gin.Context) {
-		reqCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-		defer cancel()
-
-		dbHealth, err := database.Health(reqCtx, dbClient.DB())
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":   "unhealthy",
-				"database": dbHealth,
-				"phase":    "2.3 - Service Layer Complete",
-				"error":    err.Error(),
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "healthy",
-			"database": dbHealth,
-			"phase":    "2.2 - Configuration System Complete",
-			"services": gin.H{
-				"session":     "ready",
-				"stage":       "ready",
-				"message":     "ready",
-				"timeline":    "ready",
-				"interaction": "ready",
-				"event":       "ready",
-				"chat":        "ready",
-			},
-			"configuration": gin.H{
-				"agents":        stats.Agents,
-				"chains":        stats.Chains,
-				"mcp_servers":   stats.MCPServers,
-				"llm_providers": stats.LLMProviders,
-			},
-		})
-	})
-
-	// Start server
-	log.Printf("HTTP server listening on :%s", httpPort)
-	log.Printf("Health check available at: http://localhost:%s/health", httpPort)
-	if err := router.Run(":" + httpPort); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// 3. One-time startup orphan cleanup
+	if err := queue.CleanupStartupOrphans(ctx, dbClient.Client, podID); err != nil {
+		slog.Error("Failed to cleanup startup orphans", "error", err)
+		// Non-fatal — continue
 	}
+
+	// 4. Initialize services
+	alertService := services.NewAlertService(dbClient.Client, cfg.ChainRegistry, cfg.Defaults)
+	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
+	slog.Info("Services initialized")
+
+	// 5. Create stub session executor (replaced by real executor in Phase 3)
+	executor := queue.NewStubExecutor()
+
+	// 6. Start worker pool (before HTTP server)
+	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor)
+	if err := workerPool.Start(ctx); err != nil {
+		slog.Error("Failed to start worker pool", "error", err)
+		os.Exit(1)
+	}
+
+	// 7. Create HTTP server
+	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool)
+
+	// 8. Start HTTP server (non-blocking)
+	go func() {
+		addr := ":" + httpPort
+		slog.Info("HTTP server listening", "addr", addr)
+		if err := httpServer.Start(addr); err != nil && err != http.ErrServerClosed {
+			slog.Error("HTTP server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	slog.Info("TARSy started successfully",
+		"pod_id", podID,
+		"workers", cfg.Queue.WorkerCount)
+
+	// 9. Wait for shutdown signal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-sigCh
+	slog.Info("Shutdown signal received", "signal", sig)
+
+	// 10. Graceful shutdown
+	shutdownCtx, cancel := context.WithTimeout(ctx, cfg.Queue.GracefulShutdownTimeout)
+	defer cancel()
+
+	// Stop worker pool first (wait for active sessions to complete)
+	done := make(chan struct{})
+	go func() {
+		workerPool.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slog.Info("Worker pool stopped gracefully")
+	case <-shutdownCtx.Done():
+		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
+	}
+
+	// Stop HTTP server
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		slog.Error("HTTP server shutdown error", "error", err)
+	}
+
+	slog.Info("Shutdown complete")
 }
