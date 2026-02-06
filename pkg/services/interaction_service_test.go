@@ -17,7 +17,7 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
 	interactionService := NewInteractionService(client.Client, messageService)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
 	interactionService := NewInteractionService(client.Client, messageService)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -155,7 +155,7 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
 	interactionService := NewInteractionService(client.Client, messageService)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -227,7 +227,7 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
 	interactionService := NewInteractionService(client.Client, messageService)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -311,7 +311,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
 	interactionService := NewInteractionService(client.Client, messageService)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 

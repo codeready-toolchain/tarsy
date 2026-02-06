@@ -14,7 +14,7 @@ import (
 func TestChatService_CreateChat(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	chatService := NewChatService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -73,7 +73,7 @@ func TestChatService_CreateChat(t *testing.T) {
 func TestChatService_AddChatMessage(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	chatService := NewChatService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -161,7 +161,7 @@ func TestChatService_AddChatMessage(t *testing.T) {
 func TestChatService_GetChatHistory(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	chatService := NewChatService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -216,7 +216,7 @@ func TestChatService_GetChatHistory(t *testing.T) {
 func TestChatService_BuildChatContext(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	chatService := NewChatService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{

@@ -17,7 +17,7 @@ import (
 func TestStageService_CreateStage(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	// Create session first
@@ -115,7 +115,7 @@ func TestStageService_CreateStage(t *testing.T) {
 func TestStageService_CreateAgentExecution(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	// Create session and stage
@@ -195,7 +195,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 func TestStageService_UpdateAgentStatus(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	// Setup
@@ -259,7 +259,7 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 	t.Run("success_policy=all - all agents must complete", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
 		stageService := NewStageService(client.Client)
-		sessionService := NewSessionService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		// Setup
@@ -316,7 +316,7 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 	t.Run("success_policy=all - one agent fails", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
 		stageService := NewStageService(client.Client)
-		sessionService := NewSessionService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -377,7 +377,7 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 	t.Run("success_policy=any - at least one succeeds", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
 		stageService := NewStageService(client.Client)
-		sessionService := NewSessionService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -437,7 +437,7 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 	t.Run("stage remains active while agents are pending/active", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
 		stageService := NewStageService(client.Client)
-		sessionService := NewSessionService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -495,7 +495,7 @@ func TestStageService_AggregateStageStatus(t *testing.T) {
 func TestStageService_GetStagesBySession(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{

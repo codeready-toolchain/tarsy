@@ -1,0 +1,170 @@
+# TARSy LLM Provider Configurations
+# Copy this file to llm-providers.yaml and customize for your environment
+#
+# cp llm-providers.yaml.example llm-providers.yaml
+#
+# IMPORTANT: API keys should be configured via environment variables
+# - Define actual API key values in your .env file
+# - Use ${VAR_NAME} syntax to reference environment variables
+# - Built-in providers can be overridden by defining same name
+
+# =============================================================================
+# GOOGLE / GEMINI PROVIDERS
+# =============================================================================
+
+llm_providers:
+  # Fast model for quick responses
+  gemini-2.5-flash:
+    type: google
+    model: gemini-2.0-flash-exp
+    api_key_env: GOOGLE_API_KEY
+    max_tool_result_tokens: 950000  # Conservative for 1M context
+    native_tools:
+      google_search: true
+      code_execution: false
+      url_context: true
+
+  # Pro model for complex reasoning
+  gemini-2.5-pro:
+    type: google
+    model: gemini-2.0-flash-thinking-exp
+    api_key_env: GOOGLE_API_KEY
+    max_tool_result_tokens: 950000
+    native_tools:
+      google_search: true
+      code_execution: false
+      url_context: true
+
+  # Next-gen model
+  gemini-3-pro:
+    type: google
+    model: gemini-3-pro-preview
+    api_key_env: GOOGLE_API_KEY
+    max_tool_result_tokens: 950000
+    native_tools:
+      google_search: true
+      code_execution: false
+      url_context: true
+
+  # Example: Google via OpenAI-compatible proxy
+  openai-gemini-proxy:
+    type: openai
+    model: gemini-2.5-pro
+    api_key_env: OPENAI_API_KEY
+    base_url: https://gemini-proxy.example.com/v1beta/openai
+    max_tool_result_tokens: 950000
+
+# =============================================================================
+# OPENAI PROVIDERS
+# =============================================================================
+
+  # GPT-4o for general use
+  gpt-4o:
+    type: openai
+    model: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    max_tool_result_tokens: 100000  # Conservative for 128K context
+
+  # GPT-4o-mini for cost-effective operations
+  gpt-4o-mini:
+    type: openai
+    model: gpt-4o-mini
+    api_key_env: OPENAI_API_KEY
+    max_tool_result_tokens: 100000
+
+  # o1 for advanced reasoning
+  o1:
+    type: openai
+    model: o1
+    api_key_env: OPENAI_API_KEY
+    max_tool_result_tokens: 100000
+
+  # o1-mini for faster reasoning
+  o1-mini:
+    type: openai
+    model: o1-mini
+    api_key_env: OPENAI_API_KEY
+    max_tool_result_tokens: 100000
+
+# =============================================================================
+# ANTHROPIC / CLAUDE PROVIDERS
+# =============================================================================
+
+  # Claude Opus for maximum capability
+  claude-opus:
+    type: anthropic
+    model: claude-opus-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 150000  # Conservative for 200K context
+
+  # Claude Sonnet for balanced performance
+  claude-sonnet:
+    type: anthropic
+    model: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 150000
+
+  # Claude Haiku for speed
+  claude-haiku:
+    type: anthropic
+    model: claude-haiku-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 150000
+
+# =============================================================================
+# X.AI / GROK PROVIDERS
+# =============================================================================
+
+  # Grok for X.AI
+  grok:
+    type: xai
+    model: grok-4-beta
+    api_key_env: XAI_API_KEY
+    max_tool_result_tokens: 200000  # Conservative for 256K context
+
+  # Grok 2 (if available)
+  grok-2:
+    type: xai
+    model: grok-2
+    api_key_env: XAI_API_KEY
+    max_tool_result_tokens: 200000
+
+# =============================================================================
+# VERTEX AI PROVIDERS (GCP)
+# =============================================================================
+
+  # Claude on Vertex AI
+  vertexai-claude-sonnet:
+    type: vertexai
+    model: claude-sonnet-4@20250514
+    project_env: GCP_PROJECT
+    location_env: GCP_LOCATION
+    max_tool_result_tokens: 150000
+
+  # Gemini on Vertex AI
+  vertexai-gemini-pro:
+    type: vertexai
+    model: gemini-2.0-pro
+    project_env: GCP_PROJECT
+    location_env: GCP_LOCATION
+    max_tool_result_tokens: 950000
+
+# =============================================================================
+# CUSTOM / ENTERPRISE PROVIDERS
+# =============================================================================
+
+  # Example: Custom OpenAI-compatible endpoint
+  custom-llm:
+    type: openai
+    model: custom-model
+    api_key_env: CUSTOM_API_KEY
+    base_url: https://llm.company.com/v1
+    max_tool_result_tokens: 100000
+
+  # Example: Azure OpenAI
+  azure-gpt4:
+    type: openai
+    model: gpt-4
+    api_key_env: AZURE_OPENAI_KEY
+    base_url: https://your-resource.openai.azure.com/openai/deployments/your-deployment
+    max_tool_result_tokens: 100000

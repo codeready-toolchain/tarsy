@@ -15,7 +15,7 @@ import (
 func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -68,7 +68,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -140,7 +140,7 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 
@@ -267,7 +267,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 func TestTimelineService_GetTimelines(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 

@@ -11,18 +11,25 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
 
 // SessionService manages alert session lifecycle
 type SessionService struct {
-	client *ent.Client
+	client            *ent.Client
+	chainRegistry     *config.ChainRegistry
+	mcpServerRegistry *config.MCPServerRegistry
 }
 
-// NewSessionService creates a new SessionService
-func NewSessionService(client *ent.Client) *SessionService {
-	return &SessionService{client: client}
+// NewSessionService creates a new SessionService with configuration registries
+func NewSessionService(client *ent.Client, chainRegistry *config.ChainRegistry, mcpServerRegistry *config.MCPServerRegistry) *SessionService {
+	return &SessionService{
+		client:            client,
+		chainRegistry:     chainRegistry,
+		mcpServerRegistry: mcpServerRegistry,
+	}
 }
 
 // CreateSession creates a new alert session with initial stage and agent execution
@@ -39,6 +46,18 @@ func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessi
 	}
 	if req.ChainID == "" {
 		return nil, NewValidationError("chain_id", "required")
+	}
+
+	// Validate chain exists in configuration (NEW)
+	if _, err := s.chainRegistry.Get(req.ChainID); err != nil {
+		return nil, NewValidationError("chain_id", fmt.Sprintf("invalid chain '%s': %v", req.ChainID, err))
+	}
+
+	// Validate MCP override if provided (NEW)
+	if req.MCPSelection != nil {
+		if err := s.validateMCPOverride(req.MCPSelection); err != nil {
+			return nil, NewValidationError("mcp_selection", fmt.Sprintf("invalid: %v", err))
+		}
 	}
 
 	// Use background context with timeout for critical write
@@ -411,4 +430,15 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 	}
 
 	return sessions, nil
+}
+
+// validateMCPOverride validates MCP server selection override
+func (s *SessionService) validateMCPOverride(mcp *models.MCPSelectionConfig) error {
+	// Validate all MCP server names exist in registry
+	for _, server := range mcp.Servers {
+		if _, err := s.mcpServerRegistry.Get(server.Name); err != nil {
+			return fmt.Errorf("MCP server '%s' not found: %w", server.Name, err)
+		}
+	}
+	return nil
 }

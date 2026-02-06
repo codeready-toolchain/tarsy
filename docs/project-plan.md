@@ -53,12 +53,20 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [x] Alembic-style migrations (Go)
 - [x] Session/alert persistence
 
-**Configuration System**
-- [ ] YAML-based agent definitions
-- [ ] YAML-based chain definitions
-- [ ] YAML-based MCP server registry
-- [ ] YAML-based LLM provider configuration
-- [ ] Hierarchical config resolution
+**Configuration System** ✅
+- [x] YAML-based agent definitions
+- [x] YAML-based chain definitions
+- [x] YAML-based MCP server registry
+- [x] YAML-based LLM provider configuration
+- [x] Hierarchical config resolution
+- [x] Built-in + user-defined configuration (singleton pattern)
+- [x] Environment variable interpolation
+- [x] Comprehensive validation with clear error messages
+- [x] In-memory registries with thread-safe access
+- [x] Example configuration files
+- [x] Integration with main.go and services
+- [x] Proto file updated for LLM config passing
+- [x] Comprehensive test suite (80%+ coverage)
 
 **Queue & Worker System**
 - [ ] Database-backed job queue (Go)

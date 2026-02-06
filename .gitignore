@@ -52,5 +52,12 @@ Thumbs.db
 .env.local
 deploy/.env
 
+# Configuration files (user-created from .example templates)
+# Keep .example files tracked, but ignore actual config files with secrets
+deploy/config/tarsy.yaml
+deploy/config/llm-providers.yaml
+deploy/config/oauth2-proxy.cfg
+deploy/config/.env
+
 # Logs
 *.log
