@@ -114,7 +114,7 @@ func TestExpandEnv(t *testing.T) {
 			want:  "port: 8080",
 		},
 		{
-			name:  "complex YAML with multiple variables",
+			name: "complex YAML with multiple variables",
 			input: `
 database:
   host: ${DB_HOST}

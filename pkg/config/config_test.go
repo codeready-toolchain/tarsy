@@ -111,7 +111,7 @@ func TestConfigConvenienceMethods(t *testing.T) {
 	})
 }
 
-func TestConfigStats(t *testing.T) {
+func TestStats(t *testing.T) {
 	cfg := &Config{
 		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"a1": {}, "a2": {}}),
 		ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{"c1": {}}),

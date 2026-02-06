@@ -47,7 +47,7 @@ func TestAgentRegistry(t *testing.T) {
 	})
 }
 
-func TestAgentRegistryThreadSafety(t *testing.T) {
+func TestAgentRegistryThreadSafety(_ *testing.T) {
 	agents := map[string]*AgentConfig{
 		"agent1": {MCPServers: []string{"server1"}},
 		"agent2": {MCPServers: []string{"server2"}},
@@ -106,11 +106,10 @@ func TestChainRegistry(t *testing.T) {
 	})
 
 	t.Run("GetByAlertType", func(t *testing.T) {
-		chain, err := registry.GetByAlertType("alert1")
+		_, err := registry.GetByAlertType("alert1")
 		require.NoError(t, err)
-		assert.Equal(t, "chain1", "chain1") // We get back the chain that handles alert1
 
-		chain, err = registry.GetByAlertType("alert3")
+		chain, err := registry.GetByAlertType("alert3")
 		require.NoError(t, err)
 		assert.Contains(t, chain.AlertTypes, "alert3")
 	})
@@ -138,7 +137,7 @@ func TestChainRegistry(t *testing.T) {
 	})
 }
 
-func TestChainRegistryThreadSafety(t *testing.T) {
+func TestChainRegistryThreadSafety(_ *testing.T) {
 	chains := map[string]*ChainConfig{
 		"chain1": {
 			AlertTypes: []string{"alert1"},
@@ -214,7 +213,7 @@ func TestMCPServerRegistry(t *testing.T) {
 	})
 }
 
-func TestMCPServerRegistryThreadSafety(t *testing.T) {
+func TestMCPServerRegistryThreadSafety(_ *testing.T) {
 	servers := map[string]*MCPServerConfig{
 		"server1": {
 			Transport: TransportConfig{Type: TransportTypeStdio, Command: "cmd1"},
@@ -292,7 +291,7 @@ func TestLLMProviderRegistry(t *testing.T) {
 	})
 }
 
-func TestLLMProviderRegistryThreadSafety(t *testing.T) {
+func TestLLMProviderRegistryThreadSafety(_ *testing.T) {
 	providers := map[string]*LLMProviderConfig{
 		"provider1": {
 			Type:                LLMProviderTypeGoogle,

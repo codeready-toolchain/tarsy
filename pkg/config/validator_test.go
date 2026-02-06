@@ -674,8 +674,8 @@ func TestValidateStageComprehensive(t *testing.T) {
 				},
 			},
 			agents: map[string]*AgentConfig{
-				"test-agent":       {MCPServers: []string{"test-server"}},
-				"synthesis-agent":  {MCPServers: []string{"test-server"}},
+				"test-agent":      {MCPServers: []string{"test-server"}},
+				"synthesis-agent": {MCPServers: []string{"test-server"}},
 			},
 			providers: map[string]*LLMProviderConfig{},
 			servers: map[string]*MCPServerConfig{

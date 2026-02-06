@@ -1,3 +1,5 @@
+// Package config provides configuration management for the Tarsy system,
+// including agent, chain, MCP server, and LLM provider configurations.
 package config
 
 import (

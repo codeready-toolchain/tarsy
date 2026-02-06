@@ -250,11 +250,11 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 
 func initBuiltinPatternGroups() map[string][]string {
 	return map[string][]string{
-		"basic":      {"api_key", "password"},                                                                          // Most common secrets
-		"secrets":    {"api_key", "password", "token", "private_key", "secret_key"},                                    // Basic + tokens
-		"security":   {"api_key", "password", "token", "certificate", "certificate_authority_data", "email", "ssh_key"}, // Full security focus
-		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                       // Kubernetes-specific - uses code-based masker for Secrets (not ConfigMaps)
-		"cloud":      {"aws_access_key", "aws_secret_key", "api_key", "token"},                                         // Cloud provider secrets
+		"basic":      {"api_key", "password"},                                                                                                                                                                                                            // Most common secrets
+		"secrets":    {"api_key", "password", "token", "private_key", "secret_key"},                                                                                                                                                                      // Basic + tokens
+		"security":   {"api_key", "password", "token", "certificate", "certificate_authority_data", "email", "ssh_key"},                                                                                                                                  // Full security focus
+		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                                                                                                                                                         // Kubernetes-specific - uses code-based masker for Secrets (not ConfigMaps)
+		"cloud":      {"aws_access_key", "aws_secret_key", "api_key", "token"},                                                                                                                                                                           // Cloud provider secrets
 		"all":        {"base64_secret", "base64_short", "api_key", "password", "certificate", "certificate_authority_data", "email", "token", "ssh_key", "private_key", "secret_key", "aws_access_key", "aws_secret_key", "github_token", "slack_token"}, // All patterns
 	}
 }

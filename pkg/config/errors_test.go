@@ -9,11 +9,11 @@ import (
 
 func TestValidationErrorError(t *testing.T) {
 	baseErr := errors.New("base error")
-	
+
 	tests := []struct {
-		name      string
-		err       *ValidationError
-		contains  []string
+		name     string
+		err      *ValidationError
+		contains []string
 	}{
 		{
 			name: "full error",
@@ -50,7 +50,7 @@ func TestValidationErrorError(t *testing.T) {
 func TestValidationErrorUnwrap(t *testing.T) {
 	baseErr := errors.New("base error")
 	validationErr := NewValidationError("test", "test-id", "field", baseErr)
-	
+
 	unwrapped := validationErr.Unwrap()
 	assert.Equal(t, baseErr, unwrapped)
 	assert.True(t, errors.Is(validationErr, baseErr))
@@ -104,7 +104,7 @@ func TestLoadErrorUnwrap(t *testing.T) {
 		File: "test.yaml",
 		Err:  baseErr,
 	}
-	
+
 	unwrapped := loadErr.Unwrap()
 	assert.Equal(t, baseErr, unwrapped)
 	assert.True(t, errors.Is(loadErr, baseErr))

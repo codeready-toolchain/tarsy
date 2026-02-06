@@ -18,8 +18,8 @@ type Config struct {
 
 // Initialize is defined in loader.go
 
-// ConfigStats contains statistics about loaded configuration
-type ConfigStats struct {
+// Stats contains statistics about loaded configuration
+type Stats struct {
 	Agents       int
 	Chains       int
 	MCPServers   int
@@ -27,8 +27,8 @@ type ConfigStats struct {
 }
 
 // Stats returns configuration statistics for logging/monitoring
-func (c *Config) Stats() ConfigStats {
-	return ConfigStats{
+func (c *Config) Stats() Stats {
+	return Stats{
 		Agents:       len(c.AgentRegistry.GetAll()),
 		Chains:       len(c.ChainRegistry.GetAll()),
 		MCPServers:   len(c.MCPServerRegistry.GetAll()),

@@ -5,18 +5,18 @@ import (
 	"os"
 )
 
-// ConfigValidator validates configuration comprehensively with clear error messages
-type ConfigValidator struct {
+// Validator validates configuration comprehensively with clear error messages
+type Validator struct {
 	cfg *Config
 }
 
 // NewValidator creates a validator for the given configuration
-func NewValidator(cfg *Config) *ConfigValidator {
-	return &ConfigValidator{cfg: cfg}
+func NewValidator(cfg *Config) *Validator {
+	return &Validator{cfg: cfg}
 }
 
 // ValidateAll performs comprehensive validation (fail-fast - stops at first error)
-func (v *ConfigValidator) ValidateAll() error {
+func (v *Validator) ValidateAll() error {
 	// Validate in order: agents → chains → MCP servers → LLM providers
 	// This ensures dependencies are validated before dependents
 
@@ -39,7 +39,7 @@ func (v *ConfigValidator) ValidateAll() error {
 	return nil
 }
 
-func (v *ConfigValidator) validateAgents() error {
+func (v *Validator) validateAgents() error {
 	for name, agent := range v.cfg.AgentRegistry.GetAll() {
 		// Validate MCP servers exist
 		if len(agent.MCPServers) == 0 {
@@ -66,7 +66,7 @@ func (v *ConfigValidator) validateAgents() error {
 	return nil
 }
 
-func (v *ConfigValidator) validateChains() error {
+func (v *Validator) validateChains() error {
 	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
 		// Validate alert_types is not empty
 		if len(chain.AlertTypes) == 0 {
@@ -84,55 +84,55 @@ func (v *ConfigValidator) validateChains() error {
 			}
 		}
 
-	// Validate chat agent if enabled
-	if chain.Chat != nil && chain.Chat.Enabled {
-		// Chat agent is required when chat is enabled
-		if chain.Chat.Agent == "" {
-			return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("chat.agent required when chat is enabled"))
-		}
+		// Validate chat agent if enabled
+		if chain.Chat != nil && chain.Chat.Enabled {
+			// Chat agent is required when chat is enabled
+			if chain.Chat.Agent == "" {
+				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("chat.agent required when chat is enabled"))
+			}
 
-		if !v.cfg.AgentRegistry.Has(chain.Chat.Agent) {
-			return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
-		}
+			if !v.cfg.AgentRegistry.Has(chain.Chat.Agent) {
+				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
+			}
 
-		// Validate chat iteration strategy if specified
-		if chain.Chat.IterationStrategy != "" && !chain.Chat.IterationStrategy.IsValid() {
-			return NewValidationError("chain", chainID, "chat.iteration_strategy", fmt.Errorf("invalid strategy: %s", chain.Chat.IterationStrategy))
-		}
+			// Validate chat iteration strategy if specified
+			if chain.Chat.IterationStrategy != "" && !chain.Chat.IterationStrategy.IsValid() {
+				return NewValidationError("chain", chainID, "chat.iteration_strategy", fmt.Errorf("invalid strategy: %s", chain.Chat.IterationStrategy))
+			}
 
-		// Validate chat LLM provider if specified
-		if chain.Chat.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Chat.LLMProvider) {
-			return NewValidationError("chain", chainID, "chat.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Chat.LLMProvider))
-		}
+			// Validate chat LLM provider if specified
+			if chain.Chat.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Chat.LLMProvider) {
+				return NewValidationError("chain", chainID, "chat.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Chat.LLMProvider))
+			}
 
-		// Validate chat max iterations if specified
-		if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
-			return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
+			// Validate chat max iterations if specified
+			if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
+				return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
+			}
 		}
-	}
 
 		// Validate chain-level LLM provider if specified
 		if chain.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.LLMProvider) {
 			return NewValidationError("chain", chainID, "llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.LLMProvider))
 		}
 
-	// Validate chain-level max iterations if specified
-	if chain.MaxIterations != nil && *chain.MaxIterations < 1 {
-		return NewValidationError("chain", chainID, "max_iterations", fmt.Errorf("must be at least 1"))
-	}
+		// Validate chain-level max iterations if specified
+		if chain.MaxIterations != nil && *chain.MaxIterations < 1 {
+			return NewValidationError("chain", chainID, "max_iterations", fmt.Errorf("must be at least 1"))
+		}
 
-	// Validate chain-level MCP servers if specified
-	for _, serverID := range chain.MCPServers {
-		if !v.cfg.MCPServerRegistry.Has(serverID) {
-			return NewValidationError("chain", chainID, "mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
+		// Validate chain-level MCP servers if specified
+		for _, serverID := range chain.MCPServers {
+			if !v.cfg.MCPServerRegistry.Has(serverID) {
+				return NewValidationError("chain", chainID, "mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
+			}
 		}
 	}
-}
 
 	return nil
 }
 
-func (v *ConfigValidator) validateStage(chainID string, stageIndex int, stage *StageConfig) error {
+func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageConfig) error {
 	stageRef := fmt.Sprintf("chain '%s' stage %d", chainID, stageIndex)
 
 	// Validate stage name
@@ -209,7 +209,7 @@ func (v *ConfigValidator) validateStage(chainID string, stageIndex int, stage *S
 	return nil
 }
 
-func (v *ConfigValidator) validateMCPServers() error {
+func (v *Validator) validateMCPServers() error {
 	builtin := GetBuiltinConfig()
 
 	for serverID, server := range v.cfg.MCPServerRegistry.GetAll() {
@@ -272,7 +272,7 @@ func (v *ConfigValidator) validateMCPServers() error {
 	return nil
 }
 
-func (v *ConfigValidator) validateLLMProviders() error {
+func (v *Validator) validateLLMProviders() error {
 	for name, provider := range v.cfg.LLMProviderRegistry.GetAll() {
 		// Validate provider type
 		if !provider.Type.IsValid() {

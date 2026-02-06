@@ -45,9 +45,9 @@ func TestBuiltinAgents(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
 	tests := []struct {
-		name     string
-		agentID  string
-		wantDesc string
+		name      string
+		agentID   string
+		wantDesc  string
 		wantStrat IterationStrategy
 	}{
 		{
@@ -250,8 +250,8 @@ func TestBuiltinPatternGroups(t *testing.T) {
 			for _, patternName := range group {
 				_, existsInPatterns := cfg.MaskingPatterns[patternName]
 				_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
-				assert.True(t, existsInPatterns || existsInCodeMaskers, 
-					"Pattern %s in group %s should exist in either MaskingPatterns or CodeMaskers", 
+				assert.True(t, existsInPatterns || existsInCodeMaskers,
+					"Pattern %s in group %s should exist in either MaskingPatterns or CodeMaskers",
 					patternName, tt.groupName)
 			}
 		})

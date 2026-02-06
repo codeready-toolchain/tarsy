@@ -60,7 +60,7 @@ func Initialize(ctx context.Context, configDir string) (*Config, error) {
 }
 
 // load is the internal loader (not exported)
-func load(ctx context.Context, configDir string) (*Config, error) {
+func load(_ context.Context, configDir string) (*Config, error) {
 	loader := &configLoader{
 		configDir: configDir,
 	}

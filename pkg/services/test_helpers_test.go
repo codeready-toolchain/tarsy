@@ -8,7 +8,7 @@ import (
 )
 
 // setupTestSessionService creates a SessionService with test configuration for testing
-func setupTestSessionService(t *testing.T, client *ent.Client) *SessionService {
+func setupTestSessionService(_ *testing.T, client *ent.Client) *SessionService {
 	// Create test registries with minimal valid configuration
 	chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
 		"k8s-analysis": {
