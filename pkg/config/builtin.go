@@ -83,7 +83,7 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 					"--read-only",
 					"--disable-destructive",
 					"--kubeconfig",
-					"${KUBECONFIG}",
+					"{{.KUBECONFIG}}",
 				},
 			},
 			Instructions: `For Kubernetes operations:

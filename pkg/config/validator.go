@@ -186,6 +186,7 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 	}
 
 	// Validate replicas if specified
+	// Note: 0 is allowed and means "use default of 1" (struct tag min=1 is documentation-only)
 	if stage.Replicas < 0 {
 		return fmt.Errorf("%s: replicas must be positive", stageRef)
 	}

@@ -985,10 +985,7 @@ func (r *LLMProviderRegistry) Get(name string) (*LLMProviderConfig, error) {
     
     provider, exists := r.providers[name]
     if !exists {
-        return nil, fmt.Errorf("LLM provider not found: %s", name)
-    }
-    if !provider.Enabled {
-        return nil, fmt.Errorf("LLM provider disabled: %s", name)
+        return nil, fmt.Errorf("%w: %s", ErrLLMProviderNotFound, name)
     }
     return provider, nil
 }
@@ -2054,12 +2051,6 @@ func TestExpandEnv(t *testing.T) {
         {
             name:  "simple substitution {{.VAR}}",
             input: "api_key: {{.API_KEY}}",
-            env:   map[string]string{"API_KEY": "secret123"},
-            want:  "api_key: secret123",
-        },
-        {
-            name:  "simple substitution $VAR",
-            input: "api_key: $API_KEY",
             env:   map[string]string{"API_KEY": "secret123"},
             want:  "api_key: secret123",
         },

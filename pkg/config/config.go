@@ -28,12 +28,20 @@ type Stats struct {
 
 // Stats returns configuration statistics for logging/monitoring
 func (c *Config) Stats() Stats {
-	return Stats{
-		Agents:       c.AgentRegistry.Len(),
-		Chains:       c.ChainRegistry.Len(),
-		MCPServers:   c.MCPServerRegistry.Len(),
-		LLMProviders: c.LLMProviderRegistry.Len(),
+	s := Stats{}
+	if c.AgentRegistry != nil {
+		s.Agents = c.AgentRegistry.Len()
 	}
+	if c.ChainRegistry != nil {
+		s.Chains = c.ChainRegistry.Len()
+	}
+	if c.MCPServerRegistry != nil {
+		s.MCPServers = c.MCPServerRegistry.Len()
+	}
+	if c.LLMProviderRegistry != nil {
+		s.LLMProviders = c.LLMProviderRegistry.Len()
+	}
+	return s
 }
 
 // ConfigDir returns the configuration directory path

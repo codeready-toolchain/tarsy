@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"os"
+	"strings"
 	"text/template"
 )
 
@@ -21,11 +22,19 @@ import (
 //
 // Missing variables expand to empty string (unless template is malformed).
 // Validation should catch required fields that are empty.
+//
+// DESIGN CHOICE: Malformed templates (parse/execution errors) pass through unchanged.
+// Rationale:
+//   - Preserves backward compatibility with configs that coincidentally contain {{
+//   - Allows YAML parser to potentially handle the syntax (or fail with clearer error)
+//   - Template syntax is opt-in: configs without {{.VAR}} work without modification
+//   - Trade-off: Typos like "{{.API_KEY" won't error early, but YAML validation
+//     will catch missing/invalid values when field is required
 func ExpandEnv(data []byte) []byte {
 	tmpl, err := template.New("config").Option("missingkey=zero").Parse(string(data))
 	if err != nil {
-		// If template parsing fails, return original data
-		// This allows YAML without any template syntax to pass through
+		// Parse error: return original data unchanged
+		// This allows YAML without template syntax (or with malformed templates) to pass through
 		return data
 	}
 
@@ -33,7 +42,7 @@ func ExpandEnv(data []byte) []byte {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {
 		// Split only on first = to handle values with = in them
-		if idx := bytes.IndexByte([]byte(env), '='); idx > 0 {
+		if idx := strings.IndexByte(env, '='); idx > 0 {
 			key := env[:idx]
 			value := env[idx+1:]
 			envMap[key] = value
@@ -42,7 +51,8 @@ func ExpandEnv(data []byte) []byte {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, envMap); err != nil {
-		// If execution fails, return original data
+		// Execution error: return original data unchanged
+		// Rare case (parse succeeded but exec failed), but maintains consistent pass-through behavior
 		return data
 	}
 

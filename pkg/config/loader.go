@@ -139,7 +139,9 @@ func (l *configLoader) loadYAML(filename string, target any) error {
 		return err
 	}
 
-	// Expand environment variables
+	// Expand environment variables using {{.VAR}} template syntax
+	// Note: ExpandEnv passes through original data on parse/execution errors,
+	// allowing YAML parser to handle the content (or fail with clearer error message)
 	data = ExpandEnv(data)
 
 	// Parse YAML

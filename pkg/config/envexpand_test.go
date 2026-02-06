@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
 
 func TestExpandEnv(t *testing.T) {
@@ -236,5 +237,209 @@ func TestExpandEnvThreadSafety(t *testing.T) {
 	expected := "key: value"
 	for i, result := range results {
 		assert.Equal(t, expected, result, "Result %d should match", i)
+	}
+}
+
+// TestExpandEnvMalformedTemplates verifies that malformed template syntax
+// is passed through unchanged rather than causing errors. This allows the
+// YAML parser to handle the content or fail with a clearer error message.
+func TestExpandEnvMalformedTemplates(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		description string
+	}{
+		{
+			name:        "unclosed template - missing closing braces",
+			input:       "api_key: {{.API_KEY",
+			description: "Template starts but never closes",
+		},
+		{
+			name:        "incomplete template - only opening braces",
+			input:       "api_key: {{",
+			description: "Only opening braces without variable name",
+		},
+		{
+			name:        "single closing brace after variable",
+			input:       "api_key: {{.API_KEY}",
+			description: "Missing one closing brace",
+		},
+		{
+			name:        "reversed template syntax",
+			input:       "api_key: }}.API_KEY{{",
+			description: "Template syntax in reverse order",
+		},
+		{
+			name:        "malformed variable name - missing dot",
+			input:       "api_key: {{API_KEY}}",
+			description: "Variable without leading dot (not valid template syntax)",
+		},
+		{
+			name:        "nested template braces",
+			input:       "api_key: {{{{.API_KEY}}}}",
+			description: "Extra nested braces",
+		},
+		{
+			name:        "triple opening braces",
+			input:       "api_key: {{{.API_KEY}}}",
+			description: "Too many opening braces",
+		},
+		{
+			name:        "space in variable name",
+			input:       "api_key: {{.API KEY}}",
+			description: "Spaces not valid in variable names",
+		},
+		{
+			name:        "special characters in template",
+			input:       "api_key: {{.API-KEY!}}",
+			description: "Special chars that may not be valid in templates",
+		},
+		{
+			name:        "unclosed with valid YAML around it",
+			input:       "host: localhost\napi_key: {{.API_KEY\nport: 8080",
+			description: "Unclosed template in middle of valid YAML",
+		},
+		{
+			name:        "multiple malformed templates",
+			input:       "key1: {{.VAR1\nkey2: {{.VAR2}",
+			description: "Multiple unclosed templates",
+		},
+		{
+			name:        "template with undefined function",
+			input:       `api_key: {{.API_KEY | upper}}`,
+			description: "Pipeline/function calls not configured in our template",
+		},
+		{
+			name:        "template with invalid field access",
+			input:       "api_key: {{.API_KEY.NonExistent.Field}}",
+			description: "Nested field access on string values",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set some env vars that would be used if template was valid
+			t.Setenv("API_KEY", "should-not-appear")
+			t.Setenv("VAR1", "should-not-appear")
+			t.Setenv("VAR2", "should-not-appear")
+			t.Setenv("ITEMS", "should-not-appear")
+
+			result := ExpandEnv([]byte(tt.input))
+
+			// Assert that the input is returned unchanged
+			assert.Equal(t, tt.input, string(result),
+				"Malformed template should be passed through unchanged: %s", tt.description)
+
+			// Verify environment values did NOT leak through
+			assert.NotContains(t, string(result), "should-not-appear",
+				"Malformed template should not expand environment variables")
+		})
+	}
+}
+
+// TestExpandEnvPassThroughToYAMLParser verifies that when ExpandEnv returns
+// original data due to template errors, the YAML parser can still process it.
+// This tests the integration between ExpandEnv and yaml.Unmarshal.
+func TestExpandEnvPassThroughToYAMLParser(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectYAMLErr bool
+		description   string
+	}{
+		{
+			name: "valid YAML without templates passes through successfully",
+			input: `
+host: localhost
+port: 8080
+name: test-server
+`,
+			expectYAMLErr: false,
+			description:   "No templates, valid YAML should parse successfully",
+		},
+		{
+			name: "malformed template but valid YAML structure",
+			input: `
+host: localhost
+api_key: "{{.API_KEY"
+port: 8080
+`,
+			expectYAMLErr: false,
+			description:   "Malformed template treated as string literal, YAML parses",
+		},
+		{
+			name: "malformed template with invalid YAML",
+			input: `
+host: localhost
+api_key: {{.API_KEY
+  invalid: indentation
+port: 8080
+`,
+			expectYAMLErr: true,
+			description:   "Both malformed template AND invalid YAML - YAML parser catches it",
+		},
+		{
+			name: "unclosed template in quoted string is valid YAML",
+			input: `
+config:
+  command: "run"
+  args: ["--key", "{{.API_KEY"]
+`,
+			expectYAMLErr: false,
+			description:   "Unclosed template in array, but valid YAML syntax",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Expand environment (should pass through on malformed templates)
+			expanded := ExpandEnv([]byte(tt.input))
+
+			// Try to unmarshal as YAML
+			var result map[string]any
+			err := yaml.Unmarshal(expanded, &result)
+
+			if tt.expectYAMLErr {
+				assert.Error(t, err, "Expected YAML parsing to fail: %s", tt.description)
+			} else {
+				assert.NoError(t, err, "Expected YAML parsing to succeed: %s", tt.description)
+				assert.NotNil(t, result, "Parsed YAML should not be nil")
+			}
+		})
+	}
+}
+
+// TestExpandEnvReturnsOriginalBytesOnError verifies the exact contract:
+// ExpandEnv must return the original byte slice (not a copy) when errors occur.
+func TestExpandEnvReturnsOriginalBytesOnError(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "parse error - unclosed template",
+			input: "key: {{.VAR",
+		},
+		{
+			name:  "parse error - empty template",
+			input: "key: {{}}",
+		},
+		{
+			name:  "parse error - invalid syntax",
+			input: "key: {{.VAR1 {{.VAR2}}}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := []byte(tt.input)
+			result := ExpandEnv(input)
+
+			// Verify the returned data is identical to input
+			assert.Equal(t, tt.input, string(result), "Must return original data on error")
+
+			// Verify it's byte-for-byte identical (not just string-equal)
+			assert.Equal(t, input, result, "Must return original byte slice on error")
+		})
 	}
 }

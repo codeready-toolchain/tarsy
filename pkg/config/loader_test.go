@@ -98,6 +98,7 @@ agent_chains:
 	require.NoError(t, err)
 
 	// Set all required environment variables for built-in providers
+	// KUBECONFIG not needed: built-in Go strings aren't template-expanded (only YAML files are)
 	t.Setenv("GOOGLE_API_KEY", "test-key")
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
@@ -220,6 +221,222 @@ mcp_servers:
 	require.NoError(t, err)
 	assert.Equal(t, "test-cmd", server.Transport.Command)
 	assert.Equal(t, []string{"arg1-value", "arg2-value"}, server.Transport.Args)
+}
+
+// TestLoadYAMLWithMalformedTemplates verifies that loadYAML properly handles
+// malformed template syntax by passing it through to the YAML parser.
+// This tests the integration between ExpandEnv's pass-through behavior and loadYAML.
+func TestLoadYAMLWithMalformedTemplates(t *testing.T) {
+	tests := []struct {
+		name          string
+		yamlContent   string
+		expectSuccess bool
+		description   string
+	}{
+		{
+			name: "malformed template but valid YAML - should succeed",
+			yamlContent: `
+mcp_servers:
+  test-server:
+    transport:
+      type: "stdio"
+      command: "test-cmd"
+      # Unclosed template, but YAML parser treats it as a string
+      args: ["{{.UNCLOSED_VAR"]
+`,
+			expectSuccess: true,
+			description:   "Malformed template passed through, YAML is valid",
+		},
+		{
+			name: "valid YAML without templates - should succeed",
+			yamlContent: `
+mcp_servers:
+  test-server:
+    transport:
+      type: "stdio"
+      command: "test-cmd"
+      args: ["arg1", "arg2"]
+`,
+			expectSuccess: true,
+			description:   "No templates, just valid YAML",
+		},
+		{
+			name: "malformed template AND invalid YAML - should fail",
+			yamlContent: `
+mcp_servers:
+  test-server:
+    transport:
+      type: "stdio"
+      command: "test-cmd"
+      args: ["{{.UNCLOSED"
+        invalid: indentation
+`,
+			expectSuccess: false,
+			description:   "Both malformed template and invalid YAML - YAML parser catches it",
+		},
+		{
+			name: "valid template syntax - should succeed and expand",
+			yamlContent: `
+mcp_servers:
+  test-server:
+    transport:
+      type: "stdio"
+      command: "{{.TEST_CMD}}"
+      args: ["{{.TEST_ARG}}"]
+`,
+			expectSuccess: true,
+			description:   "Valid template syntax should expand successfully",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory and file
+			dir := t.TempDir()
+			testFile := filepath.Join(dir, "test.yaml")
+			err := os.WriteFile(testFile, []byte(tt.yamlContent), 0644)
+			require.NoError(t, err)
+
+			// Set environment variables for valid template expansion
+			t.Setenv("TEST_CMD", "expanded-cmd")
+			t.Setenv("TEST_ARG", "expanded-arg")
+
+			// Create loader and attempt to load YAML
+			loader := &configLoader{configDir: dir}
+			var result TarsyYAMLConfig
+			err = loader.loadYAML("test.yaml", &result)
+
+			if tt.expectSuccess {
+				assert.NoError(t, err, "Expected loadYAML to succeed: %s", tt.description)
+				if err == nil {
+					// Verify the YAML was parsed
+					assert.NotNil(t, result.MCPServers, "MCPServers should be parsed")
+				}
+			} else {
+				assert.Error(t, err, "Expected loadYAML to fail: %s", tt.description)
+			}
+		})
+	}
+}
+
+// TestLoadYAMLExpandEnvIntegration verifies that loadYAML correctly calls ExpandEnv
+// and receives the original data back when template parsing fails.
+func TestLoadYAMLExpandEnvIntegration(t *testing.T) {
+	dir := t.TempDir()
+
+	// Test case 1: Malformed template that ExpandEnv passes through
+	malformedYAML := `
+mcp_servers:
+  server1:
+    transport:
+      type: "stdio"
+      command: "cmd"
+      args: ["{{.MALFORMED"]
+    notes: "This has an unclosed template but valid YAML structure"
+`
+	testFile1 := filepath.Join(dir, "malformed.yaml")
+	err := os.WriteFile(testFile1, []byte(malformedYAML), 0644)
+	require.NoError(t, err)
+
+	loader := &configLoader{configDir: dir}
+	var result1 TarsyYAMLConfig
+	err = loader.loadYAML("malformed.yaml", &result1)
+
+	// Should succeed because YAML is valid even though template is malformed
+	assert.NoError(t, err, "loadYAML should succeed with malformed template but valid YAML")
+	assert.NotNil(t, result1.MCPServers)
+	assert.Contains(t, result1.MCPServers, "server1")
+
+	// The malformed template should be preserved in the parsed data
+	assert.Equal(t, "{{.MALFORMED", result1.MCPServers["server1"].Transport.Args[0],
+		"Malformed template should be preserved as literal string")
+
+	// Test case 2: Valid template that ExpandEnv processes
+	validYAML := `
+mcp_servers:
+  server2:
+    transport:
+      type: "stdio"
+      command: "{{.TEST_COMMAND}}"
+      args: ["{{.TEST_ARG1}}"]
+`
+	testFile2 := filepath.Join(dir, "valid.yaml")
+	err = os.WriteFile(testFile2, []byte(validYAML), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("TEST_COMMAND", "expanded-command")
+	t.Setenv("TEST_ARG1", "expanded-arg")
+
+	var result2 TarsyYAMLConfig
+	err = loader.loadYAML("valid.yaml", &result2)
+
+	assert.NoError(t, err, "loadYAML should succeed with valid template")
+	assert.NotNil(t, result2.MCPServers)
+	assert.Contains(t, result2.MCPServers, "server2")
+
+	// Valid templates should be expanded
+	assert.Equal(t, "expanded-command", result2.MCPServers["server2"].Transport.Command,
+		"Valid template should be expanded")
+	assert.Equal(t, "expanded-arg", result2.MCPServers["server2"].Transport.Args[0],
+		"Valid template should be expanded")
+}
+
+// TestLoadYAMLPreservesOriginalDataOnTemplateError verifies that when ExpandEnv
+// returns original data due to template errors, loadYAML receives that exact data
+// and the YAML parser processes it correctly.
+func TestLoadYAMLPreservesOriginalDataOnTemplateError(t *testing.T) {
+	dir := t.TempDir()
+
+	// YAML with various malformed templates that should all pass through
+	yamlContent := `
+mcp_servers:
+  test1:
+    transport:
+      type: "stdio"
+      command: "cmd1"
+      args: ["{{.UNCLOSED"]
+  test2:
+    transport:
+      type: "stdio"
+      command: "cmd2"
+      args: ["{{.VAR1", "{{.VAR2}"]
+  test3:
+    transport:
+      type: "stdio"
+      command: "cmd3"
+      args: ["{{", "}}", "{{.}}"]
+`
+	testFile := filepath.Join(dir, "malformed-multi.yaml")
+	err := os.WriteFile(testFile, []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	// Set env vars (but they shouldn't be expanded due to malformed syntax)
+	t.Setenv("UNCLOSED", "should-not-appear")
+	t.Setenv("VAR1", "should-not-appear")
+	t.Setenv("VAR2", "should-not-appear")
+
+	loader := &configLoader{configDir: dir}
+	var result TarsyYAMLConfig
+	err = loader.loadYAML("malformed-multi.yaml", &result)
+
+	// Should succeed - YAML structure is valid even with malformed templates
+	require.NoError(t, err, "loadYAML should succeed when YAML structure is valid")
+
+	// Verify all malformed templates are preserved as literal strings
+	assert.Equal(t, "{{.UNCLOSED", result.MCPServers["test1"].Transport.Args[0],
+		"Malformed template should be preserved")
+	assert.Equal(t, "{{.VAR1", result.MCPServers["test2"].Transport.Args[0],
+		"Malformed template should be preserved")
+	assert.Equal(t, "{{.VAR2}", result.MCPServers["test2"].Transport.Args[1],
+		"Malformed template should be preserved")
+	assert.Equal(t, "{{", result.MCPServers["test3"].Transport.Args[0],
+		"Malformed template should be preserved")
+	assert.Equal(t, "}}", result.MCPServers["test3"].Transport.Args[1],
+		"Malformed template should be preserved")
+
+	// Verify env vars did NOT leak through
+	assert.NotContains(t, result.MCPServers["test1"].Transport.Args[0], "should-not-appear")
+	assert.NotContains(t, result.MCPServers["test2"].Transport.Args[0], "should-not-appear")
 }
 
 // Helper function to set up test config directory
