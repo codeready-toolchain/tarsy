@@ -47,7 +47,7 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ### Phase 2: Core Infrastructure
 
-**Database & Persistence**
+**Database & Persistence** ✅
 - [x] PostgreSQL integration (Go)
 - [x] Database models & repositories (Go)
 - [x] Alembic-style migrations (Go)
@@ -68,11 +68,15 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [x] Proto file updated for LLM config passing
 - [x] Comprehensive test suite (80%+ coverage)
 
-**Queue & Worker System**
+**Web Framework**: Echo v5 (labstack/echo) — chosen over Gin for cleaner error-return handlers, lighter dependency tree, built-in middleware (CORS, RequestID, Timeout), and consistency with other team projects. WebSocket via coder/websocket.
+
+**Queue & Worker System** 🚧
 - [ ] Database-backed job queue (Go)
 - [ ] Session claim worker pattern (Go)
 - [ ] Concurrency limits & backpressure
 - [ ] Background worker lifecycle
+- [ ] Session cancellation API (Go) — `POST /api/v1/sessions/{id}/cancel`, context-based cancellation propagation
+- **Design Phase**: ✅ Complete — See `docs/phase2-queue-worker-system-design.md` and `docs/phase2-queue-worker-system-questions.md`
 
 ---
 
@@ -132,11 +136,9 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [ ] Synthesis agent invocation
 - [ ] Replica & comparison parallelism
 
-**Pause/Resume**
-- [ ] Iteration limits & pausing
-- [ ] Session state preservation
-- [ ] Resume logic
-- [ ] Force conclusion option
+**Iteration Limits**
+- [ ] Max iteration enforcement
+- [ ] Force conclusion at limit (no pause/resume — decided in Phase 2.3 Q9)
 
 ---
 
@@ -228,7 +230,6 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [ ] Live LLM streaming UI
 - [ ] Stage timeline visualization
 - [ ] Native thinking indicators
-- [ ] Pause/resume UI controls
 
 **History Views**
 - [ ] Session list with filters
