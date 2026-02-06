@@ -1,0 +1,294 @@
+# TARSy Main Configuration File
+# Copy this file to tarsy.yaml and customize for your environment
+#
+# cp tarsy.yaml.example tarsy.yaml
+#
+# IMPORTANT: This file uses environment variable interpolation.
+# - Use {{.VAR_NAME}} syntax to reference environment variables (Go template syntax)
+# - Literal $ characters (in passwords, regexes, etc.) are preserved as-is
+# - Configure actual values in your .env file (copy from .env.example)
+# - Built-in agents/MCP servers/chains can be overridden by defining same name/ID
+
+# =============================================================================
+# SYSTEM-WIDE DEFAULTS
+# =============================================================================
+# These values are used when components don't specify their own values
+
+defaults:
+  # Default LLM provider for all agents/chains
+  llm_provider: "google-default"
+  
+  # Default max iterations (forces conclusion when reached, no pause/resume)
+  max_iterations: 20
+  
+  # Default iteration strategy
+  iteration_strategy: "react"
+  
+  # Default success policy for parallel stages ("all" or "any")
+  success_policy: "any"
+  
+  # Default alert type for new sessions (used in UI dropdown)
+  alert_type: "kubernetes"
+  
+  # Default runbook content for new sessions
+  # Override with your organization's troubleshooting guide
+  runbook: |
+    # Company Troubleshooting Guide
+    
+    ## Investigation Steps
+    1. Check monitoring dashboards
+    2. Review recent deployments
+    3. Analyze logs and metrics
+    4. Contact on-call engineer if needed
+    
+    ## Internal Resources
+    - Runbook wiki: https://wiki.company.com/runbooks
+    - Escalation: #oncall-team
+
+# =============================================================================
+# MCP SERVER CONFIGURATIONS
+# =============================================================================
+# Define MCP servers that agents can use
+# Built-in: kubernetes-server (can be overridden)
+
+mcp_servers:
+  # Override built-in kubernetes-server with custom configuration
+  kubernetes-server:
+    transport:
+      type: "stdio"
+      command: "npx"
+      args:
+        - "-y"
+        - "kubernetes-mcp-server@0.0.54"
+        - "--read-only"
+        - "--disable-destructive"
+        - "--kubeconfig"
+        - "{{.KUBECONFIG}}"
+    
+    instructions: |
+      For Kubernetes operations:
+      - **IMPORTANT: In multi-cluster environments** (when 'configuration_contexts_list' tool is available):
+        * ALWAYS start by calling 'configuration_contexts_list' to see all available contexts
+        * Use this information to determine which context to target before performing operations
+      - Be careful with cluster-scoped resource listings in large clusters
+      - Always prefer namespaced queries when possible
+      - If you get "server could not find the requested resource" error:
+        * Cluster-scoped resources (Namespace, Node, ClusterRole) should NOT have namespace parameter
+        * Namespace-scoped resources (Pod, Deployment, Service) REQUIRE namespace parameter
+    
+    data_masking:
+      enabled: true
+      pattern_groups:
+        - "kubernetes"  # Expands to: certificate_authority_data, api_key, password, token
+      patterns:
+        - "certificate"
+        - "token"
+        - "email"
+      # custom_patterns:  # Optional: define your own patterns
+      #   - pattern: "CUSTOM_SECRET_.*"
+      #     replacement: "__MASKED_CUSTOM__"
+      #     description: "Custom secret pattern"
+    
+    summarization:
+      enabled: true
+      size_threshold_tokens: 5000
+      summary_max_token_limit: 1000
+
+  # Example: ArgoCD MCP server
+  argocd-server:
+    transport:
+      type: "stdio"
+      command: "npx"
+      args:
+        - "-y"
+        - "argocd-mcp-server@latest"
+        - "--server"
+        - "{{.ARGOCD_SERVER}}"
+        - "--auth-token"
+        - "{{.ARGOCD_TOKEN}}"
+    
+    instructions: |
+      For ArgoCD operations:
+      - Check application sync status and health first
+      - Look at sync operations and their results
+      - Consider GitOps workflow and source repository state
+      - Pay attention to resource hooks and sync waves
+    
+    data_masking:
+      enabled: true
+      pattern_groups: ["kubernetes"]
+      patterns: ["certificate", "token"]
+    
+    summarization:
+      enabled: true
+      size_threshold_tokens: 3000
+
+  # Example: HTTP-based MCP server
+  monitoring-server:
+    transport:
+      type: "http"
+      url: "{{.MONITORING_MCP_URL}}"
+      bearer_token: "{{.MONITORING_TOKEN}}"
+      verify_ssl: true  # Keep enabled for production; only disable (false) for local testing with self-signed certs
+      timeout: 30
+    
+    instructions: |
+      For monitoring operations:
+      - Query metrics for the last 24 hours by default
+      - Focus on anomalies and trends
+      - Consider baseline metrics for comparison
+    
+    data_masking:
+      enabled: true
+      patterns: ["email", "token"]
+    
+    summarization:
+      enabled: true
+      size_threshold_tokens: 4000
+
+# =============================================================================
+# CUSTOM AGENT DEFINITIONS
+# =============================================================================
+# Define custom agents or override built-in agents
+# Built-in agents: KubernetesAgent, ChatAgent, SynthesisAgent
+
+agents:
+  # Example: Security-focused agent
+  security-agent:
+    mcp_servers:
+      - "kubernetes-server"
+      - "argocd-server"
+    iteration_strategy: "react"
+    max_iterations: 25
+    custom_instructions: |
+      You are a security-focused SRE agent specializing in cybersecurity incidents.
+      
+      PRIORITIES:
+      1. Data security and compliance over service availability
+      2. Immediate containment of security threats
+      3. Detailed forensic analysis and documentation
+      
+      APPROACH:
+      - Immediately assess the severity and scope of security incidents
+      - Take containment actions to prevent further damage
+      - Gather evidence and maintain chain of custody
+      - Provide clear recommendations for remediation
+
+  # Example: Performance-focused agent
+  performance-agent:
+    mcp_servers:
+      - "monitoring-server"
+      - "kubernetes-server"
+    iteration_strategy: "react"
+    custom_instructions: |
+      You are a performance-focused SRE agent specializing in system optimization.
+      
+      Focus on identifying root causes of performance bottlenecks and
+      providing actionable recommendations for optimization.
+
+  # Example: Override built-in KubernetesAgent
+  KubernetesAgent:
+    mcp_servers:
+      - "kubernetes-server"
+      - "argocd-server"  # Add ArgoCD support
+    custom_instructions: |
+      You are a Kubernetes expert with deep knowledge of container orchestration.
+      
+      When investigating issues:
+      - Start by understanding the current state
+      - Check for recent changes (deployments, config changes)
+      - Examine logs, events, and resource status
+      - Consider dependencies and external factors
+      - Provide clear, actionable recommendations
+
+# =============================================================================
+# AGENT CHAIN DEFINITIONS
+# =============================================================================
+# Define multi-stage agent chains for different alert types
+# Built-in chains: kubernetes-agent-chain
+
+agent_chains:
+  # Single-stage chain with native thinking
+  kubernetes-pod-crashloop:
+    alert_types: ["PodCrashLoop", "PodCrashLoopBackOff"]
+    description: "Deep Kubernetes troubleshooting for crash loops"
+    stages:
+      - name: "Investigation"
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "native-thinking"
+            max_iterations: 15
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+
+  # Multi-stage chain with different strategies
+  kubernetes-deep-troubleshooting:
+    alert_types: ["PodCrashLoop - Multi-Stage"]
+    description: "2-stage deep Kubernetes troubleshooting"
+    stages:
+      - name: "system-data-collection"
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "react-stage"
+        max_iterations: 10
+      
+      - name: "final-diagnosis"
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "react-final-analysis"
+        max_iterations: 5
+
+  # Multiple agents in parallel with synthesis
+  kubernetes-multiple-agents:
+    alert_types: ["Kubernetes - Multiple Agents"]
+    description: "Multiple agents with custom synthesis"
+    llm_provider: "google-default"
+    stages:
+      - name: "Investigation"
+        max_iterations: 10
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "native-thinking"
+            llm_provider: "gemini-2.5-flash"
+            max_iterations: 10
+          
+          - name: "KubernetesAgent"
+            iteration_strategy: "react"
+            llm_provider: "gemini-2.5-flash"
+            max_iterations: 3
+          
+          - name: "performance-agent"
+            iteration_strategy: "native-thinking"
+            llm_provider: "gemini-2.5-pro"
+        
+        synthesis:
+          agent: "SynthesisAgent"
+          iteration_strategy: "synthesis-native-thinking"
+          llm_provider: "gemini-3-pro"
+
+  # Replica chain (run same agent multiple times)
+  kubernetes-2-replicas:
+    alert_types: ["Kubernetes - Replicas"]
+    description: "2 replicas of same agent for redundancy"
+    llm_provider: "gemini-2.5-flash"
+    stages:
+      - name: "replicas"
+        agents:
+          - name: "KubernetesAgent"
+        replicas: 2  # Run KubernetesAgent twice
+
+  # Security incident chain
+  security-incident:
+    alert_types: ["SecurityIncident", "IntrusionDetection"]
+    description: "Security-focused investigation"
+    stages:
+      - name: "triage"
+        agents:
+          - name: "security-agent"
+            iteration_strategy: "react"
+            max_iterations: 30
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      max_iterations: 20

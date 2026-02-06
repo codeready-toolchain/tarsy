@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -16,9 +17,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNewSessionService(t *testing.T) {
+	client := testdb.NewTestClient(t)
+
+	t.Run("panics when chainRegistry is nil", func(t *testing.T) {
+		mcpRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
+		assert.Panics(t, func() {
+			NewSessionService(client.Client, nil, mcpRegistry)
+		})
+	})
+
+	t.Run("panics when mcpServerRegistry is nil", func(t *testing.T) {
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{})
+		assert.Panics(t, func() {
+			NewSessionService(client.Client, chainRegistry, nil)
+		})
+	})
+
+	t.Run("succeeds with valid registries", func(t *testing.T) {
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{})
+		mcpRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
+		service := NewSessionService(client.Client, chainRegistry, mcpRegistry)
+		assert.NotNil(t, service)
+	})
+}
+
 func TestSessionService_CreateSession(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("creates session with initial stage and agent", func(t *testing.T) {
@@ -132,7 +158,7 @@ func TestSessionService_CreateSession(t *testing.T) {
 
 func TestSessionService_GetSession(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("retrieves existing session", func(t *testing.T) {
@@ -176,7 +202,7 @@ func TestSessionService_GetSession(t *testing.T) {
 
 func TestSessionService_ListSessions(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	// Create test sessions
@@ -259,7 +285,7 @@ func TestSessionService_ListSessions(t *testing.T) {
 
 func TestSessionService_UpdateSessionStatus(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("updates status", func(t *testing.T) {
@@ -310,7 +336,7 @@ func TestSessionService_UpdateSessionStatus(t *testing.T) {
 func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 	t.Run("claims oldest pending session", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
-		service := NewSessionService(client.Client)
+		service := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		// Create two pending sessions
@@ -345,7 +371,7 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 
 	t.Run("returns nil when no pending sessions", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
-		service := NewSessionService(client.Client)
+		service := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		claimed, err := service.ClaimNextPendingSession(ctx, "pod-1")
@@ -355,7 +381,7 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 
 	t.Run("allows concurrent claims without conflict", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
-		service := NewSessionService(client.Client)
+		service := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 
 		// Create sessions
@@ -387,7 +413,7 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 func TestSessionService_ConcurrentClaiming(t *testing.T) {
 	t.Run("multiple workers claim different sessions without conflict", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
-		service := NewSessionService(client.Client)
+		service := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 		// Create 10 pending sessions
 		numSessions := 10
@@ -453,7 +479,7 @@ func TestSessionService_ConcurrentClaiming(t *testing.T) {
 
 	t.Run("workers claiming more sessions than available", func(t *testing.T) {
 		client := testdb.NewTestClient(t)
-		service := NewSessionService(client.Client)
+		service := setupTestSessionService(t, client.Client)
 		ctx := context.Background()
 		// Create only 3 pending sessions
 		numSessions := 3
@@ -513,7 +539,7 @@ func TestSessionService_ConcurrentClaiming(t *testing.T) {
 
 func TestSessionService_FindOrphanedSessions(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("finds orphaned sessions", func(t *testing.T) {
@@ -569,7 +595,7 @@ func TestSessionService_FindOrphanedSessions(t *testing.T) {
 
 func TestSessionService_SoftDeleteOldSessions(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("soft deletes old completed sessions", func(t *testing.T) {
@@ -631,7 +657,7 @@ func TestSessionService_SoftDeleteOldSessions(t *testing.T) {
 
 func TestSessionService_RestoreSession(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("restores soft-deleted session", func(t *testing.T) {
@@ -669,7 +695,7 @@ func TestSessionService_RestoreSession(t *testing.T) {
 
 func TestSessionService_SearchSessions(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := NewSessionService(client.Client)
+	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	t.Run("searches alert_data", func(t *testing.T) {

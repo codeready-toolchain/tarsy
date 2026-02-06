@@ -1,4 +1,5 @@
 """gRPC servicer implementation for LLM service."""
+import os
 from typing import AsyncIterator
 
 import grpc
@@ -12,14 +13,9 @@ from llm.models import LLMConversation, LLMMessage, MessageRole
 class LLMServicer(pb_grpc.LLMServiceServicer):
     """gRPC servicer for LLM operations."""
     
-    def __init__(self, api_key: str, model: str, temperature: float = 1.0):
-        """Initialize the servicer with Gemini client."""
-        self.client = GeminiNativeThinkingClient(
-            api_key=api_key,
-            model=model,
-            temperature=temperature
-        )
-        print(f"LLM Servicer initialized with model {model}")
+    def __init__(self):
+        """Initialize the servicer."""
+        print("LLM Servicer initialized - will resolve credentials per-request")
     
     def _pb_to_conversation(self, request: pb.ThinkingRequest) -> LLMConversation:
         """Convert protobuf request to internal conversation model."""
@@ -37,6 +33,34 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
         
         return LLMConversation(messages=messages)
     
+    def _resolve_credentials(self, llm_config: pb.LLMConfig) -> str:
+        """Resolve API key from environment variables specified in config."""
+        # Resolve primary API key from env var name
+        if llm_config.api_key_env:
+            api_key = os.getenv(llm_config.api_key_env)
+            if not api_key:
+                raise ValueError(
+                    f"Environment variable '{llm_config.api_key_env}' not found. "
+                    f"Please set it for provider '{llm_config.provider}'."
+                )
+            return api_key
+        
+        # For VertexAI, credentials are resolved via credentials_env
+        if llm_config.credentials_env:
+            creds_path = os.getenv(llm_config.credentials_env)
+            if not creds_path:
+                raise ValueError(
+                    f"Environment variable '{llm_config.credentials_env}' not found. "
+                    f"Please set it for provider '{llm_config.provider}'."
+                )
+            # VertexAI uses application default credentials - return empty string
+            return ""
+        
+        raise ValueError(
+            f"No credentials configured for provider '{llm_config.provider}'. "
+            f"Please specify api_key_env or credentials_env in LLMConfig."
+        )
+    
     async def GenerateWithThinking(
         self,
         request: pb.ThinkingRequest,
@@ -46,6 +70,26 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
         print(f"Received GenerateWithThinking request for session {request.session_id}")
         
         try:
+            # Validate llm_config is provided
+            if not request.HasField('llm_config'):
+                raise ValueError("llm_config is required in ThinkingRequest")
+            
+            llm_config = request.llm_config
+            
+            # Resolve credentials from environment
+            api_key = self._resolve_credentials(llm_config)
+            
+            # Create client with resolved credentials
+            # TODO: Support other providers (OpenAI, Anthropic, XAI, VertexAI)
+            if llm_config.provider != "google":
+                raise ValueError(f"Unsupported provider: {llm_config.provider}. Only 'google' is currently supported.")
+            
+            client = GeminiNativeThinkingClient(
+                api_key=api_key,
+                model=llm_config.model or "gemini-2.0-flash-thinking-exp-01-21",
+                temperature=1.0  # TODO: Support temperature in LLMConfig
+            )
+            
             # Convert request to conversation
             conversation = self._pb_to_conversation(request)
             
@@ -53,7 +97,7 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
             max_tokens = request.max_tokens if request.HasField('max_tokens') else None
             
             # Stream responses
-            async for chunk in self.client.generate_stream(
+            async for chunk in client.generate_stream(
                 conversation=conversation,
                 session_id=request.session_id,
                 max_tokens=max_tokens
@@ -76,6 +120,15 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
                     )
             
             print(f"Completed GenerateWithThinking for session {request.session_id}")
+            
+        except ValueError as e:
+            print(f"Configuration error for session {request.session_id}: {e}")
+            yield pb.ThinkingChunk(
+                error=pb.ErrorContent(
+                    message=str(e),
+                    retryable=False
+                )
+            )
             
         except TimeoutError as e:
             print(f"Timeout error for session {request.session_id}: {e}")

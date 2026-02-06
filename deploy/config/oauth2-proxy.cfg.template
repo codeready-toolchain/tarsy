@@ -1,0 +1,55 @@
+# OAuth2 Proxy Configuration Template
+# This file uses placeholder syntax: {{VARIABLE_NAME}}
+# Makefile replaces placeholders with environment variables to generate oauth2-proxy.cfg
+#
+# DO NOT EDIT oauth2-proxy.cfg DIRECTLY (it's generated and gitignored)
+
+# Provider Configuration
+provider = "github"
+client_id = "{{OAUTH2_CLIENT_ID}}"
+client_secret = "{{OAUTH2_CLIENT_SECRET}}"
+
+# Cookie Configuration
+cookie_secret = "{{OAUTH2_COOKIE_SECRET}}"
+cookie_secure = true
+cookie_httponly = true
+cookie_samesite = "lax"
+cookie_name = "_tarsy_oauth2"
+
+# Session Configuration
+session_cookie_minimal = true
+
+# Upstream Configuration
+http_address = "0.0.0.0:4180"
+upstreams = [
+    "http://localhost:8080/"
+]
+
+# Email Domain Restriction (optional)
+# email_domains = [
+#     "*"
+# ]
+
+# GitHub Organization/Team Restriction (optional)
+# github_org = "{{GITHUB_ORG}}"
+# github_team = "{{GITHUB_TEAM}}"
+
+# Logging
+request_logging = true
+auth_logging = true
+standard_logging = true
+
+# Security Headers
+set_xauthrequest = true
+pass_access_token = true
+pass_authorization_header = true
+pass_user_headers = true
+
+# Paths
+proxy_prefix = "/oauth2"
+redirect_url = "{{OAUTH2_PROXY_REDIRECT_URL}}"
+
+# Skip Authentication for Health Check
+skip_auth_routes = [
+    "^/health$"
+]

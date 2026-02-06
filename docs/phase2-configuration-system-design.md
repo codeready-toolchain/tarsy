@@ -62,12 +62,12 @@ cp deploy/config/.env.example deploy/config/.env
   - `agents:` - Custom agent definitions with `custom_instructions`
   - `agent_chains:` - Multi-stage chains with `alert_types`
   - `defaults:` - System-wide defaults (NEW: llm_provider, max_iterations, alert_type, runbook, etc.)
-  - Environment-agnostic (uses `${VAR}` placeholders for environment-specific values)
+  - Environment-agnostic (uses `{{.VAR}}` placeholders for environment-specific values)
   - Users copy to `tarsy.yaml` and customize
 
 - **`deploy/config/llm-providers.yaml.example`**: Example LLM provider configurations (tracked in git, ~50 lines)
-  - API endpoints and authentication (via env vars: `${GEMINI_API_KEY}`)
-  - Model parameters (can be overridden via env vars: `${LLM_TEMPERATURE}`)
+  - API endpoints and authentication (via env vars: `{{.GEMINI_API_KEY}}`)
+  - Model parameters (can be overridden via env vars: `{{.LLM_TEMPERATURE}}`)
   - Rate limits and retry policies
   - Native tools configuration (Google-specific)
   - Environment-agnostic
@@ -125,8 +125,8 @@ cp deploy/config/.env.example deploy/config/.env
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  2. Interpolate Environment Variables                    │
-│     Uses os.ExpandEnv (stdlib)                           │
-│     Supports ${VAR} and $VAR syntax                      │
+│     Uses text/template (stdlib)                          │
+│     Supports {{.VAR}} syntax (no $ collision)            │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -259,7 +259,7 @@ func initBuiltinConfig() {
                 Transport: TransportConfig{
                     Type:    TransportTypeStdio,
                     Command: "npx",
-                    Args:    []string{"-y", "kubernetes-mcp-server@0.0.54", "--read-only", "--disable-destructive", "--kubeconfig", "${KUBECONFIG}"},
+                    Args:    []string{"-y", "kubernetes-mcp-server@0.0.54", "--read-only", "--disable-destructive", "--kubeconfig", "{{.KUBECONFIG}}"},
                 },
                 Instructions: "For Kubernetes operations: ...",
                 DataMasking: &MaskingConfig{
@@ -718,7 +718,7 @@ mcp_servers:
     #     - "--read-only"
     #     - "--disable-destructive"
     #     - "--kubeconfig"
-    #     - "${KUBECONFIG}"
+    #     - "{{.KUBECONFIG}}"
     
     instructions: |
       For Kubernetes operations:
@@ -758,9 +758,9 @@ mcp_servers:
         - "-y"
         - "argocd-mcp-server@latest"
         - "--server"
-        - "${ARGOCD_SERVER}"
+        - "{{.ARGOCD_SERVER}}"
         - "--auth-token"
-        - "${ARGOCD_TOKEN}"
+        - "{{.ARGOCD_TOKEN}}"
     
     instructions: |
       For ArgoCD operations:
@@ -781,8 +781,8 @@ mcp_servers:
   monitoring-server:
     transport:
       type: "http"
-      url: "${MONITORING_MCP_URL}"
-      bearer_token: "${MONITORING_TOKEN}"
+      url: "{{.MONITORING_MCP_URL}}"
+      bearer_token: "{{.MONITORING_TOKEN}}"
       verify_ssl: false
       timeout: 30
     
@@ -985,10 +985,7 @@ func (r *LLMProviderRegistry) Get(name string) (*LLMProviderConfig, error) {
     
     provider, exists := r.providers[name]
     if !exists {
-        return nil, fmt.Errorf("LLM provider not found: %s", name)
-    }
-    if !provider.Enabled {
-        return nil, fmt.Errorf("LLM provider disabled: %s", name)
+        return nil, fmt.Errorf("%w: %s", ErrLLMProviderNotFound, name)
     }
     return provider, nil
 }
@@ -1056,7 +1053,7 @@ type RetentionDefaults struct {
 1. **Built-in Defaults** (Go code - `builtin.go`) - Base built-in agents/MCP servers/LLM providers/chains (singleton pattern)
 2. **System Defaults** (tarsy.yaml - `defaults:` section) - System-wide configuration defaults
 3. **Component Configuration** (tarsy.yaml + llm-providers.yaml) - User-defined/override agents, MCP servers, chains, LLM providers
-4. **Environment Variables** - Interpolated `${VAR}` values at startup
+4. **Environment Variables** - Interpolated `{{.VAR}}` values at startup
 5. **Per-Interaction API Overrides** - MCP server selection at runtime (transient, not persisted)
 
 ### Configuration Override Example
@@ -1124,37 +1121,58 @@ POST /api/sessions/:id/interactions
 ### Environment Variable Interpolation
 
 **Syntax:**
-- `${VAR_NAME}` or `$VAR_NAME` - Environment variable substitution
+- `{{.VAR_NAME}}` - Environment variable substitution (Go template syntax)
 
 **Examples:**
 
 ```yaml
 # Environment variables
-api_key: ${GEMINI_API_KEY}
-endpoint: ${GEMINI_API_ENDPOINT}
+api_key: {{.GEMINI_API_KEY}}
+endpoint: {{.GEMINI_API_ENDPOINT}}
 
 # Nested in arrays
 args:
   - --kubeconfig
-  - ${KUBECONFIG}
+  - {{.KUBECONFIG}}
   - --namespace
-  - ${K8S_NAMESPACE}
+  - {{.K8S_NAMESPACE}}
 ```
 
 **Implementation:**
 
-Uses Go's standard library `os.ExpandEnv` for simple, robust environment variable expansion:
+Uses Go's `text/template` package for safe environment variable expansion.
+Template syntax `{{.VAR}}` avoids collision with literal `$` in regex patterns, passwords, etc.
 
 ```go
 // pkg/config/envexpand.go
 
-import "os"
+import (
+    "bytes"
+    "os"
+    "text/template"
+)
 
-// ExpandEnv expands environment variables in YAML content
-// Supports both ${VAR} and $VAR syntax (standard shell-style)
+// ExpandEnv expands environment variables using Go templates
+// Uses {{.VAR_NAME}} syntax - no collision with $ in regex patterns
 func ExpandEnv(data []byte) []byte {
-    expanded := os.ExpandEnv(string(data))
-    return []byte(expanded)
+    tmpl, err := template.New("config").Option("missingkey=zero").Parse(string(data))
+    if err != nil {
+        return data // Pass through on parse error
+    }
+    
+    // Build environment map
+    envMap := make(map[string]string)
+    for _, env := range os.Environ() {
+        if idx := bytes.IndexByte([]byte(env), '='); idx > 0 {
+            envMap[env[:idx]] = env[idx+1:]
+        }
+    }
+    
+    var buf bytes.Buffer
+    if err := tmpl.Execute(&buf, envMap); err != nil {
+        return data // Pass through on execution error
+    }
+    return buf.Bytes()
 }
 
 // Usage in config loader:
@@ -1182,16 +1200,16 @@ func LoadConfig(path string) (*Config, error) {
 ```
 
 **Benefits:**
-- ✅ **Stdlib**: Uses `os.ExpandEnv` from Go standard library
-- ✅ **Simple**: 1-line implementation for expansion
-- ✅ **Fast**: Native Go implementation
-- ✅ **Standard syntax**: Supports both `${VAR}` and `$VAR`
+- ✅ **Stdlib**: Uses `text/template` from Go standard library
+- ✅ **Safe**: No collision with `$` in regex patterns, passwords, shell snippets
+- ✅ **Explicit**: `{{.VAR}}` syntax is unambiguous
+- ✅ **Extensible**: Template system allows future enhancements if needed
 - ✅ **No dependencies**: No regex, no parsing logic
 
 **Notes:**
 - Missing environment variables expand to empty string (validation catches this)
-- Default values can be added later if needed (using `os.Expand` with custom function)
-- Matches old TARSy's simple `${VAR}` syntax
+- Template syntax `{{.VAR}}` avoids collision with `$` in regex patterns and passwords
+- Safer than shell-style `${VAR}` which conflicts with literal `$` usage
 
 ---
 
@@ -1398,8 +1416,8 @@ data:
     llm_providers:
       - id: gemini-thinking
         api:
-          endpoint: ${GEMINI_API_ENDPOINT}
-          api_key: ${GEMINI_API_KEY}
+          endpoint: {{.GEMINI_API_ENDPOINT}}
+          api_key: {{.GEMINI_API_KEY}}
         # ... LLM config
 
 ---
@@ -1469,25 +1487,34 @@ This approach:
 // proto/llm_service.proto
 
 message LLMConfig {
-  string provider = 1;           // "google", "openai", "anthropic"
+  string provider = 1;           // "google", "openai", "anthropic", "xai", "vertexai"
   string model = 2;              // "gemini-2.0-flash-thinking-exp-1219"
-  string api_key = 3;            // From environment variable (resolved in Go)
-  string endpoint = 4;           // API endpoint
-  float temperature = 5;
-  int32 max_tokens = 6;
-  // ... other LLM parameters
+  string api_key_env = 3;        // Environment variable name (e.g., "GOOGLE_API_KEY") - resolved in Python
+  string credentials_env = 4;    // Credentials file path env var (e.g., "GOOGLE_APPLICATION_CREDENTIALS") - for VertexAI
+  string base_url = 5;           // Optional custom endpoint/base URL
+  int32 max_tool_result_tokens = 6;
+  map<string, bool> native_tools = 7;  // Google-specific native tools
+  string project = 8;            // GCP project (for VertexAI)
+  string location = 9;           // GCP location (for VertexAI)
 }
 
-message GenerateRequest {
-  LLMConfig llm_config = 1;      // Go passes config per request
+message ThinkingRequest {
+  string session_id = 1;
   repeated Message messages = 2;
-  repeated Tool tools = 3;
-  // ... other request parameters
+  
+  // Deprecated fields (backward compatibility)
+  string model = 3 [deprecated = true];
+  optional float temperature = 4 [deprecated = true];
+  optional int32 max_tokens = 5 [deprecated = true];
+  
+  reserved 6;  // Reserved for future use
+  
+  LLMConfig llm_config = 7;      // New: Go passes config per request
 }
 ```
 
 ```go
-// Go: Load config and pass to Python
+// Go: Load config and pass env var names to Python
 func (s *StageExecutor) executeLLMRequest(ctx context.Context, stage *ent.Stage) error {
     // 1. Resolve LLM provider from registry (loaded from config files)
     llmProvider, err := s.config.LLMProviders.Get(stage.LLMProviderID)
@@ -1495,41 +1522,47 @@ func (s *StageExecutor) executeLLMRequest(ctx context.Context, stage *ent.Stage)
         return err
     }
     
-    // 2. Build gRPC request with LLM config
+    // 2. Build gRPC request with LLM config (pass env var names, not values)
     req := &pb.GenerateRequest{
         LlmConfig: &pb.LLMConfig{
-            Provider:    llmProvider.Provider,
-            Model:       llmProvider.Model,
-            ApiKey:      os.Getenv(llmProvider.API.APIKeyEnv),  // Resolve from env
-            Endpoint:    llmProvider.API.Endpoint,
-            Temperature: llmProvider.Parameters.Temperature,
-            MaxTokens:   llmProvider.Parameters.MaxOutputTokens,
+            Provider:       llmProvider.Provider,
+            Model:          llmProvider.Model,
+            ApiKeyEnv:      llmProvider.API.APIKeyEnv,        // Pass env var name (e.g., "GOOGLE_API_KEY")
+            CredentialsEnv: llmProvider.API.CredentialsEnv,   // For VertexAI (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+            BaseUrl:        llmProvider.API.Endpoint,
+            Project:        llmProvider.VertexAI.Project,     // For VertexAI
+            Location:       llmProvider.VertexAI.Location,    // For VertexAI
         },
         Messages: convertMessages(stage.Messages),
         Tools:    convertTools(stage.Tools),
     }
     
-    // 3. Call Python LLM service
+    // 3. Call Python LLM service (secrets never sent over wire)
     stream, err := s.llmClient.Generate(ctx, req)
     // ...
 }
 ```
 
 ```python
-# Python: Receive config from Go, no file reading
+# Python: Receive config from Go, resolve credentials from environment
 def Generate(self, request, context):
     # Configuration comes from Go via gRPC request
     llm_config = request.llm_config
     
-    # Initialize LLM client with provided config
+    # Resolve API key from environment variable name
+    api_key = os.getenv(llm_config.api_key_env)
+    if not api_key and llm_config.provider != "vertexai":
+        raise ValueError(f"Environment variable '{llm_config.api_key_env}' not found")
+    
+    # Initialize LLM client with resolved credentials
     if llm_config.provider == "google":
         client = genai.Client(
-            api_key=llm_config.api_key,
+            api_key=api_key,  # Resolved from environment
             http_options={'api_version': 'v1beta'}
         )
         model_name = llm_config.model
     elif llm_config.provider == "openai":
-        client = openai.OpenAI(api_key=llm_config.api_key)
+        client = openai.OpenAI(api_key=api_key)  # Resolved from environment
         model_name = llm_config.model
     # ... handle other providers
     
@@ -2016,26 +2049,20 @@ func TestExpandEnv(t *testing.T) {
         want  string
     }{
         {
-            name:  "simple substitution ${VAR}",
-            input: "api_key: ${API_KEY}",
-            env:   map[string]string{"API_KEY": "secret123"},
-            want:  "api_key: secret123",
-        },
-        {
-            name:  "simple substitution $VAR",
-            input: "api_key: $API_KEY",
+            name:  "simple substitution {{.VAR}}",
+            input: "api_key: {{.API_KEY}}",
             env:   map[string]string{"API_KEY": "secret123"},
             want:  "api_key: secret123",
         },
         {
             name:  "missing var expands to empty",
-            input: "endpoint: ${ENDPOINT}",
+            input: "endpoint: {{.ENDPOINT}}",
             env:   map[string]string{},
             want:  "endpoint: ",
         },
         {
             name:  "multiple substitutions",
-            input: "url: ${PROTOCOL}://${HOST}:${PORT}",
+            input: "url: {{.PROTOCOL}}://{{.HOST}}:{{.PORT}}",
             env: map[string]string{
                 "PROTOCOL": "https",
                 "HOST":     "example.com",
@@ -2221,7 +2248,7 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 **Strong Validation**: Comprehensive validation on startup with clear error messages. Fail fast if configuration invalid.
 
-**Environment Variable Interpolation**: Uses `os.ExpandEnv` for simple `${VAR}` and `$VAR` syntax in configuration files.
+**Environment Variable Interpolation**: Uses `text/template` for safe `{{.VAR}}` syntax with no `$` collision in configuration files.
 
 **Environment-Agnostic YAML**: YAML config files work across all environments (local dev, podman, k8s). Environment differences handled via .env files only.
 
@@ -2278,7 +2305,7 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 - **Built-in + User-defined**: Built-in agents/MCP/LLM/chains in Go code, user can add or override in YAML
 - **YAML-based**: Human-readable, easy to edit, version controlled
 - **Dictionary structure**: Components keyed by name/ID (not arrays)
-- **Environment variable interpolation**: Uses `os.ExpandEnv` (stdlib) for `${VAR}` and `$VAR` syntax
+- **Environment variable interpolation**: Uses `text/template` (stdlib) for `{{.VAR}}` syntax (no `$` collision)
 - **Environment-agnostic**: Same YAML works across all environments (local, podman, k8s, prod)
 - **12-factor app compliance**: Environment-specific config via environment variables
 - **Startup validation**: Fail-fast validation on startup with clear error messages
@@ -2297,7 +2324,7 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 - **Singleton pattern**: Built-in configs use encapsulated singleton with `sync.Once` (thread-safe, lazy-initialized)
 - **Registry pattern**: Thread-safe registries store configuration metadata (not implementations)
 - **Clear validation**: Detailed error messages for misconfigurations
-- **Environment integration**: `os.ExpandEnv` for simple `${VAR}` and `$VAR` substitution
+- **Environment integration**: `text/template` for safe `{{.VAR}}` substitution (no `$` collision)
 - **Phase boundary**: Configuration only - agent execution is Phase 3
 
 ---

@@ -3,12 +3,14 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
@@ -16,30 +18,46 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
-	// Load .env file from deploy directory
-	envPath := filepath.Join("deploy", ".env")
+	// Parse command-line flags
+	configDir := flag.String("config-dir",
+		getEnv("CONFIG_DIR", "./deploy/config"),
+		"Path to configuration directory")
+	flag.Parse()
+
+	// Load .env file from config directory
+	envPath := filepath.Join(*configDir, ".env")
 	if err := godotenv.Load(envPath); err != nil {
 		log.Printf("Warning: Could not load %s file: %v", envPath, err)
 		log.Printf("Continuing with existing environment variables...")
 	} else {
-		log.Printf("Loaded configuration from %s", envPath)
+		log.Printf("Loaded environment from %s", envPath)
 	}
 
 	// Get HTTP port from environment (with default)
-	httpPort := os.Getenv("HTTP_PORT")
-	if httpPort == "" {
-		httpPort = "8080"
-	}
-
-	ginMode := os.Getenv("GIN_MODE")
-	if ginMode == "" {
-		ginMode = "debug"
-	}
+	httpPort := getEnv("HTTP_PORT", "8080")
+	ginMode := getEnv("GIN_MODE", "debug")
 	gin.SetMode(ginMode)
 
 	log.Printf("Starting TARSy")
 	log.Printf("HTTP Port: %s", httpPort)
+	log.Printf("Config Directory: %s", *configDir)
+
+	ctx := context.Background()
+
+	// Initialize configuration system (NEW)
+	cfg, err := config.Initialize(ctx, *configDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize configuration: %v", err)
+	}
+	stats := cfg.Stats() // For health check endpoint
 
 	// Initialize database
 	dbConfig, err := database.LoadConfigFromEnv()
@@ -47,7 +65,6 @@ func main() {
 		log.Fatalf("Failed to load database config: %v", err)
 	}
 
-	ctx := context.Background()
 	dbClient, err := database.NewClient(ctx, dbConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -60,8 +77,8 @@ func main() {
 	log.Println("✓ Connected to PostgreSQL database")
 	log.Println("✓ Database schema initialized")
 
-	// Initialize services
-	sessionService := services.NewSessionService(dbClient.Client)
+	// Initialize services with configuration (UPDATED)
+	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
 	stageService := services.NewStageService(dbClient.Client)
 	messageService := services.NewMessageService(dbClient.Client)
 	timelineService := services.NewTimelineService(dbClient.Client)
@@ -101,7 +118,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"status":   "healthy",
 			"database": dbHealth,
-			"phase":    "2.3 - Service Layer Complete",
+			"phase":    "2.2 - Configuration System Complete",
 			"services": gin.H{
 				"session":     "ready",
 				"stage":       "ready",
@@ -110,6 +127,12 @@ func main() {
 				"interaction": "ready",
 				"event":       "ready",
 				"chat":        "ready",
+			},
+			"configuration": gin.H{
+				"agents":        stats.Agents,
+				"chains":        stats.Chains,
+				"mcp_servers":   stats.MCPServers,
+				"llm_providers": stats.LLMProviders,
 			},
 		})
 	})

@@ -18,7 +18,7 @@ func TestServiceIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	// Initialize all services
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	messageService := NewMessageService(client.Client)
 	timelineService := NewTimelineService(client.Client)

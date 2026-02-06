@@ -15,7 +15,7 @@ import (
 func TestEventService_CreateEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	eventService := NewEventService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -44,7 +44,7 @@ func TestEventService_CreateEvent(t *testing.T) {
 func TestEventService_GetEventsSince(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	eventService := NewEventService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -91,7 +91,7 @@ func TestEventService_GetEventsSince(t *testing.T) {
 func TestEventService_CleanupSessionEvents(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	eventService := NewEventService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
@@ -127,7 +127,7 @@ func TestEventService_CleanupSessionEvents(t *testing.T) {
 func TestEventService_CleanupOrphanedEvents(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	eventService := NewEventService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
 	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{

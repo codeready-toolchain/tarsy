@@ -14,7 +14,7 @@ import (
 func TestMessageService_CreateAndRetrieve(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	sessionService := NewSessionService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
 

@@ -2,17 +2,16 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: llm_service.proto
+// source: proto/llm_service.proto
 
 package llmv1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -58,11 +57,11 @@ func (x Message_Role) String() string {
 }
 
 func (Message_Role) Descriptor() protoreflect.EnumDescriptor {
-	return file_llm_service_proto_enumTypes[0].Descriptor()
+	return file_proto_llm_service_proto_enumTypes[0].Descriptor()
 }
 
 func (Message_Role) Type() protoreflect.EnumType {
-	return &file_llm_service_proto_enumTypes[0]
+	return &file_proto_llm_service_proto_enumTypes[0]
 }
 
 func (x Message_Role) Number() protoreflect.EnumNumber {
@@ -71,24 +70,140 @@ func (x Message_Role) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Message_Role.Descriptor instead.
 func (Message_Role) EnumDescriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{1, 0}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{2, 0}
+}
+
+// LLMConfig contains LLM provider configuration passed from Go to Python
+type LLMConfig struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`                                   // "google", "openai", "anthropic", "xai", "vertexai"
+	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                         // Model name (e.g., "gemini-2.0-flash-exp")
+	ApiKeyEnv           string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`              // Environment variable name for API key (e.g., "GOOGLE_API_KEY")
+	CredentialsEnv      string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"` // Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+	BaseUrl             string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                      // Optional custom endpoint/base URL
+	MaxToolResultTokens int32                  `protobuf:"varint,6,opt,name=max_tool_result_tokens,json=maxToolResultTokens,proto3" json:"max_tool_result_tokens,omitempty"`
+	NativeTools         map[string]bool        `protobuf:"bytes,7,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
+	Project             string                 `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
+	Location            string                 `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *LLMConfig) Reset() {
+	*x = LLMConfig{}
+	mi := &file_proto_llm_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LLMConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LLMConfig) ProtoMessage() {}
+
+func (x *LLMConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LLMConfig.ProtoReflect.Descriptor instead.
+func (*LLMConfig) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *LLMConfig) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetApiKeyEnv() string {
+	if x != nil {
+		return x.ApiKeyEnv
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetCredentialsEnv() string {
+	if x != nil {
+		return x.CredentialsEnv
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetBaseUrl() string {
+	if x != nil {
+		return x.BaseUrl
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetMaxToolResultTokens() int32 {
+	if x != nil {
+		return x.MaxToolResultTokens
+	}
+	return 0
+}
+
+func (x *LLMConfig) GetNativeTools() map[string]bool {
+	if x != nil {
+		return x.NativeTools
+	}
+	return nil
+}
+
+func (x *LLMConfig) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
 }
 
 // ThinkingRequest contains the conversation and configuration
 type ThinkingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Messages      []*Message             `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
-	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	Temperature   *float32               `protobuf:"fixed32,4,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
-	MaxTokens     *int32                 `protobuf:"varint,5,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Messages  []*Message             `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
+	// Deprecated fields (kept for backward compatibility, remove in Phase 3)
+	//
+	// Deprecated: Marked as deprecated in proto/llm_service.proto.
+	Model string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	// Deprecated: Marked as deprecated in proto/llm_service.proto.
+	Temperature *float32 `protobuf:"fixed32,4,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
+	// Deprecated: Marked as deprecated in proto/llm_service.proto.
+	MaxTokens *int32 `protobuf:"varint,5,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	// New configuration system (Phase 2+)
+	LlmConfig     *LLMConfig `protobuf:"bytes,7,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"` // LLM configuration from Go orchestrator
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ThinkingRequest) Reset() {
 	*x = ThinkingRequest{}
-	mi := &file_llm_service_proto_msgTypes[0]
+	mi := &file_proto_llm_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -100,7 +215,7 @@ func (x *ThinkingRequest) String() string {
 func (*ThinkingRequest) ProtoMessage() {}
 
 func (x *ThinkingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[0]
+	mi := &file_proto_llm_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -113,7 +228,7 @@ func (x *ThinkingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThinkingRequest.ProtoReflect.Descriptor instead.
 func (*ThinkingRequest) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{0}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ThinkingRequest) GetSessionId() string {
@@ -130,6 +245,7 @@ func (x *ThinkingRequest) GetMessages() []*Message {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in proto/llm_service.proto.
 func (x *ThinkingRequest) GetModel() string {
 	if x != nil {
 		return x.Model
@@ -137,6 +253,7 @@ func (x *ThinkingRequest) GetModel() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in proto/llm_service.proto.
 func (x *ThinkingRequest) GetTemperature() float32 {
 	if x != nil && x.Temperature != nil {
 		return *x.Temperature
@@ -144,11 +261,19 @@ func (x *ThinkingRequest) GetTemperature() float32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in proto/llm_service.proto.
 func (x *ThinkingRequest) GetMaxTokens() int32 {
 	if x != nil && x.MaxTokens != nil {
 		return *x.MaxTokens
 	}
 	return 0
+}
+
+func (x *ThinkingRequest) GetLlmConfig() *LLMConfig {
+	if x != nil {
+		return x.LlmConfig
+	}
+	return nil
 }
 
 // Message represents a single conversation message
@@ -162,7 +287,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_llm_service_proto_msgTypes[1]
+	mi := &file_proto_llm_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -174,7 +299,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[1]
+	mi := &file_proto_llm_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -187,7 +312,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{1}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Message) GetRole() Message_Role {
@@ -219,7 +344,7 @@ type ThinkingChunk struct {
 
 func (x *ThinkingChunk) Reset() {
 	*x = ThinkingChunk{}
-	mi := &file_llm_service_proto_msgTypes[2]
+	mi := &file_proto_llm_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -231,7 +356,7 @@ func (x *ThinkingChunk) String() string {
 func (*ThinkingChunk) ProtoMessage() {}
 
 func (x *ThinkingChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[2]
+	mi := &file_proto_llm_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -244,7 +369,7 @@ func (x *ThinkingChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThinkingChunk.ProtoReflect.Descriptor instead.
 func (*ThinkingChunk) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{2}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ThinkingChunk) GetChunkType() isThinkingChunk_ChunkType {
@@ -314,7 +439,7 @@ type ThinkingContent struct {
 
 func (x *ThinkingContent) Reset() {
 	*x = ThinkingContent{}
-	mi := &file_llm_service_proto_msgTypes[3]
+	mi := &file_proto_llm_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +451,7 @@ func (x *ThinkingContent) String() string {
 func (*ThinkingContent) ProtoMessage() {}
 
 func (x *ThinkingContent) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[3]
+	mi := &file_proto_llm_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +464,7 @@ func (x *ThinkingContent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThinkingContent.ProtoReflect.Descriptor instead.
 func (*ThinkingContent) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{3}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ThinkingContent) GetContent() string {
@@ -368,7 +493,7 @@ type ResponseContent struct {
 
 func (x *ResponseContent) Reset() {
 	*x = ResponseContent{}
-	mi := &file_llm_service_proto_msgTypes[4]
+	mi := &file_proto_llm_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -380,7 +505,7 @@ func (x *ResponseContent) String() string {
 func (*ResponseContent) ProtoMessage() {}
 
 func (x *ResponseContent) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[4]
+	mi := &file_proto_llm_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -393,7 +518,7 @@ func (x *ResponseContent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResponseContent.ProtoReflect.Descriptor instead.
 func (*ResponseContent) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{4}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ResponseContent) GetContent() string {
@@ -428,7 +553,7 @@ type ErrorContent struct {
 
 func (x *ErrorContent) Reset() {
 	*x = ErrorContent{}
-	mi := &file_llm_service_proto_msgTypes[5]
+	mi := &file_proto_llm_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +565,7 @@ func (x *ErrorContent) String() string {
 func (*ErrorContent) ProtoMessage() {}
 
 func (x *ErrorContent) ProtoReflect() protoreflect.Message {
-	mi := &file_llm_service_proto_msgTypes[5]
+	mi := &file_proto_llm_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +578,7 @@ func (x *ErrorContent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorContent.ProtoReflect.Descriptor instead.
 func (*ErrorContent) Descriptor() ([]byte, []int) {
-	return file_llm_service_proto_rawDescGZIP(), []int{5}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ErrorContent) GetMessage() string {
@@ -470,21 +595,36 @@ func (x *ErrorContent) GetRetryable() bool {
 	return false
 }
 
-var File_llm_service_proto protoreflect.FileDescriptor
+var File_proto_llm_service_proto protoreflect.FileDescriptor
 
-const file_llm_service_proto_rawDesc = "" +
+const file_proto_llm_service_proto_rawDesc = "" +
 	"\n" +
-	"\x11llm_service.proto\x12\x06llm.v1\"\xdd\x01\n" +
+	"\x17proto/llm_service.proto\x12\x06llm.v1\"\x93\x03\n" +
+	"\tLLMConfig\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
+	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x12'\n" +
+	"\x0fcredentials_env\x18\x04 \x01(\tR\x0ecredentialsEnv\x12\x19\n" +
+	"\bbase_url\x18\x05 \x01(\tR\abaseUrl\x123\n" +
+	"\x16max_tool_result_tokens\x18\x06 \x01(\x05R\x13maxToolResultTokens\x12E\n" +
+	"\fnative_tools\x18\a \x03(\v2\".llm.v1.LLMConfig.NativeToolsEntryR\vnativeTools\x12\x18\n" +
+	"\aproject\x18\b \x01(\tR\aproject\x12\x1a\n" +
+	"\blocation\x18\t \x01(\tR\blocation\x1a>\n" +
+	"\x10NativeToolsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xa1\x02\n" +
 	"\x0fThinkingRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12+\n" +
-	"\bmessages\x18\x02 \x03(\v2\x0f.llm.v1.MessageR\bmessages\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\x12%\n" +
-	"\vtemperature\x18\x04 \x01(\x02H\x00R\vtemperature\x88\x01\x01\x12\"\n" +
+	"\bmessages\x18\x02 \x03(\v2\x0f.llm.v1.MessageR\bmessages\x12\x18\n" +
+	"\x05model\x18\x03 \x01(\tB\x02\x18\x01R\x05model\x12)\n" +
+	"\vtemperature\x18\x04 \x01(\x02B\x02\x18\x01H\x00R\vtemperature\x88\x01\x01\x12&\n" +
 	"\n" +
-	"max_tokens\x18\x05 \x01(\x05H\x01R\tmaxTokens\x88\x01\x01B\x0e\n" +
+	"max_tokens\x18\x05 \x01(\x05B\x02\x18\x01H\x01R\tmaxTokens\x88\x01\x01\x120\n" +
+	"\n" +
+	"llm_config\x18\a \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfigB\x0e\n" +
 	"\f_temperatureB\r\n" +
-	"\v_max_tokens\"\x9f\x01\n" +
+	"\v_max_tokensJ\x04\b\x06\x10\a\"\x9f\x01\n" +
 	"\aMessage\x12(\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x14.llm.v1.Message.RoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\"P\n" +
@@ -513,53 +653,57 @@ const file_llm_service_proto_rawDesc = "" +
 	"\tretryable\x18\x02 \x01(\bR\tretryable2V\n" +
 	"\n" +
 	"LLMService\x12H\n" +
-	"\x14GenerateWithThinking\x12\x17.llm.v1.ThinkingRequest\x1a\x15.llm.v1.ThinkingChunk0\x01B&Z$github.com/tarsy/pkg/pb/llm/v1;llmv1b\x06proto3"
+	"\x14GenerateWithThinking\x12\x17.llm.v1.ThinkingRequest\x1a\x15.llm.v1.ThinkingChunk0\x01B2Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3"
 
 var (
-	file_llm_service_proto_rawDescOnce sync.Once
-	file_llm_service_proto_rawDescData []byte
+	file_proto_llm_service_proto_rawDescOnce sync.Once
+	file_proto_llm_service_proto_rawDescData []byte
 )
 
-func file_llm_service_proto_rawDescGZIP() []byte {
-	file_llm_service_proto_rawDescOnce.Do(func() {
-		file_llm_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_llm_service_proto_rawDesc), len(file_llm_service_proto_rawDesc)))
+func file_proto_llm_service_proto_rawDescGZIP() []byte {
+	file_proto_llm_service_proto_rawDescOnce.Do(func() {
+		file_proto_llm_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_llm_service_proto_rawDesc), len(file_proto_llm_service_proto_rawDesc)))
 	})
-	return file_llm_service_proto_rawDescData
+	return file_proto_llm_service_proto_rawDescData
 }
 
-var file_llm_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_llm_service_proto_goTypes = []any{
+var file_proto_llm_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_llm_service_proto_goTypes = []any{
 	(Message_Role)(0),       // 0: llm.v1.Message.Role
-	(*ThinkingRequest)(nil), // 1: llm.v1.ThinkingRequest
-	(*Message)(nil),         // 2: llm.v1.Message
-	(*ThinkingChunk)(nil),   // 3: llm.v1.ThinkingChunk
-	(*ThinkingContent)(nil), // 4: llm.v1.ThinkingContent
-	(*ResponseContent)(nil), // 5: llm.v1.ResponseContent
-	(*ErrorContent)(nil),    // 6: llm.v1.ErrorContent
+	(*LLMConfig)(nil),       // 1: llm.v1.LLMConfig
+	(*ThinkingRequest)(nil), // 2: llm.v1.ThinkingRequest
+	(*Message)(nil),         // 3: llm.v1.Message
+	(*ThinkingChunk)(nil),   // 4: llm.v1.ThinkingChunk
+	(*ThinkingContent)(nil), // 5: llm.v1.ThinkingContent
+	(*ResponseContent)(nil), // 6: llm.v1.ResponseContent
+	(*ErrorContent)(nil),    // 7: llm.v1.ErrorContent
+	nil,                     // 8: llm.v1.LLMConfig.NativeToolsEntry
 }
-var file_llm_service_proto_depIdxs = []int32{
-	2, // 0: llm.v1.ThinkingRequest.messages:type_name -> llm.v1.Message
-	0, // 1: llm.v1.Message.role:type_name -> llm.v1.Message.Role
-	4, // 2: llm.v1.ThinkingChunk.thinking:type_name -> llm.v1.ThinkingContent
-	5, // 3: llm.v1.ThinkingChunk.response:type_name -> llm.v1.ResponseContent
-	6, // 4: llm.v1.ThinkingChunk.error:type_name -> llm.v1.ErrorContent
-	1, // 5: llm.v1.LLMService.GenerateWithThinking:input_type -> llm.v1.ThinkingRequest
-	3, // 6: llm.v1.LLMService.GenerateWithThinking:output_type -> llm.v1.ThinkingChunk
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+var file_proto_llm_service_proto_depIdxs = []int32{
+	8, // 0: llm.v1.LLMConfig.native_tools:type_name -> llm.v1.LLMConfig.NativeToolsEntry
+	3, // 1: llm.v1.ThinkingRequest.messages:type_name -> llm.v1.Message
+	1, // 2: llm.v1.ThinkingRequest.llm_config:type_name -> llm.v1.LLMConfig
+	0, // 3: llm.v1.Message.role:type_name -> llm.v1.Message.Role
+	5, // 4: llm.v1.ThinkingChunk.thinking:type_name -> llm.v1.ThinkingContent
+	6, // 5: llm.v1.ThinkingChunk.response:type_name -> llm.v1.ResponseContent
+	7, // 6: llm.v1.ThinkingChunk.error:type_name -> llm.v1.ErrorContent
+	2, // 7: llm.v1.LLMService.GenerateWithThinking:input_type -> llm.v1.ThinkingRequest
+	4, // 8: llm.v1.LLMService.GenerateWithThinking:output_type -> llm.v1.ThinkingChunk
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_llm_service_proto_init() }
-func file_llm_service_proto_init() {
-	if File_llm_service_proto != nil {
+func init() { file_proto_llm_service_proto_init() }
+func file_proto_llm_service_proto_init() {
+	if File_proto_llm_service_proto != nil {
 		return
 	}
-	file_llm_service_proto_msgTypes[0].OneofWrappers = []any{}
-	file_llm_service_proto_msgTypes[2].OneofWrappers = []any{
+	file_proto_llm_service_proto_msgTypes[1].OneofWrappers = []any{}
+	file_proto_llm_service_proto_msgTypes[3].OneofWrappers = []any{
 		(*ThinkingChunk_Thinking)(nil),
 		(*ThinkingChunk_Response)(nil),
 		(*ThinkingChunk_Error)(nil),
@@ -568,18 +712,18 @@ func file_llm_service_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_llm_service_proto_rawDesc), len(file_llm_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_llm_service_proto_rawDesc), len(file_proto_llm_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_llm_service_proto_goTypes,
-		DependencyIndexes: file_llm_service_proto_depIdxs,
-		EnumInfos:         file_llm_service_proto_enumTypes,
-		MessageInfos:      file_llm_service_proto_msgTypes,
+		GoTypes:           file_proto_llm_service_proto_goTypes,
+		DependencyIndexes: file_proto_llm_service_proto_depIdxs,
+		EnumInfos:         file_proto_llm_service_proto_enumTypes,
+		MessageInfos:      file_proto_llm_service_proto_msgTypes,
 	}.Build()
-	File_llm_service_proto = out.File
-	file_llm_service_proto_goTypes = nil
-	file_llm_service_proto_depIdxs = nil
+	File_proto_llm_service_proto = out.File
+	file_proto_llm_service_proto_goTypes = nil
+	file_proto_llm_service_proto_depIdxs = nil
 }

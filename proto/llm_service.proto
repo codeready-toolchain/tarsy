@@ -10,13 +10,34 @@ service LLMService {
   rpc GenerateWithThinking(ThinkingRequest) returns (stream ThinkingChunk);
 }
 
+// LLMConfig contains LLM provider configuration passed from Go to Python
+message LLMConfig {
+  string provider = 1;           // "google", "openai", "anthropic", "xai", "vertexai"
+  string model = 2;              // Model name (e.g., "gemini-2.0-flash-exp")
+  string api_key_env = 3;        // Environment variable name for API key (e.g., "GOOGLE_API_KEY")
+  string credentials_env = 4;    // Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+  string base_url = 5;           // Optional custom endpoint/base URL
+  int32 max_tool_result_tokens = 6;
+  map<string, bool> native_tools = 7;  // Google-specific native tools
+  string project = 8;            // GCP project (for VertexAI)
+  string location = 9;           // GCP location (for VertexAI)
+}
+
 // ThinkingRequest contains the conversation and configuration
 message ThinkingRequest {
   string session_id = 1;
   repeated Message messages = 2;
-  string model = 3;
-  optional float temperature = 4;
-  optional int32 max_tokens = 5;
+  
+  // Deprecated fields (kept for backward compatibility, remove in Phase 3)
+  string model = 3 [deprecated = true];
+  optional float temperature = 4 [deprecated = true];
+  optional int32 max_tokens = 5 [deprecated = true];
+  
+  // Reserved field 6 for future use
+  reserved 6;
+  
+  // New configuration system (Phase 2+)
+  LLMConfig llm_config = 7;      // LLM configuration from Go orchestrator
 }
 
 // Message represents a single conversation message
