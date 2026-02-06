@@ -47,7 +47,7 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ### Phase 2: Core Infrastructure
 
-**Database & Persistence**
+**Database & Persistence** ✅
 - [x] PostgreSQL integration (Go)
 - [x] Database models & repositories (Go)
 - [x] Alembic-style migrations (Go)
@@ -68,11 +68,12 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [x] Proto file updated for LLM config passing
 - [x] Comprehensive test suite (80%+ coverage)
 
-**Queue & Worker System**
+**Queue & Worker System** 🚧
 - [ ] Database-backed job queue (Go)
 - [ ] Session claim worker pattern (Go)
 - [ ] Concurrency limits & backpressure
 - [ ] Background worker lifecycle
+- **Design Phase**: See `docs/phase2-queue-worker-system-design.md` and `docs/phase2-queue-worker-system-questions.md`
 
 ---
 
