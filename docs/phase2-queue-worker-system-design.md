@@ -748,7 +748,7 @@ queue:
   
   # Orphan detection
   orphan_detection_interval: 5m        # How often to scan for orphans
-  orphan_threshold: 10m                # Consider orphaned if no update for N minutes
+  orphan_threshold: 5m                 # Consider orphaned if no heartbeat for 5m (~10 missed 30s heartbeats)
 ```
 
 ### Database-Based Concurrency (Old TARSy Pattern)
@@ -1529,8 +1529,8 @@ func DefaultQueueConfig() *QueueConfig {
         PollIntervalJitter:      500 * time.Millisecond, // Distribute load across replicas
         SessionTimeout:          15 * time.Minute,
         GracefulShutdownTimeout: 15 * time.Minute,  // Match SessionTimeout for complete graceful shutdown
-        OrphanDetectionInterval: 5 * time.Minute,
-        OrphanThreshold:         10 * time.Minute,
+        OrphanDetectionInterval: 5 * time.Minute,  // Scan every 5m (cheap query)
+        OrphanThreshold:         5 * time.Minute,  // 5m = ~10 missed 30s heartbeats, safe margin
     }
 }
 ```
@@ -1551,7 +1551,7 @@ queue:
   graceful_shutdown_timeout: 15m  # Match session_timeout to avoid interrupting sessions
   
   orphan_detection_interval: 5m
-  orphan_threshold: 10m
+  orphan_threshold: 5m
   
   # No session-level retry config. Failed sessions stay in "failed" status.
   # Users re-send the alert via POST /api/v1/alerts to create a new session.
@@ -1600,44 +1600,119 @@ These are applied by the executor internally via `context.WithTimeout` nested un
 
 ## Integration with Existing Services
 
-### AlertService Integration
+### API Layer Pattern
+
+Go-idiomatic 3-layer architecture: **Handler** (HTTP concerns) → **Service** (business logic) → **Repository** (ent/database).
+
+In Go, the handler IS the controller — no separate controller class. The handler method handles HTTP binding, validation, transformation to domain types, and response formatting. The service never sees HTTP-specific types.
+
+**Key rules:**
+- Request/Response structs live in `pkg/api/` (HTTP contract, with `json`/`validate` tags)
+- Service input structs live in `pkg/services/` (domain types, no HTTP tags)
+- Handler transforms between them **only when they differ** (alert submission: yes, get-by-ID: no)
+- Structural validation (required fields, format) in handler via Echo's `c.Validate()`
+- Business validation (chain exists, queue capacity) in service
+- Centralized error mapping: service errors → HTTP status codes
+- Use typed response structs (not `map[string]any`) for type safety and API contract clarity
+
+```
+Handler Layer (pkg/api/)          Service Layer (pkg/services/)         Database (ent)
+┌─────────────────────┐          ┌──────────────────────┐             ┌─────────────┐
+│ Bind HTTP request   │          │ Business validation  │             │ ent.Client  │
+│ Structural validate │──input──►│ Chain resolution     │──ent ops──►│ PostgreSQL  │
+│ Transform to domain │          │ Create/update records│             │             │
+│ Map errors → HTTP   │◄─result──│ Return ent entities  │◄───────────│             │
+│ Format response     │          │ Return typed errors  │             │             │
+└─────────────────────┘          └──────────────────────┘             └─────────────┘
+```
+
+### HTTP Request & Response Structs
+
+```go
+// pkg/api/requests.go
+//
+// HTTP request structs define the API contract (what clients send).
+// These are binding targets with json/validate tags — they stay in pkg/api/.
+// Services never see these types directly.
+
+// SubmitAlertRequest is the HTTP request body for POST /api/v1/alerts.
+type SubmitAlertRequest struct {
+    AlertType string `json:"alert_type"`
+    Runbook   string `json:"runbook,omitempty"`
+    Data      string `json:"data" validate:"required"`  // Alert payload (opaque text)
+    MCP       string `json:"mcp,omitempty"`              // MCP selection (optional)
+}
+
+// pkg/api/responses.go
+//
+// HTTP response structs define what clients receive.
+// Use structs (not maps) for type safety, testability, and API contract clarity.
+
+// AlertResponse is returned by POST /api/v1/alerts.
+type AlertResponse struct {
+    SessionID string `json:"session_id"`
+    Status    string `json:"status"`
+    Message   string `json:"message"`
+}
+
+// CancelResponse is returned by POST /api/v1/sessions/:id/cancel.
+type CancelResponse struct {
+    SessionID string `json:"session_id"`
+    Message   string `json:"message"`
+}
+```
+
+### Service Layer Input
 
 ```go
 // pkg/services/alert_service.go
+//
+// Service-level input types — domain objects, no HTTP tags.
+// The handler creates these from HTTP request data.
+
+// SubmitAlertInput contains the domain-level data needed to create a session.
+// Transformed from the HTTP request + headers by the handler.
+// Note: fields like Author come from HTTP headers (oauth2-proxy), not the JSON body —
+// this is why SubmitAlertInput is separate from SubmitAlertRequest.
+type SubmitAlertInput struct {
+    AlertType string
+    Runbook   string
+    Data      string // Alert payload (opaque text, stored as-is)
+    MCP       string // MCP selection config (optional)
+    Author    string // From oauth2-proxy headers (X-Forwarded-User || X-Forwarded-Email || "api-client")
+}
 
 // SubmitAlert creates a new session from an alert submission.
 // This is the queue entry point — the session starts in "pending" status
 // and is picked up by the worker pool automatically.
-// Matches old TARSy: POST /api/v1/alerts → create session → return immediately.
-func (s *AlertService) SubmitAlert(ctx context.Context, req *SubmitAlertRequest) (*ent.AlertSession, error) {
-    // Validate request
-    if err := s.validateRequest(req); err != nil {
-        return nil, err
+func (s *AlertService) SubmitAlert(ctx context.Context, input SubmitAlertInput) (*ent.AlertSession, error) {
+    // Business validation (chain resolution, queue capacity, etc.)
+    if input.Data == "" {
+        return nil, NewValidationError("data", "alert data is required")
     }
     
     // Create session in "pending" status
     // Worker pool will pick it up automatically
     session, err := s.client.AlertSession.Create().
         SetID(generateSessionID()).
-        SetAlertData(req.Data).
-        SetAlertType(req.AlertType).
+        SetAlertData(input.Data).
+        SetAlertType(input.AlertType).
         SetStatus(alertsession.StatusPending).  // <-- Queue entry point
         SetStartedAt(time.Now()).
-        SetNillableMcpSelection(req.MCP).
-        SetNillableRunbookURL(req.Runbook).
+        SetNillableAuthor(nillableString(input.Author)).
+        SetNillableRunbookURL(nillableString(input.Runbook)).
+        SetNillableMcpSelection(nillableString(input.MCP)).
         Save(ctx)
     
     if err != nil {
         return nil, fmt.Errorf("failed to create session: %w", err)
     }
     
-    // Return immediately (non-blocking)
-    // Client can poll GET /api/v1/sessions/:id for status updates
     return session, nil
 }
 ```
 
-### API Integration
+### Handler Implementation
 
 ```go
 // pkg/api/routes.go
@@ -1647,66 +1722,112 @@ func (s *AlertService) SubmitAlert(ctx context.Context, req *SubmitAlertRequest)
 //   GET    /api/v1/sessions/:id        — Get session status
 //   POST   /api/v1/sessions/:id/cancel — Cancel in-progress session
 
-// pkg/api/alert_handler.go
+// pkg/api/handler_alert.go
 
 // POST /api/v1/alerts — Submit an alert for investigation.
 // Creates a session in "pending" status. Returns immediately with session_id.
-// Matches old TARSy endpoint: POST /api/v1/alerts
 func (s *Server) submitAlertHandler(c echo.Context) error {
+    // 1. Bind HTTP request
     var req SubmitAlertRequest
     if err := c.Bind(&req); err != nil {
         return echo.NewHTTPError(http.StatusBadRequest, err.Error())
     }
     
-    // Create session (non-blocking — worker pool picks it up)
-    session, err := s.alertService.SubmitAlert(c.Request().Context(), &req)
-    if err != nil {
-        return err // Handled by centralized HTTPErrorHandler
+    // 2. Validate (structural — required fields, format)
+    if err := c.Validate(req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
     }
     
-    // Return immediately (matches old TARSy response)
-    return c.JSON(http.StatusAccepted, map[string]any{
-        "session_id": session.ID,
-        "status":     "queued",
-        "message":    "Alert submitted for processing",
+    // 3. Transform HTTP request → service input (handler owns this conversion)
+    //    Author comes from oauth2-proxy header, not the JSON body.
+    input := services.SubmitAlertInput{
+        AlertType: req.AlertType,
+        Runbook:   req.Runbook,
+        Data:      req.Data,
+        MCP:       req.MCP,
+        Author:    extractAuthor(c), // from oauth2-proxy (X-Forwarded-User > X-Forwarded-Email > "api-client")
+    }
+    
+    // 4. Call service (service handles business logic)
+    session, err := s.alertService.SubmitAlert(c.Request().Context(), input)
+    if err != nil {
+        return s.mapServiceError(err)
+    }
+    
+    // 5. Format response
+    return c.JSON(http.StatusAccepted, &AlertResponse{
+        SessionID: session.ID,
+        Status:    "queued",
+        Message:   "Alert submitted for processing",
     })
 }
 
-// pkg/api/session_handler.go
+// pkg/api/handler_session.go
 
 // GET /api/v1/sessions/:id — Get session status and details.
+// Simple endpoint: no transformation needed, just extract path param and call service.
 func (s *Server) getSessionStatusHandler(c echo.Context) error {
-    sessionID := c.Param("id")
-    
-    session, err := s.sessionService.GetSession(c.Request().Context(), sessionID)
+    session, err := s.sessionService.GetSession(c.Request().Context(), c.Param("id"))
     if err != nil {
-        return echo.NewHTTPError(http.StatusNotFound, "Session not found")
+        return s.mapServiceError(err)
     }
-    
     return c.JSON(http.StatusOK, session)
 }
 
 // POST /api/v1/sessions/:id/cancel — Cancel an in-progress session.
+// Simple endpoint: extract path param and call service.
 func (s *Server) cancelSessionHandler(c echo.Context) error {
     sessionID := c.Param("id")
     
-    err := s.sessionService.CancelSession(c.Request().Context(), sessionID)
-    if err != nil {
-        if errors.Is(err, ErrNotCancellable) {
-            return echo.NewHTTPError(http.StatusConflict, "Session is not in a cancellable state")
-        }
-        return err // Handled by centralized HTTPErrorHandler
+    if err := s.sessionService.CancelSession(c.Request().Context(), sessionID); err != nil {
+        return s.mapServiceError(err)
     }
     
-    return c.JSON(http.StatusOK, map[string]any{
-        "session_id": sessionID,
-        "message":    "Session cancellation requested",
+    return c.JSON(http.StatusOK, &CancelResponse{
+        SessionID: sessionID,
+        Message:   "Session cancellation requested",
     })
 }
 
 // Manual retry: No special endpoint needed.
 // Users re-send the alert via POST /api/v1/alerts with the original alert data.
 // This creates a brand new session. The failed session remains as historical record.
+
+// pkg/api/auth.go
+//
+// Extract author from oauth2-proxy headers (matches old TARSy behavior).
+// Priority: X-Forwarded-User > X-Forwarded-Email > "api-client"
+
+func extractAuthor(c echo.Context) string {
+    if user := c.Request().Header.Get("X-Forwarded-User"); user != "" {
+        return user
+    }
+    if email := c.Request().Header.Get("X-Forwarded-Email"); email != "" {
+        return email
+    }
+    return "api-client"
+}
+
+// pkg/api/errors.go
+//
+// Centralized error mapping: service errors → HTTP status codes.
+// Keeps handler code clean and ensures consistent error responses.
+
+func (s *Server) mapServiceError(err error) error {
+    var validErr *services.ValidationError
+    if errors.As(err, &validErr) {
+        return echo.NewHTTPError(http.StatusBadRequest, validErr.Error())
+    }
+    if errors.Is(err, services.ErrNotFound) {
+        return echo.NewHTTPError(http.StatusNotFound, "Resource not found")
+    }
+    if errors.Is(err, services.ErrNotCancellable) {
+        return echo.NewHTTPError(http.StatusConflict, "Session is not in a cancellable state")
+    }
+    // Unexpected error — log and return 500
+    slog.Error("Unexpected service error", "error", err)
+    return echo.NewHTTPError(http.StatusInternalServerError, "Internal server error")
+}
 ```
 
 **Cancellation Flow:**
@@ -1782,8 +1903,11 @@ func (s *Server) cancelSessionHandler(c echo.Context) error {
 - [ ] Document configuration options
 
 **Integration:**
-- [ ] Implement AlertService.SubmitAlert (create session with "pending" status)
-- [ ] Add POST /api/v1/alerts handler (return 202 Accepted with session_id)
+- [ ] Define HTTP request/response structs in `pkg/api/` (SubmitAlertRequest, AlertResponse, CancelResponse)
+- [ ] Define service input struct in `pkg/services/` (SubmitAlertInput)
+- [ ] Implement AlertService.SubmitAlert(ctx, SubmitAlertInput) — business logic, create session
+- [ ] Implement alert handler (bind → validate → transform → service → response)
+- [ ] Implement centralized error mapping (mapServiceError: service errors → HTTP status codes)
 - [ ] Add session status polling endpoint
 - [ ] Update main.go to start worker pool
 - [ ] Add signal handling for graceful shutdown
@@ -1816,6 +1940,10 @@ func (s *Server) cancelSessionHandler(c echo.Context) error {
 **Hierarchical Timeouts with Context Propagation**: Session timeout (15m configurable) applied via `context.WithTimeout` at worker level. Sub-operation timeouts (LLM: 2m, MCP: 2m) applied by executor (Phase 3). Manual cancellation via stored `CancelFunc`. Rationale: Go's standard cancellation mechanism, defense in depth (prevents single stuck operation from consuming session budget), different statuses for timeout vs cancellation aid debugging.
 
 **Graceful Shutdown**: Workers finish current sessions before exiting on SIGTERM with timeout matching session timeout (15m). Rationale: Prevents interrupting healthy sessions during deployments (K8s rolling updates), better user experience (complete results), no wasted LLM tokens. Requires `terminationGracePeriodSeconds: 900` in K8s deployment. Orphan recovery handles timeout edge cases.
+
+**Handler → Service Layer Pattern**: Go-idiomatic 3-layer architecture (Handler → Service → Repository). Handlers own HTTP concerns (binding, structural validation, request-to-domain transformation, response formatting, error mapping). Services accept domain types (never HTTP request structs), handle business logic and business validation. Separate HTTP request/response structs in `pkg/api/`, service input structs in `pkg/services/`. Transform between them in handler only when they diverge. Simple endpoints (get-by-ID, cancel) skip transformation. Centralized `mapServiceError` maps service errors to HTTP status codes.
+
+**Alert Data as String**: Alert payload (`data` field) is stored and passed as an opaque `string`, not `map[string]any` or `json.RawMessage`. The service never parses or inspects alert data contents — it's passed through to the database as-is. This simplifies the entire pipeline and avoids unnecessary JSON decode/re-encode cycles.
 
 **FIFO Ordering**: Process sessions in order of creation (`ORDER BY started_at ASC`). Rationale: Fairness, predictability, prevents starvation.
 
@@ -1908,8 +2036,9 @@ All design questions have been discussed and decided. See `phase2-queue-worker-s
    - Unit tests: worker logic, pool lifecycle, config parsing (mocked interfaces, no DB)
    - Integration tests: claiming, FOR UPDATE SKIP LOCKED, concurrency (real Postgres)
 6. **Integrate with services**
-   - Implement AlertService.SubmitAlert (pending status)
-   - Add API handlers (POST /api/v1/alerts, GET /api/v1/sessions/:id, POST /api/v1/sessions/:id/cancel)
+   - Implement AlertService.SubmitAlert with service-level input types
+   - Implement handlers with bind → validate → transform → service → response pattern
+   - Add centralized error mapping (mapServiceError)
    - Update main.go (startup sequence, signal handling)
 7. **Document system**
    - Configuration reference
