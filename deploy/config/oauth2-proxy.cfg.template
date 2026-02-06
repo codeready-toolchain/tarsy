@@ -47,7 +47,7 @@ pass_user_headers = true
 
 # Paths
 proxy_prefix = "/oauth2"
-redirect_url = "https://tarsy.example.com/oauth2/callback"
+redirect_url = "{{OAUTH2_PROXY_REDIRECT_URL}}"
 
 # Skip Authentication for Health Check
 skip_auth_routes = [

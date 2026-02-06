@@ -25,6 +25,9 @@ type SessionService struct {
 
 // NewSessionService creates a new SessionService with configuration registries
 func NewSessionService(client *ent.Client, chainRegistry *config.ChainRegistry, mcpServerRegistry *config.MCPServerRegistry) *SessionService {
+	if chainRegistry == nil || mcpServerRegistry == nil {
+		panic("NewSessionService: chainRegistry and mcpServerRegistry must not be nil")
+	}
 	return &SessionService{
 		client:            client,
 		chainRegistry:     chainRegistry,

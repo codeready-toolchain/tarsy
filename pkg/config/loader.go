@@ -50,11 +50,12 @@ func Initialize(ctx context.Context, configDir string) (*Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
+	stats := cfg.Stats()
 	log.Info("Configuration initialized successfully",
-		"agents", len(cfg.AgentRegistry.GetAll()),
-		"chains", len(cfg.ChainRegistry.GetAll()),
-		"mcp_servers", len(cfg.MCPServerRegistry.GetAll()),
-		"llm_providers", len(cfg.LLMProviderRegistry.GetAll()))
+		"agents", stats.Agents,
+		"chains", stats.Chains,
+		"mcp_servers", stats.MCPServers,
+		"llm_providers", stats.LLMProviders)
 
 	return cfg, nil
 }
@@ -126,7 +127,7 @@ type configLoader struct {
 	configDir string
 }
 
-func (l *configLoader) loadYAML(filename string, target interface{}) error {
+func (l *configLoader) loadYAML(filename string, target any) error {
 	path := filepath.Join(l.configDir, filename)
 
 	// Read file

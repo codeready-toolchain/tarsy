@@ -17,30 +17,19 @@ async def serve(port: int = 50051):
     env_path = Path(__file__).parent.parent.parent / "deploy" / ".env"
     if env_path.exists():
         load_dotenv(env_path)
-        print(f"Loaded configuration from {env_path}")
+        print(f"Loaded environment variables from {env_path}")
     else:
         print(f"Warning: .env file not found at {env_path}")
         print("Continuing with existing environment variables...")
     
-    # Get configuration from environment
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        print("ERROR: GOOGLE_API_KEY environment variable is required")
-        print("Please set it in deploy/.env or as an environment variable")
-        sys.exit(1)
-    
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-thinking-exp-01-21")
-    temperature = float(os.getenv("GEMINI_TEMPERATURE", "1.0"))
-    
     print(f"Starting LLM gRPC server on port {port}")
-    print(f"Model: {model}")
-    print(f"Temperature: {temperature}")
+    print("Credentials will be resolved per-request from environment variables")
     
     # Create gRPC server
     server = grpc.aio.server()
     
-    # Add servicer
-    servicer = LLMServicer(api_key=api_key, model=model, temperature=temperature)
+    # Add servicer (no hardcoded credentials)
+    servicer = LLMServicer()
     pb_grpc.add_LLMServiceServicer_to_server(servicer, server)
     
     # Bind port

@@ -4,7 +4,8 @@
 # cp tarsy.yaml.example tarsy.yaml
 #
 # IMPORTANT: This file uses environment variable interpolation.
-# - Use ${VAR_NAME} or $VAR_NAME syntax to reference environment variables
+# - Use {{.VAR_NAME}} syntax to reference environment variables (Go template syntax)
+# - Literal $ characters (in passwords, regexes, etc.) are preserved as-is
 # - Configure actual values in your .env file (copy from .env.example)
 # - Built-in agents/MCP servers/chains can be overridden by defining same name/ID
 
@@ -62,7 +63,7 @@ mcp_servers:
         - "--read-only"
         - "--disable-destructive"
         - "--kubeconfig"
-        - "${KUBECONFIG}"
+        - "{{.KUBECONFIG}}"
     
     instructions: |
       For Kubernetes operations:
@@ -102,9 +103,9 @@ mcp_servers:
         - "-y"
         - "argocd-mcp-server@latest"
         - "--server"
-        - "${ARGOCD_SERVER}"
+        - "{{.ARGOCD_SERVER}}"
         - "--auth-token"
-        - "${ARGOCD_TOKEN}"
+        - "{{.ARGOCD_TOKEN}}"
     
     instructions: |
       For ArgoCD operations:
@@ -126,9 +127,9 @@ mcp_servers:
   monitoring-server:
     transport:
       type: "http"
-      url: "${MONITORING_MCP_URL}"
-      bearer_token: "${MONITORING_TOKEN}"
-      verify_ssl: false
+      url: "{{.MONITORING_MCP_URL}}"
+      bearer_token: "{{.MONITORING_TOKEN}}"
+      verify_ssl: true  # Keep enabled for production; only disable (false) for local testing with self-signed certs
       timeout: 30
     
     instructions: |

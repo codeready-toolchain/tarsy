@@ -76,14 +76,15 @@ func (Message_Role) EnumDescriptor() ([]byte, []int) {
 // LLMConfig contains LLM provider configuration passed from Go to Python
 type LLMConfig struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
-	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`              // "google", "openai", "anthropic", "xai", "vertexai"
-	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                    // Model name (e.g., "gemini-2.0-flash-exp")
-	ApiKey              string                 `protobuf:"bytes,3,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`    // API key resolved from environment
-	BaseUrl             string                 `protobuf:"bytes,4,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"` // Optional custom endpoint/base URL
-	MaxToolResultTokens int32                  `protobuf:"varint,5,opt,name=max_tool_result_tokens,json=maxToolResultTokens,proto3" json:"max_tool_result_tokens,omitempty"`
-	NativeTools         map[string]bool        `protobuf:"bytes,6,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
-	Project             string                 `protobuf:"bytes,7,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
-	Location            string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
+	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`                                   // "google", "openai", "anthropic", "xai", "vertexai"
+	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                         // Model name (e.g., "gemini-2.0-flash-exp")
+	ApiKeyEnv           string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`              // Environment variable name for API key (e.g., "GOOGLE_API_KEY")
+	CredentialsEnv      string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"` // Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+	BaseUrl             string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                      // Optional custom endpoint/base URL
+	MaxToolResultTokens int32                  `protobuf:"varint,6,opt,name=max_tool_result_tokens,json=maxToolResultTokens,proto3" json:"max_tool_result_tokens,omitempty"`
+	NativeTools         map[string]bool        `protobuf:"bytes,7,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
+	Project             string                 `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
+	Location            string                 `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -132,9 +133,16 @@ func (x *LLMConfig) GetModel() string {
 	return ""
 }
 
-func (x *LLMConfig) GetApiKey() string {
+func (x *LLMConfig) GetApiKeyEnv() string {
 	if x != nil {
-		return x.ApiKey
+		return x.ApiKeyEnv
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetCredentialsEnv() string {
+	if x != nil {
+		return x.CredentialsEnv
 	}
 	return ""
 }
@@ -179,15 +187,16 @@ type ThinkingRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Messages  []*Message             `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
-	LlmConfig *LLMConfig             `protobuf:"bytes,3,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"` // LLM configuration from Go orchestrator
 	// Deprecated fields (kept for backward compatibility, remove in Phase 3)
 	//
 	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	Model string `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	Model string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
 	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	Temperature *float32 `protobuf:"fixed32,5,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
+	Temperature *float32 `protobuf:"fixed32,4,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
 	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	MaxTokens     *int32 `protobuf:"varint,6,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	MaxTokens *int32 `protobuf:"varint,5,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	// New configuration system (Phase 2+)
+	LlmConfig     *LLMConfig `protobuf:"bytes,7,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"` // LLM configuration from Go orchestrator
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -236,13 +245,6 @@ func (x *ThinkingRequest) GetMessages() []*Message {
 	return nil
 }
 
-func (x *ThinkingRequest) GetLlmConfig() *LLMConfig {
-	if x != nil {
-		return x.LlmConfig
-	}
-	return nil
-}
-
 // Deprecated: Marked as deprecated in proto/llm_service.proto.
 func (x *ThinkingRequest) GetModel() string {
 	if x != nil {
@@ -265,6 +267,13 @@ func (x *ThinkingRequest) GetMaxTokens() int32 {
 		return *x.MaxTokens
 	}
 	return 0
+}
+
+func (x *ThinkingRequest) GetLlmConfig() *LLMConfig {
+	if x != nil {
+		return x.LlmConfig
+	}
+	return nil
 }
 
 // Message represents a single conversation message
@@ -590,31 +599,32 @@ var File_proto_llm_service_proto protoreflect.FileDescriptor
 
 const file_proto_llm_service_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/llm_service.proto\x12\x06llm.v1\"\xe3\x02\n" +
+	"\x17proto/llm_service.proto\x12\x06llm.v1\"\x93\x03\n" +
 	"\tLLMConfig\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
-	"\x05model\x18\x02 \x01(\tR\x05model\x12\x17\n" +
-	"\aapi_key\x18\x03 \x01(\tR\x06apiKey\x12\x19\n" +
-	"\bbase_url\x18\x04 \x01(\tR\abaseUrl\x123\n" +
-	"\x16max_tool_result_tokens\x18\x05 \x01(\x05R\x13maxToolResultTokens\x12E\n" +
-	"\fnative_tools\x18\x06 \x03(\v2\".llm.v1.LLMConfig.NativeToolsEntryR\vnativeTools\x12\x18\n" +
-	"\aproject\x18\a \x01(\tR\aproject\x12\x1a\n" +
-	"\blocation\x18\b \x01(\tR\blocation\x1a>\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
+	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x12'\n" +
+	"\x0fcredentials_env\x18\x04 \x01(\tR\x0ecredentialsEnv\x12\x19\n" +
+	"\bbase_url\x18\x05 \x01(\tR\abaseUrl\x123\n" +
+	"\x16max_tool_result_tokens\x18\x06 \x01(\x05R\x13maxToolResultTokens\x12E\n" +
+	"\fnative_tools\x18\a \x03(\v2\".llm.v1.LLMConfig.NativeToolsEntryR\vnativeTools\x12\x18\n" +
+	"\aproject\x18\b \x01(\tR\aproject\x12\x1a\n" +
+	"\blocation\x18\t \x01(\tR\blocation\x1a>\n" +
 	"\x10NativeToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x9b\x02\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xa1\x02\n" +
 	"\x0fThinkingRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12+\n" +
-	"\bmessages\x18\x02 \x03(\v2\x0f.llm.v1.MessageR\bmessages\x120\n" +
+	"\bmessages\x18\x02 \x03(\v2\x0f.llm.v1.MessageR\bmessages\x12\x18\n" +
+	"\x05model\x18\x03 \x01(\tB\x02\x18\x01R\x05model\x12)\n" +
+	"\vtemperature\x18\x04 \x01(\x02B\x02\x18\x01H\x00R\vtemperature\x88\x01\x01\x12&\n" +
 	"\n" +
-	"llm_config\x18\x03 \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfig\x12\x18\n" +
-	"\x05model\x18\x04 \x01(\tB\x02\x18\x01R\x05model\x12)\n" +
-	"\vtemperature\x18\x05 \x01(\x02B\x02\x18\x01H\x00R\vtemperature\x88\x01\x01\x12&\n" +
+	"max_tokens\x18\x05 \x01(\x05B\x02\x18\x01H\x01R\tmaxTokens\x88\x01\x01\x120\n" +
 	"\n" +
-	"max_tokens\x18\x06 \x01(\x05B\x02\x18\x01H\x01R\tmaxTokens\x88\x01\x01B\x0e\n" +
+	"llm_config\x18\a \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfigB\x0e\n" +
 	"\f_temperatureB\r\n" +
-	"\v_max_tokens\"\x9f\x01\n" +
+	"\v_max_tokensJ\x04\b\x06\x10\a\"\x9f\x01\n" +
 	"\aMessage\x12(\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x14.llm.v1.Message.RoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\"P\n" +

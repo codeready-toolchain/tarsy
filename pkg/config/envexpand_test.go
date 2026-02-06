@@ -14,20 +14,26 @@ func TestExpandEnv(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "simple substitution with braces ${VAR}",
-			input: "api_key: ${API_KEY}",
+			name:  "simple substitution with {{.VAR}}",
+			input: "api_key: {{.API_KEY}}",
 			env:   map[string]string{"API_KEY": "secret123"},
 			want:  "api_key: secret123",
 		},
 		{
-			name:  "simple substitution without braces $VAR",
-			input: "api_key: $API_KEY",
-			env:   map[string]string{"API_KEY": "secret123"},
-			want:  "api_key: secret123",
+			name:  "literal ${VAR} is NOT expanded (no collision)",
+			input: "pattern: ${USER_ID}",
+			env:   map[string]string{"USER_ID": "123"},
+			want:  "pattern: ${USER_ID}",
+		},
+		{
+			name:  "literal $VAR is NOT expanded (no collision)",
+			input: "regex: ^secret.*$",
+			env:   map[string]string{},
+			want:  "regex: ^secret.*$",
 		},
 		{
 			name:  "multiple substitutions in one line",
-			input: "url: ${PROTOCOL}://${HOST}:${PORT}",
+			input: "url: {{.PROTOCOL}}://{{.HOST}}:{{.PORT}}",
 			env: map[string]string{
 				"PROTOCOL": "https",
 				"HOST":     "example.com",
@@ -37,13 +43,13 @@ func TestExpandEnv(t *testing.T) {
 		},
 		{
 			name:  "missing variable expands to empty",
-			input: "endpoint: ${MISSING_VAR}",
+			input: "endpoint: {{.MISSING_VAR}}",
 			env:   map[string]string{},
 			want:  "endpoint: ",
 		},
 		{
 			name:  "mixed present and missing variables",
-			input: "url: ${PROTOCOL}://${MISSING}:${PORT}",
+			input: "url: {{.PROTOCOL}}://{{.MISSING}}:{{.PORT}}",
 			env: map[string]string{
 				"PROTOCOL": "https",
 				"PORT":     "443",
@@ -58,7 +64,7 @@ func TestExpandEnv(t *testing.T) {
 		},
 		{
 			name:  "variables in YAML array",
-			input: "args:\n  - ${ARG1}\n  - ${ARG2}",
+			input: "args:\n  - {{.ARG1}}\n  - {{.ARG2}}",
 			env: map[string]string{
 				"ARG1": "value1",
 				"ARG2": "value2",
@@ -67,7 +73,7 @@ func TestExpandEnv(t *testing.T) {
 		},
 		{
 			name:  "variables in nested YAML structure",
-			input: "config:\n  host: ${HOST}\n  port: ${PORT}",
+			input: "config:\n  host: {{.HOST}}\n  port: {{.PORT}}",
 			env: map[string]string{
 				"HOST": "localhost",
 				"PORT": "5432",
@@ -75,20 +81,32 @@ func TestExpandEnv(t *testing.T) {
 			want: "config:\n  host: localhost\n  port: 5432",
 		},
 		{
-			name:  "special characters in value",
-			input: "password: ${PASSWORD}",
+			name:  "special characters in expanded value",
+			input: "password: {{.PASSWORD}}",
 			env:   map[string]string{"PASSWORD": "p@ssw0rd!#$%"},
 			want:  "password: p@ssw0rd!#$%",
 		},
 		{
+			name:  "literal dollar in password is preserved",
+			input: "password: p@ss$word",
+			env:   map[string]string{},
+			want:  "password: p@ss$word",
+		},
+		{
+			name:  "regex pattern with $ preserved",
+			input: `pattern: "^\\$[0-9]+$"`,
+			env:   map[string]string{},
+			want:  `pattern: "^\\$[0-9]+$"`,
+		},
+		{
 			name:  "environment variable with underscores",
-			input: "key: ${MY_LONG_VAR_NAME}",
+			input: "key: {{.MY_LONG_VAR_NAME}}",
 			env:   map[string]string{"MY_LONG_VAR_NAME": "value"},
 			want:  "key: value",
 		},
 		{
 			name:  "adjacent variables without separator",
-			input: "${VAR1}${VAR2}",
+			input: "{{.VAR1}}{{.VAR2}}",
 			env: map[string]string{
 				"VAR1": "hello",
 				"VAR2": "world",
@@ -97,19 +115,19 @@ func TestExpandEnv(t *testing.T) {
 		},
 		{
 			name:  "variable in quoted string",
-			input: `message: "Hello ${NAME}"`,
+			input: `message: "Hello {{.NAME}}"`,
 			env:   map[string]string{"NAME": "World"},
 			want:  `message: "Hello World"`,
 		},
 		{
 			name:  "empty string variable",
-			input: "value: ${EMPTY}",
+			input: "value: {{.EMPTY}}",
 			env:   map[string]string{"EMPTY": ""},
 			want:  "value: ",
 		},
 		{
 			name:  "numeric value in environment variable",
-			input: "port: ${PORT_NUMBER}",
+			input: "port: {{.PORT_NUMBER}}",
 			env:   map[string]string{"PORT_NUMBER": "8080"},
 			want:  "port: 8080",
 		},
@@ -117,10 +135,10 @@ func TestExpandEnv(t *testing.T) {
 			name: "complex YAML with multiple variables",
 			input: `
 database:
-  host: ${DB_HOST}
-  port: ${DB_PORT}
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
+  host: {{.DB_HOST}}
+  port: {{.DB_PORT}}
+  user: {{.DB_USER}}
+  password: {{.DB_PASSWORD}}
 `,
 			env: map[string]string{
 				"DB_HOST":     "localhost",
@@ -135,6 +153,12 @@ database:
   user: tarsy
   password: secret
 `,
+		},
+		{
+			name:  "masking pattern with ${} syntax preserved",
+			input: `custom_patterns:\n  - pattern: "user_\${USER_ID}_.*"`,
+			env:   map[string]string{"USER_ID": "123"},
+			want:  `custom_patterns:\n  - pattern: "user_\${USER_ID}_.*"`,
 		},
 	}
 
@@ -173,21 +197,22 @@ func TestExpandEnvWithEmptyInput(t *testing.T) {
 	assert.Equal(t, "", string(result), "Empty input should return empty output")
 }
 
-func TestExpandEnvDoesNotInterpretEscapes(t *testing.T) {
-	// os.ExpandEnv does not interpret escape sequences like \n or \t
-	input := "path: ${PATH}\nother: value"
-	t.Setenv("PATH", "/usr/bin")
+func TestExpandEnvPreservesLiteralBackslashN(t *testing.T) {
+	// Template expansion preserves literal \n sequences (backslash-n, not newline)
+	// Using raw string to ensure we're testing actual literal \n preservation
+	input := `path: {{.TEST_PATH}}\nother: value`
+	t.Setenv("TEST_PATH", "/usr/bin")
 
 	result := ExpandEnv([]byte(input))
-	// The \n in the input remains as literal characters (not newline)
-	assert.Contains(t, string(result), "/usr/bin")
+	// The literal \n should be preserved in the output (not converted to newline)
+	assert.Contains(t, string(result), `/usr/bin\nother: value`)
 }
 
 func TestExpandEnvThreadSafety(t *testing.T) {
-	// os.ExpandEnv is thread-safe (reads from environment)
-	// This test ensures our wrapper is also thread-safe
+	// Template expansion is thread-safe (each call creates new template + reads env)
+	// This test ensures our implementation is also thread-safe
 
-	input := []byte("key: ${TEST_VAR}")
+	input := []byte("key: {{.TEST_VAR}}")
 	t.Setenv("TEST_VAR", "value")
 
 	// Run multiple goroutines concurrently

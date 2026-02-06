@@ -7,8 +7,11 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 
 	// First, convert built-in agents to AgentConfig format
 	for name, builtin := range builtinAgents {
+		// Defensive copy of MCPServers slice to prevent shared state
+		mcpCopy := make([]string, len(builtin.MCPServers))
+		copy(mcpCopy, builtin.MCPServers)
 		result[name] = &AgentConfig{
-			MCPServers:        builtin.MCPServers,
+			MCPServers:        mcpCopy,
 			IterationStrategy: builtin.IterationStrategy,
 			// CustomInstructions empty for built-in agents (no override)
 		}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"sync"
 	"testing"
 
@@ -18,7 +19,6 @@ func TestGetBuiltinConfig(t *testing.T) {
 }
 
 func TestBuiltinConfigThreadSafety(t *testing.T) {
-	// Reset for test (use separate test to avoid affecting other tests)
 	const goroutines = 100
 
 	var wg sync.WaitGroup
@@ -293,5 +293,349 @@ func TestBuiltinConfigCompleteness(t *testing.T) {
 		assert.NotEmpty(t, cfg.PatternGroups, "Pattern groups should be populated")
 		assert.NotEmpty(t, cfg.DefaultRunbook, "Default runbook should be populated")
 		assert.NotEmpty(t, cfg.DefaultAlertType, "Default alert type should be populated")
+	})
+}
+
+func TestMaskingPatternsRegexValidation(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	tests := []struct {
+		name        string
+		patternName string
+		testInput   string
+		shouldMatch bool
+		description string
+	}{
+		// Certificate pattern tests (multi-line PEM blocks)
+		{
+			name:        "certificate - RSA private key (multi-line)",
+			patternName: "certificate",
+			testInput: `-----BEGIN RSA PRIVATE KEY-----
+FAKE-RSA-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+FAKE-RSA-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+-----END RSA PRIVATE KEY-----`,
+			shouldMatch: true,
+			description: "Multi-line PEM certificate should match",
+		},
+		{
+			name:        "certificate - certificate (multi-line)",
+			patternName: "certificate",
+			testInput: `-----BEGIN CERTIFICATE-----
+FAKE-CERTIFICATE-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXX
+FAKE-CERTIFICATE-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXX
+FAKE-CERTIFICATE-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXX
+-----END CERTIFICATE-----`,
+			shouldMatch: true,
+			description: "Multi-line certificate should match",
+		},
+		{
+			name:        "certificate - EC private key",
+			patternName: "certificate",
+			testInput: `-----BEGIN EC PRIVATE KEY-----
+FAKE-EC-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+FAKE-EC-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+FAKE-EC-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+-----END EC PRIVATE KEY-----`,
+			shouldMatch: true,
+			description: "Multi-line EC private key should match",
+		},
+		{
+			name:        "certificate - no match for plain text",
+			patternName: "certificate",
+			testInput:   "This is just plain text without any certificate",
+			shouldMatch: false,
+			description: "Plain text should not match",
+		},
+
+		// API key pattern tests
+		{
+			name:        "api_key - standard format",
+			patternName: "api_key",
+			testInput:   `"api_key": "FAKE-API-KEY-NOT-REAL-XXXXXXXXXXXX"`,
+			shouldMatch: true,
+			description: "Standard API key format should match",
+		},
+		{
+			name:        "api_key - alternative format",
+			patternName: "api_key",
+			testInput:   `apikey=FAKE-SK-KEY-NOT-REAL-XXXXX`,
+			shouldMatch: true,
+			description: "Alternative API key format should match",
+		},
+		{
+			name:        "api_key - short key should not match",
+			patternName: "api_key",
+			testInput:   `api_key: "short"`,
+			shouldMatch: false,
+			description: "Short API key should not match (less than 20 chars)",
+		},
+
+		// Password pattern tests
+		{
+			name:        "password - standard format",
+			patternName: "password",
+			testInput:   `password: "FAKE-PASSWORD-NOT-REAL"`,
+			shouldMatch: true,
+			description: "Standard password format should match",
+		},
+		{
+			name:        "password - short password should not match",
+			patternName: "password",
+			testInput:   `password: "short"`,
+			shouldMatch: false,
+			description: "Short password should not match (less than 6 chars)",
+		},
+
+		// Token pattern tests
+		{
+			name:        "token - bearer token",
+			patternName: "token",
+			testInput:   `bearer: FAKE-JWT-TOKEN-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+			shouldMatch: true,
+			description: "Bearer token should match",
+		},
+		{
+			name:        "token - jwt token",
+			patternName: "token",
+			testInput:   `jwt: "FAKE-JWT-TOKEN-NOT-REAL-XXXXXXXXXXXXX"`,
+			shouldMatch: true,
+			description: "JWT token should match",
+		},
+		{
+			name:        "token - token with equals",
+			patternName: "token",
+			testInput:   `token=FAKE-TOKEN-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+			shouldMatch: true,
+			description: "Token with equals should match",
+		},
+
+		// Email pattern tests
+		{
+			name:        "email - standard email",
+			patternName: "email",
+			testInput:   "user@example.com",
+			shouldMatch: true,
+			description: "Standard email should match",
+		},
+		{
+			name:        "email - email with subdomain",
+			patternName: "email",
+			testInput:   "admin@mail.company.co.uk",
+			shouldMatch: true,
+			description: "Email with subdomain should match",
+		},
+		{
+			name:        "email - email with plus",
+			patternName: "email",
+			testInput:   "user+tag@example.com",
+			shouldMatch: true,
+			description: "Email with plus should match",
+		},
+		{
+			name:        "email - invalid email",
+			patternName: "email",
+			testInput:   "not-an-email",
+			shouldMatch: false,
+			description: "Invalid email should not match",
+		},
+
+		// SSH key pattern tests
+		{
+			name:        "ssh_key - RSA public key",
+			patternName: "ssh_key",
+			testInput:   `ssh-rsa FAKE-SSH-RSA-KEY-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXX user@host`,
+			shouldMatch: true,
+			description: "SSH RSA public key should match",
+		},
+		{
+			name:        "ssh_key - ed25519 key",
+			patternName: "ssh_key",
+			testInput:   `ssh-ed25519 FAKE-SSH-ED25519-KEY-NOT-REAL-XXXXXXXXXXXXXX user@host`,
+			shouldMatch: true,
+			description: "SSH ed25519 key should match",
+		},
+
+		// Certificate authority data pattern tests
+		{
+			name:        "certificate_authority_data - k8s format",
+			patternName: "certificate_authority_data",
+			testInput:   `certificate-authority-data: RkFLRS1DRVJUSUFJQ0FURS1EQVRBLU5PVC1SRUFMLVRYWFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRYUFRY`,
+			shouldMatch: true,
+			description: "Kubernetes CA data should match",
+		},
+
+		// Base64 pattern tests
+		{
+			name:        "base64_secret - long base64",
+			patternName: "base64_secret",
+			testInput:   "RkFLRS1CQVNFNTY0LUZBVEFMT05HLU5PVC1SRUFMLURYYFJJU1hYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhY",
+			shouldMatch: true,
+			description: "Long base64 value should match",
+		},
+		{
+			name:        "base64_short - short base64",
+			patternName: "base64_short",
+			testInput:   "key: dGVzdA==",
+			shouldMatch: true,
+			description: "Short base64 value should match",
+		},
+
+		// AWS keys pattern tests
+		{
+			name:        "aws_access_key - AKIA format",
+			patternName: "aws_access_key",
+			testInput:   `aws_access_key_id: "AKIAFAKENOTREALSECRET"`,
+			shouldMatch: true,
+			description: "AWS access key should match",
+		},
+		{
+			name:        "aws_secret_key - 40 char format",
+			patternName: "aws_secret_key",
+			testInput:   `aws_secret_access_key: "FAKESECRETNOTREAL1234567890XXXXXXXXXXXABC"`,
+			shouldMatch: true,
+			description: "AWS secret key should match",
+		},
+
+		// GitHub token pattern tests
+		{
+			name:        "github_token - ghp format",
+			patternName: "github_token",
+			testInput:   `github_token: ghp_FAKE_NOT_REAL_GITHUB_TOKEN_XXXXXXXXXXXX`,
+			shouldMatch: true,
+			description: "GitHub personal access token should match",
+		},
+		{
+			name:        "github_token - ghs format",
+			patternName: "github_token",
+			testInput:   `GITHUB_TOKEN=ghs_FAKE_NOT_REAL_GITHUB_SERVER_TOKEN_XXXX`,
+			shouldMatch: true,
+			description: "GitHub server token should match",
+		},
+
+		// Slack token pattern tests
+		{
+			name:        "slack_token - xoxb format",
+			patternName: "slack_token",
+			testInput:   `SLACK_TOKEN=xoxb-FAKE-NOT-REAL-SLACK-BOT-TOKEN-XXXXXXXXXX`,
+			shouldMatch: true,
+			description: "Slack bot token should match",
+		},
+		{
+			name:        "slack_token - xoxp format",
+			patternName: "slack_token",
+			testInput:   `slack_token: xoxp-FAKE-NOT-REAL-SLACK-USER-TOKEN-XXXXXXX`,
+			shouldMatch: true,
+			description: "Slack user token should match",
+		},
+
+		// Private key and secret key patterns
+		{
+			name:        "private_key - standard format",
+			patternName: "private_key",
+			testInput:   `private_key: "sk_test_FAKE_NOT_REAL_XXXXX"`,
+			shouldMatch: true,
+			description: "Private key should match",
+		},
+		{
+			name:        "secret_key - standard format",
+			patternName: "secret_key",
+			testInput:   `secret_key: "sec_FAKE_NOT_REAL_XXXXXXX"`,
+			shouldMatch: true,
+			description: "Secret key should match",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pattern, exists := cfg.MaskingPatterns[tt.patternName]
+			require.True(t, exists, "Pattern %s should exist", tt.patternName)
+
+			// Compile and test the regex
+			re, err := regexp.Compile(pattern.Pattern)
+			require.NoError(t, err, "Pattern %s should compile: %s", tt.patternName, pattern.Pattern)
+
+			matched := re.MatchString(tt.testInput)
+			if tt.shouldMatch {
+				assert.True(t, matched, "%s: expected pattern to match input\nPattern: %s\nInput: %s",
+					tt.description, pattern.Pattern, tt.testInput)
+			} else {
+				assert.False(t, matched, "%s: expected pattern NOT to match input\nPattern: %s\nInput: %s",
+					tt.description, pattern.Pattern, tt.testInput)
+			}
+		})
+	}
+}
+
+func TestAllMaskingPatternsCompile(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	// Ensure all patterns compile as valid regex
+	for patternName, pattern := range cfg.MaskingPatterns {
+		t.Run(patternName, func(t *testing.T) {
+			_, err := regexp.Compile(pattern.Pattern)
+			assert.NoError(t, err, "Pattern %s should compile: %s", patternName, pattern.Pattern)
+		})
+	}
+}
+
+func TestPatternGroupMembersResolve(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	// Test that all pattern group members resolve to either MaskingPatterns or CodeMaskers
+	// This is critical for runtime masking to work correctly
+	for groupName, patternNames := range cfg.PatternGroups {
+		t.Run(groupName, func(t *testing.T) {
+			for _, patternName := range patternNames {
+				_, existsInPatterns := cfg.MaskingPatterns[patternName]
+				_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
+
+				assert.True(t, existsInPatterns || existsInCodeMaskers,
+					"Pattern '%s' in group '%s' must exist in either MaskingPatterns or CodeMaskers. "+
+						"Found in MaskingPatterns: %v, Found in CodeMaskers: %v",
+					patternName, groupName, existsInPatterns, existsInCodeMaskers)
+			}
+		})
+	}
+}
+
+func TestKubernetesPatternGroupSpecifically(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	// Explicit test for kubernetes group to ensure kubernetes_secret (code-based masker) is properly resolved
+	t.Run("kubernetes group exists", func(t *testing.T) {
+		kubernetesGroup, exists := cfg.PatternGroups["kubernetes"]
+		require.True(t, exists, "kubernetes pattern group should exist")
+		assert.NotEmpty(t, kubernetesGroup, "kubernetes group should have patterns")
+	})
+
+	t.Run("kubernetes_secret in CodeMaskers", func(t *testing.T) {
+		_, exists := cfg.CodeMaskers["kubernetes_secret"]
+		require.True(t, exists, "kubernetes_secret should exist in CodeMaskers")
+	})
+
+	t.Run("kubernetes group references kubernetes_secret", func(t *testing.T) {
+		kubernetesGroup := cfg.PatternGroups["kubernetes"]
+		assert.Contains(t, kubernetesGroup, "kubernetes_secret",
+			"kubernetes group should reference kubernetes_secret from CodeMaskers")
+	})
+
+	t.Run("all kubernetes group members resolve", func(t *testing.T) {
+		kubernetesGroup := cfg.PatternGroups["kubernetes"]
+		for _, patternName := range kubernetesGroup {
+			_, existsInPatterns := cfg.MaskingPatterns[patternName]
+			_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
+
+			assert.True(t, existsInPatterns || existsInCodeMaskers,
+				"Pattern '%s' in kubernetes group must exist in either MaskingPatterns or CodeMaskers",
+				patternName)
+
+			// Log where each pattern is found for debugging
+			if existsInPatterns {
+				t.Logf("✓ Pattern '%s' found in MaskingPatterns", patternName)
+			}
+			if existsInCodeMaskers {
+				t.Logf("✓ Pattern '%s' found in CodeMaskers", patternName)
+			}
+		}
 	})
 }

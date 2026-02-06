@@ -9,12 +9,38 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewSessionService(t *testing.T) {
+	client := testdb.NewTestClient(t)
+
+	t.Run("panics when chainRegistry is nil", func(t *testing.T) {
+		mcpRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
+		assert.Panics(t, func() {
+			NewSessionService(client.Client, nil, mcpRegistry)
+		})
+	})
+
+	t.Run("panics when mcpServerRegistry is nil", func(t *testing.T) {
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{})
+		assert.Panics(t, func() {
+			NewSessionService(client.Client, chainRegistry, nil)
+		})
+	})
+
+	t.Run("succeeds with valid registries", func(t *testing.T) {
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{})
+		mcpRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
+		service := NewSessionService(client.Client, chainRegistry, mcpRegistry)
+		assert.NotNil(t, service)
+	})
+}
 
 func TestSessionService_CreateSession(t *testing.T) {
 	client := testdb.NewTestClient(t)

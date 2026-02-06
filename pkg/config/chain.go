@@ -64,8 +64,13 @@ type ChainRegistry struct {
 
 // NewChainRegistry creates a new chain registry
 func NewChainRegistry(chains map[string]*ChainConfig) *ChainRegistry {
+	// Defensive copy to prevent external mutation
+	copied := make(map[string]*ChainConfig, len(chains))
+	for k, v := range chains {
+		copied[k] = v
+	}
 	return &ChainRegistry{
-		chains: chains,
+		chains: copied,
 	}
 }
 
@@ -116,4 +121,11 @@ func (r *ChainRegistry) Has(chainID string) bool {
 
 	_, exists := r.chains[chainID]
 	return exists
+}
+
+// Len returns the number of chains in the registry (thread-safe)
+func (r *ChainRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.chains)
 }

@@ -172,9 +172,15 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 **Data Masking**
 - [ ] Masking service (Go)
-- [ ] Kubernetes secret masker
-- [ ] Regex-based maskers
+- [ ] Regex-based maskers (DONE - 15 patterns in builtin.go)
+- [ ] Kubernetes secret masker (code-based - TODO)
+  - [ ] Implement KubernetesSecretMasker in Go
+  - [ ] Parse YAML/JSON structures
+  - [ ] Distinguish between K8s Secrets (mask) vs ConfigMaps (don't mask)
+  - [ ] Integrate with masking pattern groups
+  - [ ] Add comprehensive tests
 - [ ] Alert payload sanitization
+- [ ] MCP tool result masking integration
 
 ---
 

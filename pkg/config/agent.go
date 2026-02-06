@@ -30,8 +30,13 @@ type AgentRegistry struct {
 
 // NewAgentRegistry creates a new agent registry
 func NewAgentRegistry(agents map[string]*AgentConfig) *AgentRegistry {
+	// Defensive copy to prevent external mutation
+	copied := make(map[string]*AgentConfig, len(agents))
+	for k, v := range agents {
+		copied[k] = v
+	}
 	return &AgentRegistry{
-		agents: agents,
+		agents: copied,
 	}
 }
 
@@ -67,4 +72,11 @@ func (r *AgentRegistry) Has(name string) bool {
 
 	_, exists := r.agents[name]
 	return exists
+}
+
+// Len returns the number of agents in the registry (thread-safe)
+func (r *AgentRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.agents)
 }

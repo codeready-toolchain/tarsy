@@ -62,11 +62,7 @@ func TestInitializeInvalidYAML(t *testing.T) {
 	configDir := t.TempDir()
 
 	// Write invalid YAML
-	invalidYAML := `
-invalid: yaml: content:
-  - this is not valid
-    - indentation wrong
-`
+	invalidYAML := `{{{`
 	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(invalidYAML), 0644)
 	require.NoError(t, err)
 
@@ -193,10 +189,10 @@ mcp_servers:
   test-server:
     transport:
       type: "stdio"
-      command: "${TEST_COMMAND}"
+      command: "{{.TEST_COMMAND}}"
       args:
-        - "${TEST_ARG1}"
-        - "${TEST_ARG2}"
+        - "{{.TEST_ARG1}}"
+        - "{{.TEST_ARG2}}"
 `
 	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(config), 0644)
 	require.NoError(t, err)

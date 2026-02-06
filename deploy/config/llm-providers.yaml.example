@@ -5,7 +5,7 @@
 #
 # IMPORTANT: API keys should be configured via environment variables
 # - Define actual API key values in your .env file
-# - Use ${VAR_NAME} syntax to reference environment variables
+# - Use {{.VAR_NAME}} syntax to reference environment variables (Go template syntax)
 # - Built-in providers can be overridden by defining same name
 
 # =============================================================================
@@ -16,7 +16,7 @@ llm_providers:
   # Fast model for quick responses
   gemini-2.5-flash:
     type: google
-    model: gemini-2.0-flash-exp
+    model: gemini-2.5-flash
     api_key_env: GOOGLE_API_KEY
     max_tool_result_tokens: 950000  # Conservative for 1M context
     native_tools:
@@ -27,7 +27,7 @@ llm_providers:
   # Pro model for complex reasoning
   gemini-2.5-pro:
     type: google
-    model: gemini-2.0-flash-thinking-exp
+    model: gemini-2.5-pro
     api_key_env: GOOGLE_API_KEY
     max_tool_result_tokens: 950000
     native_tools:
@@ -144,7 +144,7 @@ llm_providers:
   # Gemini on Vertex AI
   vertexai-gemini-pro:
     type: vertexai
-    model: gemini-2.0-pro
+    model: gemini-2.5-pro
     project_env: GCP_PROJECT
     location_env: GCP_LOCATION
     max_tool_result_tokens: 950000

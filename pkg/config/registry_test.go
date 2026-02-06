@@ -106,10 +106,11 @@ func TestChainRegistry(t *testing.T) {
 	})
 
 	t.Run("GetByAlertType", func(t *testing.T) {
-		_, err := registry.GetByAlertType("alert1")
+		chain, err := registry.GetByAlertType("alert1")
 		require.NoError(t, err)
+		assert.Contains(t, chain.AlertTypes, "alert1")
 
-		chain, err := registry.GetByAlertType("alert3")
+		chain, err = registry.GetByAlertType("alert3")
 		require.NoError(t, err)
 		assert.Contains(t, chain.AlertTypes, "alert3")
 	})

@@ -77,7 +77,7 @@ proto-generate: ## Generate Go and Python code from proto files
 		--go-grpc_opt=paths=source_relative \
 		proto/llm_service.proto
 	@echo -e "$(BLUE)  -> Generating Python code...$(NC)"
-	@cd llm-service && python -m grpc_tools.protoc \
+	@cd llm-service && uv run python -m grpc_tools.protoc \
 		-I../proto \
 		--python_out=proto \
 		--grpc_python_out=proto \

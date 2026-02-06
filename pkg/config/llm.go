@@ -38,8 +38,13 @@ type LLMProviderRegistry struct {
 
 // NewLLMProviderRegistry creates a new LLM provider registry
 func NewLLMProviderRegistry(providers map[string]*LLMProviderConfig) *LLMProviderRegistry {
+	// Defensive copy to prevent external mutation
+	copied := make(map[string]*LLMProviderConfig, len(providers))
+	for k, v := range providers {
+		copied[k] = v
+	}
 	return &LLMProviderRegistry{
-		providers: providers,
+		providers: copied,
 	}
 }
 
@@ -75,4 +80,11 @@ func (r *LLMProviderRegistry) Has(name string) bool {
 
 	_, exists := r.providers[name]
 	return exists
+}
+
+// Len returns the number of LLM providers in the registry (thread-safe)
+func (r *LLMProviderRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.providers)
 }

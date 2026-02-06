@@ -191,6 +191,35 @@ func TestValidateChains(t *testing.T) {
 			wantErr:   true,
 			errMsg:    "LLM provider 'invalid-provider' not found",
 		},
+		{
+			name: "multiple chains with duplicate alert type",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"critical", "warning"},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+				"chain2": {
+					AlertTypes: []string{"info", "critical"},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "alert type 'critical' is already mapped to chain",
+		},
 	}
 
 	for _, tt := range tests {
@@ -215,8 +244,6 @@ func TestValidateChains(t *testing.T) {
 }
 
 func TestValidateMCPServers(t *testing.T) {
-	builtin := GetBuiltinConfig()
-
 	tests := []struct {
 		name    string
 		servers map[string]*MCPServerConfig
@@ -325,9 +352,6 @@ func TestValidateMCPServers(t *testing.T) {
 				MCPServerRegistry: NewMCPServerRegistry(tt.servers),
 			}
 
-			// Need to ensure builtin config is available for pattern validation
-			_ = builtin
-
 			validator := NewValidator(cfg)
 			err := validator.validateMCPServers()
 
@@ -363,7 +387,7 @@ func TestValidateLLMProviders(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "provider with missing API key",
+			name: "unreferenced provider with missing API key does not error",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
 					Type:                LLMProviderTypeGoogle,
@@ -373,8 +397,7 @@ func TestValidateLLMProviders(t *testing.T) {
 				},
 			},
 			env:     map[string]string{},
-			wantErr: true,
-			errMsg:  "environment variable MISSING_API_KEY is not set",
+			wantErr: false, // No error because provider is not referenced by any chain
 		},
 		{
 			name: "provider with invalid type",
@@ -415,6 +438,55 @@ func TestValidateLLMProviders(t *testing.T) {
 			wantErr: true,
 			errMsg:  "must be at least 1000",
 		},
+		{
+			name: "VertexAI provider with both environment variables set",
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "TEST_GCP_PROJECT",
+					LocationEnv:         "TEST_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_PROJECT":  "my-project",
+				"TEST_GCP_LOCATION": "us-central1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "VertexAI provider with missing ProjectEnv",
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "MISSING_GCP_PROJECT",
+					LocationEnv:         "TEST_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_LOCATION": "us-central1",
+			},
+			wantErr: false, // No error because provider is not referenced
+		},
+		{
+			name: "VertexAI provider with missing LocationEnv",
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "TEST_GCP_PROJECT",
+					LocationEnv:         "MISSING_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_PROJECT": "my-project",
+			},
+			wantErr: false, // No error because provider is not referenced
+		},
 	}
 
 	for _, tt := range tests {
@@ -426,6 +498,352 @@ func TestValidateLLMProviders(t *testing.T) {
 
 			cfg := &Config{
 				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateLLMProviders()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
+	tests := []struct {
+		name      string
+		chains    map[string]*ChainConfig
+		agents    map[string]*AgentConfig
+		providers map[string]*LLMProviderConfig
+		env       map[string]string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "unreferenced providers do not require env vars",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"used-provider": {
+					Type:                LLMProviderTypeOpenAI,
+					Model:               "gpt-4",
+					APIKeyEnv:           "USED_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+				"unused-provider": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "gemini-pro",
+					APIKeyEnv:           "UNUSED_API_KEY", // This env var is NOT set, but should not cause error
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{}, // No env vars set
+			wantErr: false,               // Should NOT error because no provider is referenced
+		},
+		{
+			name: "chain-level referenced provider requires env var",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "used-provider",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"used-provider": {
+					Type:                LLMProviderTypeOpenAI,
+					Model:               "gpt-4",
+					APIKeyEnv:           "USED_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+				"unused-provider": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "gemini-pro",
+					APIKeyEnv:           "UNUSED_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{}, // USED_API_KEY is not set
+			wantErr: true,
+			errMsg:  "environment variable USED_API_KEY is not set",
+		},
+		{
+			name: "chat-level referenced provider requires env var",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+					Chat: &ChatConfig{
+						Enabled:     true,
+						Agent:       "test-agent",
+						LLMProvider: "chat-provider",
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"chat-provider": {
+					Type:                LLMProviderTypeAnthropic,
+					Model:               "claude-3",
+					APIKeyEnv:           "CHAT_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{}, // CHAT_API_KEY is not set
+			wantErr: true,
+			errMsg:  "environment variable CHAT_API_KEY is not set",
+		},
+		{
+			name: "agent-level referenced provider requires env var",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name: "stage1",
+							Agents: []StageAgentConfig{
+								{
+									Name:        "test-agent",
+									LLMProvider: "agent-provider",
+								},
+							},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"agent-provider": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "gemini-pro",
+					APIKeyEnv:           "AGENT_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{}, // AGENT_API_KEY is not set
+			wantErr: true,
+			errMsg:  "environment variable AGENT_API_KEY is not set",
+		},
+		{
+			name: "synthesis-level referenced provider requires env var",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+							Synthesis: &SynthesisConfig{
+								Agent:       "test-agent",
+								LLMProvider: "synthesis-provider",
+							},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"synthesis-provider": {
+					Type:                LLMProviderTypeXAI,
+					Model:               "grok-1",
+					APIKeyEnv:           "SYNTHESIS_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{}, // SYNTHESIS_API_KEY is not set
+			wantErr: true,
+			errMsg:  "environment variable SYNTHESIS_API_KEY is not set",
+		},
+		{
+			name: "only one referenced provider needs env var, others don't",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "used-provider",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"used-provider": {
+					Type:                LLMProviderTypeOpenAI,
+					Model:               "gpt-4",
+					APIKeyEnv:           "USED_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+				"unused-provider-1": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "gemini-pro",
+					APIKeyEnv:           "UNUSED_API_KEY_1",
+					MaxToolResultTokens: 100000,
+				},
+				"unused-provider-2": {
+					Type:                LLMProviderTypeAnthropic,
+					Model:               "claude-3",
+					APIKeyEnv:           "UNUSED_API_KEY_2",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"USED_API_KEY": "valid-key",
+				// UNUSED_API_KEY_1 and UNUSED_API_KEY_2 are not set, but should not cause error
+			},
+			wantErr: false,
+		},
+		{
+			name: "referenced VertexAI provider with missing ProjectEnv",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "vertexai-provider",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertexai-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "MISSING_GCP_PROJECT",
+					LocationEnv:         "TEST_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_LOCATION": "us-central1",
+				// MISSING_GCP_PROJECT is not set
+			},
+			wantErr: true,
+			errMsg:  "environment variable MISSING_GCP_PROJECT is not set",
+		},
+		{
+			name: "referenced VertexAI provider with missing LocationEnv",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "vertexai-provider",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertexai-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "TEST_GCP_PROJECT",
+					LocationEnv:         "MISSING_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_PROJECT": "my-project",
+				// MISSING_GCP_LOCATION is not set
+			},
+			wantErr: true,
+			errMsg:  "environment variable MISSING_GCP_LOCATION is not set",
+		},
+		{
+			name: "referenced VertexAI provider with all env vars set",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "vertexai-provider",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertexai-provider": {
+					Type:                LLMProviderTypeVertexAI,
+					Model:               "gemini-pro",
+					ProjectEnv:          "TEST_GCP_PROJECT",
+					LocationEnv:         "TEST_GCP_LOCATION",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env: map[string]string{
+				"TEST_GCP_PROJECT":  "my-project",
+				"TEST_GCP_LOCATION": "us-central1",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			cfg := &Config{
+				ChainRegistry:       NewChainRegistry(tt.chains),
+				AgentRegistry:       NewAgentRegistry(tt.agents),
+				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
+				MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{"test": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}}}),
 			}
 
 			validator := NewValidator(cfg)

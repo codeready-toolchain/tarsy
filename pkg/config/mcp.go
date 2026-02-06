@@ -28,8 +28,13 @@ type MCPServerRegistry struct {
 
 // NewMCPServerRegistry creates a new MCP server registry
 func NewMCPServerRegistry(servers map[string]*MCPServerConfig) *MCPServerRegistry {
+	// Defensive copy to prevent external mutation
+	copied := make(map[string]*MCPServerConfig, len(servers))
+	for k, v := range servers {
+		copied[k] = v
+	}
 	return &MCPServerRegistry{
-		servers: servers,
+		servers: copied,
 	}
 }
 
@@ -65,4 +70,11 @@ func (r *MCPServerRegistry) Has(serverID string) bool {
 
 	_, exists := r.servers[serverID]
 	return exists
+}
+
+// Len returns the number of MCP servers in the registry (thread-safe)
+func (r *MCPServerRegistry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.servers)
 }

@@ -29,10 +29,10 @@ type Stats struct {
 // Stats returns configuration statistics for logging/monitoring
 func (c *Config) Stats() Stats {
 	return Stats{
-		Agents:       len(c.AgentRegistry.GetAll()),
-		Chains:       len(c.ChainRegistry.GetAll()),
-		MCPServers:   len(c.MCPServerRegistry.GetAll()),
-		LLMProviders: len(c.LLMProviderRegistry.GetAll()),
+		Agents:       c.AgentRegistry.Len(),
+		Chains:       c.ChainRegistry.Len(),
+		MCPServers:   c.MCPServerRegistry.Len(),
+		LLMProviders: c.LLMProviderRegistry.Len(),
 	}
 }
 

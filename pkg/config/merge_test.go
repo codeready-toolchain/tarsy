@@ -242,4 +242,25 @@ func TestMergeEmptyMaps(t *testing.T) {
 		result := mergeAgents(map[string]BuiltinAgentConfig{}, map[string]AgentConfig{})
 		assert.Len(t, result, 0)
 	})
+
+	t.Run("nil user MCP servers", func(t *testing.T) {
+		result := mergeMCPServers(nil, map[string]MCPServerConfig{
+			"server1": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "cmd"}},
+		})
+		assert.Len(t, result, 1)
+	})
+
+	t.Run("nil user chains", func(t *testing.T) {
+		result := mergeChains(nil, map[string]ChainConfig{
+			"chain1": {AlertTypes: []string{"alert1"}},
+		})
+		assert.Len(t, result, 1)
+	})
+
+	t.Run("nil user LLM providers", func(t *testing.T) {
+		result := mergeLLMProviders(nil, map[string]LLMProviderConfig{
+			"provider1": {Type: LLMProviderTypeGoogle, Model: "model1", MaxToolResultTokens: 100000},
+		})
+		assert.Len(t, result, 1)
+	})
 }

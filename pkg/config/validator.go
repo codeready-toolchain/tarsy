@@ -17,7 +17,7 @@ func NewValidator(cfg *Config) *Validator {
 
 // ValidateAll performs comprehensive validation (fail-fast - stops at first error)
 func (v *Validator) ValidateAll() error {
-	// Validate in order: agents → chains → MCP servers → LLM providers
+	// Validate in order: agents → MCP servers → LLM providers → chains
 	// This ensures dependencies are validated before dependents
 
 	if err := v.validateAgents(); err != nil {
@@ -67,10 +67,21 @@ func (v *Validator) validateAgents() error {
 }
 
 func (v *Validator) validateChains() error {
+	// Build map to ensure each alert type maps to only one chain
+	alertTypeToChain := make(map[string]string)
+
 	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
 		// Validate alert_types is not empty
 		if len(chain.AlertTypes) == 0 {
 			return NewValidationError("chain", chainID, "alert_types", fmt.Errorf("at least one alert type required"))
+		}
+
+		// Validate each alert type is unique across all chains
+		for _, alertType := range chain.AlertTypes {
+			if existingChainID, exists := alertTypeToChain[alertType]; exists {
+				return NewValidationError("chain", chainID, "alert_types", fmt.Errorf("alert type '%s' is already mapped to chain '%s' (each alert type must map to exactly one chain)", alertType, existingChainID))
+			}
+			alertTypeToChain[alertType] = chainID
 		}
 
 		// Validate stages
@@ -273,6 +284,9 @@ func (v *Validator) validateMCPServers() error {
 }
 
 func (v *Validator) validateLLMProviders() error {
+	// Collect all referenced LLM providers from chains
+	referencedProviders := v.collectReferencedLLMProviders()
+
 	for name, provider := range v.cfg.LLMProviderRegistry.GetAll() {
 		// Validate provider type
 		if !provider.Type.IsValid() {
@@ -284,15 +298,17 @@ func (v *Validator) validateLLMProviders() error {
 			return NewValidationError("llm_provider", name, "model", fmt.Errorf("model required"))
 		}
 
-		// Validate API key environment variable is set (if specified)
-		if provider.APIKeyEnv != "" {
-			if value := os.Getenv(provider.APIKeyEnv); value == "" {
-				return NewValidationError("llm_provider", name, "api_key_env", fmt.Errorf("environment variable %s is not set", provider.APIKeyEnv))
+		// Only validate API key environment variable for providers that are actually referenced
+		if referencedProviders[name] {
+			if provider.APIKeyEnv != "" {
+				if value := os.Getenv(provider.APIKeyEnv); value == "" {
+					return NewValidationError("llm_provider", name, "api_key_env", fmt.Errorf("environment variable %s is not set", provider.APIKeyEnv))
+				}
 			}
 		}
 
-		// Validate VertexAI-specific fields
-		if provider.Type == LLMProviderTypeVertexAI {
+		// Validate VertexAI-specific fields (only for referenced providers)
+		if referencedProviders[name] && provider.Type == LLMProviderTypeVertexAI {
 			if provider.ProjectEnv != "" {
 				if value := os.Getenv(provider.ProjectEnv); value == "" {
 					return NewValidationError("llm_provider", name, "project_env", fmt.Errorf("environment variable %s is not set", provider.ProjectEnv))
@@ -321,4 +337,43 @@ func (v *Validator) validateLLMProviders() error {
 	}
 
 	return nil
+}
+
+// collectReferencedLLMProviders returns a set of LLM provider names that are actually referenced by chains
+func (v *Validator) collectReferencedLLMProviders() map[string]bool {
+	referenced := make(map[string]bool)
+
+	// If no chain registry exists, no providers are referenced
+	if v.cfg.ChainRegistry == nil {
+		return referenced
+	}
+
+	for _, chain := range v.cfg.ChainRegistry.GetAll() {
+		// Chain-level LLM provider
+		if chain.LLMProvider != "" {
+			referenced[chain.LLMProvider] = true
+		}
+
+		// Chat-level LLM provider
+		if chain.Chat != nil && chain.Chat.LLMProvider != "" {
+			referenced[chain.Chat.LLMProvider] = true
+		}
+
+		// Stage-level LLM providers
+		for _, stage := range chain.Stages {
+			// Stage agent-level LLM providers
+			for _, agent := range stage.Agents {
+				if agent.LLMProvider != "" {
+					referenced[agent.LLMProvider] = true
+				}
+			}
+
+			// Stage synthesis-level LLM provider
+			if stage.Synthesis != nil && stage.Synthesis.LLMProvider != "" {
+				referenced[stage.Synthesis.LLMProvider] = true
+			}
+		}
+	}
+
+	return referenced
 }

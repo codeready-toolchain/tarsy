@@ -181,7 +181,7 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 			Description: "Passwords",
 		},
 		"certificate": {
-			Pattern:     `-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----`,
+			Pattern:     `(?s)-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----`,
 			Replacement: `__MASKED_CERTIFICATE__`,
 			Description: "SSL/TLS certificates",
 		},
@@ -196,7 +196,7 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 			Description: "Access tokens",
 		},
 		"email": {
-			Pattern:     `(?<!\\)\b[A-Za-z0-9._%+-]+@[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*\.[A-Za-z]{2,63}\b(?!\()`,
+			Pattern:     `\b[A-Za-z0-9._%+-]+@[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*\.[A-Za-z]{2,63}\b`,
 			Replacement: `__MASKED_EMAIL__`,
 			Description: "Email addresses",
 		},
@@ -211,8 +211,8 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 			Description: "Base64 values (20+ chars)",
 		},
 		"base64_short": {
-			Pattern:     `(?<=:\s)([A-Za-z0-9+/]{4,19}={0,2})(?=\s|$)`,
-			Replacement: `__MASKED_SHORT_BASE64__`,
+			Pattern:     `:\s+([A-Za-z0-9+/]{4,19}={0,2})(?:\s|$)`,
+			Replacement: `: __MASKED_SHORT_BASE64__`,
 			Description: "Short base64 values",
 		},
 		"private_key": {
@@ -248,22 +248,46 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 	}
 }
 
+// initBuiltinPatternGroups returns predefined groups of masking patterns.
+// Pattern group members can reference either:
+//   - MaskingPatterns: regex-based patterns (implemented)
+//   - CodeMaskers: code-based maskers for complex structural parsing (TODO - Phase 7)
+//
+// Example: "kubernetes_secret" is a code-based masker that parses YAML/JSON
+// to mask only Secret data (not ConfigMaps), so it appears in CodeMaskers
+// instead of MaskingPatterns. This is a placeholder for Phase 7 implementation.
 func initBuiltinPatternGroups() map[string][]string {
 	return map[string][]string{
 		"basic":      {"api_key", "password"},                                                                                                                                                                                                            // Most common secrets
 		"secrets":    {"api_key", "password", "token", "private_key", "secret_key"},                                                                                                                                                                      // Basic + tokens
 		"security":   {"api_key", "password", "token", "certificate", "certificate_authority_data", "email", "ssh_key"},                                                                                                                                  // Full security focus
-		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                                                                                                                                                         // Kubernetes-specific - uses code-based masker for Secrets (not ConfigMaps)
+		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                                                                                                                                                         // Kubernetes-specific - kubernetes_secret is TODO (Phase 7), others are regex-based
 		"cloud":      {"aws_access_key", "aws_secret_key", "api_key", "token"},                                                                                                                                                                           // Cloud provider secrets
 		"all":        {"base64_secret", "base64_short", "api_key", "password", "certificate", "certificate_authority_data", "email", "token", "ssh_key", "private_key", "secret_key", "aws_access_key", "aws_secret_key", "github_token", "slack_token"}, // All patterns
 	}
 }
 
+// initBuiltinCodeMaskers returns code-based maskers for complex masking scenarios.
+// These maskers require structural parsing and can be referenced in PatternGroups.
+// Unlike regex patterns in MaskingPatterns, code-based maskers implement custom logic.
+//
+// Example: kubernetes_secret masker parses YAML/JSON to distinguish between
+// Kubernetes Secrets (which should be masked) and ConfigMaps (which should not).
+// This masker is referenced in the "kubernetes" pattern group.
+//
+// TODO: Code-based maskers are not yet implemented - they are placeholders for Phase 7.
+// See docs/project-plan.md Phase 7: Security & Data → Data Masking
 func initBuiltinCodeMaskers() map[string]string {
 	return map[string]string{
-		// Code-based maskers for complex masking requiring structural parsing
-		// Example: kubernetes_secret masker parses YAML/JSON to mask only Secret data (not ConfigMaps)
-		// Implementation in Phase 3+
+		// TODO (Phase 7): Implement KubernetesSecretMasker
+		// This masker needs to:
+		//   1. Parse YAML/JSON structures from MCP tool results
+		//   2. Identify Kubernetes Secret resources (kind: Secret)
+		//   3. Mask Secret.data fields (base64-encoded sensitive data)
+		//   4. Leave ConfigMaps untouched (kind: ConfigMap)
+		//   5. Handle both single resources and lists (e.g., kubectl get secrets -o yaml)
+		// Referenced in: "kubernetes" pattern group
+		// Implementation path: pkg/maskers/kubernetes_secret.go
 		"kubernetes_secret": "pkg/maskers.KubernetesSecretMasker",
 	}
 }

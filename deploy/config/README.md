@@ -103,7 +103,7 @@ LLM provider configurations:
 llm_providers:
   gemini-2.5-flash:
     type: google
-    model: gemini-2.0-flash-exp
+    model: gemini-2.5-flash
     api_key_env: GOOGLE_API_KEY
     max_tool_result_tokens: 950000
     native_tools:
@@ -132,10 +132,11 @@ GRPC_ADDR=localhost:50051
 
 ## Environment Variable Interpolation
 
-Both `tarsy.yaml` and `llm-providers.yaml` support environment variable interpolation:
+Both `tarsy.yaml` and `llm-providers.yaml` support environment variable interpolation using Go templates:
 
-- **Syntax**: `${VAR_NAME}` or `$VAR_NAME`
-- **Example**: `api_key: ${GOOGLE_API_KEY}`
+- **Syntax**: `{{.VAR_NAME}}` (Go template syntax)
+- **Example**: `api_key: {{.GOOGLE_API_KEY}}`
+- **Important**: Literal `$` characters (passwords, regexes, etc.) are preserved as-is
 - **Missing variables**: Expand to empty string (validation will catch required fields)
 
 ## Built-in Configuration
@@ -154,7 +155,7 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 ### Built-in LLM Providers
 
-- **google-default** - Gemini 2.0 Flash Exp
+- **google-default** - Gemini 2.5 Flash
 - **openai-default** - GPT-4o
 - **anthropic-default** - Claude Sonnet 4
 - **xai-default** - Grok Beta
@@ -312,13 +313,6 @@ Error: failed to parse tarsy.yaml: invalid YAML syntax
 ```
 
 **Solution**: Check YAML indentation and syntax (use a YAML validator)
-
-## Additional Resources
-
-- **Design Document**: `docs/phase2-configuration-system-design.md`
-- **Configuration Reference**: `docs/configuration-reference.md` (Phase 11)
-- **Deployment Guide**: `docs/deployment-guide.md` (Phase 11)
-- **Project Plan**: `docs/project-plan.md`
 
 ## Support
 
