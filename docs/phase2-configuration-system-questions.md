@@ -139,7 +139,7 @@ cp deploy/config/.env.example deploy/config/.env
 # deploy/config/tarsy.yaml (environment-agnostic)
 agents:
   - id: kubernetes-agent
-    max_iterations: ${MAX_ITERATIONS:-20}  # Override per environment
+    max_iterations: ${MAX_ITERATIONS}      # Override per environment via .env
 
 # deploy/config/llm-providers.yaml
 llm_providers:
@@ -148,7 +148,7 @@ llm_providers:
       endpoint: ${GEMINI_API_ENDPOINT}
       api_key: ${GEMINI_API_KEY}           # Secret from .env
     rate_limit:
-      requests_per_minute: ${LLM_RATE_LIMIT:-60}
+      requests_per_minute: ${LLM_RATE_LIMIT}
 ```
 
 **Example .env file:**
@@ -370,7 +370,7 @@ How should configuration precedence and merging work?
 
 **Rationale:**
 - Clear hierarchy: defaults → components → env vars → runtime
-- Environment variables interpolated at startup using `${VAR}` or `${VAR:-default}` syntax
+- Environment variables interpolated at startup using `${VAR}` or `$VAR` syntax (via `os.ExpandEnv`)
 - No environment override YAML files (decided in Q3)
 - Per-alert API overrides are transient (not persisted)
 
@@ -399,10 +399,15 @@ How should configuration precedence and merging work?
    llm_providers:
      - id: gemini-thinking
        api:
-         api_key: ${GEMINI_API_KEY}        # From .env
-         endpoint: ${GEMINI_ENDPOINT:-https://generativelanguage.googleapis.com}
+         api_key: ${GEMINI_API_KEY}        # From .env (required)
+         endpoint: ${GEMINI_ENDPOINT}      # From .env (required)
        parameters:
-         temperature: ${LLM_TEMP:-0.7}     # Default if not set
+         temperature: ${LLM_TEMP}          # From .env (required)
+   
+   # .env file provides values:
+   # GEMINI_API_KEY=your-key-here
+   # GEMINI_ENDPOINT=https://generativelanguage.googleapis.com
+   # LLM_TEMP=0.7
    ```
 
 3. **Per-Alert API Overrides (Runtime):**

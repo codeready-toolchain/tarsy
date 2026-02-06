@@ -983,12 +983,12 @@ func (r *LLMProviderRegistry) Get(name string) (*LLMProviderConfig, error) {
     r.mu.RLock()
     defer r.mu.RUnlock()
     
-    provider, exists := r.providers[id]
+    provider, exists := r.providers[name]
     if !exists {
-        return nil, fmt.Errorf("LLM provider not found: %s", id)
+        return nil, fmt.Errorf("LLM provider not found: %s", name)
     }
     if !provider.Enabled {
-        return nil, fmt.Errorf("LLM provider disabled: %s", id)
+        return nil, fmt.Errorf("LLM provider disabled: %s", name)
     }
     return provider, nil
 }
