@@ -84,38 +84,50 @@ func (v *ConfigValidator) validateChains() error {
 			}
 		}
 
-		// Validate chat agent if enabled
-		if chain.Chat != nil && chain.Chat.Enabled {
-			if chain.Chat.Agent != "" && !v.cfg.AgentRegistry.Has(chain.Chat.Agent) {
-				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
-			}
-
-			// Validate chat iteration strategy if specified
-			if chain.Chat.IterationStrategy != "" && !chain.Chat.IterationStrategy.IsValid() {
-				return NewValidationError("chain", chainID, "chat.iteration_strategy", fmt.Errorf("invalid strategy: %s", chain.Chat.IterationStrategy))
-			}
-
-			// Validate chat LLM provider if specified
-			if chain.Chat.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Chat.LLMProvider) {
-				return NewValidationError("chain", chainID, "chat.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Chat.LLMProvider))
-			}
-
-			// Validate chat max iterations if specified
-			if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
-				return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
-			}
+	// Validate chat agent if enabled
+	if chain.Chat != nil && chain.Chat.Enabled {
+		// Chat agent is required when chat is enabled
+		if chain.Chat.Agent == "" {
+			return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("chat.agent required when chat is enabled"))
 		}
+
+		if !v.cfg.AgentRegistry.Has(chain.Chat.Agent) {
+			return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
+		}
+
+		// Validate chat iteration strategy if specified
+		if chain.Chat.IterationStrategy != "" && !chain.Chat.IterationStrategy.IsValid() {
+			return NewValidationError("chain", chainID, "chat.iteration_strategy", fmt.Errorf("invalid strategy: %s", chain.Chat.IterationStrategy))
+		}
+
+		// Validate chat LLM provider if specified
+		if chain.Chat.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Chat.LLMProvider) {
+			return NewValidationError("chain", chainID, "chat.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Chat.LLMProvider))
+		}
+
+		// Validate chat max iterations if specified
+		if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
+			return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
+		}
+	}
 
 		// Validate chain-level LLM provider if specified
 		if chain.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.LLMProvider) {
 			return NewValidationError("chain", chainID, "llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.LLMProvider))
 		}
 
-		// Validate chain-level max iterations if specified
-		if chain.MaxIterations != nil && *chain.MaxIterations < 1 {
-			return NewValidationError("chain", chainID, "max_iterations", fmt.Errorf("must be at least 1"))
+	// Validate chain-level max iterations if specified
+	if chain.MaxIterations != nil && *chain.MaxIterations < 1 {
+		return NewValidationError("chain", chainID, "max_iterations", fmt.Errorf("must be at least 1"))
+	}
+
+	// Validate chain-level MCP servers if specified
+	for _, serverID := range chain.MCPServers {
+		if !v.cfg.MCPServerRegistry.Has(serverID) {
+			return NewValidationError("chain", chainID, "mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
 		}
 	}
+}
 
 	return nil
 }
