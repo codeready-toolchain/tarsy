@@ -2,11 +2,13 @@
 
 **Status**: ✅ Design Complete - All questions decided  
 **Questions Document**: See `phase2-configuration-system-questions.md` for decision rationale  
-**Last Updated**: 2026-02-04
+**Last Updated**: 2026-02-05
 
 ## Overview
 
 This document details the configuration system design for the new TARSy implementation. The configuration system manages agent definitions, chain configurations, MCP server registry, and LLM provider settings through YAML files with hierarchical resolution.
+
+**Phase 2.2 Scope**: This phase focuses on **configuration management** (loading, parsing, validating, storing config). Agent **instantiation and execution** is handled in **Phase 3: Agent Framework**.
 
 **Key Design Principles:**
 - File-based configuration (version controlled with code)
@@ -23,6 +25,10 @@ This document details the configuration system design for the new TARSy implemen
 - Type-safe configuration loading in Go
 - Comprehensive validation on startup
 - Support for multiple deployment environments (dev, staging, prod)
+
+**Phase Boundary**:
+- **Phase 2.2 (this phase)**: Configuration schema, loading, validation, registries
+- **Phase 3**: Agent factory, instantiation, execution logic
 
 ---
 
@@ -51,16 +57,17 @@ cp deploy/config/.env.example deploy/config/.env
 **File Descriptions:**
 
 - **`deploy/config/tarsy.yaml.example`**: Example main configuration (tracked in git, ~800-1000 lines)
-  - Agent definitions with custom instructions
-  - Chain configurations (single/parallel/replica stages)
-  - MCP server registry and transport configurations
-  - System-wide defaults
+  - **Built-in + User-defined** configuration (user configs override built-ins)
+  - `mcp_servers:` - MCP server configurations (transport, instructions, data_masking, summarization)
+  - `agents:` - Custom agent definitions with `custom_instructions`
+  - `agent_chains:` - Multi-stage chains with `alert_types`
+  - `defaults:` - System-wide defaults (NEW: llm_provider, max_iterations, alert_type, runbook, etc.)
   - Environment-agnostic (uses `${VAR}` placeholders for environment-specific values)
   - Users copy to `tarsy.yaml` and customize
 
 - **`deploy/config/llm-providers.yaml.example`**: Example LLM provider configurations (tracked in git, ~50 lines)
   - API endpoints and authentication (via env vars: `${GEMINI_API_KEY}`)
-  - Model parameters (can be overridden via env vars: `${LLM_TEMPERATURE:-0.7}`)
+  - Model parameters (can be overridden via env vars: `${LLM_TEMPERATURE}`)
   - Rate limits and retry policies
   - Native tools configuration (Google-specific)
   - Environment-agnostic
@@ -118,8 +125,8 @@ cp deploy/config/.env.example deploy/config/.env
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  2. Interpolate Environment Variables                    │
-│     ${ENV_VAR} or $ENV_VAR syntax                        │
-│     ${ENV_VAR:-default_value} with defaults              │
+│     Uses os.ExpandEnv (stdlib)                           │
+│     Supports ${VAR} and $VAR syntax                      │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -133,11 +140,14 @@ cp deploy/config/.env.example deploy/config/.env
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  4. Build In-Memory Registries                          │
-│     - AgentRegistry                                      │
+│  4. Build In-Memory Registries (Phase 2.2)              │
+│     - AgentRegistry (stores config metadata only)        │
 │     - ChainRegistry                                      │
 │     - MCPServerRegistry                                  │
 │     - LLMProviderRegistry                                │
+│                                                          │
+│  Note: Registries store configuration data, not          │
+│  implementations. Agent instantiation is Phase 3.        │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -171,152 +181,312 @@ cp deploy/config/.env.example deploy/config/.env
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Chain Orchestrator                                      │
+│  Chain Orchestrator (Phase 3)                            │
 │  1. Get chain config from registry                       │
 │  2. For each stage:                                      │
 │     - Look up agent config from AgentRegistry            │
 │     - Look up LLM provider from LLMProviderRegistry      │
 │     - Look up MCP servers from MCPServerRegistry         │
 │  3. Execute stage with resolved configuration            │
+│     (Agent instantiation and execution is Phase 3)       │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
+## Built-in vs User-defined Configuration
+
+TARSy supports both **built-in** and **user-defined** configurations with override capability:
+
+### Built-in Configuration (Go Code)
+
+Built-in configurations are defined in Go code (`pkg/config/builtin.go`) using an encapsulated singleton pattern:
+
+```go
+// pkg/config/builtin.go
+
+// BuiltinConfig holds all built-in configuration data (agents, MCP servers, LLM providers, etc.)
+// This is a singleton initialized once and accessed via GetBuiltinConfig()
+type BuiltinConfig struct {
+    Agents           map[string]BuiltinAgentConfig
+    MCPServers       map[string]MCPServerConfig
+    LLMProviders     map[string]LLMProviderConfig
+    ChainDefinitions map[string]ChainConfig
+    MaskingPatterns  map[string]MaskingPattern
+    PatternGroups    map[string][]string
+    CodeMaskers      map[string]string
+    DefaultRunbook   string
+    DefaultAlertType string
+}
+
+// Built-in agent metadata (configuration only - instantiation is Phase 3)
+// Note: Agent instantiation/factory pattern is handled in Phase 3: Agent Framework
+type BuiltinAgentConfig struct {
+    Description       string
+    IterationStrategy IterationStrategy
+    // Agent implementation/instantiation is Phase 3 - not part of config
+}
+
+var (
+    builtinConfig     *BuiltinConfig
+    builtinConfigOnce sync.Once
+)
+
+// GetBuiltinConfig returns the singleton built-in configuration (thread-safe, lazy-initialized)
+func GetBuiltinConfig() *BuiltinConfig {
+    builtinConfigOnce.Do(initBuiltinConfig)
+    return builtinConfig
+}
+
+func initBuiltinConfig() {
+    builtinConfig = &BuiltinConfig{
+        Agents: map[string]BuiltinAgentConfig{
+            "KubernetesAgent": {
+                Description:       "Kubernetes-specialized agent using ReAct pattern",
+                IterationStrategy: IterationStrategyReact,
+            },
+            "ChatAgent": {
+                Description:       "Built-in agent for follow-up conversations",
+                IterationStrategy: IterationStrategyReact,
+            },
+            "SynthesisAgent": {
+                Description:       "Synthesizes parallel investigation results",
+                IterationStrategy: IterationStrategySynthesis,
+            },
+        },
+        MCPServers: map[string]MCPServerConfig{
+            "kubernetes-server": {
+                Transport: TransportConfig{
+                    Type:    TransportTypeStdio,
+                    Command: "npx",
+                    Args:    []string{"-y", "kubernetes-mcp-server@0.0.54", "--read-only", "--disable-destructive", "--kubeconfig", "${KUBECONFIG}"},
+                },
+                Instructions: "For Kubernetes operations: ...",
+                DataMasking: &MaskingConfig{
+                    Enabled:       true,
+                    PatternGroups: []string{"kubernetes"},
+                    Patterns:      []string{"certificate", "token", "email"},
+                },
+            },
+        },
+        LLMProviders: map[string]LLMProviderConfig{
+            "google-default": {
+                Type:                LLMProviderTypeGoogle,
+                Model:               "gemini-2.5-pro",
+                APIKeyEnv:           "GOOGLE_API_KEY",
+                MaxToolResultTokens: 950000,
+                NativeTools: map[GoogleNativeTool]bool{
+                    GoogleNativeToolGoogleSearch:  true,
+                    GoogleNativeToolCodeExecution: false,
+                    GoogleNativeToolURLContext:    true,
+                },
+            },
+        },
+        ChainDefinitions: map[string]ChainConfig{
+            "kubernetes-agent-chain": {
+                AlertTypes:  []string{"kubernetes"},
+                Stages: []StageConfig{
+                    {
+                        Name: "analysis",
+                        Agents: []StageAgentConfig{
+                            {Name: "KubernetesAgent"},
+                        },
+                    },
+                },
+                Description: "Single-stage Kubernetes analysis",
+            },
+        },
+        MaskingPatterns: map[string]MaskingPattern{
+            // Regex-based data masking patterns
+            // See old TARSy: backend/tarsy/config/builtin_config.py BUILTIN_MASKING_PATTERNS
+            "api_key":                    {Pattern: `(?i)(?:api[_-]?key|apikey|key)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-]{20,})["\']?`, Replacement: `"api_key": "__MASKED_API_KEY__"`, Description: "API keys"},
+            "password":                   {Pattern: `(?i)(?:password|pwd|pass)["\']?\s*[:=]\s*["\']?([^"\'\s\n]{6,})["\']?`, Replacement: `"password": "__MASKED_PASSWORD__"`, Description: "Passwords"},
+            "certificate":                {Pattern: `-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----`, Replacement: `__MASKED_CERTIFICATE__`, Description: "SSL/TLS certificates"},
+            "certificate_authority_data": {Pattern: `(?i)certificate-authority-data:\s*([A-Za-z0-9+/]{20,}={0,2})`, Replacement: `certificate-authority-data: __MASKED_CA_CERTIFICATE__`, Description: "K8s CA data"},
+            "token":                      {Pattern: `(?i)(?:token|bearer|jwt)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?`, Replacement: `"token": "__MASKED_TOKEN__"`, Description: "Access tokens"},
+            "email":                      {Pattern: `(?<!\\)\b[A-Za-z0-9._%+-]+@[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*\.[A-Za-z]{2,63}\b(?!\()`, Replacement: `__MASKED_EMAIL__`, Description: "Email addresses"},
+            "ssh_key":                    {Pattern: `ssh-(?:rsa|dss|ed25519|ecdsa)\s+[A-Za-z0-9+/=]+`, Replacement: `__MASKED_SSH_KEY__`, Description: "SSH public keys"},
+            "base64_secret":              {Pattern: `\b([A-Za-z0-9+/]{20,}={0,2})\b`, Replacement: `__MASKED_BASE64_VALUE__`, Description: "Base64 values (20+ chars)"},
+            "base64_short":               {Pattern: `(?<=:\s)([A-Za-z0-9+/]{4,19}={0,2})(?=\s|$)`, Replacement: `__MASKED_SHORT_BASE64__`, Description: "Short base64 values"},
+            // Full list: See old TARSy builtin_config.py
+        },
+        PatternGroups: map[string][]string{
+            "basic":      {"api_key", "password"},
+            "secrets":    {"api_key", "password", "token"},
+            "security":   {"api_key", "password", "token", "certificate", "certificate_authority_data", "email", "ssh_key"},
+            "kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},
+            "all":        {"base64_secret", "base64_short", "api_key", "password", "certificate", "certificate_authority_data", "email", "token", "ssh_key"},
+        },
+        CodeMaskers: map[string]string{
+            // Code-based maskers for complex masking requiring structural parsing
+            // Example: kubernetes_secret masker parses YAML/JSON to mask only Secret data (not ConfigMaps)
+            // See old TARSy: backend/tarsy/services/maskers/kubernetes_secret_masker.py
+            "kubernetes_secret": "pkg/maskers.KubernetesSecretMasker", // Phase 3+ implementation
+        },
+        DefaultRunbook:   defaultRunbookContent,
+        DefaultAlertType: "kubernetes",
+    }
+}
+
+const defaultRunbookContent = `# Generic Troubleshooting Guide
+
+## Investigation Steps
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+`
+
+// Direct access to built-in config (rarely needed):
+// builtin := config.GetBuiltinConfig()
+// agent := builtin.Agents["KubernetesAgent"]
+// mcpServer := builtin.MCPServers["kubernetes-server"]
+
+// Typical usage - access via Config (includes YAML overrides):
+// cfg, _ := config.Initialize(ctx, configDir)
+// 
+// // Access defaults (YAML overrides or built-in fallback)
+// runbook := cfg.Defaults.Runbook           // Default runbook for new sessions
+// alertType := cfg.Defaults.AlertType       // Default alert type
+// maxIter := cfg.Defaults.MaxIterations     // Default max iterations
+// llmProvider := cfg.Defaults.LLMProvider   // Default LLM provider
+// 
+// // Access registry items
+// agent, _ := cfg.GetAgent("KubernetesAgent")
+// chain, _ := cfg.GetChainByAlertType("kubernetes")
+// 
+// // Example: Creating a new alert session
+// session := &models.AlertSession{
+//     AlertType: cfg.Defaults.AlertType,
+//     Runbook:   cfg.Defaults.Runbook,
+//     // ... other fields
+// }
+```
+
+**Key Features:**
+- **Thread-safe**: Uses `sync.Once` for safe concurrent access
+- **Lazy initialization**: Built-in config is created only when first accessed
+- **Encapsulated**: No global mutable state - all data inside BuiltinConfig struct
+- **Single source of truth**: All built-in data in one place
+- **Testable**: Easy to mock GetBuiltinConfig() for testing
+
+### User-defined Configuration (YAML Files)
+
+Users can:
+1. **Add new components**: Define custom agents, MCP servers, chains, LLM providers
+2. **Override built-ins**: Use same name/ID to replace built-in configuration
+3. **Extend built-ins**: Reference built-in agents/MCP servers in custom chains
+
+**Override Priority**: User-defined (YAML) > Built-in (Go code)
+
+**Example - Override Built-in Agent**:
+```yaml
+# deploy/config/tarsy.yaml
+
+agents:
+  KubernetesAgent:  # Same name as built-in = override
+    mcp_servers:
+      - "kubernetes-server"
+      - "custom-k8s-tool"     # Add custom MCP server
+    custom_instructions: |
+      Custom instructions replace built-in behavior.
+    max_iterations: 30
+```
+
+---
+
+## Phase 2.2 Scope: Configuration vs Execution
+
+**What Phase 2.2 Includes (Configuration Management):**
+- ✅ YAML schemas for agent definitions (metadata)
+- ✅ Configuration loading and parsing
+- ✅ AgentRegistry: Stores agent **configuration metadata** (name, mcp_servers, custom_instructions, iteration_strategy)
+- ✅ Validation: Ensure agent names exist in built-in or user-defined configs
+- ✅ Configuration hierarchical resolution
+- ✅ Chain definitions that **reference** agents by name
+
+**What Phase 2.2 Does NOT Include (Agent Execution - Phase 3):**
+- ❌ Agent interface/base class definition (BaseAgent)
+- ❌ Agent factory for instantiation
+- ❌ Agent implementation classes (KubernetesAgent, ChatAgent code)
+- ❌ Agent execution logic (process_alert, iteration controllers)
+- ❌ Agent-LLM integration
+- ❌ Agent-MCP client integration
+
+**Key Point**: In Phase 2.2, agents are just **configuration entries** (name + metadata). The actual agent **implementations** and **instantiation** are handled in Phase 3: Agent Framework.
+
+When Phase 3 is implemented, it will:
+1. Define the `Agent` interface and `BaseAgent` class
+2. Implement built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent)
+3. Create an AgentFactory that uses the AgentRegistry to get configuration
+4. Handle agent instantiation with dependency injection (LLM client, MCP client, etc.)
+
+---
+
 ## Configuration Files
 
-### 1. Agent Definitions (`tarsy.yaml` - agents section)
+### 1. Custom Agent Definitions (`tarsy.yaml` - agents section)
 
-Defines available agent types with their default configurations.
+**Built-in Agents** (in Go code):
+- `KubernetesAgent` - Default Kubernetes troubleshooting agent
+- `ChatAgent` - Follow-up chat conversations
+- `SynthesisAgent` - Synthesizes parallel investigation results
 
-**Schema:**
+**User-defined Agents** (in YAML - optional, can override built-ins):
 
 ```yaml
 # deploy/config/tarsy.yaml
 
 agents:
-  - id: kubernetes-agent
-    name: "Kubernetes Agent"
-    description: "Analyzes Kubernetes cluster state and pod issues"
-    
-    # Iteration configuration
-    iteration_strategy: react  # react | native_thinking
-    max_iterations: 20
-    
-    # LLM configuration
-    llm_provider: gemini-thinking  # Reference to llm-providers.yaml
-    
-    # MCP servers (default set, can be overridden per chain/alert)
+  # Dictionary of custom agent definitions
+  # Agent name is the dictionary key (e.g., "security-agent")
+  # Can reference built-in or custom MCP servers
+  
+  security-agent:
     mcp_servers:
-      - kubernetes-server
-      - prometheus-server
-    
-    # Prompt configuration
-    system_prompt: |
-      You are a Kubernetes expert investigating cluster issues.
-      Use the available tools to analyze pod states, logs, and metrics.
-    
-    # Tool selection preferences
-    native_tools:
-      google_search: true
-      code_execution: false
-      url_context: false
-    
-    # Stage-specific behavior (optional)
-    stage_config:
-      initial_analysis:
-        max_iterations: 10
-        focus: "Quick assessment of immediate issues"
+      - "security-server"         # Custom MCP server
+      - "kubernetes-server"       # Built-in MCP server
+    iteration_strategy: "react"   # Optional: "react" | "native-thinking" | "synthesis"
+    max_iterations: 25            # Optional: agent-level max iterations (forces conclusion when reached)
+    custom_instructions: |
+      You are a security-focused SRE agent specializing in cybersecurity incidents.
       
-      deep_dive:
-        max_iterations: 20
-        focus: "Comprehensive root cause analysis"
-    
-    # Metadata
-    enabled: true
-    version: "1.0"
-    tags:
-      - kubernetes
-      - infrastructure
+      PRIORITIES:
+      1. Data security and compliance over service availability
+      2. Immediate containment of security threats
+      3. Detailed forensic analysis and documentation
+      
+      APPROACH:
+      - Immediately assess the severity and scope of security incidents
+      - Take containment actions to prevent further damage
+      - Gather evidence and maintain chain of custody
+      - Provide clear recommendations for remediation
 
-  - id: argocd-agent
-    name: "ArgoCD Agent"
-    description: "Analyzes ArgoCD application state and deployment issues"
-    iteration_strategy: react
-    max_iterations: 15
-    llm_provider: gemini-thinking
+  performance-agent:
     mcp_servers:
-      - argocd-server
-      - kubernetes-server
-    system_prompt: |
-      You are an ArgoCD expert investigating application deployment issues.
-      Analyze application sync status, health, and recent changes.
-    native_tools:
-      google_search: true
-      code_execution: false
-    enabled: true
-    version: "1.0"
-    tags:
-      - argocd
-      - deployments
+      - "monitoring-server"
+      - "kubernetes-server"
+    iteration_strategy: "react"
+    custom_instructions: |
+      You are a performance-focused SRE agent specializing in system optimization.
+      
+      Focus on identifying root causes of performance bottlenecks and
+      providing actionable recommendations for optimization.
 
-  - id: prometheus-agent
-    name: "Prometheus Agent"
-    description: "Analyzes metrics and time-series data"
-    iteration_strategy: react
-    max_iterations: 15
-    llm_provider: gemini-thinking
+  # Example: override built-in KubernetesAgent with custom instructions
+  KubernetesAgent:
     mcp_servers:
-      - prometheus-server
-    system_prompt: |
-      You are a metrics analysis expert.
-      Query Prometheus metrics to understand resource usage patterns and anomalies.
-    native_tools:
-      google_search: false
-      code_execution: true  # For metric calculations
-    enabled: true
-    version: "1.0"
-    tags:
-      - metrics
-      - observability
-
-  - id: synthesis-agent
-    name: "Synthesis Agent"
-    description: "Synthesizes findings from multiple parallel agents"
-    iteration_strategy: native_thinking
-    max_iterations: 5
-    llm_provider: gemini-thinking
-    mcp_servers: []  # No MCP tools needed
-    system_prompt: |
-      You are a synthesis expert combining insights from multiple investigations.
-      Create a coherent analysis from different perspectives.
-    native_tools:
-      google_search: false
-      code_execution: false
-    enabled: true
-    version: "1.0"
-    tags:
-      - synthesis
-      - aggregation
-
-  - id: chat-agent
-    name: "Chat Agent"
-    description: "Handles follow-up questions about completed investigations"
-    iteration_strategy: react
-    max_iterations: 10
-    llm_provider: gemini-thinking
-    mcp_servers: []  # Inherits from session
-    system_prompt: |
-      You are helping a user understand a completed investigation.
-      Answer questions clearly and refer to specific findings.
-    native_tools:
-      google_search: true
-      code_execution: false
-    enabled: true
-    version: "1.0"
-    tags:
-      - chat
-      - support
+      - "kubernetes-server"
+      - "custom-k8s-tool"         # Add additional MCP server
+    custom_instructions: |
+      Custom instructions override built-in agent behavior.
+      This allows customization without modifying Go code.
 ```
 
 **Go Struct:**
@@ -325,189 +495,120 @@ agents:
 // pkg/config/agent.go
 
 type AgentConfig struct {
-    ID          string            `yaml:"id" validate:"required"`
-    Name        string            `yaml:"name" validate:"required"`
-    Description string            `yaml:"description"`
-    
-    // Iteration
-    IterationStrategy string `yaml:"iteration_strategy" validate:"required,oneof=react native_thinking"`
-    MaxIterations     int    `yaml:"max_iterations" validate:"required,min=1,max=50"`
-    
-    // LLM
-    LLMProvider string `yaml:"llm_provider" validate:"required"`
-    
-    // MCP
-    MCPServers []string `yaml:"mcp_servers"`
-    
-    // Prompts
-    SystemPrompt string `yaml:"system_prompt" validate:"required"`
-    
-    // Native tools
-    NativeTools struct {
-        GoogleSearch  bool `yaml:"google_search"`
-        CodeExecution bool `yaml:"code_execution"`
-        URLContext    bool `yaml:"url_context"`
-    } `yaml:"native_tools"`
-    
-    // Stage-specific config (optional)
-    StageConfig map[string]struct {
-        MaxIterations int    `yaml:"max_iterations"`
-        Focus         string `yaml:"focus"`
-    } `yaml:"stage_config,omitempty"`
-    
-    // Metadata
-    Enabled bool     `yaml:"enabled"`
-    Version string   `yaml:"version"`
-    Tags    []string `yaml:"tags,omitempty"`
+    MCPServers         []string          `yaml:"mcp_servers" validate:"required,min=1"`
+    CustomInstructions string            `yaml:"custom_instructions"`
+    IterationStrategy  IterationStrategy `yaml:"iteration_strategy,omitempty"`
+    MaxIterations      *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+    // Note: When max_iterations is reached, agent always forces conclusion (no pause/resume)
 }
 
 type AgentRegistry struct {
-    agents map[string]*AgentConfig
+    agents map[string]*AgentConfig  // Key = agent name
     mu     sync.RWMutex
 }
 
-func (r *AgentRegistry) Get(id string) (*AgentConfig, error) {
+func (r *AgentRegistry) Get(name string) (*AgentConfig, error) {
     r.mu.RLock()
     defer r.mu.RUnlock()
     
-    agent, exists := r.agents[id]
+    agent, exists := r.agents[name]
     if !exists {
-        return nil, fmt.Errorf("agent not found: %s", id)
-    }
-    if !agent.Enabled {
-        return nil, fmt.Errorf("agent disabled: %s", id)
+        return nil, fmt.Errorf("agent not found: %s", name)
     }
     return agent, nil
 }
+
+// Note: Built-in agents are defined in Go code (builtin.go) via GetBuiltinConfig()
+// User-defined agents can override built-ins by using the same name
 ```
 
 ---
 
-### 2. Chain Definitions (`tarsy.yaml` - chains section)
+### 2. Agent Chain Definitions (`tarsy.yaml` - agent_chains section)
 
-Defines multi-stage agent chains for different alert types.
+Defines multi-stage agent chains for handling specific alert types.
 
-**Schema:**
+**Built-in Chains** (in Go code):
+- `kubernetes-agent-chain` - Basic single-stage Kubernetes analysis
+
+**User-defined Chains** (in YAML):
 
 ```yaml
-# deploy/config/tarsy.yaml (chains section)
+# deploy/config/tarsy.yaml
 
-chains:
-  - id: k8s-quick-analysis
-    name: "Kubernetes Quick Analysis"
-    description: "Fast single-agent analysis for routine K8s alerts"
-    
+agent_chains:
+  # Dictionary of chain configurations
+  # Chain ID is the dictionary key
+  
+  kubernetes-pod-crashloop-troubleshooting:
+    alert_types: ["PodCrashLoop"]  # REQUIRED: Alert types this chain handles
+    description: "Deep Kubernetes troubleshooting with specialized analysis"
     stages:
-      - name: "Quick Assessment"
-        index: 0
-        agent: kubernetes-agent
-        execution_mode: single  # single | parallel
-    
-    # Chat configuration
-    chat:
+      - name: "Investigation"
+        agents:                                 # Always use agents array (even for single agent)
+          - name: "KubernetesAgent"             # Single agent
+            iteration_strategy: "native-thinking"   # Optional: override agent's strategy
+            llm_provider: "gemini-2.5-pro"          # Optional: override default
+            max_iterations: 15                      # Optional: agent-level override
+    chat:                                       # Optional chat configuration
       enabled: true
-      agent: chat-agent
-    
-    # Metadata
-    enabled: true
-    version: "1.0"
-    tags:
-      - kubernetes
-      - quick
+      agent: "ChatAgent"
+    llm_provider: "gemini-2.5-flash"            # Optional: chain-level default
 
-  - id: k8s-deep-analysis
-    name: "Kubernetes Deep Analysis"
-    description: "Multi-stage comprehensive analysis with parallel investigation"
-    
+  kubernetes-deep-troubleshooting:
+    alert_types: ["PodCrashLoop - ReAct-Tools"]
+    description: "2-stage deep Kubernetes troubleshooting"
     stages:
-      - name: "Initial Analysis"
-        index: 0
-        agent: kubernetes-agent
-        execution_mode: single
-        config:
-          max_iterations: 10  # Override agent default
+      - name: "system-data-collection"
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "react-stage"   # Stage-specific strategy
       
-      - name: "Deep Dive"
-        index: 1
-        execution_mode: parallel
-        parallel_config:
-          type: multi_agent  # multi_agent | replica
-          success_policy: all  # all | any
-          agents:
-            - agent: kubernetes-agent
-              config:
-                max_iterations: 20
-            - agent: argocd-agent
-            - agent: prometheus-agent
-      
-      - name: "Synthesis"
-        index: 2
-        agent: synthesis-agent
-        execution_mode: single
-    
-    chat:
-      enabled: true
-      agent: chat-agent
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - kubernetes
-      - comprehensive
+      - name: "final-diagnosis"
+        agents:
+          - name: "KubernetesAgent"
+            iteration_strategy: "react-final-analysis"
 
-  - id: argocd-deployment-analysis
-    name: "ArgoCD Deployment Analysis"
-    description: "Analyzes ArgoCD application deployment failures"
-    
+  kubernetes-multiple-agents:
+    alert_types: ["Kubernetes - Multiple agents - Custom Synthesis"]
+    description: "Multiple agents with custom synthesis"
     stages:
-      - name: "Deployment Analysis"
-        index: 0
-        agent: argocd-agent
-        execution_mode: single
-      
-      - name: "Cluster State Check"
-        index: 1
-        agent: kubernetes-agent
-        execution_mode: single
-    
-    chat:
-      enabled: true
-      agent: chat-agent
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - argocd
-      - deployments
+      - name: "Investigation"
+        max_iterations: 10                      # Stage-level max iterations
+        agents:                                 # Multiple agents in parallel
+          - name: "KubernetesAgent"
+            iteration_strategy: "native-thinking"
+            llm_provider: "gemini-2.5-flash"
+            max_iterations: 10                  # Per-agent override (forces conclusion when reached)
+          
+          - name: "KubernetesAgent"
+            iteration_strategy: "react"
+            llm_provider: "gemini-2.5-flash"
+            max_iterations: 3
+          
+          - name: "KubernetesAgent"
+            iteration_strategy: "native-thinking"
+            llm_provider: "gemini-2.5-pro"
+        
+        synthesis:                              # Optional synthesis configuration
+          agent: "SynthesisAgent"
+          iteration_strategy: "synthesis-native-thinking"
+          llm_provider: "gemini-3-pro"
 
-  - id: replica-comparison
-    name: "Replica Comparison Analysis"
-    description: "Runs same agent multiple times for comparison"
-    
+  kubernetes-2-replicas:
+    alert_types: ["Kubernetes - 2 replicas - ReAct - Default Synthesis"]
+    description: "2 replicas of same agent with automatic synthesis"
     stages:
-      - name: "Parallel Analysis"
-        index: 0
-        execution_mode: parallel
-        parallel_config:
-          type: replica  # Same agent, different replicas
-          success_policy: any  # At least one must succeed
-          replica_count: 3
-          agent: kubernetes-agent
-      
-      - name: "Synthesis"
-        index: 1
-        agent: synthesis-agent
-        execution_mode: single
-    
-    chat:
-      enabled: true
-      agent: chat-agent
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - experimental
-      - comparison
+      - name: "replicas"
+        agents:
+          - name: "KubernetesAgent"
+        replicas: 2                             # Run same agent 2 times (simple redundancy)
+    llm_provider: "gemini-2.5-flash"
+
+# Optional: Configure system defaults
+defaults:
+  alert_type: "PodCrashLoop"                    # Default alert type for UI dropdown
+  llm_provider: "google-default"
 ```
 
 **Go Struct:**
@@ -516,64 +617,70 @@ chains:
 // pkg/config/chain.go
 
 type ChainConfig struct {
-    ID          string       `yaml:"id" validate:"required"`
-    Name        string       `yaml:"name" validate:"required"`
-    Description string       `yaml:"description"`
-    Stages      []StageConfig `yaml:"stages" validate:"required,dive"`
-    Chat        *ChatConfig  `yaml:"chat,omitempty"`
-    Enabled     bool         `yaml:"enabled"`
-    Version     string       `yaml:"version"`
-    Tags        []string     `yaml:"tags,omitempty"`
+    AlertTypes    []string      `yaml:"alert_types" validate:"required,min=1"`
+    Description   string        `yaml:"description,omitempty"`
+    Stages        []StageConfig `yaml:"stages" validate:"required,min=1,dive"`
+    Chat          *ChatConfig   `yaml:"chat,omitempty"`
+    LLMProvider   string        `yaml:"llm_provider,omitempty"`
+    MaxIterations *int          `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+    MCPServers    []string      `yaml:"mcp_servers,omitempty"`
+    // Note: When max_iterations is reached, agent always forces conclusion (no pause/resume)
 }
 
 type StageConfig struct {
-    Name          string         `yaml:"name" validate:"required"`
-    Index         int            `yaml:"index" validate:"min=0"`
-    Agent         string         `yaml:"agent,omitempty"` // For single mode
-    ExecutionMode string         `yaml:"execution_mode" validate:"required,oneof=single parallel"`
-    ParallelConfig *ParallelConfig `yaml:"parallel_config,omitempty"`
-    Config        map[string]interface{} `yaml:"config,omitempty"` // Agent overrides
+    Name          string                 `yaml:"name" validate:"required"`
+    Agents        []StageAgentConfig  `yaml:"agents" validate:"required,min=1,dive"` // Always use agents array (1+ agents)
+    Replicas      int                    `yaml:"replicas,omitempty" validate:"omitempty,min=1"` // For simple redundancy (default: 1)
+    SuccessPolicy SuccessPolicy          `yaml:"success_policy,omitempty"`
+    MaxIterations *int                   `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+    MCPServers    []string               `yaml:"mcp_servers,omitempty"`
+    Synthesis     *SynthesisConfig       `yaml:"synthesis,omitempty"`
+    // Note: IterationStrategy and LLMProvider are set per-agent in StageAgentConfig
 }
 
-type ParallelConfig struct {
-    Type          string `yaml:"type" validate:"required,oneof=multi_agent replica"`
-    SuccessPolicy string `yaml:"success_policy" validate:"required,oneof=all any"`
-    
-    // For multi_agent type
-    Agents []ParallelAgentConfig `yaml:"agents,omitempty"`
-    
-    // For replica type
-    ReplicaCount int    `yaml:"replica_count,omitempty" validate:"omitempty,min=2,max=10"`
-    Agent        string `yaml:"agent,omitempty"`
+// StageAgentConfig represents an agent reference with stage-level overrides
+// Used in stage.agents[] array (even for single-agent stages)
+// Parallel execution occurs when: len(agents) > 1 OR replicas > 1
+type StageAgentConfig struct {
+    Name              string            `yaml:"name" validate:"required"` // Agent name to execute
+    LLMProvider       string            `yaml:"llm_provider,omitempty"`   // Optional: override LLM provider
+    IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"` // Optional: override iteration strategy
+    MaxIterations     *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"` // Optional: override max iterations
+    MCPServers        []string          `yaml:"mcp_servers,omitempty"`    // Optional: override MCP servers
 }
 
-type ParallelAgentConfig struct {
-    Agent  string                 `yaml:"agent" validate:"required"`
-    Config map[string]interface{} `yaml:"config,omitempty"`
+type SynthesisConfig struct {
+    Agent             string            `yaml:"agent,omitempty"`
+    IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+    LLMProvider       string            `yaml:"llm_provider,omitempty"`
 }
 
 type ChatConfig struct {
-    Enabled bool   `yaml:"enabled"`
-    Agent   string `yaml:"agent" validate:"required"`
+    Enabled           bool              `yaml:"enabled"`
+    Agent             string            `yaml:"agent,omitempty"`
+    IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+    LLMProvider       string            `yaml:"llm_provider,omitempty"`
+    MCPServers        []string          `yaml:"mcp_servers,omitempty"`
+    MaxIterations     *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 }
 
 type ChainRegistry struct {
-    chains map[string]*ChainConfig
+    chains map[string]*ChainConfig  // Key = chain ID
     mu     sync.RWMutex
 }
 
-func (r *ChainRegistry) Get(id string) (*ChainConfig, error) {
+func (r *ChainRegistry) GetByAlertType(alertType string) (*ChainConfig, error) {
     r.mu.RLock()
     defer r.mu.RUnlock()
     
-    chain, exists := r.chains[id]
-    if !exists {
-        return nil, fmt.Errorf("chain not found: %s", id)
+    for _, chain := range r.chains {
+        for _, at := range chain.AlertTypes {
+            if at == alertType {
+                return chain, nil
+            }
+        }
     }
-    if !chain.Enabled {
-        return nil, fmt.Errorf("chain disabled: %s", id)
-    }
-    return chain, nil
+    return nil, fmt.Errorf("no chain found for alert type: %s", alertType)
 }
 ```
 
@@ -583,151 +690,135 @@ func (r *ChainRegistry) Get(id string) (*ChainConfig, error) {
 
 Defines available MCP servers and their configurations.
 
-**Schema:**
+**Built-in MCP Servers** (in Go code):
+- `kubernetes-server` - Kubernetes MCP server with default configuration
+
+**User-defined MCP Servers** (in YAML - can override built-ins):
 
 ```yaml
-# deploy/config/tarsy.yaml (mcp_servers section)
+# deploy/config/tarsy.yaml
 
 mcp_servers:
-  - id: kubernetes-server
-    name: "Kubernetes MCP Server"
-    description: "Provides kubectl and K8s API access"
-    
-    # Transport configuration
+  # Dictionary of MCP server configurations
+  # Server ID is the dictionary key
+  
+  kubernetes-server:
     transport:
-      type: stdio  # stdio | http | sse
-      command: /usr/local/bin/mcp-kubernetes
+      type: "http"                              # "stdio" | "http" | "sse"
+      url: "http://localhost:8888/mcp"
+      timeout: 30
+    
+    # Alternative: stdio transport
+    # transport:
+    #   type: "stdio"
+    #   command: "npx"
+    #   args:
+    #     - "-y"
+    #     - "kubernetes-mcp-server@0.0.54"
+    #     - "--read-only"
+    #     - "--disable-destructive"
+    #     - "--kubeconfig"
+    #     - "${KUBECONFIG}"
+    
+    instructions: |
+      For Kubernetes operations:
+      - **IMPORTANT: In multi-cluster environments** (when 'configuration_contexts_list' tool is available):
+        * ALWAYS start by calling 'configuration_contexts_list' to see all available contexts
+        * Use this information to determine which context to target before performing operations
+      - Be careful with cluster-scoped resource listings in large clusters
+      - Always prefer namespaced queries when possible
+      - If you get "server could not find the requested resource" error:
+        * Cluster-scoped resources (Namespace, Node, ClusterRole) should NOT have namespace parameter
+        * Namespace-scoped resources (Pod, Deployment, Service) REQUIRE namespace parameter
+    
+    data_masking:                               # Optional but critical for security
+      enabled: true
+      pattern_groups:
+        - "kubernetes"                          # Expands to: kubernetes_secret, api_key, password, etc.
+      patterns:
+        - "certificate"                         # Additional individual patterns
+        - "token"
+        - "email"
+      # custom_patterns:                        # Optional custom patterns
+      #   - name: "custom-secret"
+      #     pattern: "SECRET_.*"
+      #     replacement: "__MASKED__"
+      #     description: "Custom secret pattern"
+    
+    summarization:                              # Optional but critical for large responses
+      enabled: true
+      size_threshold_tokens: 5000               # Summarize if response > 5000 tokens
+      summary_max_token_limit: 1000             # Max tokens in summary
+
+  argocd-server:
+    transport:
+      type: "stdio"
+      command: "npx"
       args:
-        - --kubeconfig
-        - ${KUBECONFIG}
-        - --namespace
-        - ${K8S_NAMESPACE:-default}
-      env:
-        KUBECONFIG: ${KUBECONFIG}
-        LOG_LEVEL: ${MCP_LOG_LEVEL:-info}
+        - "-y"
+        - "argocd-mcp-server@latest"
+        - "--server"
+        - "${ARGOCD_SERVER}"
+        - "--auth-token"
+        - "${ARGOCD_TOKEN}"
     
-    # Available tools (optional - can be discovered at runtime)
-    tools:
-      - kubectl-get
-      - kubectl-describe
-      - kubectl-logs
-      - kubectl-events
-      - k8s-api-query
+    instructions: |
+      For ArgoCD operations:
+      - Check application sync status and health first
+      - Look at sync operations and their results
+      - Consider GitOps workflow and source repository state
+      - Pay attention to resource hooks and sync waves
     
-    # Health check
-    health_check:
+    data_masking:
       enabled: true
-      interval: 30s
-      timeout: 5s
+      pattern_groups: ["kubernetes"]
+      patterns: ["certificate", "token"]
     
-    # Timeouts
-    timeout:
-      startup: 10s
-      tool_call: 60s
-    
-    # Metadata
-    enabled: true
-    version: "1.0"
-    tags:
-      - kubernetes
-      - infrastructure
+    summarization:
+      enabled: true
+      size_threshold_tokens: 3000
 
-  - id: argocd-server
-    name: "ArgoCD MCP Server"
-    description: "Provides ArgoCD CLI and API access"
-    
+  monitoring-server:
     transport:
-      type: stdio
-      command: /usr/local/bin/mcp-argocd
-      args:
-        - --server
-        - ${ARGOCD_SERVER}
-      env:
-        ARGOCD_SERVER: ${ARGOCD_SERVER}
-        ARGOCD_AUTH_TOKEN: ${ARGOCD_AUTH_TOKEN}
+      type: "http"
+      url: "${MONITORING_MCP_URL}"
+      bearer_token: "${MONITORING_TOKEN}"
+      verify_ssl: false
+      timeout: 30
     
-    tools:
-      - argocd-app-get
-      - argocd-app-history
-      - argocd-app-manifests
-      - argocd-app-diff
+    instructions: |
+      For monitoring operations:
+      - Query metrics for the last 24 hours by default
+      - Focus on anomalies and trends
+      - Consider baseline metrics for comparison
     
-    health_check:
+    data_masking:
       enabled: true
-      interval: 30s
-      timeout: 5s
+      patterns: ["email", "token"]
     
-    timeout:
-      startup: 10s
-      tool_call: 60s
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - argocd
-      - gitops
-
-  - id: prometheus-server
-    name: "Prometheus MCP Server"
-    description: "Queries Prometheus metrics"
-    
-    transport:
-      type: http
-      url: ${PROMETHEUS_SERVER}/mcp
-      headers:
-        Authorization: "Bearer ${PROMETHEUS_TOKEN}"
-    
-    tools:
-      - prometheus-query
-      - prometheus-query-range
-      - prometheus-series
-      - prometheus-labels
-    
-    health_check:
+    summarization:
       enabled: true
-      interval: 60s
-      timeout: 10s
-    
-    timeout:
-      startup: 5s
-      tool_call: 30s
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - metrics
-      - observability
-
-  - id: github-server
-    name: "GitHub MCP Server"
-    description: "Fetches runbooks and documentation from GitHub"
-    
-    transport:
-      type: sse
-      url: ${GITHUB_MCP_SERVER}
-      headers:
-        Authorization: "token ${GITHUB_TOKEN}"
-    
-    tools:
-      - github-get-file
-      - github-search-code
-      - github-list-issues
-    
-    health_check:
-      enabled: true
-      interval: 60s
-      timeout: 10s
-    
-    timeout:
-      startup: 5s
-      tool_call: 30s
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - github
-      - documentation
+      size_threshold_tokens: 4000
 ```
+
+**Built-in Data Masking Patterns:**
+
+MCP servers can use built-in masking patterns defined in `builtin.go` (via `GetBuiltinConfig().MaskingPatterns`):
+
+- **Pattern Groups** (convenient presets):
+  - `basic`: api_key, password
+  - `secrets`: api_key, password, token
+  - `security`: api_key, password, token, certificate, certificate_authority_data, email, ssh_key
+  - `kubernetes`: kubernetes_secret (code-based), api_key, password, certificate_authority_data
+  - `all`: All regex-based patterns
+
+- **Individual Patterns** (regex-based):
+  - `api_key`, `password`, `token`, `certificate`, `certificate_authority_data`, `email`, `ssh_key`, `base64_secret`, `base64_short`
+
+- **Code-based Maskers** (structural parsing):
+  - `kubernetes_secret`: Masks Secret objects in YAML/JSON (not ConfigMaps) - requires context-aware parsing
+
+See full definitions in the Built-in Configuration section above or reference old TARSy: `backend/tarsy/config/builtin_config.py`
 
 **Go Struct:**
 
@@ -735,44 +826,48 @@ mcp_servers:
 // pkg/config/mcp.go
 
 type MCPServerConfig struct {
-    ID          string            `yaml:"id" validate:"required"`
-    Name        string            `yaml:"name" validate:"required"`
-    Description string            `yaml:"description"`
-    Transport   TransportConfig   `yaml:"transport" validate:"required"`
-    Tools       []string          `yaml:"tools,omitempty"`
-    HealthCheck *HealthCheckConfig `yaml:"health_check,omitempty"`
-    Timeout     TimeoutConfig     `yaml:"timeout"`
-    Enabled     bool              `yaml:"enabled"`
-    Version     string            `yaml:"version"`
-    Tags        []string          `yaml:"tags,omitempty"`
+    Transport      TransportConfig      `yaml:"transport" validate:"required"`
+    Instructions   string               `yaml:"instructions,omitempty"`
+    DataMasking    *MaskingConfig       `yaml:"data_masking,omitempty"`
+    Summarization  *SummarizationConfig `yaml:"summarization,omitempty"`
 }
 
 type TransportConfig struct {
-    Type    string            `yaml:"type" validate:"required,oneof=stdio http sse"`
+    Type        TransportType `yaml:"type" validate:"required"`
     
     // For stdio
-    Command string   `yaml:"command,omitempty"`
-    Args    []string `yaml:"args,omitempty"`
-    Env     map[string]string `yaml:"env,omitempty"`
+    Command     string   `yaml:"command,omitempty"`
+    Args        []string `yaml:"args,omitempty"`
     
     // For http/sse
-    URL     string            `yaml:"url,omitempty"`
-    Headers map[string]string `yaml:"headers,omitempty"`
+    URL         string `yaml:"url,omitempty"`
+    BearerToken string `yaml:"bearer_token,omitempty"`
+    VerifySSL   bool   `yaml:"verify_ssl,omitempty"`
+    Timeout     int    `yaml:"timeout,omitempty"`
 }
 
-type HealthCheckConfig struct {
-    Enabled  bool          `yaml:"enabled"`
-    Interval time.Duration `yaml:"interval"`
-    Timeout  time.Duration `yaml:"timeout"`
+type MaskingConfig struct {
+    Enabled        bool             `yaml:"enabled"`
+    PatternGroups  []string         `yaml:"pattern_groups,omitempty"`
+    Patterns       []string         `yaml:"patterns,omitempty"`
+    CustomPatterns []MaskingPattern `yaml:"custom_patterns,omitempty"`
 }
 
-type TimeoutConfig struct {
-    Startup  time.Duration `yaml:"startup"`
-    ToolCall time.Duration `yaml:"tool_call"`
+type MaskingPattern struct {
+    Name        string `yaml:"name" validate:"required"`
+    Pattern     string `yaml:"pattern" validate:"required"`
+    Replacement string `yaml:"replacement" validate:"required"`
+    Description string `yaml:"description,omitempty"`
+}
+
+type SummarizationConfig struct {
+    Enabled              bool `yaml:"enabled"`
+    SizeThresholdTokens  int  `yaml:"size_threshold_tokens" validate:"omitempty,min=100"`
+    SummaryMaxTokenLimit int  `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
 }
 
 type MCPServerRegistry struct {
-    servers map[string]*MCPServerConfig
+    servers map[string]*MCPServerConfig  // Key = server ID
     mu      sync.RWMutex
 }
 
@@ -784,11 +879,11 @@ func (r *MCPServerRegistry) Get(id string) (*MCPServerConfig, error) {
     if !exists {
         return nil, fmt.Errorf("MCP server not found: %s", id)
     }
-    if !server.Enabled {
-        return nil, fmt.Errorf("MCP server disabled: %s", id)
-    }
     return server, nil
 }
+
+// Note: Built-in MCP servers are defined in Go code (builtin.go) via GetBuiltinConfig()
+// User-defined servers can override built-ins by using the same ID
 ```
 
 ---
@@ -797,154 +892,70 @@ func (r *MCPServerRegistry) Get(id string) (*MCPServerConfig, error) {
 
 Defines LLM providers and their configurations.
 
-**Schema:**
+**Built-in LLM Providers** (in Go code):
+- `google-default` - Gemini 2.5 Pro with default settings
+- `openai-default` - GPT-5 with default settings
+- `anthropic-default` - Claude Sonnet 4 with default settings
+- `xai-default` - Grok-4 with default settings
+- `vertexai-default` - Claude Sonnet 4.5 on Vertex AI
+
+**User-defined LLM Providers** (in YAML):
 
 ```yaml
 # deploy/config/llm-providers.yaml
 
 llm_providers:
-  - id: gemini-thinking
-    name: "Google Gemini 2.0 Flash Thinking"
-    description: "Gemini with native thinking mode"
-    
-    provider: google  # google | openai | anthropic | xai
-    model: gemini-2.0-flash-thinking-exp-1219
-    
-    # API configuration
-    api:
-      endpoint: ${GEMINI_API_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta}
-      api_key: ${GEMINI_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT}
-    
-    # Model parameters
-    parameters:
-      temperature: 0.7
-      max_output_tokens: 8192
-      top_p: 0.95
-      top_k: 40
-    
-    # Native tools support
+  # Dictionary of LLM provider configurations
+  # Provider name is the dictionary key
+  
+  gemini-2.5-flash:
+    type: google                            # google | openai | anthropic | xai | vertexai
+    model: gemini-2.5-flash
+    api_key_env: GOOGLE_API_KEY            # Environment variable name for API key
+    max_tool_result_tokens: 950000          # Conservative for 1M context
+    native_tools:                           # Google-specific native tools
+      google_search: true
+      code_execution: false
+      url_context: true
+  
+  gemini-2.5-pro:
+    type: google
+    model: gemini-2.5-pro
+    api_key_env: GOOGLE_API_KEY
+    max_tool_result_tokens: 950000
     native_tools:
-      google_search:
-        enabled: true
-        grounding_threshold: 0.3
-      code_execution:
-        enabled: true
-        timeout: 30s
-      url_context:
-        enabled: false
-    
-    # Rate limiting
-    rate_limit:
-      requests_per_minute: 60
-      tokens_per_minute: 100000
-    
-    # Timeouts
-    timeout:
-      request: 120s
-      streaming: 300s
-    
-    # Retry configuration
-    retry:
-      max_attempts: 3
-      initial_delay: 1s
-      max_delay: 10s
-      multiplier: 2
-    
-    # Metadata
-    enabled: true
-    version: "1.0"
-    tags:
-      - gemini
-      - thinking
-      - production
-
-  - id: gemini-standard
-    name: "Google Gemini 2.0 Flash"
-    description: "Standard Gemini without thinking mode"
-    
-    provider: google
-    model: gemini-2.0-flash-exp
-    
-    api:
-      endpoint: ${GEMINI_API_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta}
-      api_key: ${GEMINI_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT}
-    
-    parameters:
-      temperature: 0.7
-      max_output_tokens: 8192
-      top_p: 0.95
-    
+      google_search: true
+      code_execution: false
+      url_context: true
+  
+  gemini-3-pro:
+    type: google
+    model: gemini-3-pro-preview
+    api_key_env: GOOGLE_API_KEY
+    max_tool_result_tokens: 950000
     native_tools:
-      google_search:
-        enabled: true
-      code_execution:
-        enabled: true
-      url_context:
-        enabled: false
-    
-    rate_limit:
-      requests_per_minute: 60
-      tokens_per_minute: 100000
-    
-    timeout:
-      request: 120s
-      streaming: 300s
-    
-    retry:
-      max_attempts: 3
-      initial_delay: 1s
-      max_delay: 10s
-      multiplier: 2
-    
-    enabled: true
-    version: "1.0"
-    tags:
-      - gemini
-      - standard
-
-  - id: openai-gpt4
-    name: "OpenAI GPT-4"
-    description: "OpenAI GPT-4 for complex analysis"
-    
-    provider: openai
-    model: gpt-4-turbo-preview
-    
-    api:
-      endpoint: ${OPENAI_API_ENDPOINT:-https://api.openai.com/v1}
-      api_key: ${OPENAI_API_KEY}
-    
-    parameters:
-      temperature: 0.7
-      max_tokens: 4096
-      top_p: 0.95
-    
-    native_tools:
-      google_search:
-        enabled: false  # Not supported by OpenAI
-      code_execution:
-        enabled: false
-    
-    rate_limit:
-      requests_per_minute: 100
-      tokens_per_minute: 150000
-    
-    timeout:
-      request: 120s
-      streaming: 300s
-    
-    retry:
-      max_attempts: 3
-      initial_delay: 1s
-      max_delay: 10s
-      multiplier: 2
-    
-    enabled: false  # Not used by default
-    version: "1.0"
-    tags:
-      - openai
-      - gpt4
+      google_search: true
+      code_execution: false
+      url_context: true
+  
+  openai-gemini-proxy:
+    type: openai
+    model: gemini-2.5-pro
+    api_key_env: OPENAI_API_KEY
+    base_url: https://gemini-proxy.example.com/v1beta/openai
+    max_tool_result_tokens: 950000
+  
+  claude-opus:
+    type: anthropic
+    model: claude-opus-4
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 150000          # Conservative for 200K context
+  
+  grok-beta:
+    type: xai
+    model: grok-4-beta
+    api_key_env: XAI_API_KEY
+    max_tool_result_tokens: 200000          # Conservative for 256K context
 ```
 
 **Go Struct:**
@@ -953,70 +964,22 @@ llm_providers:
 // pkg/config/llm.go
 
 type LLMProviderConfig struct {
-    ID          string              `yaml:"id" validate:"required"`
-    Name        string              `yaml:"name" validate:"required"`
-    Description string              `yaml:"description"`
-    Provider    string              `yaml:"provider" validate:"required,oneof=google openai anthropic xai"`
-    Model       string              `yaml:"model" validate:"required"`
-    API         APIConfig           `yaml:"api" validate:"required"`
-    Parameters  ModelParameters     `yaml:"parameters"`
-    NativeTools NativeToolsConfig   `yaml:"native_tools"`
-    RateLimit   *RateLimitConfig    `yaml:"rate_limit,omitempty"`
-    Timeout     TimeoutConfig       `yaml:"timeout"`
-    Retry       RetryConfig         `yaml:"retry"`
-    Enabled     bool                `yaml:"enabled"`
-    Version     string              `yaml:"version"`
-    Tags        []string            `yaml:"tags,omitempty"`
-}
-
-type APIConfig struct {
-    Endpoint  string `yaml:"endpoint" validate:"required,url"`
-    APIKey    string `yaml:"api_key" validate:"required"`
-    ProjectID string `yaml:"project_id,omitempty"`
-}
-
-type ModelParameters struct {
-    Temperature      float64 `yaml:"temperature" validate:"min=0,max=2"`
-    MaxOutputTokens  int     `yaml:"max_output_tokens,omitempty" validate:"omitempty,min=1"`
-    MaxTokens        int     `yaml:"max_tokens,omitempty" validate:"omitempty,min=1"`
-    TopP             float64 `yaml:"top_p,omitempty" validate:"omitempty,min=0,max=1"`
-    TopK             int     `yaml:"top_k,omitempty" validate:"omitempty,min=1"`
-}
-
-type NativeToolsConfig struct {
-    GoogleSearch struct {
-        Enabled            bool    `yaml:"enabled"`
-        GroundingThreshold float64 `yaml:"grounding_threshold,omitempty"`
-    } `yaml:"google_search"`
-    
-    CodeExecution struct {
-        Enabled bool          `yaml:"enabled"`
-        Timeout time.Duration `yaml:"timeout,omitempty"`
-    } `yaml:"code_execution"`
-    
-    URLContext struct {
-        Enabled bool `yaml:"enabled"`
-    } `yaml:"url_context"`
-}
-
-type RateLimitConfig struct {
-    RequestsPerMinute int `yaml:"requests_per_minute"`
-    TokensPerMinute   int `yaml:"tokens_per_minute"`
-}
-
-type RetryConfig struct {
-    MaxAttempts  int           `yaml:"max_attempts" validate:"min=1,max=10"`
-    InitialDelay time.Duration `yaml:"initial_delay"`
-    MaxDelay     time.Duration `yaml:"max_delay"`
-    Multiplier   float64       `yaml:"multiplier"`
+    Type                  LLMProviderType        `yaml:"type" validate:"required"`
+    Model                 string                 `yaml:"model" validate:"required"`
+    APIKeyEnv             string                 `yaml:"api_key_env,omitempty"`        // Env var name for API key
+    ProjectEnv            string                 `yaml:"project_env,omitempty"`        // For VertexAI/GCP
+    LocationEnv           string                 `yaml:"location_env,omitempty"`       // For VertexAI/GCP
+    BaseURL               string                 `yaml:"base_url,omitempty"`           // For custom endpoints/proxies
+    MaxToolResultTokens   int                    `yaml:"max_tool_result_tokens" validate:"required,min=1000"`
+    NativeTools           map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`    // Google-specific native tools
 }
 
 type LLMProviderRegistry struct {
-    providers map[string]*LLMProviderConfig
+    providers map[string]*LLMProviderConfig  // Key = provider name
     mu        sync.RWMutex
 }
 
-func (r *LLMProviderRegistry) Get(id string) (*LLMProviderConfig, error) {
+func (r *LLMProviderRegistry) Get(name string) (*LLMProviderConfig, error) {
     r.mu.RLock()
     defer r.mu.RUnlock()
     
@@ -1035,54 +998,28 @@ func (r *LLMProviderRegistry) Get(id string) (*LLMProviderConfig, error) {
 
 ### 5. System Defaults (`tarsy.yaml` - defaults section)
 
-System-wide default configurations.
+**NEW**: System-wide default configurations for agent/chain execution.
+
+**Note**: Old TARSy doesn't have a `defaults:` section - defaults are hardcoded in python code or come from environment variables. This is a new addition to provide configurable defaults.
 
 **Schema:**
 
 ```yaml
-# deploy/config/tarsy.yaml (defaults section)
+# deploy/config/tarsy.yaml
 
 defaults:
-  # Session defaults
-  session:
-    timeout: 30m
-    max_stages: 10
-    max_iterations_per_agent: 20
-  
-  # LLM defaults
-  llm:
-    default_provider: gemini-thinking
-    temperature: 0.7
-    max_retries: 3
-    streaming_enabled: true
-  
-  # MCP defaults
-  mcp:
-    tool_call_timeout: 60s
-    health_check_interval: 30s
-    max_concurrent_tools: 5
-  
-  # Worker defaults
-  worker:
-    poll_interval: 2s
-    max_concurrent_sessions: 3
-    orphan_timeout: 10m
-  
-  # Database defaults
-  database:
-    max_open_connections: 25
-    max_idle_connections: 10
-    connection_max_lifetime: 1h
-    connection_max_idle_time: 15m
-  
-  # Event retention
-  events:
-    cleanup_on_completion: true
-    ttl_fallback: 7d
-  
-  # Soft delete retention
-  retention:
-    soft_delete_after: 90d
+  llm_provider: "google-default"                  # Default LLM provider for all agents/chains
+  max_iterations: 20                              # Default max iterations (forces conclusion when reached)
+  iteration_strategy: "react"                     # Default iteration strategy
+  success_policy: "any"                           # Default for parallel stages: "any" | "all"
+  alert_type: "kubernetes"                        # Default alert type for new sessions
+  runbook: |                                      # Default runbook content for new sessions
+    # Generic Troubleshooting Guide
+    
+    ## Investigation Steps
+    1. Analyze the alert
+    2. Gather context
+    3. Identify root cause
 ```
 
 **Go Struct:**
@@ -1091,45 +1028,13 @@ defaults:
 // pkg/config/defaults.go
 
 type Defaults struct {
-    Session  SessionDefaults  `yaml:"session"`
-    LLM      LLMDefaults      `yaml:"llm"`
-    MCP      MCPDefaults      `yaml:"mcp"`
-    Worker   WorkerDefaults   `yaml:"worker"`
-    Database DatabaseDefaults `yaml:"database"`
-    Events   EventsDefaults   `yaml:"events"`
-    Retention RetentionDefaults `yaml:"retention"`
-}
-
-type SessionDefaults struct {
-    Timeout              time.Duration `yaml:"timeout"`
-    MaxStages            int           `yaml:"max_stages"`
-    MaxIterationsPerAgent int          `yaml:"max_iterations_per_agent"`
-}
-
-type LLMDefaults struct {
-    DefaultProvider   string  `yaml:"default_provider"`
-    Temperature       float64 `yaml:"temperature"`
-    MaxRetries        int     `yaml:"max_retries"`
-    StreamingEnabled  bool    `yaml:"streaming_enabled"`
-}
-
-type MCPDefaults struct {
-    ToolCallTimeout      time.Duration `yaml:"tool_call_timeout"`
-    HealthCheckInterval  time.Duration `yaml:"health_check_interval"`
-    MaxConcurrentTools   int           `yaml:"max_concurrent_tools"`
-}
-
-type WorkerDefaults struct {
-    PollInterval         time.Duration `yaml:"poll_interval"`
-    MaxConcurrentSessions int          `yaml:"max_concurrent_sessions"`
-    OrphanTimeout        time.Duration `yaml:"orphan_timeout"`
-}
-
-type DatabaseDefaults struct {
-    MaxOpenConnections    int           `yaml:"max_open_connections"`
-    MaxIdleConnections    int           `yaml:"max_idle_connections"`
-    ConnectionMaxLifetime time.Duration `yaml:"connection_max_lifetime"`
-    ConnectionMaxIdleTime time.Duration `yaml:"connection_max_idle_time"`
+    LLMProvider       string            `yaml:"llm_provider,omitempty"`
+    MaxIterations     *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+    IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+    SuccessPolicy     SuccessPolicy     `yaml:"success_policy,omitempty"`
+    AlertType         string            `yaml:"alert_type,omitempty"`     // Default alert type for new sessions
+    Runbook           string            `yaml:"runbook,omitempty"`        // Default runbook content for new sessions
+    // Note: When max_iterations is reached, agent always forces conclusion (no pause/resume)
 }
 
 type EventsDefaults struct {
@@ -1146,108 +1051,147 @@ type RetentionDefaults struct {
 
 ## Hierarchical Configuration Resolution
 
-### Resolution Order
+### Resolution Order (Lowest to Highest Priority)
 
-1. **System Defaults** (tarsy.yaml - defaults section) - Base configuration
-2. **Component Configuration** (tarsy.yaml - agents/chains/mcp_servers sections + llm-providers.yaml)
-3. **Environment Override** (optional) - `environments/{env}.yaml`
-4. **Environment Variables** - Interpolated values (highest priority)
-5. **Per-Alert Override** - MCP selection via API (runtime only)
+1. **Built-in Defaults** (Go code - `builtin.go`) - Base built-in agents/MCP servers/LLM providers/chains (singleton pattern)
+2. **System Defaults** (tarsy.yaml - `defaults:` section) - System-wide configuration defaults
+3. **Component Configuration** (tarsy.yaml + llm-providers.yaml) - User-defined/override agents, MCP servers, chains, LLM providers
+4. **Environment Variables** - Interpolated `${VAR}` values at startup
+5. **Per-Interaction API Overrides** - MCP server selection at runtime (transient, not persisted)
 
 ### Configuration Override Example
 
+```go
+// Go code: builtin.go - Built-in defaults (singleton pattern)
+builtin := config.GetBuiltinConfig()
+// builtin.Agents["KubernetesAgent"] = {Description: "...", IterationStrategy: "react"}
+// builtin.LLMProviders["google-default"] = {Type: "google", Model: "gemini-2.5-pro", ...}
+```
+
 ```yaml
-# tarsy.yaml - defaults section
+
+# tarsy.yaml - System defaults
 defaults:
-  llm:
-    temperature: 0.7
+  llm_provider: "google-default"        # Default LLM for all chains
+  max_iterations: 20                    # Default max iterations (forces conclusion when reached)
+  alert_type: "kubernetes"              # Default alert type for new sessions (optional, defaults to built-in)
+  runbook: |                            # Default runbook for new sessions (optional, defaults to built-in)
+    # Company-Specific Troubleshooting Guide
+    
+    ## Investigation Steps
+    1. Check monitoring dashboards
+    2. Review recent deployments
+    3. Contact on-call engineer if needed
+    
+    ## Internal Resources
+    - Runbook wiki: https://wiki.company.com/runbooks
+    - Escalation: #oncall-team
 
-# tarsy.yaml - agents section
+# tarsy.yaml - Custom agent (overrides built-in KubernetesAgent)
 agents:
-  - id: kubernetes-agent
-    llm_provider: gemini-thinking
-    # Uses default temperature: 0.7
+  KubernetesAgent:
+    custom_instructions: |
+      Custom instructions override built-in agent behavior.
+    max_iterations: 25                  # Agent-level override
 
-# tarsy.yaml - chains section (override at stage level)
-chains:
-  - id: k8s-deep-analysis
+# tarsy.yaml - Chain configuration
+agent_chains:
+  k8s-deep-analysis:
+    alert_types: ["PodCrashLoop"]
+    llm_provider: "gemini-2.5-pro"      # Chain-level override
+    max_iterations: 15                  # Chain-level override
     stages:
       - name: "Initial Analysis"
-        agent: kubernetes-agent
-        config:
-          temperature: 0.5  # Override for this stage
+        agents:
+          - name: "KubernetesAgent"
+            max_iterations: 10          # Agent-level override (highest)
 
-# API request (runtime override)
-POST /api/sessions
+# .env - Environment variables
+GEMINI_API_KEY=abc123                   # Interpolated into llm-providers.yaml
+
+# API request - Runtime override (transient)
+POST /api/sessions/:id/interactions
 {
-  "chain_id": "k8s-deep-analysis",
-  "mcp": {
-    "servers": [
-      {"name": "kubernetes-server", "tools": ["kubectl-get"]}
-    ]
-  }
+  "message": "Investigate the issue",
+  "mcp_server_ids": ["kubernetes-server"],  # Override MCP servers for this interaction
+  "native_tool_ids": ["kubectl"]
 }
+
+# Effective max_iterations for this stage: 10 (stage-level wins)
+# Effective llm_provider: "gemini-2.5-pro" (chain-level)
 ```
 
 ### Environment Variable Interpolation
 
 **Syntax:**
-- `${VAR_NAME}` - Required variable (fails if not set)
-- `${VAR_NAME:-default}` - Optional with default value
+- `${VAR_NAME}` or `$VAR_NAME` - Environment variable substitution
 
 **Examples:**
 
 ```yaml
-# Required environment variable
+# Environment variables
 api_key: ${GEMINI_API_KEY}
-
-# Optional with default
-endpoint: ${GEMINI_API_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta}
+endpoint: ${GEMINI_API_ENDPOINT}
 
 # Nested in arrays
 args:
   - --kubeconfig
   - ${KUBECONFIG}
   - --namespace
-  - ${K8S_NAMESPACE:-default}
+  - ${K8S_NAMESPACE}
 ```
 
 **Implementation:**
 
-```go
-// pkg/config/interpolation.go
+Uses Go's standard library `os.ExpandEnv` for simple, robust environment variable expansion:
 
-func InterpolateEnvVars(data []byte) ([]byte, error) {
-    result := string(data)
-    
-    // Pattern: ${VAR_NAME} or ${VAR_NAME:-default}
-    re := regexp.MustCompile(`\$\{([^:}]+)(?::-([^}]+))?\}`)
-    
-    matches := re.FindAllStringSubmatch(result, -1)
-    for _, match := range matches {
-        fullMatch := match[0]
-        varName := match[1]
-        defaultValue := match[2]
-        
-        // Try to get from environment
-        value := os.Getenv(varName)
-        
-        if value == "" {
-            if defaultValue != "" {
-                // Use default
-                value = defaultValue
-            } else {
-                // Required but not set
-                return nil, fmt.Errorf("required environment variable not set: %s", varName)
-            }
-        }
-        
-        result = strings.ReplaceAll(result, fullMatch, value)
+```go
+// pkg/config/envexpand.go
+
+import "os"
+
+// ExpandEnv expands environment variables in YAML content
+// Supports both ${VAR} and $VAR syntax (standard shell-style)
+func ExpandEnv(data []byte) []byte {
+    expanded := os.ExpandEnv(string(data))
+    return []byte(expanded)
+}
+
+// Usage in config loader:
+func LoadConfig(path string) (*Config, error) {
+    yamlBytes, err := os.ReadFile(path)
+    if err != nil {
+        return nil, err
     }
     
-    return []byte(result), nil
+    // Expand environment variables (1 line!)
+    expanded := ExpandEnv(yamlBytes)
+    
+    var config Config
+    if err := yaml.Unmarshal(expanded, &config); err != nil {
+        return nil, err
+    }
+    
+    // Validate after expansion
+    if err := validateConfig(&config); err != nil {
+        return nil, err
+    }
+    
+    return &config, nil
 }
 ```
+
+**Benefits:**
+- ✅ **Stdlib**: Uses `os.ExpandEnv` from Go standard library
+- ✅ **Simple**: 1-line implementation for expansion
+- ✅ **Fast**: Native Go implementation
+- ✅ **Standard syntax**: Supports both `${VAR}` and `$VAR`
+- ✅ **No dependencies**: No regex, no parsing logic
+
+**Notes:**
+- Missing environment variables expand to empty string (validation catches this)
+- Default values can be added later if needed (using `os.Expand` with custom function)
+- Matches old TARSy's simple `${VAR}` syntax
 
 ---
 
@@ -1294,10 +1238,12 @@ func InterpolateEnvVars(data []byte) ([]byte, error) {
 // pkg/config/validator.go
 
 type ConfigValidator struct {
-    agents       *AgentRegistry
-    chains       *ChainRegistry
-    mcpServers   *MCPServerRegistry
-    llmProviders *LLMProviderRegistry
+    cfg *Config // Reference to the complete configuration
+}
+
+// NewValidator creates a validator for the given configuration
+func NewValidator(cfg *Config) *ConfigValidator {
+    return &ConfigValidator{cfg: cfg}
 }
 
 func (v *ConfigValidator) ValidateAll() error {
@@ -1327,47 +1273,60 @@ func (v *ConfigValidator) ValidateAll() error {
 }
 
 func (v *ConfigValidator) validateChains() error {
-    for _, chain := range v.chains.GetAll() {
-        // Validate stage indices are sequential
+    for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
+        // Validate alert_types is not empty
+        if len(chain.AlertTypes) == 0 {
+            return fmt.Errorf("chain %s: alert_types required", chainID)
+        }
+        
+        // Validate stages
         for i, stage := range chain.Stages {
-            if stage.Index != i {
-                return fmt.Errorf("chain %s: stage indices not sequential", chain.ID)
+            // Validate agents field (must have at least 1 agent)
+            if len(stage.Agents) == 0 {
+                return fmt.Errorf("chain %s stage %d: must specify at least one agent in 'agents' array", chainID, i)
             }
             
-            // Validate agent references
-            if stage.ExecutionMode == "single" {
-                if _, err := v.agents.Get(stage.Agent); err != nil {
-                    return fmt.Errorf("chain %s stage %d: %w", chain.ID, i, err)
+            // Validate all agents exist
+            for _, pa := range stage.Agents {
+                if !v.agentExists(pa.Name) {
+                    return fmt.Errorf("chain %s stage %d: agent '%s' not found", chainID, i, pa.Name)
                 }
-            } else if stage.ExecutionMode == "parallel" {
-                if stage.ParallelConfig == nil {
-                    return fmt.Errorf("chain %s stage %d: parallel_config required for parallel mode", chain.ID, i)
-                }
-                
-                // Validate parallel agents
-                if stage.ParallelConfig.Type == "multi_agent" {
-                    for _, pa := range stage.ParallelConfig.Agents {
-                        if _, err := v.agents.Get(pa.Agent); err != nil {
-                            return fmt.Errorf("chain %s stage %d: %w", chain.ID, i, err)
-                        }
-                    }
-                } else if stage.ParallelConfig.Type == "replica" {
-                    if _, err := v.agents.Get(stage.ParallelConfig.Agent); err != nil {
-                        return fmt.Errorf("chain %s stage %d: %w", chain.ID, i, err)
-                    }
+            }
+            
+            // Validate synthesis agent if present
+            if stage.Synthesis != nil && stage.Synthesis.Agent != "" {
+                if !v.agentExists(stage.Synthesis.Agent) {
+                    return fmt.Errorf("chain %s stage %d: synthesis agent '%s' not found", chainID, i, stage.Synthesis.Agent)
                 }
             }
         }
         
         // Validate chat agent
         if chain.Chat != nil && chain.Chat.Enabled {
-            if _, err := v.agents.Get(chain.Chat.Agent); err != nil {
-                return fmt.Errorf("chain %s: chat agent %w", chain.ID, err)
+            if chain.Chat.Agent != "" && !v.agentExists(chain.Chat.Agent) {
+                return fmt.Errorf("chain %s: chat agent '%s' not found", chainID, chain.Chat.Agent)
+            }
+        }
+        
+        // Validate LLM provider references
+        if chain.LLMProvider != "" {
+            if !v.llmProviderExists(chain.LLMProvider) {
+                return fmt.Errorf("chain %s: LLM provider '%s' not found", chainID, chain.LLMProvider)
             }
         }
     }
     
     return nil
+}
+
+func (v *ConfigValidator) agentExists(name string) bool {
+    _, err := v.cfg.AgentRegistry.Get(name)
+    return err == nil
+}
+
+func (v *ConfigValidator) llmProviderExists(name string) bool {
+    _, err := v.cfg.LLMProviderRegistry.Get(name)
+    return err == nil
 }
 ```
 
@@ -1604,44 +1563,20 @@ def Generate(self, request, context):
 func main() {
     ctx := context.Background()
     
-    // 0. Parse command-line flags
+    // Parse command-line flags
     configDir := flag.String("config-dir", 
         getEnv("CONFIG_DIR", "./deploy/config"), 
         "Path to configuration directory")
     flag.Parse()
     
-    log.Info("Loading configuration", "config_dir", *configDir)
-    
-    // 1. Load configuration from filesystem
-    cfg, err := config.Load(ctx, config.LoadOptions{
-        ConfigDir: *configDir,
-    })
+    // Load and validate configuration (all orchestration in config package)
+    cfg, err := config.Initialize(ctx, *configDir)
     if err != nil {
-        log.Fatal("Failed to load configuration", "error", err)
+        log.Fatal("Failed to initialize configuration", "error", err)
     }
     
-    // 2. Initialize registries
-    registries := &config.Registries{
-        Agents:       cfg.AgentRegistry,
-        Chains:       cfg.ChainRegistry,
-        MCPServers:   cfg.MCPServerRegistry,
-        LLMProviders: cfg.LLMProviderRegistry,
-    }
-    
-    // 3. Validate configuration
-    validator := config.NewValidator(registries)
-    if err := validator.ValidateAll(); err != nil {
-        log.Fatal("Configuration validation failed", "error", err)
-    }
-    
-    log.Info("Configuration loaded successfully",
-        "agents", len(registries.Agents.GetAll()),
-        "chains", len(registries.Chains.GetAll()),
-        "mcp_servers", len(registries.MCPServers.GetAll()),
-        "llm_providers", len(registries.LLMProviders.GetAll()),
-    )
-    
-    // 4. Continue with service initialization...
+    // Continue with service initialization...
+    // Use cfg.GetAgent(), cfg.GetChainByAlertType(), etc.
 }
 
 func getEnv(key, defaultValue string) string {
@@ -1657,61 +1592,121 @@ func getEnv(key, defaultValue string) string {
 ```go
 // pkg/config/loader.go
 
-type LoadOptions struct {
-    ConfigDir string  // Path to configuration directory (required)
-}
-
+// Config is the umbrella configuration object that encapsulates
+// all registries, defaults, and configuration state
 type Config struct {
-    Defaults         *Defaults
-    AgentRegistry    *AgentRegistry
-    ChainRegistry    *ChainRegistry
-    MCPServerRegistry *MCPServerRegistry
+    configDir string // For reference/logging
+    
+    Defaults            *Defaults       // System-wide defaults (includes alert_type, runbook, execution configs)
+    AgentRegistry       *AgentRegistry
+    ChainRegistry       *ChainRegistry
+    MCPServerRegistry   *MCPServerRegistry
     LLMProviderRegistry *LLMProviderRegistry
 }
 
-func Load(ctx context.Context, opts LoadOptions) (*Config, error) {
+// Thread-safe accessors for configuration
+func (c *Config) GetAgent(name string) (*AgentConfig, error)
+func (c *Config) GetChainByAlertType(alertType string) (*ChainConfig, error)
+func (c *Config) GetMCPServer(id string) (*MCPServerConfig, error)
+func (c *Config) GetLLMProvider(name string) (*LLMProviderConfig, error)
+
+// stats returns configuration statistics for logging/monitoring
+func (c *Config) stats() ConfigStats {
+    return ConfigStats{
+        Agents:       len(c.AgentRegistry.GetAll()),
+        Chains:       len(c.ChainRegistry.GetAll()),
+        MCPServers:   len(c.MCPServerRegistry.GetAll()),
+        LLMProviders: len(c.LLMProviderRegistry.GetAll()),
+    }
+}
+
+type ConfigStats struct {
+    Agents       int
+    Chains       int
+    MCPServers   int
+    LLMProviders int
+}
+
+// Initialize loads, validates, and returns ready-to-use configuration
+// This is the primary entry point for configuration loading
+func Initialize(ctx context.Context, configDir string) (*Config, error) {
+    log := slog.With("config_dir", configDir)
+    log.Info("Initializing configuration")
+    
+    // 1. Load configuration files
+    cfg, err := load(ctx, configDir)
+    if err != nil {
+        return nil, fmt.Errorf("failed to load configuration: %w", err)
+    }
+    
+    // 2. Validate all configuration
+    if err := validate(cfg); err != nil {
+        return nil, fmt.Errorf("configuration validation failed: %w", err)
+    }
+    
+    log.Info("Configuration initialized successfully", "stats", cfg.stats())
+    return cfg, nil
+}
+
+// load is the internal loader (not exported)
+func load(ctx context.Context, configDir string) (*Config, error) {
     loader := &configLoader{
-        configDir: opts.ConfigDir,
-        env:       opts.Environment,
+        configDir: configDir,
     }
     
-    // Load defaults
-    defaults, err := loader.loadDefaults()
+    // 1. Load tarsy.yaml (contains mcp_servers, agents, agent_chains, defaults)
+    tarsyConfig, err := loader.loadTarsyYAML()
     if err != nil {
-        return nil, fmt.Errorf("failed to load defaults: %w", err)
+        return nil, fmt.Errorf("failed to load tarsy.yaml: %w", err)
     }
     
-    // Load agents
-    agents, err := loader.loadAgents()
+    // 2. Load llm-providers.yaml
+    llmProviders, err := loader.loadLLMProvidersYAML()
     if err != nil {
-        return nil, fmt.Errorf("failed to load agents: %w", err)
+        return nil, fmt.Errorf("failed to load llm-providers.yaml: %w", err)
     }
     
-    // Load chains
-    chains, err := loader.loadChains()
-    if err != nil {
-        return nil, fmt.Errorf("failed to load chains: %w", err)
+    // 3. Merge built-in + user-defined components (user overrides built-in)
+    agents := mergeAgents(getBuiltinAgents(), tarsyConfig.Agents)
+    mcpServers := mergeMCPServers(getBuiltinMCPServers(), tarsyConfig.MCPServers)
+    chains := mergeChains(getBuiltinChains(), tarsyConfig.AgentChains)
+    llmProvidersMerged := mergeLLMProviders(getBuiltinLLMProviders(), llmProviders)
+    
+    // 4. Build registries
+    agentRegistry := NewAgentRegistry(agents)
+    mcpServerRegistry := NewMCPServerRegistry(mcpServers)
+    chainRegistry := NewChainRegistry(chains)
+    llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
+    
+    // 5. Resolve defaults (YAML overrides built-in)
+    defaults := tarsyConfig.Defaults
+    if defaults == nil {
+        defaults = &Defaults{}
     }
     
-    // Load MCP servers
-    mcpServers, err := loader.loadMCPServers()
-    if err != nil {
-        return nil, fmt.Errorf("failed to load MCP servers: %w", err)
+    // Apply built-in defaults for any unset values
+    builtin := GetBuiltinConfig()
+    if defaults.AlertType == "" {
+        defaults.AlertType = builtin.DefaultAlertType
     }
-    
-    // Load LLM providers
-    llmProviders, err := loader.loadLLMProviders()
-    if err != nil {
-        return nil, fmt.Errorf("failed to load LLM providers: %w", err)
+    if defaults.Runbook == "" {
+        defaults.Runbook = builtin.DefaultRunbook
     }
     
     return &Config{
+        configDir:           configDir,
         Defaults:            defaults,
-        AgentRegistry:       agents,
-        ChainRegistry:       chains,
-        MCPServerRegistry:   mcpServers,
-        LLMProviderRegistry: llmProviders,
+        AgentRegistry:       agentRegistry,
+        ChainRegistry:       chainRegistry,
+        MCPServerRegistry:   mcpServerRegistry,
+        LLMProviderRegistry: llmProviderRegistry,
     }, nil
+}
+
+// validate performs comprehensive validation on loaded configuration
+func validate(cfg *Config) error {
+    validator := NewValidator(cfg)
+    return validator.ValidateAll()
 }
 
 type configLoader struct {
@@ -1727,11 +1722,8 @@ func (l *configLoader) loadYAML(filename string, target interface{}) error {
         return fmt.Errorf("failed to read %s: %w", filename, err)
     }
     
-    // Interpolate environment variables
-    data, err = InterpolateEnvVars(data)
-    if err != nil {
-        return fmt.Errorf("failed to interpolate env vars in %s: %w", filename, err)
-    }
+    // Expand environment variables
+    data = ExpandEnv(data)
     
     // Parse YAML
     if err := yaml.Unmarshal(data, target); err != nil {
@@ -1741,26 +1733,38 @@ func (l *configLoader) loadYAML(filename string, target interface{}) error {
     return nil
 }
 
-func (l *configLoader) loadAgents() (*AgentRegistry, error) {
-    var data struct {
-        Agents []AgentConfig `yaml:"agents"`
-    }
+// TarsyYAMLConfig represents the complete tarsy.yaml file structure
+type TarsyYAMLConfig struct {
+    MCPServers  map[string]MCPServerConfig `yaml:"mcp_servers"`
+    Agents      map[string]AgentConfig     `yaml:"agents"`
+    AgentChains map[string]ChainConfig     `yaml:"agent_chains"`
+    Defaults    *Defaults                  `yaml:"defaults"` // Includes alert_type, runbook, and execution defaults
+}
+
+func (l *configLoader) loadTarsyYAML() (*TarsyYAMLConfig, error) {
+    var config TarsyYAMLConfig
     
-    if err := l.loadYAML("tarsy.yaml", &data); err != nil {
+    if err := l.loadYAML("tarsy.yaml", &config); err != nil {
         return nil, err
     }
     
-    registry := NewAgentRegistry()
-    for _, agent := range data.Agents {
-        if err := registry.Register(&agent); err != nil {
-            return nil, fmt.Errorf("failed to register agent %s: %w", agent.ID, err)
-        }
-    }
-    
-    return registry, nil
+    return &config, nil
 }
 
-// Similar implementations for chains, MCP servers, LLM providers...
+// LLMProvidersYAMLConfig represents the complete llm-providers.yaml file structure
+type LLMProvidersYAMLConfig struct {
+    LLMProviders map[string]LLMProviderConfig `yaml:"llm_providers"`
+}
+
+func (l *configLoader) loadLLMProvidersYAML() (map[string]LLMProviderConfig, error) {
+    var config LLMProvidersYAMLConfig
+    
+    if err := l.loadYAML("llm-providers.yaml", &config); err != nil {
+        return nil, err
+    }
+    
+    return config.LLMProviders, nil
+}
 ```
 
 ---
@@ -1897,13 +1901,13 @@ func TestValidateChainReferences(t *testing.T) {
         {
             name: "valid single agent chain",
             chain: ChainConfig{
-                ID: "test-chain",
+                AlertTypes: []string{"PodCrashLoop"},
                 Stages: []StageConfig{
                     {
-                        Name:          "Stage 1",
-                        Index:         0,
-                        Agent:         "kubernetes-agent",
-                        ExecutionMode: "single",
+                        Name: "Investigation",
+                        Agents: []StageAgentConfig{
+                            {Name: "KubernetesAgent"},
+                        },
                     },
                 },
             },
@@ -1912,13 +1916,13 @@ func TestValidateChainReferences(t *testing.T) {
         {
             name: "invalid agent reference",
             chain: ChainConfig{
-                ID: "test-chain",
+                AlertTypes: []string{"PodCrashLoop"},
                 Stages: []StageConfig{
                     {
-                        Name:          "Stage 1",
-                        Index:         0,
-                        Agent:         "nonexistent-agent",
-                        ExecutionMode: "single",
+                        Name: "Investigation",
+                        Agents: []StageAgentConfig{
+                            {Name: "nonexistent-agent"},
+                        },
                     },
                 },
             },
@@ -1926,16 +1930,20 @@ func TestValidateChainReferences(t *testing.T) {
             errMsg:  "agent not found",
         },
         {
-            name: "non-sequential stage indices",
+            name: "missing alert_types",
             chain: ChainConfig{
-                ID: "test-chain",
+                AlertTypes: []string{},
                 Stages: []StageConfig{
-                    {Name: "Stage 1", Index: 0, Agent: "kubernetes-agent", ExecutionMode: "single"},
-                    {Name: "Stage 2", Index: 2, Agent: "kubernetes-agent", ExecutionMode: "single"},
+                    {
+                        Name: "Stage 1",
+                        Agents: []StageAgentConfig{
+                            {Name: "KubernetesAgent"},
+                        },
+                    },
                 },
             },
             wantErr: true,
-            errMsg:  "stage indices not sequential",
+            errMsg:  "alert_types required",
         },
     }
     
@@ -1998,39 +2006,32 @@ func TestMCPOverrideValidation(t *testing.T) {
 ### Environment Variable Interpolation Tests
 
 ```go
-// pkg/config/interpolation_test.go
+// pkg/config/envexpand_test.go
 
-func TestInterpolateEnvVars(t *testing.T) {
+func TestExpandEnv(t *testing.T) {
     tests := []struct {
-        name    string
-        input   string
-        env     map[string]string
-        want    string
-        wantErr bool
+        name  string
+        input string
+        env   map[string]string
+        want  string
     }{
         {
-            name:  "simple substitution",
+            name:  "simple substitution ${VAR}",
             input: "api_key: ${API_KEY}",
             env:   map[string]string{"API_KEY": "secret123"},
             want:  "api_key: secret123",
         },
         {
-            name:  "substitution with default",
-            input: "endpoint: ${ENDPOINT:-https://default.com}",
+            name:  "simple substitution $VAR",
+            input: "api_key: $API_KEY",
+            env:   map[string]string{"API_KEY": "secret123"},
+            want:  "api_key: secret123",
+        },
+        {
+            name:  "missing var expands to empty",
+            input: "endpoint: ${ENDPOINT}",
             env:   map[string]string{},
-            want:  "endpoint: https://default.com",
-        },
-        {
-            name:  "override default with env var",
-            input: "endpoint: ${ENDPOINT:-https://default.com}",
-            env:   map[string]string{"ENDPOINT": "https://custom.com"},
-            want:  "endpoint: https://custom.com",
-        },
-        {
-            name:    "required var missing",
-            input:   "api_key: ${API_KEY}",
-            env:     map[string]string{},
-            wantErr: true,
+            want:  "endpoint: ",
         },
         {
             name:  "multiple substitutions",
@@ -2048,20 +2049,33 @@ func TestInterpolateEnvVars(t *testing.T) {
         t.Run(tt.name, func(t *testing.T) {
             // Set up environment
             for k, v := range tt.env {
-                os.Setenv(k, v)
-                defer os.Unsetenv(k)
+                t.Setenv(k, v) // Automatic cleanup
             }
             
-            result, err := InterpolateEnvVars([]byte(tt.input))
-            
-            if tt.wantErr {
-                assert.Error(t, err)
-            } else {
-                assert.NoError(t, err)
-                assert.Equal(t, tt.want, string(result))
-            }
+            result := ExpandEnv([]byte(tt.input))
+            assert.Equal(t, tt.want, string(result))
         })
     }
+}
+
+// Test validation catches missing required vars
+func TestValidationCatchesMissingEnvVars(t *testing.T) {
+    yamlContent := `
+llm_providers:
+  google-default:
+    api_key: ${GOOGLE_API_KEY}  # Empty after expansion
+`
+    
+    expanded := ExpandEnv([]byte(yamlContent))
+    
+    var config Config
+    err := yaml.Unmarshal(expanded, &config)
+    assert.NoError(t, err) // Unmarshaling succeeds
+    
+    // Validation catches the empty api_key
+    err = validateConfig(&config)
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "api_key")
 }
 ```
 
@@ -2079,13 +2093,10 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
     writeTestConfig(t, tempDir, "llm-providers.yaml", testLLMProvidersYAML)
     
     // Set required environment variables
-    os.Setenv("GEMINI_API_KEY", "test-key")
-    defer os.Unsetenv("GEMINI_API_KEY")
+    t.Setenv("GEMINI_API_KEY", "test-key")
     
-    // Load configuration
-    cfg, err := config.Load(context.Background(), config.LoadOptions{
-        ConfigDir: tempDir,
-    })
+    // Initialize configuration (load + validate)
+    cfg, err := config.Initialize(context.Background(), tempDir)
     require.NoError(t, err)
     
     // Validate registries populated
@@ -2104,15 +2115,7 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
     require.NoError(t, err)
     assert.Len(t, chain.Stages, 3)
     
-    // Validate cross-references
-    validator := config.NewValidator(&config.Registries{
-        Agents:       cfg.AgentRegistry,
-        Chains:       cfg.ChainRegistry,
-        MCPServers:   cfg.MCPServerRegistry,
-        LLMProviders: cfg.LLMProviderRegistry,
-    })
-    err = validator.ValidateAll()
-    assert.NoError(t, err)
+    // Note: Validation already done by Initialize(), so cfg is guaranteed valid
 }
 ```
 
@@ -2122,14 +2125,33 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ### Phase 2.2: Configuration System
 - [ ] Define YAML schemas for all configuration files
-  - [ ] tarsy.yaml schema (agents, chains, mcp_servers, defaults sections)
-  - [ ] llm-providers.yaml schema
-- [ ] Implement Go structs with validation tags
-  - [ ] AgentConfig
-  - [ ] ChainConfig
-  - [ ] MCPServerConfig
-  - [ ] LLMProviderConfig
-  - [ ] Defaults
+  - [ ] tarsy.yaml schema (mcp_servers, agents, agent_chains, defaults)
+  - [ ] llm-providers.yaml schema (llm_providers)
+- [ ] Implement Go built-in configurations (singleton pattern)
+  - [ ] builtin.go: BuiltinConfig struct with all built-in data
+  - [ ] builtin.go: GetBuiltinConfig() with sync.Once for thread-safe lazy initialization
+  - [ ] builtin.go: initBuiltinConfig() to populate Agents, MCPServers, LLMProviders, ChainDefinitions
+  - [ ] builtin.go: MaskingPatterns, PatternGroups, CodeMaskers
+  - [ ] builtin.go: DefaultRunbook, DefaultAlertType constants
+- [ ] Implement Go enums (type-safe string constants)
+  - [ ] enums.go: IterationStrategy (react, react-stage, react-final-analysis, native-thinking, synthesis, synthesis-native-thinking)
+  - [ ] enums.go: SuccessPolicy (all, any)
+  - [ ] enums.go: TransportType (stdio, http, sse)
+  - [ ] enums.go: LLMProviderType (google, openai, anthropic, xai, vertexai)
+  - [ ] enums.go: GoogleNativeTool (google_search, code_execution, url_context)
+- [ ] Implement Go structs with validation tags (using enum types)
+  - [ ] AgentConfig (custom_instructions, mcp_servers, iteration_strategy, max_iterations)
+  - [ ] ChainConfig (alert_types, stages, chat, llm_provider, max_iterations, etc.)
+  - [ ] StageConfig (name, agents, replicas, success_policy, synthesis, etc.)
+  - [ ] StageAgentConfig (name, llm_provider, iteration_strategy, max_iterations, mcp_servers)
+  - [ ] SynthesisConfig (agent, iteration_strategy, llm_provider)
+  - [ ] ChatConfig (enabled, agent, iteration_strategy, llm_provider, mcp_servers, max_iterations)
+  - [ ] MCPServerConfig (transport, instructions, data_masking, summarization)
+  - [ ] MaskingConfig, SummarizationConfig
+  - [ ] LLMProviderConfig (type, model, api_key_env, max_tool_result_tokens, native_tools)
+  - [ ] Defaults (llm_provider, max_iterations, iteration_strategy, success_policy)
+  - [ ] TarsyYAMLConfig (root structure with all sections)
+  - [ ] LLMProvidersYAMLConfig (root structure)
 - [ ] Implement configuration loader
   - [ ] YAML parsing
   - [ ] Environment variable interpolation
@@ -2185,13 +2207,21 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ## Design Decisions
 
+**Built-in + User-defined Configuration**: Built-in agents, MCP servers, LLM providers, and chains defined in Go code (`builtin.go`) using encapsulated singleton pattern (thread-safe with `sync.Once`). Users can add new components or override built-ins via YAML files. User-defined configurations have higher priority.
+
+**Config Umbrella Object**: Single `Config` struct encapsulates all registries, defaults, and configuration state. Provides thread-safe accessors and acts as the single source of truth for configuration at runtime.
+
+**Single-Function Initialization**: `config.Initialize()` handles all loading, validation, and setup internally. Main.go stays thin - just calls Initialize and uses the returned Config. All orchestration logic lives in the config package.
+
 **File-Based Configuration**: Configuration stored in YAML files (not database) for version control, code review, and deployment simplicity.
+
+**Dictionary-Based Structure**: Configuration uses dictionaries (maps) keyed by name/ID, not arrays. Matches old TARSy structure for familiarity and easier lookups.
 
 **In-Memory Registries**: Configuration loaded once at startup into in-memory registries. Configuration changes require service restart (no hot-reload support).
 
 **Strong Validation**: Comprehensive validation on startup with clear error messages. Fail fast if configuration invalid.
 
-**Environment Variable Interpolation**: Supports `${VAR}` and `${VAR:-default}` syntax for secrets and environment-specific values.
+**Environment Variable Interpolation**: Uses `os.ExpandEnv` for simple `${VAR}` and `$VAR` syntax in configuration files.
 
 **Environment-Agnostic YAML**: YAML config files work across all environments (local dev, podman, k8s). Environment differences handled via .env files only.
 
@@ -2203,9 +2233,15 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 **Per-Alert Overrides**: MCP selection can be overridden per alert via API (stored in database, not config files).
 
+**Simplified Stage Configuration**: Always use `agents: []` array for stage configuration (even for single agent). Rationale: Old TARSy had both `agent: "name"` (single) and `agents: [...]` (multiple) with complex mutual exclusivity validation. New TARSy simplifies to always use `agents: [{name: "AgentName"}]` - more consistent, simpler validation, easier to process. Single-agent stages just have 1 item in the array.
+
+**Consolidated Defaults**: All default values (execution configs AND application state defaults) in single `Defaults` struct under `defaults:` YAML section. Includes `alert_type` and `runbook` alongside execution defaults like `llm_provider` and `max_iterations`. Rationale: Better organization, cleaner YAML structure, intuitive grouping of all configurable defaults, simpler Config struct. While `alert_type` and `runbook` don't participate in hierarchical override like execution configs, consolidating them improves maintainability and user experience.
+
 ---
 
 ## Decided Against
+
+**Pause/Resume Feature**: Not implementing pause/resume functionality for agents that reach max iterations. When `max_iterations` is reached, agents will always force conclusion. Rationale: Simpler implementation, clearer behavior, no state management for paused sessions. Old TARSy had `force_conclusion_at_max_iterations` flag, but new TARSy removes this complexity.
 
 **Hot Reload**: Not implementing configuration hot-reload. Configuration changes require service restart. Rationale: Keep it simple like old TARSy - simpler implementation, clearer deployment process, no partial configuration states, atomic configuration updates.
 
@@ -2229,31 +2265,200 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
 
 ### ✅ Configuration Files
 - **tarsy.yaml**: Main orchestration configuration (~800-1000 lines)
-  - Agents: Agent definitions with iteration strategies, LLM providers, MCP servers
-  - Chains: Multi-stage agent chains with single/parallel execution
-  - MCP Servers: MCP server registry with transport configurations
-  - Defaults: System-wide defaults
+  - `mcp_servers:` - MCP server configs (transport, instructions, data_masking, summarization)
+  - `agents:` - Custom agent definitions (custom_instructions, mcp_servers, max_iterations)
+  - `agent_chains:` - Multi-stage chains with alert_types (single/parallel/replica execution)
+  - `defaults:` - System-wide defaults (llm_provider, max_iterations, alert_type, runbook, etc.)
 - **llm-providers.yaml**: LLM provider configurations (~50 lines)
+  - `llm_providers:` - Provider configs (type, model, api_key_env, max_tool_result_tokens, native_tools)
 - **.env**: Environment-specific values and secrets (gitignored)
 - **oauth2-proxy.cfg.template**: OAuth2 proxy template (generates oauth2-proxy.cfg)
 
 ### ✅ Key Features
+- **Built-in + User-defined**: Built-in agents/MCP/LLM/chains in Go code, user can add or override in YAML
 - **YAML-based**: Human-readable, easy to edit, version controlled
-- **Environment variable interpolation**: `${VAR}` and `${VAR:-default}` support
+- **Dictionary structure**: Components keyed by name/ID (not arrays)
+- **Environment variable interpolation**: Uses `os.ExpandEnv` (stdlib) for `${VAR}` and `$VAR` syntax
 - **Environment-agnostic**: Same YAML works across all environments (local, podman, k8s, prod)
 - **12-factor app compliance**: Environment-specific config via environment variables
 - **Startup validation**: Fail-fast validation on startup with clear error messages
 - **File-based only**: No configuration API, changes via git + restart
 - **In-memory registries**: Fast lookups, type-safe access
-- **Per-alert overrides**: MCP server selection via API (runtime only)
+- **Alert-type routing**: Chains specify `alert_types` for request routing
+- **Per-interaction overrides**: MCP server selection via API (runtime only, transient)
 - **OAuth2 integration**: Template-based OAuth2 proxy configuration
 - **Simple examples**: `.example` suffixed files for easy setup
+- **Data masking & summarization**: Critical security and performance features for MCP servers
 
 ### ✅ Go Implementation
-- **Type-safe structs**: Go structs with validation tags
-- **Registry pattern**: Thread-safe registries for each config type
+- **Single entry point**: `config.Initialize(ctx, configDir)` - all orchestration encapsulated in config package
+- **Type-safe structs**: Go structs with validation tags and enum types for string constants
+- **Enums for type safety**: IterationStrategy, SuccessPolicy, TransportType, LLMProviderType, GoogleNativeTool
+- **Singleton pattern**: Built-in configs use encapsulated singleton with `sync.Once` (thread-safe, lazy-initialized)
+- **Registry pattern**: Thread-safe registries store configuration metadata (not implementations)
 - **Clear validation**: Detailed error messages for misconfigurations
-- **Environment integration**: Seamless environment variable substitution
+- **Environment integration**: `os.ExpandEnv` for simple `${VAR}` and `$VAR` substitution
+- **Phase boundary**: Configuration only - agent execution is Phase 3
+
+---
+
+## Enums (Type-Safe String Fields)
+
+The following string fields should be implemented as enums in Go for type safety:
+
+### Configuration Enums
+
+```go
+// pkg/config/enums.go
+
+// IterationStrategy defines available agent iteration strategies
+type IterationStrategy string
+
+const (
+    IterationStrategyReact               IterationStrategy = "react"
+    IterationStrategyReactStage          IterationStrategy = "react-stage"
+    IterationStrategyReactFinalAnalysis  IterationStrategy = "react-final-analysis"
+    IterationStrategyNativeThinking      IterationStrategy = "native-thinking"
+    IterationStrategySynthesis           IterationStrategy = "synthesis"
+    IterationStrategySynthesisNativeThinking IterationStrategy = "synthesis-native-thinking"
+)
+
+// SuccessPolicy defines success criteria for parallel stages
+type SuccessPolicy string
+
+const (
+    SuccessPolicyAll SuccessPolicy = "all" // All agents must succeed
+    SuccessPolicyAny SuccessPolicy = "any" // At least one agent must succeed (default)
+)
+
+// TransportType defines MCP server transport types
+type TransportType string
+
+const (
+    TransportTypeStdio TransportType = "stdio" // Subprocess communication
+    TransportTypeHTTP  TransportType = "http"  // HTTP/HTTPS JSON-RPC
+    TransportTypeSSE   TransportType = "sse"   // Server-Sent Events
+)
+
+// LLMProviderType defines supported LLM providers
+type LLMProviderType string
+
+const (
+    LLMProviderTypeOpenAI    LLMProviderType = "openai"
+    LLMProviderTypeGoogle    LLMProviderType = "google"
+    LLMProviderTypeXAI       LLMProviderType = "xai"
+    LLMProviderTypeAnthropic LLMProviderType = "anthropic"
+    LLMProviderTypeVertexAI  LLMProviderType = "vertexai"
+)
+
+// GoogleNativeTool defines Google/Gemini native tools
+type GoogleNativeTool string
+
+const (
+    GoogleNativeToolGoogleSearch  GoogleNativeTool = "google_search"
+    GoogleNativeToolCodeExecution GoogleNativeTool = "code_execution"
+    GoogleNativeToolURLContext    GoogleNativeTool = "url_context"
+)
+```
+
+### Database/Runtime Enums (from Phase 2.1)
+
+These enums are already defined in the database design but referenced here for completeness:
+
+```go
+// pkg/models/enums.go (from Phase 2.1)
+
+// SessionStatus defines alert session processing states
+type SessionStatus string
+
+const (
+    SessionStatusPending    SessionStatus = "pending"
+    SessionStatusInProgress SessionStatus = "in_progress"
+    SessionStatusCompleted  SessionStatus = "completed"
+    SessionStatusFailed     SessionStatus = "failed"
+    SessionStatusCancelled  SessionStatus = "cancelled"
+    SessionStatusTimedOut   SessionStatus = "timed_out"
+)
+
+// StageStatus defines stage execution states
+type StageStatus string
+
+const (
+    StageStatusPending   StageStatus = "pending"
+    StageStatusActive    StageStatus = "active"
+    StageStatusCompleted StageStatus = "completed"
+    StageStatusFailed    StageStatus = "failed"
+    StageStatusCancelled StageStatus = "cancelled"
+    StageStatusTimedOut  StageStatus = "timed_out"
+    StageStatusPartial   StageStatus = "partial"
+)
+
+// ParallelType defines types of parallel execution
+type ParallelType string
+
+const (
+    ParallelTypeSingle     ParallelType = "single"      // Non-parallel
+    ParallelTypeMultiAgent ParallelType = "multi_agent" // Different agents in parallel
+    ParallelTypeReplica    ParallelType = "replica"     // Same agent replicated
+)
+
+// LLMInteractionType categorizes LLM interaction purposes
+type LLMInteractionType string
+
+const (
+    LLMInteractionTypeInvestigation         LLMInteractionType = "investigation"
+    LLMInteractionTypeSummarization         LLMInteractionType = "summarization"
+    LLMInteractionTypeFinalAnalysis         LLMInteractionType = "final_analysis"
+    LLMInteractionTypeForcedConclusion      LLMInteractionType = "forced_conclusion"
+    LLMInteractionTypeFinalAnalysisSummary  LLMInteractionType = "final_analysis_summary"
+)
+```
+
+### Usage in Configuration Structs
+
+Update all string fields to use enum types:
+
+```go
+type AgentConfig struct {
+    MCPServers         []string          `yaml:"mcp_servers" validate:"required,min=1"`
+    CustomInstructions string            `yaml:"custom_instructions"`
+    IterationStrategy  IterationStrategy `yaml:"iteration_strategy,omitempty"`
+    MaxIterations      *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+}
+
+type StageConfig struct {
+    Name          string             `yaml:"name" validate:"required"`
+    Agents        []StageAgentConfig `yaml:"agents" validate:"required,min=1,dive"`
+    Replicas      int                `yaml:"replicas,omitempty" validate:"omitempty,min=1"`
+    SuccessPolicy SuccessPolicy      `yaml:"success_policy,omitempty"`
+    MaxIterations *int               `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+    MCPServers    []string           `yaml:"mcp_servers,omitempty"`
+    Synthesis     *SynthesisConfig   `yaml:"synthesis,omitempty"`
+}
+
+type TransportConfig struct {
+    Type TransportType `yaml:"type" validate:"required"`
+    // ... other fields
+}
+
+type LLMProviderConfig struct {
+    Type                  LLMProviderType `yaml:"type" validate:"required"`
+    Model                 string          `yaml:"model" validate:"required"`
+    // ... other fields
+}
+```
+
+**Benefits:**
+- ✅ Compile-time type safety (no typos)
+- ✅ IDE autocomplete for valid values
+- ✅ Clear API documentation
+- ✅ Easy to add helper methods (e.g., `IsParallel()`, `IsTerminal()`)
+- ✅ YAML unmarshaling works naturally (Go's yaml package handles string-based enums)
+
+**Implementation Note:**
+- Go's `yaml` package automatically unmarshals string values to enum types
+- Validation happens at runtime during YAML parsing
+- Invalid enum values will cause clear unmarshaling errors
 
 ---
 
@@ -2267,7 +2472,7 @@ Design phase complete ✅. Ready for implementation:
    - Environment variable interpolation
    - Validation logic (fail-fast)
 3. Implement in-memory registries
-   - AgentRegistry
+   - AgentRegistry (stores agent **config metadata**, not implementations)
    - ChainRegistry
    - MCPServerRegistry
    - LLMProviderRegistry
@@ -2281,6 +2486,8 @@ Design phase complete ✅. Ready for implementation:
    - Loading tests
    - Integration tests
 6. Integrate with existing services
+
+**Important**: Agent instantiation and execution logic (Agent Factory, BaseAgent, etc.) will be implemented in **Phase 3: Agent Framework**. Phase 2.2 only handles configuration storage and validation.
    - SessionService (chain lookup)
    - StageExecutor (agent/MCP resolution)
 7. Document configuration system
