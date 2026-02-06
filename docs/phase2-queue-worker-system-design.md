@@ -123,9 +123,9 @@ Worker Pool (per Go process):
        │
        └── Worker crash (no heartbeat)
            ▼
-          ┌──────────┐
-          │ pending  │ ◄─── Orphan recovery (reset for retry)
-          └──────────┘
+          ┌───────────┐
+          │ timed_out │ ◄─── Orphan recovery (terminal — partial state in DB, no resume)
+          └───────────┘
 
 Terminal States: completed, failed, timed_out, cancelled
 (no further processing)
@@ -135,10 +135,11 @@ Terminal States: completed, failed, timed_out, cancelled
 - `pending` → `in_progress`: Worker claims session
 - `in_progress` → `completed`: Successful execution
 - `in_progress` → `failed`: Execution error
-- `in_progress` → `timed_out`: Session timeout exceeded (15m default)
+- `in_progress` → `timed_out`: Session timeout exceeded (15m) OR orphan recovery (worker crash)
 - `in_progress` → `cancelling`: User requests cancellation via API
 - `cancelling` → `cancelled`: Worker detects cancellation, cleans up
-- `in_progress` → `pending`: Orphan recovery (worker crash, no heartbeat)
+
+**Note:** Orphaned sessions go to `timed_out` (terminal), NOT back to `pending`. The session has unknown partial state in the DB (half-created stages, streaming TimelineEvents, incomplete agent executions). Resetting to `pending` would require resume logic, which we don't implement. The partial data remains for debugging. Users can re-submit the alert via `POST /api/v1/alerts` to create a fresh session.
 
 ---
 
@@ -877,19 +878,34 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
     for _, session := range orphans {
         log := slog.With("session_id", session.ID, "old_pod_id", session.PodID)
         
-        // Reset session to pending for retry
+        // Mark orphaned session as timed_out (terminal state).
+        // NOT reset to pending — session has unknown partial state in DB
+        // (half-created stages, streaming TimelineEvents, incomplete executions).
+        // Resetting to pending would require resume logic, which we don't implement.
+        // Users can re-submit the alert to create a fresh session.
+        now := time.Now()
         _, err := session.Update().
-            SetStatus(alertsession.StatusPending).
-            ClearPodID().
-            ClearLastInteractionAt().
+            SetStatus(alertsession.StatusTimedOut).
+            SetCompletedAt(now).
+            SetErrorMessage(fmt.Sprintf("Orphaned: no heartbeat from pod %s since %s", session.PodID, session.LastInteractionAt)).
             Save(ctx)
         
         if err != nil {
-            log.Error("Failed to recover orphaned session", "error", err)
+            log.Error("Failed to mark orphaned session as timed_out", "error", err)
             continue
         }
         
-        log.Info("Recovered orphaned session")
+        // Also mark any incomplete TimelineEvents as timed_out
+        _, _ = w.client.TimelineEvent.Update().
+            Where(
+                timelineevent.SessionIDEQ(session.ID),
+                timelineevent.Status("streaming"),
+            ).
+            SetStatus("timed_out").
+            SetCompletedAt(now).
+            Save(ctx)
+        
+        log.Warn("Orphaned session marked as timed_out", "last_heartbeat", session.LastInteractionAt)
     }
     
     return nil
@@ -898,10 +914,10 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 
 **Safety Considerations:**
 - **All pods run orphan detection independently** (no leader election needed)
-- Operations are idempotent: `UPDATE status = 'pending' WHERE session_id = ...`
+- Operations are idempotent: `UPDATE status = 'timed_out' WHERE session_id = ... AND status = 'in_progress'`
 - Race condition safe: Multiple pods detecting same orphan just means redundant updates (harmless)
 - No single point of failure (every pod can detect and recover orphans)
-- Proven pattern from old TARSy (`history_cleanup_service.py`)
+- Orphans go to `timed_out` (terminal state), not back to `pending` — no resume logic needed
 
 ---
 
@@ -923,25 +939,25 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 SIGTERM received (e.g., kubectl rollout restart)
      │
      ▼
-┌──────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────┐
 │  1. Stop accepting NEW sessions                       │
 │     - Workers stop polling/claiming from queue        │
 │     - Workers finish CURRENT sessions naturally       │
 │     - No interruption of active LLM/MCP interactions  │
-└──────────────────────┬─────────────────────────────────┘
+└──────────────────────┬────────────────────────────────┘
                        │
                        ▼
-┌──────────────────────────────────────────────────────┐
-│  2. Wait for workers to complete (with timeout)      │
+┌───────────────────────────────────────────────────────┐
+│  2. Wait for workers to complete (with timeout)       │
 │     - Wait for WaitGroup (all workers done)           │
 │     - Max wait: graceful_shutdown_timeout (15m)       │
 │     - Log progress: "Waiting for 3 active sessions"   │
-└──────────────────────┬─────────────────────────────────┘
+└──────────────────────┬────────────────────────────────┘
                        │
                        ▼
               Two possible outcomes:
                        │
-        ┌──────────────┴──────────────┐
+        ┌──────────────┴───────────────┐
         │                              │
         ▼                              ▼
 ┌────────────────┐          ┌──────────────────────┐
@@ -952,8 +968,8 @@ SIGTERM received (e.g., kubectl rollout restart)
 │   finished     │          │   sessions           │
 │ - Exit 0       │          │ - Sessions become    │
 │                │          │   orphans            │
-│                │          │ - Next startup will  │
-│                │          │   recover them       │
+│                │          │ - Orphan detection   │
+│                │          │   marks as timed_out │
 └────────────────┘          └──────────────────────┘
 ```
 
@@ -1030,7 +1046,7 @@ func main() {
         // - Workers immediately stop accepting NEW sessions (no more claims)
         // - Workers wait for CURRENT sessions to complete naturally
         // - Timeout after graceful_shutdown_timeout (default: 15m, matches session_timeout)
-        // - If timeout exceeded, incomplete sessions become orphans (recovered on next startup)
+        // - If timeout exceeded, incomplete sessions become orphans (marked timed_out by orphan detection)
         // NOTE: Kubernetes terminationGracePeriodSeconds must be >= 900s (15m)
         workerPool.Stop()
         close(done)
@@ -1151,10 +1167,12 @@ Frontend state machine per event:
 ### Crash Recovery
 
 If a worker crashes mid-processing:
-- TimelineEvent records with `status = streaming` → incomplete work (can be marked `failed`/`timed_out` on recovery)
-- Completed TimelineEvents and Interactions → already persisted, no data loss
 - Session `last_interaction_at` → stale, orphan detection picks it up
-- Orphan recovery resets session to `pending` → new worker claims and reprocesses
+- Orphan recovery marks session as `timed_out` (terminal state — no resume)
+- TimelineEvent records with `status = streaming` → marked `timed_out` by orphan recovery
+- Completed TimelineEvents and Interactions → already persisted, no data loss
+- Partial data remains in DB for debugging (stages, agent executions, etc.)
+- Users can re-submit the alert via `POST /api/v1/alerts` to start a fresh investigation
 
 ### Worker Responsibilities (Phase 2.3) vs Executor (Phase 3)
 
@@ -1460,10 +1478,11 @@ func TestWorkerPool_OrphanRecovery(t *testing.T) {
     err := pool.detectAndRecoverOrphans(context.Background())
     require.NoError(t, err)
     
-    // Verify session reset to pending
+    // Verify session marked as timed_out (terminal — not reset to pending)
     recovered := client.AlertSession.GetX(context.Background(), orphan.ID)
-    assert.Equal(t, alertsession.StatusPending, recovered.Status)
-    assert.Nil(t, recovered.PodID)
+    assert.Equal(t, alertsession.StatusTimedOut, recovered.Status)
+    assert.NotNil(t, recovered.CompletedAt)
+    assert.Contains(t, recovered.ErrorMessage, "Orphaned")
 }
 ```
 
@@ -1788,7 +1807,7 @@ func (s *Server) cancelSessionHandler(c echo.Context) error {
 
 **Pod ID Assignment**: Track which pod owns a session via `pod_id` field. Rationale: Enables orphan detection, supports multi-replica deployments, debugging and observability.
 
-**Distributed Orphan Detection**: All pods run orphan detection independently. Rationale: Simpler than leader election, idempotent operations make races harmless, no single point of failure.
+**Distributed Orphan Detection**: All pods run orphan detection independently. Orphans are marked `timed_out` (terminal), not reset to `pending`. Rationale: Simpler than leader election, idempotent operations make races harmless, no single point of failure. Orphaned sessions have unknown partial DB state — resetting to `pending` would require resume logic (which we don't implement).
 
 **Poll Interval (1s + 500ms jitter)**: Workers poll database every 1s with ±500ms random jitter. Rationale: Matches proven old TARSy pattern (1s), provides ~0.5s average pickup latency (better UX than 2s), jitter distributes load across replicas to prevent thundering herd, DB load is manageable (3-10 queries/sec for typical 3-10 replica deployments), configurable for high-replica environments (50+).
 
@@ -1804,7 +1823,7 @@ func (s *Server) cancelSessionHandler(c echo.Context) error {
 
 **Manual Session-Level Retry Only**: Failed sessions remain in "failed" status. No special retry API -- users re-send the original alert data to `POST /api/v1/alerts` to create a new independent session. Sub-operation retries (LLM 3x, MCP 1x, ReAct correction, DB 3x) are Phase 3 executor concerns. Rationale: Old TARSy has no automatic session restart. Sub-operation retries handle most transient failures. Avoids retry storms against down services. Keeps queue system simple.
 
-**Progressive DB Writes + Transient Streaming**: Executor writes to DB immediately as each operation completes (not at session end). LLM tokens streamed via NOTIFY/WebSocket only (no DB persistence per token). TimelineEvent created at operation start (status: `streaming`), updated once on completion (status: `completed`, final content). Rationale: 2 DB writes per TimelineEvent (create + complete) vs hundreds for per-token updates. Eliminates old TARSy's frontend de-duplication problem (event_id known from start, status monotonic). Heartbeat every 30s for orphan detection. Crash recovery via `streaming` status detection.
+**Progressive DB Writes + Transient Streaming**: Executor writes to DB immediately as each operation completes (not at session end). LLM tokens streamed via NOTIFY/WebSocket only (no DB persistence per token). TimelineEvent created at operation start (status: `streaming`), updated once on completion (status: `completed`, final content). Rationale: 2 DB writes per TimelineEvent (create + complete) vs hundreds for per-token updates. Eliminates old TARSy's frontend de-duplication problem (event_id known from start, status monotonic). Heartbeat every 30s for orphan detection. Crash recovery marks orphaned sessions as `timed_out` and incomplete TimelineEvents (status: `streaming`) as `timed_out`.
 
 **Worker Owns Entire Session (Sequential Stages)**: Worker claims session and executor processes all stages sequentially. Stage failure immediately stops the session. No per-stage queueing, no pause/resume. Always force conclusion at max iterations. Rationale: Same proven pattern as old TARSy (one worker, sequential stages, immediate failure stop). Dropping pause/resume eliminates significant complexity (conversation state serialization, resume context reconstruction, selective parallel agent re-execution) with minimal feature loss. Parallel agents within a stage follow `success_policy` (defined in DB schema). All stage orchestration is internal to SessionExecutor (Phase 3) -- the worker only sees the terminal result.
 
@@ -1836,7 +1855,7 @@ func (s *Server) cancelSessionHandler(c echo.Context) error {
 
 **Per-Token DB Updates**: Not updating TimelineEvent content in DB for every LLM token. Rationale: 5-15 concurrent streams at ~10-50 tokens/sec = 50-750 DB writes/sec of pure write amplification. NOTIFY/WebSocket delivers the same real-time UX without DB overhead. Final content written once on completion is sufficient for persistence.
 
-**Dead Letter Queue**: Not creating a separate DLQ table. Rationale: Failed sessions remain queryable in `alert_sessions` table (status: `failed`). No benefit to moving them to a separate table. Manual retry resets status to `pending`. Adds unnecessary schema complexity.
+**Dead Letter Queue**: Not creating a separate DLQ table. Rationale: Failed/timed_out sessions remain queryable in `alert_sessions` table. No benefit to moving them to a separate table. Manual retry means re-submitting the alert to create a new session. Adds unnecessary schema complexity.
 
 **Per-Stage Queueing**: Not queuing stages individually. Rationale: Stages are sequential by design (each depends on previous stage's output). Per-stage queue entries add coordination complexity with no benefit. Old TARSy processes all stages in a single flow and it works fine.
 

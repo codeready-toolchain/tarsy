@@ -154,11 +154,13 @@ func (p *WorkerPool) runOrphanDetection(ctx context.Context) {
             // Find orphaned sessions
             orphans, err := p.findOrphanedSessions(ctx)
             
-            // Reset each to PENDING (idempotent - safe if multiple pods do it)
+            // Mark each as TIMED_OUT (terminal state — idempotent, safe if multiple pods do it)
+            // NOT reset to pending — session has unknown partial state in DB, no resume logic
             for _, session := range orphans {
                 session.Update().
-                    SetStatus("pending").
-                    ClearPodID().
+                    SetStatus("timed_out").
+                    SetCompletedAt(time.Now()).
+                    SetErrorMessage("Orphaned: worker crashed").
                     Save(ctx)
             }
         }
@@ -167,7 +169,7 @@ func (p *WorkerPool) runOrphanDetection(ctx context.Context) {
 ```
 
 **Why This Works:**
-- Recovery is idempotent (UPDATE status = 'pending' WHERE session_id = ...)
+- Recovery is idempotent (UPDATE status = 'timed_out' WHERE session_id = ... AND status = 'in_progress')
 - If two pods recover same orphan simultaneously → harmless duplicate UPDATEs
 - Simple implementation (no leader election complexity)
 - No single point of failure
