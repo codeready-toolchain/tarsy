@@ -578,9 +578,22 @@ func TestStageService_GetAgentExecutions(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, executions, 3)
 
+		// Verify we got back the same executions we created
+		retrievedIDs := make([]string, len(executions))
+		for i, exec := range executions {
+			retrievedIDs[i] = exec.ID
+		}
+		assert.ElementsMatch(t, execIDs, retrievedIDs)
+
 		// Verify ordering by agent index
 		for i := 0; i < len(executions)-1; i++ {
 			assert.Less(t, executions[i].AgentIndex, executions[i+1].AgentIndex)
+		}
+
+		// Verify agent names match expected pattern
+		for i, exec := range executions {
+			expectedName := fmt.Sprintf("TestAgent%d", i+1)
+			assert.Equal(t, expectedName, exec.AgentName)
 		}
 	})
 
