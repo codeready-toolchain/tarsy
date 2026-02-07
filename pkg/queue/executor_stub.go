@@ -1,3 +1,4 @@
+// Package queue provides session queue management and processing infrastructure.
 package queue
 
 import (

@@ -19,6 +19,7 @@ import (
 // WorkerStatus represents the current state of a worker.
 type WorkerStatus string
 
+// Worker status constants.
 const (
 	WorkerStatusIdle    WorkerStatus = "idle"
 	WorkerStatusWorking WorkerStatus = "working"

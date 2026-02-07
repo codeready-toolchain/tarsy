@@ -18,7 +18,7 @@ import (
 )
 
 // createTestSession creates an alert session in pending status.
-func createTestSession(t *testing.T, ctx context.Context, client *ent.Client) *ent.AlertSession {
+func createTestSession(ctx context.Context, t *testing.T, client *ent.Client) *ent.AlertSession {
 	t.Helper()
 	session, err := client.AlertSession.Create().
 		SetID(uuid.New().String()).
@@ -54,7 +54,7 @@ func TestForUpdateSkipLockedClaiming(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a pending session
-	session := createTestSession(t, ctx, client)
+	session := createTestSession(ctx, t, client)
 
 	// Create worker and claim
 	cfg := intTestQueueConfig()
@@ -83,7 +83,7 @@ func TestConcurrentClaimsDifferentSessions(t *testing.T) {
 	// Create multiple pending sessions
 	sessionIDs := make(map[string]struct{})
 	for i := 0; i < 5; i++ {
-		s := createTestSession(t, ctx, client)
+		s := createTestSession(ctx, t, client)
 		sessionIDs[s.ID] = struct{}{}
 	}
 
@@ -264,7 +264,7 @@ func TestPoolEndToEndWithMockExecutor(t *testing.T) {
 
 	// Create pending sessions
 	for i := 0; i < 3; i++ {
-		createTestSession(t, ctx, client)
+		createTestSession(ctx, t, client)
 	}
 
 	// Create pool with mock executor
@@ -316,12 +316,12 @@ func TestCapacityLimits(t *testing.T) {
 
 	// Create multiple pending sessions
 	for i := 0; i < 5; i++ {
-		createTestSession(t, ctx, client)
+		createTestSession(ctx, t, client)
 	}
 
 	// Configure pool with low max concurrent limit
 	cfg := intTestQueueConfig()
-	cfg.WorkerCount = 3 // 3 workers available
+	cfg.WorkerCount = 3           // 3 workers available
 	cfg.MaxConcurrentSessions = 2 // But only allow 2 concurrent sessions globally
 	cfg.PollInterval = 50 * time.Millisecond
 
@@ -360,7 +360,7 @@ func TestHeartbeatUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a pending session
-	session := createTestSession(t, ctx, client)
+	session := createTestSession(ctx, t, client)
 
 	// Configure worker with short heartbeat for testing
 	cfg := intTestQueueConfig()
