@@ -1546,8 +1546,8 @@ type ToolCallData struct {
 
 The current PoC Python service needs these changes for Phase 3.1:
 
-1. **Implement new `Generate` RPC** alongside deprecated `GenerateWithThinking`
-2. **Remove usage of deprecated proto fields** (`model`, `temperature`, `max_tokens` on `ThinkingRequest`)
+1. **Replace PoC `GenerateWithThinking` RPC with new `Generate` RPC** (clean break — remove old RPC and message types entirely)
+2. **Remove old PoC proto types** (`ThinkingRequest`, `ThinkingChunk`, `Message`, etc.)
 3. **Add tool support** — pass `ToolDefinition` to Gemini as `FunctionDeclaration`
 4. **Return structured tool calls** — when Gemini returns `FunctionCall`, stream as `ToolCallDelta`
 5. **Handle tool result messages** — translate `role="tool"` to Gemini's `FunctionResponse`
