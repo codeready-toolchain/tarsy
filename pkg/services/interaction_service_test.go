@@ -391,8 +391,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)
 		assert.Len(t, conversation, 2)
-		assert.Equal(t, "system", string(conversation[0].Role))
-		assert.Equal(t, "user", string(conversation[1].Role))
+		assert.Equal(t, message.RoleSystem, conversation[0].Role)
+		assert.Equal(t, message.RoleUser, conversation[1].Role)
 	})
 
 	t.Run("returns empty conversation when no last_message_id", func(t *testing.T) {
@@ -451,7 +451,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)
 		assert.Len(t, conversation, 1)
-		assert.Equal(t, "system", string(conversation[0].Role))
+		assert.Equal(t, message.RoleSystem, conversation[0].Role)
 	})
 
 	t.Run("handles last_message_id pointing to middle of long conversation", func(t *testing.T) {

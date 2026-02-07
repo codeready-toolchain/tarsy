@@ -248,7 +248,7 @@ Code execution can happen multiple times in one response (model iterates: writes
 **Phasing and affected documents:**
 
 - **Phase 3.1:** Reserve `CodeExecutionDelta` in proto. No thought signature or code execution implementation yet (SingleCallController doesn't iterate, code execution not in scope).
-- **Phase 3.2 (native thinking controller):** Implement thought signature caching in `GoogleNativeProvider`. The native thinking controller in Go uses `backend: "google-native"` — Python's `GoogleNativeProvider` manages thought signatures internally per `session_id`.
+- **Phase 3.2 (native thinking controller):** Implement thought signature caching in `GoogleNativeProvider`. The native thinking controller in Go uses `backend: "google-native"` — Python's `GoogleNativeProvider` manages thought signatures internally per `execution_id`.
   - **Update:** `phase3-base-agent-architecture-design.md` — Python service section should note thought signature caching in `GoogleNativeProvider`.
 - **Phase 3.2 (iteration controllers):** Code execution results handled by controllers that support native tools (e.g., ReAct with no MCP tools). Go receives `CodeExecutionDelta`, stores in LLMInteraction.
   - **Update:** Phase 3.2 design doc (when created) — document `CodeExecutionDelta` handling in controllers.
@@ -454,7 +454,6 @@ Track which questions we've addressed:
 
 ## Next Steps
 
-1. Go through each question in order
-2. Add answers inline under each question
-3. Mark status (✅ Decided / ❌ Rejected / ⏸️ Deferred)
-4. Update the Phase 3.1 design document based on decisions
+All questions decided. Remaining action:
+
+1. ✅ Update the Phase 3.1 design document based on decisions — **done**

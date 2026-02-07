@@ -56,7 +56,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 			Content:        "You are a helpful assistant",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "system", string(msg1.Role))
+		assert.Equal(t, message.RoleSystem, msg1.Role)
 
 		msg2, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
 			SessionID:      session.ID,
@@ -76,10 +76,25 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Equal(t, msg2.ID, messages[1].ID)
 	})
 
+	t.Run("rejects invalid role", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 10,
+			Role:           message.Role("admin"),
+			Content:        "Should fail",
+		})
+		require.Error(t, err)
+		var validationErr *ValidationError
+		require.ErrorAs(t, err, &validationErr)
+		assert.Equal(t, "role", validationErr.Field)
+	})
+
 	t.Run("gets messages up to sequence", func(t *testing.T) {
 		messages, err := messageService.GetMessagesUpToSequence(ctx, exec.ID, 1)
 		require.NoError(t, err)
 		assert.Len(t, messages, 1)
-		assert.Equal(t, "system", string(messages[0].Role))
+		assert.Equal(t, message.RoleSystem, messages[0].Role)
 	})
 }

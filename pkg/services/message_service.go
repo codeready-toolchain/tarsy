@@ -36,6 +36,9 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 	if string(req.Role) == "" {
 		return nil, NewValidationError("role", "required")
 	}
+	if err := message.RoleValidator(req.Role); err != nil {
+		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant", req.Role))
+	}
 	if req.Content == "" {
 		return nil, NewValidationError("content", "required")
 	}

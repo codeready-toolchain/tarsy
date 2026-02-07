@@ -713,11 +713,12 @@ func (c *SingleCallController) Run(
     // SingleCallController makes one LLM call with no tools, so the response
     // is always the final analysis (not an intermediate llm_response).
     event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-        SessionID:   execCtx.SessionID,
-        StageID:     execCtx.StageID,
-        ExecutionID: execCtx.ExecutionID,
-        EventType:   timelineevent.EventTypeFinalAnalysis,
-        Content:     "",
+        SessionID:      execCtx.SessionID,
+        StageID:        execCtx.StageID,
+        ExecutionID:    execCtx.ExecutionID,
+        SequenceNumber: len(messages) + 1, // After system + user messages
+        EventType:      timelineevent.EventTypeFinalAnalysis,
+        Content:        "",
     })
     if err != nil {
         return nil, fmt.Errorf("failed to create timeline event: %w", err)
@@ -1072,6 +1073,8 @@ type GRPCLLMClient struct {
 }
 
 func NewGRPCLLMClient(addr string) (*GRPCLLMClient, error) {
+    // Insecure credentials: Go and Python run in the same pod (localhost).
+    // If deployment changes to separate pods/nodes, switch to TLS.
     conn, err := grpc.NewClient(addr,
         grpc.WithTransportCredentials(insecure.NewCredentials()),
     )
@@ -1110,6 +1113,10 @@ func (c *GRPCLLMClient) Generate(ctx context.Context, input *GenerateInput) (<-c
                 return
             }
             if err != nil {
+                // Phase 3.1: mark all gRPC errors as non-retryable since Python
+                // handles transient retries internally (Q5). Phase 3.2+ can inspect
+                // grpc status codes (Unavailable, ResourceExhausted) to set Retryable
+                // for Go's strategic retry logic.
                 ch <- &ErrorChunk{Message: err.Error(), Retryable: false}
                 return
             }
@@ -1248,6 +1255,9 @@ func (e *SessionExecutor) executeStage(
 
     // 2. Execute first agent (Phase 3.1: single agent per stage)
     // Phase 5 will add parallel agent execution
+    if len(stageConfig.Agents) == 0 {
+        return nil, fmt.Errorf("stage %q has no agents configured", stageConfig.Name)
+    }
     agentConfig := stageConfig.Agents[0]
 
     // 3. Create AgentExecution record
@@ -1682,7 +1692,7 @@ class GoogleNativeProvider(LLMProvider):
                     )
                 # Cache thought signature for next turn (Q3 decision)
                 if hasattr(part, 'thought_signature') and part.thought_signature:
-                    self._thought_signatures[config.session_id] = part.thought_signature
+                    self._thought_signatures[config.execution_id] = part.thought_signature
 
         # Usage info
         if chunk.usage_metadata:
