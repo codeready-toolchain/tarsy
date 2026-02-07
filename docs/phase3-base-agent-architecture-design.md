@@ -384,14 +384,6 @@ type Agent interface {
     // All intermediate state (TimelineEvents, Messages, Interactions) is
     // written to DB progressively during execution by the iteration controller.
     Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error)
-
-    // BuildStageContext generates context from this agent's completed execution
-    // for consumption by the next stage. Called lazily — only when the next
-    // stage actually needs it (not at execution completion).
-    //
-    // Queries the agent's own artifacts (Messages, TimelineEvents) and formats
-    // them appropriately. Each agent type can format differently.
-    BuildStageContext(ctx context.Context, executionID string) (string, error)
 }
 ```
 
@@ -539,11 +531,6 @@ func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prev
     return result, nil
 }
 
-func (a *BaseAgent) BuildStageContext(ctx context.Context, executionID string) (string, error) {
-    // Default implementation: query TimelineEvents for this execution
-    // and format them as text. Agent-specific implementations can override.
-    return a.controller.BuildContext(ctx, executionID)
-}
 ```
 
 ### Agent Factory
@@ -615,6 +602,7 @@ func (f *AgentFactory) createController(execCtx *ExecutionContext) (Controller, 
 // - Agent lifecycle (handled by BaseAgent)
 // - Session state management (handled by executor)
 // - MCP client management (injected via ExecutionContext)
+// - Cross-stage context formatting (handled by ContextFormatter)
 type Controller interface {
     // Run executes the iteration strategy.
     //
@@ -625,12 +613,44 @@ type Controller interface {
     // Returns the execution result. All intermediate state (TimelineEvents,
     // Messages, LLMInteractions) written to DB during execution.
     Run(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error)
-
-    // BuildContext generates text context from a completed execution
-    // for consumption by the next stage. Queries this execution's artifacts.
-    BuildContext(ctx context.Context, executionID string) (string, error)
 }
 ```
+
+### Timeline Event Types
+
+Controllers create `TimelineEvent` records during execution. Each event type has specific semantics:
+
+| Event Type | Semantics | Streamed to Frontend? | Included in Cross-Stage Context? |
+|---|---|---|---|
+| `llm_thinking` | LLM reasoning/thought content. Covers both native model thinking (Gemini, `metadata.source = "native"`) and ReAct parsed thoughts (`"Thought: ..."`, `metadata.source = "react"`). Frontend renders them differently per source. | Yes (live) | Only for synthesis strategies |
+| `llm_response` | Regular LLM text during intermediate iterations. Produced alongside tool calls in native thinking, or as intermediate output before the agent is done. Maps to old TARSy's `INTERMEDIATE_RESPONSE`. | Yes (live) | Yes |
+| `llm_tool_call` | LLM requested a tool call (native function calling). Metadata: `tool_name`, `server_name`, `arguments`. | Yes | Yes (in ReAct/synthesis formatters) |
+| `mcp_tool_call` | MCP tool execution was invoked. Metadata: `tool_name`, `server_name`. | Yes | Yes |
+| `mcp_tool_summary` | MCP tool result summary. | Yes | Yes |
+| `final_analysis` | Agent's final conclusion — no more iterations or tool calls. Maps to old TARSy's `FINAL_ANSWER`. Primary content for next-stage context. | Yes (live) | Yes (primary) |
+| `user_question` | User question in chat mode. | Yes | No |
+| `executive_summary` | High-level session summary. | Yes | No |
+
+**Key distinction: `llm_response` vs `final_analysis`**
+
+A single Gemini native thinking call can produce multiple event types. For example, during an intermediate iteration:
+
+```
+LLM call → response contains:
+  ├── thinking content    → llm_thinking event
+  ├── regular text        → llm_response event (the LLM is "talking" while also calling tools)
+  └── tool calls          → llm_tool_call events
+```
+
+On the final iteration (no tool calls):
+
+```
+LLM call → response contains:
+  ├── thinking content    → llm_thinking event
+  └── conclusion text     → final_analysis event (no tool calls = agent is done)
+```
+
+With ReAct controllers, the LLM returns a single text blob that is **parsed** into structured parts (Thought, Action, Observation, Final Answer). The controller creates the appropriate event types based on parsed content.
 
 ### Controller Types (Phase 3.2)
 
@@ -690,11 +710,13 @@ func (c *SingleCallController) Run(
     }
 
     // 3. Create TimelineEvent (streaming)
+    // SingleCallController makes one LLM call with no tools, so the response
+    // is always the final analysis (not an intermediate llm_response).
     event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
         SessionID:   execCtx.SessionID,
         StageID:     execCtx.StageID,
         ExecutionID: execCtx.ExecutionID,
-        EventType:   timelineevent.EventTypeLlmResponse,
+        EventType:   timelineevent.EventTypeFinalAnalysis,
         Content:     "",
     })
     if err != nil {
@@ -802,23 +824,156 @@ func (c *SingleCallController) buildMessages(
     return messages
 }
 
-func (c *SingleCallController) BuildContext(ctx context.Context, executionID string) (string, error) {
-    // Query TimelineEvents for this execution and format as text
-    events, err := c.execCtx.Services.Timeline.GetAgentTimeline(ctx, executionID)
-    if err != nil {
-        return "", err
-    }
+```
 
+### Context Formatter
+
+Context formatting is **separate from controllers**. Controllers handle the LLM call loop;
+context formatters handle how a completed execution's artifacts are presented to the next stage's LLM.
+
+Old TARSy uses two distinct formats depending on strategy:
+- **Sequential stages**: passes the agent's final analysis (last assistant message)
+- **Synthesis strategies**: passes the full conversation history (`ROLE: content` pairs)
+- **Tool results**: formatted as `Observation: server.tool: {result}`
+- **Cross-stage boundaries**: wrapped with `<!-- Analysis Result START/END -->` markers
+
+```go
+// pkg/agent/context/formatter.go
+
+// ContextFormatter formats a completed agent execution's artifacts
+// into text for consumption by the next stage's LLM.
+//
+// Different strategies need different formatting:
+// - Sequential stages: final analysis only
+// - Synthesis: full investigation history (conversation + tool results)
+//
+// The executor calls FormatStageContext after a stage completes,
+// passing the result to the next stage as prevStageContext.
+type ContextFormatter interface {
+    // FormatExecution formats a single agent execution's timeline events
+    // into text. Used by the executor when building stage context.
+    FormatExecution(ctx context.Context, execution *ent.AgentExecution, events []*ent.TimelineEvent) (string, error)
+
+    // FormatStageContext formats one or more agent executions from a completed
+    // stage into text for the next stage. Handles both single-agent and
+    // parallel (multi-agent) stages.
+    FormatStageContext(ctx context.Context, stage *ent.Stage, executions []*ent.AgentExecution) (string, error)
+}
+```
+
+#### Phase 3.1: Simple Context Formatter
+
+For Phase 3.1, a type-aware formatter that labels events by type. Sufficient for single-call
+executions (one `llm_response` event per execution).
+
+```go
+// pkg/agent/context/simple_formatter.go
+
+// SimpleContextFormatter formats timeline events with type labels.
+// Used in Phase 3.1. Phase 3.2 adds strategy-specific formatters
+// (ReAct conversation history, synthesis investigation history).
+type SimpleContextFormatter struct {
+    timelineSvc *services.TimelineService
+    stageSvc    *services.StageService
+}
+
+func (f *SimpleContextFormatter) FormatExecution(
+    ctx context.Context,
+    execution *ent.AgentExecution,
+    events []*ent.TimelineEvent,
+) (string, error) {
     var sb strings.Builder
+
     for _, event := range events {
-        if event.Status == timelineevent.StatusCompleted {
+        if event.Status != timelineevent.StatusCompleted {
+            continue
+        }
+
+        switch event.EventType {
+        case timelineevent.EventTypeFinalAnalysis:
+            // Primary content for cross-stage context.
+            sb.WriteString(fmt.Sprintf("## Analysis Result\n\n%s\n", event.Content))
+        case timelineevent.EventTypeLlmResponse:
+            // Intermediate LLM text (produced alongside tool calls in native thinking,
+            // or as intermediate output before the agent is done).
+            // Included in context so the next stage sees the full investigation trail.
+            sb.WriteString(fmt.Sprintf("### LLM Response\n\n%s\n", event.Content))
+        case timelineevent.EventTypeLlmThinking:
+            // Thinking is internal reasoning — include for synthesis,
+            // skip for sequential stages. Phase 3.2 will differentiate.
+            continue
+        case timelineevent.EventTypeLlmToolCall:
+            // LLM requested a tool call (native function calling).
+            toolName, _ := event.Metadata["tool_name"].(string)
+            sb.WriteString(fmt.Sprintf("Tool request [%s]: %s\n", toolName, event.Content))
+        case timelineevent.EventTypeMcpToolCall:
+            toolName, _ := event.Metadata["tool_name"].(string)
+            sb.WriteString(fmt.Sprintf("Tool call [%s]: %s\n", toolName, event.Content))
+        case timelineevent.EventTypeMcpToolSummary:
+            sb.WriteString(fmt.Sprintf("Tool result: %s\n", event.Content))
+        default:
             sb.WriteString(event.Content)
             sb.WriteString("\n")
         }
     }
+
+    return sb.String(), nil
+}
+
+func (f *SimpleContextFormatter) FormatStageContext(
+    ctx context.Context,
+    stage *ent.Stage,
+    executions []*ent.AgentExecution,
+) (string, error) {
+    var sb strings.Builder
+    sb.WriteString(fmt.Sprintf("### Results from '%s' stage:\n\n", stage.StageName))
+
+    for i, exec := range executions {
+        events, err := f.timelineSvc.GetAgentTimeline(ctx, exec.ID)
+        if err != nil {
+            return "", fmt.Errorf("failed to get timeline for execution %s: %w", exec.ID, err)
+        }
+
+        if len(executions) > 1 {
+            sb.WriteString(fmt.Sprintf("#### Agent %d: %s\n", i+1, exec.AgentName))
+            sb.WriteString(fmt.Sprintf("**Status**: %s\n\n", exec.Status))
+        }
+
+        // Wrap content with boundaries to prevent markdown conflicts
+        sb.WriteString("<!-- Analysis Result START -->\n")
+
+        content, err := f.FormatExecution(ctx, exec, events)
+        if err != nil {
+            return "", err
+        }
+        // Escape HTML comment markers inside content
+        content = strings.ReplaceAll(content, "<!--", "&lt;!--")
+        content = strings.ReplaceAll(content, "-->", "--&gt;")
+        sb.WriteString(content)
+
+        sb.WriteString("<!-- Analysis Result END -->\n\n")
+    }
+
     return sb.String(), nil
 }
 ```
+
+#### Phase 3.2+: Strategy-Specific Formatters (Future)
+
+Phase 3.2 will add richer formatters matching old TARSy's patterns:
+
+- **`ReActContextFormatter`** — formats full ReAct conversation history including
+  tool calls and observations (e.g., `Observation: server.tool: {result}`).
+  Used by synthesis strategies that need the full investigation trail.
+- **`SynthesisContextFormatter`** — formats parallel agent results with metadata
+  (agent name, provider, iteration strategy, status) and per-agent investigation history.
+  Matches old TARSy's `format_previous_stages_context()`.
+- **`NativeThinkingContextFormatter`** — includes structured tool call/result pairs
+  from Gemini's native function calling.
+
+The `ContextFormatter` interface is strategy-agnostic — the executor selects the
+appropriate formatter based on the *consuming* stage's strategy (the stage that will
+*read* the context), not the producing stage.
 
 ---
 
@@ -997,6 +1152,7 @@ type SessionExecutor struct {
     cfg          *config.Config
     dbClient     *ent.Client
     agentFactory *agent.AgentFactory
+    ctxFormatter agentctx.ContextFormatter
     services     *agent.ServiceBundle
 }
 
@@ -1016,6 +1172,7 @@ func NewSessionExecutor(
         cfg:          cfg,
         dbClient:     dbClient,
         agentFactory: agent.NewAgentFactory(llmClient, svcBundle),
+        ctxFormatter: agentctx.NewSimpleContextFormatter(svcBundle.Timeline, svcBundle.Stage),
         services:     svcBundle,
     }
 }
@@ -1038,7 +1195,11 @@ func (e *SessionExecutor) Execute(ctx context.Context, session *ent.AlertSession
     }
 
     // 2. Execute first stage only (Phase 3.1)
-    // Phase 5 will add multi-stage sequential execution
+    // Phase 5 will add multi-stage sequential execution with:
+    //   for i, stageConfig := range chain.Stages {
+    //       result, err := e.executeStage(ctx, session, chain, stageConfig, i, prevStageContext)
+    //       prevStageContext, _ = e.ctxFormatter.FormatStageContext(ctx, stage, executions)
+    //   }
     if len(chain.Stages) == 0 {
         return &queue.ExecutionResult{
             Status: string(agent.ExecutionStatusFailed),
@@ -1634,7 +1795,7 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 - [ ] Create provider interface (`llm/providers/base.py`) — `LLMProvider` ABC
 - [ ] Create provider registry (`llm/providers/registry.py`) — routes `backend` field to provider (Q1)
 - [ ] Implement `GoogleNativeProvider` (`llm/providers/google_native.py`) with cached SDK client (Q4)
-- [ ] Implement thought signature caching in `GoogleNativeProvider` (Q3 — in-memory per session_id)
+- [ ] Implement thought signature caching in `GoogleNativeProvider` (Q3 — in-memory per execution_id, 1h TTL)
 - [ ] Implement native tools mutual exclusivity (Q6 — suppress native_tools when MCP tools present, log warning)
 - [ ] Implement tool name conversion: `server.tool` ↔ `server__tool` for Gemini (Q7)
 - [ ] Implement transient retry logic: rate limits (3x backoff), empty responses (3x 3s) (Q5)
@@ -1680,6 +1841,13 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 - [ ] Create `pkg/agent/controller/` package
 - [ ] Define Controller interface
 - [ ] Implement SingleCallController (Phase 3.1 validation)
+
+**Context Formatter (Go):**
+- [ ] Create `pkg/agent/context/` package
+- [ ] Define ContextFormatter interface
+- [ ] Implement SimpleContextFormatter (type-aware event labels, HTML comment boundaries)
+- [ ] (Phase 3.2) Implement ReActContextFormatter (full conversation with tool observations)
+- [ ] (Phase 3.2) Implement SynthesisContextFormatter (parallel agent results with metadata)
 
 **LLM Client (Go):**
 - [ ] Create LLMClient interface
@@ -1759,6 +1927,8 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 **Canonical tool names in proto (Q7)**: `ToolDefinition.name` uses readable `server.tool` format. Each Python provider converts to/from its required format (e.g., Gemini: `server__tool`). Provider-specific naming restrictions are implementation details.
 
 **Forward SDK streaming chunks as-is (Q8)**: No buffering in Python. SDK streaming granularity is already reasonable. Frontend handles any smoothing needed.
+
+**ContextFormatter separate from Controller**: Cross-stage context formatting is NOT a controller concern. Controllers handle the LLM call loop; `ContextFormatter` handles how completed execution artifacts are presented to the next stage. The executor selects the formatter based on the *consuming* stage's strategy. Phase 3.1 uses `SimpleContextFormatter` (type-aware event labels, HTML comment boundaries matching old TARSy). Phase 3.2 adds strategy-specific formatters (ReAct conversation history, synthesis investigation history with agent metadata). Old TARSy's `format_previous_stages_context()` is the reference implementation.
 
 ---
 

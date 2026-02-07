@@ -431,7 +431,15 @@ mcp_interaction_id  *string   Link to debug details
 - `created_at` - Chronological queries
 
 **Enums:**
-- `EventType`: `llm_thinking`, `llm_response`, `llm_tool_call`, `mcp_tool_call`, `mcp_tool_summary`, `user_question`, `executive_summary`, `final_analysis`
+- `EventType`:
+  - `llm_thinking` — LLM reasoning/thought content. Covers both native model thinking (Gemini thinking feature, `metadata.source = "native"`) and ReAct parsed thoughts (`"Thought: ..."`, `metadata.source = "react"`). Streamed to frontend (rendered differently per source). Not included in cross-stage context for sequential stages; included for synthesis.
+  - `llm_response` — Regular LLM text during intermediate iterations. The LLM may produce text alongside tool calls (native thinking) or as an intermediate step before more tool calls. Maps to old TARSy's `INTERMEDIATE_RESPONSE`.
+  - `llm_tool_call` — LLM requested a tool call (native function calling). Metadata: `tool_name`, `server_name`, `arguments`.
+  - `mcp_tool_call` — MCP tool execution (tool was invoked). Metadata: `tool_name`, `server_name`.
+  - `mcp_tool_summary` — MCP tool result summary for the timeline.
+  - `user_question` — User question in chat mode.
+  - `executive_summary` — High-level session summary.
+  - `final_analysis` — Agent's final conclusion (no more iterations/tool calls). Maps to old TARSy's `FINAL_ANSWER`. Primary content for next-stage context in sequential chains.
 - `EventStatus`: `streaming`, `completed`, `failed`, `cancelled`, `timed_out`
 
 **Edges:**

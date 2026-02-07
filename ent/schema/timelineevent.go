@@ -46,6 +46,27 @@ func (TimelineEvent) Fields() []ent.Field {
 			Comment("Last update (for streaming)"),
 
 		// Event Details
+		//
+		// Event types and their semantics:
+		//   llm_thinking       — LLM reasoning/thought content. Covers both:
+		//                        (a) Native model thinking (Gemini thinking feature) — metadata.source = "native"
+		//                        (b) ReAct parsed thoughts ("Thought: ...") — metadata.source = "react"
+		//                        Streamed to frontend (rendered differently per source).
+		//                        NOT included in cross-stage context for sequential stages;
+		//                        included for synthesis strategies.
+		//   llm_response       — Regular LLM text during intermediate iterations. The LLM may produce
+		//                        text alongside tool calls (native thinking) or as an intermediate step.
+		//                        Maps to old TARSy's INTERMEDIATE_RESPONSE.
+		//   llm_tool_call      — LLM requested a tool call (native function calling).
+		//                        Metadata: tool_name, server_name, arguments.
+		//   mcp_tool_call      — MCP tool execution (tool was invoked).
+		//                        Metadata: tool_name, server_name.
+		//   mcp_tool_summary   — MCP tool result summary for the timeline.
+		//   user_question      — User question in chat mode.
+		//   executive_summary  — High-level session summary.
+		//   final_analysis     — Agent's final conclusion (no more iterations/tool calls).
+		//                        Maps to old TARSy's FINAL_ANSWER. Used as primary context
+		//                        for the next stage in sequential chains.
 		field.Enum("event_type").
 			Values(
 				"llm_thinking",
