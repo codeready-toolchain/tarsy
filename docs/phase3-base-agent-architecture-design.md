@@ -11,7 +11,7 @@ This document details the Base Agent Architecture for the new TARSy implementati
 
 **Key Design Principles:**
 - All orchestration in Go (agent lifecycle, iteration control, conversation management, prompt building)
-- Python is a thin, stateless LLM API proxy (receives messages via gRPC, calls LLM, streams back)
+- Python is a thin LLM API proxy (receives messages via gRPC, calls LLM, streams back). Stateless for conversation data; caches SDK clients and thought signatures in memory.
 - Strategy pattern for iteration controllers (pluggable execution strategies)
 - Progressive DB writes during execution (not at the end)
 - Context-based cancellation and timeouts throughout
@@ -85,6 +85,7 @@ This document details the Base Agent Architecture for the new TARSy implementati
 |---------|-----------|-------|
 | Agent interface & lifecycle | `pkg/agent/` | New package |
 | Iteration controllers | `pkg/agent/controller/` | Strategy pattern |
+| ReAct text parser | `pkg/agent/parser/` | Phase 3.2 — parses complete LLM text for tool calls |
 | Session executor | `pkg/queue/executor.go` | Replaces stub |
 | Prompt building | `pkg/agent/prompt/` | Phase 3.3 |
 | Conversation management | `pkg/agent/conversation/` | Message building |
@@ -99,8 +100,13 @@ This document details the Base Agent Architecture for the new TARSy implementati
 | Concern | Location | Notes |
 |---------|----------|-------|
 | LLM API calls | `llm-service/` | gRPC servicer |
-| Provider SDKs | `llm-service/llm/providers/` | Gemini (Phase 3.1), others (Phase 6) |
+| Provider backends | `llm-service/llm/providers/` | GoogleNative (Phase 3.1), LangChain (Phase 3.2) |
+| Provider registry | `llm-service/llm/providers/registry.py` | Routes `backend` field to provider |
 | Streaming responses | `llm-service/llm/servicer.py` | Chunks → gRPC stream |
+| Transient retry logic | `llm-service/llm/providers/` | Rate limits, empty responses (hidden from Go) |
+| Thought signature cache | `llm-service/llm/providers/google_native.py` | In-memory per session_id |
+| Native tools exclusivity | `llm-service/llm/providers/` | MCP present → suppress native tools |
+| Tool name conversion | `llm-service/llm/providers/` | `server.tool` ↔ provider-specific format |
 
 ### The Iteration Loop (Go-Driven)
 
@@ -235,8 +241,11 @@ message ConversationMessage {
 
 // ToolDefinition describes a tool available to the LLM.
 // Maps to MCP tool schemas discovered from MCP servers.
+// Names use canonical "server.tool" format (e.g., "kubernetes-server.resources_get").
+// Python providers convert to/from provider-specific formats as needed
+// (e.g., Gemini requires "server__tool" — dots not allowed in function names).
 message ToolDefinition {
-  string name = 1;              // Tool name (e.g., "kubectl_get_pods")
+  string name = 1;              // Canonical tool name: "server.tool" format
   string description = 2;       // Human-readable description
   string parameters_schema = 3; // JSON Schema string for tool parameters
 }
@@ -259,11 +268,22 @@ message GenerateResponse {
     ToolCallDelta tool_call = 3;
     UsageInfo usage = 4;
     ErrorInfo error = 5;
+    CodeExecutionDelta code_execution = 6; // Gemini code execution results
   }
 
   // True when this is the last chunk for this Generate call.
   // After this, no more chunks will be sent.
   bool is_final = 10;
+}
+
+// CodeExecutionDelta carries Gemini code execution results.
+// When code_execution native tool is enabled, Gemini generates Python code,
+// executes it in a sandbox, and returns the results. These are intermediate
+// reasoning artifacts — the model's final text already incorporates the results.
+// Streamed as deltas because the model may execute code multiple times per response.
+message CodeExecutionDelta {
+  string code = 1;    // The generated Python code
+  string result = 2;  // Execution output (stdout/stderr)
 }
 
 // TextDelta is a chunk of the LLM's text response.
@@ -303,9 +323,22 @@ message ErrorInfo {
 }
 ```
 
+### LLMConfig Update
+
+The existing `LLMConfig` (from Phase 2 proto) needs one new field for Phase 3.1:
+
+```protobuf
+message LLMConfig {
+  // ... existing fields (provider, model, api_key_env, etc.) ...
+  string backend = 10;  // Provider backend: "langchain" (default), "google-native", etc.
+}
+```
+
+The `backend` field tells Python which provider implementation to use (see Q1 decision). Go sets it based on the iteration strategy during config resolution. If empty, defaults to `"langchain"`.
+
 ### Key Design Decisions
 
-**1. Stateless per-request model**: Each `GenerateRequest` contains the FULL conversation history. Python never stores state between calls. Go rebuilds messages each time. This is simpler, more debuggable, and matches how LLM APIs actually work (they're stateless too).
+**1. Stateless per-request model**: Each `GenerateRequest` contains the FULL conversation history. Python never stores conversation state between calls. Go rebuilds messages each time. This is simpler, more debuggable, and matches how LLM APIs actually work (they're stateless too). Note: Python does cache SDK client instances (connection pools, auth tokens) and thought signatures in memory — this is infrastructure/provider state, not application state.
 
 **2. Tool calls as structured data**: `ToolCallDelta` provides structured tool call information for native function calling (Gemini, OpenAI). For ReAct controllers, tool calls are parsed from text on the Go side — the proto doesn't need to handle that case.
 
@@ -834,14 +867,16 @@ type Chunk interface {
 type TextChunk struct{ Content string }
 type ThinkingChunk struct{ Content string }
 type ToolCallChunk struct{ CallID, Name, Arguments string }
+type CodeExecutionChunk struct{ Code, Result string }
 type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int32 }
 type ErrorChunk struct{ Message, Code string; Retryable bool }
 
-func (c *TextChunk) chunkType() string     { return "text" }
-func (c *ThinkingChunk) chunkType() string  { return "thinking" }
-func (c *ToolCallChunk) chunkType() string  { return "tool_call" }
-func (c *UsageChunk) chunkType() string     { return "usage" }
-func (c *ErrorChunk) chunkType() string     { return "error" }
+func (c *TextChunk) chunkType() string          { return "text" }
+func (c *ThinkingChunk) chunkType() string       { return "thinking" }
+func (c *ToolCallChunk) chunkType() string       { return "tool_call" }
+func (c *CodeExecutionChunk) chunkType() string  { return "code_execution" }
+func (c *UsageChunk) chunkType() string          { return "usage" }
+func (c *ErrorChunk) chunkType() string          { return "error" }
 ```
 
 ### gRPC Implementation
@@ -1347,17 +1382,25 @@ If we later need Go-side control (e.g., per-chain thinking budgets), we can add 
 
 ### Python Service Architecture
 
+The Python service uses a **dual-provider model** with a registry pattern (Q1 decision). Two provider backends, each implementing the same `LLMProvider` ABC:
+
+1. **`GoogleNativeProvider`** — Uses `google-genai` SDK directly. For Gemini-specific thinking features (thinking content, thought signatures, ThinkingConfig). Used when `backend = "google-native"`.
+2. **`LangChainProvider`** — Uses LangChain for multi-provider abstraction (Google, OpenAI, Anthropic, XAI, VertexAI). For all iteration strategies that don't require native thinking. Used when `backend = "langchain"` (default).
+
+SDK client instances are **cached at startup** (Q4 decision) — all major LLM providers recommend reuse for connection pooling and auth token caching. API key changes require service restart.
+
 ```
 llm-service/
 ├── llm/
-│   ├── server.py          # gRPC server (async)
-│   ├── servicer.py        # LLMServicer (routes to providers)
+│   ├── server.py              # gRPC server (async)
+│   ├── servicer.py            # LLMServicer (routes to providers via registry)
 │   ├── providers/
-│   │   ├── base.py        # Provider interface
-│   │   ├── google.py      # Gemini provider (Phase 3.1)
-│   │   ├── openai.py      # OpenAI provider (Phase 6)
-│   │   └── anthropic.py   # Anthropic provider (Phase 6)
-│   └── proto/             # Generated proto code
+│   │   ├── base.py            # LLMProvider ABC
+│   │   ├── registry.py        # Provider registry (backend_name → LLMProvider)
+│   │   ├── google_native.py   # Gemini native thinking (google-genai SDK) — Phase 3.1
+│   │   ├── langchain_provider.py  # LangChain multi-provider — Phase 3.2
+│   │   └── (future: openai_native.py, litellm_provider.py, etc.)
+│   └── proto/                 # Generated proto code
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -1384,46 +1427,73 @@ class LLMProvider(ABC):
         ...
 ```
 
-### Gemini Provider (Phase 3.1)
+### GoogleNativeProvider (Phase 3.1)
 
 ```python
-# llm/providers/google.py
+# llm/providers/google_native.py
 
-class GoogleProvider(LLMProvider):
-    """Gemini provider using google-genai SDK."""
+class GoogleNativeProvider(LLMProvider):
+    """Gemini provider using google-genai SDK for native thinking features."""
+
+    def __init__(self, api_key: str):
+        # Client cached at startup — reused across all requests (Q4 decision)
+        self._client = genai.Client(api_key=api_key, http_options={'api_version': 'v1beta'})
+        # Thought signatures cached per session for multi-turn reasoning continuity (Q3 decision)
+        self._thought_signatures: dict[str, bytes] = {}
 
     async def generate(self, messages, config, tools=None):
-        api_key = os.getenv(config.api_key_env)
-        if not api_key:
-            yield error_response(f"Environment variable '{config.api_key_env}' not set")
-            return
-
-        client = genai.Client(api_key=api_key, http_options={'api_version': 'v1beta'})
-
         # Convert proto messages to Gemini format
         gemini_contents = self._to_gemini_contents(messages)
         gemini_tools = self._to_gemini_tools(tools) if tools else None
 
+        # Native tools mutual exclusivity (Q6 decision):
+        # If MCP tools present, suppress native tools and log warning
+        native_tools_config = None
+        if tools:
+            if config.native_tools:
+                logger.warning("MCP tools present — suppressing native_tools (Gemini limitation)")
+        else:
+            native_tools_config = self._build_native_tools(config.native_tools)
+
+        # Tool name conversion (Q7 decision):
+        # Canonical "server.tool" → Gemini "server__tool" (dots not allowed in function names)
+        if gemini_tools:
+            gemini_tools = self._convert_tool_names_to_gemini(gemini_tools)
+
         # Stream response
-        async for chunk in client.models.generate_content_stream(
+        async for chunk in self._client.aio.models.generate_content_stream(
             model=config.model,
             contents=gemini_contents,
             config=genai.types.GenerateContentConfig(
                 tools=gemini_tools,
+                thinking_config=self._get_thinking_config(config.model),
                 # ... other config
             ),
         ):
             for part in chunk.candidates[0].content.parts:
-                if part.text:
-                    yield text_delta(part.text)
-                elif part.thought:
+                if part.text and part.thought:
                     yield thinking_delta(part.text)
+                elif part.text:
+                    yield text_delta(part.text)
                 elif part.function_call:
                     yield tool_call_delta(
                         call_id=str(uuid4()),
-                        name=part.function_call.name,
+                        name=self._convert_tool_name_from_gemini(part.function_call.name),
                         arguments=json.dumps(part.function_call.args),
                     )
+                elif hasattr(part, 'executable_code') and part.executable_code:
+                    yield code_execution_delta(
+                        code=part.executable_code.code,
+                        result="",  # Result comes in next part
+                    )
+                elif hasattr(part, 'code_execution_result') and part.code_execution_result:
+                    yield code_execution_delta(
+                        code="",
+                        result=part.code_execution_result.output,
+                    )
+                # Cache thought signature for next turn (Q3 decision)
+                if hasattr(part, 'thought_signature') and part.thought_signature:
+                    self._thought_signatures[config.session_id] = part.thought_signature
 
         # Usage info
         if chunk.usage_metadata:
@@ -1433,6 +1503,20 @@ class GoogleProvider(LLMProvider):
                 total_tokens=chunk.usage_metadata.total_token_count,
             )
 ```
+
+### Error Handling in Providers (Q5 Decision)
+
+Python providers handle **transient retries** internally, hidden from Go:
+- Rate limit errors (429): up to 3 retries with exponential backoff
+- Empty responses: up to 3 retries with 3s delay
+- If retries exhausted: return `ErrorInfo(retryable=true)` so Go can make strategic decisions
+- Non-retryable errors (auth, config): return `ErrorInfo(retryable=false)` immediately
+
+Go retains full control via gRPC context — timeouts and cancellation propagate through to Python and interrupt retry loops, backoff sleeps, and in-flight LLM calls immediately.
+
+### LangChainProvider (Phase 3.2)
+
+Added in Phase 3.2 when ReAct controllers need multi-provider support. Uses LangChain for streaming, tool binding, message conversion, and token tracking across all providers (Google, OpenAI, Anthropic, XAI, VertexAI). Matches old TARSy's `LLMClient` pattern. Same `LLMProvider` interface — Go doesn't know which backend is used.
 
 ---
 
@@ -1509,6 +1593,9 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 
 **Proto/gRPC Evolution:**
 - [ ] Design new proto messages (GenerateRequest, GenerateResponse, ConversationMessage, ToolDefinition, ToolCall, etc.)
+- [ ] Add `CodeExecutionDelta` message to `GenerateResponse` oneof (Q3)
+- [ ] Add `backend` field to `LLMConfig` (Q1)
+- [ ] Update `ToolDefinition.name` comment to document canonical `server.tool` format (Q7)
 - [ ] Add new `Generate` RPC to proto
 - [ ] Mark old `GenerateWithThinking` as deprecated
 - [ ] Regenerate Go proto code
@@ -1517,16 +1604,23 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 - [ ] Update Python gRPC servicer
 
 **Python LLM Service Cleanup:**
-- [ ] Create provider interface (`llm/providers/base.py`)
-- [ ] Implement Gemini provider (`llm/providers/google.py`)
-- [ ] Implement new `Generate` RPC in servicer
+- [ ] Create provider interface (`llm/providers/base.py`) — `LLMProvider` ABC
+- [ ] Create provider registry (`llm/providers/registry.py`) — routes `backend` field to provider (Q1)
+- [ ] Implement `GoogleNativeProvider` (`llm/providers/google_native.py`) with cached SDK client (Q4)
+- [ ] Implement thought signature caching in `GoogleNativeProvider` (Q3 — in-memory per session_id)
+- [ ] Implement native tools mutual exclusivity (Q6 — suppress native_tools when MCP tools present, log warning)
+- [ ] Implement tool name conversion: `server.tool` ↔ `server__tool` for Gemini (Q7)
+- [ ] Implement transient retry logic: rate limits (3x backoff), empty responses (3x 3s) (Q5)
+- [ ] Implement new `Generate` RPC in servicer — routes via provider registry
 - [ ] Add tool definition → Gemini FunctionDeclaration conversion
 - [ ] Add Gemini FunctionCall → ToolCallDelta conversion
 - [ ] Add tool result message → Gemini FunctionResponse conversion
 - [ ] Add UsageInfo streaming
-- [ ] Add error classification (retryable vs non-retryable)
+- [ ] Add error classification (retryable vs non-retryable) with `ErrorInfo.retryable` (Q5)
+- [ ] Forward SDK streaming chunks as-is — no buffering (Q8)
 - [ ] Remove deprecated field usage in servicer
 - [ ] Write Python tests
+- [ ] (Phase 3.2) Implement `LangChainProvider` (`llm/providers/langchain_provider.py`) for ReAct controllers (Q1)
 
 **Message Schema Migration:**
 - [ ] Add `tool` value to `role` enum in `ent/schema/message.go`
@@ -1562,7 +1656,7 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 
 **LLM Client (Go):**
 - [ ] Create LLMClient interface
-- [ ] Define Chunk types (TextChunk, ThinkingChunk, ToolCallChunk, UsageChunk, ErrorChunk)
+- [ ] Define Chunk types (TextChunk, ThinkingChunk, ToolCallChunk, UsageChunk, ErrorChunk, CodeExecutionChunk)
 - [ ] Define GenerateInput, ConversationMessage, ToolDefinition, ToolCall types
 - [ ] Implement GRPCLLMClient
 - [ ] Replace old `pkg/llm/client.go` stub
@@ -1603,7 +1697,15 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 
 **Channel-based streaming in Go**: `LLMClient.Generate()` returns `<-chan Chunk` instead of callback-based streaming. Rationale: Idiomatic Go, easy to compose with select/context, natural backpressure.
 
-**Provider-agnostic proto**: The proto uses a common message model that maps to all LLM providers (Gemini, OpenAI, Anthropic). Provider-specific translation happens in Python. Rationale: Go code never deals with provider quirks; adding a new provider only requires a Python adapter.
+**Provider-agnostic proto**: The proto uses a common message model that maps to all LLM providers (Gemini, OpenAI, Anthropic). Provider-specific translation happens in Python. Rationale: Go code never deals with provider quirks; adding a new provider only requires a Python adapter. The `backend` field in `LLMConfig` routes requests to the right Python provider implementation without changing the proto message format.
+
+**Dual-provider model (Q1)**: Python has two provider backends behind a shared `LLMProvider` ABC: `GoogleNativeProvider` (google-genai SDK for thinking features) and `LangChainProvider` (LangChain for multi-provider abstraction). This matches old TARSy's proven dual-client pattern. A provider registry makes the system extensible — new backends can be added without refactoring existing code.
+
+**ReAct parsing in Go (Q2)**: The ReAct text parser lives in Go (`pkg/agent/parser/`), not Python. The parser runs on complete LLM text (not streaming) — it's a line-by-line state machine, straightforward in Go. Streaming UI detection (simple substring checks) is separate and trivial. This keeps all orchestration logic in Go and the proto clean (no "ReAct mode" in Python).
+
+**Cached SDK clients (Q4)**: Python caches SDK client instances at startup, matching old TARSy and all provider recommendations. Connection pooling, auth token caching, and TLS handshake reuse are critical for performance with up to 100 LLM calls per session.
+
+**Two-layer error handling (Q5)**: Python handles transient retries (rate limits, empty responses) internally. Go handles strategic retries (provider failover, session-level retry budget) and retains full control via gRPC context cancellation which cuts through Python's retry loops instantly.
 
 **Separate `tool` role for results**: Tool execution results use `role="tool"` messages with `tool_call_id` linking. Rationale: Follows OpenAI/Anthropic convention, maps cleanly to Gemini's FunctionResponse, clearly distinguishes tool results from user messages.
 
@@ -1620,6 +1722,16 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 **Message schema includes tool fields now**: Tool-related fields (`tool` role, `tool_calls`, `tool_call_id`, `tool_name`) are added to the Message table in Phase 3.1, even though tool execution comes in Phase 4. Rationale: The proto and conversation management already support tools. Adding the schema now avoids a migration gap where the Go conversation builder can't persist tool messages.
 
 **Thinking config stays in Python**: Thinking budget/level is determined by the Python service based on model name, not passed from Go via proto. Rationale: Matches old TARSy pattern, keeps proto simple, thinking config is highly provider-specific. Can add proto support later if Go-side control becomes needed.
+
+**Thought signatures in Python memory (Q3)**: `GoogleNativeProvider` caches thought signatures (opaque binary blobs for Gemini multi-turn reasoning continuity) in memory, keyed by `session_id`. This matches old TARSy's pattern. Acceptable because Python and Go share the same pod/container lifecycle — if the pod restarts, sessions are re-queued anyway.
+
+**Code execution as proto metadata (Q3)**: Gemini code execution results are exposed through a `CodeExecutionDelta` in the `GenerateResponse` oneof, not hidden in Python. Go can store them in LLMInteraction records and optionally stream to the frontend.
+
+**Native tools exclusivity in Python (Q6)**: Python silently suppresses `native_tools` when MCP tools are present (Gemini API limitation). Logs a warning. Matches old TARSy behavior. Python is the right layer because it talks to the Gemini API and understands the constraint.
+
+**Canonical tool names in proto (Q7)**: `ToolDefinition.name` uses readable `server.tool` format. Each Python provider converts to/from its required format (e.g., Gemini: `server__tool`). Provider-specific naming restrictions are implementation details.
+
+**Forward SDK streaming chunks as-is (Q8)**: No buffering in Python. SDK streaming granularity is already reasonable. Frontend handles any smoothing needed.
 
 ---
 
@@ -1638,6 +1750,14 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 **Hot-swappable controllers**: Not supporting changing iteration strategy mid-execution. Rationale: YAGNI. Strategy is determined at agent creation time from config. If a different strategy is needed, configure a different stage in the chain.
 
 **Streaming tool call arguments**: Not streaming tool call arguments incrementally (some providers support this). Rationale: Tool calls are typically small JSON objects. Waiting for the complete arguments simplifies parsing and MCP invocation. Can optimize later if needed.
+
+**Native SDKs only (no LangChain)**: Not replacing LangChain with per-provider native SDK implementations (Q1). Rationale: LangChain provides battle-tested multi-provider abstraction for streaming, tool binding, message conversion, and token tracking. Reimplementing this for each provider would be significant Phase 6 work with no clear benefit. Old TARSy's dual-client pattern (LangChain + native Gemini) is proven.
+
+**ReAct parsing in Python**: Not parsing ReAct text responses in Python to return structured `ToolCallDelta` (Q2). Rationale: Would make Python aware of iteration strategies and TARSy's ReAct format, violating the "thin proxy" principle. The parser works on complete text (not streaming), making it a straightforward state machine in Go.
+
+**Per-request SDK client creation**: Not creating fresh SDK clients for each gRPC call (Q4). Rationale: All major LLM providers explicitly recommend against it — loses connection pooling, repeats auth handshakes, risks auth rate limiting.
+
+**Provider-state round-tripping through proto**: Not adding `provider_state` blob to the proto for thought signatures (Q3). Rationale: Python in-memory caching is simpler, matches old TARSy, and Python/Go share the same lifecycle. Can add proto support later if needed.
 
 ---
 

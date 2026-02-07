@@ -310,3 +310,4 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
   - [Queue & Worker System Questions](phase2-queue-worker-system-questions.md)
 - **Phase 3 Design**:
   - [Base Agent Architecture Design](phase3-base-agent-architecture-design.md)
+  - [Base Agent Architecture Questions](phase3-base-agent-architecture-questions.md)
