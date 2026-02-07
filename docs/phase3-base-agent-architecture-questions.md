@@ -206,7 +206,7 @@ Three sub-concerns, each handled differently:
 
 **1. Native tools configuration** — Already solved. `LLMConfig.native_tools` map (existing proto field). Go knows the agent configuration and what provider/strategy it's using. Go sets `native_tools` based on config. Python passes them to the Gemini API. Go being aware of provider specifics is fine — it knows exactly what client/provider it's using. Mutual exclusivity with MCP tools is covered in Q6.
 
-**2. Thought signatures** — Python stores in memory, keyed by `session_id`. This matches old TARSy's pattern exactly (old TARSy also stores thought signatures in Python memory via `GeminiNativeThinkingClient`). Acceptable because:
+**2. Thought signatures** — Python stores in memory, keyed by `execution_id` (not `session_id` — a session has multiple stages and parallel agents, each with its own independent conversation). Entries cleaned up after 1 hour TTL (well above typical agent execution duration). This matches old TARSy's pattern (old TARSy also stores thought signatures in Python memory via `GeminiNativeThinkingClient`). Acceptable because:
 - Python and Go live in the same pod/container with the same lifecycle
 - If the pod restarts, Go's session executor also restarts — the session would be re-queued
 - Thinking continuity degradation is graceful (LLM works without it, just loses some reasoning context from previous turns)

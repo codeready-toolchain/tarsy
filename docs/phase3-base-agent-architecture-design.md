@@ -104,7 +104,7 @@ This document details the Base Agent Architecture for the new TARSy implementati
 | Provider registry | `llm-service/llm/providers/registry.py` | Routes `backend` field to provider |
 | Streaming responses | `llm-service/llm/servicer.py` | Chunks → gRPC stream |
 | Transient retry logic | `llm-service/llm/providers/` | Rate limits, empty responses (hidden from Go) |
-| Thought signature cache | `llm-service/llm/providers/google_native.py` | In-memory per session_id |
+| Thought signature cache | `llm-service/llm/providers/google_native.py` | In-memory per execution_id, 1h TTL cleanup |
 | Native tools exclusivity | `llm-service/llm/providers/` | MCP present → suppress native tools |
 | Tool name conversion | `llm-service/llm/providers/` | `server.tool` ↔ provider-specific format |
 
@@ -181,7 +181,7 @@ The current proto has:
 
 ### New Proto Design
 
-The new proto adds tool support, usage metadata, and a cleaner message model while being fully backward-compatible during migration.
+The new proto adds tool support, usage metadata, and a cleaner message model. This is a breaking change from the PoC proto — the old `GenerateWithThinking` RPC and its message types will be removed entirely (no backward compatibility needed since new TARSy is not in production yet).
 
 ```protobuf
 syntax = "proto3";
@@ -194,10 +194,8 @@ service LLMService {
   // New: Production RPC for agent framework
   rpc Generate(GenerateRequest) returns (stream GenerateResponse);
 
-  // Deprecated: PoC RPC — remove after Phase 3.1 migration
-  rpc GenerateWithThinking(ThinkingRequest) returns (stream ThinkingChunk) {
-    option deprecated = true;
-  }
+  // PoC RPC — removed in Phase 3.1 (replaced by Generate)
+  // rpc GenerateWithThinking(ThinkingRequest) returns (stream ThinkingChunk);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -209,6 +207,7 @@ service LLMService {
 // Python is stateless — each request is self-contained.
 message GenerateRequest {
   string session_id = 1;                    // For logging/tracing
+  string execution_id = 5;                  // AgentExecution ID — used by Python for thought signature cache key
   repeated ConversationMessage messages = 2; // Full conversation history
   LLMConfig llm_config = 3;                 // Provider configuration
   repeated ToolDefinition tools = 4;         // Available tools (empty = no tools)
@@ -346,7 +345,7 @@ The `backend` field tells Python which provider implementation to use (see Q1 de
 
 **4. Usage metadata**: `UsageInfo` enables token tracking, cost estimation, and the `max_tool_result_tokens` enforcement in Go.
 
-**5. Backward compatibility**: Old `GenerateWithThinking` RPC kept (marked deprecated) during migration. Removed after Phase 3.1 code fully migrates.
+**5. Clean break from PoC**: Old `GenerateWithThinking` RPC and its message types (`ThinkingRequest`, `ThinkingChunk`, `Message`) are removed entirely in Phase 3.1. No backward compatibility needed — new TARSy is not in production yet.
 
 ### Provider Mapping
 
@@ -1438,8 +1437,10 @@ class GoogleNativeProvider(LLMProvider):
     def __init__(self, api_key: str):
         # Client cached at startup — reused across all requests (Q4 decision)
         self._client = genai.Client(api_key=api_key, http_options={'api_version': 'v1beta'})
-        # Thought signatures cached per session for multi-turn reasoning continuity (Q3 decision)
-        self._thought_signatures: dict[str, bytes] = {}
+        # Thought signatures cached per execution_id for multi-turn reasoning continuity (Q3 decision)
+        # Keyed by execution_id (not session_id) because a session has multiple agents/stages
+        # Cleaned up after 1h TTL (well above typical agent execution duration)
+        self._thought_signatures: dict[str, tuple[bytes, float]] = {}  # exec_id → (signature, timestamp)
 
     async def generate(self, messages, config, tools=None):
         # Convert proto messages to Gemini format
@@ -1597,7 +1598,7 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 - [ ] Add `backend` field to `LLMConfig` (Q1)
 - [ ] Update `ToolDefinition.name` comment to document canonical `server.tool` format (Q7)
 - [ ] Add new `Generate` RPC to proto
-- [ ] Mark old `GenerateWithThinking` as deprecated
+- [ ] Remove old `GenerateWithThinking` RPC and PoC message types (clean break, not in production)
 - [ ] Regenerate Go proto code
 - [ ] Regenerate Python proto code
 - [ ] Update Go gRPC client
@@ -1723,7 +1724,7 @@ The Phase 2 service methods have some naming mismatches with the Phase 3.1 desig
 
 **Thinking config stays in Python**: Thinking budget/level is determined by the Python service based on model name, not passed from Go via proto. Rationale: Matches old TARSy pattern, keeps proto simple, thinking config is highly provider-specific. Can add proto support later if Go-side control becomes needed.
 
-**Thought signatures in Python memory (Q3)**: `GoogleNativeProvider` caches thought signatures (opaque binary blobs for Gemini multi-turn reasoning continuity) in memory, keyed by `session_id`. This matches old TARSy's pattern. Acceptable because Python and Go share the same pod/container lifecycle — if the pod restarts, sessions are re-queued anyway.
+**Thought signatures in Python memory (Q3)**: `GoogleNativeProvider` caches thought signatures (opaque binary blobs for Gemini multi-turn reasoning continuity) in memory, keyed by `execution_id` (not `session_id` — a session has multiple stages and parallel agents, each with its own conversation). Entries are cleaned up after 1 hour TTL (well above typical agent execution duration). Acceptable because Python and Go share the same pod/container lifecycle — if the pod restarts, sessions are re-queued anyway.
 
 **Code execution as proto metadata (Q3)**: Gemini code execution results are exposed through a `CodeExecutionDelta` in the `GenerateResponse` oneof, not hidden in Python. Go can store them in LLMInteraction records and optionally stream to the frontend.
 
