@@ -19,11 +19,13 @@ type WorkerPool struct {
 	sessionExecutor SessionExecutor
 	workers         []*Worker
 	stopCh          chan struct{}
+	stopOnce        sync.Once
 	wg              sync.WaitGroup
 
 	// Session cancel registry: session_id → cancel function
 	activeSessions map[string]context.CancelFunc
 	mu             sync.RWMutex
+	started        bool
 
 	// Orphan detection state
 	orphans orphanState
@@ -43,7 +45,14 @@ func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, ex
 }
 
 // Start spawns worker goroutines and the orphan detection background task.
+// It is safe to call multiple times; subsequent calls are no-ops.
 func (p *WorkerPool) Start(ctx context.Context) error {
+	if p.started {
+		slog.Warn("Worker pool already started, ignoring duplicate Start call", "pod_id", p.podID)
+		return nil
+	}
+	p.started = true
+
 	slog.Info("Starting worker pool", "pod_id", p.podID, "worker_count", p.config.WorkerCount)
 
 	for i := 0; i < p.config.WorkerCount; i++ {
@@ -83,7 +92,7 @@ func (p *WorkerPool) Stop() {
 	}
 
 	// Signal orphan detection to stop
-	close(p.stopCh)
+	p.stopOnce.Do(func() { close(p.stopCh) })
 	p.wg.Wait()
 
 	slog.Info("Worker pool stopped gracefully")

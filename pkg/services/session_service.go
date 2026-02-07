@@ -371,7 +371,11 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 // CancelSession requests cancellation of an in-progress session.
 // Sets the DB status to "cancelling" (intermediate state).
 // The owning worker detects this and propagates cancellation.
-func (s *SessionService) CancelSession(ctx context.Context, sessionID string) error {
+func (s *SessionService) CancelSession(_ context.Context, sessionID string) error {
+	// Use background context with timeout for critical write
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Conditional update: only update if session exists and is in_progress
 	// This prevents TOCTOU race conditions
 	count, err := s.client.AlertSession.Update().
@@ -380,14 +384,23 @@ func (s *SessionService) CancelSession(ctx context.Context, sessionID string) er
 			alertsession.StatusEQ(alertsession.StatusInProgress),
 		).
 		SetStatus(alertsession.StatusCancelling).
-		Save(ctx)
+		Save(bgCtx)
 	if err != nil {
 		return fmt.Errorf("failed to cancel session: %w", err)
 	}
 
 	// Check if the update actually modified a row
 	if count == 0 {
-		// Session either doesn't exist or is not in_progress
+		// Distinguish "not found" from "not in cancellable state"
+		exists, err := s.client.AlertSession.Query().
+			Where(alertsession.IDEQ(sessionID)).
+			Exist(bgCtx)
+		if err != nil {
+			return fmt.Errorf("failed to check session existence: %w", err)
+		}
+		if !exists {
+			return ErrNotFound
+		}
 		return ErrNotCancellable
 	}
 

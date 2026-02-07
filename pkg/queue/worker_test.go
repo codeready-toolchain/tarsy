@@ -18,6 +18,7 @@ func testQueueConfig() *config.QueueConfig {
 		GracefulShutdownTimeout: 15 * time.Minute,
 		OrphanDetectionInterval: 5 * time.Minute,
 		OrphanThreshold:         5 * time.Minute,
+		HeartbeatInterval:       30 * time.Second,
 	}
 }
 

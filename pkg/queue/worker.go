@@ -128,7 +128,8 @@ func (w *Worker) sleep(d time.Duration) {
 
 // pollAndProcess checks capacity, claims a session, and processes it.
 func (w *Worker) pollAndProcess(ctx context.Context) error {
-	// 1. Check global capacity
+	// 1. Check global capacity (best-effort; racy with concurrent workers but
+	//    bounded by WorkerCount and mitigated by poll jitter).
 	activeCount, err := w.client.AlertSession.Query().
 		Where(alertsession.StatusEQ(alertsession.StatusInProgress)).
 		Count(ctx)

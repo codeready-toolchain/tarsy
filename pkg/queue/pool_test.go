@@ -55,7 +55,9 @@ func TestPoolGetActiveSessionIDs(t *testing.T) {
 
 	// Register sessions
 	_, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
 	_, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
 	pool.RegisterSession("session-a", cancel1)
 	pool.RegisterSession("session-b", cancel2)
 
@@ -63,6 +65,19 @@ func TestPoolGetActiveSessionIDs(t *testing.T) {
 	require.Len(t, ids, 2)
 	assert.Contains(t, ids, "session-a")
 	assert.Contains(t, ids, "session-b")
+}
+
+func TestPoolStopTwiceDoesNotPanic(t *testing.T) {
+	pool := &WorkerPool{
+		stopCh:         make(chan struct{}),
+		activeSessions: make(map[string]context.CancelFunc),
+	}
+
+	// First call should close the channel without panic.
+	pool.Stop()
+
+	// Second call must not panic (sync.Once guards the close).
+	assert.NotPanics(t, func() { pool.Stop() })
 }
 
 func TestStubExecutor(t *testing.T) {
