@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -51,7 +52,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 1,
-			Role:           "system",
+			Role:           message.RoleSystem,
 			Content:        "You are a helpful assistant",
 		})
 		require.NoError(t, err)
@@ -62,7 +63,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 2,
-			Role:           "user",
+			Role:           message.RoleUser,
 			Content:        "Hello",
 		})
 		require.NoError(t, err)

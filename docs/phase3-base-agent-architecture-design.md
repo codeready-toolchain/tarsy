@@ -769,7 +769,7 @@ func (c *SingleCallController) Run(
         StageID:        execCtx.StageID,
         ExecutionID:    execCtx.ExecutionID,
         SequenceNumber: len(messages) + 1,
-        Role:           "assistant",
+        Role:           message.RoleAssistant,
         Content:        fullText.String(),
     })
     if err != nil {
@@ -798,7 +798,7 @@ func (c *SingleCallController) buildMessages(
 ) []ConversationMessage {
     messages := []ConversationMessage{
         {
-            Role:    "system",
+            Role:    message.RoleSystem,
             Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s",
                 execCtx.AgentName, execCtx.Config.CustomInstructions),
         },
@@ -817,7 +817,7 @@ func (c *SingleCallController) buildMessages(
     userContent.WriteString(execCtx.AlertData)
 
     messages = append(messages, ConversationMessage{
-        Role:    "user",
+        Role:    message.RoleUser,
         Content: userContent.String(),
     })
 
@@ -1005,12 +1005,13 @@ type GenerateInput struct {
 }
 
 // ConversationMessage is the Go-side message type.
+// Role uses the message.Role enum from the ent schema.
 type ConversationMessage struct {
-    Role       string     // "system", "user", "assistant", "tool"
+    Role       message.Role // message.RoleSystem, RoleUser, RoleAssistant, RoleTool
     Content    string
-    ToolCalls  []ToolCall // For assistant messages
-    ToolCallID string     // For tool result messages
-    ToolName   string     // For tool result messages
+    ToolCalls  []ToolCall   // For assistant messages
+    ToolCallID string       // For tool result messages
+    ToolName   string       // For tool result messages
 }
 
 // ToolDefinition describes a tool available to the LLM.
@@ -1523,7 +1524,7 @@ The `models.CreateMessageRequest` struct needs corresponding fields:
 ```go
 type CreateMessageRequest struct {
     // ... existing fields ...
-    Role           string // Now includes "tool"
+    Role           message.Role // message.RoleSystem, RoleUser, RoleAssistant, RoleTool
     Content        string
     ToolCalls      []ToolCallData `json:"tool_calls,omitempty"`      // For assistant messages
     ToolCallID     string         `json:"tool_call_id,omitempty"`    // For tool messages

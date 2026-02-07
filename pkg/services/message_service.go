@@ -33,7 +33,7 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 	if req.ExecutionID == "" {
 		return nil, NewValidationError("execution_id", "required")
 	}
-	if req.Role == "" {
+	if string(req.Role) == "" {
 		return nil, NewValidationError("role", "required")
 	}
 	if req.Content == "" {
@@ -51,7 +51,7 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		SetStageID(req.StageID).
 		SetExecutionID(req.ExecutionID).
 		SetSequenceNumber(req.SequenceNumber).
-		SetRole(message.Role(req.Role)).
+		SetRole(req.Role).
 		SetContent(req.Content).
 		SetCreatedAt(time.Now()).
 		Save(ctx)
