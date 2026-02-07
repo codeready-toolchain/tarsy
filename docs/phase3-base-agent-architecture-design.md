@@ -694,8 +694,7 @@ func (c *SingleCallController) Run(
         SessionID:   execCtx.SessionID,
         StageID:     execCtx.StageID,
         ExecutionID: execCtx.ExecutionID,
-        EventType:   "llm_response",
-        Status:      "streaming", // TimelineEvent status, not ExecutionStatus
+        EventType:   timelineevent.EventTypeLlmResponse,
         Content:     "",
     })
     if err != nil {
@@ -812,7 +811,7 @@ func (c *SingleCallController) BuildContext(ctx context.Context, executionID str
 
     var sb strings.Builder
     for _, event := range events {
-        if event.Status == "completed" {
+        if event.Status == timelineevent.StatusCompleted {
             sb.WriteString(event.Content)
             sb.WriteString("\n")
         }
@@ -873,9 +872,21 @@ type ToolCall struct {
     Arguments string // JSON
 }
 
+// ChunkType identifies the kind of streaming chunk.
+type ChunkType string
+
+const (
+    ChunkTypeText          ChunkType = "text"
+    ChunkTypeThinking      ChunkType = "thinking"
+    ChunkTypeToolCall      ChunkType = "tool_call"
+    ChunkTypeCodeExecution ChunkType = "code_execution"
+    ChunkTypeUsage         ChunkType = "usage"
+    ChunkTypeError         ChunkType = "error"
+)
+
 // Chunk is the interface for all streaming chunk types.
 type Chunk interface {
-    chunkType() string
+    chunkType() ChunkType
 }
 
 type TextChunk struct{ Content string }
@@ -885,12 +896,12 @@ type CodeExecutionChunk struct{ Code, Result string }
 type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int32 }
 type ErrorChunk struct{ Message, Code string; Retryable bool }
 
-func (c *TextChunk) chunkType() string          { return "text" }
-func (c *ThinkingChunk) chunkType() string       { return "thinking" }
-func (c *ToolCallChunk) chunkType() string       { return "tool_call" }
-func (c *CodeExecutionChunk) chunkType() string  { return "code_execution" }
-func (c *UsageChunk) chunkType() string          { return "usage" }
-func (c *ErrorChunk) chunkType() string          { return "error" }
+func (c *TextChunk) chunkType() ChunkType          { return ChunkTypeText }
+func (c *ThinkingChunk) chunkType() ChunkType       { return ChunkTypeThinking }
+func (c *ToolCallChunk) chunkType() ChunkType       { return ChunkTypeToolCall }
+func (c *CodeExecutionChunk) chunkType() ChunkType  { return ChunkTypeCodeExecution }
+func (c *UsageChunk) chunkType() ChunkType          { return ChunkTypeUsage }
+func (c *ErrorChunk) chunkType() ChunkType          { return ChunkTypeError }
 ```
 
 ### gRPC Implementation

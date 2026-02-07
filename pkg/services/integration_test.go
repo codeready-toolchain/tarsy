@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -74,7 +75,7 @@ func TestServiceIntegration(t *testing.T) {
 			StageID:        initialStage.ID,
 			ExecutionID:    initialExec.ID,
 			SequenceNumber: 1,
-			EventType:      "llm_thinking",
+			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Analyzing pod status...",
 		})
 		require.NoError(t, err)
