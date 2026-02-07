@@ -491,6 +491,38 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, stage.StatusActive, updated.Status)
 	})
+
+	t.Run("no-op when stage has zero agent executions", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		stageService := NewStageService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
+		ctx := context.Background()
+
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Empty Stage",
+			StageIndex:         1,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		// Call UpdateStageStatus with no agent executions — should be a no-op
+		err = stageService.UpdateStageStatus(ctx, stg.ID)
+		require.NoError(t, err)
+
+		// Stage should remain pending (not silently completed)
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusPending, updated.Status)
+	})
 }
 
 func TestStageService_GetStagesBySession(t *testing.T) {

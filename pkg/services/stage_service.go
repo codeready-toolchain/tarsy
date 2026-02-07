@@ -211,6 +211,11 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 		return nil
 	}
 
+	// Guard: if no agent executions exist, don't finalize
+	if len(stg.Edges.AgentExecutions) == 0 {
+		return nil
+	}
+
 	// All agents terminated - determine final stage status
 	allCompleted := true
 	allTimedOut := true
