@@ -44,7 +44,7 @@ Old TARSy uses **two Python LLM clients**:
 
 **Two clients required now:**
 
-1. **`LangChainProvider`** — Uses LangChain for multi-provider abstraction. Handles streaming, tool binding, message conversion, and token usage tracking across all supported providers (Google, OpenAI, Anthropic, XAI, VertexAI). Used for all iteration strategies that don't require Gemini-specific thinking features: ReAct, react-stage, react-final-analysis, synthesis, chat, final-analysis.
+1. **`LangChainProvider`** — Uses LangChain for multi-provider abstraction. Handles streaming, tool binding, message conversion, and token usage tracking across all supported providers (Google, OpenAI, Anthropic, XAI, VertexAI). Used for all iteration strategies that don't require Gemini-specific thinking features: ReAct, synthesis, chat.
 
 2. **`GoogleNativeProvider`** — Uses `google-genai` SDK directly. Required for Gemini-specific thinking features that LangChain doesn't expose: thinking content, thought signatures, ThinkingConfig (thinking budgets/levels). Used exclusively for native-thinking and synthesis-native-thinking iteration strategies.
 
@@ -60,7 +60,7 @@ message LLMConfig {
 ```
 
 Go's config resolution sets the backend based on iteration strategy:
-- `react`, `react-stage`, `react-final-analysis`, `synthesis`, `chat` → `"langchain"`
+- `react`, `synthesis`, `chat` → `"langchain"`
 - `native-thinking`, `synthesis-native-thinking` → `"google-native"`
 
 Python servicer routes to the matching provider. If `backend` is empty/unset, defaults to `"langchain"`.

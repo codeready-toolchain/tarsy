@@ -108,7 +108,8 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 **3.2: Iteration Controllers (Go)**
 - [ ] ReAct controller (text-based tool parsing, observation loop)
 - [ ] Native thinking controller (Gemini function calling, structured tool calls)
-- [ ] Stage controller variants (react-stage, react-final-analysis)
+- ~~Stage controller variants (react-stage, react-final-analysis) — dropped, never used in old TARSy production. Strategy pattern allows adding new controllers later if needed.~~
+- [ ] Cleanup: remove `react-stage` and `react-final-analysis` from Phase 2 code (enums, config examples, validation, built-in configs)
 - [ ] Synthesis controller (tool-less, single LLM call)
 - [ ] Chat controller (investigation context + chat history)
 - [ ] Final analysis controller (tool-less comprehensive analysis)

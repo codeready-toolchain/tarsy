@@ -562,12 +562,12 @@ agent_chains:
       - name: "system-data-collection"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "react-stage"   # Stage-specific strategy
+            iteration_strategy: "react"
       
       - name: "final-diagnosis"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "react-final-analysis"
+            iteration_strategy: "react"          # Could use a specialized controller in the future
 
   kubernetes-multiple-agents:
     alert_types: ["Kubernetes - Multiple agents - Custom Synthesis"]
@@ -2161,7 +2161,7 @@ func TestConfigurationLoadingEndToEnd(t *testing.T) {
   - [ ] builtin.go: MaskingPatterns, PatternGroups, CodeMaskers
   - [ ] builtin.go: DefaultRunbook, DefaultAlertType constants
 - [ ] Implement Go enums (type-safe string constants)
-  - [ ] enums.go: IterationStrategy (react, react-stage, react-final-analysis, native-thinking, synthesis, synthesis-native-thinking)
+  - [ ] enums.go: IterationStrategy (react, native-thinking, synthesis, synthesis-native-thinking) — react-stage and react-final-analysis dropped (not used in old TARSy, can add later)
   - [ ] enums.go: SuccessPolicy (all, any)
   - [ ] enums.go: TransportType (stdio, http, sse)
   - [ ] enums.go: LLMProviderType (google, openai, anthropic, xai, vertexai)
@@ -2342,12 +2342,12 @@ The following string fields should be implemented as enums in Go for type safety
 type IterationStrategy string
 
 const (
-    IterationStrategyReact               IterationStrategy = "react"
-    IterationStrategyReactStage          IterationStrategy = "react-stage"
-    IterationStrategyReactFinalAnalysis  IterationStrategy = "react-final-analysis"
-    IterationStrategyNativeThinking      IterationStrategy = "native-thinking"
-    IterationStrategySynthesis           IterationStrategy = "synthesis"
+    IterationStrategyReact                  IterationStrategy = "react"
+    IterationStrategyNativeThinking         IterationStrategy = "native-thinking"
+    IterationStrategySynthesis              IterationStrategy = "synthesis"
     IterationStrategySynthesisNativeThinking IterationStrategy = "synthesis-native-thinking"
+    // Dropped: react-stage, react-final-analysis — never used in old TARSy production.
+    // Strategy pattern allows adding new controllers later without refactoring.
 )
 
 // SuccessPolicy defines success criteria for parallel stages

@@ -639,11 +639,15 @@ These will be implemented in Phase 3.2, listed here for architectural context:
 | Strategy | Controller | Tools? | Use Case |
 |----------|-----------|--------|----------|
 | `react` | ReActController | Yes (text-parsed) | Standard investigation |
-| `react-stage` | ReactStageController | Yes (text-parsed) | Stage-specific data collection |
-| `react-final-analysis` | FinalAnalysisController | No | Tool-less final analysis |
 | `native-thinking` | NativeThinkingController | Yes (structured) | Gemini native function calling |
 | `synthesis` | SynthesisController | No | Synthesize parallel results |
 | `synthesis-native-thinking` | SynthesisNativeController | No | Synthesis with native thinking |
+
+**Dropped from old TARSy** (never used in production, can be added later if needed — strategy pattern allows new controllers without refactoring):
+- `react-stage` (ReactStageController) — stage-specific data collection variant of ReAct
+- `react-final-analysis` (FinalAnalysisController) — tool-less final analysis variant
+
+> **Cleanup required**: Remove `react-stage` and `react-final-analysis` from existing Phase 2 code — enums in `pkg/config/enums.go`, YAML config examples, validation logic, and any references in built-in configurations.
 
 ### Phase 3.1: Basic Single-Call Controller
 
