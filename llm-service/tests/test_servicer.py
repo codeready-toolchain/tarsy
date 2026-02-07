@@ -17,7 +17,12 @@ def mock_provider():
 
 @pytest.fixture
 def servicer_with_mock_provider(mock_provider):
-    """Create a servicer with a mocked provider registry."""
+    """Create a servicer with a mocked provider registry.
+    
+    Note: Both patching ProviderRegistry and manually overriding _registry are needed:
+    - The patch prevents side effects during __init__ (e.g., GoogleNativeProvider instantiation)
+    - The manual assignment ensures the mock is properly in place for test assertions
+    """
     with patch("llm.servicer.ProviderRegistry") as mock_registry_class:
         mock_registry = Mock()
         mock_registry.get.return_value = mock_provider
@@ -79,33 +84,30 @@ class TestLLMServicer:
         
         mock_registry.get.assert_called_once_with("custom-backend")
 
-    async def test_generate_invalid_backend(self):
+    async def test_generate_invalid_backend(self, servicer_with_mock_provider):
         """Test that Generate yields error response for invalid backend."""
-        with patch("llm.servicer.ProviderRegistry") as mock_registry_class:
-            mock_registry = Mock()
-            mock_registry.get.side_effect = ValueError("No provider registered for backend 'invalid'")
-            mock_registry_class.return_value = mock_registry
-            
-            servicer = LLMServicer()
-            servicer._registry = mock_registry
-            
-            request = pb.GenerateRequest(
-                session_id="sess-1",
-                execution_id="exec-1",
-                llm_config=pb.LLMConfig(backend="invalid", model="model-1"),
-                messages=[],
-            )
-            context = MagicMock()
-            
-            responses = []
-            async for resp in servicer.Generate(request, context):
-                responses.append(resp)
-            
-            assert len(responses) == 1
-            assert responses[0].HasField("error")
-            assert responses[0].error.code == "invalid_backend"
-            assert responses[0].error.retryable is False
-            assert responses[0].is_final
+        servicer, mock_registry, _ = servicer_with_mock_provider
+        
+        # Configure the mock to raise on invalid backend
+        mock_registry.get.side_effect = ValueError("No provider registered for backend 'invalid'")
+        
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(backend="invalid", model="model-1"),
+            messages=[],
+        )
+        context = MagicMock()
+        
+        responses = []
+        async for resp in servicer.Generate(request, context):
+            responses.append(resp)
+        
+        assert len(responses) == 1
+        assert responses[0].HasField("error")
+        assert responses[0].error.code == "invalid_backend"
+        assert responses[0].error.retryable is False
+        assert responses[0].is_final
 
     async def test_generate_streams_provider_responses(self, servicer_with_mock_provider):
         """Test that Generate streams all responses from the provider."""
@@ -160,7 +162,7 @@ class TestLLMServicer:
         assert len(responses) == 1
         assert responses[0].HasField("error")
         assert responses[0].error.code == "internal"
-        assert "Provider failed" in responses[0].error.message
+        assert responses[0].error.message == "Internal error during generation"
         assert responses[0].is_final
 
     async def test_generate_passes_request_to_provider(self, servicer_with_mock_provider):

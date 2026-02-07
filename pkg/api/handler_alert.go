@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	echo "github.com/labstack/echo/v5"
@@ -25,7 +26,8 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 
 	// 3. Enforce alert data size limit
 	if len(req.Data) > agent.MaxAlertDataSize {
-		return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "alert data exceeds maximum size of 1 MB")
+		return echo.NewHTTPError(http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("alert data exceeds maximum size of %d bytes", agent.MaxAlertDataSize))
 	}
 
 	// 4. Transform to service input

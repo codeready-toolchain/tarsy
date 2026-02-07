@@ -24,6 +24,9 @@ func NewAgentFactory(controllerFactory ControllerFactory) *AgentFactory {
 
 // CreateAgent builds an Agent instance for the given execution context.
 func (f *AgentFactory) CreateAgent(execCtx *ExecutionContext) (Agent, error) {
+	if execCtx == nil || execCtx.Config == nil {
+		return nil, fmt.Errorf("execution context and config must not be nil")
+	}
 	controller, err := f.controllerFactory.CreateController(execCtx.Config.IterationStrategy, execCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller for strategy %q: %w",

@@ -149,8 +149,12 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	agentResult, err := agentInstance.Execute(ctx, execCtx, "")
 	if err != nil {
 		logger.Error("Agent execution error", "error", err)
-		_ = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusFailed, err.Error())
-		_ = stageService.UpdateStageStatus(ctx, stg.ID)
+		if updateErr := stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusFailed, err.Error()); updateErr != nil {
+			logger.Error("Failed to update agent execution status after error", "error", updateErr)
+		}
+		if updateErr := stageService.UpdateStageStatus(ctx, stg.ID); updateErr != nil {
+			logger.Error("Failed to update stage status after error", "error", updateErr)
+		}
 		return &ExecutionResult{
 			Status: alertsession.StatusFailed,
 			Error:  err,

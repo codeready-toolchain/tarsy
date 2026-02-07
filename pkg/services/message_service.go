@@ -7,6 +7,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -22,7 +23,7 @@ func NewMessageService(client *ent.Client) *MessageService {
 }
 
 // CreateMessage creates a new message
-func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
+func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
 	// Validate input
 	if req.SessionID == "" {
 		return nil, NewValidationError("session_id", "required")
@@ -43,10 +44,6 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		return nil, NewValidationError("content", "required")
 	}
 
-	// Use background context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	messageID := uuid.New().String()
 	builder := s.client.Message.Create().
 		SetID(messageID).
@@ -60,15 +57,15 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 
 	// Tool-related fields
 	if len(req.ToolCalls) > 0 {
-		toolCallMaps := make([]map[string]interface{}, len(req.ToolCalls))
+		toolCalls := make([]schema.MessageToolCall, len(req.ToolCalls))
 		for i, tc := range req.ToolCalls {
-			toolCallMaps[i] = map[string]interface{}{
-				"id":        tc.ID,
-				"name":      tc.Name,
-				"arguments": tc.Arguments,
+			toolCalls[i] = schema.MessageToolCall{
+				ID:        tc.ID,
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
 			}
 		}
-		builder = builder.SetToolCalls(toolCallMaps)
+		builder = builder.SetToolCalls(toolCalls)
 	}
 	if req.ToolCallID != "" {
 		builder = builder.SetToolCallID(req.ToolCallID)

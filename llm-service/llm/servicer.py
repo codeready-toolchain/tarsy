@@ -56,14 +56,14 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
         try:
             async for chunk in provider.generate(request):
                 yield chunk
-        except Exception as e:
+        except Exception:
             logger.exception(
-                "Unhandled error in Generate for session %s: %s",
-                request.session_id, e,
+                "Unhandled error in Generate for session %s",
+                request.session_id,
             )
             yield pb.GenerateResponse(
                 error=pb.ErrorInfo(
-                    message=f"Internal error: {e}",
+                    message="Internal error during generation",
                     code="internal",
                     retryable=False,
                 ),

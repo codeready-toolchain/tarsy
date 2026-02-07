@@ -91,8 +91,13 @@ class GoogleNativeProvider(LLMProvider):
         system_instruction = None
         contents: List[genai_types.Content] = []
 
-        for msg in messages:
+        for idx, msg in enumerate(messages):
             if msg.role == "system":
+                if system_instruction is not None:
+                    raise ValueError(
+                        f"Multiple system messages provided (duplicate at index {idx}). "
+                        f"Only one system message is allowed."
+                    )
                 system_instruction = msg.content
             elif msg.role == "user":
                 contents.append(
@@ -186,7 +191,19 @@ class GoogleNativeProvider(LLMProvider):
 
     @staticmethod
     def _tool_name_to_native(name: str) -> str:
-        """Convert canonical 'server.tool' format to 'server__tool' for Gemini API."""
+        """Convert canonical 'server.tool' format to 'server__tool' for Gemini API.
+
+        The mapping uses '__' as the dot replacement. Tool name segments
+        (the parts between dots) must not contain '__' themselves, or the
+        round-trip would be lossy. We validate and reject such names early.
+        """
+        for segment in name.split("."):
+            if "__" in segment:
+                raise ValueError(
+                    f"Tool name segment '{segment}' in '{name}' contains '__' "
+                    f"which conflicts with the dot separator encoding. "
+                    f"Rename the tool to avoid double underscores."
+                )
         return name.replace(".", "__")
 
     @staticmethod
@@ -252,16 +269,37 @@ class GoogleNativeProvider(LLMProvider):
         if tools:
             gen_config.tools = tools
 
-        # Retry loop
+        # Retry loop.
+        # Only retry when zero chunks have been yielded to the caller.
+        # Once any chunk is yielded over gRPC it cannot be retracted,
+        # so retrying after partial output would corrupt the stream.
         last_error = None
         for attempt in range(MAX_RETRIES):
+            chunks_yielded = 0
             try:
                 async for chunk in self._stream_with_timeout(
                     client, config.model, contents, gen_config, request_id
                 ):
                     yield chunk
+                    chunks_yielded += 1
                 return  # Success
             except _RetryableError as e:
+                if chunks_yielded > 0:
+                    # Partial output already sent — retrying would duplicate data
+                    logger.error(
+                        "[%s] Retryable error after %d chunks already yielded, "
+                        "cannot retry safely: %s",
+                        request_id, chunks_yielded, e,
+                    )
+                    yield pb.GenerateResponse(
+                        error=pb.ErrorInfo(
+                            message=f"Stream failed after partial output ({chunks_yielded} chunks): {e}",
+                            code="partial_stream_error",
+                            retryable=False,
+                        ),
+                        is_final=True,
+                    )
+                    return
                 last_error = e
                 delay = RETRY_BACKOFF_BASE ** attempt
                 logger.warning(
@@ -270,7 +308,7 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
-                logger.error("[%s] Non-retryable error: %s", request_id, e)
+                logger.exception("[%s] Non-retryable error: %s", request_id, e)
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
                         message=f"Generation failed: {e}",
@@ -281,7 +319,7 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 return
 
-        # All retries exhausted
+        # All retries exhausted (only reached when zero chunks were yielded each time)
         yield pb.GenerateResponse(
             error=pb.ErrorInfo(
                 message=f"Generation failed after {MAX_RETRIES} retries: {last_error}",
@@ -372,8 +410,8 @@ class GoogleNativeProvider(LLMProvider):
                             )
                         )
 
-        except asyncio.TimeoutError:
-            raise _RetryableError(f"Generation timed out after {timeout_seconds}s")
+        except asyncio.TimeoutError as exc:
+            raise _RetryableError(f"Generation timed out after {timeout_seconds}s") from exc
 
         if not has_content:
             raise _RetryableError("Empty response from LLM (no content generated)")

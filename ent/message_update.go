@@ -14,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 )
 
 // MessageUpdate is the builder for updating Message entities.
@@ -79,13 +80,13 @@ func (_u *MessageUpdate) SetNillableContent(v *string) *MessageUpdate {
 }
 
 // SetToolCalls sets the "tool_calls" field.
-func (_u *MessageUpdate) SetToolCalls(v []map[string]interface{}) *MessageUpdate {
+func (_u *MessageUpdate) SetToolCalls(v []schema.MessageToolCall) *MessageUpdate {
 	_u.mutation.SetToolCalls(v)
 	return _u
 }
 
 // AppendToolCalls appends value to the "tool_calls" field.
-func (_u *MessageUpdate) AppendToolCalls(v []map[string]interface{}) *MessageUpdate {
+func (_u *MessageUpdate) AppendToolCalls(v []schema.MessageToolCall) *MessageUpdate {
 	_u.mutation.AppendToolCalls(v)
 	return _u
 }
@@ -385,13 +386,13 @@ func (_u *MessageUpdateOne) SetNillableContent(v *string) *MessageUpdateOne {
 }
 
 // SetToolCalls sets the "tool_calls" field.
-func (_u *MessageUpdateOne) SetToolCalls(v []map[string]interface{}) *MessageUpdateOne {
+func (_u *MessageUpdateOne) SetToolCalls(v []schema.MessageToolCall) *MessageUpdateOne {
 	_u.mutation.SetToolCalls(v)
 	return _u
 }
 
 // AppendToolCalls appends value to the "tool_calls" field.
-func (_u *MessageUpdateOne) AppendToolCalls(v []map[string]interface{}) *MessageUpdateOne {
+func (_u *MessageUpdateOne) AppendToolCalls(v []schema.MessageToolCall) *MessageUpdateOne {
 	_u.mutation.AppendToolCalls(v)
 	return _u
 }

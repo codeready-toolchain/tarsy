@@ -34,6 +34,13 @@ class TestGoogleNativeProvider:
         assert GoogleNativeProvider._tool_name_to_native("my.server.tool") == "my__server__tool"
         assert GoogleNativeProvider._tool_name_to_native("notool") == "notool"
 
+    def test_tool_name_to_native_rejects_double_underscore(self):
+        """Test that tool names with __ in segments are rejected."""
+        with pytest.raises(ValueError, match="contains '__'"):
+            GoogleNativeProvider._tool_name_to_native("server.my__helper")
+        with pytest.raises(ValueError, match="contains '__'"):
+            GoogleNativeProvider._tool_name_to_native("my__server.tool")
+
     def test_tool_name_conversion_from_native(self):
         """Test conversion from server__tool back to server.tool format."""
         assert GoogleNativeProvider._tool_name_from_native("server__tool") == "server.tool"
@@ -104,6 +111,17 @@ class TestGoogleNativeProvider:
         assert system_instruction == "You are a helpful assistant"
         assert len(contents) == 1
         assert contents[0].role == "user"
+
+    def test_convert_messages_multiple_system_raises(self, provider):
+        """Test that multiple system messages raise ValueError."""
+        messages = [
+            pb.ConversationMessage(role="system", content="First system message"),
+            pb.ConversationMessage(role="user", content="Hello"),
+            pb.ConversationMessage(role="system", content="Second system message"),
+        ]
+
+        with pytest.raises(ValueError, match="Multiple system messages provided \\(duplicate at index 2\\)"):
+            provider._convert_messages(messages)
 
     def test_convert_messages_user_and_assistant(self, provider):
         """Test conversion of user and assistant messages."""
@@ -218,6 +236,7 @@ class TestGoogleNativeProvider:
         cached = provider._get_cached_thought_signature("nonexistent")
         assert cached is None
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
     async def test_generate_missing_api_key(self, mock_client_class, provider):
@@ -243,6 +262,7 @@ class TestGoogleNativeProvider:
             assert responses[0].error.code == "credentials"
             assert responses[0].is_final
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
     async def test_generate_success(self, mock_client_class, provider):
@@ -290,6 +310,7 @@ class TestGoogleNativeProvider:
         assert responses[0].text.content == "Hello, world!"
         assert responses[1].is_final
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
     async def test_generate_with_usage_info(self, mock_client_class, provider):
@@ -345,3 +366,114 @@ class TestGoogleNativeProvider:
         assert usage.output_tokens == 20
         assert usage.total_tokens == 30
         assert usage.thinking_tokens == 5
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_retries_on_empty_stream(self, mock_client_class, provider):
+        """Test that retries happen when zero chunks were produced."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        call_count = 0
+
+        # First call: empty stream (triggers retry), second call: success
+        mock_part = MagicMock()
+        mock_part.thought = False
+        mock_part.text = "Success after retry"
+        mock_part.function_call = None
+        mock_part.executable_code = None
+        mock_part.code_execution_result = None
+
+        mock_candidate = MagicMock()
+        mock_candidate.content = MagicMock()
+        mock_candidate.content.parts = [mock_part]
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
+        mock_chunk.usage_metadata = None
+
+        async def empty_stream():
+            # Yield nothing — triggers "Empty response" RetryableError
+            return
+            yield  # make it an async generator
+
+        async def good_stream():
+            yield mock_chunk
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return empty_stream()
+            return good_stream()
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=side_effect)
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        assert call_count == 2
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert len(text_responses) == 1
+        assert text_responses[0].text.content == "Success after retry"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_no_retry_after_partial_output(self, mock_client_class, provider):
+        """Test that no retry happens when chunks were already yielded.
+
+        We patch _stream_with_timeout to yield one chunk then raise
+        _RetryableError, simulating a timeout mid-stream. The generate()
+        method should NOT retry because output was already sent.
+        """
+        from llm.providers.google_native import _RetryableError
+
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        call_count = 0
+
+        async def mock_stream_partial(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            yield pb.GenerateResponse(text=pb.TextDelta(content="Partial data"))
+            raise _RetryableError("timeout after partial output")
+
+        with patch.object(provider, "_stream_with_timeout", side_effect=mock_stream_partial):
+            request = pb.GenerateRequest(
+                session_id="sess-1",
+                execution_id="exec-1",
+                llm_config=pb.LLMConfig(
+                    backend="google-native",
+                    model="gemini-2.5-pro",
+                    api_key_env="TEST_API_KEY",
+                ),
+                messages=[pb.ConversationMessage(role="user", content="Hi")],
+            )
+
+            responses = []
+            async for resp in provider.generate(request):
+                responses.append(resp)
+
+        # Should have the partial text chunk + an error (no retry)
+        assert call_count == 1  # No retry attempted
+        assert len(responses) == 2
+        assert responses[0].HasField("text")
+        assert responses[0].text.content == "Partial data"
+        assert responses[1].HasField("error")
+        assert responses[1].error.code == "partial_stream_error"
+        assert responses[1].is_final

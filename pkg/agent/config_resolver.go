@@ -6,6 +6,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
+const DefaultMaxIterations = 20
+
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
 func ResolveAgentConfig(
@@ -14,6 +16,12 @@ func ResolveAgentConfig(
 	stageConfig config.StageConfig,
 	agentConfig config.StageAgentConfig,
 ) (*ResolvedAgentConfig, error) {
+	// Guard against nil chain to prevent nil pointer dereference
+	// when accessing chain.LLMProvider and chain.MaxIterations
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
 	defaults := cfg.Defaults
 
 	// Get agent definition (built-in or user-defined)
@@ -45,7 +53,7 @@ func ResolveAgentConfig(
 	}
 
 	// Resolve max iterations (stage-agent > stage > chain > agent-def > defaults)
-	maxIter := 20 // built-in default
+	maxIter := DefaultMaxIterations
 	if defaults.MaxIterations != nil {
 		maxIter = *defaults.MaxIterations
 	}

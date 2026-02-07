@@ -11,6 +11,11 @@ type Agent interface {
 	// ctx carries the session timeout and cancellation signal.
 	// execCtx provides all execution dependencies and state.
 	// prevStageContext is the output from the previous stage (empty for first stage).
+	//
+	// Returns (*ExecutionResult, nil) on completion — check Result.Status and
+	// Result.Error for agent-level failures (e.g., LLM errors, tool failures).
+	// Returns (nil, error) only for infrastructure failures where no meaningful
+	// result exists (e.g., cannot mark execution as active in DB).
 	Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error)
 }
 

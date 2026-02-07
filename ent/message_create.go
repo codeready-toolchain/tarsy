@@ -14,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 )
 
@@ -61,7 +62,7 @@ func (_c *MessageCreate) SetContent(v string) *MessageCreate {
 }
 
 // SetToolCalls sets the "tool_calls" field.
-func (_c *MessageCreate) SetToolCalls(v []map[string]interface{}) *MessageCreate {
+func (_c *MessageCreate) SetToolCalls(v []schema.MessageToolCall) *MessageCreate {
 	_c.mutation.SetToolCalls(v)
 	return _c
 }

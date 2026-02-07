@@ -82,8 +82,8 @@ func TestResolveAgentConfig(t *testing.T) {
 			MCPServers:        []string{"custom-server"},
 		}
 
-		// Need custom-server in agent registry is not needed for this test
-		// The resolver doesn't validate MCP servers exist - that's the validator's job
+		// Note: custom-server is not in the agent registry, but that's fine.
+		// The resolver doesn't validate MCP servers exist - that's the validator's job.
 
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
@@ -115,5 +115,14 @@ func TestResolveAgentConfig(t *testing.T) {
 		_, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("errors on nil chain", func(t *testing.T) {
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+
+		_, err := ResolveAgentConfig(cfg, nil, stageConfig, agentConfig)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "chain configuration cannot be nil")
 	})
 }

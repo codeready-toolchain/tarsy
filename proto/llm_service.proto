@@ -27,6 +27,16 @@ message GenerateRequest {
 
 // GenerateResponse is a streaming chunk from the LLM.
 // Multiple chunks form a complete response.
+//
+// Error handling has two layers:
+//   - ErrorInfo (in the oneof): application-level errors from the LLM provider
+//     (e.g., rate limits, invalid request, provider timeouts). The stream
+//     remains open and the error is delivered as a typed chunk with is_final=true.
+//   - gRPC status codes: transport-level failures (e.g., connection lost,
+//     Python service crashed, deadline exceeded). These surface as errors on
+//     stream.Recv() in Go and are NOT delivered as ErrorInfo chunks.
+// Consumers must handle both: ErrorChunk from the channel for provider errors,
+// and gRPC errors from the Generate call / stream for transport failures.
 message GenerateResponse {
   oneof content {
     TextDelta text = 1;
@@ -76,7 +86,12 @@ message ConversationMessage {
 message ToolDefinition {
   string name = 1;              // Canonical tool name: "server.tool" format
   string description = 2;       // Human-readable description
-  string parameters_schema = 3; // JSON Schema string for tool parameters
+
+  // JSON Schema string describing the tool's input parameters.
+  // This is an opaque string at the proto level — no structural validation
+  // is performed here. The Python LLM provider must parse and validate it
+  // before passing to the upstream API (e.g., Gemini, OpenAI).
+  string parameters_schema = 3;
 }
 
 // ToolCall represents a tool invocation requested by the LLM.

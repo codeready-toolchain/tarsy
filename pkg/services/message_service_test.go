@@ -122,9 +122,9 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, message.RoleAssistant, msg.Role)
 		assert.Len(t, msg.ToolCalls, 2)
-		assert.Equal(t, "call_123", msg.ToolCalls[0]["id"])
-		assert.Equal(t, "get_logs", msg.ToolCalls[0]["name"])
-		assert.Equal(t, `{"namespace":"default"}`, msg.ToolCalls[0]["arguments"])
+		assert.Equal(t, "call_123", msg.ToolCalls[0].ID)
+		assert.Equal(t, "get_logs", msg.ToolCalls[0].Name)
+		assert.Equal(t, `{"namespace":"default"}`, msg.ToolCalls[0].Arguments)
 	})
 
 	t.Run("creates tool response message", func(t *testing.T) {
@@ -183,6 +183,6 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		messages, err := messageService.GetStageMessages(ctx, stg.ID)
 		require.NoError(t, err)
 		// Should have all messages from both executions (original 2 + tool call + tool response + 2 new = 6)
-		assert.GreaterOrEqual(t, len(messages), 2)
+		assert.Len(t, messages, 6)
 	})
 }

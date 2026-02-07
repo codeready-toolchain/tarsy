@@ -12,8 +12,15 @@ func TestSimpleContextFormatter_Format(t *testing.T) {
 	formatter := NewSimpleContextFormatter()
 
 	t.Run("empty events", func(t *testing.T) {
-		result := formatter.Format(nil)
-		assert.Equal(t, "", result)
+		t.Run("nil slice", func(t *testing.T) {
+			result := formatter.Format(nil)
+			assert.Equal(t, "", result)
+		})
+
+		t.Run("empty non-nil slice", func(t *testing.T) {
+			result := formatter.Format([]*ent.TimelineEvent{})
+			assert.Equal(t, "", result)
+		})
 	})
 
 	t.Run("formats events with type labels", func(t *testing.T) {

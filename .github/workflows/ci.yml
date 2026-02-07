@@ -122,10 +122,12 @@ jobs:
         run: uv python install 3.13
 
       - name: Install dependencies
-        run: cd llm-service && uv sync --extra test
+        working-directory: llm-service
+        run: uv sync --extra test
 
       - name: Run Python tests
-        run: cd llm-service && uv run pytest tests/ -v --cov=llm --cov-report=xml --cov-report=term
+        working-directory: llm-service
+        run: uv run pytest tests/ -v --cov=llm --cov-report=xml --cov-report=term
 
       - name: Upload Python coverage
         uses: actions/upload-artifact@v4

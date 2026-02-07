@@ -60,12 +60,19 @@ func (c *SingleCallController) Run(
 		return nil, fmt.Errorf("failed to create timeline event: %w", err)
 	}
 
-	// 4. Call LLM via gRPC
+	// 4. Call LLM via gRPC.
+	// Use a derived context so the producer goroutine inside Generate is
+	// always cleaned up when we return — whether normally or on error.
+	// The producer's select already watches for ctx.Done(), so cancelling
+	// this context unblocks it immediately.
+	llmCtx, llmCancel := context.WithCancel(ctx)
+	defer llmCancel()
+
 	var fullText strings.Builder
 	var thinkingText strings.Builder
 	var usage *agent.TokenUsage
 
-	stream, err := execCtx.LLMClient.Generate(ctx, &agent.GenerateInput{
+	stream, err := execCtx.LLMClient.Generate(llmCtx, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
@@ -84,10 +91,10 @@ func (c *SingleCallController) Run(
 			thinkingText.WriteString(c.Content)
 		case *agent.UsageChunk:
 			usage = &agent.TokenUsage{
-				InputTokens:    int(c.InputTokens),
-				OutputTokens:   int(c.OutputTokens),
-				TotalTokens:    int(c.TotalTokens),
-				ThinkingTokens: int(c.ThinkingTokens),
+				InputTokens:    c.InputTokens,
+				OutputTokens:   c.OutputTokens,
+				TotalTokens:    c.TotalTokens,
+				ThinkingTokens: c.ThinkingTokens,
 			}
 		case *agent.ErrorChunk:
 			return nil, fmt.Errorf("LLM error: %s (code: %s)", c.Message, c.Code)

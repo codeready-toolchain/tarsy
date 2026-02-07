@@ -54,4 +54,23 @@ func TestAgentFactory_CreateAgent(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported")
 	})
+
+	t.Run("returns error when execCtx is nil", func(t *testing.T) {
+		factory := NewAgentFactory(&mockControllerFactory{})
+
+		_, err := factory.CreateAgent(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execution context and config must not be nil")
+	})
+
+	t.Run("returns error when Config is nil", func(t *testing.T) {
+		factory := NewAgentFactory(&mockControllerFactory{})
+		execCtx := &ExecutionContext{
+			Config: nil,
+		}
+
+		_, err := factory.CreateAgent(execCtx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execution context and config must not be nil")
+	})
 }

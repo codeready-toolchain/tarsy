@@ -105,10 +105,11 @@ func main() {
 	slog.Info("Services initialized")
 
 	// 5. Create LLM client and session executor
+	// Note: grpc.NewClient uses lazy dialing; actual connection happens on first RPC call
 	llmAddr := getEnv("LLM_SERVICE_ADDR", "localhost:50051")
 	llmClient, err := agent.NewGRPCLLMClient(llmAddr)
 	if err != nil {
-		slog.Error("Failed to connect to LLM service", "addr", llmAddr, "error", err)
+		slog.Error("Failed to initialize LLM client", "addr", llmAddr, "error", err)
 		os.Exit(1)
 	}
 	defer func() {
@@ -116,7 +117,7 @@ func main() {
 			slog.Error("Error closing LLM client", "error", err)
 		}
 	}()
-	slog.Info("Connected to LLM service", "addr", llmAddr)
+	slog.Info("LLM client initialized", "addr", llmAddr)
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient)
 

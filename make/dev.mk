@@ -80,7 +80,7 @@ test-llm-integration: ## Run LLM service integration tests only
 .PHONY: test-llm-coverage
 test-llm-coverage: ## Run LLM service tests with coverage
 	@echo -e "$(YELLOW)Running LLM service tests with coverage...$(NC)"
-	@cd llm-service && uv run pytest tests/ --cov=llm --cov-report=term-missing
+	@cd llm-service && uv run pytest tests/ --cov=llm --cov-report=term-missing --cov-report=xml:coverage.xml
 	@echo -e "$(GREEN)✅ LLM service tests complete$(NC)"
 
 # -----------------------------------------------------------------------------

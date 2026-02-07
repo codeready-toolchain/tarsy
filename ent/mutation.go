@@ -20,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -9035,8 +9036,8 @@ type MessageMutation struct {
 	addsequence_number      *int
 	role                    *message.Role
 	content                 *string
-	tool_calls              *[]map[string]interface{}
-	appendtool_calls        []map[string]interface{}
+	tool_calls              *[]schema.MessageToolCall
+	appendtool_calls        []schema.MessageToolCall
 	tool_call_id            *string
 	tool_name               *string
 	created_at              *time.Time
@@ -9396,13 +9397,13 @@ func (m *MessageMutation) ResetContent() {
 }
 
 // SetToolCalls sets the "tool_calls" field.
-func (m *MessageMutation) SetToolCalls(value []map[string]interface{}) {
-	m.tool_calls = &value
+func (m *MessageMutation) SetToolCalls(stc []schema.MessageToolCall) {
+	m.tool_calls = &stc
 	m.appendtool_calls = nil
 }
 
 // ToolCalls returns the value of the "tool_calls" field in the mutation.
-func (m *MessageMutation) ToolCalls() (r []map[string]interface{}, exists bool) {
+func (m *MessageMutation) ToolCalls() (r []schema.MessageToolCall, exists bool) {
 	v := m.tool_calls
 	if v == nil {
 		return
@@ -9413,7 +9414,7 @@ func (m *MessageMutation) ToolCalls() (r []map[string]interface{}, exists bool) 
 // OldToolCalls returns the old "tool_calls" field's value of the Message entity.
 // If the Message object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *MessageMutation) OldToolCalls(ctx context.Context) (v []map[string]interface{}, err error) {
+func (m *MessageMutation) OldToolCalls(ctx context.Context) (v []schema.MessageToolCall, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldToolCalls is only allowed on UpdateOne operations")
 	}
@@ -9427,13 +9428,13 @@ func (m *MessageMutation) OldToolCalls(ctx context.Context) (v []map[string]inte
 	return oldValue.ToolCalls, nil
 }
 
-// AppendToolCalls adds value to the "tool_calls" field.
-func (m *MessageMutation) AppendToolCalls(value []map[string]interface{}) {
-	m.appendtool_calls = append(m.appendtool_calls, value...)
+// AppendToolCalls adds stc to the "tool_calls" field.
+func (m *MessageMutation) AppendToolCalls(stc []schema.MessageToolCall) {
+	m.appendtool_calls = append(m.appendtool_calls, stc...)
 }
 
 // AppendedToolCalls returns the list of values that were appended to the "tool_calls" field in this mutation.
-func (m *MessageMutation) AppendedToolCalls() ([]map[string]interface{}, bool) {
+func (m *MessageMutation) AppendedToolCalls() ([]schema.MessageToolCall, bool) {
 	if len(m.appendtool_calls) == 0 {
 		return nil, false
 	}
@@ -9916,7 +9917,7 @@ func (m *MessageMutation) SetField(name string, value ent.Value) error {
 		m.SetContent(v)
 		return nil
 	case message.FieldToolCalls:
-		v, ok := value.([]map[string]interface{})
+		v, ok := value.([]schema.MessageToolCall)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

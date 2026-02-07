@@ -37,6 +37,7 @@ func TestToProtoMessages(t *testing.T) {
 	// Tool result
 	assert.Equal(t, "tool", result[3].Role)
 	assert.Equal(t, "tc1", result[3].ToolCallId)
+	assert.Equal(t, "k8s.get_pods", result[3].ToolName)
 }
 
 func TestToProtoLLMConfig(t *testing.T) {
@@ -126,8 +127,10 @@ func TestFromProtoResponse(t *testing.T) {
 		chunk := fromProtoResponse(resp)
 		uc, ok := chunk.(*UsageChunk)
 		require.True(t, ok)
-		assert.Equal(t, int32(100), uc.InputTokens)
-		assert.Equal(t, int32(300), uc.TotalTokens)
+		assert.Equal(t, 100, uc.InputTokens)
+		assert.Equal(t, 200, uc.OutputTokens)
+		assert.Equal(t, 300, uc.TotalTokens)
+		assert.Equal(t, 50, uc.ThinkingTokens)
 	})
 
 	t.Run("error info", func(t *testing.T) {

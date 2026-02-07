@@ -20,6 +20,9 @@ func NewFactory() *Factory {
 // CreateController builds a Controller for the given strategy.
 func (f *Factory) CreateController(strategy config.IterationStrategy, execCtx *agent.ExecutionContext) (agent.Controller, error) {
 	switch strategy {
+	case "":
+		// Empty string defaults to single-call controller (Phase 3.1)
+		return NewSingleCallController(), nil
 	case config.IterationStrategyReact:
 		return nil, fmt.Errorf("react controller not yet implemented (Phase 3.2)")
 	case config.IterationStrategyNativeThinking:
@@ -29,7 +32,6 @@ func (f *Factory) CreateController(strategy config.IterationStrategy, execCtx *a
 	case config.IterationStrategySynthesisNativeThinking:
 		return nil, fmt.Errorf("synthesis-native-thinking controller not yet implemented (Phase 3.2)")
 	default:
-		// Phase 3.1: basic single-call controller for validation
-		return NewSingleCallController(), nil
+		return nil, fmt.Errorf("unknown iteration strategy: %q", strategy)
 	}
 }

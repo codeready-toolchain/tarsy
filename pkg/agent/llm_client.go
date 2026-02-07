@@ -80,7 +80,7 @@ type ToolCallChunk struct{ CallID, Name, Arguments string }
 type CodeExecutionChunk struct{ Code, Result string }
 
 // UsageChunk reports token consumption for this LLM call.
-type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int32 }
+type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int }
 
 // ErrorChunk signals an error from the LLM provider.
 type ErrorChunk struct {

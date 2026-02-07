@@ -32,10 +32,7 @@ func NewGRPCLLMClient(addr string) (*GRPCLLMClient, error) {
 
 // Generate sends a conversation to the LLM and returns a channel of chunks.
 func (c *GRPCLLMClient) Generate(ctx context.Context, input *GenerateInput) (<-chan Chunk, error) {
-	req, err := toProtoRequest(input)
-	if err != nil {
-		return nil, err
-	}
+	req := toProtoRequest(input)
 
 	stream, err := c.client.Generate(ctx, req)
 	if err != nil {
@@ -80,7 +77,7 @@ func (c *GRPCLLMClient) Close() error {
 // Proto conversion helpers
 // ────────────────────────────────────────────────────────────
 
-func toProtoRequest(input *GenerateInput) (*llmv1.GenerateRequest, error) {
+func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 	req := &llmv1.GenerateRequest{
 		SessionId:   input.SessionID,
 		ExecutionId: input.ExecutionID,
@@ -90,7 +87,7 @@ func toProtoRequest(input *GenerateInput) (*llmv1.GenerateRequest, error) {
 	if input.Config != nil {
 		req.LlmConfig = toProtoLLMConfig(input.Config)
 	}
-	return req, nil
+	return req
 }
 
 func toProtoMessages(msgs []ConversationMessage) []*llmv1.ConversationMessage {
@@ -180,10 +177,10 @@ func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
 		}
 	case *llmv1.GenerateResponse_Usage:
 		return &UsageChunk{
-			InputTokens:    c.Usage.InputTokens,
-			OutputTokens:   c.Usage.OutputTokens,
-			TotalTokens:    c.Usage.TotalTokens,
-			ThinkingTokens: c.Usage.ThinkingTokens,
+			InputTokens:    int(c.Usage.InputTokens),
+			OutputTokens:   int(c.Usage.OutputTokens),
+			TotalTokens:    int(c.Usage.TotalTokens),
+			ThinkingTokens: int(c.Usage.ThinkingTokens),
 		}
 	case *llmv1.GenerateResponse_Error:
 		return &ErrorChunk{

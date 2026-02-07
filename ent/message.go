@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 )
 
@@ -33,8 +34,8 @@ type Message struct {
 	Role message.Role `json:"role,omitempty"`
 	// Message text
 	Content string `json:"content,omitempty"`
-	// For assistant messages: tool calls requested by LLM [{id, name, arguments}]
-	ToolCalls []map[string]interface{} `json:"tool_calls,omitempty"`
+	// For assistant messages: tool calls requested by LLM
+	ToolCalls []schema.MessageToolCall `json:"tool_calls,omitempty"`
 	// For tool messages: links result to the original tool call
 	ToolCallID *string `json:"tool_call_id,omitempty"`
 	// For tool messages: name of the tool that was called
