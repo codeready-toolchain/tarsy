@@ -48,6 +48,23 @@ func intTestQueueConfig() *config.QueueConfig {
 	}
 }
 
+// awaitCondition polls until condition returns true or the timeout elapses.
+func awaitCondition(t *testing.T, timeout, interval time.Duration, msg string, condition func() bool) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out: %s", msg)
+		default:
+			if condition() {
+				return
+			}
+			time.Sleep(interval)
+		}
+	}
+}
+
 // TestForUpdateSkipLockedClaiming tests that a worker can atomically claim a pending session.
 func TestForUpdateSkipLockedClaiming(t *testing.T) {
 	dbClient := testdb.NewTestClient(t)
@@ -311,20 +328,10 @@ func TestPoolEndToEndWithMockExecutor(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for sessions to be processed
-	deadline := time.After(10 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for sessions to be processed, processed: %d", executor.processed.Load())
-		default:
-			if executor.processed.Load() >= 3 {
-				goto done
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+	awaitCondition(t, 10*time.Second, 100*time.Millisecond,
+		fmt.Sprintf("waiting for sessions to be processed, processed: %d", executor.processed.Load()),
+		func() bool { return executor.processed.Load() >= 3 })
 
-done:
 	// Stop the pool gracefully
 	pool.Stop()
 
@@ -369,20 +376,10 @@ func TestCapacityLimits(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait until exactly MaxConcurrentSessions sessions are in progress
-	deadline := time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for %d sessions in progress, got: %d", cfg.MaxConcurrentSessions, executor.inProgress.Load())
-		default:
-			if executor.inProgress.Load() == int64(cfg.MaxConcurrentSessions) {
-				goto verified
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	awaitCondition(t, 5*time.Second, 10*time.Millisecond,
+		fmt.Sprintf("waiting for %d sessions in progress, got: %d", cfg.MaxConcurrentSessions, executor.inProgress.Load()),
+		func() bool { return executor.inProgress.Load() == int64(cfg.MaxConcurrentSessions) })
 
-verified:
 	// Give the system a moment to stabilize
 	time.Sleep(100 * time.Millisecond)
 
@@ -401,36 +398,16 @@ verified:
 	close(releaseCh)
 
 	// Wait for first batch to complete
-	deadline = time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for first batch to complete, in_progress: %d", executor.inProgress.Load())
-		default:
-			if executor.inProgress.Load() == 0 {
-				goto firstBatchCompleted
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	awaitCondition(t, 5*time.Second, 10*time.Millisecond,
+		fmt.Sprintf("waiting for first batch to complete, in_progress: %d", executor.inProgress.Load()),
+		func() bool { return executor.inProgress.Load() == 0 })
 
-firstBatchCompleted:
 	// Workers should now claim remaining sessions (3 more)
 	// Wait for all 5 sessions to be processed
-	deadline = time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for all sessions to be processed, processed: %d", executor.processed.Load())
-		default:
-			if executor.processed.Load() >= 5 {
-				goto allProcessed
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
+	awaitCondition(t, 5*time.Second, 50*time.Millisecond,
+		fmt.Sprintf("waiting for all sessions to be processed, processed: %d", executor.processed.Load()),
+		func() bool { return executor.processed.Load() >= 5 })
 
-allProcessed:
 	// Stop the pool
 	pool.Stop()
 
@@ -468,22 +445,14 @@ func TestHeartbeatUpdates(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for session to be claimed
-	deadline := time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for session to be claimed")
-		default:
+	awaitCondition(t, 5*time.Second, 10*time.Millisecond,
+		"waiting for session to be claimed",
+		func() bool {
 			s, err := client.AlertSession.Get(ctx, session.ID)
 			require.NoError(t, err)
-			if s.Status == alertsession.StatusInProgress && s.LastInteractionAt != nil {
-				goto claimed
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+			return s.Status == alertsession.StatusInProgress && s.LastInteractionAt != nil
+		})
 
-claimed:
 	// Get initial last_interaction_at
 	s1, err := client.AlertSession.Get(ctx, session.ID)
 	require.NoError(t, err)
@@ -543,19 +512,10 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		require.NoError(t, pool.Start(ctx))
 
 		// Wait for processing
-		deadline := time.After(5 * time.Second)
-		for {
-			select {
-			case <-deadline:
-				t.Fatalf("timed out waiting for session to be processed")
-			default:
-				if executor.processed.Load() >= 1 {
-					goto done
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	done:
+		awaitCondition(t, 5*time.Second, 50*time.Millisecond,
+			"waiting for session to be processed",
+			func() bool { return executor.processed.Load() >= 1 })
+
 		pool.Stop()
 
 		updated, err := client.AlertSession.Get(ctx, session.ID)
@@ -583,19 +543,10 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		require.NoError(t, pool.Start(ctx))
 
 		// Wait for processing (must exceed the 200ms timeout)
-		deadline := time.After(5 * time.Second)
-		for {
-			select {
-			case <-deadline:
-				t.Fatalf("timed out waiting for session to be processed")
-			default:
-				if executor.processed.Load() >= 1 {
-					goto done2
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	done2:
+		awaitCondition(t, 5*time.Second, 50*time.Millisecond,
+			"waiting for session to be processed",
+			func() bool { return executor.processed.Load() >= 1 })
+
 		// Give the worker time to persist the terminal status
 		time.Sleep(100 * time.Millisecond)
 		pool.Stop()
@@ -626,41 +577,27 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		require.NoError(t, pool.Start(ctx))
 
 		// Wait for session to be claimed (in_progress)
-		deadline := time.After(5 * time.Second)
-		for {
-			select {
-			case <-deadline:
-				t.Fatalf("timed out waiting for session to be claimed")
-			default:
+		awaitCondition(t, 5*time.Second, 10*time.Millisecond,
+			"waiting for session to be claimed",
+			func() bool {
 				s, err := client.AlertSession.Get(ctx, session.ID)
 				require.NoError(t, err)
-				if s.Status == alertsession.StatusInProgress {
-					goto claimed
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
-	claimed:
+				return s.Status == alertsession.StatusInProgress
+			})
+
 		// Cancel the session via the pool (simulates API-triggered cancellation)
 		cancelled := pool.CancelSession(session.ID)
 		require.True(t, cancelled, "CancelSession should find the active session")
 
 		// Wait for the executor to finish and status to be persisted
-		deadline = time.After(5 * time.Second)
-		for {
-			select {
-			case <-deadline:
-				t.Fatalf("timed out waiting for session to reach terminal status")
-			default:
+		awaitCondition(t, 5*time.Second, 50*time.Millisecond,
+			"waiting for session to reach terminal status",
+			func() bool {
 				s, err := client.AlertSession.Get(ctx, session.ID)
 				require.NoError(t, err)
-				if s.Status == alertsession.StatusCancelled {
-					goto done3
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	done3:
+				return s.Status == alertsession.StatusCancelled
+			})
+
 		pool.Stop()
 
 		updated, err := client.AlertSession.Get(ctx, session.ID)

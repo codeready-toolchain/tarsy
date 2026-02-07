@@ -639,6 +639,7 @@ func TestSessionService_CancelSession(t *testing.T) {
 			{name: "failed", status: alertsession.StatusFailed},
 			{name: "cancelled", status: alertsession.StatusCancelled},
 			{name: "timed_out", status: alertsession.StatusTimedOut},
+			{name: "cancelling", status: alertsession.StatusCancelling},
 		}
 
 		for _, tt := range tests {
