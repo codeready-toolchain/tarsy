@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -348,7 +349,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 1,
-			Role:           "system",
+			Role:           message.RoleSystem,
 			Content:        "System prompt",
 		})
 		require.NoError(t, err)
@@ -358,7 +359,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 2,
-			Role:           "user",
+			Role:           message.RoleUser,
 			Content:        "User message",
 		})
 		require.NoError(t, err)
@@ -368,7 +369,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 3,
-			Role:           "assistant",
+			Role:           message.RoleAssistant,
 			Content:        "Assistant response",
 		})
 		require.NoError(t, err)
@@ -390,8 +391,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)
 		assert.Len(t, conversation, 2)
-		assert.Equal(t, "system", string(conversation[0].Role))
-		assert.Equal(t, "user", string(conversation[1].Role))
+		assert.Equal(t, message.RoleSystem, conversation[0].Role)
+		assert.Equal(t, message.RoleUser, conversation[1].Role)
 	})
 
 	t.Run("returns empty conversation when no last_message_id", func(t *testing.T) {
@@ -428,7 +429,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec2.ID,
 			SequenceNumber: 1,
-			Role:           "system",
+			Role:           message.RoleSystem,
 			Content:        "First message",
 		})
 		require.NoError(t, err)
@@ -450,7 +451,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
 		require.NoError(t, err)
 		assert.Len(t, conversation, 1)
-		assert.Equal(t, "system", string(conversation[0].Role))
+		assert.Equal(t, message.RoleSystem, conversation[0].Role)
 	})
 
 	t.Run("handles last_message_id pointing to middle of long conversation", func(t *testing.T) {
@@ -467,9 +468,9 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		// Create 10 messages
 		var messages []*ent.Message
 		for i := 1; i <= 10; i++ {
-			role := "user"
+			role := message.RoleUser
 			if i%2 == 0 {
-				role = "assistant"
+				role = message.RoleAssistant
 			}
 			msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
 				SessionID:      session.ID,

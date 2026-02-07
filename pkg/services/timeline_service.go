@@ -36,7 +36,7 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 	if req.SequenceNumber <= 0 {
 		return nil, NewValidationError("SequenceNumber", "must be positive")
 	}
-	if req.EventType == "" {
+	if string(req.EventType) == "" {
 		return nil, NewValidationError("EventType", "required")
 	}
 	if req.Content == "" {
@@ -53,7 +53,7 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 		SetStageID(req.StageID).
 		SetExecutionID(req.ExecutionID).
 		SetSequenceNumber(req.SequenceNumber).
-		SetEventType(timelineevent.EventType(req.EventType)).
+		SetEventType(req.EventType).
 		SetStatus(timelineevent.StatusStreaming).
 		SetContent(req.Content).
 		SetMetadata(req.Metadata).

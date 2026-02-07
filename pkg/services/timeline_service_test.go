@@ -51,7 +51,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 1,
-			EventType:      "llm_thinking",
+			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Analyzing...",
 			Metadata:       map[string]any{"test": "metadata"},
 		}
@@ -103,7 +103,7 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 		StageID:        stg.ID,
 		ExecutionID:    exec.ID,
 		SequenceNumber: 1,
-		EventType:      "llm_thinking",
+		EventType:      timelineevent.EventTypeLlmThinking,
 		Content:        "Starting...",
 	})
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		StageID:        stg.ID,
 		ExecutionID:    exec.ID,
 		SequenceNumber: 1,
-		EventType:      "llm_thinking",
+		EventType:      timelineevent.EventTypeLlmThinking,
 		Content:        "Streaming...",
 	})
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: 2,
-			EventType:      "llm_thinking",
+			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Streaming...",
 		})
 		require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 			StageID:        stg.ID,
 			ExecutionID:    exec.ID,
 			SequenceNumber: i,
-			EventType:      "llm_thinking",
+			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Event",
 		})
 		require.NoError(t, err)
