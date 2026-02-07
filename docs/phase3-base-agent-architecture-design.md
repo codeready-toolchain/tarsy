@@ -1159,6 +1159,7 @@ The Phase 2.3 stub executor returns "completed" immediately. Phase 3.1 replaces 
 type SessionExecutor struct {
     cfg          *config.Config
     dbClient     *ent.Client
+    llmClient    agent.LLMClient
     agentFactory *agent.AgentFactory
     ctxFormatter agentctx.ContextFormatter
     services     *agent.ServiceBundle
@@ -1179,6 +1180,7 @@ func NewSessionExecutor(
     return &SessionExecutor{
         cfg:          cfg,
         dbClient:     dbClient,
+        llmClient:    llmClient,
         agentFactory: agent.NewAgentFactory(llmClient, svcBundle),
         ctxFormatter: agentctx.NewSimpleContextFormatter(svcBundle.Timeline, svcBundle.Stage),
         services:     svcBundle,
@@ -1288,7 +1290,7 @@ func (e *SessionExecutor) executeStage(
         AgentIndex:  1,
         AlertData:   session.AlertData, // Arbitrary text from the alert submission
         Config:      resolvedConfig,
-        LLMClient:   e.agentFactory.LLMClient(),
+        LLMClient:   e.llmClient,
         Services:    e.services,
     }
 
