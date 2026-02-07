@@ -68,6 +68,20 @@ func (_c *AlertSessionCreate) SetNillableStatus(v *alertsession.Status) *AlertSe
 	return _c
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *AlertSessionCreate) SetCreatedAt(v time.Time) *AlertSessionCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableCreatedAt(v *time.Time) *AlertSessionCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_c *AlertSessionCreate) SetStartedAt(v time.Time) *AlertSessionCreate {
 	_c.mutation.SetStartedAt(v)
@@ -451,9 +465,9 @@ func (_c *AlertSessionCreate) defaults() {
 		v := alertsession.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
-	if _, ok := _c.mutation.StartedAt(); !ok {
-		v := alertsession.DefaultStartedAt()
-		_c.mutation.SetStartedAt(v)
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := alertsession.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
 	}
 }
 
@@ -473,8 +487,8 @@ func (_c *AlertSessionCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.status": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.StartedAt(); !ok {
-		return &ValidationError{Name: "started_at", err: errors.New(`ent: missing required field "AlertSession.started_at"`)}
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "AlertSession.created_at"`)}
 	}
 	if _, ok := _c.mutation.ChainID(); !ok {
 		return &ValidationError{Name: "chain_id", err: errors.New(`ent: missing required field "AlertSession.chain_id"`)}
@@ -530,9 +544,13 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 		_spec.SetField(alertsession.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
 	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(alertsession.FieldCreatedAt, field.TypeTime, value)
+		_node.CreatedAt = value
+	}
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(alertsession.FieldStartedAt, field.TypeTime, value)
-		_node.StartedAt = value
+		_node.StartedAt = &value
 	}
 	if value, ok := _c.mutation.CompletedAt(); ok {
 		_spec.SetField(alertsession.FieldCompletedAt, field.TypeTime, value)

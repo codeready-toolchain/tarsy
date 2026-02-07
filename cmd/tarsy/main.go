@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -116,12 +117,13 @@ func main() {
 	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool)
 
 	// 8. Start HTTP server (non-blocking)
+	errCh := make(chan error, 1)
 	go func() {
 		addr := ":" + httpPort
 		slog.Info("HTTP server listening", "addr", addr)
 		if err := httpServer.Start(addr); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", "error", err)
-			os.Exit(1)
+			errCh <- err
 		}
 	}()
 
@@ -129,15 +131,20 @@ func main() {
 		"pod_id", podID,
 		"workers", cfg.Queue.WorkerCount)
 
-	// 9. Wait for shutdown signal
+	// 9. Wait for shutdown signal or server error
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-	sig := <-sigCh
-	slog.Info("Shutdown signal received", "signal", sig)
+
+	select {
+	case sig := <-sigCh:
+		slog.Info("Shutdown signal received", "signal", sig)
+	case err := <-errCh:
+		slog.Error("Server error triggered shutdown", "error", err)
+	}
 
 	// 10. Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(ctx, cfg.Queue.GracefulShutdownTimeout)
-	defer cancel()
+	workerShutdownCtx, workerCancel := context.WithTimeout(ctx, cfg.Queue.GracefulShutdownTimeout)
+	defer workerCancel()
 
 	// Stop worker pool first (wait for active sessions to complete)
 	done := make(chan struct{})
@@ -149,12 +156,14 @@ func main() {
 	select {
 	case <-done:
 		slog.Info("Worker pool stopped gracefully")
-	case <-shutdownCtx.Done():
+	case <-workerShutdownCtx.Done():
 		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
 	}
 
-	// Stop HTTP server
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+	// Stop HTTP server with its own timeout budget
+	httpShutdownCtx, httpCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer httpCancel()
+	if err := httpServer.Shutdown(httpShutdownCtx); err != nil {
 		slog.Error("HTTP server shutdown error", "error", err)
 	}
 

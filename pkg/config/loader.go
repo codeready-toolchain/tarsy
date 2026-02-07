@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"dario.cat/mergo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,10 +109,14 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		defaults.Runbook = builtin.DefaultRunbook
 	}
 
-	// Resolve queue config (YAML overrides built-in defaults)
-	queueConfig := tarsyConfig.Queue
-	if queueConfig == nil {
-		queueConfig = DefaultQueueConfig()
+	// Resolve queue config (merge user YAML with built-in defaults)
+	// Start with defaults, then merge user config on top to preserve unset defaults
+	queueConfig := DefaultQueueConfig()
+	if tarsyConfig.Queue != nil {
+		// Merge user-provided config into defaults (non-zero values override)
+		if err := mergo.Merge(queueConfig, tarsyConfig.Queue, mergo.WithOverride); err != nil {
+			return nil, fmt.Errorf("failed to merge queue config: %w", err)
+		}
 	}
 
 	return &Config{

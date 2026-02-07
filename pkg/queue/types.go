@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 )
 
 // Sentinel errors for queue operations.
@@ -35,15 +36,17 @@ type SessionExecutor interface {
 // All intermediate state (TimelineEvents, Interactions, Stages) was already
 // written to DB by the executor during processing.
 type ExecutionResult struct {
-	Status           string // completed, failed, timed_out, cancelled
-	FinalAnalysis    string // Final analysis text (if completed)
-	ExecutiveSummary string // Executive summary (if completed)
-	Error            error  // Error details (if failed/timed_out)
+	Status           alertsession.Status // completed, failed, timed_out, cancelled
+	FinalAnalysis    string              // Final analysis text (if completed)
+	ExecutiveSummary string              // Executive summary (if completed)
+	Error            error               // Error details (if failed/timed_out)
 }
 
 // PoolHealth contains health information for the entire worker pool.
 type PoolHealth struct {
 	IsHealthy        bool           `json:"is_healthy"`
+	DBReachable      bool           `json:"db_reachable"`
+	DBError          string         `json:"db_error,omitempty"`
 	PodID            string         `json:"pod_id"`
 	ActiveWorkers    int            `json:"active_workers"`
 	TotalWorkers     int            `json:"total_workers"`

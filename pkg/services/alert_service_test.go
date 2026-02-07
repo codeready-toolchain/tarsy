@@ -7,6 +7,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,8 +80,10 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 			AlertType: "pod-crash",
 			Runbook:   "https://runbook.example.com/pod-crash",
 			Data:      "Pod nginx-xyz crashed with exit code 137",
-			MCP:       `{"servers": ["kubernetes"]}`,
-			Author:    "test@example.com",
+			MCP: &models.MCPSelectionConfig{
+				Servers: []models.MCPServerSelection{{Name: "kubernetes"}},
+			},
+			Author: "test@example.com",
 		}
 
 		session, err := service.SubmitAlert(ctx, input)
@@ -93,14 +96,15 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 		assert.Equal(t, input.AlertType, session.AlertType)
 		assert.Equal(t, "k8s-analysis", session.ChainID)
 		assert.Equal(t, alertsession.StatusPending, session.Status)
-		assert.NotNil(t, session.StartedAt)
+		assert.NotZero(t, session.CreatedAt, "created_at should be set at submission")
+		assert.Nil(t, session.StartedAt, "started_at should be nil until worker claims session")
 		require.NotNil(t, session.Author)
 		assert.Equal(t, input.Author, *session.Author)
 		require.NotNil(t, session.RunbookURL)
 		assert.Equal(t, input.Runbook, *session.RunbookURL)
 	})
 
-	t.Run("creates session with minimal fields", func(t *testing.T) {
+	t.Run("creates session with minimal fields and default alert type", func(t *testing.T) {
 		input := SubmitAlertInput{
 			Data: "Generic alert data",
 		}
@@ -117,18 +121,6 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 		assert.Equal(t, alertsession.StatusPending, session.Status)
 		assert.Nil(t, session.Author)
 		assert.Nil(t, session.RunbookURL)
-	})
-
-	t.Run("uses default alert type when not provided", func(t *testing.T) {
-		input := SubmitAlertInput{
-			Data: "Test alert",
-		}
-
-		session, err := service.SubmitAlert(ctx, input)
-		require.NoError(t, err)
-
-		assert.Equal(t, "generic", session.AlertType)
-		assert.Equal(t, "default-chain", session.ChainID)
 	})
 
 	t.Run("validates alert data is required", func(t *testing.T) {
@@ -167,15 +159,21 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 	t.Run("handles MCP selection", func(t *testing.T) {
 		input := SubmitAlertInput{
 			Data: "Alert with MCP config",
-			MCP:  `{"servers": ["kubernetes", "aws"]}`,
+			MCP: &models.MCPSelectionConfig{
+				Servers: []models.MCPServerSelection{
+					{Name: "kubernetes"},
+					{Name: "aws"},
+				},
+			},
 		}
 
 		session, err := service.SubmitAlert(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, session)
 
-		// MCP selection is stored as-is (not validated in AlertService)
 		assert.NotEmpty(t, session.ID)
+		require.NotNil(t, session.McpSelection)
+		assert.NotEmpty(t, session.McpSelection)
 	})
 
 	t.Run("handles empty optional fields", func(t *testing.T) {
@@ -184,7 +182,7 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 			AlertType: "pod-crash",
 			Author:    "",
 			Runbook:   "",
-			MCP:       "",
+			MCP:       nil,
 		}
 
 		session, err := service.SubmitAlert(ctx, input)

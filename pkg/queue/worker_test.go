@@ -66,13 +66,3 @@ func TestWorkerHealth(t *testing.T) {
 	assert.Equal(t, "idle", h.Status)
 	assert.Equal(t, "", h.CurrentSessionID)
 }
-
-func TestExecutionResult(t *testing.T) {
-	result := &ExecutionResult{
-		Status:        "completed",
-		FinalAnalysis: "Test analysis",
-	}
-	assert.Equal(t, "completed", result.Status)
-	assert.Equal(t, "Test analysis", result.FinalAnalysis)
-	assert.Nil(t, result.Error)
-}

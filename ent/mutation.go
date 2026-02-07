@@ -1456,6 +1456,7 @@ type AlertSessionMutation struct {
 	agent_type                *string
 	alert_type                *string
 	status                    *alertsession.Status
+	created_at                *time.Time
 	started_at                *time.Time
 	completed_at              *time.Time
 	error_message             *string
@@ -1764,6 +1765,42 @@ func (m *AlertSessionMutation) ResetStatus() {
 	m.status = nil
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (m *AlertSessionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AlertSessionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AlertSessionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
 // SetStartedAt sets the "started_at" field.
 func (m *AlertSessionMutation) SetStartedAt(t time.Time) {
 	m.started_at = &t
@@ -1781,7 +1818,7 @@ func (m *AlertSessionMutation) StartedAt() (r time.Time, exists bool) {
 // OldStartedAt returns the old "started_at" field's value of the AlertSession entity.
 // If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AlertSessionMutation) OldStartedAt(ctx context.Context) (v time.Time, err error) {
+func (m *AlertSessionMutation) OldStartedAt(ctx context.Context) (v *time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
 	}
@@ -1795,9 +1832,22 @@ func (m *AlertSessionMutation) OldStartedAt(ctx context.Context) (v time.Time, e
 	return oldValue.StartedAt, nil
 }
 
+// ClearStartedAt clears the value of the "started_at" field.
+func (m *AlertSessionMutation) ClearStartedAt() {
+	m.started_at = nil
+	m.clearedFields[alertsession.FieldStartedAt] = struct{}{}
+}
+
+// StartedAtCleared returns if the "started_at" field was cleared in this mutation.
+func (m *AlertSessionMutation) StartedAtCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldStartedAt]
+	return ok
+}
+
 // ResetStartedAt resets all changes to the "started_at" field.
 func (m *AlertSessionMutation) ResetStartedAt() {
 	m.started_at = nil
+	delete(m.clearedFields, alertsession.FieldStartedAt)
 }
 
 // SetCompletedAt sets the "completed_at" field.
@@ -3043,7 +3093,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 22)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -3055,6 +3105,9 @@ func (m *AlertSessionMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, alertsession.FieldStatus)
+	}
+	if m.created_at != nil {
+		fields = append(fields, alertsession.FieldCreatedAt)
 	}
 	if m.started_at != nil {
 		fields = append(fields, alertsession.FieldStartedAt)
@@ -3123,6 +3176,8 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.AlertType()
 	case alertsession.FieldStatus:
 		return m.Status()
+	case alertsession.FieldCreatedAt:
+		return m.CreatedAt()
 	case alertsession.FieldStartedAt:
 		return m.StartedAt()
 	case alertsession.FieldCompletedAt:
@@ -3174,6 +3229,8 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldAlertType(ctx)
 	case alertsession.FieldStatus:
 		return m.OldStatus(ctx)
+	case alertsession.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
 	case alertsession.FieldStartedAt:
 		return m.OldStartedAt(ctx)
 	case alertsession.FieldCompletedAt:
@@ -3244,6 +3301,13 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case alertsession.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
 		return nil
 	case alertsession.FieldStartedAt:
 		v, ok := value.(time.Time)
@@ -3412,6 +3476,9 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldAlertType) {
 		fields = append(fields, alertsession.FieldAlertType)
 	}
+	if m.FieldCleared(alertsession.FieldStartedAt) {
+		fields = append(fields, alertsession.FieldStartedAt)
+	}
 	if m.FieldCleared(alertsession.FieldCompletedAt) {
 		fields = append(fields, alertsession.FieldCompletedAt)
 	}
@@ -3473,6 +3540,9 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 	switch name {
 	case alertsession.FieldAlertType:
 		m.ClearAlertType()
+		return nil
+	case alertsession.FieldStartedAt:
+		m.ClearStartedAt()
 		return nil
 	case alertsession.FieldCompletedAt:
 		m.ClearCompletedAt()
@@ -3538,6 +3608,9 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 		return nil
 	case alertsession.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case alertsession.FieldCreatedAt:
+		m.ResetCreatedAt()
 		return nil
 	case alertsession.FieldStartedAt:
 		m.ResetStartedAt()

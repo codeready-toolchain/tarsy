@@ -33,6 +33,10 @@ type QueueConfig struct {
 	// OrphanThreshold is how long a session can go without a heartbeat
 	// before it is considered orphaned.
 	OrphanThreshold time.Duration `yaml:"orphan_threshold"`
+
+	// HeartbeatInterval is how often workers update session last_interaction_at.
+	// Must be less than OrphanThreshold.
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 }
 
 // DefaultQueueConfig returns the built-in queue defaults.
@@ -46,5 +50,6 @@ func DefaultQueueConfig() *QueueConfig {
 		GracefulShutdownTimeout: 15 * time.Minute,
 		OrphanDetectionInterval: 5 * time.Minute,
 		OrphanThreshold:         5 * time.Minute,
+		HeartbeatInterval:       30 * time.Second,
 	}
 }

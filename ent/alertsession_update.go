@@ -98,6 +98,20 @@ func (_u *AlertSessionUpdate) SetNillableStatus(v *alertsession.Status) *AlertSe
 	return _u
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_u *AlertSessionUpdate) SetCreatedAt(v time.Time) *AlertSessionUpdate {
+	_u.mutation.SetCreatedAt(v)
+	return _u
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableCreatedAt(v *time.Time) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetCreatedAt(*v)
+	}
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *AlertSessionUpdate) SetStartedAt(v time.Time) *AlertSessionUpdate {
 	_u.mutation.SetStartedAt(v)
@@ -109,6 +123,12 @@ func (_u *AlertSessionUpdate) SetNillableStartedAt(v *time.Time) *AlertSessionUp
 	if v != nil {
 		_u.SetStartedAt(*v)
 	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *AlertSessionUpdate) ClearStartedAt() *AlertSessionUpdate {
+	_u.mutation.ClearStartedAt()
 	return _u
 }
 
@@ -763,8 +783,14 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(alertsession.FieldStatus, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.CreatedAt(); ok {
+		_spec.SetField(alertsession.FieldCreatedAt, field.TypeTime, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(alertsession.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(alertsession.FieldStartedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CompletedAt(); ok {
 		_spec.SetField(alertsession.FieldCompletedAt, field.TypeTime, value)
@@ -1288,6 +1314,20 @@ func (_u *AlertSessionUpdateOne) SetNillableStatus(v *alertsession.Status) *Aler
 	return _u
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_u *AlertSessionUpdateOne) SetCreatedAt(v time.Time) *AlertSessionUpdateOne {
+	_u.mutation.SetCreatedAt(v)
+	return _u
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableCreatedAt(v *time.Time) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetCreatedAt(*v)
+	}
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *AlertSessionUpdateOne) SetStartedAt(v time.Time) *AlertSessionUpdateOne {
 	_u.mutation.SetStartedAt(v)
@@ -1299,6 +1339,12 @@ func (_u *AlertSessionUpdateOne) SetNillableStartedAt(v *time.Time) *AlertSessio
 	if v != nil {
 		_u.SetStartedAt(*v)
 	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *AlertSessionUpdateOne) ClearStartedAt() *AlertSessionUpdateOne {
+	_u.mutation.ClearStartedAt()
 	return _u
 }
 
@@ -1983,8 +2029,14 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(alertsession.FieldStatus, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.CreatedAt(); ok {
+		_spec.SetField(alertsession.FieldCreatedAt, field.TypeTime, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(alertsession.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(alertsession.FieldStartedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CompletedAt(); ok {
 		_spec.SetField(alertsession.FieldCompletedAt, field.TypeTime, value)

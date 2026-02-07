@@ -61,6 +61,9 @@ func (v *Validator) validateQueue() error {
 	if q.PollIntervalJitter < 0 {
 		return fmt.Errorf("poll_interval_jitter must be non-negative, got %v", q.PollIntervalJitter)
 	}
+	if q.PollIntervalJitter >= q.PollInterval {
+		return fmt.Errorf("poll_interval_jitter must be less than poll_interval, got jitter=%v interval=%v", q.PollIntervalJitter, q.PollInterval)
+	}
 	if q.SessionTimeout <= 0 {
 		return fmt.Errorf("session_timeout must be positive, got %v", q.SessionTimeout)
 	}
@@ -72,6 +75,12 @@ func (v *Validator) validateQueue() error {
 	}
 	if q.OrphanThreshold <= 0 {
 		return fmt.Errorf("orphan_threshold must be positive, got %v", q.OrphanThreshold)
+	}
+	if q.HeartbeatInterval <= 0 {
+		return fmt.Errorf("heartbeat_interval must be positive, got %v", q.HeartbeatInterval)
+	}
+	if q.HeartbeatInterval >= q.OrphanThreshold {
+		return fmt.Errorf("heartbeat_interval must be less than orphan_threshold to prevent false orphan detection, got heartbeat=%v threshold=%v", q.HeartbeatInterval, q.OrphanThreshold)
 	}
 
 	return nil

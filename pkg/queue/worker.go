@@ -170,7 +170,7 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	// 7. Handle timeout
 	if result.Status == "" && errors.Is(sessionCtx.Err(), context.DeadlineExceeded) {
 		result = &ExecutionResult{
-			Status: "timed_out",
+			Status: alertsession.StatusTimedOut,
 			Error:  fmt.Errorf("session timed out after %v", w.config.SessionTimeout),
 		}
 	}
@@ -178,7 +178,7 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	// 8. Handle cancellation
 	if result.Status == "" && errors.Is(sessionCtx.Err(), context.Canceled) {
 		result = &ExecutionResult{
-			Status: "cancelled",
+			Status: alertsession.StatusCancelled,
 			Error:  context.Canceled,
 		}
 	}
@@ -215,12 +215,13 @@ func (w *Worker) claimNextSession(ctx context.Context) (*ent.AlertSession, error
 	defer func() { _ = tx.Rollback() }()
 
 	// SELECT ... FOR UPDATE SKIP LOCKED
+	// Order by created_at for FIFO processing
 	session, err := tx.AlertSession.Query().
 		Where(
 			alertsession.StatusEQ(alertsession.StatusPending),
 			alertsession.DeletedAtIsNil(),
 		).
-		Order(ent.Asc(alertsession.FieldStartedAt)).
+		Order(ent.Asc(alertsession.FieldCreatedAt)).
 		Limit(1).
 		ForUpdate(sql.WithLockAction(sql.SkipLocked)).
 		First(ctx)
@@ -231,11 +232,13 @@ func (w *Worker) claimNextSession(ctx context.Context) (*ent.AlertSession, error
 		return nil, fmt.Errorf("failed to query pending session: %w", err)
 	}
 
-	// Claim: set in_progress, pod_id, last_interaction_at
+	// Claim: set in_progress, pod_id, started_at, last_interaction_at
+	// This is when actual execution starts (mirrors Stage and AgentExecution behavior)
 	now := time.Now()
 	session, err = session.Update().
 		SetStatus(alertsession.StatusInProgress).
 		SetPodID(w.podID).
+		SetStartedAt(now).
 		SetLastInteractionAt(now).
 		Save(ctx)
 	if err != nil {
@@ -251,7 +254,7 @@ func (w *Worker) claimNextSession(ctx context.Context) (*ent.AlertSession, error
 
 // runHeartbeat periodically updates last_interaction_at for orphan detection.
 func (w *Worker) runHeartbeat(ctx context.Context, sessionID string) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(w.config.HeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -271,7 +274,7 @@ func (w *Worker) runHeartbeat(ctx context.Context, sessionID string) {
 // updateSessionTerminalStatus writes the final session status.
 func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.AlertSession, result *ExecutionResult) error {
 	update := w.client.AlertSession.UpdateOneID(session.ID).
-		SetStatus(alertsession.Status(result.Status)).
+		SetStatus(result.Status).
 		SetCompletedAt(time.Now())
 
 	if result.Error != nil {

@@ -24,10 +24,10 @@ func init() {
 	_ = agentexecutionFields
 	alertsessionFields := schema.AlertSession{}.Fields()
 	_ = alertsessionFields
-	// alertsessionDescStartedAt is the schema descriptor for started_at field.
-	alertsessionDescStartedAt := alertsessionFields[5].Descriptor()
-	// alertsession.DefaultStartedAt holds the default value on creation for the started_at field.
-	alertsession.DefaultStartedAt = alertsessionDescStartedAt.Default.(func() time.Time)
+	// alertsessionDescCreatedAt is the schema descriptor for created_at field.
+	alertsessionDescCreatedAt := alertsessionFields[5].Descriptor()
+	// alertsession.DefaultCreatedAt holds the default value on creation for the created_at field.
+	alertsession.DefaultCreatedAt = alertsessionDescCreatedAt.Default.(func() time.Time)
 	chatFields := schema.Chat{}.Fields()
 	_ = chatFields
 	// chatDescCreatedAt is the schema descriptor for created_at field.

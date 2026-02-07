@@ -119,19 +119,29 @@ func (p *WorkerPool) CancelSession(sessionID string) bool {
 func (p *WorkerPool) Health() *PoolHealth {
 	ctx := context.Background()
 
-	queueDepth, _ := p.client.AlertSession.Query().
+	queueDepth, errQ := p.client.AlertSession.Query().
 		Where(
 			alertsession.StatusEQ(alertsession.StatusPending),
 			alertsession.DeletedAtIsNil(),
 		).
 		Count(ctx)
+	if errQ != nil {
+		slog.Error("Failed to query queue depth for health check",
+			"pod_id", p.podID,
+			"error", errQ)
+	}
 
-	activeSessions, _ := p.client.AlertSession.Query().
+	activeSessions, errA := p.client.AlertSession.Query().
 		Where(
 			alertsession.StatusEQ(alertsession.StatusInProgress),
 			alertsession.PodIDEQ(p.podID),
 		).
 		Count(ctx)
+	if errA != nil {
+		slog.Error("Failed to query active sessions for health check",
+			"pod_id", p.podID,
+			"error", errA)
+	}
 
 	workerStats := make([]WorkerHealth, len(p.workers))
 	activeWorkers := 0
@@ -143,15 +153,28 @@ func (p *WorkerPool) Health() *PoolHealth {
 		}
 	}
 
-	isHealthy := len(p.workers) > 0 && activeSessions <= p.config.MaxConcurrentSessions
+	// DB errors affect health status - if we can't reach the DB, we're not healthy
+	dbHealthy := errQ == nil && errA == nil
+	isHealthy := len(p.workers) > 0 && activeSessions <= p.config.MaxConcurrentSessions && dbHealthy
 
 	p.orphans.mu.Lock()
 	lastOrphanScan := p.orphans.lastOrphanScan
 	orphansRecovered := p.orphans.orphansRecovered
 	p.orphans.mu.Unlock()
 
+	var dbError string
+	if !dbHealthy {
+		if errQ != nil {
+			dbError = fmt.Sprintf("queue depth query failed: %v", errQ)
+		} else if errA != nil {
+			dbError = fmt.Sprintf("active sessions query failed: %v", errA)
+		}
+	}
+
 	return &PoolHealth{
 		IsHealthy:        isHealthy,
+		DBReachable:      dbHealthy,
+		DBError:          dbError,
 		PodID:            p.podID,
 		ActiveWorkers:    activeWorkers,
 		TotalWorkers:     len(p.workers),

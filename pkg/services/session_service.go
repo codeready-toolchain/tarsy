@@ -86,13 +86,14 @@ func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessi
 	}
 
 	// Create session
+	// Note: created_at is set automatically by schema default
+	// started_at will be set by the worker when it claims the session
 	sessionBuilder := tx.AlertSession.Create().
 		SetID(req.SessionID).
 		SetAlertData(req.AlertData).
 		SetAgentType(req.AgentType).
 		SetChainID(req.ChainID).
-		SetStatus(alertsession.StatusPending).
-		SetStartedAt(time.Now())
+		SetStatus(alertsession.StatusPending)
 
 	if req.AlertType != "" {
 		sessionBuilder.SetAlertType(req.AlertType)
@@ -233,10 +234,11 @@ func (s *SessionService) ListSessions(ctx context.Context, filters models.Sessio
 	}
 
 	// Get sessions
+	// Order by created_at (submission time) for consistent ordering
 	sessions, err := query.
 		Limit(limit).
 		Offset(offset).
-		Order(ent.Desc(alertsession.FieldStartedAt)).
+		Order(ent.Desc(alertsession.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
@@ -294,9 +296,10 @@ func (s *SessionService) ClaimNextPendingSession(_ context.Context, podID string
 		}
 
 		// Find first pending session
+		// Order by created_at for FIFO processing
 		session, err := tx.AlertSession.Query().
 			Where(alertsession.StatusEQ(alertsession.StatusPending)).
-			Order(ent.Asc(alertsession.FieldStartedAt)).
+			Order(ent.Asc(alertsession.FieldCreatedAt)).
 			First(claimCtx)
 
 		if err != nil {
@@ -369,25 +372,23 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 // Sets the DB status to "cancelling" (intermediate state).
 // The owning worker detects this and propagates cancellation.
 func (s *SessionService) CancelSession(ctx context.Context, sessionID string) error {
-	session, err := s.client.AlertSession.Get(ctx, sessionID)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-
-	// Only in_progress sessions can be cancelled
-	if session.Status != alertsession.StatusInProgress {
-		return ErrNotCancellable
-	}
-
-	// Set status to cancelling (intermediate)
-	err = s.client.AlertSession.UpdateOneID(sessionID).
+	// Conditional update: only update if session exists and is in_progress
+	// This prevents TOCTOU race conditions
+	count, err := s.client.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.StatusEQ(alertsession.StatusInProgress),
+		).
 		SetStatus(alertsession.StatusCancelling).
-		Exec(ctx)
+		Save(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to set session to cancelling: %w", err)
+		return fmt.Errorf("failed to cancel session: %w", err)
+	}
+
+	// Check if the update actually modified a row
+	if count == 0 {
+		// Session either doesn't exist or is not in_progress
+		return ErrNotCancellable
 	}
 
 	return nil
@@ -453,7 +454,7 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 			))
 		}).
 		Limit(limit).
-		Order(ent.Desc(alertsession.FieldStartedAt)).
+		Order(ent.Desc(alertsession.FieldCreatedAt)).
 		All(ctx)
 
 	if err != nil {

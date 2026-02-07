@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 )
 
 // StubExecutor is a placeholder SessionExecutor for Phase 2.3.
@@ -38,13 +39,13 @@ func (e *StubExecutor) Execute(ctx context.Context, session *ent.AlertSession) *
 	// Check if context is already cancelled
 	if ctx.Err() != nil {
 		return &ExecutionResult{
-			Status: "cancelled",
+			Status: alertsession.StatusCancelled,
 			Error:  ctx.Err(),
 		}
 	}
 
 	return &ExecutionResult{
-		Status:           "completed",
+		Status:           alertsession.StatusCompleted,
 		FinalAnalysis:    "Stub executor: no agent execution performed (Phase 2.3)",
 		ExecutiveSummary: "Stub execution completed successfully",
 	}

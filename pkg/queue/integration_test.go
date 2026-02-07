@@ -44,6 +44,7 @@ func intTestQueueConfig() *config.QueueConfig {
 		GracefulShutdownTimeout: 10 * time.Second,
 		OrphanDetectionInterval: 1 * time.Second,
 		OrphanThreshold:         2 * time.Second,
+		HeartbeatInterval:       30 * time.Second,
 	}
 }
 
@@ -91,6 +92,7 @@ func TestConcurrentClaimsDifferentSessions(t *testing.T) {
 	cfg := intTestQueueConfig()
 	var mu sync.Mutex
 	claimed := make([]string, 0, 5)
+	errCh := make(chan error, 5)
 	var wg sync.WaitGroup
 
 	for i := 0; i < 5; i++ {
@@ -99,15 +101,26 @@ func TestConcurrentClaimsDifferentSessions(t *testing.T) {
 			defer wg.Done()
 			w := NewWorker(fmt.Sprintf("worker-%d", workerID), "test-pod", client, cfg, nil, nil)
 			session, err := w.claimNextSession(ctx)
-			require.NoError(t, err)
+			if err != nil {
+				errCh <- fmt.Errorf("worker-%d claim failed: %w", workerID, err)
+				return
+			}
 			if session != nil {
 				mu.Lock()
 				claimed = append(claimed, session.ID)
 				mu.Unlock()
+			} else {
+				errCh <- fmt.Errorf("worker-%d got nil session without error", workerID)
 			}
 		}(i)
 	}
 	wg.Wait()
+	close(errCh)
+
+	// Check for errors from goroutines
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 
 	// All 5 sessions should be claimed, each by exactly one worker (no duplicates)
 	assert.Len(t, claimed, 5, "all 5 sessions should be claimed")
@@ -229,8 +242,10 @@ func TestStartupOrphanCleanup(t *testing.T) {
 
 // mockExecutor counts executions and tracks which sessions were processed.
 type mockExecutor struct {
-	processed atomic.Int64
-	sessions  sync.Map // string → struct{}
+	processed  atomic.Int64
+	sessions   sync.Map // string → struct{}
+	inProgress atomic.Int64
+	releaseCh  chan struct{} // optional: blocks execution until closed
 }
 
 func (m *mockExecutor) Execute(ctx context.Context, session *ent.AlertSession) *ExecutionResult {
@@ -239,18 +254,35 @@ func (m *mockExecutor) Execute(ctx context.Context, session *ent.AlertSession) *
 		m.sessions.Store(session.ID, struct{}{})
 	}
 
-	// Simulate short processing
-	select {
-	case <-time.After(50 * time.Millisecond):
-	case <-ctx.Done():
-		return &ExecutionResult{
-			Status: "cancelled",
-			Error:  ctx.Err(),
+	// Track in-progress sessions
+	m.inProgress.Add(1)
+	defer m.inProgress.Add(-1)
+
+	// If releaseCh is set, block until it's closed (for deterministic tests)
+	if m.releaseCh != nil {
+		select {
+		case <-m.releaseCh:
+			// Released, continue
+		case <-ctx.Done():
+			return &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  ctx.Err(),
+			}
+		}
+	} else {
+		// Default behavior: simulate short processing
+		select {
+		case <-time.After(50 * time.Millisecond):
+		case <-ctx.Done():
+			return &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  ctx.Err(),
+			}
 		}
 	}
 
 	return &ExecutionResult{
-		Status:           "completed",
+		Status:           alertsession.StatusCompleted,
 		FinalAnalysis:    "Mock analysis",
 		ExecutiveSummary: "Mock summary",
 	}
@@ -319,38 +351,95 @@ func TestCapacityLimits(t *testing.T) {
 		createTestSession(ctx, t, client)
 	}
 
-	// Configure pool with low max concurrent limit
+	// Configure pool: use 2 workers matching MaxConcurrentSessions to avoid races
 	cfg := intTestQueueConfig()
-	cfg.WorkerCount = 3           // 3 workers available
-	cfg.MaxConcurrentSessions = 2 // But only allow 2 concurrent sessions globally
+	cfg.WorkerCount = 2           // Match MaxConcurrentSessions to avoid startup races
+	cfg.MaxConcurrentSessions = 2 // Global limit
 	cfg.PollInterval = 50 * time.Millisecond
+	cfg.OrphanDetectionInterval = 1 * time.Hour // Disable orphan detection during test
 
-	// Mock executor that takes some time
-	executor := &mockExecutor{}
+	// Mock executor with release channel for deterministic control
+	releaseCh := make(chan struct{})
+	executor := &mockExecutor{
+		releaseCh: releaseCh,
+	}
 	pool := NewWorkerPool("test-pod", client, cfg, executor)
 
 	err := pool.Start(ctx)
 	require.NoError(t, err)
 
-	// Give workers time to start claiming sessions
-	time.Sleep(200 * time.Millisecond)
+	// Wait until exactly MaxConcurrentSessions sessions are in progress
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d sessions in progress, got: %d", cfg.MaxConcurrentSessions, executor.inProgress.Load())
+		default:
+			if executor.inProgress.Load() == int64(cfg.MaxConcurrentSessions) {
+				goto verified
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 
-	// Check that only 2 sessions are in_progress (respecting the global limit)
-	inProgress, err := client.AlertSession.Query().
+verified:
+	// Give the system a moment to stabilize
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify exactly MaxConcurrentSessions are in progress (no races with 2 workers)
+	assert.Equal(t, int64(cfg.MaxConcurrentSessions), executor.inProgress.Load(),
+		"should have exactly MaxConcurrentSessions in progress")
+
+	// Verify the database also shows MaxConcurrentSessions in_progress
+	dbInProgress, err := client.AlertSession.Query().
 		Where(alertsession.StatusEQ(alertsession.StatusInProgress)).
 		Count(ctx)
 	require.NoError(t, err)
-	assert.LessOrEqual(t, inProgress, 2, "should not exceed MaxConcurrentSessions")
+	assert.Equal(t, cfg.MaxConcurrentSessions, dbInProgress, "DB should show MaxConcurrentSessions in_progress")
 
+	// Release executions to complete
+	close(releaseCh)
+
+	// Wait for first batch to complete
+	deadline = time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for first batch to complete, in_progress: %d", executor.inProgress.Load())
+		default:
+			if executor.inProgress.Load() == 0 {
+				goto firstBatchCompleted
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+firstBatchCompleted:
+	// Workers should now claim remaining sessions (3 more)
+	// Wait for all 5 sessions to be processed
+	deadline = time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for all sessions to be processed, processed: %d", executor.processed.Load())
+		default:
+			if executor.processed.Load() >= 5 {
+				goto allProcessed
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+allProcessed:
 	// Stop the pool
 	pool.Stop()
 
-	// All sessions should eventually complete
-	completed, err := client.AlertSession.Query().
+	// Verify all 5 sessions completed
+	completedCount, err := client.AlertSession.Query().
 		Where(alertsession.StatusEQ(alertsession.StatusCompleted)).
 		Count(ctx)
 	require.NoError(t, err)
-	assert.Greater(t, completed, 0, "some sessions should complete")
+	assert.Equal(t, 5, completedCount, "all 5 sessions should complete")
 }
 
 // TestHeartbeatUpdates tests that heartbeats update last_interaction_at.
@@ -362,41 +451,59 @@ func TestHeartbeatUpdates(t *testing.T) {
 	// Create a pending session
 	session := createTestSession(ctx, t, client)
 
-	// Configure worker with short heartbeat for testing
+	// Configure pool with short heartbeat interval and blocking executor
 	cfg := intTestQueueConfig()
 	cfg.WorkerCount = 1
 	cfg.PollInterval = 50 * time.Millisecond
+	cfg.HeartbeatInterval = 100 * time.Millisecond // Short interval for testing
 
-	// Mock executor that takes longer to process (to allow heartbeats)
-	slowExecutor := &mockExecutor{}
-	pool := NewWorkerPool("test-pod", client, cfg, slowExecutor)
+	// Mock executor that blocks until released (to keep session in_progress)
+	releaseCh := make(chan struct{})
+	executor := &mockExecutor{
+		releaseCh: releaseCh,
+	}
+	pool := NewWorkerPool("test-pod", client, cfg, executor)
 
 	err := pool.Start(ctx)
 	require.NoError(t, err)
 
 	// Wait for session to be claimed
-	time.Sleep(200 * time.Millisecond)
-
-	// Get initial last_interaction_at
-	s1, err := client.AlertSession.Get(ctx, session.ID)
-	require.NoError(t, err)
-	if s1.Status == alertsession.StatusInProgress && s1.LastInteractionAt != nil {
-		initialTime := *s1.LastInteractionAt
-
-		// Wait for a heartbeat update (workers heartbeat every 30s in real code, but faster in tests)
-		time.Sleep(100 * time.Millisecond)
-
-		// Get updated last_interaction_at
-		s2, err := client.AlertSession.Get(ctx, session.ID)
-		require.NoError(t, err)
-
-		// If still in progress, last_interaction_at may have been updated
-		if s2.Status == alertsession.StatusInProgress && s2.LastInteractionAt != nil {
-			// Note: In fast tests, session may complete before we can observe heartbeat
-			// This test validates the pattern, not timing
-			assert.True(t, s2.LastInteractionAt.After(initialTime) || s2.LastInteractionAt.Equal(initialTime))
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for session to be claimed")
+		default:
+			s, err := client.AlertSession.Get(ctx, session.ID)
+			require.NoError(t, err)
+			if s.Status == alertsession.StatusInProgress && s.LastInteractionAt != nil {
+				goto claimed
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
+claimed:
+	// Get initial last_interaction_at
+	s1, err := client.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+	require.Equal(t, alertsession.StatusInProgress, s1.Status)
+	require.NotNil(t, s1.LastInteractionAt)
+	initialTime := *s1.LastInteractionAt
+
+	// Wait for at least one heartbeat to occur (heartbeat interval is 100ms)
+	time.Sleep(250 * time.Millisecond)
+
+	// Get updated last_interaction_at
+	s2, err := client.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+	require.Equal(t, alertsession.StatusInProgress, s2.Status, "session should still be in progress")
+	require.NotNil(t, s2.LastInteractionAt)
+
+	// Verify heartbeat actually updated the timestamp
+	assert.True(t, s2.LastInteractionAt.After(initialTime), "last_interaction_at should be updated by heartbeat")
+
+	// Release executor and stop pool
+	close(releaseCh)
 	pool.Stop()
 }

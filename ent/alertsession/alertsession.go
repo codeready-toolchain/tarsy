@@ -23,6 +23,8 @@ const (
 	FieldAlertType = "alert_type"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// FieldCompletedAt holds the string denoting the completed_at field in the database.
@@ -156,6 +158,7 @@ var Columns = []string{
 	FieldAgentType,
 	FieldAlertType,
 	FieldStatus,
+	FieldCreatedAt,
 	FieldStartedAt,
 	FieldCompletedAt,
 	FieldErrorMessage,
@@ -186,8 +189,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultStartedAt holds the default value on creation for the "started_at" field.
-	DefaultStartedAt func() time.Time
+	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
+	DefaultCreatedAt func() time.Time
 )
 
 // Status defines the type for the "status" enum field.
@@ -247,6 +250,11 @@ func ByAlertType(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByStartedAt orders the results by the started_at field.

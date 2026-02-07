@@ -63,7 +63,8 @@ func TestSessionService_CreateSession(t *testing.T) {
 		assert.Equal(t, req.AlertData, session.AlertData)
 		assert.Equal(t, req.AgentType, session.AgentType)
 		assert.Equal(t, alertsession.StatusPending, session.Status)
-		assert.NotNil(t, session.StartedAt)
+		assert.NotZero(t, session.CreatedAt, "created_at should be set at submission")
+		assert.Nil(t, session.StartedAt, "started_at should be nil until worker claims session")
 		assert.NotNil(t, session.CurrentStageIndex)
 		assert.Equal(t, 0, *session.CurrentStageIndex)
 

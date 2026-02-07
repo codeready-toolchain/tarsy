@@ -439,6 +439,108 @@ mcp_servers:
 	assert.NotContains(t, result.MCPServers["test2"].Transport.Args[0], "should-not-appear")
 }
 
+// TestQueueConfigMerging verifies that partial queue config properly merges with defaults
+func TestQueueConfigMerging(t *testing.T) {
+	tests := []struct {
+		name                string
+		queueYAML           string
+		expectWorkerCount   int
+		expectMaxConcurrent int
+		expectPollInterval  string
+		expectJitter        string
+	}{
+		{
+			name:                "nil queue config uses all defaults",
+			queueYAML:           "",
+			expectWorkerCount:   5,
+			expectMaxConcurrent: 5,
+			expectPollInterval:  "1s",
+			expectJitter:        "500ms",
+		},
+		{
+			name: "partial queue config merges with defaults",
+			queueYAML: `
+queue:
+  worker_count: 10`,
+			expectWorkerCount:   10,      // overridden
+			expectMaxConcurrent: 5,       // default
+			expectPollInterval:  "1s",    // default
+			expectJitter:        "500ms", // default
+		},
+		{
+			name: "multiple fields override preserves unset defaults",
+			queueYAML: `
+queue:
+  worker_count: 20
+  max_concurrent_sessions: 15`,
+			expectWorkerCount:   20,      // overridden
+			expectMaxConcurrent: 15,      // overridden
+			expectPollInterval:  "1s",    // default
+			expectJitter:        "500ms", // default
+		},
+		{
+			name: "all fields can be overridden",
+			queueYAML: `
+queue:
+  worker_count: 3
+  max_concurrent_sessions: 10
+  poll_interval: 2s
+  poll_interval_jitter: 1s`,
+			expectWorkerCount:   3,
+			expectMaxConcurrent: 10,
+			expectPollInterval:  "2s",
+			expectJitter:        "1s",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configDir := t.TempDir()
+
+			// Create tarsy.yaml with queue config
+			tarsyYAML := `
+defaults:
+  llm_provider: "google-default"
+
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+` + tt.queueYAML
+
+			err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(tarsyYAML), 0644)
+			require.NoError(t, err)
+
+			// Create minimal llm-providers.yaml
+			err = os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte("llm_providers: {}"), 0644)
+			require.NoError(t, err)
+
+			// Set all required environment variables
+			t.Setenv("GOOGLE_API_KEY", "test-key")
+			t.Setenv("OPENAI_API_KEY", "test-key")
+			t.Setenv("ANTHROPIC_API_KEY", "test-key")
+			t.Setenv("XAI_API_KEY", "test-key")
+			t.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+			t.Setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+			ctx := context.Background()
+			cfg, err := Initialize(ctx, configDir)
+
+			require.NoError(t, err)
+			require.NotNil(t, cfg.Queue)
+
+			// Verify queue config values
+			assert.Equal(t, tt.expectWorkerCount, cfg.Queue.WorkerCount,
+				"WorkerCount should be %d", tt.expectWorkerCount)
+			assert.Equal(t, tt.expectMaxConcurrent, cfg.Queue.MaxConcurrentSessions,
+				"MaxConcurrentSessions should be %d", tt.expectMaxConcurrent)
+			assert.Equal(t, tt.expectPollInterval, cfg.Queue.PollInterval.String(),
+				"PollInterval should be %s", tt.expectPollInterval)
+			assert.Equal(t, tt.expectJitter, cfg.Queue.PollIntervalJitter.String(),
+				"PollIntervalJitter should be %s", tt.expectJitter)
+		})
+	}
+}
+
 // Helper function to set up test config directory
 func setupTestConfigDir(t *testing.T) string {
 	dir := t.TempDir()

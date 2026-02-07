@@ -66,11 +66,13 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 	slog.Warn("Detected orphaned sessions", "count", len(orphans))
 
 	recovered := 0
+	failed := 0
 	for _, session := range orphans {
 		if err := p.recoverOrphanedSession(ctx, session); err != nil {
 			slog.Error("Failed to recover orphaned session",
 				"session_id", session.ID,
 				"error", err)
+			failed++
 			continue
 		}
 		recovered++
@@ -81,6 +83,13 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 	p.orphans.orphansRecovered += recovered
 	p.orphans.mu.Unlock()
 
+	if failed > 0 {
+		slog.Warn("Orphan recovery completed with failures",
+			"total_orphans", len(orphans),
+			"recovered", recovered,
+			"failed", failed)
+	}
+
 	return nil
 }
 
@@ -88,7 +97,6 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 func (p *WorkerPool) recoverOrphanedSession(ctx context.Context, session *ent.AlertSession) error {
 	log := slog.With("session_id", session.ID, "old_pod_id", session.PodID)
 
-	now := time.Now()
 	lastHeartbeat := "unknown"
 	if session.LastInteractionAt != nil {
 		lastHeartbeat = session.LastInteractionAt.Format(time.RFC3339)
@@ -99,25 +107,10 @@ func (p *WorkerPool) recoverOrphanedSession(ctx context.Context, session *ent.Al
 		podID = *session.PodID
 	}
 
-	// Mark session as timed_out (terminal — no resume)
-	err := session.Update().
-		SetStatus(alertsession.StatusTimedOut).
-		SetCompletedAt(now).
-		SetErrorMessage(fmt.Sprintf("Orphaned: no heartbeat from pod %s since %s", podID, lastHeartbeat)).
-		Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to mark session as timed_out: %w", err)
+	errorMsg := fmt.Sprintf("Orphaned: no heartbeat from pod %s since %s", podID, lastHeartbeat)
+	if err := markSessionTimedOut(ctx, p.client, session.ID, errorMsg); err != nil {
+		return err
 	}
-
-	// Mark any incomplete TimelineEvents as timed_out
-	_, _ = p.client.TimelineEvent.Update().
-		Where(
-			timelineevent.SessionIDEQ(session.ID),
-			timelineevent.StatusEQ(timelineevent.StatusStreaming),
-		).
-		SetStatus(timelineevent.StatusTimedOut).
-		SetUpdatedAt(now).
-		Save(ctx)
 
 	log.Warn("Orphaned session marked as timed_out", "last_heartbeat", lastHeartbeat)
 	return nil
@@ -146,31 +139,57 @@ func CleanupStartupOrphans(ctx context.Context, client *ent.Client, podID string
 		"pod_id", podID,
 		"count", len(orphans))
 
-	now := time.Now()
 	for _, session := range orphans {
-		err := session.Update().
-			SetStatus(alertsession.StatusTimedOut).
-			SetCompletedAt(now).
-			SetErrorMessage(fmt.Sprintf("Orphaned: pod %s restarted while session was in progress", podID)).
-			Exec(ctx)
-		if err != nil {
+		errorMsg := fmt.Sprintf("Orphaned: pod %s restarted while session was in progress", podID)
+		if err := markSessionTimedOut(ctx, client, session.ID, errorMsg); err != nil {
 			slog.Error("Failed to mark startup orphan",
 				"session_id", session.ID,
 				"error", err)
 			continue
 		}
 
-		// Mark streaming TimelineEvents
-		_, _ = client.TimelineEvent.Update().
-			Where(
-				timelineevent.SessionIDEQ(session.ID),
-				timelineevent.StatusEQ(timelineevent.StatusStreaming),
-			).
-			SetStatus(timelineevent.StatusTimedOut).
-			SetUpdatedAt(now).
-			Save(ctx)
-
 		slog.Info("Startup orphan recovered", "session_id", session.ID)
+	}
+
+	return nil
+}
+
+// markSessionTimedOut is a shared helper that marks a session as timed_out
+// and updates any streaming timeline events. Uses a transaction for atomicity.
+func markSessionTimedOut(ctx context.Context, client *ent.Client, sessionID, errorMsg string) error {
+	now := time.Now()
+
+	// Use transaction to ensure session and timeline events are updated atomically
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Mark session as timed_out (terminal — no resume)
+	err = tx.AlertSession.UpdateOneID(sessionID).
+		SetStatus(alertsession.StatusTimedOut).
+		SetCompletedAt(now).
+		SetErrorMessage(errorMsg).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to mark session as timed_out: %w", err)
+	}
+
+	// Mark any incomplete TimelineEvents as timed_out
+	if err := tx.TimelineEvent.Update().
+		Where(
+			timelineevent.SessionIDEQ(sessionID),
+			timelineevent.StatusEQ(timelineevent.StatusStreaming),
+		).
+		SetStatus(timelineevent.StatusTimedOut).
+		SetUpdatedAt(now).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to update timeline events: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil

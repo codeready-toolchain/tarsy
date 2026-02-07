@@ -19,6 +19,7 @@ func TestDefaultQueueConfig(t *testing.T) {
 	assert.Equal(t, 15*time.Minute, cfg.GracefulShutdownTimeout)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanDetectionInterval)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanThreshold)
+	assert.Equal(t, 30*time.Second, cfg.HeartbeatInterval)
 }
 
 func TestValidateQueue(t *testing.T) {
@@ -134,6 +135,80 @@ func TestValidateQueue(t *testing.T) {
 			queue: func() *QueueConfig {
 				q := DefaultQueueConfig()
 				q.PollIntervalJitter = 0
+				return q
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "jitter equal to poll interval",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.PollInterval = 1 * time.Second
+				q.PollIntervalJitter = 1 * time.Second
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "poll_interval_jitter must be less than poll_interval",
+		},
+		{
+			name: "jitter greater than poll interval",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.PollInterval = 500 * time.Millisecond
+				q.PollIntervalJitter = 1 * time.Second
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "poll_interval_jitter must be less than poll_interval",
+		},
+		{
+			name: "jitter slightly less than poll interval is valid",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.PollInterval = 1 * time.Second
+				q.PollIntervalJitter = 999 * time.Millisecond
+				return q
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "heartbeat interval zero",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.HeartbeatInterval = 0
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "heartbeat_interval must be positive",
+		},
+		{
+			name: "heartbeat interval equal to orphan threshold",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.OrphanThreshold = 1 * time.Minute
+				q.HeartbeatInterval = 1 * time.Minute
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "heartbeat_interval must be less than orphan_threshold",
+		},
+		{
+			name: "heartbeat interval greater than orphan threshold",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.OrphanThreshold = 1 * time.Minute
+				q.HeartbeatInterval = 2 * time.Minute
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "heartbeat_interval must be less than orphan_threshold",
+		},
+		{
+			name: "heartbeat interval slightly less than orphan threshold is valid",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.OrphanThreshold = 5 * time.Minute
+				q.HeartbeatInterval = 30 * time.Second
 				return q
 			}(),
 			wantErr: false,

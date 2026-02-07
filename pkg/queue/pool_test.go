@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestStubExecutor(t *testing.T) {
 
 	// Test with valid context
 	result := executor.Execute(context.Background(), nil)
-	assert.Equal(t, "completed", result.Status)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.NotEmpty(t, result.FinalAnalysis)
 	assert.NotEmpty(t, result.ExecutiveSummary)
 	assert.Nil(t, result.Error)
@@ -83,6 +84,6 @@ func TestStubExecutorCancelled(t *testing.T) {
 	cancel()
 
 	result := executor.Execute(ctx, nil)
-	assert.Equal(t, "cancelled", result.Status)
+	assert.Equal(t, alertsession.StatusCancelled, result.Status)
 	assert.Error(t, result.Error)
 }
