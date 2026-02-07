@@ -47,13 +47,13 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ### ✅ Phase 2: Core Infrastructure
 
-**Database & Persistence** ✅
+**Database & Persistence** ✅  — See `docs/phase2-database-persistence-design.md`
 - [x] PostgreSQL integration (Go)
 - [x] Database models & repositories (Go)
 - [x] Alembic-style migrations (Go)
 - [x] Session/alert persistence
 
-**Configuration System** ✅
+**Configuration System** ✅ — See `docs/phase2-configuration-system-design.md`
 - [x] YAML-based agent definitions
 - [x] YAML-based chain definitions
 - [x] YAML-based MCP server registry
@@ -70,7 +70,7 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 **Web Framework**: Echo v5 (labstack/echo) — chosen over Gin for cleaner error-return handlers, lighter dependency tree, built-in middleware (CORS, RequestID, Timeout), and consistency with other team projects. WebSocket via coder/websocket.
 
-**Queue & Worker System** ✅
+**Queue & Worker System** ✅ — See `docs/phase2-queue-worker-system-design.md`
 - [x] Database-backed job queue (Go)
 - [x] Session claim worker pattern (Go)
 - [x] Concurrency limits & backpressure
@@ -94,16 +94,16 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ### Phase 3: Agent Framework
 
-**3.1: Base Agent Architecture** — See `docs/phase3-base-agent-architecture-design.md`
-- [ ] Proto/gRPC evolution (remove PoC fields, add tool calls, tool definitions, usage metadata)
-- [ ] Python LLM service cleanup (production-quality single provider, new Generate RPC)
-- [ ] Agent interface & lifecycle (Go)
-- [ ] Iteration controller interface (Go)
-- [ ] Session executor framework (Go — replaces stub)
-- [ ] Agent execution context (Go)
-- [ ] Configuration resolution at runtime (defaults → chain → stage → agent)
-- [ ] Conversation management (Go — message building, tool call/result flow)
-- [ ] Basic single-call controller for validation
+**3.1: Base Agent Architecture** ✅ — See `docs/phase3-base-agent-architecture-design.md`
+- [x] Proto/gRPC evolution (remove PoC fields, add tool calls, tool definitions, usage metadata)
+- [x] Python LLM service cleanup (production-quality single provider, new Generate RPC)
+- [x] Agent interface & lifecycle (Go)
+- [x] Iteration controller interface (Go)
+- [x] Session executor framework (Go — replaces stub)
+- [x] Agent execution context (Go)
+- [x] Configuration resolution at runtime (defaults → chain → stage → agent)
+- [x] Conversation management (Go — message building, tool call/result flow)
+- [x] Basic single-call controller for validation
 
 **3.2: Iteration Controllers (Go)**
 - [ ] ReAct controller (text-based tool parsing, observation loop)

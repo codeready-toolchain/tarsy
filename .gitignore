@@ -9,6 +9,8 @@
 *.out
 go.work
 go.work.sum
+coverage.out
+coverage.html
 
 # Python
 __pycache__/
@@ -35,6 +37,10 @@ wheels/
 venv/
 ENV/
 env/
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
 
 # IDEs
 .vscode/

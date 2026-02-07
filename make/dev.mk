@@ -18,7 +18,7 @@ dev-clean: db-clean ent-clean ## Clean all development artifacts
 	@echo -e "$(GREEN)✅ Development environment cleaned$(NC)"
 
 # =============================================================================
-# Build & Test
+# Build
 # =============================================================================
 
 .PHONY: build
@@ -27,15 +27,71 @@ build: ## Build Go application
 	@go build -o bin/tarsy ./cmd/tarsy
 	@echo -e "$(GREEN)✅ Build complete: bin/tarsy$(NC)"
 
-.PHONY: test
-test: ## Run Go tests
-	@echo -e "$(YELLOW)Running tests...$(NC)"
-	@go test -v -race -coverprofile=coverage.out ./...
+# =============================================================================
+# Testing
+# =============================================================================
 
-.PHONY: test-coverage
-test-coverage: test ## Run tests and show coverage report
-	@echo -e "$(YELLOW)Generating coverage report...$(NC)"
+.PHONY: test
+test: test-go test-python ## Run all tests (Go + Python)
+	@echo ""
+	@echo -e "$(GREEN)✅ All tests passed!$(NC)"
+
+# -----------------------------------------------------------------------------
+# Go Tests
+# -----------------------------------------------------------------------------
+
+.PHONY: test-go
+test-go: ## Run all Go tests
+	@echo -e "$(YELLOW)Running Go tests...$(NC)"
+	@go test -v -race -coverprofile=coverage.out ./...
+	@echo -e "$(GREEN)✅ Go tests passed$(NC)"
+
+.PHONY: test-go-coverage
+test-go-coverage: test-go ## Run Go tests and show coverage report
+	@echo -e "$(YELLOW)Generating Go coverage report...$(NC)"
 	@go tool cover -html=coverage.out
+
+# -----------------------------------------------------------------------------
+# Python Tests
+# -----------------------------------------------------------------------------
+
+.PHONY: test-python
+test-python: ## Run all Python tests (alias for test-llm)
+	@$(MAKE) test-llm
+
+.PHONY: test-llm
+test-llm: ## Run LLM service Python tests
+	@echo -e "$(YELLOW)Running LLM service tests...$(NC)"
+	@cd llm-service && uv run pytest tests/ -v
+	@echo -e "$(GREEN)✅ LLM service tests passed$(NC)"
+
+.PHONY: test-llm-unit
+test-llm-unit: ## Run LLM service unit tests only
+	@echo -e "$(YELLOW)Running LLM service unit tests...$(NC)"
+	@cd llm-service && uv run pytest tests/ -m unit -v
+	@echo -e "$(GREEN)✅ LLM service unit tests passed$(NC)"
+
+.PHONY: test-llm-integration
+test-llm-integration: ## Run LLM service integration tests only
+	@echo -e "$(YELLOW)Running LLM service integration tests...$(NC)"
+	@cd llm-service && uv run pytest tests/ -m integration -v
+	@echo -e "$(GREEN)✅ LLM service integration tests passed$(NC)"
+
+.PHONY: test-llm-coverage
+test-llm-coverage: ## Run LLM service tests with coverage
+	@echo -e "$(YELLOW)Running LLM service tests with coverage...$(NC)"
+	@cd llm-service && uv run pytest tests/ --cov=llm --cov-report=term-missing
+	@echo -e "$(GREEN)✅ LLM service tests complete$(NC)"
+
+# -----------------------------------------------------------------------------
+# Dashboard Tests (placeholder for future)
+# -----------------------------------------------------------------------------
+
+# .PHONY: test-dashboard
+# test-dashboard: ## Run dashboard tests
+# 	@echo -e "$(YELLOW)Running dashboard tests...$(NC)"
+# 	@cd dashboard && npm test
+# 	@echo -e "$(GREEN)✅ Dashboard tests passed$(NC)"
 
 .PHONY: lint
 lint: ## Run golangci-lint

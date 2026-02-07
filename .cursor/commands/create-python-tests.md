@@ -2,12 +2,32 @@
 
 ## Running Tests
 
-- **All tests**: `pytest` or `make test-llm`
-- **Coverage**: `pytest --cov=llm --cov-report=term-missing`
-- **Specific file**: `pytest tests/test_servicer.py -v`
-- **Specific test**: `pytest tests/test_servicer.py::test_stream_completion -v`
-- **Show print statements**: `pytest -s`
-- **Stop on first failure**: `pytest -x`
+### From Project Root
+
+**All tests:**
+- `make test` - Run all tests (Go + Python + Dashboard)
+- `make test-go` - Run all Go tests
+- `make test-python` - Run all Python tests
+
+**Python-specific:**
+- `make test-llm` - Run LLM service tests
+- `make test-llm-unit` - Run unit tests only
+- `make test-llm-integration` - Run integration tests only
+- `make test-llm-coverage` - Run with coverage report
+
+**Go-specific:**
+- `make test-go-coverage` - Run Go tests with coverage report
+
+### From `llm-service/` Directory
+
+- **All tests**: `uv run pytest tests/ -v`
+- **Unit tests only**: `uv run pytest tests/ -m unit -v`
+- **Integration tests only**: `uv run pytest tests/ -m integration -v`
+- **Coverage**: `uv run pytest tests/ --cov=llm --cov-report=term-missing`
+- **Specific file**: `uv run pytest tests/test_servicer.py -v`
+- **Specific test**: `uv run pytest tests/test_servicer.py::TestLLMServicer::test_generate_success -v`
+- **Show print statements**: `uv run pytest -s`
+- **Stop on first failure**: `uv run pytest -x`
 
 ## Critical Rules
 
@@ -29,6 +49,14 @@ New tests are done ONLY when they ALL pass 100%. Don't leave failing tests. If a
 ### 6. No Documentation Files Unless Explicitly Requested
 DO NOT create summary documents, README files, or any markdown documentation files (like test coverage summaries, test reports, etc.) unless the user explicitly asks for them. Focus exclusively on creating the actual test code.
 
+
+## Pytest Markers
+
+Tests are organized using pytest markers:
+- `@pytest.mark.unit` - Unit tests (fast, no external dependencies, mocked)
+- `@pytest.mark.integration` - Integration tests (may require real services, slower)
+
+Apply markers at the module level using `pytestmark = pytest.mark.unit` at the top of the test file.
 
 ## Project Conventions
 
