@@ -1,4 +1,4 @@
-// Package api provides HTTP and WebSocket API handlers.
+// Package api provides HTTP API handlers for TARSy.
 package api
 
 import (
@@ -6,106 +6,107 @@ import (
 	"net/http"
 	"time"
 
+	echo "github.com/labstack/echo/v5"
+
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
-	"github.com/codeready-toolchain/tarsy/pkg/llm"
+	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
-	"github.com/gin-gonic/gin"
 )
 
-// Server represents the API server
+// Server is the HTTP API server.
 type Server struct {
-	db    *database.Client
-	llm   *llm.Client
-	wsHub *WSHub
-
-	// Services
-	sessionService     *services.SessionService
-	stageService       *services.StageService
-	timelineService    *services.TimelineService
-	messageService     *services.MessageService
-	interactionService *services.InteractionService
-	eventService       *services.EventService
-	chatService        *services.ChatService
+	echo           *echo.Echo
+	httpServer     *http.Server
+	cfg            *config.Config
+	dbClient       *database.Client
+	alertService   *services.AlertService
+	sessionService *services.SessionService
+	workerPool     *queue.WorkerPool
 }
 
-// NewServer creates a new API server
+// NewServer creates a new API server with Echo v5.
 func NewServer(
-	db *database.Client,
-	llm *llm.Client,
-	wsHub *WSHub,
+	cfg *config.Config,
+	dbClient *database.Client,
+	alertService *services.AlertService,
 	sessionService *services.SessionService,
-	stageService *services.StageService,
-	timelineService *services.TimelineService,
-	messageService *services.MessageService,
-	interactionService *services.InteractionService,
-	eventService *services.EventService,
-	chatService *services.ChatService,
+	workerPool *queue.WorkerPool,
 ) *Server {
-	return &Server{
-		db:                 db,
-		llm:                llm,
-		wsHub:              wsHub,
-		sessionService:     sessionService,
-		stageService:       stageService,
-		timelineService:    timelineService,
-		messageService:     messageService,
-		interactionService: interactionService,
-		eventService:       eventService,
-		chatService:        chatService,
+	e := echo.New()
+
+	s := &Server{
+		echo:           e,
+		cfg:            cfg,
+		dbClient:       dbClient,
+		alertService:   alertService,
+		sessionService: sessionService,
+		workerPool:     workerPool,
 	}
+
+	s.setupRoutes()
+	return s
 }
 
-// Health returns the health status
-func (s *Server) Health(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+// setupRoutes registers all API routes.
+func (s *Server) setupRoutes() {
+	// Health check
+	s.echo.GET("/health", s.healthHandler)
+
+	// API v1
+	v1 := s.echo.Group("/api/v1")
+	v1.POST("/alerts", s.submitAlertHandler)
+	v1.GET("/sessions/:id", s.getSessionHandler)
+	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
+}
+
+// Start starts the HTTP server on the given address (non-blocking).
+func (s *Server) Start(addr string) error {
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: s.echo,
+	}
+	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the HTTP server.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer == nil {
+		return nil
+	}
+	return s.httpServer.Shutdown(ctx)
+}
+
+// healthHandler handles GET /health.
+func (s *Server) healthHandler(c *echo.Context) error {
+	reqCtx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
 	defer cancel()
 
-	dbHealth, err := database.Health(ctx, s.db.DB())
+	dbHealth, err := database.Health(reqCtx, s.dbClient.DB())
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":   "unhealthy",
-			"database": dbHealth,
-			"phase":    "2.3 - Service Layer Complete",
-			"error":    err.Error(),
+		return c.JSON(http.StatusServiceUnavailable, &HealthResponse{
+			Status:   "unhealthy",
+			Database: dbHealth,
 		})
-		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":   "healthy",
-		"database": dbHealth,
-		"phase":    "2.3 - Service Layer Complete",
-	})
-}
+	stats := s.cfg.Stats()
+	response := &HealthResponse{
+		Status:   "healthy",
+		Database: dbHealth,
+		Phase:    "2.3 - Queue & Worker System",
+		Configuration: ConfigurationStats{
+			Agents:       stats.Agents,
+			Chains:       stats.Chains,
+			MCPServers:   stats.MCPServers,
+			LLMProviders: stats.LLMProviders,
+		},
+	}
 
-// CreateAlert creates a new alert session
-func (s *Server) CreateAlert(c *gin.Context) {
-	// TODO: Implement in Phase 3 (Agent Framework)
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Service layer ready - Agent framework coming in Phase 3",
-	})
-}
+	if s.workerPool != nil {
+		poolHealth := s.workerPool.Health()
+		response.WorkerPool = poolHealth
+	}
 
-// ListSessions lists all sessions
-func (s *Server) ListSessions(c *gin.Context) {
-	// TODO: Implement in Phase 3 (Agent Framework)
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Service layer ready - Agent framework coming in Phase 3",
-	})
-}
-
-// GetSession retrieves a session by ID
-func (s *Server) GetSession(c *gin.Context) {
-	// TODO: Implement in Phase 3 (Agent Framework)
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Service layer ready - Agent framework coming in Phase 3",
-	})
-}
-
-// CancelSession cancels a session
-func (s *Server) CancelSession(c *gin.Context) {
-	// TODO: Implement in Phase 3 (Agent Framework)
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Service layer ready - Agent framework coming in Phase 3",
-	})
+	return c.JSON(http.StatusOK, response)
 }

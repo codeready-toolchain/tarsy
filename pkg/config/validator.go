@@ -17,8 +17,12 @@ func NewValidator(cfg *Config) *Validator {
 
 // ValidateAll performs comprehensive validation (fail-fast - stops at first error)
 func (v *Validator) ValidateAll() error {
-	// Validate in order: agents → MCP servers → LLM providers → chains
+	// Validate in order: queue → agents → MCP servers → LLM providers → chains
 	// This ensures dependencies are validated before dependents
+
+	if err := v.validateQueue(); err != nil {
+		return fmt.Errorf("queue validation failed: %w", err)
+	}
 
 	if err := v.validateAgents(); err != nil {
 		return fmt.Errorf("agent validation failed: %w", err)
@@ -34,6 +38,49 @@ func (v *Validator) ValidateAll() error {
 
 	if err := v.validateChains(); err != nil {
 		return fmt.Errorf("chain validation failed: %w", err)
+	}
+
+	return nil
+}
+
+func (v *Validator) validateQueue() error {
+	q := v.cfg.Queue
+	if q == nil {
+		return fmt.Errorf("queue configuration is nil")
+	}
+
+	if q.WorkerCount < 1 || q.WorkerCount > 50 {
+		return fmt.Errorf("worker_count must be between 1 and 50, got %d", q.WorkerCount)
+	}
+	if q.MaxConcurrentSessions < 1 {
+		return fmt.Errorf("max_concurrent_sessions must be at least 1, got %d", q.MaxConcurrentSessions)
+	}
+	if q.PollInterval <= 0 {
+		return fmt.Errorf("poll_interval must be positive, got %v", q.PollInterval)
+	}
+	if q.PollIntervalJitter < 0 {
+		return fmt.Errorf("poll_interval_jitter must be non-negative, got %v", q.PollIntervalJitter)
+	}
+	if q.PollIntervalJitter >= q.PollInterval {
+		return fmt.Errorf("poll_interval_jitter must be less than poll_interval, got jitter=%v interval=%v", q.PollIntervalJitter, q.PollInterval)
+	}
+	if q.SessionTimeout <= 0 {
+		return fmt.Errorf("session_timeout must be positive, got %v", q.SessionTimeout)
+	}
+	if q.GracefulShutdownTimeout <= 0 {
+		return fmt.Errorf("graceful_shutdown_timeout must be positive, got %v", q.GracefulShutdownTimeout)
+	}
+	if q.OrphanDetectionInterval <= 0 {
+		return fmt.Errorf("orphan_detection_interval must be positive, got %v", q.OrphanDetectionInterval)
+	}
+	if q.OrphanThreshold <= 0 {
+		return fmt.Errorf("orphan_threshold must be positive, got %v", q.OrphanThreshold)
+	}
+	if q.HeartbeatInterval <= 0 {
+		return fmt.Errorf("heartbeat_interval must be positive, got %v", q.HeartbeatInterval)
+	}
+	if q.HeartbeatInterval >= q.OrphanThreshold {
+		return fmt.Errorf("heartbeat_interval must be less than orphan_threshold to prevent false orphan detection, got heartbeat=%v threshold=%v", q.HeartbeatInterval, q.OrphanThreshold)
 	}
 
 	return nil

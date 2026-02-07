@@ -1325,8 +1325,9 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 // TestValidateAllFailFast tests that ValidateAll fails fast on first error
 func TestValidateAllFailFast(t *testing.T) {
 	// Create config with multiple validation errors
-	// Agent has no MCP servers (will fail first)
+	// Agent has no MCP servers (will fail after queue passes)
 	cfg := &Config{
+		Queue: DefaultQueueConfig(),
 		AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
 			"bad-agent": {MCPServers: []string{}}, // Error: no MCP servers
 		}),
@@ -1343,7 +1344,7 @@ func TestValidateAllFailFast(t *testing.T) {
 	validator := NewValidator(cfg)
 	err := validator.ValidateAll()
 
-	// Should fail fast and return only the first error (agent validation)
+	// Should fail fast and return only the first error (agent validation, after queue passes)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "agent validation failed")
 	assert.Contains(t, err.Error(), "at least one MCP server required")

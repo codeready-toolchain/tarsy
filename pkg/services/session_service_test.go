@@ -63,7 +63,8 @@ func TestSessionService_CreateSession(t *testing.T) {
 		assert.Equal(t, req.AlertData, session.AlertData)
 		assert.Equal(t, req.AgentType, session.AgentType)
 		assert.Equal(t, alertsession.StatusPending, session.Status)
-		assert.NotNil(t, session.StartedAt)
+		assert.NotZero(t, session.CreatedAt, "created_at should be set at submission")
+		assert.Nil(t, session.StartedAt, "started_at should be nil until worker claims session")
 		assert.NotNil(t, session.CurrentStageIndex)
 		assert.Equal(t, 0, *session.CurrentStageIndex)
 
@@ -367,6 +368,7 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 		assert.Equal(t, session1.ID, claimed.ID)
 		assert.Equal(t, alertsession.StatusInProgress, claimed.Status)
 		assert.Equal(t, "pod-1", *claimed.PodID)
+		assert.NotNil(t, claimed.StartedAt, "started_at should be set when session is claimed")
 	})
 
 	t.Run("returns nil when no pending sessions", func(t *testing.T) {
@@ -589,6 +591,80 @@ func TestSessionService_FindOrphanedSessions(t *testing.T) {
 		require.NoError(t, err)
 		for _, s := range orphaned {
 			assert.NotEqual(t, session.ID, s.ID)
+		}
+	})
+}
+
+func TestSessionService_CancelSession(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("cancels in-progress session", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		// Set to in_progress
+		err = service.UpdateSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
+		require.NoError(t, err)
+
+		err = service.CancelSession(ctx, session.ID)
+		require.NoError(t, err)
+
+		// Verify status is now cancelling
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelling, updated.Status)
+	})
+
+	t.Run("returns ErrNotFound for missing session", func(t *testing.T) {
+		err := service.CancelSession(ctx, "nonexistent")
+		require.Error(t, err)
+		assert.Equal(t, ErrNotFound, err)
+	})
+
+	t.Run("returns ErrNotCancellable for non-in-progress session", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			status alertsession.Status
+		}{
+			{name: "pending", status: alertsession.StatusPending},
+			{name: "completed", status: alertsession.StatusCompleted},
+			{name: "failed", status: alertsession.StatusFailed},
+			{name: "cancelled", status: alertsession.StatusCancelled},
+			{name: "timed_out", status: alertsession.StatusTimedOut},
+			{name: "cancelling", status: alertsession.StatusCancelling},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := models.CreateSessionRequest{
+					SessionID: uuid.New().String(),
+					AlertData: "test alert",
+					AgentType: "kubernetes",
+					ChainID:   "k8s-analysis",
+				}
+				session, err := service.CreateSession(ctx, req)
+				require.NoError(t, err)
+
+				// For non-pending states, explicitly set the status
+				if tt.status != alertsession.StatusPending {
+					err = client.AlertSession.UpdateOneID(session.ID).
+						SetStatus(tt.status).
+						Exec(ctx)
+					require.NoError(t, err)
+				}
+
+				err = service.CancelSession(ctx, session.ID)
+				require.Error(t, err)
+				assert.Equal(t, ErrNotCancellable, err)
+			})
 		}
 	})
 }

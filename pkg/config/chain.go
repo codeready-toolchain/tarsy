@@ -91,14 +91,35 @@ func (r *ChainRegistry) GetByAlertType(alertType string) (*ChainConfig, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, chain := range r.chains {
+	chainID := r.findChainIDByAlertType(alertType)
+	if chainID == "" {
+		return nil, fmt.Errorf("%w for alert type: %s", ErrChainNotFound, alertType)
+	}
+	return r.chains[chainID], nil
+}
+
+// GetIDByAlertType retrieves the chain ID that handles the given alert type (thread-safe)
+func (r *ChainRegistry) GetIDByAlertType(alertType string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	chainID := r.findChainIDByAlertType(alertType)
+	if chainID == "" {
+		return "", fmt.Errorf("%w for alert type: %s", ErrChainNotFound, alertType)
+	}
+	return chainID, nil
+}
+
+// findChainIDByAlertType is an unexported helper that assumes the lock is held
+func (r *ChainRegistry) findChainIDByAlertType(alertType string) string {
+	for chainID, chain := range r.chains {
 		for _, at := range chain.AlertTypes {
 			if at == alertType {
-				return chain, nil
+				return chainID
 			}
 		}
 	}
-	return nil, fmt.Errorf("%w for alert type: %s", ErrChainNotFound, alertType)
+	return ""
 }
 
 // GetAll returns all chain configurations (thread-safe, returns copy)

@@ -36,10 +36,15 @@ func (AlertSession) Fields() []ent.Field {
 			Optional().
 			Comment("Alert classification"),
 		field.Enum("status").
-			Values("pending", "in_progress", "completed", "failed", "cancelled", "timed_out").
+			Values("pending", "in_progress", "cancelling", "completed", "failed", "cancelled", "timed_out").
 			Default("pending"),
+		field.Time("created_at").
+			Default(time.Now).
+			Comment("When the session was submitted/created"),
 		field.Time("started_at").
-			Default(time.Now),
+			Optional().
+			Nillable().
+			Comment("When the worker started processing (transitioned from pending to in_progress)"),
 		field.Time("completed_at").
 			Optional().
 			Nillable(),
@@ -129,6 +134,7 @@ func (AlertSession) Indexes() []ent.Index {
 		index.Fields("chain_id"),
 
 		// Composite indexes
+		index.Fields("status", "created_at"),
 		index.Fields("status", "started_at"),
 		index.Fields("status", "last_interaction_at"),
 

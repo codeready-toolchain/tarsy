@@ -17,6 +17,9 @@ var (
 
 	// ErrConcurrentModification is returned when optimistic locking fails
 	ErrConcurrentModification = errors.New("concurrent modification detected")
+
+	// ErrNotCancellable is returned when attempting to cancel a session that is not in a cancellable state
+	ErrNotCancellable = errors.New("session is not in a cancellable state")
 )
 
 // ValidationError wraps field-specific validation errors

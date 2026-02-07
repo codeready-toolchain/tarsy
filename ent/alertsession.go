@@ -27,8 +27,10 @@ type AlertSession struct {
 	AlertType string `json:"alert_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status alertsession.Status `json:"status,omitempty"`
-	// StartedAt holds the value of the "started_at" field.
-	StartedAt time.Time `json:"started_at,omitempty"`
+	// When the session was submitted/created
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// When the worker started processing (transitioned from pending to in_progress)
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// CompletedAt holds the value of the "completed_at" field.
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
@@ -175,7 +177,7 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint:
 			values[i] = new(sql.NullString)
-		case alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt:
+		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -222,11 +224,18 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Status = alertsession.Status(value.String)
 			}
+		case alertsession.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Time
+			}
 		case alertsession.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field started_at", values[i])
 			} else if value.Valid {
-				_m.StartedAt = value.Time
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
 			}
 		case alertsession.FieldCompletedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -429,8 +438,13 @@ func (_m *AlertSession) String() string {
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
-	builder.WriteString("started_at=")
-	builder.WriteString(_m.StartedAt.Format(time.ANSIC))
+	builder.WriteString("created_at=")
+	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.CompletedAt; v != nil {
 		builder.WriteString("completed_at=")

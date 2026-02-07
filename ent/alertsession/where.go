@@ -80,6 +80,11 @@ func AlertType(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldAlertType, v))
 }
 
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCreatedAt, v))
+}
+
 // StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
 func StartedAt(v time.Time) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldStartedAt, v))
@@ -380,6 +385,46 @@ func StatusNotIn(vs ...Status) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldNotIn(FieldStatus, vs...))
 }
 
+// CreatedAtEQ applies the EQ predicate on the "created_at" field.
+func CreatedAtEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
+func CreatedAtNEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtIn applies the In predicate on the "created_at" field.
+func CreatedAtIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
+func CreatedAtNotIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtGT applies the GT predicate on the "created_at" field.
+func CreatedAtGT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldCreatedAt, v))
+}
+
+// CreatedAtGTE applies the GTE predicate on the "created_at" field.
+func CreatedAtGTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldCreatedAt, v))
+}
+
+// CreatedAtLT applies the LT predicate on the "created_at" field.
+func CreatedAtLT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldCreatedAt, v))
+}
+
+// CreatedAtLTE applies the LTE predicate on the "created_at" field.
+func CreatedAtLTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldCreatedAt, v))
+}
+
 // StartedAtEQ applies the EQ predicate on the "started_at" field.
 func StartedAtEQ(v time.Time) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldStartedAt, v))
@@ -418,6 +463,16 @@ func StartedAtLT(v time.Time) predicate.AlertSession {
 // StartedAtLTE applies the LTE predicate on the "started_at" field.
 func StartedAtLTE(v time.Time) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldLTE(FieldStartedAt, v))
+}
+
+// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
+func StartedAtIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldStartedAt))
+}
+
+// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
+func StartedAtNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldStartedAt))
 }
 
 // CompletedAtEQ applies the EQ predicate on the "completed_at" field.
