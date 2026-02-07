@@ -63,6 +63,75 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		assert.NotNil(t, event.CreatedAt)
 		assert.NotNil(t, event.UpdatedAt)
 	})
+
+	t.Run("creates event with empty content for streaming", func(t *testing.T) {
+		req := models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 2,
+			EventType:      timelineevent.EventTypeLlmThinking,
+			Content:        "", // Empty content is now allowed for streaming
+		}
+
+		event, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.NoError(t, err)
+		assert.Empty(t, event.Content)
+		assert.Equal(t, timelineevent.StatusStreaming, event.Status)
+	})
+
+	t.Run("validates required fields", func(t *testing.T) {
+		validReq := models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 3,
+			EventType:      timelineevent.EventTypeLlmThinking,
+			Content:        "test",
+		}
+
+		// Missing SessionID
+		req := validReq
+		req.SessionID = ""
+		_, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Missing StageID
+		req = validReq
+		req.StageID = ""
+		_, err = timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Missing ExecutionID
+		req = validReq
+		req.ExecutionID = ""
+		_, err = timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Invalid SequenceNumber (zero)
+		req = validReq
+		req.SequenceNumber = 0
+		_, err = timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Invalid SequenceNumber (negative)
+		req = validReq
+		req.SequenceNumber = -1
+		_, err = timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		// Missing EventType
+		req = validReq
+		req.EventType = ""
+		_, err = timelineService.CreateTimelineEvent(ctx, req)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
 }
 
 func TestTimelineService_UpdateTimelineEvent(t *testing.T) {

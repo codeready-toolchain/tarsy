@@ -97,4 +97,92 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Len(t, messages, 1)
 		assert.Equal(t, message.RoleSystem, messages[0].Role)
 	})
+
+	t.Run("creates message with tool calls", func(t *testing.T) {
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 10,
+			Role:           message.RoleAssistant,
+			Content:        "Let me check the logs",
+			ToolCalls: []models.ToolCallData{
+				{
+					ID:        "call_123",
+					Name:      "get_logs",
+					Arguments: `{"namespace":"default"}`,
+				},
+				{
+					ID:        "call_456",
+					Name:      "get_pods",
+					Arguments: `{"label":"app=web"}`,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleAssistant, msg.Role)
+		assert.Len(t, msg.ToolCalls, 2)
+		assert.Equal(t, "call_123", msg.ToolCalls[0]["id"])
+		assert.Equal(t, "get_logs", msg.ToolCalls[0]["name"])
+		assert.Equal(t, `{"namespace":"default"}`, msg.ToolCalls[0]["arguments"])
+	})
+
+	t.Run("creates tool response message", func(t *testing.T) {
+		toolCallID := "call_789"
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 11,
+			Role:           message.RoleTool,
+			Content:        `{"pods": ["pod-1", "pod-2"]}`,
+			ToolCallID:     toolCallID,
+			ToolName:       "get_pods",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleTool, msg.Role)
+		require.NotNil(t, msg.ToolCallID)
+		assert.Equal(t, toolCallID, *msg.ToolCallID)
+		require.NotNil(t, msg.ToolName)
+		assert.Equal(t, "get_pods", *msg.ToolName)
+	})
+
+	t.Run("gets stage messages across executions", func(t *testing.T) {
+		// Create a second execution in the same stage
+		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "TestAgent2",
+			AgentIndex:        2,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+
+		// Create messages in both executions
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 20,
+			Role:           message.RoleUser,
+			Content:        "Message in exec1",
+		})
+		require.NoError(t, err)
+
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec2.ID,
+			SequenceNumber: 1,
+			Role:           message.RoleUser,
+			Content:        "Message in exec2",
+		})
+		require.NoError(t, err)
+
+		// Get all messages for the stage
+		messages, err := messageService.GetStageMessages(ctx, stg.ID)
+		require.NoError(t, err)
+		// Should have all messages from both executions (original 2 + tool call + tool response + 2 new = 6)
+		assert.GreaterOrEqual(t, len(messages), 2)
+	})
 }

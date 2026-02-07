@@ -7,12 +7,12 @@ import (
 
 // CreateMessageRequest contains fields for creating a message
 type CreateMessageRequest struct {
-	SessionID      string       `json:"session_id"`
-	StageID        string       `json:"stage_id"`
-	ExecutionID    string       `json:"execution_id"`
-	SequenceNumber int          `json:"sequence_number"`
-	Role           message.Role `json:"role"`
-	Content        string       `json:"content"`
+	SessionID      string         `json:"session_id"`
+	StageID        string         `json:"stage_id"`
+	ExecutionID    string         `json:"execution_id"`
+	SequenceNumber int            `json:"sequence_number"`
+	Role           message.Role   `json:"role"`
+	Content        string         `json:"content"`
 	ToolCalls      []ToolCallData `json:"tool_calls,omitempty"`   // For assistant messages
 	ToolCallID     string         `json:"tool_call_id,omitempty"` // For tool messages
 	ToolName       string         `json:"tool_name,omitempty"`    // For tool messages

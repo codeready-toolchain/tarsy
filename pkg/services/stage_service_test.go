@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -532,5 +533,68 @@ func TestStageService_GetStagesBySession(t *testing.T) {
 		stages, err := stageService.GetStagesBySession(ctx, session.ID, true)
 		require.NoError(t, err)
 		assert.NotNil(t, stages[0].Edges.AgentExecutions)
+	})
+}
+
+func TestStageService_GetAgentExecutions(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Setup
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 3,
+	})
+	require.NoError(t, err)
+
+	// Create multiple agent executions
+	var execIDs []string
+	for i := 1; i <= 3; i++ {
+		exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         fmt.Sprintf("TestAgent%d", i),
+			AgentIndex:        i,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+		execIDs = append(execIDs, exec.ID)
+	}
+
+	t.Run("retrieves all executions for stage ordered by index", func(t *testing.T) {
+		executions, err := stageService.GetAgentExecutions(ctx, stg.ID)
+		require.NoError(t, err)
+		assert.Len(t, executions, 3)
+
+		// Verify ordering by agent index
+		for i := 0; i < len(executions)-1; i++ {
+			assert.Less(t, executions[i].AgentIndex, executions[i+1].AgentIndex)
+		}
+	})
+
+	t.Run("returns empty list for stage with no executions", func(t *testing.T) {
+		stg2, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "EmptyStage",
+			StageIndex:         2,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		executions, err := stageService.GetAgentExecutions(ctx, stg2.ID)
+		require.NoError(t, err)
+		assert.Empty(t, executions)
 	})
 }

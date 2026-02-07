@@ -1,0 +1,1901 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>services: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/codeready-toolchain/tarsy/pkg/services/alert_service.go (88.2%)</option>
+				
+				<option value="file1">github.com/codeready-toolchain/tarsy/pkg/services/chat_service.go (89.1%)</option>
+				
+				<option value="file2">github.com/codeready-toolchain/tarsy/pkg/services/errors.go (100.0%)</option>
+				
+				<option value="file3">github.com/codeready-toolchain/tarsy/pkg/services/event_service.go (80.8%)</option>
+				
+				<option value="file4">github.com/codeready-toolchain/tarsy/pkg/services/interaction_service.go (85.4%)</option>
+				
+				<option value="file5">github.com/codeready-toolchain/tarsy/pkg/services/message_service.go (71.4%)</option>
+				
+				<option value="file6">github.com/codeready-toolchain/tarsy/pkg/services/session_service.go (78.4%)</option>
+				
+				<option value="file7">github.com/codeready-toolchain/tarsy/pkg/services/stage_service.go (74.1%)</option>
+				
+				<option value="file8">github.com/codeready-toolchain/tarsy/pkg/services/timeline_service.go (80.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package services
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/alertsession"
+        "github.com/codeready-toolchain/tarsy/pkg/config"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// SubmitAlertInput contains the domain-level data needed to create a session.
+// Transformed from the HTTP request + headers by the handler.
+type SubmitAlertInput struct {
+        AlertType string
+        Runbook   string
+        Data      string                     // Alert payload (opaque text, stored as-is)
+        MCP       *models.MCPSelectionConfig // MCP selection config (optional)
+        Author    string                     // From oauth2-proxy headers
+}
+
+// AlertService handles alert submission and session creation.
+type AlertService struct {
+        client        *ent.Client
+        chainRegistry *config.ChainRegistry
+        defaults      *config.Defaults
+}
+
+// NewAlertService creates a new AlertService.
+func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, defaults *config.Defaults) *AlertService <span class="cov7" title="4">{
+        if client == nil </span><span class="cov0" title="0">{
+                panic("NewAlertService: client must not be nil")</span>
+        }
+        <span class="cov7" title="4">if chainRegistry == nil </span><span class="cov1" title="1">{
+                panic("NewAlertService: chainRegistry must not be nil")</span>
+        }
+        <span class="cov6" title="3">if defaults == nil </span><span class="cov1" title="1">{
+                panic("NewAlertService: defaults must not be nil")</span>
+        }
+        <span class="cov4" title="2">return &amp;AlertService{
+                client:        client,
+                chainRegistry: chainRegistry,
+                defaults:      defaults,
+        }</span>
+}
+
+// SubmitAlert creates a new session from an alert submission.
+// The session starts in "pending" status and is picked up by the worker pool.
+func (s *AlertService) SubmitAlert(ctx context.Context, input SubmitAlertInput) (*ent.AlertSession, error) <span class="cov10" title="6">{
+        if input.Data == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("data", "alert data is required")
+        }</span>
+
+        // Resolve alert type (use default if not provided)
+        <span class="cov9" title="5">alertType := input.AlertType
+        if alertType == "" </span><span class="cov4" title="2">{
+                alertType = s.defaults.AlertType
+        }</span>
+
+        // Resolve chain ID from alert type
+        <span class="cov9" title="5">chainID, err := s.chainRegistry.GetIDByAlertType(alertType)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, NewValidationError("alert_type", fmt.Sprintf("no chain found for alert type '%s'", alertType))
+        }</span>
+
+        // Generate session ID
+        <span class="cov7" title="4">sessionID := uuid.New().String()
+
+        // Convert MCP selection to JSON map for ent storage
+        var mcpSelectionJSON map[string]any
+        if input.MCP != nil </span><span class="cov4" title="2">{
+                mcpBytes, err := json.Marshal(input.MCP)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to marshal MCP selection: %w", err)
+                }</span>
+                <span class="cov4" title="2">if err := json.Unmarshal(mcpBytes, &amp;mcpSelectionJSON); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to convert MCP selection: %w", err)
+                }</span>
+        }
+
+        // Create session in "pending" status
+        // Note: created_at is set automatically by schema default
+        // started_at will be set by the worker when it claims the session
+        <span class="cov7" title="4">builder := s.client.AlertSession.Create().
+                SetID(sessionID).
+                SetAlertData(input.Data).
+                SetAgentType(alertType). // Use alert type as agent type
+                SetAlertType(alertType).
+                SetChainID(chainID).
+                SetStatus(alertsession.StatusPending)
+
+        if input.Author != "" </span><span class="cov1" title="1">{
+                builder.SetAuthor(input.Author)
+        }</span>
+        <span class="cov7" title="4">if input.Runbook != "" </span><span class="cov1" title="1">{
+                builder.SetRunbookURL(input.Runbook)
+        }</span>
+        <span class="cov7" title="4">if mcpSelectionJSON != nil </span><span class="cov4" title="2">{
+                builder.SetMcpSelection(mcpSelectionJSON)
+        }</span>
+
+        <span class="cov7" title="4">session, err := builder.Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create session: %w", err)
+        }</span>
+
+        <span class="cov7" title="4">return session, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Package services contains business logic service layer implementations.
+package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/chat"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// ChatService manages follow-up chat conversations
+type ChatService struct {
+        client *ent.Client
+}
+
+// NewChatService creates a new ChatService
+func NewChatService(client *ent.Client) *ChatService <span class="cov7" title="4">{
+        return &amp;ChatService{client: client}
+}</span>
+
+// CreateChat initializes a chat for a session
+func (s *ChatService) CreateChat(httpCtx context.Context, req models.CreateChatRequest) (*ent.Chat, error) <span class="cov10" title="7">{
+        if req.SessionID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("session_id", "required")
+        }</span>
+        <span class="cov9" title="6">if req.CreatedBy == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("created_by", "required")
+        }</span>
+
+        <span class="cov8" title="5">ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        // Get session to inherit chain_id
+        session, err := s.client.AlertSession.Get(ctx, req.SessionID)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get session: %w", err)</span>
+        }
+
+        <span class="cov7" title="4">chatID := uuid.New().String()
+        chatObj, err := s.client.Chat.Create().
+                SetID(chatID).
+                SetSessionID(req.SessionID).
+                SetCreatedAt(time.Now()).
+                SetCreatedBy(req.CreatedBy).
+                SetChainID(session.ChainID).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create chat: %w", err)
+        }</span>
+
+        <span class="cov7" title="4">return chatObj, nil</span>
+}
+
+// AddChatMessage adds a user message to the chat
+func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChatMessageRequest) (*ent.ChatUserMessage, error) <span class="cov10" title="7">{
+        // Validate input
+        if req.ChatID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("chat_id", "required")
+        }</span>
+        <span class="cov9" title="6">if req.Content == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("content", "required")
+        }</span>
+        <span class="cov8" title="5">if req.Author == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("author", "required")
+        }</span>
+
+        <span class="cov7" title="4">ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        // Verify chat exists before creating message (consistent with CreateChat pattern)
+        _, err := s.client.Chat.Get(ctx, req.ChatID)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to verify chat existence: %w", err)</span>
+        }
+
+        <span class="cov6" title="3">messageID := uuid.New().String()
+        msg, err := s.client.ChatUserMessage.Create().
+                SetID(messageID).
+                SetChatID(req.ChatID).
+                SetContent(req.Content).
+                SetAuthor(req.Author).
+                SetCreatedAt(time.Now()).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to add chat message: %w", err)
+        }</span>
+
+        <span class="cov6" title="3">return msg, nil</span>
+}
+
+// GetChatHistory retrieves all messages and response stages for a chat
+func (s *ChatService) GetChatHistory(ctx context.Context, chatID string) (*models.ChatHistoryResponse, error) <span class="cov6" title="3">{
+        if chatID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("chatID", "required")
+        }</span>
+
+        <span class="cov4" title="2">chatObj, err := s.client.Chat.Query().
+                Where(chat.IDEQ(chatID)).
+                WithUserMessages().
+                WithStages().
+                Only(ctx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get chat: %w", err)</span>
+        }
+
+        <span class="cov1" title="1">return &amp;models.ChatHistoryResponse{
+                Chat:         chatObj,
+                UserMessages: chatObj.Edges.UserMessages,
+                Stages:       chatObj.Edges.Stages,
+        }, nil</span>
+}
+
+// BuildChatContext builds context from parent session artifacts
+func (s *ChatService) BuildChatContext(ctx context.Context, chatID string) (string, error) <span class="cov6" title="3">{
+        if chatID == "" </span><span class="cov1" title="1">{
+                return "", NewValidationError("chatID", "required")
+        }</span>
+
+        // Get chat with parent session
+        <span class="cov4" title="2">chatObj, err := s.client.Chat.Query().
+                Where(chat.IDEQ(chatID)).
+                WithSession(func(q *ent.AlertSessionQuery) </span><span class="cov4" title="2">{
+                        q.WithStages().WithTimelineEvents()
+                }</span>).
+                Only(ctx)
+        <span class="cov4" title="2">if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return "", ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return "", fmt.Errorf("failed to get chat: %w", err)</span>
+        }
+
+        // Build context from parent session's artifacts
+        // This is a simplified implementation - in production, this would be more sophisticated
+        <span class="cov1" title="1">chatContext := fmt.Sprintf("Original Alert: %s\n\n", chatObj.Edges.Session.AlertData)
+
+        if chatObj.Edges.Session.FinalAnalysis != nil </span><span class="cov1" title="1">{
+                chatContext += fmt.Sprintf("Investigation Summary: %s\n\n", *chatObj.Edges.Session.FinalAnalysis)
+        }</span>
+
+        <span class="cov1" title="1">return chatContext, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package services
+
+import (
+        "errors"
+        "fmt"
+)
+
+var (
+        // ErrNotFound is returned when an entity is not found
+        ErrNotFound = errors.New("entity not found")
+
+        // ErrAlreadyExists is returned when attempting to create a duplicate entity
+        ErrAlreadyExists = errors.New("entity already exists")
+
+        // ErrInvalidInput is returned when input validation fails
+        ErrInvalidInput = errors.New("invalid input")
+
+        // ErrConcurrentModification is returned when optimistic locking fails
+        ErrConcurrentModification = errors.New("concurrent modification detected")
+
+        // ErrNotCancellable is returned when attempting to cancel a session that is not in a cancellable state
+        ErrNotCancellable = errors.New("session is not in a cancellable state")
+)
+
+// ValidationError wraps field-specific validation errors
+type ValidationError struct {
+        Field   string
+        Message string
+}
+
+func (e *ValidationError) Error() string <span class="cov3" title="3">{
+        return fmt.Sprintf("validation error on field '%s': %s", e.Field, e.Message)
+}</span>
+
+// NewValidationError creates a new validation error
+func NewValidationError(field, message string) error <span class="cov10" title="28">{
+        return &amp;ValidationError{
+                Field:   field,
+                Message: message,
+        }
+}</span>
+
+// IsValidationError checks if an error is a validation error
+func IsValidationError(err error) bool <span class="cov9" title="25">{
+        var ve *ValidationError
+        return errors.As(err, &amp;ve)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/event"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+)
+
+// EventService manages WebSocket event distribution
+type EventService struct {
+        client *ent.Client
+}
+
+// NewEventService creates a new EventService
+func NewEventService(client *ent.Client) *EventService <span class="cov8" title="5">{
+        return &amp;EventService{client: client}
+}</span>
+
+// CreateEvent creates a new event
+func (s *EventService) CreateEvent(httpCtx context.Context, req models.CreateEventRequest) (*ent.Event, error) <span class="cov10" title="7">{
+        ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        evt, err := s.client.Event.Create().
+                SetSessionID(req.SessionID).
+                SetChannel(req.Channel).
+                SetPayload(req.Payload).
+                SetCreatedAt(time.Now()).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create event: %w", err)
+        }</span>
+
+        <span class="cov10" title="7">return evt, nil</span>
+}
+
+// GetEventsSince retrieves events since a given ID
+func (s *EventService) GetEventsSince(ctx context.Context, channel string, sinceID int) ([]*ent.Event, error) <span class="cov6" title="3">{
+        events, err := s.client.Event.Query().
+                Where(
+                        event.ChannelEQ(channel),
+                        event.IDGT(sinceID),
+                ).
+                Order(ent.Asc(event.FieldID)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get events: %w", err)
+        }</span>
+
+        <span class="cov6" title="3">return events, nil</span>
+}
+
+// CleanupSessionEvents removes all events for a session
+func (s *EventService) CleanupSessionEvents(ctx context.Context, sessionID string) (int, error) <span class="cov4" title="2">{
+        writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+        defer cancel()
+
+        count, err := s.client.Event.Delete().
+                Where(event.SessionIDEQ(sessionID)).
+                Exec(writeCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("failed to cleanup session events: %w", err)
+        }</span>
+
+        <span class="cov4" title="2">return count, nil</span>
+}
+
+// CleanupOrphanedEvents removes events older than TTL
+func (s *EventService) CleanupOrphanedEvents(ctx context.Context, ttlDays int) (int, error) <span class="cov1" title="1">{
+        if ttlDays &lt;= 0 </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("ttl_days must be positive, got %d", ttlDays)
+        }</span>
+
+        <span class="cov1" title="1">cutoff := time.Now().Add(-time.Duration(ttlDays) * 24 * time.Hour)
+
+        writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+        defer cancel()
+
+        count, err := s.client.Event.Delete().
+                Where(event.CreatedAtLT(cutoff)).
+                Exec(writeCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("failed to cleanup orphaned events: %w", err)
+        }</span>
+
+        <span class="cov1" title="1">return count, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/llminteraction"
+        "github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// InteractionService manages LLM and MCP interactions (debug data)
+type InteractionService struct {
+        client         *ent.Client
+        messageService *MessageService
+}
+
+// NewInteractionService creates a new InteractionService
+func NewInteractionService(client *ent.Client, messageService *MessageService) *InteractionService <span class="cov8" title="7">{
+        return &amp;InteractionService{
+                client:         client,
+                messageService: messageService,
+        }
+}</span>
+
+// CreateLLMInteraction creates a new LLM interaction
+func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req models.CreateLLMInteractionRequest) (*ent.LLMInteraction, error) <span class="cov10" title="10">{
+        ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        interactionID := uuid.New().String()
+        builder := s.client.LLMInteraction.Create().
+                SetID(interactionID).
+                SetSessionID(req.SessionID).
+                SetStageID(req.StageID).
+                SetExecutionID(req.ExecutionID).
+                SetInteractionType(llminteraction.InteractionType(req.InteractionType)).
+                SetModelName(req.ModelName).
+                SetLlmRequest(req.LLMRequest).
+                SetLlmResponse(req.LLMResponse).
+                SetCreatedAt(time.Now())
+
+        if req.LastMessageID != nil </span><span class="cov6" title="4">{
+                builder = builder.SetLastMessageID(*req.LastMessageID)
+        }</span>
+        <span class="cov10" title="10">if req.ThinkingContent != nil </span><span class="cov1" title="1">{
+                builder = builder.SetThinkingContent(*req.ThinkingContent)
+        }</span>
+        <span class="cov10" title="10">if req.ResponseMetadata != nil </span><span class="cov1" title="1">{
+                builder = builder.SetResponseMetadata(req.ResponseMetadata)
+        }</span>
+        <span class="cov10" title="10">if req.InputTokens != nil </span><span class="cov3" title="2">{
+                builder = builder.SetInputTokens(*req.InputTokens)
+        }</span>
+        <span class="cov10" title="10">if req.OutputTokens != nil </span><span class="cov3" title="2">{
+                builder = builder.SetOutputTokens(*req.OutputTokens)
+        }</span>
+        <span class="cov10" title="10">if req.TotalTokens != nil </span><span class="cov1" title="1">{
+                builder = builder.SetTotalTokens(*req.TotalTokens)
+        }</span>
+        <span class="cov10" title="10">if req.DurationMs != nil </span><span class="cov1" title="1">{
+                builder = builder.SetDurationMs(*req.DurationMs)
+        }</span>
+        <span class="cov10" title="10">if req.ErrorMessage != nil </span><span class="cov0" title="0">{
+                builder = builder.SetErrorMessage(*req.ErrorMessage)
+        }</span>
+
+        <span class="cov10" title="10">interaction, err := builder.Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create LLM interaction: %w", err)
+        }</span>
+
+        <span class="cov10" title="10">return interaction, nil</span>
+}
+
+// CreateMCPInteraction creates a new MCP interaction
+func (s *InteractionService) CreateMCPInteraction(httpCtx context.Context, req models.CreateMCPInteractionRequest) (*ent.MCPInteraction, error) <span class="cov8" title="6">{
+        ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        interactionID := uuid.New().String()
+        builder := s.client.MCPInteraction.Create().
+                SetID(interactionID).
+                SetSessionID(req.SessionID).
+                SetStageID(req.StageID).
+                SetExecutionID(req.ExecutionID).
+                SetInteractionType(mcpinteraction.InteractionType(req.InteractionType)).
+                SetServerName(req.ServerName).
+                SetCreatedAt(time.Now())
+
+        if req.ToolName != nil </span><span class="cov7" title="5">{
+                builder = builder.SetToolName(*req.ToolName)
+        }</span>
+        <span class="cov8" title="6">if req.ToolArguments != nil </span><span class="cov7" title="5">{
+                builder = builder.SetToolArguments(req.ToolArguments)
+        }</span>
+        <span class="cov8" title="6">if req.ToolResult != nil </span><span class="cov7" title="5">{
+                builder = builder.SetToolResult(req.ToolResult)
+        }</span>
+        <span class="cov8" title="6">if req.AvailableTools != nil </span><span class="cov1" title="1">{
+                // Convert map[string]any to []interface{} by iterating over the map
+                tools := make([]interface{}, 0, len(req.AvailableTools))
+                for _, tool := range req.AvailableTools </span><span class="cov1" title="1">{
+                        tools = append(tools, tool)
+                }</span>
+                <span class="cov1" title="1">builder = builder.SetAvailableTools(tools)</span>
+        }
+        <span class="cov8" title="6">if req.DurationMs != nil </span><span class="cov1" title="1">{
+                builder = builder.SetDurationMs(*req.DurationMs)
+        }</span>
+        <span class="cov8" title="6">if req.ErrorMessage != nil </span><span class="cov0" title="0">{
+                builder = builder.SetErrorMessage(*req.ErrorMessage)
+        }</span>
+
+        <span class="cov8" title="6">interaction, err := builder.Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create MCP interaction: %w", err)
+        }</span>
+
+        <span class="cov8" title="6">return interaction, nil</span>
+}
+
+// GetLLMInteractionsList retrieves interaction metadata for list view
+func (s *InteractionService) GetLLMInteractionsList(ctx context.Context, sessionID string) ([]*ent.LLMInteraction, error) <span class="cov3" title="2">{
+        interactions, err := s.client.LLMInteraction.Query().
+                Where(llminteraction.SessionIDEQ(sessionID)).
+                Order(ent.Asc(llminteraction.FieldCreatedAt)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get LLM interactions: %w", err)
+        }</span>
+
+        <span class="cov3" title="2">return interactions, nil</span>
+}
+
+// GetLLMInteractionDetail retrieves full interaction details
+func (s *InteractionService) GetLLMInteractionDetail(ctx context.Context, interactionID string) (*ent.LLMInteraction, error) <span class="cov9" title="9">{
+        interaction, err := s.client.LLMInteraction.Get(ctx, interactionID)
+        if err != nil </span><span class="cov3" title="2">{
+                if ent.IsNotFound(err) </span><span class="cov3" title="2">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get LLM interaction: %w", err)</span>
+        }
+
+        <span class="cov8" title="7">return interaction, nil</span>
+}
+
+// GetMCPInteractionsList retrieves interaction metadata for list view
+func (s *InteractionService) GetMCPInteractionsList(ctx context.Context, sessionID string) ([]*ent.MCPInteraction, error) <span class="cov3" title="2">{
+        interactions, err := s.client.MCPInteraction.Query().
+                Where(mcpinteraction.SessionIDEQ(sessionID)).
+                Order(ent.Asc(mcpinteraction.FieldCreatedAt)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get MCP interactions: %w", err)
+        }</span>
+
+        <span class="cov3" title="2">return interactions, nil</span>
+}
+
+// GetMCPInteractionDetail retrieves full interaction details
+func (s *InteractionService) GetMCPInteractionDetail(ctx context.Context, interactionID string) (*ent.MCPInteraction, error) <span class="cov3" title="2">{
+        interaction, err := s.client.MCPInteraction.Get(ctx, interactionID)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get MCP interaction: %w", err)</span>
+        }
+
+        <span class="cov1" title="1">return interaction, nil</span>
+}
+
+// ReconstructConversation rebuilds the conversation from messages
+func (s *InteractionService) ReconstructConversation(ctx context.Context, interactionID string) ([]*ent.Message, error) <span class="cov8" title="7">{
+        // Get the interaction to find last_message_id
+        interaction, err := s.GetLLMInteractionDetail(ctx, interactionID)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="6">if interaction.LastMessageID == nil </span><span class="cov3" title="2">{
+                return []*ent.Message{}, nil
+        }</span>
+
+        // Get the last message
+        <span class="cov6" title="4">lastMessage, err := s.client.Message.Get(ctx, *interaction.LastMessageID)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("last message %s not found: %w", *interaction.LastMessageID, ErrNotFound)
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get last message: %w", err)</span>
+        }
+
+        // Get all messages up to that sequence number
+        <span class="cov6" title="4">messages, err := s.messageService.GetMessagesUpToSequence(
+                ctx,
+                interaction.ExecutionID,
+                lastMessage.SequenceNumber,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov6" title="4">return messages, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/message"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// MessageService manages LLM conversation messages
+type MessageService struct {
+        client *ent.Client
+}
+
+// NewMessageService creates a new MessageService
+func NewMessageService(client *ent.Client) *MessageService <span class="cov7" title="8">{
+        return &amp;MessageService{client: client}
+}</span>
+
+// CreateMessage creates a new message
+func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessageRequest) (*ent.Message, error) <span class="cov10" title="21">{
+        // Validate input
+        if req.SessionID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("session_id", "required")
+        }</span>
+        <span class="cov10" title="21">if req.StageID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("stage_id", "required")
+        }</span>
+        <span class="cov10" title="21">if req.ExecutionID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("execution_id", "required")
+        }</span>
+        <span class="cov10" title="21">if string(req.Role) == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("role", "required")
+        }</span>
+        <span class="cov10" title="21">if err := message.RoleValidator(req.Role); err != nil </span><span class="cov1" title="1">{
+                return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant, tool", req.Role))
+        }</span>
+        <span class="cov9" title="20">if req.Content == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("content", "required")
+        }</span>
+
+        // Use background context with timeout
+        <span class="cov9" title="20">ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        messageID := uuid.New().String()
+        builder := s.client.Message.Create().
+                SetID(messageID).
+                SetSessionID(req.SessionID).
+                SetStageID(req.StageID).
+                SetExecutionID(req.ExecutionID).
+                SetSequenceNumber(req.SequenceNumber).
+                SetRole(req.Role).
+                SetContent(req.Content).
+                SetCreatedAt(time.Now())
+
+        // Tool-related fields
+        if len(req.ToolCalls) &gt; 0 </span><span class="cov1" title="1">{
+                toolCallMaps := make([]map[string]interface{}, len(req.ToolCalls))
+                for i, tc := range req.ToolCalls </span><span class="cov3" title="2">{
+                        toolCallMaps[i] = map[string]interface{}{
+                                "id":        tc.ID,
+                                "name":      tc.Name,
+                                "arguments": tc.Arguments,
+                        }
+                }</span>
+                <span class="cov1" title="1">builder = builder.SetToolCalls(toolCallMaps)</span>
+        }
+        <span class="cov9" title="20">if req.ToolCallID != "" </span><span class="cov1" title="1">{
+                builder = builder.SetToolCallID(req.ToolCallID)
+        }</span>
+        <span class="cov9" title="20">if req.ToolName != "" </span><span class="cov1" title="1">{
+                builder = builder.SetToolName(req.ToolName)
+        }</span>
+
+        <span class="cov9" title="20">msg, err := builder.Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create message: %w", err)
+        }</span>
+
+        <span class="cov9" title="20">return msg, nil</span>
+}
+
+// GetExecutionMessages retrieves all messages for an agent execution in order
+func (s *MessageService) GetExecutionMessages(ctx context.Context, executionID string) ([]*ent.Message, error) <span class="cov3" title="2">{
+        messages, err := s.client.Message.Query().
+                Where(message.ExecutionIDEQ(executionID)).
+                Order(ent.Asc(message.FieldSequenceNumber)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get execution messages: %w", err)
+        }</span>
+
+        <span class="cov3" title="2">return messages, nil</span>
+}
+
+// GetMessagesUpToSequence retrieves messages up to a specific sequence number
+func (s *MessageService) GetMessagesUpToSequence(ctx context.Context, executionID string, sequenceNumber int) ([]*ent.Message, error) <span class="cov5" title="5">{
+        messages, err := s.client.Message.Query().
+                Where(
+                        message.ExecutionIDEQ(executionID),
+                        message.SequenceNumberLTE(sequenceNumber),
+                ).
+                Order(ent.Asc(message.FieldSequenceNumber)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get messages: %w", err)
+        }</span>
+
+        <span class="cov5" title="5">return messages, nil</span>
+}
+
+// GetStageMessages retrieves all messages for a stage across all agent executions
+func (s *MessageService) GetStageMessages(ctx context.Context, stageID string) ([]*ent.Message, error) <span class="cov0" title="0">{
+        messages, err := s.client.Message.Query().
+                Where(message.StageIDEQ(stageID)).
+                Order(ent.Asc(message.FieldCreatedAt)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get stage messages: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return messages, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package services
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "time"
+
+        "entgo.io/ent/dialect/sql"
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/agentexecution"
+        "github.com/codeready-toolchain/tarsy/ent/alertsession"
+        "github.com/codeready-toolchain/tarsy/ent/stage"
+        "github.com/codeready-toolchain/tarsy/pkg/config"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// SessionService manages alert session lifecycle
+type SessionService struct {
+        client            *ent.Client
+        chainRegistry     *config.ChainRegistry
+        mcpServerRegistry *config.MCPServerRegistry
+}
+
+// NewSessionService creates a new SessionService with configuration registries
+func NewSessionService(client *ent.Client, chainRegistry *config.ChainRegistry, mcpServerRegistry *config.MCPServerRegistry) *SessionService <span class="cov8" title="44">{
+        if chainRegistry == nil || mcpServerRegistry == nil </span><span class="cov2" title="2">{
+                panic("NewSessionService: chainRegistry and mcpServerRegistry must not be nil")</span>
+        }
+        <span class="cov8" title="42">return &amp;SessionService{
+                client:            client,
+                chainRegistry:     chainRegistry,
+                mcpServerRegistry: mcpServerRegistry,
+        }</span>
+}
+
+// CreateSession creates a new alert session with initial stage and agent execution
+func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessionRequest) (*ent.AlertSession, error) <span class="cov10" title="77">{
+        // Validate input
+        if req.SessionID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("session_id", "required")
+        }</span>
+        <span class="cov9" title="76">if req.AlertData == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("alert_data", "required")
+        }</span>
+        <span class="cov9" title="75">if req.AgentType == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("agent_type", "required")
+        }</span>
+        <span class="cov9" title="74">if req.ChainID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("chain_id", "required")
+        }</span>
+
+        // Validate chain exists in configuration (NEW)
+        <span class="cov9" title="73">if _, err := s.chainRegistry.Get(req.ChainID); err != nil </span><span class="cov0" title="0">{
+                return nil, NewValidationError("chain_id", fmt.Sprintf("invalid chain '%s': %v", req.ChainID, err))
+        }</span>
+
+        // Validate MCP override if provided (NEW)
+        <span class="cov9" title="73">if req.MCPSelection != nil </span><span class="cov1" title="1">{
+                if err := s.validateMCPOverride(req.MCPSelection); err != nil </span><span class="cov0" title="0">{
+                        return nil, NewValidationError("mcp_selection", fmt.Sprintf("invalid: %v", err))
+                }</span>
+        }
+
+        // Use background context with timeout for critical write
+        <span class="cov9" title="73">ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+
+        tx, err := s.client.Tx(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to start transaction: %w", err)
+        }</span>
+        <span class="cov9" title="73">defer func() </span><span class="cov9" title="73">{ _ = tx.Rollback() }</span>()
+
+        // Convert MCP selection to JSON if provided
+        <span class="cov9" title="73">var mcpSelectionJSON map[string]any
+        if req.MCPSelection != nil </span><span class="cov1" title="1">{
+                mcpBytes, err := json.Marshal(req.MCPSelection)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to marshal mcp_selection: %w", err)
+                }</span>
+                <span class="cov1" title="1">if err := json.Unmarshal(mcpBytes, &amp;mcpSelectionJSON); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to unmarshal mcp_selection: %w", err)
+                }</span>
+        }
+
+        // Create session
+        // Note: created_at is set automatically by schema default
+        // started_at will be set by the worker when it claims the session
+        <span class="cov9" title="73">sessionBuilder := tx.AlertSession.Create().
+                SetID(req.SessionID).
+                SetAlertData(req.AlertData).
+                SetAgentType(req.AgentType).
+                SetChainID(req.ChainID).
+                SetStatus(alertsession.StatusPending)
+
+        if req.AlertType != "" </span><span class="cov2" title="2">{
+                sessionBuilder.SetAlertType(req.AlertType)
+        }</span>
+        <span class="cov9" title="73">if req.Author != "" </span><span class="cov2" title="2">{
+                sessionBuilder.SetAuthor(req.Author)
+        }</span>
+        <span class="cov9" title="73">if req.RunbookURL != "" </span><span class="cov0" title="0">{
+                sessionBuilder.SetRunbookURL(req.RunbookURL)
+        }</span>
+        <span class="cov9" title="73">if mcpSelectionJSON != nil </span><span class="cov1" title="1">{
+                sessionBuilder.SetMcpSelection(mcpSelectionJSON)
+        }</span>
+        <span class="cov9" title="73">if req.SessionMetadata != nil </span><span class="cov0" title="0">{
+                sessionBuilder.SetSessionMetadata(req.SessionMetadata)
+        }</span>
+
+        <span class="cov9" title="73">session, err := sessionBuilder.Save(ctx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsConstraintError(err) </span><span class="cov1" title="1">{
+                        return nil, ErrAlreadyExists
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to create session: %w", err)</span>
+        }
+
+        // Create initial stage (stage 0)
+        <span class="cov9" title="72">stageID := uuid.New().String()
+        stg, err := tx.Stage.Create().
+                SetID(stageID).
+                SetSessionID(session.ID).
+                SetStageName("Initial Analysis").
+                SetStageIndex(0).
+                SetExpectedAgentCount(1).
+                SetStatus(stage.StatusPending).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create initial stage: %w", err)
+        }</span>
+
+        // Create initial agent execution
+        <span class="cov9" title="72">executionID := uuid.New().String()
+        _, err = tx.AgentExecution.Create().
+                SetID(executionID).
+                SetStageID(stg.ID).
+                SetSessionID(session.ID).
+                SetAgentName(req.AgentType). // Use agent_type as initial agent name
+                SetAgentIndex(1).
+                SetStatus(agentexecution.StatusPending).
+                SetIterationStrategy("react"). // Default strategy
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create initial agent execution: %w", err)
+        }</span>
+
+        // Update session with current stage
+        <span class="cov9" title="72">session, err = session.Update().
+                SetCurrentStageIndex(0).
+                SetCurrentStageID(stg.ID).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to update session current stage: %w", err)
+        }</span>
+
+        <span class="cov9" title="72">if err := tx.Commit(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to commit transaction: %w", err)
+        }</span>
+
+        <span class="cov9" title="72">return session, nil</span>
+}
+
+// GetSession retrieves a session by ID with optional edge loading
+func (s *SessionService) GetSession(ctx context.Context, sessionID string, withEdges bool) (*ent.AlertSession, error) <span class="cov5" title="9">{
+        query := s.client.AlertSession.Query().Where(alertsession.IDEQ(sessionID))
+
+        if withEdges </span><span class="cov1" title="1">{
+                query = query.
+                        WithStages(func(q *ent.StageQuery) </span><span class="cov1" title="1">{
+                                q.WithAgentExecutions().Order(ent.Asc(stage.FieldStageIndex))
+                        }</span>).
+                        WithChat()
+        }
+
+        <span class="cov5" title="9">session, err := query.Only(ctx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get session: %w", err)</span>
+        }
+
+        <span class="cov5" title="8">return session, nil</span>
+}
+
+// ListSessions lists sessions with filtering and pagination
+func (s *SessionService) ListSessions(ctx context.Context, filters models.SessionFilters) (*models.SessionListResponse, error) <span class="cov4" title="5">{
+        query := s.client.AlertSession.Query()
+
+        // Apply filters
+        if filters.Status != "" </span><span class="cov1" title="1">{
+                query = query.Where(alertsession.StatusEQ(alertsession.Status(filters.Status)))
+        }</span>
+        <span class="cov4" title="5">if filters.AgentType != "" </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.AgentTypeEQ(filters.AgentType))
+        }</span>
+        <span class="cov4" title="5">if filters.AlertType != "" </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.AlertTypeEQ(filters.AlertType))
+        }</span>
+        <span class="cov4" title="5">if filters.ChainID != "" </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.ChainIDEQ(filters.ChainID))
+        }</span>
+        <span class="cov4" title="5">if filters.Author != "" </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.AuthorEQ(filters.Author))
+        }</span>
+        <span class="cov4" title="5">if filters.StartedAt != nil </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.StartedAtGTE(*filters.StartedAt))
+        }</span>
+        <span class="cov4" title="5">if filters.StartedBefore != nil </span><span class="cov0" title="0">{
+                query = query.Where(alertsession.StartedAtLT(*filters.StartedBefore))
+        }</span>
+        <span class="cov4" title="5">if !filters.IncludeDeleted </span><span class="cov3" title="4">{
+                query = query.Where(alertsession.DeletedAtIsNil())
+        }</span>
+
+        // Count total
+        <span class="cov4" title="5">totalCount, err := query.Count(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to count sessions: %w", err)
+        }</span>
+
+        // Apply pagination
+        <span class="cov4" title="5">limit := filters.Limit
+        if limit &lt;= 0 </span><span class="cov3" title="4">{
+                limit = 20 // Default
+        }</span>
+        <span class="cov4" title="5">offset := filters.Offset
+        if offset &lt; 0 </span><span class="cov0" title="0">{
+                offset = 0
+        }</span>
+
+        // Get sessions
+        // Order by created_at (submission time) for consistent ordering
+        <span class="cov4" title="5">sessions, err := query.
+                Limit(limit).
+                Offset(offset).
+                Order(ent.Desc(alertsession.FieldCreatedAt)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to list sessions: %w", err)
+        }</span>
+
+        <span class="cov4" title="5">return &amp;models.SessionListResponse{
+                Sessions:   sessions,
+                TotalCount: totalCount,
+                Limit:      limit,
+                Offset:     offset,
+        }, nil</span>
+}
+
+// UpdateSessionStatus updates a session's status
+func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string, status alertsession.Status) error <span class="cov3" title="4">{
+        // Use background context with timeout for critical write
+        writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        update := s.client.AlertSession.UpdateOneID(sessionID).
+                SetStatus(status).
+                SetLastInteractionAt(time.Now())
+
+        if status == alertsession.StatusCompleted ||
+                status == alertsession.StatusFailed ||
+                status == alertsession.StatusCancelled ||
+                status == alertsession.StatusTimedOut </span><span class="cov2" title="2">{
+                update = update.SetCompletedAt(time.Now())
+        }</span>
+
+        <span class="cov3" title="4">err := update.Exec(writeCtx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to update session status: %w", err)</span>
+        }
+
+        <span class="cov3" title="3">return nil</span>
+}
+
+// ClaimNextPendingSession atomically claims a pending session with retry logic
+// Retries on conflicts to ensure all available sessions are claimed in high-concurrency scenarios
+func (s *SessionService) ClaimNextPendingSession(_ context.Context, podID string) (*ent.AlertSession, error) <span class="cov7" title="24">{
+        // Use background context with timeout
+        claimCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        // Retry up to 10 times to claim a session (handles high-concurrency conflicts)
+        const maxRetries = 10
+        for attempt := 0; attempt &lt; maxRetries; attempt++ </span><span class="cov9" title="68">{
+                tx, err := s.client.Tx(claimCtx)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to start transaction: %w", err)
+                }</span>
+
+                // Find first pending session
+                // Order by created_at for FIFO processing
+                <span class="cov9" title="68">session, err := tx.AlertSession.Query().
+                        Where(alertsession.StatusEQ(alertsession.StatusPending)).
+                        Order(ent.Asc(alertsession.FieldCreatedAt)).
+                        First(claimCtx)
+
+                if err != nil </span><span class="cov5" title="8">{
+                        _ = tx.Rollback()
+                        if ent.IsNotFound(err) </span><span class="cov5" title="8">{
+                                return nil, nil // No pending sessions
+                        }</span>
+                        <span class="cov0" title="0">return nil, fmt.Errorf("failed to query pending session: %w", err)</span>
+                }
+
+                // Conditional update: only update if still pending
+                <span class="cov9" title="60">count, err := tx.AlertSession.Update().
+                        Where(
+                                alertsession.IDEQ(session.ID),
+                                alertsession.StatusEQ(alertsession.StatusPending),
+                        ).
+                        SetStatus(alertsession.StatusInProgress).
+                        SetPodID(podID).
+                        SetStartedAt(time.Now()).
+                        SetLastInteractionAt(time.Now()).
+                        Save(claimCtx)
+                if err != nil </span><span class="cov0" title="0">{
+                        _ = tx.Rollback()
+                        return nil, fmt.Errorf("failed to claim session: %w", err)
+                }</span>
+
+                // Check if the update actually claimed the row
+                <span class="cov9" title="60">if count == 0 </span><span class="cov8" title="44">{
+                        // Session was already claimed by another process, retry
+                        _ = tx.Rollback()
+                        continue</span>
+                }
+
+                // Refetch the updated session
+                <span class="cov6" title="16">session, err = tx.AlertSession.Get(claimCtx, session.ID)
+                if err != nil </span><span class="cov0" title="0">{
+                        _ = tx.Rollback()
+                        return nil, fmt.Errorf("failed to refetch claimed session: %w", err)
+                }</span>
+
+                <span class="cov6" title="16">if err := tx.Commit(); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to commit claim: %w", err)
+                }</span>
+
+                <span class="cov6" title="16">return session, nil</span>
+        }
+
+        // After max retries, return nil (all sessions were likely claimed by other workers)
+        <span class="cov0" title="0">return nil, nil</span>
+}
+
+// FindOrphanedSessions finds sessions stuck in-progress past timeout
+func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDuration time.Duration) ([]*ent.AlertSession, error) <span class="cov2" title="2">{
+        threshold := time.Now().Add(-timeoutDuration)
+
+        sessions, err := s.client.AlertSession.Query().
+                Where(
+                        alertsession.StatusEQ(alertsession.StatusInProgress),
+                        alertsession.LastInteractionAtNotNil(),
+                        alertsession.LastInteractionAtLT(threshold),
+                ).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to find orphaned sessions: %w", err)
+        }</span>
+
+        <span class="cov2" title="2">return sessions, nil</span>
+}
+
+// CancelSession requests cancellation of an in-progress session.
+// Sets the DB status to "cancelling" (intermediate state).
+// The owning worker detects this and propagates cancellation.
+func (s *SessionService) CancelSession(_ context.Context, sessionID string) error <span class="cov5" title="8">{
+        // Use background context with timeout for critical write
+        bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        // Conditional update: only update if session exists and is in_progress
+        // This prevents TOCTOU race conditions
+        count, err := s.client.AlertSession.Update().
+                Where(
+                        alertsession.IDEQ(sessionID),
+                        alertsession.StatusEQ(alertsession.StatusInProgress),
+                ).
+                SetStatus(alertsession.StatusCancelling).
+                Save(bgCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to cancel session: %w", err)
+        }</span>
+
+        // Check if the update actually modified a row
+        <span class="cov5" title="8">if count == 0 </span><span class="cov5" title="7">{
+                // Distinguish "not found" from "not in cancellable state"
+                exists, err := s.client.AlertSession.Query().
+                        Where(alertsession.IDEQ(sessionID)).
+                        Exist(bgCtx)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to check session existence: %w", err)
+                }</span>
+                <span class="cov5" title="7">if !exists </span><span class="cov1" title="1">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov4" title="6">return ErrNotCancellable</span>
+        }
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+// SoftDeleteOldSessions soft deletes sessions older than retention period
+func (s *SessionService) SoftDeleteOldSessions(_ context.Context, retentionDays int) (int, error) <span class="cov2" title="2">{
+        if retentionDays &lt;= 0 </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("retention_days must be positive, got %d", retentionDays)
+        }</span>
+
+        <span class="cov2" title="2">cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+
+        // Use background context with timeout
+        deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+
+        count, err := s.client.AlertSession.Update().
+                Where(
+                        alertsession.CompletedAtLT(cutoff),
+                        alertsession.DeletedAtIsNil(),
+                ).
+                SetDeletedAt(time.Now()).
+                Save(deleteCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("failed to soft delete sessions: %w", err)
+        }</span>
+
+        <span class="cov2" title="2">return count, nil</span>
+}
+
+// RestoreSession restores a soft-deleted session
+func (s *SessionService) RestoreSession(_ context.Context, sessionID string) error <span class="cov2" title="2">{
+        // Use background context with timeout
+        restoreCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        err := s.client.AlertSession.UpdateOneID(sessionID).
+                ClearDeletedAt().
+                Exec(restoreCtx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to restore session: %w", err)</span>
+        }
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+// SearchSessions performs full-text search on alert_data and final_analysis
+func (s *SessionService) SearchSessions(ctx context.Context, query string, limit int) ([]*ent.AlertSession, error) <span class="cov2" title="2">{
+        if limit &lt;= 0 </span><span class="cov0" title="0">{
+                limit = 20
+        }</span>
+
+        <span class="cov2" title="2">sessions, err := s.client.AlertSession.Query().
+                Where(alertsession.DeletedAtIsNil()).
+                Where(func(sel *sql.Selector) </span><span class="cov2" title="2">{
+                        sel.Where(sql.Or(
+                                sql.ExprP("to_tsvector('english', alert_data) @@ plainto_tsquery($1)", query),
+                                sql.ExprP("to_tsvector('english', COALESCE(final_analysis, '')) @@ plainto_tsquery($2)", query),
+                        ))
+                }</span>).
+                Limit(limit).
+                Order(ent.Desc(alertsession.FieldCreatedAt)).
+                All(ctx)
+
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to search sessions: %w", err)
+        }</span>
+
+        <span class="cov2" title="2">return sessions, nil</span>
+}
+
+// validateMCPOverride validates MCP server selection override
+func (s *SessionService) validateMCPOverride(mcp *models.MCPSelectionConfig) error <span class="cov1" title="1">{
+        // Validate all MCP server names exist in registry
+        for _, server := range mcp.Servers </span><span class="cov1" title="1">{
+                if _, err := s.mcpServerRegistry.Get(server.Name); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("MCP server '%s' not found: %w", server.Name, err)
+                }</span>
+        }
+        <span class="cov1" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/agentexecution"
+        "github.com/codeready-toolchain/tarsy/ent/stage"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// StageService manages stage and agent execution lifecycle
+type StageService struct {
+        client *ent.Client
+}
+
+// NewStageService creates a new StageService
+func NewStageService(client *ent.Client) *StageService <span class="cov8" title="19">{
+        return &amp;StageService{client: client}
+}</span>
+
+// CreateStage creates a new stage
+func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateStageRequest) (*ent.Stage, error) <span class="cov9" title="26">{
+        // Validate input
+        if req.SessionID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("session_id", "required")
+        }</span>
+        <span class="cov9" title="25">if req.StageName == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("stage_name", "required")
+        }</span>
+        <span class="cov9" title="24">if req.ExpectedAgentCount &lt;= 0 </span><span class="cov1" title="1">{
+                return nil, NewValidationError("expected_agent_count", "must be positive")
+        }</span>
+        <span class="cov9" title="23">if req.SuccessPolicy != nil </span><span class="cov4" title="4">{
+                policy := *req.SuccessPolicy
+                if policy != "all" &amp;&amp; policy != "any" </span><span class="cov0" title="0">{
+                        return nil, NewValidationError("success_policy", "invalid: must be 'all' or 'any'")
+                }</span>
+        }
+        <span class="cov9" title="23">if req.ParallelType != nil </span><span class="cov4" title="4">{
+                parallelType := *req.ParallelType
+                if parallelType != "multi_agent" &amp;&amp; parallelType != "replica" </span><span class="cov1" title="1">{
+                        return nil, NewValidationError("parallel_type", "invalid: must be 'multi_agent' or 'replica'")
+                }</span>
+        }
+
+        // Use timeout context derived from incoming context
+        <span class="cov9" title="22">ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
+        defer cancel()
+
+        stageID := uuid.New().String()
+        builder := s.client.Stage.Create().
+                SetID(stageID).
+                SetSessionID(req.SessionID).
+                SetStageName(req.StageName).
+                SetStageIndex(req.StageIndex).
+                SetExpectedAgentCount(req.ExpectedAgentCount).
+                SetStatus(stage.StatusPending)
+
+        if req.ParallelType != nil </span><span class="cov3" title="3">{
+                builder.SetParallelType(stage.ParallelType(*req.ParallelType))
+        }</span>
+        <span class="cov9" title="22">if req.SuccessPolicy != nil </span><span class="cov4" title="4">{
+                builder.SetSuccessPolicy(stage.SuccessPolicy(*req.SuccessPolicy))
+        }</span>
+        <span class="cov9" title="22">if req.ChatID != nil </span><span class="cov0" title="0">{
+                builder.SetChatID(*req.ChatID)
+        }</span>
+        <span class="cov9" title="22">if req.ChatUserMessageID != nil </span><span class="cov0" title="0">{
+                builder.SetChatUserMessageID(*req.ChatUserMessageID)
+        }</span>
+
+        <span class="cov9" title="22">stg, err := builder.Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create stage: %w", err)
+        }</span>
+
+        <span class="cov9" title="22">return stg, nil</span>
+}
+
+// CreateAgentExecution creates a new agent execution
+func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.CreateAgentExecutionRequest) (*ent.AgentExecution, error) <span class="cov10" title="29">{
+        // Validate input
+        if req.StageID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("stage_id", "required")
+        }</span>
+        <span class="cov9" title="28">if req.SessionID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("session_id", "required")
+        }</span>
+        <span class="cov9" title="28">if req.AgentName == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("agent_name", "required")
+        }</span>
+        <span class="cov9" title="27">if req.AgentIndex &lt;= 0 </span><span class="cov1" title="1">{
+                return nil, NewValidationError("agent_index", "must be positive")
+        }</span>
+
+        // Use timeout context derived from incoming context
+        <span class="cov9" title="26">ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
+        defer cancel()
+
+        executionID := uuid.New().String()
+        execution, err := s.client.AgentExecution.Create().
+                SetID(executionID).
+                SetStageID(req.StageID).
+                SetSessionID(req.SessionID).
+                SetAgentName(req.AgentName).
+                SetAgentIndex(req.AgentIndex).
+                SetStatus(agentexecution.StatusPending).
+                SetIterationStrategy(req.IterationStrategy).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create agent execution: %w", err)
+        }</span>
+
+        <span class="cov9" title="26">return execution, nil</span>
+}
+
+// UpdateAgentExecutionStatus updates an agent execution's status
+func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, executionID string, status agentexecution.Status, errorMsg string) error <span class="cov9" title="26">{
+        // Use timeout context derived from incoming context
+        writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+        defer cancel()
+
+        // Fetch the execution first to check current state
+        exec, err := s.client.AgentExecution.Get(writeCtx, executionID)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to get agent execution: %w", err)</span>
+        }
+
+        <span class="cov9" title="25">update := s.client.AgentExecution.UpdateOneID(executionID).
+                SetStatus(status)
+
+        if status == agentexecution.StatusActive &amp;&amp; exec.StartedAt == nil </span><span class="cov7" title="13">{
+                update = update.SetStartedAt(time.Now())
+        }</span>
+
+        <span class="cov9" title="25">if status == agentexecution.StatusCompleted ||
+                status == agentexecution.StatusFailed ||
+                status == agentexecution.StatusCancelled ||
+                status == agentexecution.StatusTimedOut </span><span class="cov7" title="12">{
+                now := time.Now()
+                update = update.SetCompletedAt(now)
+
+                // Calculate duration if started_at exists
+                if exec.StartedAt != nil </span><span class="cov7" title="12">{
+                        durationMs := int(now.Sub(*exec.StartedAt).Milliseconds())
+                        update = update.SetDurationMs(durationMs)
+                }</span>
+        }
+
+        <span class="cov9" title="25">if errorMsg != "" </span><span class="cov3" title="3">{
+                update = update.SetErrorMessage(errorMsg)
+        }</span>
+
+        <span class="cov9" title="25">err = update.Exec(writeCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to update agent status: %w", err)</span>
+        }
+
+        <span class="cov9" title="25">return nil</span>
+}
+
+// UpdateStageStatus aggregates stage status from all agent executions
+func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) error <span class="cov5" title="5">{
+        // Use timeout context derived from incoming context
+        writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+        defer cancel()
+
+        // Get stage with agent executions
+        stg, err := s.client.Stage.Query().
+                Where(stage.IDEQ(stageID)).
+                WithAgentExecutions().
+                Only(writeCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to get stage: %w", err)</span>
+        }
+
+        // Check if any agent is still pending or active
+        <span class="cov5" title="5">hasActive := false
+        hasPending := false
+        for _, exec := range stg.Edges.AgentExecutions </span><span class="cov7" title="12">{
+                if exec.Status == agentexecution.StatusPending </span><span class="cov0" title="0">{
+                        hasPending = true
+                }</span>
+                <span class="cov7" title="12">if exec.Status == agentexecution.StatusActive </span><span class="cov1" title="1">{
+                        hasActive = true
+                }</span>
+        }
+
+        // Stage remains active if any agent is pending or active
+        <span class="cov5" title="5">if hasPending || hasActive </span><span class="cov1" title="1">{
+                // Ensure stage is active if any agent is working
+                if hasActive &amp;&amp; stg.Status != stage.StatusActive </span><span class="cov1" title="1">{
+                        return s.client.Stage.UpdateOneID(stageID).
+                                SetStatus(stage.StatusActive).
+                                SetStartedAt(time.Now()).
+                                Exec(writeCtx)
+                }</span>
+                <span class="cov0" title="0">return nil</span>
+        }
+
+        // All agents terminated - determine final stage status
+        <span class="cov4" title="4">allCompleted := true
+        allTimedOut := true
+        allCancelled := true
+        anyCompleted := false
+
+        for _, exec := range stg.Edges.AgentExecutions </span><span class="cov7" title="10">{
+                if exec.Status == agentexecution.StatusCompleted </span><span class="cov6" title="7">{
+                        anyCompleted = true
+                }</span> else<span class="cov3" title="3"> {
+                        allCompleted = false
+                }</span>
+                <span class="cov7" title="10">if exec.Status != agentexecution.StatusTimedOut </span><span class="cov7" title="10">{
+                        allTimedOut = false
+                }</span>
+                <span class="cov7" title="10">if exec.Status != agentexecution.StatusCancelled </span><span class="cov7" title="10">{
+                        allCancelled = false
+                }</span>
+        }
+
+        // Determine final status based on success policy
+        <span class="cov4" title="4">var finalStatus stage.Status
+        var errorMessage string
+
+        if stg.SuccessPolicy == nil || *stg.SuccessPolicy == stage.SuccessPolicyAll </span><span class="cov3" title="3">{
+                // All agents must succeed
+                if allCompleted </span><span class="cov2" title="2">{
+                        finalStatus = stage.StatusCompleted
+                }</span> else<span class="cov1" title="1"> if allTimedOut </span><span class="cov0" title="0">{
+                        finalStatus = stage.StatusTimedOut
+                        errorMessage = "all agents timed out"
+                }</span> else<span class="cov1" title="1"> if allCancelled </span><span class="cov0" title="0">{
+                        finalStatus = stage.StatusCancelled
+                        errorMessage = "all agents cancelled"
+                }</span> else<span class="cov1" title="1"> {
+                        finalStatus = stage.StatusFailed
+                        errorMessage = "one or more agents failed"
+                }</span>
+        } else<span class="cov1" title="1"> if *stg.SuccessPolicy == stage.SuccessPolicyAny </span><span class="cov1" title="1">{
+                // At least one agent must succeed
+                if anyCompleted </span><span class="cov1" title="1">{
+                        finalStatus = stage.StatusCompleted
+                }</span> else<span class="cov0" title="0"> if allTimedOut </span><span class="cov0" title="0">{
+                        finalStatus = stage.StatusTimedOut
+                        errorMessage = "all agents timed out"
+                }</span> else<span class="cov0" title="0"> if allCancelled </span><span class="cov0" title="0">{
+                        finalStatus = stage.StatusCancelled
+                        errorMessage = "all agents cancelled"
+                }</span> else<span class="cov0" title="0"> {
+                        finalStatus = stage.StatusFailed
+                        errorMessage = "all agents failed"
+                }</span>
+        }
+
+        // Update stage
+        <span class="cov4" title="4">now := time.Now()
+        update := s.client.Stage.UpdateOneID(stageID).
+                SetStatus(finalStatus).
+                SetCompletedAt(now)
+
+        if stg.StartedAt != nil </span><span class="cov0" title="0">{
+                durationMs := int(now.Sub(*stg.StartedAt).Milliseconds())
+                update = update.SetDurationMs(durationMs)
+        }</span>
+        <span class="cov4" title="4">if errorMessage != "" </span><span class="cov1" title="1">{
+                update = update.SetErrorMessage(errorMessage)
+        }</span>
+
+        <span class="cov4" title="4">return update.Exec(writeCtx)</span>
+}
+
+// GetStageByID retrieves a stage by ID with optional edges
+func (s *StageService) GetStageByID(ctx context.Context, stageID string, withEdges bool) (*ent.Stage, error) <span class="cov4" title="4">{
+        query := s.client.Stage.Query().Where(stage.IDEQ(stageID))
+
+        if withEdges </span><span class="cov0" title="0">{
+                query = query.WithAgentExecutions()
+        }</span>
+
+        <span class="cov4" title="4">stg, err := query.Only(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get stage: %w", err)</span>
+        }
+
+        <span class="cov4" title="4">return stg, nil</span>
+}
+
+// GetStagesBySession retrieves all stages for a session
+func (s *StageService) GetStagesBySession(ctx context.Context, sessionID string, withEdges bool) ([]*ent.Stage, error) <span class="cov3" title="3">{
+        query := s.client.Stage.Query().
+                Where(stage.SessionIDEQ(sessionID)).
+                Order(ent.Asc(stage.FieldStageIndex))
+
+        if withEdges </span><span class="cov2" title="2">{
+                query = query.WithAgentExecutions()
+        }</span>
+
+        <span class="cov3" title="3">stages, err := query.All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get stages: %w", err)
+        }</span>
+
+        <span class="cov3" title="3">return stages, nil</span>
+}
+
+// GetAgentExecutions retrieves all agent executions for a stage
+func (s *StageService) GetAgentExecutions(ctx context.Context, stageID string) ([]*ent.AgentExecution, error) <span class="cov0" title="0">{
+        executions, err := s.client.AgentExecution.Query().
+                Where(agentexecution.StageIDEQ(stageID)).
+                Order(ent.Asc(agentexecution.FieldAgentIndex)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get agent executions: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return executions, nil</span>
+}
+
+// GetAgentExecutionByID retrieves an agent execution by ID
+func (s *StageService) GetAgentExecutionByID(ctx context.Context, executionID string) (*ent.AgentExecution, error) <span class="cov2" title="2">{
+        execution, err := s.client.AgentExecution.Get(ctx, executionID)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return nil, ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get agent execution: %w", err)</span>
+        }
+
+        <span class="cov2" title="2">return execution, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package services
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/codeready-toolchain/tarsy/ent"
+        "github.com/codeready-toolchain/tarsy/ent/timelineevent"
+        "github.com/codeready-toolchain/tarsy/pkg/models"
+        "github.com/google/uuid"
+)
+
+// TimelineService manages timeline events
+type TimelineService struct {
+        client *ent.Client
+}
+
+// NewTimelineService creates a new TimelineService
+func NewTimelineService(client *ent.Client) *TimelineService <span class="cov7" title="5">{
+        return &amp;TimelineService{client: client}
+}</span>
+
+// CreateTimelineEvent creates a new timeline event
+func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req models.CreateTimelineEventRequest) (*ent.TimelineEvent, error) <span class="cov10" title="9">{
+        // Validate request
+        if req.SessionID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("SessionID", "required")
+        }</span>
+        <span class="cov10" title="9">if req.StageID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("StageID", "required")
+        }</span>
+        <span class="cov10" title="9">if req.ExecutionID == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("ExecutionID", "required")
+        }</span>
+        <span class="cov10" title="9">if req.SequenceNumber &lt;= 0 </span><span class="cov0" title="0">{
+                return nil, NewValidationError("SequenceNumber", "must be positive")
+        }</span>
+        <span class="cov10" title="9">if string(req.EventType) == "" </span><span class="cov0" title="0">{
+                return nil, NewValidationError("EventType", "required")
+        }</span>
+        // Content may be empty for streaming events (filled in later via UpdateTimelineEvent/CompleteTimelineEvent)
+
+        <span class="cov10" title="9">ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+        defer cancel()
+
+        eventID := uuid.New().String()
+        event, err := s.client.TimelineEvent.Create().
+                SetID(eventID).
+                SetSessionID(req.SessionID).
+                SetStageID(req.StageID).
+                SetExecutionID(req.ExecutionID).
+                SetSequenceNumber(req.SequenceNumber).
+                SetEventType(req.EventType).
+                SetStatus(timelineevent.StatusStreaming).
+                SetContent(req.Content).
+                SetMetadata(req.Metadata).
+                SetCreatedAt(time.Now()).
+                SetUpdatedAt(time.Now()).
+                Save(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create timeline event: %w", err)
+        }</span>
+
+        <span class="cov10" title="9">return event, nil</span>
+}
+
+// UpdateTimelineEvent updates event content during streaming
+func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID string, content string) error <span class="cov7" title="5">{
+        if eventID == "" </span><span class="cov1" title="1">{
+                return NewValidationError("eventID", "required")
+        }</span>
+        <span class="cov6" title="4">if content == "" </span><span class="cov1" title="1">{
+                return NewValidationError("content", "required")
+        }</span>
+
+        <span class="cov5" title="3">writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+        defer cancel()
+
+        err := s.client.TimelineEvent.UpdateOneID(eventID).
+                SetContent(content).
+                SetUpdatedAt(time.Now()).
+                Exec(writeCtx)
+        if err != nil </span><span class="cov1" title="1">{
+                if ent.IsNotFound(err) </span><span class="cov1" title="1">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to update timeline event: %w", err)</span>
+        }
+
+        <span class="cov3" title="2">return nil</span>
+}
+
+// CompleteTimelineEvent marks an event as completed and sets debug links.
+// llmInteractionID and mcpInteractionID are optional debug links (pass nil if not applicable).
+func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID string, content string, llmInteractionID *string, mcpInteractionID *string) error <span class="cov7" title="5">{
+        if eventID == "" </span><span class="cov1" title="1">{
+                return NewValidationError("eventID", "required")
+        }</span>
+        <span class="cov6" title="4">if content == "" </span><span class="cov1" title="1">{
+                return NewValidationError("content", "required")
+        }</span>
+
+        <span class="cov5" title="3">writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+        defer cancel()
+
+        update := s.client.TimelineEvent.UpdateOneID(eventID).
+                SetContent(content).
+                SetStatus(timelineevent.StatusCompleted).
+                SetUpdatedAt(time.Now())
+
+        if llmInteractionID != nil </span><span class="cov3" title="2">{
+                update = update.SetLlmInteractionID(*llmInteractionID)
+        }</span>
+        <span class="cov5" title="3">if mcpInteractionID != nil </span><span class="cov1" title="1">{
+                update = update.SetMcpInteractionID(*mcpInteractionID)
+        }</span>
+
+        <span class="cov5" title="3">err := update.Exec(writeCtx)
+        if err != nil </span><span class="cov0" title="0">{
+                if ent.IsNotFound(err) </span><span class="cov0" title="0">{
+                        return ErrNotFound
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("failed to complete timeline event: %w", err)</span>
+        }
+
+        <span class="cov5" title="3">return nil</span>
+}
+
+// GetSessionTimeline retrieves all events for a session
+func (s *TimelineService) GetSessionTimeline(ctx context.Context, sessionID string) ([]*ent.TimelineEvent, error) <span class="cov5" title="3">{
+        if sessionID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("sessionID", "required")
+        }</span>
+
+        <span class="cov3" title="2">events, err := s.client.TimelineEvent.Query().
+                Where(timelineevent.SessionIDEQ(sessionID)).
+                Order(ent.Asc(timelineevent.FieldSequenceNumber)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get session timeline: %w", err)
+        }</span>
+
+        <span class="cov3" title="2">return events, nil</span>
+}
+
+// GetStageTimeline retrieves all events for a stage
+func (s *TimelineService) GetStageTimeline(ctx context.Context, stageID string) ([]*ent.TimelineEvent, error) <span class="cov3" title="2">{
+        if stageID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("stageID", "required")
+        }</span>
+
+        <span class="cov1" title="1">events, err := s.client.TimelineEvent.Query().
+                Where(timelineevent.StageIDEQ(stageID)).
+                Order(ent.Asc(timelineevent.FieldSequenceNumber)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get stage timeline: %w", err)
+        }</span>
+
+        <span class="cov1" title="1">return events, nil</span>
+}
+
+// GetAgentTimeline retrieves all events for an agent execution
+func (s *TimelineService) GetAgentTimeline(ctx context.Context, executionID string) ([]*ent.TimelineEvent, error) <span class="cov3" title="2">{
+        if executionID == "" </span><span class="cov1" title="1">{
+                return nil, NewValidationError("executionID", "required")
+        }</span>
+
+        <span class="cov1" title="1">events, err := s.client.TimelineEvent.Query().
+                Where(timelineevent.ExecutionIDEQ(executionID)).
+                Order(ent.Asc(timelineevent.FieldSequenceNumber)).
+                All(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get agent timeline: %w", err)
+        }</span>
+
+        <span class="cov1" title="1">return events, nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
