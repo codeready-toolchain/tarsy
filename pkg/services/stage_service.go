@@ -118,8 +118,8 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	return execution, nil
 }
 
-// UpdateAgentStatus updates an agent execution's status
-func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string, status agentexecution.Status, errorMsg string) error {
+// UpdateAgentExecutionStatus updates an agent execution's status
+func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, executionID string, status agentexecution.Status, errorMsg string) error {
 	// Use timeout context derived from incoming context
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -169,8 +169,8 @@ func (s *StageService) UpdateAgentStatus(ctx context.Context, executionID string
 	return nil
 }
 
-// AggregateStageStatus aggregates stage status from all agent executions
-func (s *StageService) AggregateStageStatus(ctx context.Context, stageID string) error {
+// UpdateStageStatus aggregates stage status from all agent executions
+func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) error {
 	// Use timeout context derived from incoming context
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

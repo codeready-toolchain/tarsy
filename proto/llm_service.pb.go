@@ -21,77 +21,804 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Message_Role int32
+// GenerateRequest is the input for a single LLM call.
+// Go builds the full conversation and sends it each time.
+type GenerateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`       // For logging/tracing
+	Messages      []*ConversationMessage `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`                          // Full conversation history
+	LlmConfig     *LLMConfig             `protobuf:"bytes,3,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"`       // Provider configuration
+	Tools         []*ToolDefinition      `protobuf:"bytes,4,rep,name=tools,proto3" json:"tools,omitempty"`                                // Available tools (empty = no tools)
+	ExecutionId   string                 `protobuf:"bytes,5,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"` // AgentExecution ID — used by Python for thought signature cache key
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const (
-	Message_ROLE_UNSPECIFIED Message_Role = 0
-	Message_ROLE_SYSTEM      Message_Role = 1
-	Message_ROLE_USER        Message_Role = 2
-	Message_ROLE_ASSISTANT   Message_Role = 3
-)
+func (x *GenerateRequest) Reset() {
+	*x = GenerateRequest{}
+	mi := &file_proto_llm_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
 
-// Enum value maps for Message_Role.
-var (
-	Message_Role_name = map[int32]string{
-		0: "ROLE_UNSPECIFIED",
-		1: "ROLE_SYSTEM",
-		2: "ROLE_USER",
-		3: "ROLE_ASSISTANT",
+func (x *GenerateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateRequest) ProtoMessage() {}
+
+func (x *GenerateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	Message_Role_value = map[string]int32{
-		"ROLE_UNSPECIFIED": 0,
-		"ROLE_SYSTEM":      1,
-		"ROLE_USER":        2,
-		"ROLE_ASSISTANT":   3,
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateRequest.ProtoReflect.Descriptor instead.
+func (*GenerateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GenerateRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
 	}
-)
-
-func (x Message_Role) Enum() *Message_Role {
-	p := new(Message_Role)
-	*p = x
-	return p
+	return ""
 }
 
-func (x Message_Role) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+func (x *GenerateRequest) GetMessages() []*ConversationMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
 }
 
-func (Message_Role) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_llm_service_proto_enumTypes[0].Descriptor()
+func (x *GenerateRequest) GetLlmConfig() *LLMConfig {
+	if x != nil {
+		return x.LlmConfig
+	}
+	return nil
 }
 
-func (Message_Role) Type() protoreflect.EnumType {
-	return &file_proto_llm_service_proto_enumTypes[0]
+func (x *GenerateRequest) GetTools() []*ToolDefinition {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
 }
 
-func (x Message_Role) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
+func (x *GenerateRequest) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
 }
 
-// Deprecated: Use Message_Role.Descriptor instead.
-func (Message_Role) EnumDescriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{2, 0}
+// GenerateResponse is a streaming chunk from the LLM.
+// Multiple chunks form a complete response.
+type GenerateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*GenerateResponse_Text
+	//	*GenerateResponse_Thinking
+	//	*GenerateResponse_ToolCall
+	//	*GenerateResponse_Usage
+	//	*GenerateResponse_Error
+	//	*GenerateResponse_CodeExecution
+	Content isGenerateResponse_Content `protobuf_oneof:"content"`
+	// True when this is the last chunk for this Generate call.
+	IsFinal       bool `protobuf:"varint,10,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-// LLMConfig contains LLM provider configuration passed from Go to Python
+func (x *GenerateResponse) Reset() {
+	*x = GenerateResponse{}
+	mi := &file_proto_llm_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateResponse) ProtoMessage() {}
+
+func (x *GenerateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateResponse.ProtoReflect.Descriptor instead.
+func (*GenerateResponse) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GenerateResponse) GetContent() isGenerateResponse_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetText() *TextDelta {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_Text); ok {
+			return x.Text
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetThinking() *ThinkingDelta {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_Thinking); ok {
+			return x.Thinking
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetToolCall() *ToolCallDelta {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_ToolCall); ok {
+			return x.ToolCall
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetUsage() *UsageInfo {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_Usage); ok {
+			return x.Usage
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetError() *ErrorInfo {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetCodeExecution() *CodeExecutionDelta {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_CodeExecution); ok {
+			return x.CodeExecution
+		}
+	}
+	return nil
+}
+
+func (x *GenerateResponse) GetIsFinal() bool {
+	if x != nil {
+		return x.IsFinal
+	}
+	return false
+}
+
+type isGenerateResponse_Content interface {
+	isGenerateResponse_Content()
+}
+
+type GenerateResponse_Text struct {
+	Text *TextDelta `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
+}
+
+type GenerateResponse_Thinking struct {
+	Thinking *ThinkingDelta `protobuf:"bytes,2,opt,name=thinking,proto3,oneof"`
+}
+
+type GenerateResponse_ToolCall struct {
+	ToolCall *ToolCallDelta `protobuf:"bytes,3,opt,name=tool_call,json=toolCall,proto3,oneof"`
+}
+
+type GenerateResponse_Usage struct {
+	Usage *UsageInfo `protobuf:"bytes,4,opt,name=usage,proto3,oneof"`
+}
+
+type GenerateResponse_Error struct {
+	Error *ErrorInfo `protobuf:"bytes,5,opt,name=error,proto3,oneof"`
+}
+
+type GenerateResponse_CodeExecution struct {
+	CodeExecution *CodeExecutionDelta `protobuf:"bytes,6,opt,name=code_execution,json=codeExecution,proto3,oneof"`
+}
+
+func (*GenerateResponse_Text) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_Thinking) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_ToolCall) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_Usage) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_Error) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_CodeExecution) isGenerateResponse_Content() {}
+
+// ConversationMessage represents a message in the LLM conversation.
+// Supports all roles: system, user, assistant, tool.
+type ConversationMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Role of the message sender: "system", "user", "assistant", "tool"
+	Role string `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	// Text content of the message.
+	Content string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// For assistant messages that request tool execution.
+	ToolCalls []*ToolCall `protobuf:"bytes,3,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	// For tool result messages (role = "tool").
+	// Links this result back to the original tool call.
+	ToolCallId string `protobuf:"bytes,4,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	// For tool result messages (role = "tool").
+	// The name of the tool that was called.
+	ToolName      string `protobuf:"bytes,5,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConversationMessage) Reset() {
+	*x = ConversationMessage{}
+	mi := &file_proto_llm_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConversationMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConversationMessage) ProtoMessage() {}
+
+func (x *ConversationMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConversationMessage.ProtoReflect.Descriptor instead.
+func (*ConversationMessage) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ConversationMessage) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *ConversationMessage) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ConversationMessage) GetToolCalls() []*ToolCall {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return nil
+}
+
+func (x *ConversationMessage) GetToolCallId() string {
+	if x != nil {
+		return x.ToolCallId
+	}
+	return ""
+}
+
+func (x *ConversationMessage) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+// ToolDefinition describes a tool available to the LLM.
+// Names use canonical "server.tool" format (e.g., "kubernetes-server.resources_get").
+// Python providers convert to/from provider-specific formats as needed.
+type ToolDefinition struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                 // Canonical tool name: "server.tool" format
+	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`                                   // Human-readable description
+	ParametersSchema string                 `protobuf:"bytes,3,opt,name=parameters_schema,json=parametersSchema,proto3" json:"parameters_schema,omitempty"` // JSON Schema string for tool parameters
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ToolDefinition) Reset() {
+	*x = ToolDefinition{}
+	mi := &file_proto_llm_service_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolDefinition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolDefinition) ProtoMessage() {}
+
+func (x *ToolDefinition) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolDefinition.ProtoReflect.Descriptor instead.
+func (*ToolDefinition) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ToolDefinition) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetParametersSchema() string {
+	if x != nil {
+		return x.ParametersSchema
+	}
+	return ""
+}
+
+// ToolCall represents a tool invocation requested by the LLM.
+type ToolCall struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`               // Unique call ID (for matching results)
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`           // Tool name
+	Arguments     string                 `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"` // JSON string of arguments
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolCall) Reset() {
+	*x = ToolCall{}
+	mi := &file_proto_llm_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolCall) ProtoMessage() {}
+
+func (x *ToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
+func (*ToolCall) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ToolCall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ToolCall) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolCall) GetArguments() string {
+	if x != nil {
+		return x.Arguments
+	}
+	return ""
+}
+
+// TextDelta is a chunk of the LLM's text response.
+type TextDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextDelta) Reset() {
+	*x = TextDelta{}
+	mi := &file_proto_llm_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextDelta) ProtoMessage() {}
+
+func (x *TextDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextDelta.ProtoReflect.Descriptor instead.
+func (*TextDelta) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TextDelta) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+// ThinkingDelta is a chunk of the LLM's internal reasoning.
+type ThinkingDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ThinkingDelta) Reset() {
+	*x = ThinkingDelta{}
+	mi := &file_proto_llm_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThinkingDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThinkingDelta) ProtoMessage() {}
+
+func (x *ThinkingDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThinkingDelta.ProtoReflect.Descriptor instead.
+func (*ThinkingDelta) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ThinkingDelta) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+// ToolCallDelta signals the LLM wants to call a tool.
+type ToolCallDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"` // Unique ID for this call
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                   // Tool name
+	Arguments     string                 `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`         // JSON arguments (complete, not streamed incrementally)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolCallDelta) Reset() {
+	*x = ToolCallDelta{}
+	mi := &file_proto_llm_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolCallDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolCallDelta) ProtoMessage() {}
+
+func (x *ToolCallDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolCallDelta.ProtoReflect.Descriptor instead.
+func (*ToolCallDelta) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ToolCallDelta) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *ToolCallDelta) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolCallDelta) GetArguments() string {
+	if x != nil {
+		return x.Arguments
+	}
+	return ""
+}
+
+// CodeExecutionDelta carries Gemini code execution results.
+type CodeExecutionDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`     // The generated Python code
+	Result        string                 `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"` // Execution output (stdout/stderr)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodeExecutionDelta) Reset() {
+	*x = CodeExecutionDelta{}
+	mi := &file_proto_llm_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodeExecutionDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodeExecutionDelta) ProtoMessage() {}
+
+func (x *CodeExecutionDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodeExecutionDelta.ProtoReflect.Descriptor instead.
+func (*CodeExecutionDelta) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CodeExecutionDelta) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CodeExecutionDelta) GetResult() string {
+	if x != nil {
+		return x.Result
+	}
+	return ""
+}
+
+// UsageInfo reports token consumption for this LLM call.
+type UsageInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	InputTokens    int32                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens   int32                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	TotalTokens    int32                  `protobuf:"varint,3,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
+	ThinkingTokens int32                  `protobuf:"varint,4,opt,name=thinking_tokens,json=thinkingTokens,proto3" json:"thinking_tokens,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UsageInfo) Reset() {
+	*x = UsageInfo{}
+	mi := &file_proto_llm_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageInfo) ProtoMessage() {}
+
+func (x *UsageInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageInfo.ProtoReflect.Descriptor instead.
+func (*UsageInfo) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UsageInfo) GetInputTokens() int32 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *UsageInfo) GetOutputTokens() int32 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *UsageInfo) GetTotalTokens() int32 {
+	if x != nil {
+		return x.TotalTokens
+	}
+	return 0
+}
+
+func (x *UsageInfo) GetThinkingTokens() int32 {
+	if x != nil {
+		return x.ThinkingTokens
+	}
+	return 0
+}
+
+// ErrorInfo signals an error from the LLM provider.
+type ErrorInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	Retryable     bool                   `protobuf:"varint,3,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ErrorInfo) Reset() {
+	*x = ErrorInfo{}
+	mi := &file_proto_llm_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ErrorInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ErrorInfo) ProtoMessage() {}
+
+func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ErrorInfo.ProtoReflect.Descriptor instead.
+func (*ErrorInfo) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ErrorInfo) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ErrorInfo) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ErrorInfo) GetRetryable() bool {
+	if x != nil {
+		return x.Retryable
+	}
+	return false
+}
+
+// LLMConfig contains LLM provider configuration passed from Go to Python.
 type LLMConfig struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`                                   // "google", "openai", "anthropic", "xai", "vertexai"
-	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                         // Model name (e.g., "gemini-2.0-flash-exp")
-	ApiKeyEnv           string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`              // Environment variable name for API key (e.g., "GOOGLE_API_KEY")
-	CredentialsEnv      string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"` // Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                         // Model name (e.g., "gemini-2.5-pro")
+	ApiKeyEnv           string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`              // Environment variable name for API key
+	CredentialsEnv      string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"` // Environment variable name for credentials file (VertexAI)
 	BaseUrl             string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                      // Optional custom endpoint/base URL
 	MaxToolResultTokens int32                  `protobuf:"varint,6,opt,name=max_tool_result_tokens,json=maxToolResultTokens,proto3" json:"max_tool_result_tokens,omitempty"`
 	NativeTools         map[string]bool        `protobuf:"bytes,7,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
 	Project             string                 `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
 	Location            string                 `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
+	Backend             string                 `protobuf:"bytes,10,opt,name=backend,proto3" json:"backend,omitempty"`                                                                                                      // Provider backend: "google-native", "langchain" (default)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
 	*x = LLMConfig{}
-	mi := &file_proto_llm_service_proto_msgTypes[0]
+	mi := &file_proto_llm_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +830,7 @@ func (x *LLMConfig) String() string {
 func (*LLMConfig) ProtoMessage() {}
 
 func (x *LLMConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[0]
+	mi := &file_proto_llm_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +843,7 @@ func (x *LLMConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMConfig.ProtoReflect.Descriptor instead.
 func (*LLMConfig) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{0}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LLMConfig) GetProvider() string {
@@ -182,424 +909,72 @@ func (x *LLMConfig) GetLocation() string {
 	return ""
 }
 
-// ThinkingRequest contains the conversation and configuration
-type ThinkingRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Messages  []*Message             `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
-	// Deprecated fields (kept for backward compatibility, remove in Phase 3)
-	//
-	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	Model string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	Temperature *float32 `protobuf:"fixed32,4,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
-	// Deprecated: Marked as deprecated in proto/llm_service.proto.
-	MaxTokens *int32 `protobuf:"varint,5,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
-	// New configuration system (Phase 2+)
-	LlmConfig     *LLMConfig `protobuf:"bytes,7,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"` // LLM configuration from Go orchestrator
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ThinkingRequest) Reset() {
-	*x = ThinkingRequest{}
-	mi := &file_proto_llm_service_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ThinkingRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ThinkingRequest) ProtoMessage() {}
-
-func (x *ThinkingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[1]
+func (x *LLMConfig) GetBackend() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ThinkingRequest.ProtoReflect.Descriptor instead.
-func (*ThinkingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ThinkingRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
+		return x.Backend
 	}
 	return ""
-}
-
-func (x *ThinkingRequest) GetMessages() []*Message {
-	if x != nil {
-		return x.Messages
-	}
-	return nil
-}
-
-// Deprecated: Marked as deprecated in proto/llm_service.proto.
-func (x *ThinkingRequest) GetModel() string {
-	if x != nil {
-		return x.Model
-	}
-	return ""
-}
-
-// Deprecated: Marked as deprecated in proto/llm_service.proto.
-func (x *ThinkingRequest) GetTemperature() float32 {
-	if x != nil && x.Temperature != nil {
-		return *x.Temperature
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in proto/llm_service.proto.
-func (x *ThinkingRequest) GetMaxTokens() int32 {
-	if x != nil && x.MaxTokens != nil {
-		return *x.MaxTokens
-	}
-	return 0
-}
-
-func (x *ThinkingRequest) GetLlmConfig() *LLMConfig {
-	if x != nil {
-		return x.LlmConfig
-	}
-	return nil
-}
-
-// Message represents a single conversation message
-type Message struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Role          Message_Role           `protobuf:"varint,1,opt,name=role,proto3,enum=llm.v1.Message_Role" json:"role,omitempty"`
-	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Message) Reset() {
-	*x = Message{}
-	mi := &file_proto_llm_service_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Message) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Message) ProtoMessage() {}
-
-func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Message.ProtoReflect.Descriptor instead.
-func (*Message) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Message) GetRole() Message_Role {
-	if x != nil {
-		return x.Role
-	}
-	return Message_ROLE_UNSPECIFIED
-}
-
-func (x *Message) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-// ThinkingChunk is a streaming response chunk
-type ThinkingChunk struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to ChunkType:
-	//
-	//	*ThinkingChunk_Thinking
-	//	*ThinkingChunk_Response
-	//	*ThinkingChunk_Error
-	ChunkType     isThinkingChunk_ChunkType `protobuf_oneof:"chunk_type"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ThinkingChunk) Reset() {
-	*x = ThinkingChunk{}
-	mi := &file_proto_llm_service_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ThinkingChunk) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ThinkingChunk) ProtoMessage() {}
-
-func (x *ThinkingChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ThinkingChunk.ProtoReflect.Descriptor instead.
-func (*ThinkingChunk) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ThinkingChunk) GetChunkType() isThinkingChunk_ChunkType {
-	if x != nil {
-		return x.ChunkType
-	}
-	return nil
-}
-
-func (x *ThinkingChunk) GetThinking() *ThinkingContent {
-	if x != nil {
-		if x, ok := x.ChunkType.(*ThinkingChunk_Thinking); ok {
-			return x.Thinking
-		}
-	}
-	return nil
-}
-
-func (x *ThinkingChunk) GetResponse() *ResponseContent {
-	if x != nil {
-		if x, ok := x.ChunkType.(*ThinkingChunk_Response); ok {
-			return x.Response
-		}
-	}
-	return nil
-}
-
-func (x *ThinkingChunk) GetError() *ErrorContent {
-	if x != nil {
-		if x, ok := x.ChunkType.(*ThinkingChunk_Error); ok {
-			return x.Error
-		}
-	}
-	return nil
-}
-
-type isThinkingChunk_ChunkType interface {
-	isThinkingChunk_ChunkType()
-}
-
-type ThinkingChunk_Thinking struct {
-	Thinking *ThinkingContent `protobuf:"bytes,1,opt,name=thinking,proto3,oneof"`
-}
-
-type ThinkingChunk_Response struct {
-	Response *ResponseContent `protobuf:"bytes,2,opt,name=response,proto3,oneof"`
-}
-
-type ThinkingChunk_Error struct {
-	Error *ErrorContent `protobuf:"bytes,3,opt,name=error,proto3,oneof"`
-}
-
-func (*ThinkingChunk_Thinking) isThinkingChunk_ChunkType() {}
-
-func (*ThinkingChunk_Response) isThinkingChunk_ChunkType() {}
-
-func (*ThinkingChunk_Error) isThinkingChunk_ChunkType() {}
-
-// ThinkingContent contains thinking/reasoning text
-type ThinkingContent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	IsComplete    bool                   `protobuf:"varint,2,opt,name=is_complete,json=isComplete,proto3" json:"is_complete,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ThinkingContent) Reset() {
-	*x = ThinkingContent{}
-	mi := &file_proto_llm_service_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ThinkingContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ThinkingContent) ProtoMessage() {}
-
-func (x *ThinkingContent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ThinkingContent.ProtoReflect.Descriptor instead.
-func (*ThinkingContent) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *ThinkingContent) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-func (x *ThinkingContent) GetIsComplete() bool {
-	if x != nil {
-		return x.IsComplete
-	}
-	return false
-}
-
-// ResponseContent contains the actual response text
-type ResponseContent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	IsComplete    bool                   `protobuf:"varint,2,opt,name=is_complete,json=isComplete,proto3" json:"is_complete,omitempty"`
-	IsFinal       bool                   `protobuf:"varint,3,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"` // No more tool calls expected
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResponseContent) Reset() {
-	*x = ResponseContent{}
-	mi := &file_proto_llm_service_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResponseContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResponseContent) ProtoMessage() {}
-
-func (x *ResponseContent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResponseContent.ProtoReflect.Descriptor instead.
-func (*ResponseContent) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *ResponseContent) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-func (x *ResponseContent) GetIsComplete() bool {
-	if x != nil {
-		return x.IsComplete
-	}
-	return false
-}
-
-func (x *ResponseContent) GetIsFinal() bool {
-	if x != nil {
-		return x.IsFinal
-	}
-	return false
-}
-
-// ErrorContent contains error information
-type ErrorContent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Retryable     bool                   `protobuf:"varint,2,opt,name=retryable,proto3" json:"retryable,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ErrorContent) Reset() {
-	*x = ErrorContent{}
-	mi := &file_proto_llm_service_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ErrorContent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ErrorContent) ProtoMessage() {}
-
-func (x *ErrorContent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ErrorContent.ProtoReflect.Descriptor instead.
-func (*ErrorContent) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *ErrorContent) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ErrorContent) GetRetryable() bool {
-	if x != nil {
-		return x.Retryable
-	}
-	return false
 }
 
 var File_proto_llm_service_proto protoreflect.FileDescriptor
 
 const file_proto_llm_service_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/llm_service.proto\x12\x06llm.v1\"\x93\x03\n" +
+	"\x17proto/llm_service.proto\x12\x06llm.v1\"\xec\x01\n" +
+	"\x0fGenerateRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x127\n" +
+	"\bmessages\x18\x02 \x03(\v2\x1b.llm.v1.ConversationMessageR\bmessages\x120\n" +
+	"\n" +
+	"llm_config\x18\x03 \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfig\x12,\n" +
+	"\x05tools\x18\x04 \x03(\v2\x16.llm.v1.ToolDefinitionR\x05tools\x12!\n" +
+	"\fexecution_id\x18\x05 \x01(\tR\vexecutionId\"\xe7\x02\n" +
+	"\x10GenerateResponse\x12'\n" +
+	"\x04text\x18\x01 \x01(\v2\x11.llm.v1.TextDeltaH\x00R\x04text\x123\n" +
+	"\bthinking\x18\x02 \x01(\v2\x15.llm.v1.ThinkingDeltaH\x00R\bthinking\x124\n" +
+	"\ttool_call\x18\x03 \x01(\v2\x15.llm.v1.ToolCallDeltaH\x00R\btoolCall\x12)\n" +
+	"\x05usage\x18\x04 \x01(\v2\x11.llm.v1.UsageInfoH\x00R\x05usage\x12)\n" +
+	"\x05error\x18\x05 \x01(\v2\x11.llm.v1.ErrorInfoH\x00R\x05error\x12C\n" +
+	"\x0ecode_execution\x18\x06 \x01(\v2\x1a.llm.v1.CodeExecutionDeltaH\x00R\rcodeExecution\x12\x19\n" +
+	"\bis_final\x18\n" +
+	" \x01(\bR\aisFinalB\t\n" +
+	"\acontent\"\xb3\x01\n" +
+	"\x13ConversationMessage\x12\x12\n" +
+	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12/\n" +
+	"\n" +
+	"tool_calls\x18\x03 \x03(\v2\x10.llm.v1.ToolCallR\ttoolCalls\x12 \n" +
+	"\ftool_call_id\x18\x04 \x01(\tR\n" +
+	"toolCallId\x12\x1b\n" +
+	"\ttool_name\x18\x05 \x01(\tR\btoolName\"s\n" +
+	"\x0eToolDefinition\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12+\n" +
+	"\x11parameters_schema\x18\x03 \x01(\tR\x10parametersSchema\"L\n" +
+	"\bToolCall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\targuments\x18\x03 \x01(\tR\targuments\"%\n" +
+	"\tTextDelta\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\")\n" +
+	"\rThinkingDelta\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\"Z\n" +
+	"\rToolCallDelta\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\targuments\x18\x03 \x01(\tR\targuments\"@\n" +
+	"\x12CodeExecutionDelta\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
+	"\x06result\x18\x02 \x01(\tR\x06result\"\x9f\x01\n" +
+	"\tUsageInfo\x12!\n" +
+	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
+	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\x12'\n" +
+	"\x0fthinking_tokens\x18\x04 \x01(\x05R\x0ethinkingTokens\"W\n" +
+	"\tErrorInfo\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12\x1c\n" +
+	"\tretryable\x18\x03 \x01(\bR\tretryable\"\xad\x03\n" +
 	"\tLLMConfig\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
@@ -609,51 +984,15 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"\x16max_tool_result_tokens\x18\x06 \x01(\x05R\x13maxToolResultTokens\x12E\n" +
 	"\fnative_tools\x18\a \x03(\v2\".llm.v1.LLMConfig.NativeToolsEntryR\vnativeTools\x12\x18\n" +
 	"\aproject\x18\b \x01(\tR\aproject\x12\x1a\n" +
-	"\blocation\x18\t \x01(\tR\blocation\x1a>\n" +
+	"\blocation\x18\t \x01(\tR\blocation\x12\x18\n" +
+	"\abackend\x18\n" +
+	" \x01(\tR\abackend\x1a>\n" +
 	"\x10NativeToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xa1\x02\n" +
-	"\x0fThinkingRequest\x12\x1d\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x012M\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12+\n" +
-	"\bmessages\x18\x02 \x03(\v2\x0f.llm.v1.MessageR\bmessages\x12\x18\n" +
-	"\x05model\x18\x03 \x01(\tB\x02\x18\x01R\x05model\x12)\n" +
-	"\vtemperature\x18\x04 \x01(\x02B\x02\x18\x01H\x00R\vtemperature\x88\x01\x01\x12&\n" +
-	"\n" +
-	"max_tokens\x18\x05 \x01(\x05B\x02\x18\x01H\x01R\tmaxTokens\x88\x01\x01\x120\n" +
-	"\n" +
-	"llm_config\x18\a \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfigB\x0e\n" +
-	"\f_temperatureB\r\n" +
-	"\v_max_tokensJ\x04\b\x06\x10\a\"\x9f\x01\n" +
-	"\aMessage\x12(\n" +
-	"\x04role\x18\x01 \x01(\x0e2\x14.llm.v1.Message.RoleR\x04role\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\tR\acontent\"P\n" +
-	"\x04Role\x12\x14\n" +
-	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0f\n" +
-	"\vROLE_SYSTEM\x10\x01\x12\r\n" +
-	"\tROLE_USER\x10\x02\x12\x12\n" +
-	"\x0eROLE_ASSISTANT\x10\x03\"\xb9\x01\n" +
-	"\rThinkingChunk\x125\n" +
-	"\bthinking\x18\x01 \x01(\v2\x17.llm.v1.ThinkingContentH\x00R\bthinking\x125\n" +
-	"\bresponse\x18\x02 \x01(\v2\x17.llm.v1.ResponseContentH\x00R\bresponse\x12,\n" +
-	"\x05error\x18\x03 \x01(\v2\x14.llm.v1.ErrorContentH\x00R\x05errorB\f\n" +
-	"\n" +
-	"chunk_type\"L\n" +
-	"\x0fThinkingContent\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1f\n" +
-	"\vis_complete\x18\x02 \x01(\bR\n" +
-	"isComplete\"g\n" +
-	"\x0fResponseContent\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1f\n" +
-	"\vis_complete\x18\x02 \x01(\bR\n" +
-	"isComplete\x12\x19\n" +
-	"\bis_final\x18\x03 \x01(\bR\aisFinal\"F\n" +
-	"\fErrorContent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n" +
-	"\tretryable\x18\x02 \x01(\bR\tretryable2V\n" +
-	"\n" +
-	"LLMService\x12H\n" +
-	"\x14GenerateWithThinking\x12\x17.llm.v1.ThinkingRequest\x1a\x15.llm.v1.ThinkingChunk0\x01B2Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3"
+	"LLMService\x12?\n" +
+	"\bGenerate\x12\x17.llm.v1.GenerateRequest\x1a\x18.llm.v1.GenerateResponse0\x01B2Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3"
 
 var (
 	file_proto_llm_service_proto_rawDescOnce sync.Once
@@ -667,34 +1006,41 @@ func file_proto_llm_service_proto_rawDescGZIP() []byte {
 	return file_proto_llm_service_proto_rawDescData
 }
 
-var file_proto_llm_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_proto_llm_service_proto_goTypes = []any{
-	(Message_Role)(0),       // 0: llm.v1.Message.Role
-	(*LLMConfig)(nil),       // 1: llm.v1.LLMConfig
-	(*ThinkingRequest)(nil), // 2: llm.v1.ThinkingRequest
-	(*Message)(nil),         // 3: llm.v1.Message
-	(*ThinkingChunk)(nil),   // 4: llm.v1.ThinkingChunk
-	(*ThinkingContent)(nil), // 5: llm.v1.ThinkingContent
-	(*ResponseContent)(nil), // 6: llm.v1.ResponseContent
-	(*ErrorContent)(nil),    // 7: llm.v1.ErrorContent
-	nil,                     // 8: llm.v1.LLMConfig.NativeToolsEntry
+	(*GenerateRequest)(nil),     // 0: llm.v1.GenerateRequest
+	(*GenerateResponse)(nil),    // 1: llm.v1.GenerateResponse
+	(*ConversationMessage)(nil), // 2: llm.v1.ConversationMessage
+	(*ToolDefinition)(nil),      // 3: llm.v1.ToolDefinition
+	(*ToolCall)(nil),            // 4: llm.v1.ToolCall
+	(*TextDelta)(nil),           // 5: llm.v1.TextDelta
+	(*ThinkingDelta)(nil),       // 6: llm.v1.ThinkingDelta
+	(*ToolCallDelta)(nil),       // 7: llm.v1.ToolCallDelta
+	(*CodeExecutionDelta)(nil),  // 8: llm.v1.CodeExecutionDelta
+	(*UsageInfo)(nil),           // 9: llm.v1.UsageInfo
+	(*ErrorInfo)(nil),           // 10: llm.v1.ErrorInfo
+	(*LLMConfig)(nil),           // 11: llm.v1.LLMConfig
+	nil,                         // 12: llm.v1.LLMConfig.NativeToolsEntry
 }
 var file_proto_llm_service_proto_depIdxs = []int32{
-	8, // 0: llm.v1.LLMConfig.native_tools:type_name -> llm.v1.LLMConfig.NativeToolsEntry
-	3, // 1: llm.v1.ThinkingRequest.messages:type_name -> llm.v1.Message
-	1, // 2: llm.v1.ThinkingRequest.llm_config:type_name -> llm.v1.LLMConfig
-	0, // 3: llm.v1.Message.role:type_name -> llm.v1.Message.Role
-	5, // 4: llm.v1.ThinkingChunk.thinking:type_name -> llm.v1.ThinkingContent
-	6, // 5: llm.v1.ThinkingChunk.response:type_name -> llm.v1.ResponseContent
-	7, // 6: llm.v1.ThinkingChunk.error:type_name -> llm.v1.ErrorContent
-	2, // 7: llm.v1.LLMService.GenerateWithThinking:input_type -> llm.v1.ThinkingRequest
-	4, // 8: llm.v1.LLMService.GenerateWithThinking:output_type -> llm.v1.ThinkingChunk
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	2,  // 0: llm.v1.GenerateRequest.messages:type_name -> llm.v1.ConversationMessage
+	11, // 1: llm.v1.GenerateRequest.llm_config:type_name -> llm.v1.LLMConfig
+	3,  // 2: llm.v1.GenerateRequest.tools:type_name -> llm.v1.ToolDefinition
+	5,  // 3: llm.v1.GenerateResponse.text:type_name -> llm.v1.TextDelta
+	6,  // 4: llm.v1.GenerateResponse.thinking:type_name -> llm.v1.ThinkingDelta
+	7,  // 5: llm.v1.GenerateResponse.tool_call:type_name -> llm.v1.ToolCallDelta
+	9,  // 6: llm.v1.GenerateResponse.usage:type_name -> llm.v1.UsageInfo
+	10, // 7: llm.v1.GenerateResponse.error:type_name -> llm.v1.ErrorInfo
+	8,  // 8: llm.v1.GenerateResponse.code_execution:type_name -> llm.v1.CodeExecutionDelta
+	4,  // 9: llm.v1.ConversationMessage.tool_calls:type_name -> llm.v1.ToolCall
+	12, // 10: llm.v1.LLMConfig.native_tools:type_name -> llm.v1.LLMConfig.NativeToolsEntry
+	0,  // 11: llm.v1.LLMService.Generate:input_type -> llm.v1.GenerateRequest
+	1,  // 12: llm.v1.LLMService.Generate:output_type -> llm.v1.GenerateResponse
+	12, // [12:13] is the sub-list for method output_type
+	11, // [11:12] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_proto_llm_service_proto_init() }
@@ -702,25 +1048,26 @@ func file_proto_llm_service_proto_init() {
 	if File_proto_llm_service_proto != nil {
 		return
 	}
-	file_proto_llm_service_proto_msgTypes[1].OneofWrappers = []any{}
-	file_proto_llm_service_proto_msgTypes[3].OneofWrappers = []any{
-		(*ThinkingChunk_Thinking)(nil),
-		(*ThinkingChunk_Response)(nil),
-		(*ThinkingChunk_Error)(nil),
+	file_proto_llm_service_proto_msgTypes[1].OneofWrappers = []any{
+		(*GenerateResponse_Text)(nil),
+		(*GenerateResponse_Thinking)(nil),
+		(*GenerateResponse_ToolCall)(nil),
+		(*GenerateResponse_Usage)(nil),
+		(*GenerateResponse_Error)(nil),
+		(*GenerateResponse_CodeExecution)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_llm_service_proto_rawDesc), len(file_proto_llm_service_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   8,
+			NumEnums:      0,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_llm_service_proto_goTypes,
 		DependencyIndexes: file_proto_llm_service_proto_depIdxs,
-		EnumInfos:         file_proto_llm_service_proto_enumTypes,
 		MessageInfos:      file_proto_llm_service_proto_msgTypes,
 	}.Build()
 	File_proto_llm_service_proto = out.File

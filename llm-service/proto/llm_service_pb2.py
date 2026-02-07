@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11llm_service.proto\x12\x06llm.v1\"\x9d\x02\n\tLLMConfig\x12\x10\n\x08provider\x18\x01 \x01(\t\x12\r\n\x05model\x18\x02 \x01(\t\x12\x13\n\x0b\x61pi_key_env\x18\x03 \x01(\t\x12\x17\n\x0f\x63redentials_env\x18\x04 \x01(\t\x12\x10\n\x08\x62\x61se_url\x18\x05 \x01(\t\x12\x1e\n\x16max_tool_result_tokens\x18\x06 \x01(\x05\x12\x38\n\x0cnative_tools\x18\x07 \x03(\x0b\x32\".llm.v1.LLMConfig.NativeToolsEntry\x12\x0f\n\x07project\x18\x08 \x01(\t\x12\x10\n\x08location\x18\t \x01(\t\x1a\x32\n\x10NativeToolsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x08:\x02\x38\x01\"\xe2\x01\n\x0fThinkingRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12!\n\x08messages\x18\x02 \x03(\x0b\x32\x0f.llm.v1.Message\x12\x11\n\x05model\x18\x03 \x01(\tB\x02\x18\x01\x12\x1c\n\x0btemperature\x18\x04 \x01(\x02\x42\x02\x18\x01H\x00\x88\x01\x01\x12\x1b\n\nmax_tokens\x18\x05 \x01(\x05\x42\x02\x18\x01H\x01\x88\x01\x01\x12%\n\nllm_config\x18\x07 \x01(\x0b\x32\x11.llm.v1.LLMConfigB\x0e\n\x0c_temperatureB\r\n\x0b_max_tokensJ\x04\x08\x06\x10\x07\"\x90\x01\n\x07Message\x12\"\n\x04role\x18\x01 \x01(\x0e\x32\x14.llm.v1.Message.Role\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"P\n\x04Role\x12\x14\n\x10ROLE_UNSPECIFIED\x10\x00\x12\x0f\n\x0bROLE_SYSTEM\x10\x01\x12\r\n\tROLE_USER\x10\x02\x12\x12\n\x0eROLE_ASSISTANT\x10\x03\"\x9e\x01\n\rThinkingChunk\x12+\n\x08thinking\x18\x01 \x01(\x0b\x32\x17.llm.v1.ThinkingContentH\x00\x12+\n\x08response\x18\x02 \x01(\x0b\x32\x17.llm.v1.ResponseContentH\x00\x12%\n\x05\x65rror\x18\x03 \x01(\x0b\x32\x14.llm.v1.ErrorContentH\x00\x42\x0c\n\nchunk_type\"7\n\x0fThinkingContent\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x13\n\x0bis_complete\x18\x02 \x01(\x08\"I\n\x0fResponseContent\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x13\n\x0bis_complete\x18\x02 \x01(\x08\x12\x10\n\x08is_final\x18\x03 \x01(\x08\"2\n\x0c\x45rrorContent\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x11\n\tretryable\x18\x02 \x01(\x08\x32V\n\nLLMService\x12H\n\x14GenerateWithThinking\x12\x17.llm.v1.ThinkingRequest\x1a\x15.llm.v1.ThinkingChunk0\x01\x42\x32Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11llm_service.proto\x12\x06llm.v1\"\xb8\x01\n\x0fGenerateRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12-\n\x08messages\x18\x02 \x03(\x0b\x32\x1b.llm.v1.ConversationMessage\x12%\n\nllm_config\x18\x03 \x01(\x0b\x32\x11.llm.v1.LLMConfig\x12%\n\x05tools\x18\x04 \x03(\x0b\x32\x16.llm.v1.ToolDefinition\x12\x14\n\x0c\x65xecution_id\x18\x05 \x01(\t\"\xa7\x02\n\x10GenerateResponse\x12!\n\x04text\x18\x01 \x01(\x0b\x32\x11.llm.v1.TextDeltaH\x00\x12)\n\x08thinking\x18\x02 \x01(\x0b\x32\x15.llm.v1.ThinkingDeltaH\x00\x12*\n\ttool_call\x18\x03 \x01(\x0b\x32\x15.llm.v1.ToolCallDeltaH\x00\x12\"\n\x05usage\x18\x04 \x01(\x0b\x32\x11.llm.v1.UsageInfoH\x00\x12\"\n\x05\x65rror\x18\x05 \x01(\x0b\x32\x11.llm.v1.ErrorInfoH\x00\x12\x34\n\x0e\x63ode_execution\x18\x06 \x01(\x0b\x32\x1a.llm.v1.CodeExecutionDeltaH\x00\x12\x10\n\x08is_final\x18\n \x01(\x08\x42\t\n\x07\x63ontent\"\x83\x01\n\x13\x43onversationMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12$\n\ntool_calls\x18\x03 \x03(\x0b\x32\x10.llm.v1.ToolCall\x12\x14\n\x0ctool_call_id\x18\x04 \x01(\t\x12\x11\n\ttool_name\x18\x05 \x01(\t\"N\n\x0eToolDefinition\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x19\n\x11parameters_schema\x18\x03 \x01(\t\"7\n\x08ToolCall\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x11\n\targuments\x18\x03 \x01(\t\"\x1c\n\tTextDelta\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\" \n\rThinkingDelta\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\"A\n\rToolCallDelta\x12\x0f\n\x07\x63\x61ll_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x11\n\targuments\x18\x03 \x01(\t\"2\n\x12\x43odeExecutionDelta\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x0e\n\x06result\x18\x02 \x01(\t\"g\n\tUsageInfo\x12\x14\n\x0cinput_tokens\x18\x01 \x01(\x05\x12\x15\n\routput_tokens\x18\x02 \x01(\x05\x12\x14\n\x0ctotal_tokens\x18\x03 \x01(\x05\x12\x17\n\x0fthinking_tokens\x18\x04 \x01(\x05\"=\n\tErrorInfo\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12\x11\n\tretryable\x18\x03 \x01(\x08\"\xae\x02\n\tLLMConfig\x12\x10\n\x08provider\x18\x01 \x01(\t\x12\r\n\x05model\x18\x02 \x01(\t\x12\x13\n\x0b\x61pi_key_env\x18\x03 \x01(\t\x12\x17\n\x0f\x63redentials_env\x18\x04 \x01(\t\x12\x10\n\x08\x62\x61se_url\x18\x05 \x01(\t\x12\x1e\n\x16max_tool_result_tokens\x18\x06 \x01(\x05\x12\x38\n\x0cnative_tools\x18\x07 \x03(\x0b\x32\".llm.v1.LLMConfig.NativeToolsEntry\x12\x0f\n\x07project\x18\x08 \x01(\t\x12\x10\n\x08location\x18\t \x01(\t\x12\x0f\n\x07\x62\x61\x63kend\x18\n \x01(\t\x1a\x32\n\x10NativeToolsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x08:\x02\x38\x01\x32M\n\nLLMService\x12?\n\x08Generate\x12\x17.llm.v1.GenerateRequest\x1a\x18.llm.v1.GenerateResponse0\x01\x42\x32Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,30 +34,32 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._serialized_options = b'Z0github.com/codeready-toolchain/tarsy/proto;llmv1'
   _globals['_LLMCONFIG_NATIVETOOLSENTRY']._loaded_options = None
   _globals['_LLMCONFIG_NATIVETOOLSENTRY']._serialized_options = b'8\001'
-  _globals['_THINKINGREQUEST'].fields_by_name['model']._loaded_options = None
-  _globals['_THINKINGREQUEST'].fields_by_name['model']._serialized_options = b'\030\001'
-  _globals['_THINKINGREQUEST'].fields_by_name['temperature']._loaded_options = None
-  _globals['_THINKINGREQUEST'].fields_by_name['temperature']._serialized_options = b'\030\001'
-  _globals['_THINKINGREQUEST'].fields_by_name['max_tokens']._loaded_options = None
-  _globals['_THINKINGREQUEST'].fields_by_name['max_tokens']._serialized_options = b'\030\001'
-  _globals['_LLMCONFIG']._serialized_start=30
-  _globals['_LLMCONFIG']._serialized_end=315
-  _globals['_LLMCONFIG_NATIVETOOLSENTRY']._serialized_start=265
-  _globals['_LLMCONFIG_NATIVETOOLSENTRY']._serialized_end=315
-  _globals['_THINKINGREQUEST']._serialized_start=318
-  _globals['_THINKINGREQUEST']._serialized_end=544
-  _globals['_MESSAGE']._serialized_start=547
-  _globals['_MESSAGE']._serialized_end=691
-  _globals['_MESSAGE_ROLE']._serialized_start=611
-  _globals['_MESSAGE_ROLE']._serialized_end=691
-  _globals['_THINKINGCHUNK']._serialized_start=694
-  _globals['_THINKINGCHUNK']._serialized_end=852
-  _globals['_THINKINGCONTENT']._serialized_start=854
-  _globals['_THINKINGCONTENT']._serialized_end=909
-  _globals['_RESPONSECONTENT']._serialized_start=911
-  _globals['_RESPONSECONTENT']._serialized_end=984
-  _globals['_ERRORCONTENT']._serialized_start=986
-  _globals['_ERRORCONTENT']._serialized_end=1036
-  _globals['_LLMSERVICE']._serialized_start=1038
-  _globals['_LLMSERVICE']._serialized_end=1124
+  _globals['_GENERATEREQUEST']._serialized_start=30
+  _globals['_GENERATEREQUEST']._serialized_end=214
+  _globals['_GENERATERESPONSE']._serialized_start=217
+  _globals['_GENERATERESPONSE']._serialized_end=512
+  _globals['_CONVERSATIONMESSAGE']._serialized_start=515
+  _globals['_CONVERSATIONMESSAGE']._serialized_end=646
+  _globals['_TOOLDEFINITION']._serialized_start=648
+  _globals['_TOOLDEFINITION']._serialized_end=726
+  _globals['_TOOLCALL']._serialized_start=728
+  _globals['_TOOLCALL']._serialized_end=783
+  _globals['_TEXTDELTA']._serialized_start=785
+  _globals['_TEXTDELTA']._serialized_end=813
+  _globals['_THINKINGDELTA']._serialized_start=815
+  _globals['_THINKINGDELTA']._serialized_end=847
+  _globals['_TOOLCALLDELTA']._serialized_start=849
+  _globals['_TOOLCALLDELTA']._serialized_end=914
+  _globals['_CODEEXECUTIONDELTA']._serialized_start=916
+  _globals['_CODEEXECUTIONDELTA']._serialized_end=966
+  _globals['_USAGEINFO']._serialized_start=968
+  _globals['_USAGEINFO']._serialized_end=1071
+  _globals['_ERRORINFO']._serialized_start=1073
+  _globals['_ERRORINFO']._serialized_end=1134
+  _globals['_LLMCONFIG']._serialized_start=1137
+  _globals['_LLMCONFIG']._serialized_end=1439
+  _globals['_LLMCONFIG_NATIVETOOLSENTRY']._serialized_start=1389
+  _globals['_LLMCONFIG_NATIVETOOLSENTRY']._serialized_end=1439
+  _globals['_LLMSERVICE']._serialized_start=1441
+  _globals['_LLMSERVICE']._serialized_end=1518
 # @@protoc_insertion_point(module_scope)

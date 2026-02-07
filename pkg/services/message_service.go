@@ -37,7 +37,7 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		return nil, NewValidationError("role", "required")
 	}
 	if err := message.RoleValidator(req.Role); err != nil {
-		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant", req.Role))
+		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant, tool", req.Role))
 	}
 	if req.Content == "" {
 		return nil, NewValidationError("content", "required")
@@ -48,7 +48,7 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 	defer cancel()
 
 	messageID := uuid.New().String()
-	msg, err := s.client.Message.Create().
+	builder := s.client.Message.Create().
 		SetID(messageID).
 		SetSessionID(req.SessionID).
 		SetStageID(req.StageID).
@@ -56,8 +56,28 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		SetSequenceNumber(req.SequenceNumber).
 		SetRole(req.Role).
 		SetContent(req.Content).
-		SetCreatedAt(time.Now()).
-		Save(ctx)
+		SetCreatedAt(time.Now())
+
+	// Tool-related fields
+	if len(req.ToolCalls) > 0 {
+		toolCallMaps := make([]map[string]interface{}, len(req.ToolCalls))
+		for i, tc := range req.ToolCalls {
+			toolCallMaps[i] = map[string]interface{}{
+				"id":        tc.ID,
+				"name":      tc.Name,
+				"arguments": tc.Arguments,
+			}
+		}
+		builder = builder.SetToolCalls(toolCallMaps)
+	}
+	if req.ToolCallID != "" {
+		builder = builder.SetToolCallID(req.ToolCallID)
+	}
+	if req.ToolName != "" {
+		builder = builder.SetToolName(req.ToolName)
+	}
+
+	msg, err := builder.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create message: %w", err)
 	}

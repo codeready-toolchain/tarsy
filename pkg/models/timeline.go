@@ -16,18 +16,6 @@ type CreateTimelineEventRequest struct {
 	Metadata       map[string]any          `json:"metadata,omitempty"`
 }
 
-// UpdateTimelineEventRequest contains fields for updating event during streaming
-type UpdateTimelineEventRequest struct {
-	Content string `json:"content"`
-}
-
-// CompleteTimelineEventRequest contains fields for completing a timeline event
-type CompleteTimelineEventRequest struct {
-	Content          string  `json:"content"`
-	LLMInteractionID *string `json:"llm_interaction_id,omitempty"`
-	MCPInteractionID *string `json:"mcp_interaction_id,omitempty"`
-}
-
 // TimelineEventResponse wraps a TimelineEvent
 type TimelineEventResponse struct {
 	*ent.TimelineEvent

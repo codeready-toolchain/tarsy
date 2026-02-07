@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
@@ -103,8 +104,21 @@ func main() {
 	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
 	slog.Info("Services initialized")
 
-	// 5. Create stub session executor (replaced by real executor in Phase 3)
-	executor := queue.NewStubExecutor()
+	// 5. Create LLM client and session executor
+	llmAddr := getEnv("LLM_SERVICE_ADDR", "localhost:50051")
+	llmClient, err := agent.NewGRPCLLMClient(llmAddr)
+	if err != nil {
+		slog.Error("Failed to connect to LLM service", "addr", llmAddr, "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := llmClient.Close(); err != nil {
+			slog.Error("Error closing LLM client", "error", err)
+		}
+	}()
+	slog.Info("Connected to LLM service", "addr", llmAddr)
+
+	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor)

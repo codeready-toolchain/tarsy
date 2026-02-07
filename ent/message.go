@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -32,6 +33,12 @@ type Message struct {
 	Role message.Role `json:"role,omitempty"`
 	// Message text
 	Content string `json:"content,omitempty"`
+	// For assistant messages: tool calls requested by LLM [{id, name, arguments}]
+	ToolCalls []map[string]interface{} `json:"tool_calls,omitempty"`
+	// For tool messages: links result to the original tool call
+	ToolCallID *string `json:"tool_call_id,omitempty"`
+	// For tool messages: name of the tool that was called
+	ToolName *string `json:"tool_name,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -102,9 +109,11 @@ func (*Message) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case message.FieldToolCalls:
+			values[i] = new([]byte)
 		case message.FieldSequenceNumber:
 			values[i] = new(sql.NullInt64)
-		case message.FieldID, message.FieldSessionID, message.FieldStageID, message.FieldExecutionID, message.FieldRole, message.FieldContent:
+		case message.FieldID, message.FieldSessionID, message.FieldStageID, message.FieldExecutionID, message.FieldRole, message.FieldContent, message.FieldToolCallID, message.FieldToolName:
 			values[i] = new(sql.NullString)
 		case message.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -164,6 +173,28 @@ func (_m *Message) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field content", values[i])
 			} else if value.Valid {
 				_m.Content = value.String
+			}
+		case message.FieldToolCalls:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field tool_calls", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ToolCalls); err != nil {
+					return fmt.Errorf("unmarshal field tool_calls: %w", err)
+				}
+			}
+		case message.FieldToolCallID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field tool_call_id", values[i])
+			} else if value.Valid {
+				_m.ToolCallID = new(string)
+				*_m.ToolCallID = value.String
+			}
+		case message.FieldToolName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field tool_name", values[i])
+			} else if value.Valid {
+				_m.ToolName = new(string)
+				*_m.ToolName = value.String
 			}
 		case message.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -244,6 +275,19 @@ func (_m *Message) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("content=")
 	builder.WriteString(_m.Content)
+	builder.WriteString(", ")
+	builder.WriteString("tool_calls=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ToolCalls))
+	builder.WriteString(", ")
+	if v := _m.ToolCallID; v != nil {
+		builder.WriteString("tool_call_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ToolName; v != nil {
+		builder.WriteString("tool_name=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

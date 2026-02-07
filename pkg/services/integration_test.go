@@ -101,10 +101,7 @@ func TestServiceIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		// 7. Complete timeline event with link to LLM interaction
-		err = timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
-			Content:          "Analysis complete: Pod crashed due to OOM",
-			LLMInteractionID: &llmInteraction.ID,
-		}, thinkingEvent.ID)
+		err = timelineService.CompleteTimelineEvent(ctx, thinkingEvent.ID, "Analysis complete: Pod crashed due to OOM", &llmInteraction.ID, nil)
 		require.NoError(t, err)
 
 		// 8. Create MCP interaction
@@ -122,13 +119,13 @@ func TestServiceIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		// 9. Update agent status to completed
-		err = stageService.UpdateAgentStatus(ctx, initialExec.ID, agentexecution.StatusActive, "")
+		err = stageService.UpdateAgentExecutionStatus(ctx, initialExec.ID, agentexecution.StatusActive, "")
 		require.NoError(t, err)
-		err = stageService.UpdateAgentStatus(ctx, initialExec.ID, agentexecution.StatusCompleted, "")
+		err = stageService.UpdateAgentExecutionStatus(ctx, initialExec.ID, agentexecution.StatusCompleted, "")
 		require.NoError(t, err)
 
 		// 10. Aggregate stage status
-		err = stageService.AggregateStageStatus(ctx, initialStage.ID)
+		err = stageService.UpdateStageStatus(ctx, initialStage.ID)
 		require.NoError(t, err)
 
 		// 11. Verify timeline

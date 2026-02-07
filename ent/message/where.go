@@ -90,6 +90,16 @@ func Content(v string) predicate.Message {
 	return predicate.Message(sql.FieldEQ(FieldContent, v))
 }
 
+// ToolCallID applies equality check predicate on the "tool_call_id" field. It's identical to ToolCallIDEQ.
+func ToolCallID(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldToolCallID, v))
+}
+
+// ToolName applies equality check predicate on the "tool_name" field. It's identical to ToolNameEQ.
+func ToolName(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldToolName, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Message {
 	return predicate.Message(sql.FieldEQ(FieldCreatedAt, v))
@@ -413,6 +423,166 @@ func ContentEqualFold(v string) predicate.Message {
 // ContentContainsFold applies the ContainsFold predicate on the "content" field.
 func ContentContainsFold(v string) predicate.Message {
 	return predicate.Message(sql.FieldContainsFold(FieldContent, v))
+}
+
+// ToolCallsIsNil applies the IsNil predicate on the "tool_calls" field.
+func ToolCallsIsNil() predicate.Message {
+	return predicate.Message(sql.FieldIsNull(FieldToolCalls))
+}
+
+// ToolCallsNotNil applies the NotNil predicate on the "tool_calls" field.
+func ToolCallsNotNil() predicate.Message {
+	return predicate.Message(sql.FieldNotNull(FieldToolCalls))
+}
+
+// ToolCallIDEQ applies the EQ predicate on the "tool_call_id" field.
+func ToolCallIDEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldToolCallID, v))
+}
+
+// ToolCallIDNEQ applies the NEQ predicate on the "tool_call_id" field.
+func ToolCallIDNEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldNEQ(FieldToolCallID, v))
+}
+
+// ToolCallIDIn applies the In predicate on the "tool_call_id" field.
+func ToolCallIDIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldIn(FieldToolCallID, vs...))
+}
+
+// ToolCallIDNotIn applies the NotIn predicate on the "tool_call_id" field.
+func ToolCallIDNotIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldNotIn(FieldToolCallID, vs...))
+}
+
+// ToolCallIDGT applies the GT predicate on the "tool_call_id" field.
+func ToolCallIDGT(v string) predicate.Message {
+	return predicate.Message(sql.FieldGT(FieldToolCallID, v))
+}
+
+// ToolCallIDGTE applies the GTE predicate on the "tool_call_id" field.
+func ToolCallIDGTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldGTE(FieldToolCallID, v))
+}
+
+// ToolCallIDLT applies the LT predicate on the "tool_call_id" field.
+func ToolCallIDLT(v string) predicate.Message {
+	return predicate.Message(sql.FieldLT(FieldToolCallID, v))
+}
+
+// ToolCallIDLTE applies the LTE predicate on the "tool_call_id" field.
+func ToolCallIDLTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldLTE(FieldToolCallID, v))
+}
+
+// ToolCallIDContains applies the Contains predicate on the "tool_call_id" field.
+func ToolCallIDContains(v string) predicate.Message {
+	return predicate.Message(sql.FieldContains(FieldToolCallID, v))
+}
+
+// ToolCallIDHasPrefix applies the HasPrefix predicate on the "tool_call_id" field.
+func ToolCallIDHasPrefix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasPrefix(FieldToolCallID, v))
+}
+
+// ToolCallIDHasSuffix applies the HasSuffix predicate on the "tool_call_id" field.
+func ToolCallIDHasSuffix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasSuffix(FieldToolCallID, v))
+}
+
+// ToolCallIDIsNil applies the IsNil predicate on the "tool_call_id" field.
+func ToolCallIDIsNil() predicate.Message {
+	return predicate.Message(sql.FieldIsNull(FieldToolCallID))
+}
+
+// ToolCallIDNotNil applies the NotNil predicate on the "tool_call_id" field.
+func ToolCallIDNotNil() predicate.Message {
+	return predicate.Message(sql.FieldNotNull(FieldToolCallID))
+}
+
+// ToolCallIDEqualFold applies the EqualFold predicate on the "tool_call_id" field.
+func ToolCallIDEqualFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldEqualFold(FieldToolCallID, v))
+}
+
+// ToolCallIDContainsFold applies the ContainsFold predicate on the "tool_call_id" field.
+func ToolCallIDContainsFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldContainsFold(FieldToolCallID, v))
+}
+
+// ToolNameEQ applies the EQ predicate on the "tool_name" field.
+func ToolNameEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldToolName, v))
+}
+
+// ToolNameNEQ applies the NEQ predicate on the "tool_name" field.
+func ToolNameNEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldNEQ(FieldToolName, v))
+}
+
+// ToolNameIn applies the In predicate on the "tool_name" field.
+func ToolNameIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldIn(FieldToolName, vs...))
+}
+
+// ToolNameNotIn applies the NotIn predicate on the "tool_name" field.
+func ToolNameNotIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldNotIn(FieldToolName, vs...))
+}
+
+// ToolNameGT applies the GT predicate on the "tool_name" field.
+func ToolNameGT(v string) predicate.Message {
+	return predicate.Message(sql.FieldGT(FieldToolName, v))
+}
+
+// ToolNameGTE applies the GTE predicate on the "tool_name" field.
+func ToolNameGTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldGTE(FieldToolName, v))
+}
+
+// ToolNameLT applies the LT predicate on the "tool_name" field.
+func ToolNameLT(v string) predicate.Message {
+	return predicate.Message(sql.FieldLT(FieldToolName, v))
+}
+
+// ToolNameLTE applies the LTE predicate on the "tool_name" field.
+func ToolNameLTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldLTE(FieldToolName, v))
+}
+
+// ToolNameContains applies the Contains predicate on the "tool_name" field.
+func ToolNameContains(v string) predicate.Message {
+	return predicate.Message(sql.FieldContains(FieldToolName, v))
+}
+
+// ToolNameHasPrefix applies the HasPrefix predicate on the "tool_name" field.
+func ToolNameHasPrefix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasPrefix(FieldToolName, v))
+}
+
+// ToolNameHasSuffix applies the HasSuffix predicate on the "tool_name" field.
+func ToolNameHasSuffix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasSuffix(FieldToolName, v))
+}
+
+// ToolNameIsNil applies the IsNil predicate on the "tool_name" field.
+func ToolNameIsNil() predicate.Message {
+	return predicate.Message(sql.FieldIsNull(FieldToolName))
+}
+
+// ToolNameNotNil applies the NotNil predicate on the "tool_name" field.
+func ToolNameNotNil() predicate.Message {
+	return predicate.Message(sql.FieldNotNull(FieldToolName))
+}
+
+// ToolNameEqualFold applies the EqualFold predicate on the "tool_name" field.
+func ToolNameEqualFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldEqualFold(FieldToolName, v))
+}
+
+// ToolNameContainsFold applies the ContainsFold predicate on the "tool_name" field.
+func ToolNameContainsFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldContainsFold(FieldToolName, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

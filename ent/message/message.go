@@ -27,6 +27,12 @@ const (
 	FieldRole = "role"
 	// FieldContent holds the string denoting the content field in the database.
 	FieldContent = "content"
+	// FieldToolCalls holds the string denoting the tool_calls field in the database.
+	FieldToolCalls = "tool_calls"
+	// FieldToolCallID holds the string denoting the tool_call_id field in the database.
+	FieldToolCallID = "tool_call_id"
+	// FieldToolName holds the string denoting the tool_name field in the database.
+	FieldToolName = "tool_name"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// EdgeSession holds the string denoting the session edge name in mutations.
@@ -86,6 +92,9 @@ var Columns = []string{
 	FieldSequenceNumber,
 	FieldRole,
 	FieldContent,
+	FieldToolCalls,
+	FieldToolCallID,
+	FieldToolName,
 	FieldCreatedAt,
 }
 
@@ -112,6 +121,7 @@ const (
 	RoleSystem    Role = "system"
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
 )
 
 func (r Role) String() string {
@@ -121,7 +131,7 @@ func (r Role) String() string {
 // RoleValidator is a validator for the "role" field enum values. It is called by the builders before save.
 func RoleValidator(r Role) error {
 	switch r {
-	case RoleSystem, RoleUser, RoleAssistant:
+	case RoleSystem, RoleUser, RoleAssistant, RoleTool:
 		return nil
 	default:
 		return fmt.Errorf("message: invalid enum value for role field: %q", r)
@@ -164,6 +174,16 @@ func ByRole(opts ...sql.OrderTermOption) OrderOption {
 // ByContent orders the results by the content field.
 func ByContent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldContent, opts...).ToFunc()
+}
+
+// ByToolCallID orders the results by the tool_call_id field.
+func ByToolCallID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldToolCallID, opts...).ToFunc()
+}
+
+// ByToolName orders the results by the tool_name field.
+func ByToolName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldToolName, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

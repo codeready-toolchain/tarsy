@@ -39,9 +39,7 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 	if string(req.EventType) == "" {
 		return nil, NewValidationError("EventType", "required")
 	}
-	if req.Content == "" {
-		return nil, NewValidationError("Content", "required")
-	}
+	// Content may be empty for streaming events (filled in later via UpdateTimelineEvent/CompleteTimelineEvent)
 
 	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
 	defer cancel()
@@ -93,28 +91,29 @@ func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID strin
 	return nil
 }
 
-// CompleteTimelineEvent marks an event as completed and sets debug links
-func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, req models.CompleteTimelineEventRequest, eventID string) error {
+// CompleteTimelineEvent marks an event as completed and sets debug links.
+// llmInteractionID and mcpInteractionID are optional debug links (pass nil if not applicable).
+func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID string, content string, llmInteractionID *string, mcpInteractionID *string) error {
 	if eventID == "" {
 		return NewValidationError("eventID", "required")
 	}
-	if req.Content == "" {
-		return NewValidationError("Content", "required")
+	if content == "" {
+		return NewValidationError("content", "required")
 	}
 
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	update := s.client.TimelineEvent.UpdateOneID(eventID).
-		SetContent(req.Content).
+		SetContent(content).
 		SetStatus(timelineevent.StatusCompleted).
 		SetUpdatedAt(time.Now())
 
-	if req.LLMInteractionID != nil {
-		update = update.SetLlmInteractionID(*req.LLMInteractionID)
+	if llmInteractionID != nil {
+		update = update.SetLlmInteractionID(*llmInteractionID)
 	}
-	if req.MCPInteractionID != nil {
-		update = update.SetMcpInteractionID(*req.MCPInteractionID)
+	if mcpInteractionID != nil {
+		update = update.SetMcpInteractionID(*mcpInteractionID)
 	}
 
 	err := update.Exec(writeCtx)

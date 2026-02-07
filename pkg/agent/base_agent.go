@@ -1,0 +1,51 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+)
+
+// Controller defines the iteration strategy interface.
+// Each controller implements a different investigation pattern.
+type Controller interface {
+	Run(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error)
+}
+
+// BaseAgent provides the common agent implementation.
+// It delegates iteration logic to a controller (strategy pattern).
+type BaseAgent struct {
+	controller Controller
+}
+
+// NewBaseAgent creates an agent with the given iteration controller.
+func NewBaseAgent(controller Controller) *BaseAgent {
+	return &BaseAgent{controller: controller}
+}
+
+// Execute runs the agent's investigation by delegating to the controller.
+func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error) {
+	// 1. Mark agent execution as active
+	if err := execCtx.Services.Stage.UpdateAgentExecutionStatus(
+		ctx, execCtx.ExecutionID, agentexecution.StatusActive, "",
+	); err != nil {
+		return nil, fmt.Errorf("failed to mark execution active: %w", err)
+	}
+
+	// 2. Delegate to iteration controller
+	result, err := a.controller.Run(ctx, execCtx, prevStageContext)
+
+	// 3. Handle context cancellation/timeout
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return &ExecutionResult{Status: ExecutionStatusTimedOut, Error: err}, nil
+		}
+		if ctx.Err() == context.Canceled {
+			return &ExecutionResult{Status: ExecutionStatusCancelled, Error: err}, nil
+		}
+		return &ExecutionResult{Status: ExecutionStatusFailed, Error: err}, nil
+	}
+
+	return result, nil
+}

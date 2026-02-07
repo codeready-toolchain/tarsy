@@ -181,9 +181,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("completes event without links", func(t *testing.T) {
-		err := timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
-			Content: "Final analysis complete",
-		}, event.ID)
+		err := timelineService.CompleteTimelineEvent(ctx, event.ID, "Final analysis complete", nil, nil)
 		require.NoError(t, err)
 
 		updated, err := client.TimelineEvent.Get(ctx, event.ID)
@@ -232,11 +230,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		err = timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
-			Content:          "Final analysis complete",
-			LLMInteractionID: &llmInt.ID,
-			MCPInteractionID: &mcpInt.ID,
-		}, event2.ID)
+		err = timelineService.CompleteTimelineEvent(ctx, event2.ID, "Final analysis complete", &llmInt.ID, &mcpInt.ID)
 		require.NoError(t, err)
 
 		updated, err := client.TimelineEvent.Get(ctx, event2.ID)
@@ -249,16 +243,12 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 	t.Run("validates required fields", func(t *testing.T) {
 		// Test empty eventID
-		err := timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
-			Content: "Final content",
-		}, "")
+		err := timelineService.CompleteTimelineEvent(ctx, "", "Final content", nil, nil)
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
 
 		// Test empty Content
-		err = timelineService.CompleteTimelineEvent(ctx, models.CompleteTimelineEventRequest{
-			Content: "",
-		}, event.ID)
+		err = timelineService.CompleteTimelineEvent(ctx, event.ID, "", nil, nil)
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
 	})

@@ -60,6 +60,40 @@ func (_c *MessageCreate) SetContent(v string) *MessageCreate {
 	return _c
 }
 
+// SetToolCalls sets the "tool_calls" field.
+func (_c *MessageCreate) SetToolCalls(v []map[string]interface{}) *MessageCreate {
+	_c.mutation.SetToolCalls(v)
+	return _c
+}
+
+// SetToolCallID sets the "tool_call_id" field.
+func (_c *MessageCreate) SetToolCallID(v string) *MessageCreate {
+	_c.mutation.SetToolCallID(v)
+	return _c
+}
+
+// SetNillableToolCallID sets the "tool_call_id" field if the given value is not nil.
+func (_c *MessageCreate) SetNillableToolCallID(v *string) *MessageCreate {
+	if v != nil {
+		_c.SetToolCallID(*v)
+	}
+	return _c
+}
+
+// SetToolName sets the "tool_name" field.
+func (_c *MessageCreate) SetToolName(v string) *MessageCreate {
+	_c.mutation.SetToolName(v)
+	return _c
+}
+
+// SetNillableToolName sets the "tool_name" field if the given value is not nil.
+func (_c *MessageCreate) SetNillableToolName(v *string) *MessageCreate {
+	if v != nil {
+		_c.SetToolName(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *MessageCreate) SetCreatedAt(v time.Time) *MessageCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -240,6 +274,18 @@ func (_c *MessageCreate) createSpec() (*Message, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Content(); ok {
 		_spec.SetField(message.FieldContent, field.TypeString, value)
 		_node.Content = value
+	}
+	if value, ok := _c.mutation.ToolCalls(); ok {
+		_spec.SetField(message.FieldToolCalls, field.TypeJSON, value)
+		_node.ToolCalls = value
+	}
+	if value, ok := _c.mutation.ToolCallID(); ok {
+		_spec.SetField(message.FieldToolCallID, field.TypeString, value)
+		_node.ToolCallID = &value
+	}
+	if value, ok := _c.mutation.ToolName(); ok {
+		_spec.SetField(message.FieldToolName, field.TypeString, value)
+		_node.ToolName = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(message.FieldCreatedAt, field.TypeTime, value)

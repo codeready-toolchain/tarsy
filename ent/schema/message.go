@@ -35,9 +35,23 @@ func (Message) Fields() []ent.Field {
 		field.Int("sequence_number").
 			Comment("Execution-scoped order"),
 		field.Enum("role").
-			Values("system", "user", "assistant"),
+			Values("system", "user", "assistant", "tool"),
 		field.Text("content").
 			Comment("Message text"),
+
+		// Tool-related fields for native function calling (Phase 3.1)
+		field.JSON("tool_calls", []map[string]interface{}{}).
+			Optional().
+			Comment("For assistant messages: tool calls requested by LLM [{id, name, arguments}]"),
+		field.String("tool_call_id").
+			Optional().
+			Nillable().
+			Comment("For tool messages: links result to the original tool call"),
+		field.String("tool_name").
+			Optional().
+			Nillable().
+			Comment("For tool messages: name of the tool that was called"),
+
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
