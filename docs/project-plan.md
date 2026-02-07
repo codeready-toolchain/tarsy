@@ -80,91 +80,124 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ---
 
+### Architecture: Go/Python Boundary
+
+**Critical architectural decision** for all phases going forward:
+
+**Go owns all orchestration** — agent lifecycle, iteration control loops, MCP tool execution, prompt building, conversation management, chain execution, state persistence, WebSocket streaming.
+
+**Python is a thin, stateless LLM API proxy** — receives messages + config via gRPC, calls LLM provider API (Gemini, OpenAI, etc.), streams response chunks back (text, thinking, tool calls). No state, no orchestration, no MCP.
+
+This means: iteration controllers are Go, prompt building is Go, MCP client is Go. Python's role is narrow by design — it exists solely because LLM provider SDKs have best support in Python.
+
+---
+
 ### Phase 3: Agent Framework
 
-**Base Agent Architecture**
-- [ ] BaseAgent interface (Go/Python bridge)
-- [ ] Agent lifecycle management
-- [ ] Agent execution context
-- [ ] Configuration-based agent instantiation
+**3.1: Base Agent Architecture** — See `docs/phase3-base-agent-architecture-design.md`
+- [ ] Proto/gRPC evolution (remove PoC fields, add tool calls, tool definitions, usage metadata)
+- [ ] Python LLM service cleanup (production-quality single provider, new Generate RPC)
+- [ ] Agent interface & lifecycle (Go)
+- [ ] Iteration controller interface (Go)
+- [ ] Session executor framework (Go — replaces stub)
+- [ ] Agent execution context (Go)
+- [ ] Configuration resolution at runtime (defaults → chain → stage → agent)
+- [ ] Conversation management (Go — message building, tool call/result flow)
+- [ ] Basic single-call controller for validation
 
-**Iteration Controllers**
-- [ ] ReAct controller (Python LLM service)
-- [ ] Native thinking controller (Python)
-- [ ] Stage controller variants
-- [ ] Synthesis controller
-- [ ] Chat controller
-- [ ] Final analysis controller
+**3.2: Iteration Controllers (Go)**
+- [ ] ReAct controller (text-based tool parsing, observation loop)
+- [ ] Native thinking controller (Gemini function calling, structured tool calls)
+- [ ] Stage controller variants (react-stage, react-final-analysis)
+- [ ] Synthesis controller (tool-less, single LLM call)
+- [ ] Chat controller (investigation context + chat history)
+- [ ] Final analysis controller (tool-less comprehensive analysis)
 
-**Prompt System**
-- [ ] Prompt builder framework (Python)
-- [ ] Template system (Python)
-- [ ] Component-based prompts (Python)
-- [ ] Chain context injection
+**3.3: Prompt System (Go)**
+- [ ] Prompt builder framework
+- [ ] Template system (Go text/template or string builders)
+- [ ] Component-based prompts (alert section, runbook section, tool instructions)
+- [ ] Chain context injection (previous stage results formatting)
+- [ ] Three-tier instruction composition (general → MCP server → custom)
+
+**3.4: Real-time Streaming**
+- [ ] WebSocket endpoint (Echo + coder/websocket)
+- [ ] PostgreSQL NOTIFY listener for cross-pod event delivery
+- [ ] Real-time TimelineEvent streaming to frontend
+- [ ] Frontend event protocol (create → stream chunks → complete)
 
 ---
 
 ### Phase 4: MCP Integration
 
-**MCP Client Infrastructure**
-- [ ] MCP client factory (Python/Go)
-- [ ] Transport layer (stdio/HTTP/SSE)
-- [ ] Tool registry & discovery
-- [ ] Error handling & recovery
-- [ ] Health monitoring
+**MCP Client Infrastructure (Go)**
+- [ ] MCP client implementation (Go — uses `mark3labs/mcp-go` or similar)
+- [ ] Transport layer — stdio (subprocess via `os/exec`), HTTP, SSE
+- [ ] Tool registry & discovery (list tools from MCP servers)
+- [ ] Error handling & recovery (retry, session recreation)
+- [ ] Per-session MCP client isolation
+- [ ] MCP server health monitoring
+
+**Data Masking** (moved from Phase 7 — required for MCP tool results)
+- [ ] Masking service (Go)
+- [ ] Regex-based maskers (15 patterns defined in builtin.go)
+- [ ] MCP tool result masking integration
+- [ ] Alert payload sanitization
 
 **MCP Features**
-- [ ] Custom MCP configuration per alert
-- [ ] Built-in MCP servers (kubernetes, etc.)
-- [ ] Tool result summarization
+- [ ] Custom MCP configuration per alert (mcp_selection override)
+- [ ] Tool result summarization (LLM-based, configurable threshold)
 - [ ] MCP server health tracking
+
+**Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports. The stdio transport in Go uses `os/exec.Cmd` with stdin/stdout pipes — straightforward and well-supported.
 
 ---
 
 ### Phase 5: Chain Execution
 
-**Chain Orchestration**
-- [ ] Chain registry (Go)
-- [ ] Multi-stage execution (Go)
-- [ ] Stage execution manager (Go)
-- [ ] Data flow between stages
-- [ ] Chain selection logic
+**Chain Orchestration (Go)**
+- [ ] Chain orchestrator — uses existing ChainRegistry from Phase 2 config
+- [ ] Multi-stage sequential execution
+- [ ] Stage execution manager (create Stage + AgentExecution records)
+- [ ] Lazy context building (Agent.BuildStageContext)
+- [ ] Data flow between stages (previous stage context → next stage prompt)
 
-**Parallel Execution**
-- [ ] Parallel stage executor (Go)
-- [ ] Result aggregation
-- [ ] Synthesis agent invocation
-- [ ] Replica & comparison parallelism
+**Parallel Execution (Go)**
+- [ ] Parallel stage executor (goroutine-per-agent)
+- [ ] Result aggregation from parallel agents
+- [ ] Success policy enforcement (all/any)
+- [ ] Synthesis agent invocation (automatic after parallel stages)
+- [ ] Replica execution (same agent N times)
 
-**Iteration Limits**
-- [ ] Max iteration enforcement
-- [ ] Force conclusion at limit (no pause/resume — decided in Phase 2.3 Q9)
+**Session Completion**
+- [ ] Max iteration enforcement (force conclusion, no pause/resume)
+- [ ] Executive summary generation (LLM call)
+- [ ] Final analysis formatting and storage
 
 ---
 
 ### Phase 6: Integrations
 
-**Runbook System**
-- [ ] GitHub integration (Go)
-- [ ] Runbook fetching
+**Runbook System (Go)**
+- [ ] GitHub integration
+- [ ] Runbook fetching & caching
 - [ ] Per-chain runbook configuration
-- [ ] Runbook caching
 
-**Multi-LLM Support**
-- [ ] LLM provider abstraction (Python)
-- [ ] Provider registry (Python)
-- [ ] OpenAI, Anthropic, xAI clients (Python)
-- [ ] Google Search grounding (Python)
+**Multi-LLM Support (Python)**
+- [ ] LLM provider abstraction in Python service
+- [ ] OpenAI, Anthropic, xAI client implementations
+- [ ] Google Search grounding support
+- [ ] VertexAI support
 
-**Slack Notifications**
-- [ ] Slack client (Go/Python)
+**Slack Notifications (Go)**
+- [ ] Slack client
 - [ ] Notification templates
 - [ ] Message threading/fingerprinting
 - [ ] Configurable notifications
 
 ---
 
-### Phase 7: Security & Data
+### Phase 7: Security
 
 **Authentication & Authorization**
 - [ ] OAuth2-proxy integration
@@ -172,32 +205,26 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [ ] GitHub OAuth flow
 - [ ] Session/user tracking
 
-**Data Masking**
-- [ ] Masking service (Go)
-- [ ] Regex-based maskers (DONE - 15 patterns in builtin.go)
-- [ ] Kubernetes secret masker (code-based - TODO)
-  - [ ] Implement KubernetesSecretMasker in Go
+**Advanced Data Masking**
+- [ ] Kubernetes secret masker (code-based structural parser)
   - [ ] Parse YAML/JSON structures
   - [ ] Distinguish between K8s Secrets (mask) vs ConfigMaps (don't mask)
   - [ ] Integrate with masking pattern groups
-  - [ ] Add comprehensive tests
-- [ ] Alert payload sanitization
-- [ ] MCP tool result masking integration
 
 ---
 
 ### Phase 8: History & Chat
 
-**History System**
-- [ ] History repository (Go)
+**History System (Go)**
+- [ ] History repository
 - [ ] Timeline reconstruction
 - [ ] Conversation retrieval
 - [ ] Session querying & filtering
 
-**Follow-up Chat**
-- [ ] Chat service (Go)
-- [ ] Chat agent (Python)
-- [ ] Context preservation
+**Follow-up Chat (Go + Python LLM)**
+- [ ] Chat service (Go orchestration)
+- [ ] Chat agent with investigation context (Go)
+- [ ] Context preservation (lazy context building)
 - [ ] Multi-user support
 - [ ] Chat-investigation timeline merging
 
@@ -213,7 +240,7 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 **Observability**
 - [ ] Structured logging
-- [ ] Metrics collection
+- [ ] Metrics collection (Prometheus)
 - [ ] Error tracking
 - [ ] Performance monitoring
 
@@ -244,11 +271,11 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 ---
 
-### Phase 11: Deployment & DevOps
+### Phase 11: Deployment, DevOps & CI/CD
 
 **Containerization**
 - [ ] Multi-stage Docker builds
-- [ ] Container orchestration (docker-compose)
+- [ ] Container orchestration (podman-compose)
 - [ ] Service health checks
 - [ ] Volume management
 
@@ -259,31 +286,14 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 - [ ] Routes/ingress
 - [ ] ImageStreams
 
-**CI/CD**
+**CI/CD & Testing Infra**
 - [ ] GitHub Actions workflows
-- [ ] Test automation
+- [ ] Test automation (Go + Python)
 - [ ] Build & push images
 - [ ] Deployment automation
+- [ ] E2E test suite
 
----
-
-### Phase 12: Testing & Quality
-
-**Backend Tests**
-- [ ] Unit tests (Go)
-- [ ] Integration tests (Go)
-- [ ] E2E tests (Go)
-- [ ] Mock infrastructure
-
-**Frontend Tests**
-- [ ] Component tests
-- [ ] Integration tests
-- [ ] E2E tests
-
-**Test Infrastructure**
-- [ ] Test utilities
-- [ ] Fixtures & mocks
-- [ ] CI integration
+**Note on testing**: Each phase includes its own test suite (unit + integration). There is no separate testing phase — testing is continuous. Phase 2 established the pattern with 80%+ coverage and testcontainers-based integration tests.
 
 ---
 
@@ -291,3 +301,12 @@ The original TARSy implementation (`/home/igels/Projects/AI/tarsy-bot`) is a 100
 
 - [README.md](../README.md) - Project overview and setup instructions
 - [Architecture Proposal](../../tarsy-bot/temp/go-python-split-proposal.md) - Original architecture proposal (in tarsy-bot repo)
+- **Phase 2 Design**:
+  - [Database & Persistence Design](phase2-database-persistence-design.md)
+  - [Database Schema Questions](phase2-database-schema-questions.md)
+  - [Configuration System Design](phase2-configuration-system-design.md)
+  - [Configuration System Questions](phase2-configuration-system-questions.md)
+  - [Queue & Worker System Design](phase2-queue-worker-system-design.md)
+  - [Queue & Worker System Questions](phase2-queue-worker-system-questions.md)
+- **Phase 3 Design**:
+  - [Base Agent Architecture Design](phase3-base-agent-architecture-design.md)
