@@ -507,3 +507,164 @@ claimed:
 	close(releaseCh)
 	pool.Stop()
 }
+
+// nilExecutor returns a nil *ExecutionResult for testing the nil-guard.
+type nilExecutor struct {
+	blockUntilCtxDone bool
+	processed         atomic.Int64
+}
+
+func (e *nilExecutor) Execute(ctx context.Context, _ *ent.AlertSession) *ExecutionResult {
+	e.processed.Add(1)
+	if e.blockUntilCtxDone {
+		<-ctx.Done()
+	}
+	return nil
+}
+
+// TestNilExecutionResultGuard tests that a nil *ExecutionResult from
+// SessionExecutor.Execute does not panic and is translated into the correct
+// terminal status.
+func TestNilExecutionResultGuard(t *testing.T) {
+	t.Run("nil result without context error marks session failed", func(t *testing.T) {
+		dbClient := testdb.NewTestClient(t)
+		client := dbClient.Client
+		ctx := context.Background()
+
+		session := createTestSession(ctx, t, client)
+
+		cfg := intTestQueueConfig()
+		cfg.WorkerCount = 1
+		cfg.PollInterval = 50 * time.Millisecond
+
+		executor := &nilExecutor{blockUntilCtxDone: false}
+		pool := NewWorkerPool("test-pod", client, cfg, executor)
+
+		require.NoError(t, pool.Start(ctx))
+
+		// Wait for processing
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				t.Fatalf("timed out waiting for session to be processed")
+			default:
+				if executor.processed.Load() >= 1 {
+					goto done
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	done:
+		pool.Stop()
+
+		updated, err := client.AlertSession.Get(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusFailed, updated.Status)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Contains(t, *updated.ErrorMessage, "executor returned nil result")
+	})
+
+	t.Run("nil result with deadline exceeded marks session timed_out", func(t *testing.T) {
+		dbClient := testdb.NewTestClient(t)
+		client := dbClient.Client
+		ctx := context.Background()
+
+		session := createTestSession(ctx, t, client)
+
+		cfg := intTestQueueConfig()
+		cfg.WorkerCount = 1
+		cfg.PollInterval = 50 * time.Millisecond
+		cfg.SessionTimeout = 200 * time.Millisecond
+
+		executor := &nilExecutor{blockUntilCtxDone: true}
+		pool := NewWorkerPool("test-pod", client, cfg, executor)
+
+		require.NoError(t, pool.Start(ctx))
+
+		// Wait for processing (must exceed the 200ms timeout)
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				t.Fatalf("timed out waiting for session to be processed")
+			default:
+				if executor.processed.Load() >= 1 {
+					goto done2
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	done2:
+		// Give the worker time to persist the terminal status
+		time.Sleep(100 * time.Millisecond)
+		pool.Stop()
+
+		updated, err := client.AlertSession.Get(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusTimedOut, updated.Status)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Contains(t, *updated.ErrorMessage, "timed out")
+		assert.Contains(t, *updated.ErrorMessage, "200ms")
+	})
+
+	t.Run("nil result with cancellation marks session cancelled", func(t *testing.T) {
+		dbClient := testdb.NewTestClient(t)
+		client := dbClient.Client
+		ctx := context.Background()
+
+		session := createTestSession(ctx, t, client)
+
+		cfg := intTestQueueConfig()
+		cfg.WorkerCount = 1
+		cfg.PollInterval = 50 * time.Millisecond
+		cfg.SessionTimeout = 30 * time.Second // Long timeout so cancellation wins
+
+		executor := &nilExecutor{blockUntilCtxDone: true}
+		pool := NewWorkerPool("test-pod", client, cfg, executor)
+
+		require.NoError(t, pool.Start(ctx))
+
+		// Wait for session to be claimed (in_progress)
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				t.Fatalf("timed out waiting for session to be claimed")
+			default:
+				s, err := client.AlertSession.Get(ctx, session.ID)
+				require.NoError(t, err)
+				if s.Status == alertsession.StatusInProgress {
+					goto claimed
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	claimed:
+		// Cancel the session via the pool (simulates API-triggered cancellation)
+		cancelled := pool.CancelSession(session.ID)
+		require.True(t, cancelled, "CancelSession should find the active session")
+
+		// Wait for the executor to finish and status to be persisted
+		deadline = time.After(5 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				t.Fatalf("timed out waiting for session to reach terminal status")
+			default:
+				s, err := client.AlertSession.Get(ctx, session.ID)
+				require.NoError(t, err)
+				if s.Status == alertsession.StatusCancelled {
+					goto done3
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	done3:
+		pool.Stop()
+
+		updated, err := client.AlertSession.Get(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
+	})
+}

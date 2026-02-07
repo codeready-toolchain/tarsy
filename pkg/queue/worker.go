@@ -34,6 +34,7 @@ type Worker struct {
 	sessionExecutor SessionExecutor
 	pool            SessionRegistry
 	stopCh          chan struct{}
+	stopOnce        sync.Once
 	wg              sync.WaitGroup
 
 	// Health tracking
@@ -72,8 +73,9 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 // Stop signals the worker to stop and waits for it to finish.
+// It is safe to call Stop multiple times.
 func (w *Worker) Stop() {
-	close(w.stopCh)
+	w.stopOnce.Do(func() { close(w.stopCh) })
 	w.wg.Wait()
 }
 
@@ -167,6 +169,27 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 
 	// 6. Execute session
 	result := w.sessionExecutor.Execute(sessionCtx, session)
+
+	// 6a. Nil-guard: synthesize a safe result if executor returned nil
+	if result == nil {
+		switch {
+		case errors.Is(sessionCtx.Err(), context.DeadlineExceeded):
+			result = &ExecutionResult{
+				Status: alertsession.StatusTimedOut,
+				Error:  fmt.Errorf("session timed out after %v", w.config.SessionTimeout),
+			}
+		case errors.Is(sessionCtx.Err(), context.Canceled):
+			result = &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  context.Canceled,
+			}
+		default:
+			result = &ExecutionResult{
+				Status: alertsession.StatusFailed,
+				Error:  fmt.Errorf("executor returned nil result"),
+			}
+		}
+	}
 
 	// 7. Handle timeout
 	if result.Status == "" && errors.Is(sessionCtx.Err(), context.DeadlineExceeded) {

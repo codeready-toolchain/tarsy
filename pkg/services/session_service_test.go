@@ -368,6 +368,7 @@ func TestSessionService_ClaimNextPendingSession(t *testing.T) {
 		assert.Equal(t, session1.ID, claimed.ID)
 		assert.Equal(t, alertsession.StatusInProgress, claimed.Status)
 		assert.Equal(t, "pod-1", *claimed.PodID)
+		assert.NotNil(t, claimed.StartedAt, "started_at should be set when session is claimed")
 	})
 
 	t.Run("returns nil when no pending sessions", func(t *testing.T) {
@@ -629,19 +630,41 @@ func TestSessionService_CancelSession(t *testing.T) {
 	})
 
 	t.Run("returns ErrNotCancellable for non-in-progress session", func(t *testing.T) {
-		req := models.CreateSessionRequest{
-			SessionID: uuid.New().String(),
-			AlertData: "test alert",
-			AgentType: "kubernetes",
-			ChainID:   "k8s-analysis",
+		tests := []struct {
+			name   string
+			status alertsession.Status
+		}{
+			{name: "pending", status: alertsession.StatusPending},
+			{name: "completed", status: alertsession.StatusCompleted},
+			{name: "failed", status: alertsession.StatusFailed},
+			{name: "cancelled", status: alertsession.StatusCancelled},
+			{name: "timed_out", status: alertsession.StatusTimedOut},
 		}
-		session, err := service.CreateSession(ctx, req)
-		require.NoError(t, err)
 
-		// Session is in pending state, not in_progress
-		err = service.CancelSession(ctx, session.ID)
-		require.Error(t, err)
-		assert.Equal(t, ErrNotCancellable, err)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := models.CreateSessionRequest{
+					SessionID: uuid.New().String(),
+					AlertData: "test alert",
+					AgentType: "kubernetes",
+					ChainID:   "k8s-analysis",
+				}
+				session, err := service.CreateSession(ctx, req)
+				require.NoError(t, err)
+
+				// For non-pending states, explicitly set the status
+				if tt.status != alertsession.StatusPending {
+					err = client.AlertSession.UpdateOneID(session.ID).
+						SetStatus(tt.status).
+						Exec(ctx)
+					require.NoError(t, err)
+				}
+
+				err = service.CancelSession(ctx, session.ID)
+				require.Error(t, err)
+				assert.Equal(t, ErrNotCancellable, err)
+			})
+		}
 	})
 }
 

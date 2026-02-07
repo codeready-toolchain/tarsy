@@ -318,6 +318,7 @@ func (s *SessionService) ClaimNextPendingSession(_ context.Context, podID string
 			).
 			SetStatus(alertsession.StatusInProgress).
 			SetPodID(podID).
+			SetStartedAt(time.Now()).
 			SetLastInteractionAt(time.Now()).
 			Save(claimCtx)
 		if err != nil {
