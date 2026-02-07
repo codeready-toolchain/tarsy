@@ -400,12 +400,23 @@ type Agent interface {
 ```go
 // pkg/agent/agent.go
 
+// ExecutionStatus represents the status of an agent execution.
+type ExecutionStatus string
+
+const (
+    ExecutionStatusPending   ExecutionStatus = "pending"
+    ExecutionStatusActive    ExecutionStatus = "active"
+    ExecutionStatusCompleted ExecutionStatus = "completed"
+    ExecutionStatusFailed    ExecutionStatus = "failed"
+    ExecutionStatusTimedOut  ExecutionStatus = "timed_out"
+    ExecutionStatusCancelled ExecutionStatus = "cancelled"
+)
+
 // ExecutionResult is returned by Agent.Execute().
 // Lightweight — all intermediate state was already written to DB during execution.
 type ExecutionResult struct {
     // Status is the terminal status for this agent execution.
-    // One of: "completed", "failed", "timed_out", "cancelled"
-    Status string
+    Status ExecutionStatus
 
     // FinalAnalysis is the agent's conclusion (if completed).
     FinalAnalysis string
@@ -506,7 +517,7 @@ func NewBaseAgent(controller Controller) *BaseAgent {
 func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error) {
     // 1. Mark agent execution as active
     if err := execCtx.Services.Stage.UpdateAgentExecutionStatus(
-        ctx, execCtx.ExecutionID, "active",
+        ctx, execCtx.ExecutionID, ExecutionStatusActive,
     ); err != nil {
         return nil, fmt.Errorf("failed to mark execution active: %w", err)
     }
@@ -517,12 +528,12 @@ func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prev
     // 3. Handle context cancellation/timeout
     if err != nil {
         if ctx.Err() == context.DeadlineExceeded {
-            return &ExecutionResult{Status: "timed_out", Error: err}, nil
+            return &ExecutionResult{Status: ExecutionStatusTimedOut, Error: err}, nil
         }
         if ctx.Err() == context.Canceled {
-            return &ExecutionResult{Status: "cancelled", Error: err}, nil
+            return &ExecutionResult{Status: ExecutionStatusCancelled, Error: err}, nil
         }
-        return &ExecutionResult{Status: "failed", Error: err}, nil
+        return &ExecutionResult{Status: ExecutionStatusFailed, Error: err}, nil
     }
 
     return result, nil
@@ -680,7 +691,7 @@ func (c *SingleCallController) Run(
         StageID:     execCtx.StageID,
         ExecutionID: execCtx.ExecutionID,
         EventType:   "llm_response",
-        Status:      "streaming",
+        Status:      "streaming", // TimelineEvent status, not ExecutionStatus
         Content:     "",
     })
     if err != nil {
@@ -750,7 +761,7 @@ func (c *SingleCallController) Run(
     }
 
     return &ExecutionResult{
-        Status:        "completed",
+        Status:        ExecutionStatusCompleted,
         FinalAnalysis: fullText.String(),
         TokensUsed:    tokenUsage,
     }, nil
@@ -1006,7 +1017,7 @@ func (e *SessionExecutor) Execute(ctx context.Context, session *ent.AlertSession
     if err != nil {
         log.Error("Chain not found", "chain_id", session.ChainID, "error", err)
         return &queue.ExecutionResult{
-            Status: "failed",
+            Status: string(agent.ExecutionStatusFailed),
             Error:  fmt.Errorf("chain %q not found: %w", session.ChainID, err),
         }
     }
@@ -1015,7 +1026,7 @@ func (e *SessionExecutor) Execute(ctx context.Context, session *ent.AlertSession
     // Phase 5 will add multi-stage sequential execution
     if len(chain.Stages) == 0 {
         return &queue.ExecutionResult{
-            Status: "failed",
+            Status: string(agent.ExecutionStatusFailed),
             Error:  fmt.Errorf("chain %q has no stages", session.ChainID),
         }
     }
@@ -1024,13 +1035,13 @@ func (e *SessionExecutor) Execute(ctx context.Context, session *ent.AlertSession
     result, err := e.executeStage(ctx, session, chain, stageConfig, 0, "")
     if err != nil {
         return &queue.ExecutionResult{
-            Status: "failed",
+            Status: string(agent.ExecutionStatusFailed),
             Error:  err,
         }
     }
 
     return &queue.ExecutionResult{
-        Status:        result.Status,
+        Status:        string(result.Status),
         FinalAnalysis: result.FinalAnalysis,
         Error:         result.Error,
     }
@@ -1052,7 +1063,7 @@ func (e *SessionExecutor) executeStage(
         StageName:          stageConfig.Name,
         StageIndex:         stageIndex,
         ExpectedAgentCount: len(stageConfig.Agents),
-        Status:             "active",
+        Status:             string(agent.ExecutionStatusActive),
     })
     if err != nil {
         return nil, fmt.Errorf("failed to create stage: %w", err)
@@ -1069,7 +1080,7 @@ func (e *SessionExecutor) executeStage(
         AgentName:         agentConfig.Name,
         AgentIndex:        1,
         IterationStrategy: string(agentConfig.IterationStrategy),
-        Status:            "pending",
+        Status:            string(agent.ExecutionStatusPending),
     })
     if err != nil {
         return nil, fmt.Errorf("failed to create agent execution: %w", err)
