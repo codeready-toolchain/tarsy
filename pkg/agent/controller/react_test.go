@@ -247,6 +247,84 @@ func TestReActController_PrevStageContext(t *testing.T) {
 	require.True(t, found, "previous stage context not found in LLM messages")
 }
 
+func TestReActController_ToolExecutionError(t *testing.T) {
+	// Tool fails on first call, LLM retries with a different approach and succeeds
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Check pods.\nAction: k8s.get_pods\nAction Input: {}"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Tool failed. Let me try logs.\nAction: k8s.get_logs\nAction Input: {\"pod\": \"web-1\"}"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Got the data.\nFinal Answer: Pod web-1 is crashing due to OOM."},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{
+		{Name: "k8s.get_pods", Description: "Get pods"},
+		{Name: "k8s.get_logs", Description: "Get logs"},
+	}
+
+	callCount := 0
+	executor := &mockToolExecutorFunc{
+		tools: tools,
+		executeFn: func(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+			callCount++
+			if call.Name == "k8s.get_pods" {
+				return nil, fmt.Errorf("connection refused to cluster API")
+			}
+			return &agent.ToolResult{Content: "OOMKilled at 14:32"}, nil
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "OOM")
+	require.Equal(t, 2, callCount, "both tool calls should have been attempted")
+}
+
+func TestReActController_ForcedConclusionWithFailedLast(t *testing.T) {
+	// All iterations produce tool calls, last one errors — forced conclusion returns failed
+	var responses []mockLLMResponse
+	for i := 0; i < 4; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Check.\nAction: k8s.get_pods\nAction Input: {}"},
+			},
+		})
+	}
+	// 5th iteration: LLM error
+	responses = append(responses, mockLLMResponse{
+		err: fmt.Errorf("service unavailable"),
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"k8s.get_pods": {Content: "pod-1 Running"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 5
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	require.Contains(t, result.Error.Error(), "max iterations")
+}
+
 func TestReActController_ToolNotInAvailableList(t *testing.T) {
 	// LLM calls a tool that passes format validation (has dot) but isn't in the tool list
 	llm := &mockLLMClient{
@@ -333,6 +411,20 @@ func (m *mockToolExecutor) Execute(_ context.Context, call agent.ToolCall) (*age
 }
 
 func (m *mockToolExecutor) ListTools(_ context.Context) ([]agent.ToolDefinition, error) {
+	return m.tools, nil
+}
+
+// mockToolExecutorFunc is a flexible test mock that allows custom execute functions.
+type mockToolExecutorFunc struct {
+	tools     []agent.ToolDefinition
+	executeFn func(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error)
+}
+
+func (m *mockToolExecutorFunc) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	return m.executeFn(ctx, call)
+}
+
+func (m *mockToolExecutorFunc) ListTools(_ context.Context) ([]agent.ToolDefinition, error) {
 	return m.tools, nil
 }
 

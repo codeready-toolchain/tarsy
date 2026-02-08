@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -103,12 +105,15 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 		ctx := context.Background()
 		t.Log("Starting shared PostgreSQL testcontainer for all tests")
 
+		// Resolve init script path relative to this source file (works from any package)
+		initScriptPath := resolveInitScriptPath()
+
 		pgContainer, err := postgres.Run(ctx,
 			"postgres:16-alpine",
 			postgres.WithDatabase("test"),
 			postgres.WithUsername("test"),
 			postgres.WithPassword("test"),
-			postgres.WithInitScripts("../../deploy/postgres-init/01-init.sql"),
+			postgres.WithInitScripts(initScriptPath),
 			testcontainers.WithWaitStrategy(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
@@ -172,4 +177,13 @@ func addSearchPathToConnString(connStr, schemaName string) string {
 		separator = "&"
 	}
 	return fmt.Sprintf("%s%ssearch_path=%s", connStr, separator, schemaName)
+}
+
+// resolveInitScriptPath returns the absolute path to the postgres init script.
+// Uses runtime.Caller to resolve relative to this source file, so it works
+// regardless of which package's test is running.
+func resolveInitScriptPath() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile))) // test/util/ → test/ → project root
+	return filepath.Join(projectRoot, "deploy", "postgres-init", "01-init.sql")
 }
