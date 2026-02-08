@@ -39,6 +39,9 @@ var (
 	midlineActionInputPattern = regexp.MustCompile(`[.!?][\x60\s*]*Action Input:`)
 	// server.tool format validation
 	toolNamePattern = regexp.MustCompile(`^([\w\-]+)\.([\w\-]+)$`)
+	// Recovery patterns for recoverMissingAction (compiled once)
+	recoverActionColonPattern = regexp.MustCompile(`(?i)\bAction:`)
+	recoverActionWordPattern  = regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
 )
 
 // ParseReActResponse parses LLM text output into a structured ReAct response.
@@ -77,7 +80,12 @@ func ParseReActResponse(text string) *ParsedReActResponse {
 			}
 		}
 
-		// Check if the action matches server.tool format
+		// Quick-reject: tool name must contain at least one dot.
+		// This is intentionally looser than toolNamePattern (which enforces strict
+		// ^server.tool$ format). Names like ".tool" or "a.b.c" pass here and are
+		// handed to the controller's tool-name-set lookup for final validation.
+		// This two-tier approach avoids giving a misleading "must be server.tool
+		// format" error for names that almost match the format.
 		if !strings.Contains(action, ".") {
 			return &ParsedReActResponse{
 				IsUnknownTool: true,
@@ -420,8 +428,7 @@ func recoverMissingAction(response string) string {
 	textBefore := response[:actionInputIdx]
 
 	// Try "Action:" first (more specific)
-	actionColonPattern := regexp.MustCompile(`(?i)\bAction:`)
-	matches := actionColonPattern.FindAllStringIndex(textBefore, -1)
+	matches := recoverActionColonPattern.FindAllStringIndex(textBefore, -1)
 	if len(matches) > 0 {
 		lastMatch := matches[len(matches)-1]
 		potential := strings.TrimSpace(textBefore[lastMatch[1]:])
@@ -431,8 +438,7 @@ func recoverMissingAction(response string) string {
 	}
 
 	// Try "Action" without colon
-	actionWordPattern := regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
-	matches = actionWordPattern.FindAllStringIndex(textBefore, -1)
+	matches = recoverActionWordPattern.FindAllStringIndex(textBefore, -1)
 	if len(matches) > 0 {
 		lastMatch := matches[len(matches)-1]
 		potential := strings.TrimSpace(textBefore[lastMatch[1]:])
@@ -485,9 +491,11 @@ func GetFormatErrorFeedback(parsed *ParsedReActResponse) string {
 		specificError = "FORMAT ERROR: Could not detect any ReAct sections in your response.\n" +
 			"Your response must use the exact format: \"Thought:\", \"Action:\", \"Action Input:\", or \"Final Answer:\""
 	default:
+		// Use ordered keys for deterministic output (Go map iteration is unordered).
+		keys := []string{"thought", "action", "action_input", "final_answer"}
 		var foundList, missingList []string
-		for k, v := range found {
-			if v {
+		for _, k := range keys {
+			if found[k] {
 				foundList = append(foundList, k)
 			} else {
 				missingList = append(missingList, k)

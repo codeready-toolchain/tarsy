@@ -197,7 +197,7 @@ func TestParseReActResponse_Malformed(t *testing.T) {
 	}
 }
 
-func TestParseReActResponse_ActionPreferedOverFinalAnswer(t *testing.T) {
+func TestParseReActResponse_ActionPreferredOverFinalAnswer(t *testing.T) {
 	// When both Action+ActionInput and Final Answer exist, prefer Action
 	input := "Thought: Let me check.\nAction: server.tool\nAction Input: {}\nFinal Answer: Done."
 	parsed := ParseReActResponse(input)
@@ -261,7 +261,7 @@ func TestFormatUnknownToolError(t *testing.T) {
 		}
 		// Should handle empty tools gracefully
 		if !strings.Contains(msg, "No tools") && !strings.Contains(msg, "Available tools") {
-			t.Logf("Message for empty tools: %s", msg)
+			t.Errorf("Message for empty tools should contain \"No tools\" or \"Available tools\", got: %s", msg)
 		}
 	})
 }
@@ -457,7 +457,6 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         string
-		shouldStop    bool
 		wantAction    bool
 		wantThought   string
 		wantNoThought bool
@@ -465,29 +464,23 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 		{
 			name:        "stop on [Based on",
 			input:       "Thought: Check.\nAction: server.tool\nAction Input: {}\n[Based on the above information...",
-			shouldStop:  true,
 			wantAction:  true,
 			wantThought: "Check.",
 		},
 		{
 			name:       "stop on Observation: with result",
 			input:      "Thought: Check.\nAction: server.tool\nAction Input: {}\nObservation: {\"pods\": []}",
-			shouldStop: true,
 			wantAction: true,
 		},
 		{
-			name:          "don't stop on continuation prompt with 'Please specify'",
-			input:         "Thought: Thinking.\nObservation: Please specify what Action you want to take.\nFinal Answer: Done.",
-			shouldStop:    false,
-			wantAction:    false,
-			wantNoThought: false,
+			name:   "don't stop on continuation prompt with 'Please specify'",
+			input:  "Thought: Thinking.\nObservation: Please specify what Action you want to take.\nFinal Answer: Done.",
+			wantAction: false,
 		},
 		{
-			name:          "don't stop on 'Error in reasoning' observation",
-			input:         "Thought: Thinking.\nObservation: Error in reasoning - try again.\nFinal Answer: Done.",
-			shouldStop:    false,
-			wantAction:    false,
-			wantNoThought: false,
+			name:   "don't stop on 'Error in reasoning' observation",
+			input:  "Thought: Thinking.\nObservation: Error in reasoning - try again.\nFinal Answer: Done.",
+			wantAction: false,
 		},
 	}
 
@@ -500,6 +493,9 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 			}
 			if tt.wantThought != "" && parsed.Thought != tt.wantThought {
 				t.Errorf("Thought = %q, want %q", parsed.Thought, tt.wantThought)
+			}
+			if tt.wantNoThought && parsed.Thought != "" {
+				t.Errorf("expected no Thought, got %q", parsed.Thought)
 			}
 		})
 	}
@@ -831,6 +827,11 @@ func TestParseReActResponse_ToolNameValidation(t *testing.T) {
 			wantUnknown: true,
 		},
 		{
+			// ParseReActResponse uses a loose dot-check (strings.Contains) to decide
+			// IsUnknownTool, while validateToolName uses the strict toolNamePattern
+			// regex (^[\w\-]+\.[\w\-]+$). This means ".tool" passes the parser's
+			// dot-check but would fail validateToolName. The controller's tool-name-set
+			// lookup handles final validation for these edge cases.
 			name:        "tool with dot at start - parser accepts any string with dot",
 			input:       "Action: .tool\nAction Input: {}",
 			wantAction:  true,
@@ -994,6 +995,25 @@ func TestGetFormatErrorFeedback_Comprehensive(t *testing.T) {
 				},
 			},
 			wantContains: []string{"Could not detect any ReAct sections", "FORMAT ERROR"},
+		},
+		{
+			// Exercises the default branch (thought+final_answer without action).
+			// Verifies deterministic ordering of Found/Missing lists.
+			name: "default branch - deterministic ordering",
+			parsed: &ParsedReActResponse{
+				IsMalformed: true,
+				FoundSections: map[string]bool{
+					"thought":      true,
+					"action":       false,
+					"action_input": false,
+					"final_answer": true,
+				},
+			},
+			wantContains: []string{
+				"Incomplete ReAct format",
+				"Found: thought, final_answer",
+				"Missing: action, action_input",
+			},
 		},
 	}
 

@@ -196,7 +196,11 @@ func (c *ReActController) forceConclusion(
 
 	startTime := time.Now()
 
-	resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+	// Apply same iteration timeout as the main loop to prevent indefinite hangs
+	conclusionCtx, conclusionCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
+	defer conclusionCancel()
+
+	resp, err := callLLM(conclusionCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
@@ -213,12 +217,17 @@ func (c *ReActController) forceConclusion(
 	}
 
 	accumulateUsage(totalUsage, resp)
-	assistantMsg, _ := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
-	var msgID *string
-	if assistantMsg != nil {
-		msgID = &assistantMsg.ID
+	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
+	if storeErr != nil {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError,
+			fmt.Sprintf("failed to store forced conclusion message: %v", storeErr), nil, eventSeq)
+		return &agent.ExecutionResult{
+			Status:     agent.ExecutionStatusFailed,
+			Error:      fmt.Errorf("failed to store forced conclusion message: %w", storeErr),
+			TokensUsed: *totalUsage,
+		}, nil
 	}
-	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, msgID, startTime)
+	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, &assistantMsg.ID, startTime)
 
 	// Parse forced conclusion — may or may not have ReAct format
 	parsed := ParseReActResponse(resp.Text)

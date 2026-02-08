@@ -106,7 +106,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [x] Basic single-call controller for validation
 
 **3.2: Iteration Controllers (Go)** ✅ — See `docs/phase3-iteration-controllers-design.md`
-- **Design Phase**: 🔄 In Progress — See `docs/phase3-iteration-controllers-design.md` and `docs/phase3-iteration-controllers-questions.md`
+- **Design Phase**: ✅ Complete — See `docs/phase3-iteration-controllers-design.md` and `docs/phase3-iteration-controllers-questions.md`
 - [x] ReAct controller (text-based tool parsing, observation loop)
 - [x] Native thinking controller (Gemini function calling, structured tool calls)
 - ~~Stage controller variants (react-stage, react-final-analysis) — dropped, never used in old TARSy production. Strategy pattern allows adding new controllers later if needed.~~

@@ -125,7 +125,10 @@ func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
 }
 
 func TestNativeThinkingController_ThinkingContent(t *testing.T) {
-	// Verify thinking content is recorded
+	// Verify thinking content is processed without error and the LLM receives
+	// the thinking chunk. Timeline event verification would require querying the
+	// DB for the event (the mock executor doesn't expose recorded events), so we
+	// verify the LLM was called and completed successfully with thinking input.
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -143,6 +146,20 @@ func TestNativeThinkingController_ThinkingContent(t *testing.T) {
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "The system appears to be functioning normally.", result.FinalAnalysis)
+	require.Equal(t, 1, llm.callCount, "LLM should be called exactly once for thinking+text response")
+
+	// Verify thinking content was persisted as a timeline event by querying the DB
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundThinking := false
+	for _, ev := range events {
+		if ev.EventType == "llm_thinking" && strings.Contains(ev.Content, "I need to analyze this carefully") {
+			foundThinking = true
+			break
+		}
+	}
+	require.True(t, foundThinking, "thinking content should be recorded as a timeline event")
 }
 
 func TestNativeThinkingController_ToolExecutionError(t *testing.T) {

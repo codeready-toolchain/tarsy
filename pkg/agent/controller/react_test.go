@@ -146,6 +146,8 @@ func TestReActController_MalformedResponse(t *testing.T) {
 }
 
 func TestReActController_MaxIterationsForceConclusion(t *testing.T) {
+	// 5 tool-call responses consumed by the main loop (iterations 0-4)
+	// + 1 forced-conclusion response consumed by forceConclusion after the loop.
 	var responses []mockLLMResponse
 	for i := 0; i < 5; i++ {
 		responses = append(responses, mockLLMResponse{
@@ -154,7 +156,7 @@ func TestReActController_MaxIterationsForceConclusion(t *testing.T) {
 			},
 		})
 	}
-	// Forced conclusion response
+	// Forced conclusion response (consumed by forceConclusion after the loop ends)
 	responses = append(responses, mockLLMResponse{
 		chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Thought: Based on what I know.\nFinal Answer: System appears healthy."},
@@ -361,6 +363,9 @@ type mockLLMResponse struct {
 }
 
 // mockLLMClient is a test mock for agent.LLMClient.
+// NOTE: Not safe for concurrent use — callCount and lastInput are mutated
+// without synchronization. This is fine as long as controllers call Generate
+// sequentially (which they currently do).
 type mockLLMClient struct {
 	responses []mockLLMResponse
 	callCount int
@@ -441,7 +446,7 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 	sessionID := uuid.New().String()
 	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).
-		SetAlertData("Test alert: CPU high").
+		SetAlertData("Test alert: CPU high on prod-server-1").
 		SetAgentType("test-agent").
 		SetAlertType("test-alert").
 		SetChainID("test-chain").

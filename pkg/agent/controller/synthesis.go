@@ -58,19 +58,34 @@ func (c *SynthesisController) Run(
 		}, &eventSeq)
 	}
 
-	// 5. Record final analysis
-	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, &eventSeq)
+	// 5. Compute final analysis with fallback to thinking text when resp.Text is empty
+	// (e.g., when the LLM only produced ThinkingChunks)
+	finalAnalysis := resp.Text
+	if finalAnalysis == "" && resp.ThinkingText != "" {
+		finalAnalysis = resp.ThinkingText
+	}
 
-	// 6. Store assistant message and LLM interaction
-	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+	// 6. Record final analysis
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnalysis, nil, &eventSeq)
+
+	// 7. Store assistant message and LLM interaction
+	// Use finalAnalysis for storage so the persisted message reflects the fallback
+	storeResp := resp
+	if resp.Text == "" && finalAnalysis != "" {
+		// Create a shallow copy with the fallback text so the stored message isn't empty
+		respCopy := *resp
+		respCopy.Text = finalAnalysis
+		storeResp = &respCopy
+	}
+	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, storeResp, &msgSeq)
 	if storeErr != nil {
 		return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
 	}
-	recordLLMInteraction(ctx, execCtx, 1, "synthesis", len(messages), resp, &assistantMsg.ID, startTime)
+	recordLLMInteraction(ctx, execCtx, 1, "synthesis", len(messages), storeResp, &assistantMsg.ID, startTime)
 
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,
-		FinalAnalysis: resp.Text,
+		FinalAnalysis: finalAnalysis,
 		TokensUsed:    tokenUsageFromResp(resp),
 	}, nil
 }

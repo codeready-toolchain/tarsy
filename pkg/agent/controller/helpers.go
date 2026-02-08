@@ -96,6 +96,8 @@ func accumulateUsage(total *agent.TokenUsage, resp *LLMResponse) {
 }
 
 // recordLLMInteraction creates an LLMInteraction debug record in the database.
+// This is best-effort observability — callers intentionally ignore the returned error
+// because a failure to record an interaction should never abort the investigation loop.
 func recordLLMInteraction(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -141,6 +143,11 @@ func recordLLMInteraction(
 // createTimelineEvent creates a new timeline event with content.
 // In Phase 3.2, events are always created with their final content
 // (after the LLM response is fully collected and parsed).
+//
+// Best-effort: callers intentionally ignore both return values because timeline
+// events are non-critical observability data — a failure to record one should
+// never abort the investigation loop. The same applies to createToolCallEvent
+// and createToolResultEvent below.
 func createTimelineEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,

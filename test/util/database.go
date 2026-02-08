@@ -183,7 +183,10 @@ func addSearchPathToConnString(connStr, schemaName string) string {
 // Uses runtime.Caller to resolve relative to this source file, so it works
 // regardless of which package's test is running.
 func resolveInitScriptPath() string {
-	_, thisFile, _, _ := runtime.Caller(0)
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("resolveInitScriptPath: runtime.Caller(0) failed")
+	}
 	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile))) // test/util/ → test/ → project root
 	return filepath.Join(projectRoot, "deploy", "postgres-init", "01-init.sql")
 }
