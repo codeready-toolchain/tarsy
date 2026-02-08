@@ -21,16 +21,16 @@ func NewFactory() *Factory {
 func (f *Factory) CreateController(strategy config.IterationStrategy, execCtx *agent.ExecutionContext) (agent.Controller, error) {
 	switch strategy {
 	case "":
-		// Empty string defaults to single-call controller (Phase 3.1)
-		return NewSingleCallController(), nil
+		return nil, fmt.Errorf("iteration strategy is required (must be one of: react, native-thinking, synthesis, synthesis-native-thinking)")
 	case config.IterationStrategyReact:
-		return nil, fmt.Errorf("react controller not yet implemented (Phase 3.2)")
+		return NewReActController(), nil
 	case config.IterationStrategyNativeThinking:
-		return nil, fmt.Errorf("native thinking controller not yet implemented (Phase 3.2)")
+		return NewNativeThinkingController(), nil
 	case config.IterationStrategySynthesis:
-		return nil, fmt.Errorf("synthesis controller not yet implemented (Phase 3.2)")
+		return NewSynthesisController(), nil
 	case config.IterationStrategySynthesisNativeThinking:
-		return nil, fmt.Errorf("synthesis-native-thinking controller not yet implemented (Phase 3.2)")
+		// Same controller — backend difference handled by LLMProviderConfig
+		return NewSynthesisController(), nil
 	default:
 		return nil, fmt.Errorf("unknown iteration strategy: %q", strategy)
 	}

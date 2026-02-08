@@ -2,11 +2,18 @@ package agent
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
 const DefaultMaxIterations = 20
+
+// DefaultIterationTimeout is the default per-iteration timeout.
+// Each iteration (LLM call + tool execution) gets its own context.WithTimeout
+// derived from the parent session context. This prevents a single stuck
+// iteration from consuming the entire session budget.
+const DefaultIterationTimeout = 120 * time.Second
 
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
@@ -90,6 +97,7 @@ func ResolveAgentConfig(
 		IterationStrategy:  strategy,
 		LLMProvider:        provider,
 		MaxIterations:      maxIter,
+		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 	}, nil

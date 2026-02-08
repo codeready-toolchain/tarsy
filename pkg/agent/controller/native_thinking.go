@@ -1,0 +1,265 @@
+package controller
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
+)
+
+// NativeThinkingController implements the Gemini native function calling loop.
+// Tool calls come as structured ToolCallChunk values (not parsed from text).
+// Completion signal: a response without any ToolCalls.
+type NativeThinkingController struct{}
+
+// NewNativeThinkingController creates a new native thinking controller.
+func NewNativeThinkingController() *NativeThinkingController {
+	return &NativeThinkingController{}
+}
+
+// Run executes the native thinking iteration loop.
+func (c *NativeThinkingController) Run(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	prevStageContext string,
+) (*agent.ExecutionResult, error) {
+	maxIter := execCtx.Config.MaxIterations
+	totalUsage := agent.TokenUsage{}
+	state := &agent.IterationState{MaxIterations: maxIter}
+	msgSeq := 0
+	eventSeq := 0
+
+	// 1. Build initial conversation
+	messages := c.buildMessages(execCtx, prevStageContext)
+
+	// 2. Store initial messages in DB
+	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
+		return nil, err
+	}
+
+	// 3. Get available tools
+	tools, err := execCtx.ToolExecutor.ListTools(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tools: %w", err)
+	}
+
+	// Main iteration loop
+	for iteration := 0; iteration < maxIter; iteration++ {
+		state.CurrentIteration = iteration + 1
+
+		if state.ShouldAbortOnTimeouts() {
+			return failedResult(state, totalUsage), nil
+		}
+
+		iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
+		startTime := time.Now()
+
+		// Call LLM WITH tools (native function calling)
+		resp, err := callLLM(iterCtx, execCtx.LLMClient, &agent.GenerateInput{
+			SessionID:   execCtx.SessionID,
+			ExecutionID: execCtx.ExecutionID,
+			Messages:    messages,
+			Config:      execCtx.Config.LLMProvider,
+			Tools:       tools, // Tools bound for native calling
+		})
+
+		if err != nil {
+			iterCancel()
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
+			state.RecordFailure(err.Error(), isTimeoutError(err))
+
+			// Add error context as user message
+			errMsg := fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
+			messages = append(messages, agent.ConversationMessage{Role: "user", Content: errMsg})
+			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
+			continue
+		}
+
+		accumulateUsage(&totalUsage, resp)
+		state.RecordSuccess()
+
+		// Record thinking content
+		if resp.ThinkingText != "" {
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
+				"source": "native",
+			}, &eventSeq)
+		}
+
+		// Check for tool calls in response
+		if len(resp.ToolCalls) > 0 {
+			// Record text alongside tool calls (if any)
+			if resp.Text != "" {
+				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmResponse, resp.Text, nil, &eventSeq)
+			}
+
+			// Store assistant message WITH tool calls
+			assistantMsg, storeErr := storeAssistantMessageWithToolCalls(ctx, execCtx, resp, &msgSeq)
+			if storeErr != nil {
+				iterCancel()
+				return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
+			}
+			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+
+			// Append assistant message to conversation
+			messages = append(messages, agent.ConversationMessage{
+				Role:      "assistant",
+				Content:   resp.Text,
+				ToolCalls: resp.ToolCalls,
+			})
+
+			// Execute each tool call and append results
+			for _, tc := range resp.ToolCalls {
+				createToolCallEvent(ctx, execCtx, tc.Name, tc.Arguments, &eventSeq)
+
+				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, tc)
+				if toolErr != nil {
+					// Tool execution failed
+					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
+					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
+					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
+
+					// Append error as tool result message
+					messages = append(messages, agent.ConversationMessage{
+						Role:       "tool",
+						Content:    errContent,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Name,
+					})
+					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
+				} else {
+					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
+
+					// Append result as tool result message
+					messages = append(messages, agent.ConversationMessage{
+						Role:       "tool",
+						Content:    result.Content,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Name,
+					})
+					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
+				}
+			}
+		} else {
+			// No tool calls — this is the final answer
+			assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+			if storeErr != nil {
+				iterCancel()
+				return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
+			}
+			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, &eventSeq)
+
+			iterCancel()
+			return &agent.ExecutionResult{
+				Status:        agent.ExecutionStatusCompleted,
+				FinalAnalysis: resp.Text,
+				TokensUsed:    totalUsage,
+			}, nil
+		}
+
+		iterCancel()
+	}
+
+	// Max iterations — force conclusion (call LLM WITHOUT tools)
+	return c.forceConclusion(ctx, execCtx, messages, &totalUsage, state, &msgSeq, &eventSeq)
+}
+
+// forceConclusion forces the LLM to produce a final answer by calling without tools.
+func (c *NativeThinkingController) forceConclusion(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	messages []agent.ConversationMessage,
+	totalUsage *agent.TokenUsage,
+	state *agent.IterationState,
+	msgSeq *int,
+	eventSeq *int,
+) (*agent.ExecutionResult, error) {
+	if state.LastInteractionFailed {
+		return &agent.ExecutionResult{
+			Status: agent.ExecutionStatusFailed,
+			Error: fmt.Errorf("max iterations (%d) reached with last interaction failed: %s",
+				state.MaxIterations, state.LastErrorMessage),
+			TokensUsed: *totalUsage,
+		}, nil
+	}
+
+	// Append forced conclusion prompt
+	conclusionPrompt := buildForcedConclusionPrompt(state.CurrentIteration)
+	messages = append(messages, agent.ConversationMessage{Role: "user", Content: conclusionPrompt})
+	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
+
+	startTime := time.Now()
+
+	// Call LLM WITHOUT tools — forces text-only response
+	resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+		SessionID:   execCtx.SessionID,
+		ExecutionID: execCtx.ExecutionID,
+		Messages:    messages,
+		Config:      execCtx.Config.LLMProvider,
+		Tools:       nil, // No tools — force conclusion
+	})
+	if err != nil {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
+		return &agent.ExecutionResult{
+			Status:     agent.ExecutionStatusFailed,
+			Error:      fmt.Errorf("forced conclusion LLM call failed: %w", err),
+			TokensUsed: *totalUsage,
+		}, nil
+	}
+
+	accumulateUsage(totalUsage, resp)
+	assistantMsg, _ := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
+	var msgID *string
+	if assistantMsg != nil {
+		msgID = &assistantMsg.ID
+	}
+	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, msgID, startTime)
+
+	if resp.ThinkingText != "" {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
+			"source": "native",
+		}, eventSeq)
+	}
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, eventSeq)
+
+	return &agent.ExecutionResult{
+		Status:        agent.ExecutionStatusCompleted,
+		FinalAnalysis: resp.Text,
+		TokensUsed:    *totalUsage,
+	}, nil
+}
+
+// buildMessages creates the initial conversation for a native thinking investigation.
+// Phase 3.3 will replace this with the prompt builder.
+func (c *NativeThinkingController) buildMessages(
+	execCtx *agent.ExecutionContext,
+	prevStageContext string,
+) []agent.ConversationMessage {
+	messages := []agent.ConversationMessage{
+		{
+			Role: "system",
+			Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s",
+				execCtx.AgentName, execCtx.Config.CustomInstructions),
+		},
+	}
+
+	var userContent strings.Builder
+	if prevStageContext != "" {
+		userContent.WriteString("Previous investigation context:\n")
+		userContent.WriteString(prevStageContext)
+		userContent.WriteString("\n\nContinue the investigation based on the alert below.\n\n")
+	}
+	userContent.WriteString("## Alert Data\n\n")
+	userContent.WriteString(execCtx.AlertData)
+
+	messages = append(messages, agent.ConversationMessage{
+		Role:    "user",
+		Content: userContent.String(),
+	})
+
+	return messages
+}

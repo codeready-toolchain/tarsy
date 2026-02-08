@@ -121,14 +121,15 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 	// 6. Build execution context
 	execCtx := &agent.ExecutionContext{
-		SessionID:   session.ID,
-		StageID:     stg.ID,
-		ExecutionID: exec.ID,
-		AgentName:   agentConfig.Name,
-		AgentIndex:  1,
-		AlertData:   session.AlertData,
-		Config:      resolvedConfig,
-		LLMClient:   e.llmClient,
+		SessionID:    session.ID,
+		StageID:      stg.ID,
+		ExecutionID:  exec.ID,
+		AgentName:    agentConfig.Name,
+		AgentIndex:   1,
+		AlertData:    session.AlertData,
+		Config:       resolvedConfig,
+		LLMClient:    e.llmClient,
+		ToolExecutor: agent.NewStubToolExecutor(nil), // Phase 3.2 stub; Phase 4: MCP client
 		Services: &agent.ServiceBundle{
 			Timeline:    timelineService,
 			Message:     messageService,
