@@ -43,7 +43,7 @@ func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMes
 	// Content is required for most messages, but assistant messages that
 	// contain tool calls can legally have empty content (the LLM responds
 	// with only tool invocations and no accompanying text).
-	if req.Content == "" && !(req.Role == message.RoleAssistant && len(req.ToolCalls) > 0) {
+	if req.Content == "" && (req.Role != message.RoleAssistant || len(req.ToolCalls) <= 0) {
 		return nil, NewValidationError("content", "required")
 	}
 
