@@ -9,6 +9,14 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
+// MessageToolCall represents a single tool call in an assistant message.
+// Stored as JSON in the tool_calls column.
+type MessageToolCall struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
 // Message holds the schema definition for the Message entity (Layer 2).
 // LLM conversation history (LLM context building).
 type Message struct {
@@ -35,9 +43,23 @@ func (Message) Fields() []ent.Field {
 		field.Int("sequence_number").
 			Comment("Execution-scoped order"),
 		field.Enum("role").
-			Values("system", "user", "assistant"),
+			Values("system", "user", "assistant", "tool"),
 		field.Text("content").
 			Comment("Message text"),
+
+		// Tool-related fields for native function calling (Phase 3.1)
+		field.JSON("tool_calls", []MessageToolCall{}).
+			Optional().
+			Comment("For assistant messages: tool calls requested by LLM"),
+		field.String("tool_call_id").
+			Optional().
+			Nillable().
+			Comment("For tool messages: links result to the original tool call"),
+		field.String("tool_name").
+			Optional().
+			Nillable().
+			Comment("For tool messages: name of the tool that was called"),
+
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),

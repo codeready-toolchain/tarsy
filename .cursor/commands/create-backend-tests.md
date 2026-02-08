@@ -1,12 +1,21 @@
-# Writing Tests for New Functionality
+# Writing Tests for Go Backend
 
 ## Running Tests
 
-- **All tests**: `make test`
-- **Coverage**: `make test-coverage`
+### From Project Root
+
+**All tests:**
+- `make test` - Run all tests (Go + Python + Dashboard)
+- `make test-go` - Run all Go tests only
+- `make test-go-coverage` - Run Go tests and open HTML coverage report
+
+### Direct Go Commands
+
 - **Specific package**: `go test ./pkg/queue/... -v`
 - **Specific test**: `go test ./pkg/api -run TestExtractAuthor -v`
-- **Race detector**: `go test -race ./...` (use for concurrent code)
+- **With coverage**: `go test -v -race -coverprofile=coverage.out ./...`
+- **Race detector**: `go test -race ./...` (always use for concurrent code)
+- **Show coverage**: `go tool cover -html=coverage.out`
 
 ## Critical Rules
 
@@ -29,21 +38,27 @@ New tests are done ONLY when they ALL pass 100%. Don't leave failing tests. If a
 DO NOT create summary documents, README files, or any markdown documentation files (like test coverage summaries, test reports, etc.) unless the user explicitly asks for them. Focus exclusively on creating the actual test code.
 
 
+## Test Organization
+
+- **Unit tests**: `*_test.go` - Fast, mocked, no external dependencies
+- **Integration tests**: `*_integration_test.go` - Real database, slower, comprehensive
+
 ## Project Conventions
 
 - **Test assertions**: Use `testify/assert` (non-fatal) and `testify/require` (fatal)
 - **Table-driven tests**: Preferred for multiple similar cases with `t.Run()` subtests
 - **Test helpers**: Always mark with `t.Helper()`
 - **Cleanup**: Use `t.Cleanup()` for resource cleanup
-- **Unit tests**: `*_test.go` alongside the code
-- **Integration tests**: `*_integration_test.go` with real database via `testdb.NewTestClient(t)`
-- **Test database**: Uses `DATABASE_URL_TEST` env var
+- **Test database**: Uses `DATABASE_URL_TEST` env var (via `testdb.NewTestClient(t)`)
+- **Race detection**: Always use `-race` flag when testing concurrent code
 
-Look at existing tests for patterns:
-- Table-driven unit tests: `pkg/config/validator_test.go`, `pkg/api/auth_test.go`
-- Worker unit tests: `pkg/queue/worker_test.go`
-- Database integration tests: `pkg/queue/integration_test.go`
-- Concurrent behavior tests: `pkg/queue/integration_test.go`
+### Existing Test Patterns
+
+- **Table-driven unit tests**: `pkg/config/validator_test.go`, `pkg/api/auth_test.go`
+- **Worker unit tests**: `pkg/queue/worker_test.go`
+- **Service integration tests**: `pkg/services/integration_test.go`
+- **Database integration tests**: `pkg/queue/integration_test.go`
+- **Concurrent behavior tests**: `pkg/queue/integration_test.go`
 
 ## Approach
 

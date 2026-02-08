@@ -1,5 +1,6 @@
 """gRPC server entry point for LLM service."""
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
@@ -10,6 +11,13 @@ from dotenv import load_dotenv
 from proto import llm_service_pb2_grpc as pb_grpc
 from llm.servicer import LLMServicer
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 
 async def serve(port: int = 50051):
     """Start the gRPC server."""
@@ -17,35 +25,32 @@ async def serve(port: int = 50051):
     env_path = Path(__file__).parent.parent.parent / "deploy" / ".env"
     if env_path.exists():
         load_dotenv(env_path)
-        print(f"Loaded environment variables from {env_path}")
+        logger.info("Loaded environment variables from %s", env_path)
     else:
-        print(f"Warning: .env file not found at {env_path}")
-        print("Continuing with existing environment variables...")
-    
-    print(f"Starting LLM gRPC server on port {port}")
-    print("Credentials will be resolved per-request from environment variables")
-    
+        logger.warning(".env file not found at %s", env_path)
+
+    logger.info("Starting LLM gRPC server on port %d", port)
+
     # Create gRPC server
     server = grpc.aio.server()
-    
-    # Add servicer (no hardcoded credentials)
+
+    # Add servicer
     servicer = LLMServicer()
     pb_grpc.add_LLMServiceServicer_to_server(servicer, server)
-    
+
     # Bind port
     server.add_insecure_port(f"[::]:{port}")
-    
+
     # Start server
     await server.start()
-    print(f"LLM gRPC server listening on port {port}")
-    
+    logger.info("LLM gRPC server listening on port %d", port)
+
     # Wait for termination
     await server.wait_for_termination()
 
 
 def main():
     """Main entry point."""
-    # Get port from environment (loaded from .env in serve())
     port = int(os.getenv("GRPC_PORT", "50051"))
     asyncio.run(serve(port))
 

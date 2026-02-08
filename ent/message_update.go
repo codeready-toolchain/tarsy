@@ -9,10 +9,12 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 )
 
 // MessageUpdate is the builder for updating Message entities.
@@ -74,6 +76,64 @@ func (_u *MessageUpdate) SetNillableContent(v *string) *MessageUpdate {
 	if v != nil {
 		_u.SetContent(*v)
 	}
+	return _u
+}
+
+// SetToolCalls sets the "tool_calls" field.
+func (_u *MessageUpdate) SetToolCalls(v []schema.MessageToolCall) *MessageUpdate {
+	_u.mutation.SetToolCalls(v)
+	return _u
+}
+
+// AppendToolCalls appends value to the "tool_calls" field.
+func (_u *MessageUpdate) AppendToolCalls(v []schema.MessageToolCall) *MessageUpdate {
+	_u.mutation.AppendToolCalls(v)
+	return _u
+}
+
+// ClearToolCalls clears the value of the "tool_calls" field.
+func (_u *MessageUpdate) ClearToolCalls() *MessageUpdate {
+	_u.mutation.ClearToolCalls()
+	return _u
+}
+
+// SetToolCallID sets the "tool_call_id" field.
+func (_u *MessageUpdate) SetToolCallID(v string) *MessageUpdate {
+	_u.mutation.SetToolCallID(v)
+	return _u
+}
+
+// SetNillableToolCallID sets the "tool_call_id" field if the given value is not nil.
+func (_u *MessageUpdate) SetNillableToolCallID(v *string) *MessageUpdate {
+	if v != nil {
+		_u.SetToolCallID(*v)
+	}
+	return _u
+}
+
+// ClearToolCallID clears the value of the "tool_call_id" field.
+func (_u *MessageUpdate) ClearToolCallID() *MessageUpdate {
+	_u.mutation.ClearToolCallID()
+	return _u
+}
+
+// SetToolName sets the "tool_name" field.
+func (_u *MessageUpdate) SetToolName(v string) *MessageUpdate {
+	_u.mutation.SetToolName(v)
+	return _u
+}
+
+// SetNillableToolName sets the "tool_name" field if the given value is not nil.
+func (_u *MessageUpdate) SetNillableToolName(v *string) *MessageUpdate {
+	if v != nil {
+		_u.SetToolName(*v)
+	}
+	return _u
+}
+
+// ClearToolName clears the value of the "tool_name" field.
+func (_u *MessageUpdate) ClearToolName() *MessageUpdate {
+	_u.mutation.ClearToolName()
 	return _u
 }
 
@@ -188,6 +248,29 @@ func (_u *MessageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(message.FieldContent, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ToolCalls(); ok {
+		_spec.SetField(message.FieldToolCalls, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedToolCalls(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, message.FieldToolCalls, value)
+		})
+	}
+	if _u.mutation.ToolCallsCleared() {
+		_spec.ClearField(message.FieldToolCalls, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ToolCallID(); ok {
+		_spec.SetField(message.FieldToolCallID, field.TypeString, value)
+	}
+	if _u.mutation.ToolCallIDCleared() {
+		_spec.ClearField(message.FieldToolCallID, field.TypeString)
+	}
+	if value, ok := _u.mutation.ToolName(); ok {
+		_spec.SetField(message.FieldToolName, field.TypeString, value)
+	}
+	if _u.mutation.ToolNameCleared() {
+		_spec.ClearField(message.FieldToolName, field.TypeString)
+	}
 	if _u.mutation.LlmInteractionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -299,6 +382,64 @@ func (_u *MessageUpdateOne) SetNillableContent(v *string) *MessageUpdateOne {
 	if v != nil {
 		_u.SetContent(*v)
 	}
+	return _u
+}
+
+// SetToolCalls sets the "tool_calls" field.
+func (_u *MessageUpdateOne) SetToolCalls(v []schema.MessageToolCall) *MessageUpdateOne {
+	_u.mutation.SetToolCalls(v)
+	return _u
+}
+
+// AppendToolCalls appends value to the "tool_calls" field.
+func (_u *MessageUpdateOne) AppendToolCalls(v []schema.MessageToolCall) *MessageUpdateOne {
+	_u.mutation.AppendToolCalls(v)
+	return _u
+}
+
+// ClearToolCalls clears the value of the "tool_calls" field.
+func (_u *MessageUpdateOne) ClearToolCalls() *MessageUpdateOne {
+	_u.mutation.ClearToolCalls()
+	return _u
+}
+
+// SetToolCallID sets the "tool_call_id" field.
+func (_u *MessageUpdateOne) SetToolCallID(v string) *MessageUpdateOne {
+	_u.mutation.SetToolCallID(v)
+	return _u
+}
+
+// SetNillableToolCallID sets the "tool_call_id" field if the given value is not nil.
+func (_u *MessageUpdateOne) SetNillableToolCallID(v *string) *MessageUpdateOne {
+	if v != nil {
+		_u.SetToolCallID(*v)
+	}
+	return _u
+}
+
+// ClearToolCallID clears the value of the "tool_call_id" field.
+func (_u *MessageUpdateOne) ClearToolCallID() *MessageUpdateOne {
+	_u.mutation.ClearToolCallID()
+	return _u
+}
+
+// SetToolName sets the "tool_name" field.
+func (_u *MessageUpdateOne) SetToolName(v string) *MessageUpdateOne {
+	_u.mutation.SetToolName(v)
+	return _u
+}
+
+// SetNillableToolName sets the "tool_name" field if the given value is not nil.
+func (_u *MessageUpdateOne) SetNillableToolName(v *string) *MessageUpdateOne {
+	if v != nil {
+		_u.SetToolName(*v)
+	}
+	return _u
+}
+
+// ClearToolName clears the value of the "tool_name" field.
+func (_u *MessageUpdateOne) ClearToolName() *MessageUpdateOne {
+	_u.mutation.ClearToolName()
 	return _u
 }
 
@@ -442,6 +583,29 @@ func (_u *MessageUpdateOne) sqlSave(ctx context.Context) (_node *Message, err er
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(message.FieldContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ToolCalls(); ok {
+		_spec.SetField(message.FieldToolCalls, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedToolCalls(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, message.FieldToolCalls, value)
+		})
+	}
+	if _u.mutation.ToolCallsCleared() {
+		_spec.ClearField(message.FieldToolCalls, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ToolCallID(); ok {
+		_spec.SetField(message.FieldToolCallID, field.TypeString, value)
+	}
+	if _u.mutation.ToolCallIDCleared() {
+		_spec.ClearField(message.FieldToolCallID, field.TypeString)
+	}
+	if value, ok := _u.mutation.ToolName(); ok {
+		_spec.SetField(message.FieldToolName, field.TypeString, value)
+	}
+	if _u.mutation.ToolNameCleared() {
+		_spec.ClearField(message.FieldToolName, field.TypeString)
 	}
 	if _u.mutation.LlmInteractionsCleared() {
 		edge := &sqlgraph.EdgeSpec{

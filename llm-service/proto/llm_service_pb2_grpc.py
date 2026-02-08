@@ -26,8 +26,7 @@ if _version_not_supported:
 
 
 class LLMServiceStub(object):
-    """LLMService provides gRPC interface to Python LLM clients
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -35,19 +34,20 @@ class LLMServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.GenerateWithThinking = channel.unary_stream(
-                '/llm.v1.LLMService/GenerateWithThinking',
-                request_serializer=llm__service__pb2.ThinkingRequest.SerializeToString,
-                response_deserializer=llm__service__pb2.ThinkingChunk.FromString,
+        self.Generate = channel.unary_stream(
+                '/llm.v1.LLMService/Generate',
+                request_serializer=llm__service__pb2.GenerateRequest.SerializeToString,
+                response_deserializer=llm__service__pb2.GenerateResponse.FromString,
                 _registered_method=True)
 
 
 class LLMServiceServicer(object):
-    """LLMService provides gRPC interface to Python LLM clients
-    """
+    """Missing associated documentation comment in .proto file."""
 
-    def GenerateWithThinking(self, request, context):
-        """GenerateWithThinking streams Gemini native thinking responses
+    def Generate(self, request, context):
+        """Generate streams an LLM response for the given conversation.
+        Each request is self-contained (full conversation history).
+        Python is stateless — no conversation state between calls.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -56,10 +56,10 @@ class LLMServiceServicer(object):
 
 def add_LLMServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'GenerateWithThinking': grpc.unary_stream_rpc_method_handler(
-                    servicer.GenerateWithThinking,
-                    request_deserializer=llm__service__pb2.ThinkingRequest.FromString,
-                    response_serializer=llm__service__pb2.ThinkingChunk.SerializeToString,
+            'Generate': grpc.unary_stream_rpc_method_handler(
+                    servicer.Generate,
+                    request_deserializer=llm__service__pb2.GenerateRequest.FromString,
+                    response_serializer=llm__service__pb2.GenerateResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -70,11 +70,10 @@ def add_LLMServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class LLMService(object):
-    """LLMService provides gRPC interface to Python LLM clients
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def GenerateWithThinking(request,
+    def Generate(request,
             target,
             options=(),
             channel_credentials=None,
@@ -87,9 +86,9 @@ class LLMService(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/llm.v1.LLMService/GenerateWithThinking',
-            llm__service__pb2.ThinkingRequest.SerializeToString,
-            llm__service__pb2.ThinkingChunk.FromString,
+            '/llm.v1.LLMService/Generate',
+            llm__service__pb2.GenerateRequest.SerializeToString,
+            llm__service__pb2.GenerateResponse.FromString,
             options,
             channel_credentials,
             insecure,

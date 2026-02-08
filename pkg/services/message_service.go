@@ -7,6 +7,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -22,7 +23,7 @@ func NewMessageService(client *ent.Client) *MessageService {
 }
 
 // CreateMessage creates a new message
-func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
+func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMessageRequest) (*ent.Message, error) {
 	// Validate input
 	if req.SessionID == "" {
 		return nil, NewValidationError("session_id", "required")
@@ -37,18 +38,44 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		return nil, NewValidationError("role", "required")
 	}
 	if err := message.RoleValidator(req.Role); err != nil {
-		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant", req.Role))
+		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: %v", req.Role, err))
 	}
-	if req.Content == "" {
+	// Content is required for most messages, but assistant messages that
+	// contain tool calls can legally have empty content (the LLM responds
+	// with only tool invocations and no accompanying text).
+	if req.Content == "" && (req.Role != message.RoleAssistant || len(req.ToolCalls) <= 0) {
 		return nil, NewValidationError("content", "required")
 	}
 
-	// Use background context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Tool calls are only valid for assistant messages.
+	if len(req.ToolCalls) > 0 && req.Role != message.RoleAssistant {
+		return nil, NewValidationError("tool_calls", "only allowed for assistant messages")
+	}
+
+	// Tool response messages must link back to the original tool call.
+	if req.Role == message.RoleTool {
+		if req.ToolCallID == "" {
+			return nil, NewValidationError("tool_call_id", "required for tool messages")
+		}
+		if req.ToolName == "" {
+			return nil, NewValidationError("tool_name", "required for tool messages")
+		}
+	}
+
+	// ToolCallID and ToolName are only valid for tool messages.
+	if req.Role != message.RoleTool {
+		switch {
+		case req.ToolCallID != "" && req.ToolName != "":
+			return nil, NewValidationError("tool_call_id,tool_name", "only allowed for tool messages")
+		case req.ToolCallID != "":
+			return nil, NewValidationError("tool_call_id", "only allowed for tool messages")
+		case req.ToolName != "":
+			return nil, NewValidationError("tool_name", "only allowed for tool messages")
+		}
+	}
 
 	messageID := uuid.New().String()
-	msg, err := s.client.Message.Create().
+	builder := s.client.Message.Create().
 		SetID(messageID).
 		SetSessionID(req.SessionID).
 		SetStageID(req.StageID).
@@ -56,8 +83,28 @@ func (s *MessageService) CreateMessage(_ context.Context, req models.CreateMessa
 		SetSequenceNumber(req.SequenceNumber).
 		SetRole(req.Role).
 		SetContent(req.Content).
-		SetCreatedAt(time.Now()).
-		Save(ctx)
+		SetCreatedAt(time.Now())
+
+	// Tool-related fields
+	if len(req.ToolCalls) > 0 {
+		toolCalls := make([]schema.MessageToolCall, len(req.ToolCalls))
+		for i, tc := range req.ToolCalls {
+			toolCalls[i] = schema.MessageToolCall{
+				ID:        tc.ID,
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
+			}
+		}
+		builder = builder.SetToolCalls(toolCalls)
+	}
+	if req.ToolCallID != "" {
+		builder = builder.SetToolCallID(req.ToolCallID)
+	}
+	if req.ToolName != "" {
+		builder = builder.SetToolName(req.ToolName)
+	}
+
+	msg, err := builder.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create message: %w", err)
 	}

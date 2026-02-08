@@ -1,10 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	echo "github.com/labstack/echo/v5"
 
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
@@ -22,7 +24,13 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "data field is required")
 	}
 
-	// 3. Transform to service input
+	// 3. Enforce alert data size limit
+	if len(req.Data) > agent.MaxAlertDataSize {
+		return echo.NewHTTPError(http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("alert data exceeds maximum size of %d bytes", agent.MaxAlertDataSize))
+	}
+
+	// 4. Transform to service input
 	input := services.SubmitAlertInput{
 		AlertType: req.AlertType,
 		Runbook:   req.Runbook,
@@ -31,13 +39,13 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 		Author:    extractAuthor(c),
 	}
 
-	// 4. Call service
+	// 5. Call service
 	session, err := s.alertService.SubmitAlert(c.Request().Context(), input)
 	if err != nil {
 		return mapServiceError(err)
 	}
 
-	// 5. Return response
+	// 6. Return response
 	return c.JSON(http.StatusAccepted, &AlertResponse{
 		SessionID: session.ID,
 		Status:    "queued",

@@ -97,4 +97,192 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Len(t, messages, 1)
 		assert.Equal(t, message.RoleSystem, messages[0].Role)
 	})
+
+	t.Run("creates message with tool calls", func(t *testing.T) {
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 10,
+			Role:           message.RoleAssistant,
+			Content:        "Let me check the logs",
+			ToolCalls: []models.ToolCallData{
+				{
+					ID:        "call_123",
+					Name:      "get_logs",
+					Arguments: `{"namespace":"default"}`,
+				},
+				{
+					ID:        "call_456",
+					Name:      "get_pods",
+					Arguments: `{"label":"app=web"}`,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleAssistant, msg.Role)
+		assert.Len(t, msg.ToolCalls, 2)
+		assert.Equal(t, "call_123", msg.ToolCalls[0].ID)
+		assert.Equal(t, "get_logs", msg.ToolCalls[0].Name)
+		assert.Equal(t, `{"namespace":"default"}`, msg.ToolCalls[0].Arguments)
+	})
+
+	t.Run("creates assistant message with tool calls and empty content", func(t *testing.T) {
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 15,
+			Role:           message.RoleAssistant,
+			Content:        "", // LLM responded with only tool calls, no text
+			ToolCalls: []models.ToolCallData{
+				{
+					ID:        "call_empty",
+					Name:      "get_events",
+					Arguments: `{"namespace":"kube-system"}`,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleAssistant, msg.Role)
+		assert.Equal(t, "", msg.Content)
+		assert.Len(t, msg.ToolCalls, 1)
+		assert.Equal(t, "call_empty", msg.ToolCalls[0].ID)
+	})
+
+	t.Run("rejects assistant message with empty content and no tool calls", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 16,
+			Role:           message.RoleAssistant,
+			Content:        "",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "content")
+	})
+
+	t.Run("rejects tool message without tool_call_id", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 17,
+			Role:           message.RoleTool,
+			Content:        `{"result": "data"}`,
+			ToolName:       "get_pods",
+			// ToolCallID intentionally missing
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_call_id")
+	})
+
+	t.Run("rejects tool message without tool_name", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 18,
+			Role:           message.RoleTool,
+			Content:        `{"result": "data"}`,
+			ToolCallID:     "call_abc",
+			// ToolName intentionally missing
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_name")
+	})
+
+	t.Run("creates tool response message", func(t *testing.T) {
+		toolCallID := "call_789"
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 11,
+			Role:           message.RoleTool,
+			Content:        `{"pods": ["pod-1", "pod-2"]}`,
+			ToolCallID:     toolCallID,
+			ToolName:       "get_pods",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleTool, msg.Role)
+		require.NotNil(t, msg.ToolCallID)
+		assert.Equal(t, toolCallID, *msg.ToolCallID)
+		require.NotNil(t, msg.ToolName)
+		assert.Equal(t, "get_pods", *msg.ToolName)
+	})
+
+	t.Run("rejects tool calls on non-assistant messages", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 19,
+			Role:           message.RoleUser,
+			Content:        "Hello",
+			ToolCalls: []models.ToolCallData{
+				{ID: "call_invalid", Name: "get_pods", Arguments: `{}`},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_calls")
+		assert.Contains(t, err.Error(), "only allowed for assistant messages")
+	})
+
+	t.Run("rejects tool_call_id on non-tool messages", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 20,
+			Role:           message.RoleUser,
+			Content:        "Hello",
+			ToolCallID:     "call_123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_call_id")
+		assert.Contains(t, err.Error(), "only allowed for tool messages")
+	})
+
+	t.Run("gets stage messages across executions", func(t *testing.T) {
+		// Create a second execution in the same stage
+		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "TestAgent2",
+			AgentIndex:        2,
+			IterationStrategy: "react",
+		})
+		require.NoError(t, err)
+
+		// Create messages in both executions
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 20,
+			Role:           message.RoleUser,
+			Content:        "Message in exec1",
+		})
+		require.NoError(t, err)
+
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec2.ID,
+			SequenceNumber: 1,
+			Role:           message.RoleUser,
+			Content:        "Message in exec2",
+		})
+		require.NoError(t, err)
+
+		// Get all messages for the stage
+		messages, err := messageService.GetStageMessages(ctx, stg.ID)
+		require.NoError(t, err)
+		// Should have all messages from both executions
+		// (original 2 + tool call + empty-content tool call + tool response + 2 new = 7)
+		// Note: validation test failures don't create messages
+		assert.Len(t, messages, 7)
+	})
 }

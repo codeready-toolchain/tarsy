@@ -7,6 +7,7 @@ import (
 	"time"
 
 	echo "github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
@@ -50,6 +51,12 @@ func NewServer(
 
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
+	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
+	// (1 MB) to account for JSON envelope overhead. Rejects multi-MB/GB payloads
+	// at the HTTP read level before deserialization, complementing the
+	// application-level MaxAlertDataSize check in submitAlertHandler.
+	s.echo.Use(middleware.BodyLimit(2 * 1024 * 1024))
+
 	// Health check
 	s.echo.GET("/health", s.healthHandler)
 

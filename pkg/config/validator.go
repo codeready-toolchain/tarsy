@@ -357,6 +357,11 @@ func (v *Validator) validateLLMProviders() error {
 
 		// Validate VertexAI-specific fields (only for referenced providers)
 		if referencedProviders[name] && provider.Type == LLMProviderTypeVertexAI {
+			if provider.CredentialsEnv != "" {
+				if value := os.Getenv(provider.CredentialsEnv); value == "" {
+					return NewValidationError("llm_provider", name, "credentials_env", fmt.Errorf("environment variable %s is not set", provider.CredentialsEnv))
+				}
+			}
 			if provider.ProjectEnv != "" {
 				if value := os.Getenv(provider.ProjectEnv); value == "" {
 					return NewValidationError("llm_provider", name, "project_env", fmt.Errorf("environment variable %s is not set", provider.ProjectEnv))

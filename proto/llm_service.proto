@@ -4,78 +4,159 @@ package llm.v1;
 
 option go_package = "github.com/codeready-toolchain/tarsy/proto;llmv1";
 
-// LLMService provides gRPC interface to Python LLM clients
 service LLMService {
-  // GenerateWithThinking streams Gemini native thinking responses
-  rpc GenerateWithThinking(ThinkingRequest) returns (stream ThinkingChunk);
+  // Generate streams an LLM response for the given conversation.
+  // Each request is self-contained (full conversation history).
+  // Python is stateless — no conversation state between calls.
+  rpc Generate(GenerateRequest) returns (stream GenerateResponse);
 }
 
-// LLMConfig contains LLM provider configuration passed from Go to Python
+// ────────────────────────────────────────────────────────────
+// Request / Response
+// ────────────────────────────────────────────────────────────
+
+// GenerateRequest is the input for a single LLM call.
+// Go builds the full conversation and sends it each time.
+message GenerateRequest {
+  string session_id = 1;                    // For logging/tracing
+  repeated ConversationMessage messages = 2; // Full conversation history
+  LLMConfig llm_config = 3;                 // Provider configuration
+  repeated ToolDefinition tools = 4;         // Available tools (empty = no tools)
+  string execution_id = 5;                  // AgentExecution ID — used by Python for thought signature cache key
+}
+
+// GenerateResponse is a streaming chunk from the LLM.
+// Multiple chunks form a complete response.
+//
+// Error handling has two layers:
+//   - ErrorInfo (in the oneof): application-level errors from the LLM provider
+//     (e.g., rate limits, invalid request, provider timeouts). The stream
+//     remains open and the error is delivered as a typed chunk with is_final=true.
+//   - gRPC status codes: transport-level failures (e.g., connection lost,
+//     Python service crashed, deadline exceeded). These surface as errors on
+//     stream.Recv() in Go and are NOT delivered as ErrorInfo chunks.
+// Consumers must handle both: ErrorChunk from the channel for provider errors,
+// and gRPC errors from the Generate call / stream for transport failures.
+message GenerateResponse {
+  oneof content {
+    TextDelta text = 1;
+    ThinkingDelta thinking = 2;
+    ToolCallDelta tool_call = 3;
+    UsageInfo usage = 4;
+    ErrorInfo error = 5;
+    CodeExecutionDelta code_execution = 6;
+  }
+
+  // True when this is the last chunk for this Generate call.
+  bool is_final = 10;
+}
+
+// ────────────────────────────────────────────────────────────
+// Conversation messages
+// ────────────────────────────────────────────────────────────
+
+// ConversationMessage represents a message in the LLM conversation.
+// Supports all roles: system, user, assistant, tool.
+message ConversationMessage {
+  // Role of the message sender: "system", "user", "assistant", "tool"
+  string role = 1;
+
+  // Text content of the message.
+  string content = 2;
+
+  // For assistant messages that request tool execution.
+  repeated ToolCall tool_calls = 3;
+
+  // For tool result messages (role = "tool").
+  // Links this result back to the original tool call.
+  string tool_call_id = 4;
+
+  // For tool result messages (role = "tool").
+  // The name of the tool that was called.
+  string tool_name = 5;
+}
+
+// ────────────────────────────────────────────────────────────
+// Tool definitions and calls
+// ────────────────────────────────────────────────────────────
+
+// ToolDefinition describes a tool available to the LLM.
+// Names use canonical "server.tool" format (e.g., "kubernetes-server.resources_get").
+// Python providers convert to/from provider-specific formats as needed.
+message ToolDefinition {
+  string name = 1;              // Canonical tool name: "server.tool" format
+  string description = 2;       // Human-readable description
+
+  // JSON Schema string describing the tool's input parameters.
+  // This is an opaque string at the proto level — no structural validation
+  // is performed here. The Python LLM provider must parse and validate it
+  // before passing to the upstream API (e.g., Gemini, OpenAI).
+  string parameters_schema = 3;
+}
+
+// ToolCall represents a tool invocation requested by the LLM.
+message ToolCall {
+  string id = 1;         // Unique call ID (for matching results)
+  string name = 2;       // Tool name
+  string arguments = 3;  // JSON string of arguments
+}
+
+// ────────────────────────────────────────────────────────────
+// Streaming deltas
+// ────────────────────────────────────────────────────────────
+
+// TextDelta is a chunk of the LLM's text response.
+message TextDelta {
+  string content = 1;
+}
+
+// ThinkingDelta is a chunk of the LLM's internal reasoning.
+message ThinkingDelta {
+  string content = 1;
+}
+
+// ToolCallDelta signals the LLM wants to call a tool.
+message ToolCallDelta {
+  string call_id = 1;   // Unique ID for this call
+  string name = 2;      // Tool name
+  string arguments = 3; // JSON arguments (complete, not streamed incrementally)
+}
+
+// CodeExecutionDelta carries Gemini code execution results.
+message CodeExecutionDelta {
+  string code = 1;    // The generated Python code
+  string result = 2;  // Execution output (stdout/stderr)
+}
+
+// UsageInfo reports token consumption for this LLM call.
+message UsageInfo {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+  int32 total_tokens = 3;
+  int32 thinking_tokens = 4;
+}
+
+// ErrorInfo signals an error from the LLM provider.
+message ErrorInfo {
+  string message = 1;
+  string code = 2;
+  bool retryable = 3;
+}
+
+// ────────────────────────────────────────────────────────────
+// LLM configuration (passed from Go to Python)
+// ────────────────────────────────────────────────────────────
+
+// LLMConfig contains LLM provider configuration passed from Go to Python.
 message LLMConfig {
   string provider = 1;           // "google", "openai", "anthropic", "xai", "vertexai"
-  string model = 2;              // Model name (e.g., "gemini-2.0-flash-exp")
-  string api_key_env = 3;        // Environment variable name for API key (e.g., "GOOGLE_API_KEY")
-  string credentials_env = 4;    // Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS")
+  string model = 2;              // Model name (e.g., "gemini-2.5-pro")
+  string api_key_env = 3;        // Environment variable name for API key
+  string credentials_env = 4;    // Environment variable name for credentials file (VertexAI)
   string base_url = 5;           // Optional custom endpoint/base URL
   int32 max_tool_result_tokens = 6;
   map<string, bool> native_tools = 7;  // Google-specific native tools
   string project = 8;            // GCP project (for VertexAI)
   string location = 9;           // GCP location (for VertexAI)
-}
-
-// ThinkingRequest contains the conversation and configuration
-message ThinkingRequest {
-  string session_id = 1;
-  repeated Message messages = 2;
-  
-  // Deprecated fields (kept for backward compatibility, remove in Phase 3)
-  string model = 3 [deprecated = true];
-  optional float temperature = 4 [deprecated = true];
-  optional int32 max_tokens = 5 [deprecated = true];
-  
-  // Reserved field 6 for future use
-  reserved 6;
-  
-  // New configuration system (Phase 2+)
-  LLMConfig llm_config = 7;      // LLM configuration from Go orchestrator
-}
-
-// Message represents a single conversation message
-message Message {
-  enum Role {
-    ROLE_UNSPECIFIED = 0;
-    ROLE_SYSTEM = 1;
-    ROLE_USER = 2;
-    ROLE_ASSISTANT = 3;
-  }
-  Role role = 1;
-  string content = 2;
-}
-
-// ThinkingChunk is a streaming response chunk
-message ThinkingChunk {
-  oneof chunk_type {
-    ThinkingContent thinking = 1;
-    ResponseContent response = 2;
-    ErrorContent error = 3;
-  }
-}
-
-// ThinkingContent contains thinking/reasoning text
-message ThinkingContent {
-  string content = 1;
-  bool is_complete = 2;
-}
-
-// ResponseContent contains the actual response text
-message ResponseContent {
-  string content = 1;
-  bool is_complete = 2;
-  bool is_final = 3;  // No more tool calls expected
-}
-
-// ErrorContent contains error information
-message ErrorContent {
-  string message = 1;
-  bool retryable = 2;
+  string backend = 10;           // Provider backend: "google-native", "langchain" (default)
 }

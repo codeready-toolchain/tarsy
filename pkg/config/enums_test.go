@@ -13,8 +13,6 @@ func TestIterationStrategyIsValid(t *testing.T) {
 		valid    bool
 	}{
 		{"react", IterationStrategyReact, true},
-		{"react-stage", IterationStrategyReactStage, true},
-		{"react-final-analysis", IterationStrategyReactFinalAnalysis, true},
 		{"native-thinking", IterationStrategyNativeThinking, true},
 		{"synthesis", IterationStrategySynthesis, true},
 		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, true},

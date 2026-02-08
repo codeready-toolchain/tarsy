@@ -52,8 +52,8 @@ jobs:
           path: bin/tarsy
           retention-days: 7
 
-  test:
-    name: Test
+  test-go:
+    name: Test Go Backend
     runs-on: ubuntu-latest
 
     services:
@@ -92,15 +92,46 @@ jobs:
           PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
           PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"pg_trgm\";"
 
-      - name: Run tests
+      - name: Run Go tests
         env:
           # checkov:skip=CKV_SECRET_4 - test-only credentials for ephemeral CI postgres
           CI_DATABASE_URL: postgresql://test:test@localhost:5432/test?sslmode=disable
-        run: make test
+        run: make test-go
 
-      - name: Upload coverage
+      - name: Upload Go coverage
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: go-coverage
           path: coverage.out
+          retention-days: 7
+
+  test-python:
+    name: Test Python LLM Service
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        working-directory: llm-service
+        run: uv sync --extra test
+
+      - name: Run Python tests
+        working-directory: llm-service
+        run: uv run pytest tests/ -v --cov=llm --cov-report=xml --cov-report=term
+
+      - name: Upload Python coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: llm-service/coverage.xml
           retention-days: 7

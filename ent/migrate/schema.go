@@ -388,8 +388,11 @@ var (
 	MessagesColumns = []*schema.Column{
 		{Name: "message_id", Type: field.TypeString, Unique: true},
 		{Name: "sequence_number", Type: field.TypeInt},
-		{Name: "role", Type: field.TypeEnum, Enums: []string{"system", "user", "assistant"}},
+		{Name: "role", Type: field.TypeEnum, Enums: []string{"system", "user", "assistant", "tool"}},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
+		{Name: "tool_calls", Type: field.TypeJSON, Nullable: true},
+		{Name: "tool_call_id", Type: field.TypeString, Nullable: true},
+		{Name: "tool_name", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "execution_id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
@@ -403,19 +406,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "messages_agent_executions_messages",
-				Columns:    []*schema.Column{MessagesColumns[5]},
+				Columns:    []*schema.Column{MessagesColumns[8]},
 				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "messages_alert_sessions_messages",
-				Columns:    []*schema.Column{MessagesColumns[6]},
+				Columns:    []*schema.Column{MessagesColumns[9]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "messages_stages_messages",
-				Columns:    []*schema.Column{MessagesColumns[7]},
+				Columns:    []*schema.Column{MessagesColumns[10]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -424,12 +427,12 @@ var (
 			{
 				Name:    "message_execution_id_sequence_number",
 				Unique:  false,
-				Columns: []*schema.Column{MessagesColumns[5], MessagesColumns[1]},
+				Columns: []*schema.Column{MessagesColumns[8], MessagesColumns[1]},
 			},
 			{
 				Name:    "message_stage_id_execution_id",
 				Unique:  false,
-				Columns: []*schema.Column{MessagesColumns[7], MessagesColumns[5]},
+				Columns: []*schema.Column{MessagesColumns[10], MessagesColumns[8]},
 			},
 		},
 	}

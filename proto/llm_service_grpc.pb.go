@@ -19,17 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	LLMService_GenerateWithThinking_FullMethodName = "/llm.v1.LLMService/GenerateWithThinking"
+	LLMService_Generate_FullMethodName = "/llm.v1.LLMService/Generate"
 )
 
 // LLMServiceClient is the client API for LLMService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// LLMService provides gRPC interface to Python LLM clients
 type LLMServiceClient interface {
-	// GenerateWithThinking streams Gemini native thinking responses
-	GenerateWithThinking(ctx context.Context, in *ThinkingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ThinkingChunk], error)
+	// Generate streams an LLM response for the given conversation.
+	// Each request is self-contained (full conversation history).
+	// Python is stateless — no conversation state between calls.
+	Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GenerateResponse], error)
 }
 
 type lLMServiceClient struct {
@@ -40,13 +40,13 @@ func NewLLMServiceClient(cc grpc.ClientConnInterface) LLMServiceClient {
 	return &lLMServiceClient{cc}
 }
 
-func (c *lLMServiceClient) GenerateWithThinking(ctx context.Context, in *ThinkingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ThinkingChunk], error) {
+func (c *lLMServiceClient) Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GenerateResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &LLMService_ServiceDesc.Streams[0], LLMService_GenerateWithThinking_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &LLMService_ServiceDesc.Streams[0], LLMService_Generate_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[ThinkingRequest, ThinkingChunk]{ClientStream: stream}
+	x := &grpc.GenericClientStream[GenerateRequest, GenerateResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -57,16 +57,16 @@ func (c *lLMServiceClient) GenerateWithThinking(ctx context.Context, in *Thinkin
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type LLMService_GenerateWithThinkingClient = grpc.ServerStreamingClient[ThinkingChunk]
+type LLMService_GenerateClient = grpc.ServerStreamingClient[GenerateResponse]
 
 // LLMServiceServer is the server API for LLMService service.
 // All implementations must embed UnimplementedLLMServiceServer
 // for forward compatibility.
-//
-// LLMService provides gRPC interface to Python LLM clients
 type LLMServiceServer interface {
-	// GenerateWithThinking streams Gemini native thinking responses
-	GenerateWithThinking(*ThinkingRequest, grpc.ServerStreamingServer[ThinkingChunk]) error
+	// Generate streams an LLM response for the given conversation.
+	// Each request is self-contained (full conversation history).
+	// Python is stateless — no conversation state between calls.
+	Generate(*GenerateRequest, grpc.ServerStreamingServer[GenerateResponse]) error
 	mustEmbedUnimplementedLLMServiceServer()
 }
 
@@ -77,8 +77,8 @@ type LLMServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedLLMServiceServer struct{}
 
-func (UnimplementedLLMServiceServer) GenerateWithThinking(*ThinkingRequest, grpc.ServerStreamingServer[ThinkingChunk]) error {
-	return status.Error(codes.Unimplemented, "method GenerateWithThinking not implemented")
+func (UnimplementedLLMServiceServer) Generate(*GenerateRequest, grpc.ServerStreamingServer[GenerateResponse]) error {
+	return status.Error(codes.Unimplemented, "method Generate not implemented")
 }
 func (UnimplementedLLMServiceServer) mustEmbedUnimplementedLLMServiceServer() {}
 func (UnimplementedLLMServiceServer) testEmbeddedByValue()                    {}
@@ -101,16 +101,16 @@ func RegisterLLMServiceServer(s grpc.ServiceRegistrar, srv LLMServiceServer) {
 	s.RegisterService(&LLMService_ServiceDesc, srv)
 }
 
-func _LLMService_GenerateWithThinking_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ThinkingRequest)
+func _LLMService_Generate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GenerateRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(LLMServiceServer).GenerateWithThinking(m, &grpc.GenericServerStream[ThinkingRequest, ThinkingChunk]{ServerStream: stream})
+	return srv.(LLMServiceServer).Generate(m, &grpc.GenericServerStream[GenerateRequest, GenerateResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type LLMService_GenerateWithThinkingServer = grpc.ServerStreamingServer[ThinkingChunk]
+type LLMService_GenerateServer = grpc.ServerStreamingServer[GenerateResponse]
 
 // LLMService_ServiceDesc is the grpc.ServiceDesc for LLMService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -121,8 +121,8 @@ var LLMService_ServiceDesc = grpc.ServiceDesc{
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "GenerateWithThinking",
-			Handler:       _LLMService_GenerateWithThinking_Handler,
+			StreamName:    "Generate",
+			Handler:       _LLMService_Generate_Handler,
 			ServerStreams: true,
 		},
 	},

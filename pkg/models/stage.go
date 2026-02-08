@@ -23,12 +23,6 @@ type CreateAgentExecutionRequest struct {
 	IterationStrategy string `json:"iteration_strategy"`
 }
 
-// UpdateAgentStatusRequest contains fields for updating agent execution status
-type UpdateAgentStatusRequest struct {
-	Status       string `json:"status"`
-	ErrorMessage string `json:"error_message,omitempty"`
-}
-
 // StageResponse wraps a Stage with optional loaded edges
 type StageResponse struct {
 	*ent.Stage

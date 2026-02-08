@@ -258,13 +258,13 @@ agent_chains:
       - name: "system-data-collection"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "react-stage"
+            iteration_strategy: "react"
         max_iterations: 10
       
       - name: "final-diagnosis"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "react-final-analysis"
+            iteration_strategy: "native-thinking"
         max_iterations: 5
 
   # Multiple agents in parallel with synthesis

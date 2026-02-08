@@ -6,10 +6,6 @@ type IterationStrategy string
 const (
 	// IterationStrategyReact uses standard ReAct pattern with tool calls
 	IterationStrategyReact IterationStrategy = "react"
-	// IterationStrategyReactStage is ReAct optimized for multi-stage chains
-	IterationStrategyReactStage IterationStrategy = "react-stage"
-	// IterationStrategyReactFinalAnalysis is ReAct for final analysis stage
-	IterationStrategyReactFinalAnalysis IterationStrategy = "react-final-analysis"
 	// IterationStrategyNativeThinking uses LLM native thinking/reasoning
 	IterationStrategyNativeThinking IterationStrategy = "native-thinking"
 	// IterationStrategySynthesis synthesizes parallel investigation results
@@ -22,8 +18,6 @@ const (
 func (s IterationStrategy) IsValid() bool {
 	switch s {
 	case IterationStrategyReact,
-		IterationStrategyReactStage,
-		IterationStrategyReactFinalAnalysis,
 		IterationStrategyNativeThinking,
 		IterationStrategySynthesis,
 		IterationStrategySynthesisNativeThinking:
