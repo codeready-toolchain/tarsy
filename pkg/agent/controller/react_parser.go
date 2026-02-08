@@ -542,6 +542,9 @@ Final Answer: [complete analysis]`
 
 // FormatObservation formats a tool execution result as a ReAct observation.
 func FormatObservation(result *agent.ToolResult) string {
+	if result == nil {
+		return "Observation: Error - no tool result available"
+	}
 	if result.IsError {
 		return fmt.Sprintf("Observation: Error executing %s: %s", result.Name, result.Content)
 	}

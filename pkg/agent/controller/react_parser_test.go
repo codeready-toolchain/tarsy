@@ -237,6 +237,13 @@ func TestFormatObservation(t *testing.T) {
 			t.Errorf("got %q, want error observation", obs)
 		}
 	})
+
+	t.Run("nil result", func(t *testing.T) {
+		obs := FormatObservation(nil)
+		if !strings.Contains(obs, "no tool result available") {
+			t.Errorf("got %q, want nil-safe observation", obs)
+		}
+	})
 }
 
 func TestFormatUnknownToolError(t *testing.T) {
@@ -741,7 +748,10 @@ func TestParseReActResponse_ComplexScenarios(t *testing.T) {
 		checkFunc func(*testing.T, *ParsedReActResponse)
 	}{
 		{
-			name: "multiple actions then final answer",
+			// The parser processes sections sequentially: the second Action/ActionInput
+			// overwrites the first, and Action+ActionInput takes priority over Final Answer.
+			// Last thought also wins.
+			name: "multiple actions then final answer — last action wins",
 			input: `Thought: Start investigation.
 Action: server.tool1
 Action Input: {}
@@ -750,10 +760,17 @@ Action: server.tool2
 Action Input: {}
 Final Answer: Complete.`,
 			checkFunc: func(t *testing.T, p *ParsedReActResponse) {
-				// Parser extracts first action+input, OR might handle multiple actions
-				// This tests the actual behavior
-				if !p.HasAction && !p.IsFinalAnswer {
-					t.Errorf("Should extract either action or final answer")
+				if !p.HasAction {
+					t.Fatalf("Expected HasAction=true")
+				}
+				if p.IsFinalAnswer {
+					t.Errorf("Expected IsFinalAnswer=false (action takes priority)")
+				}
+				if p.Action != "server.tool2" {
+					t.Errorf("Action = %q, want %q (last action should win)", p.Action, "server.tool2")
+				}
+				if p.Thought != "Continue." {
+					t.Errorf("Thought = %q, want %q (last thought should win)", p.Thought, "Continue.")
 				}
 			},
 		},

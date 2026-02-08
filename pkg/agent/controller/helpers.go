@@ -90,7 +90,7 @@ func callLLM(
 
 // accumulateUsage adds token counts from an LLM response to the running total.
 func accumulateUsage(total *agent.TokenUsage, resp *LLMResponse) {
-	if resp.Usage != nil {
+	if resp != nil && resp.Usage != nil {
 		total.InputTokens += resp.Usage.InputTokens
 		total.OutputTokens += resp.Usage.OutputTokens
 		total.TotalTokens += resp.Usage.TotalTokens
@@ -114,15 +114,20 @@ func recordLLMInteraction(
 	durationMs := int(time.Since(startTime).Milliseconds())
 
 	var thinkingPtr *string
-	if resp.ThinkingText != "" {
-		thinkingPtr = &resp.ThinkingText
-	}
-
 	var inputTokens, outputTokens, totalTokens *int
-	if resp.Usage != nil {
-		inputTokens = &resp.Usage.InputTokens
-		outputTokens = &resp.Usage.OutputTokens
-		totalTokens = &resp.Usage.TotalTokens
+	var textLen, toolCallsCount int
+
+	if resp != nil {
+		if resp.ThinkingText != "" {
+			thinkingPtr = &resp.ThinkingText
+		}
+		if resp.Usage != nil {
+			inputTokens = &resp.Usage.InputTokens
+			outputTokens = &resp.Usage.OutputTokens
+			totalTokens = &resp.Usage.TotalTokens
+		}
+		textLen = len(resp.Text)
+		toolCallsCount = len(resp.ToolCalls)
 	}
 
 	_, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
@@ -133,7 +138,7 @@ func recordLLMInteraction(
 		ModelName:       execCtx.Config.LLMProvider.Model,
 		LastMessageID:   lastMessageID,
 		LLMRequest:      map[string]any{"messages_count": messagesCount, "iteration": iteration},
-		LLMResponse:     map[string]any{"text_length": len(resp.Text), "tool_calls_count": len(resp.ToolCalls)},
+		LLMResponse:     map[string]any{"text_length": textLen, "tool_calls_count": toolCallsCount},
 		ThinkingContent: thinkingPtr,
 		InputTokens:     inputTokens,
 		OutputTokens:    outputTokens,
@@ -151,6 +156,10 @@ func recordLLMInteraction(
 // events are non-critical observability data — a failure to record one should
 // never abort the investigation loop. The same applies to createToolCallEvent
 // and createToolResultEvent below.
+//
+// Note: *eventSeq is incremented before the DB call. If the call fails (and
+// the caller ignores the error), the next event will have a gap in its sequence
+// number. This is acceptable for best-effort observability data.
 func createTimelineEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -313,6 +322,9 @@ func storeObservationMessage(
 // isTimeoutError checks if an error is timeout-related.
 // Used for consecutive timeout tracking.
 func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
@@ -345,6 +357,8 @@ func buildToolNameSet(tools []agent.ToolDefinition) map[string]bool {
 }
 
 // failedResult creates a failed ExecutionResult from iteration state.
+// state must not be nil — callers always pass the locally-created IterationState
+// from the top of their Run() method.
 func failedResult(state *agent.IterationState, totalUsage agent.TokenUsage) *agent.ExecutionResult {
 	return &agent.ExecutionResult{
 		Status: agent.ExecutionStatusFailed,

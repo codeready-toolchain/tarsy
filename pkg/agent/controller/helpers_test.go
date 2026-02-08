@@ -188,6 +188,12 @@ func TestAccumulateUsage(t *testing.T) {
 		accumulateUsage(total, resp)
 		assert.Equal(t, 100, total.InputTokens)
 	})
+
+	t.Run("nil resp is no-op", func(t *testing.T) {
+		total := &agent.TokenUsage{InputTokens: 100}
+		accumulateUsage(total, nil)
+		assert.Equal(t, 100, total.InputTokens)
+	})
 }
 
 // ============================================================================
@@ -233,6 +239,11 @@ func TestIsTimeoutError(t *testing.T) {
 		{
 			name: "context.Canceled is not timeout",
 			err:  context.Canceled,
+			want: false,
+		},
+		{
+			name: "nil error returns false",
+			err:  nil,
 			want: false,
 		},
 	}
@@ -302,4 +313,5 @@ func TestBuildForcedConclusionPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "5")
 	assert.Contains(t, prompt, "maximum number of iterations")
 	assert.Contains(t, prompt, "final analysis")
+	assert.Contains(t, prompt, "Do NOT call any more tools")
 }
