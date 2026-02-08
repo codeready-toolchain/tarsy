@@ -112,14 +112,16 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - ~~Stage controller variants (react-stage, react-final-analysis) — dropped, never used in old TARSy production. Strategy pattern allows adding new controllers later if needed.~~
 - [x] Cleanup: remove `react-stage` and `react-final-analysis` from Phase 2 code (enums, config examples, validation, built-in configs) — **Complete**: No references found in codebase
 - [x] Synthesis controller (tool-less, single LLM call)
-- [x] Chat support via prompt composition (reuse ReAct/NativeThinking controllers; investigation context + chat history handled in Phase 3.3 prompt builder — no separate ChatReActController or ChatNativeThinkingController)
+- [x] Chat support architecture — ReAct/NativeThinking controllers are reused for chat (no separate ChatReActController or ChatNativeThinkingController). Phase 3.3 prompt builder will handle investigation context injection and chat history formatting.
 - ~~Final analysis controller — dropped, not a real strategy. Investigation agents (ReAct/NativeThinking) naturally produce final answers; synthesis handles parallel result merging.~~
 
 > **Intentionally deferred from old TARSy parser port (Phase 3.2 → Phase 4):**
 >
-> **Action Input parameter parsing** — Old TARSy's `react_parser.py` parsed `action_input` into structured `Dict[str, Any]` parameters via a multi-format cascade: JSON → YAML (arrays, nested structures) → comma/newline-separated `key: value` → `key=value` → raw string fallback. It also had `_convert_parameter_value()` for type coercion (bool, int, float, None). New TARSy's Go parser intentionally keeps `ActionInput` as a raw string — the `ToolExecutor` interface takes `Arguments string`, deferring parsing to the tool execution layer. When Phase 4 (MCP Integration) implements the real `ToolExecutor`, it must handle multi-format parameter parsing of the raw `ActionInput` string before sending structured parameters to MCP servers. Research whether this parsing belongs in the MCP client itself, in a shared utility, or in a `ToolExecutor` wrapper.
+> **Action Input parameter parsing** — Old TARSy's `react_parser.py` parsed `action_input` into structured `Dict[str, Any]` parameters via a multi-format cascade: JSON → YAML (arrays, nested structures) → comma/newline-separated `key: value` → `key=value` → raw string fallback. It also had `_convert_parameter_value()` for type coercion (bool, int, float, None). New TARSy's Go parser intentionally keeps `ActionInput` as a raw string — the `ToolExecutor` interface takes `Arguments string`, deferring parsing to the tool execution layer. When Phase 4 (MCP Integration) implements the real `ToolExecutor`, it must handle multi-format parameter parsing of the raw `ActionInput` string before sending structured parameters to MCP servers.
 >
-> **ToolCall server/tool split** — Old TARSy split the action name into separate `server` and `tool` fields with validation that both parts are non-empty (e.g., `"server."` or `".tool"` → `ValueError` → malformed). New TARSy keeps `Action` as the full `"server.tool"` string and only validates that it contains a dot. The MCP client in Phase 4 will need to split and validate server/tool parts when routing tool calls to the correct MCP server. Consider adding stricter validation at the parser level (regex match for `^\w[\w-]*\.\w[\w-]*$`) or keeping it in the MCP routing layer.
+> **ToolCall server/tool split** — Old TARSy split the action name into separate `server` and `tool` fields with validation that both parts are non-empty (e.g., `"server."` or `".tool"` → `ValueError` → malformed). New TARSy keeps `Action` as the full `"server.tool"` string and only validates that it contains a dot. The MCP client in Phase 4 will need to split and validate server/tool parts when routing tool calls to the correct MCP server.
+>
+> **Open design questions** extracted to Phase 4 items below and tracked in `docs/phase4-open-questions.md`.
 
 **3.2.1: Gemini Native Tool Timeline Events (Go + Python)**
 > Deferred from Phase 3.2. Gemini provides built-in native tools (`google_search`, `code_execution`, `url_context`) that produce results inline in the response stream. These results need to be surfaced to users via timeline events. Currently, code execution is collected in `LLMResponse.CodeExecutions` and stored in `LLMInteraction.response_metadata` (debugging only) — not shown to users. Google Search grounding and URL context results are not captured from the stream at all.
@@ -167,8 +169,8 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [ ] Error handling & recovery (retry, session recreation)
 - [ ] Per-session MCP client isolation
 - [ ] MCP server health monitoring
-- [ ] ReAct `ActionInput` parameter parsing — parse raw text into structured MCP parameters (JSON/YAML/key-value/raw string cascade, type coercion). See Phase 3.2 deferred notes for details.
-- [ ] Tool name validation — split `"server.tool"` string, validate both parts, route to correct MCP server. See Phase 3.2 deferred notes.
+- [ ] ReAct `ActionInput` parameter parsing — parse raw text into structured MCP parameters (JSON/YAML/key-value/raw string cascade, type coercion). See Phase 3.2 deferred notes and `docs/phase4-open-questions.md` Q1.
+- [ ] Tool name validation — split `"server.tool"` string, validate both parts, route to correct MCP server. See Phase 3.2 deferred notes and `docs/phase4-open-questions.md` Q2.
 
 **Data Masking** (moved from Phase 7 — required for MCP tool results)
 - [ ] Masking service (Go)
