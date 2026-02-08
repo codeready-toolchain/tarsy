@@ -7,7 +7,7 @@
 
 This document details the Iteration Controller implementations for the new TARSy. Phase 3.2 builds on the foundation established in Phase 3.1 (base agent architecture, Controller interface, gRPC protocol, LLM client) to implement the actual iteration strategies that drive agent investigations.
 
-**Phase 3.2 Scope**: Implementation of all iteration controllers — ReAct (text-parsed tool calling), Native Thinking (Gemini structured function calling), Synthesis (tool-less summarization), Chat variants, and Final Analysis. Also includes the ReAct parser (Go), shared iteration patterns, tool execution interface (stub for Phase 4 MCP integration), forced conclusion logic, and LLM interaction recording.
+**Phase 3.2 Scope**: Implementation of all iteration controllers — ReAct (text-parsed tool calling), Native Thinking (Gemini structured function calling), and Synthesis (tool-less summarization). Also includes the ReAct parser (Go), shared iteration patterns, tool execution interface (stub for Phase 4 MCP integration), forced conclusion logic, and LLM interaction recording. Chat is handled by the same controllers via prompt composition (Phase 3.3).
 
 **Key Design Principles:**
 - All iteration logic in Go — controllers own the loop, LLM calls, tool dispatch, and conversation management
@@ -21,8 +21,6 @@ This document details the Iteration Controller implementations for the new TARSy
 - ReAct controller with text-based tool parsing and observation loop
 - Native Thinking controller with Gemini structured function calling
 - Synthesis controller (tool-less single LLM call)
-- Chat controller variants (investigation context + user question)
-- Final Analysis controller (tool-less comprehensive analysis)
 - ReAct parser (Go implementation)
 - ToolExecutor interface (with stub implementation for testing)
 - Shared iteration patterns (max iterations, forced conclusion, error tracking)
@@ -46,8 +44,7 @@ agent.Controller (interface — defined in Phase 3.1)
 ├── SingleCallController        (Phase 3.1 — already implemented)
 ├── ReActController             (Phase 3.2 — text-parsed tool loop)
 ├── NativeThinkingController    (Phase 3.2 — Gemini function calling loop)
-├── SynthesisController         (Phase 3.2 — tool-less single call)
-└── FinalAnalysisController     (Phase 3.2 — tool-less comprehensive analysis)
+└── SynthesisController         (Phase 3.2 — tool-less single call)
 ```
 
 ### Strategy-to-Controller Mapping
@@ -58,12 +55,11 @@ agent.Controller (interface — defined in Phase 3.1)
 | `native-thinking` | `NativeThinkingController` | Yes (structured) | `google-native` | Gemini-specific with native reasoning |
 | `synthesis` | `SynthesisController` | No | `langchain` | Synthesize parallel stage results |
 | `synthesis-native-thinking` | `SynthesisController` | No | `google-native` | Synthesis with Gemini native thinking |
-| *(no new strategy)* | `FinalAnalysisController` | No | *(from config)* | Final comprehensive analysis |
 
 **Key design decisions:**
 - `synthesis` and `synthesis-native-thinking` use the **same** `SynthesisController` — the only difference is the LLM backend (set via config), not the controller logic. Both are tool-less single-call controllers.
 - Chat is handled by the **same** ReAct/NativeThinking controllers — the only difference is prompt content, which is driven by `ExecutionContext` carrying chat-specific data. Chat is a prompt concern (Phase 3.3), not a controller concern.
-- `FinalAnalysisController` is a distinct controller from `SynthesisController` because it serves a different purpose (comprehensive final analysis vs. synthesizing parallel results) and will have different prompt building and timeline event types.
+- **Final analysis is NOT a separate controller or strategy.** Investigation agents (ReAct/NativeThinking) naturally produce a final answer when they stop calling tools. For multi-agent parallel stages, the synthesis agent combines results. No dedicated final-analysis controller is needed.
 
 ### Shared Components
 
@@ -85,7 +81,6 @@ pkg/agent/
     ├── react_parser.go         # NEW: ReAct text parser (Phase 3.2)
     ├── native_thinking.go      # NEW: NativeThinkingController (Phase 3.2)
     ├── synthesis.go            # NEW: SynthesisController (Phase 3.2)
-    ├── final_analysis.go       # NEW: FinalAnalysisController (Phase 3.2)
     └── helpers.go              # NEW: shared controller helpers (Phase 3.2)
 ```
 
@@ -157,9 +152,17 @@ type ExecutionContext struct {
     ToolExecutor ToolExecutor       // Phase 3.2: stub, Phase 4: MCP client
     // MCPClient   MCPClient        // Phase 4 — replaced by ToolExecutor
 }
+
+// ResolvedAgentConfig — add IterationTimeout
+type ResolvedAgentConfig struct {
+    // ... existing fields ...
+    IterationTimeout time.Duration  // Per-iteration timeout (default: 120s)
+}
 ```
 
 **Note:** The `MCPClient` comment in the current `ExecutionContext` will be replaced by `ToolExecutor`. The `ToolExecutor` interface is simpler and more general — it doesn't expose MCP-specific concepts to controllers, maintaining clean separation.
+
+`IterationTimeout` is configurable per chain/agent via the config hierarchy. It controls `context.WithTimeout` for each iteration, preventing a single stuck LLM call or tool execution from consuming the entire session budget. The parent session context still carries the overall session timeout and user cancellation signal — both propagate through the per-iteration child context.
 
 ---
 
@@ -185,6 +188,12 @@ type IterationState struct {
 // MaxConsecutiveTimeouts is the threshold for stopping iteration.
 // After this many consecutive timeout failures, the controller aborts.
 const MaxConsecutiveTimeouts = 2
+
+// DefaultIterationTimeout is the default per-iteration timeout.
+// Each iteration (LLM call + tool execution) gets its own context.WithTimeout
+// derived from the parent session context. This prevents a single stuck
+// iteration from consuming the entire session budget.
+const DefaultIterationTimeout = 120 * time.Second
 
 // ShouldAbortOnTimeouts returns true if consecutive timeout failures
 // have reached the threshold.
@@ -444,10 +453,15 @@ func (c *ReActController) Run(
             return failedResult(state), nil
         }
 
+        // Per-iteration timeout: prevents one stuck iteration from consuming
+        // the entire session budget. Parent ctx still carries session timeout
+        // and user cancellation — both propagate through iterCtx.
+        iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
+
         startTime := time.Now()
 
         // Call LLM (text only — tools described in system prompt, not bound)
-        resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+        resp, err := callLLM(iterCtx, execCtx.LLMClient, &agent.GenerateInput{
             SessionID:   execCtx.SessionID,
             ExecutionID: execCtx.ExecutionID,
             Messages:    messages,
@@ -456,6 +470,7 @@ func (c *ReActController) Run(
         })
 
         if err != nil {
+            iterCancel()
             // Handle LLM call failure
             state.RecordFailure(err.Error(), isTimeoutError(err))
             messages = appendObservation(messages, formatErrorObservation(err))
@@ -492,7 +507,7 @@ func (c *ReActController) Run(
             // Valid tool call — execute and append observation
             createToolCallEvent(ctx, execCtx, parsed.Action, parsed.ActionInput)
 
-            result, toolErr := execCtx.ToolExecutor.Execute(ctx, agent.ToolCall{
+            result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, agent.ToolCall{
                 ID:        generateCallID(),
                 Name:      parsed.Action,
                 Arguments: parsed.ActionInput,
@@ -519,6 +534,8 @@ func (c *ReActController) Run(
             feedback := getFormatErrorFeedback(parsed)
             messages = appendObservation(messages, feedback)
         }
+
+        iterCancel() // Clean up per-iteration context
     }
 
     // Max iterations reached — force conclusion
@@ -602,7 +619,7 @@ func (c *ReActController) forceConclusion(
 
 ## ReAct Parser
 
-Go implementation of old TARSy's `react_parser.py`. Parses LLM text output into structured actions.
+Full Go port of old TARSy's `react_parser.py`. The old parser was evolved over time to handle many real-world LLM format deviations and is proven to work well in production. The Go implementation preserves all detection tiers and recovery logic.
 
 ### Parsed Response
 
@@ -632,19 +649,21 @@ type ParsedReActResponse struct {
 
 ### Parser Logic
 
-The parser follows old TARSy's multi-tier detection with improvements:
+Full port of old TARSy's multi-tier detection — the parser is intentionally forgiving and tries multiple detection strategies before declaring a response malformed:
 
 ```go
 // ParseReActResponse parses LLM text output into a structured ReAct response.
 // The parser is intentionally forgiving — it tries multiple detection strategies
-// before declaring a response malformed.
+// before declaring a response malformed. All recovery logic from old TARSy's
+// react_parser.py is preserved.
 func ParseReActResponse(text string) *ParsedReActResponse {
     // Strategy order (most specific → most lenient):
     // 1. Section-based detection: Look for "Final Answer:", "Action:", "Action Input:" markers
-    // 2. Pattern recovery: Handle common LLM format deviations
-    // 3. Malformed fallback: Return with specific error feedback
+    // 2. Missing action recovery: Look for tool-like patterns without explicit markers
+    // 3. Pattern recovery: Handle common LLM format deviations
+    // 4. Malformed fallback: Return with specific error feedback
 
-    // ... implementation details ...
+    // ... implementation details ported from old TARSy react_parser.py ...
 }
 ```
 
@@ -812,10 +831,13 @@ func (c *NativeThinkingController) Run(
             return failedResult(state), nil
         }
 
+        // Per-iteration timeout (same pattern as ReAct)
+        iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
+
         startTime := time.Now()
 
         // Call LLM with tools bound
-        resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+        resp, err := callLLM(iterCtx, execCtx.LLMClient, &agent.GenerateInput{
             SessionID:   execCtx.SessionID,
             ExecutionID: execCtx.ExecutionID,
             Messages:    messages,
@@ -824,6 +846,7 @@ func (c *NativeThinkingController) Run(
         })
 
         if err != nil {
+            iterCancel()
             state.RecordFailure(err.Error(), isTimeoutError(err))
             // For native thinking, on LLM error we can't easily append an observation
             // because the conversation uses structured messages.
@@ -859,7 +882,7 @@ func (c *NativeThinkingController) Run(
             for _, tc := range resp.ToolCalls {
                 createToolCallEvent(ctx, execCtx, tc.Name, tc.Arguments)
 
-                result, toolErr := execCtx.ToolExecutor.Execute(ctx, tc)
+                result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, tc)
 
                 var toolContent string
                 var isError bool
@@ -885,6 +908,7 @@ func (c *NativeThinkingController) Run(
             }
         } else {
             // No tool calls — this is the final answer
+            iterCancel()
             assistantMsg := storeAssistantMessage(ctx, execCtx, messages, resp)
             recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
@@ -896,6 +920,8 @@ func (c *NativeThinkingController) Run(
                 TokensUsed:    totalUsage,
             }, nil
         }
+
+        iterCancel() // Clean up per-iteration context
     }
 
     // Max iterations reached — force conclusion
@@ -1047,108 +1073,6 @@ func (c *SynthesisController) Run(
 
 ---
 
-## Final Analysis Controller
-
-The Final Analysis controller produces a comprehensive final analysis from accumulated investigation data. Unlike Synthesis (which synthesizes parallel results), Final Analysis operates at the end of a chain to produce the final output.
-
-### Design
-
-```go
-// pkg/agent/controller/final_analysis.go
-
-type FinalAnalysisController struct{}
-
-func NewFinalAnalysisController() *FinalAnalysisController {
-    return &FinalAnalysisController{}
-}
-```
-
-### Run Method
-
-```go
-func (c *FinalAnalysisController) Run(
-    ctx context.Context,
-    execCtx *agent.ExecutionContext,
-    prevStageContext string,
-) (*agent.ExecutionResult, error) {
-    startTime := time.Now()
-
-    // 1. Build final analysis conversation
-    // Different from synthesis: focuses on comprehensive analysis, not parallel result merging
-    messages := c.buildMessages(execCtx, prevStageContext)
-
-    // 2. Store messages
-    storeMessages(ctx, execCtx, messages)
-
-    // 3. Create timeline event
-    event := createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis)
-
-    // 4. Single LLM call (no tools)
-    resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
-        SessionID:   execCtx.SessionID,
-        ExecutionID: execCtx.ExecutionID,
-        Messages:    messages,
-        Config:      execCtx.Config.LLMProvider,
-        Tools:       nil,
-    })
-    if err != nil {
-        return nil, fmt.Errorf("final analysis LLM call failed: %w", err)
-    }
-
-    // 5. Complete timeline event
-    completeTimelineEvent(ctx, execCtx, event.ID, resp.Text)
-
-    // 6. Store thinking content if present
-    if resp.ThinkingText != "" {
-        createThinkingEvent(ctx, execCtx, resp.ThinkingText)
-    }
-
-    // 7. Store assistant message + LLM interaction
-    assistantMsg := storeAssistantMessage(ctx, execCtx, messages, resp)
-    recordLLMInteraction(ctx, execCtx, 1, "final_analysis", len(messages), resp, &assistantMsg.ID, startTime)
-
-    // 8. Return result
-    return &agent.ExecutionResult{
-        Status:        agent.ExecutionStatusCompleted,
-        FinalAnalysis: resp.Text,
-        TokensUsed:    tokenUsageFromResp(resp),
-    }, nil
-}
-```
-
-### How Final Analysis is Triggered
-
-Final Analysis is not mapped to an `IterationStrategy` enum value. Instead, it is selected by the controller factory based on the chain configuration:
-
-```go
-// In controller/factory.go — updated for Phase 3.2
-func (f *Factory) CreateController(
-    strategy config.IterationStrategy,
-    execCtx *agent.ExecutionContext,
-) (agent.Controller, error) {
-    switch strategy {
-    case "":
-        return NewSingleCallController(), nil
-    case config.IterationStrategyReact:
-        return NewReActController(), nil
-    case config.IterationStrategyNativeThinking:
-        return NewNativeThinkingController(), nil
-    case config.IterationStrategySynthesis:
-        return NewSynthesisController(), nil
-    case config.IterationStrategySynthesisNativeThinking:
-        return NewSynthesisController(), nil // Same controller, different LLM backend
-    default:
-        return nil, fmt.Errorf("unknown iteration strategy: %q", strategy)
-    }
-}
-```
-
-**Final Analysis as a strategy**: Since `FinalAnalysisController` needs to be selectable from chain configuration, we have two options (see Questions doc Q2):
-1. Add a `final-analysis` iteration strategy enum value
-2. Use `synthesis` with a chain-level flag
-
----
-
 ## Chat Handling
 
 ### Design Philosophy
@@ -1183,29 +1107,16 @@ type ChatContext struct {
 
 ### How Chat Affects Controllers
 
-Controllers check `execCtx.ChatContext != nil` only during message building (Phase 3.2 placeholder, Phase 3.3 full implementation):
+Controllers do NOT inspect `ChatContext` — they are completely chat-unaware. The only difference between chat and investigation is the system prompt (e.g., "answer user's question about the investigation" vs "investigate this alert"). This is purely a prompt composition concern handled by Phase 3.3's prompt builder.
 
-```go
-func (c *ReActController) buildMessages(
-    execCtx *agent.ExecutionContext,
-    prevStageContext string,
-) []agent.ConversationMessage {
-    // Phase 3.2: minimal prompt building
-    // Phase 3.3: full prompt builder with chat-aware templates
-
-    if execCtx.ChatContext != nil {
-        // Include investigation context + user question in prompt
-        // Specific prompt template handled by Phase 3.3 prompt builder
-    }
-    // ... standard prompt building ...
-}
-```
+Phase 3.2 controllers use placeholder `buildMessages()` methods that produce basic investigation prompts. Phase 3.3 will replace these with a prompt builder that checks `ChatContext` and selects appropriate templates.
 
 This design means:
 - No `ChatReActController` or `ChatNativeThinkingController` needed
 - No additional iteration strategies needed
 - No duplication of iteration loop logic
-- Chat becomes a pure prompt composition concern
+- Controllers are chat-unaware — chat is a pure prompt composition concern (Phase 3.3)
+- Full chat support lands when the prompt system is built
 
 ---
 
@@ -1250,31 +1161,35 @@ Controllers create timeline events for real-time frontend updates. Each event ty
 
 ### Event Types by Controller
 
-| Event Type | ReAct | Native Thinking | Synthesis | Final Analysis |
-|---|---|---|---|---|
-| `llm_response` | ✅ (each iteration) | ✅ (each iteration) | — | — |
-| `llm_thinking` | — | ✅ (if thinking content) | ✅ (if thinking content) | ✅ (if thinking content) |
-| `tool_call` | ✅ (parsed action) | ✅ (structured call) | — | — |
-| `tool_result` | ✅ (observation) | ✅ (tool output) | — | — |
-| `final_analysis` | ✅ (completion) | ✅ (completion) | ✅ | ✅ |
-| `error` | ✅ (on failure) | ✅ (on failure) | ✅ (on failure) | ✅ (on failure) |
+| Event Type | ReAct | Native Thinking | Synthesis |
+|---|---|---|---|
+| `llm_response` | ✅ (each iteration) | ✅ (each iteration) | — |
+| `llm_thinking` | — | ✅ (if thinking content) | ✅ (if thinking content) |
+| `tool_call` | ✅ (parsed action) | ✅ (structured call) | — |
+| `tool_result` | ✅ (observation) | ✅ (tool output) | — |
+| `final_analysis` | ✅ (completion) | ✅ (completion) | ✅ |
+| `error` | ✅ (on failure) | ✅ (on failure) | ✅ (on failure) |
 
 ### Event Creation Pattern
 
 ```go
-// Shared helper used by all controllers
+// Shared helper used by all controllers.
+// Sequence numbers are managed per type — timeline events have their own
+// counter (1, 2, 3...), separate from the message sequence counter.
 func createTimelineEvent(
     ctx context.Context,
     execCtx *agent.ExecutionContext,
     eventType timelineevent.EventType,
     content string,
     metadata map[string]any,
+    eventSeq *int, // pointer to the per-execution event counter
 ) (*ent.TimelineEvent, error) {
+    *eventSeq++
     return execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
         SessionID:      execCtx.SessionID,
         StageID:        execCtx.StageID,
         ExecutionID:    execCtx.ExecutionID,
-        SequenceNumber: nextSequenceNumber(execCtx),
+        SequenceNumber: *eventSeq,
         EventType:      eventType,
         Content:        content,
         Metadata:       metadata,
@@ -1304,7 +1219,7 @@ func createTimelineEvent(
 {Role: "tool", Content: "{output}", ToolCallID: "call_123", ToolName: "kubectl.get_pods"}
 ```
 
-**Synthesis / Final Analysis**: Simple system + user + assistant:
+**Synthesis**: Simple system + user + assistant:
 ```go
 {Role: "system", Content: "You are synthesizing..."}
 {Role: "user", Content: "{prev stage context}"}
@@ -1357,6 +1272,8 @@ Per Phase 3.1 Q1 decision, Go determines which Python backend to use:
 
 This is already handled by the `ResolvedAgentConfig.LLMProvider.Backend` field, set during configuration resolution. Controllers don't need to know about backends.
 
+**Phase 3.2 implementation note:** `LangChainProvider` will be implemented as a minimal stub that delegates to `GoogleNativeProvider` internally. This gets all the backend routing wired correctly from day one (Go correctly routes `react`/`synthesis` → `langchain`), but avoids implementing the real LangChain SDK integration until Phase 6 when multi-provider support is actually needed. When Phase 6 arrives, only the `LangChainProvider` internals need to be replaced — no refactoring of Go config resolution or Python routing.
+
 ---
 
 ## Testing Strategy
@@ -1386,17 +1303,15 @@ Each controller should have comprehensive unit tests using mock `LLMClient` and 
    - Thinking content recording (synthesis-native-thinking)
    - Error propagation
 
-4. **Final Analysis Controller**:
-   - Single call with accumulated context
-   - Thinking content recording
-
-5. **ReAct Parser**:
-   - Standard format parsing
+4. **ReAct Parser** (comprehensive — full port of old TARSy parser):
+   - Standard format parsing (Thought/Action/Action Input/Final Answer)
    - Final Answer detection
-   - JSON/YAML/key-value action input parsing
-   - Malformed response detection
+   - Multi-format action input parsing (JSON, YAML, key-value, raw)
+   - Missing action recovery (tool-like patterns without explicit markers)
+   - Malformed response detection with specific error feedback
    - Missing sections detection
-   - Edge cases (empty response, partial format)
+   - Format correction reminder generation
+   - Edge cases (empty response, partial format, multi-line values)
 
 ### Mock Interfaces
 
@@ -1461,13 +1376,14 @@ func (m *MockToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*a
    - [ ] `pkg/agent/controller/synthesis.go` — full implementation
    - [ ] `pkg/agent/controller/synthesis_test.go` — unit tests
 
-6. **Final Analysis Controller**:
-   - [ ] `pkg/agent/controller/final_analysis.go` — full implementation
-   - [ ] `pkg/agent/controller/final_analysis_test.go` — unit tests
+6. **Python LangChainProvider stub**:
+   - [ ] `llm-service/llm/providers/langchain_stub.py` — stub delegating to GoogleNativeProvider
+   - [ ] Backend routing in Python service — route `langchain` backend to stub
 
 7. **Factory + Integration**:
    - [ ] Update `pkg/agent/controller/factory.go` — register all new controllers
    - [ ] Update `pkg/queue/executor.go` — wire ToolExecutor into ExecutionContext
+   - [ ] Add `IterationTimeout` to `ResolvedAgentConfig` and config resolution
    - [ ] Integration tests with mock LLM + mock tools
 
 ---
@@ -1478,25 +1394,31 @@ func (m *MockToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*a
 
 | Aspect | Old TARSy (Python) | New TARSy (Go) | Reason |
 |---|---|---|---|
-| Session pause/resume | `SessionPaused` exception at max iterations | Always force conclusion or fail | Simplifies architecture; pause/resume was rarely useful |
-| Chat controllers | Separate `ChatReActController`, `ChatNativeThinkingController` | Same controllers, chat handled via `ExecutionContext` + prompts | Eliminates code duplication; chat is a prompt concern |
-| Synthesis variants | Separate `SynthesisController`, `SynthesisNativeThinkingController` | Single `SynthesisController` (backend differs via config) | Both are identical single-call logic; backend is config |
-| Per-iteration timeout | `asyncio.wait_for()` wrapping each iteration | Go `context.Context` with per-iteration deadline | Go-native approach to timeouts |
+| Session pause/resume | `SessionPaused` exception at max iterations | Always force conclusion or fail (Q1) | Simplifies architecture; pause/resume was rarely used |
+| Final analysis controller | Separate `ReactFinalAnalysisController` | Dropped entirely (Q2) | Investigation agents naturally produce final answers; synthesis handles parallel results |
+| Chat controllers | Separate `ChatReActController`, `ChatNativeThinkingController` | Same controllers, chat is prompt concern (Q3, Phase 3.3) | Eliminates code duplication; only system prompt differs |
+| Synthesis variants | Separate `SynthesisController`, `SynthesisNativeThinkingController` | Single `SynthesisController` (Q4) | Identical logic; backend/thinking/native tools all handled by config |
+| Per-iteration timeout | `asyncio.wait_for()` wrapping each iteration | `context.WithTimeout` per iteration (Q5) | Go-native; configurable; parent ctx propagates cancellation |
+| ReAct parser | Python class evolved over time | Full Go port of all detection tiers (Q6) | Battle-tested logic; no reason to simplify and re-learn |
+| Thinking content | Stored only in `LLMInteraction.metadata` | Timeline events + LLMInteraction (Q7) | Fully utilizes Phase 2 timeline architecture |
+| Tool execution | Direct MCP calls in controller | `ToolExecutor` interface with stub (Q8) | Enables testing without MCP; Phase 4 swaps in real impl |
+| LangChain provider | Full LangChain implementation | Stub delegating to GoogleNativeProvider (Q9) | Wiring correct now; swap internals in Phase 6 |
+| Sequence numbers | Single counter | Separate counters per type (Q10) | Messages and events queried independently |
 | Thought signatures | Python in-memory dict, passed per-call | Python in-memory (Phase 3.1 decision), transparent to Go | Same architecture, Go doesn't need to know |
 | Controller dependencies | Constructor-injected LLMManager, PromptBuilder | Stateless controllers, dependencies via ExecutionContext | Simpler, more testable |
-| ReAct parser | Python class with regex | Go functions (no struct state) | Functional style fits Go idioms |
+| ReAct parser style | Python class with regex | Go functions (no struct state) | Functional style fits Go idioms |
 
 ### What Stayed the Same
 
-- ReAct text-based parsing (Go owns parsing, not Python)
+- ReAct text-based parsing (Go owns parsing, not Python) — full logic ported
 - Native Thinking structured tool calls (Gemini function calling)
 - Max iterations with forced conclusion
-- Consecutive timeout detection and abort
+- Consecutive timeout detection and abort (threshold: 2)
 - Malformed response error feedback (specific, not generic)
 - Unknown tool error listing available tools
 - Progressive DB writes during iteration
-- LLMInteraction recording for each call
-- Timeline events for real-time updates
+- LLMInteraction recording for each call (debugging/observability)
+- Timeline events for real-time frontend updates (including `llm_thinking`)
 
 ---
 

@@ -2,7 +2,7 @@
 
 This document contains questions and concerns about the proposed Phase 3.2 architecture that need discussion before finalizing the design.
 
-**Status**: 🔄 In Discussion  
+**Status**: ✅ All Decided  
 **Created**: 2026-02-08  
 **Purpose**: Surface architectural decisions where the new TARSy significantly departs from old TARSy, or where non-obvious trade-offs need discussion
 
@@ -60,80 +60,46 @@ Session pause/resume adds substantial complexity for minimal value. If an invest
 
 ### Q2: Final Analysis — New Strategy Enum or Configuration-Based Selection?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Drop final-analysis entirely — not a real strategy**
 
 **Context:**
 
-The project plan lists "Final analysis controller (tool-less comprehensive analysis)" as a Phase 3.2 item. Final Analysis produces a comprehensive final analysis from all accumulated investigation data — typically used as the last stage of a chain.
+The project plan listed "Final analysis controller (tool-less comprehensive analysis)" as a Phase 3.2 item. The question was how to trigger it in new TARSy.
 
-In old TARSy, `ReactFinalAnalysisController` was a separate controller (now dropped). The question is how to trigger `FinalAnalysisController` in new TARSy.
+#### Decision
 
-Currently, the controller factory maps `IterationStrategy` enum values to controllers. `FinalAnalysisController` needs a way to be selected.
+Drop the final-analysis concept entirely. It was a leftover from old TARSy that was never used in production. Final analysis is naturally produced by the existing flow:
 
-**Options:**
+- **Single agent stages**: The investigation agent (ReAct or Native Thinking) iterates until it stops calling tools and produces a final answer. That final answer is the stage result.
+- **Multi-agent parallel stages**: Each agent produces a final answer → the synthesis agent combines them into the stage result.
+- **Last stage in chain**: Its stage result becomes the session's final analysis.
 
-**Option A: Add `final-analysis` iteration strategy enum**
-- Add `IterationStrategyFinalAnalysis = "final-analysis"` to `pkg/config/enums.go`
-- Controller factory maps it to `FinalAnalysisController`
-- Chain config uses `iteration_strategy: final-analysis` for the final stage
-- Pros: Explicit, discoverable, consistent with other strategies
-- Cons: Another enum value; `FinalAnalysisController` is really just a specialized single-call
+There is no gap that requires a separate "final analysis" controller or strategy. Remove `FinalAnalysisController` from the Phase 3.2 design and the project plan.
 
-**Option B (Recommended): Use `synthesis` strategy + differentiate via prompt (Phase 3.3)**
-- `FinalAnalysisController` is not needed as a separate controller
-- Both synthesis and final analysis are tool-less single LLM calls
-- The difference is entirely in the prompt: synthesis merges parallel results, final analysis provides comprehensive investigation summary
-- Remove `FinalAnalysisController` from Phase 3.2; handle as a prompt template in Phase 3.3
-- Chain config marks the last stage as `iteration_strategy: synthesis` and the prompt builder uses the stage position/name to select the appropriate template
-- Pros: Fewer controllers, DRY, prompt concern handled in prompt phase
-- Cons: Less explicit in config; relies on prompt builder to distinguish synthesis vs final analysis
-
-**Option C: Add a `controller_type` field separate from `iteration_strategy`**
-- Keep `iteration_strategy` for the core strategies (react, native-thinking, synthesis)
-- Add an optional `controller_type: final-analysis` field to agent config
-- Controller factory checks `controller_type` first, then falls back to `iteration_strategy`
-- Pros: Separation of concerns between iteration pattern and controller purpose
-- Cons: Two fields to configure; more complexity
-
-**Recommendation:** Option B. Final analysis and synthesis are structurally identical (single tool-less LLM call). The difference is the prompt content, which belongs in Phase 3.3. This avoids creating a controller that duplicates `SynthesisController` logic. If we later find that final analysis needs different controller logic (not just different prompts), we can easily add a dedicated controller at that point.
+**Rejected alternatives:**
+- Option A (add `final-analysis` iteration strategy enum) — unnecessary, the concept itself is unneeded
+- Option B (use synthesis + prompt differentiation) — synthesis serves a different purpose (combining parallel results), conflating it with final analysis would be confusing
+- Option C (separate `controller_type` field) — unnecessary complexity for a non-existent need
 
 ---
 
 ### Q3: Chat Handling — Controllers Unaware or Chat-Aware?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Controllers chat-unaware — pure prompt concern**
 
 **Context:**
 
 Old TARSy has separate chat controllers (`ChatReActController`, `ChatNativeThinkingController`) that extend the base controllers and only override `build_initial_conversation()` to include investigation context and user questions.
 
-The design doc proposes making controllers chat-unaware — chat is handled entirely through `ExecutionContext.ChatContext` and prompt building (Phase 3.3).
+#### Decision
 
-**Question:** Should Phase 3.2 controllers have any chat awareness, or should it be purely a prompt/context concern?
+Controllers are chat-unaware. The only difference between a chat agent and a regular investigation agent is the initial prompt — chat uses a system message like "You are here to answer user's question regarding the investigation..." vs the regular "You are an SRE agent investigating an alert...". Stage context wrapping may differ slightly too (to be verified against old TARSy in Phase 3.3).
 
-**Options:**
+Since this is purely a prompt composition concern, controllers don't need any chat awareness. The `ChatContext` struct will be added to `ExecutionContext` in Phase 3.2 so the data model is ready, but controllers won't inspect it. Full chat support lands in Phase 3.3 when the prompt builder handles chat-specific templates.
 
-**Option A (Recommended): Controllers chat-unaware — pure prompt concern**
-- Controllers don't check `ChatContext` at all
-- `ChatContext` data flows into prompt building (Phase 3.3)
-- Controllers build messages using a `MessageBuilder` interface that handles chat/non-chat internally
-- Pros: Clean separation, no controller duplication, chat is purely a composition concern
-- Cons: Requires careful Phase 3.3 prompt builder design; Phase 3.2 chat testing is limited until Phase 3.3
-
-**Option B: Minimal chat awareness — controllers check ChatContext during message building**
-- Controllers check `execCtx.ChatContext != nil` in their `buildMessages()` methods
-- If chat, include investigation context + user question in messages
-- No separate chat controllers, but controllers have a branch for chat
-- Pros: Chat works in Phase 3.2 without waiting for Phase 3.3
-- Cons: Prompt logic leaks into controllers; will need refactoring in Phase 3.3
-
-**Option C: Separate chat controllers (old TARSy pattern)**
-- `ChatReActController` extends `ReActController` with different message building
-- `ChatNativeThinkingController` extends `NativeThinkingController`
-- Pros: Explicit, similar to old TARSy
-- Cons: Code duplication (only message building differs), more controllers to maintain
-
-**Recommendation:** Option A. The only difference between chat and non-chat is the prompt content. Making controllers chat-aware couples prompt logic to iteration logic. Phase 3.2 should focus on iteration mechanics; Phase 3.3 will handle prompt composition including chat-specific templates. The `ChatContext` struct should still be added to `ExecutionContext` in Phase 3.2 so the data model is ready, but controllers should not inspect it.
+**Rejected alternatives:**
+- Option B (minimal chat awareness in controllers) — leaks prompt logic into controllers, would need refactoring in Phase 3.3
+- Option C (separate chat controllers, old TARSy pattern) — code duplication for no benefit when only the prompt differs
 
 ---
 
@@ -141,81 +107,44 @@ The design doc proposes making controllers chat-unaware — chat is handled enti
 
 ### Q4: Synthesis and Synthesis-Native-Thinking — One Controller or Two?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Single `SynthesisController`**
 
 **Context:**
 
-Old TARSy has two separate synthesis controllers:
-- `SynthesisController` — uses LangChain for multi-provider synthesis
-- `SynthesisNativeThinkingController` — uses Gemini native thinking for synthesis (no tools)
+Old TARSy has two separate synthesis controllers. The question was whether the three key differences between react and native-thinking strategies require separate synthesis controllers.
 
-The design doc proposes using a single `SynthesisController` for both `synthesis` and `synthesis-native-thinking` strategies, since the only difference is the LLM backend (determined by config).
+#### Decision
 
-**Question:** Is a single controller sufficient, or are there Gemini-specific behaviors that require a separate controller?
+A single `SynthesisController` handles all three differences between react and native-thinking:
 
-**Analysis:**
+1. **Tool calling format** (ReAct text vs native function calling) — N/A for synthesis, it doesn't call tools.
+2. **Gemini native tools** (google_search, code_execution, url_context) — configured in `LLMProviderConfig.NativeTools` and passed through to Python via `GenerateInput.Config`. Python handles them transparently. The controller just passes the config as-is.
+3. **Native thinking** — controlled by the `backend` field in config. When `google-native`, Python uses `GoogleNativeProvider` with thinking enabled. `ThinkingChunk`s are captured by `collectStream` regardless of controller.
 
-Both synthesis controllers in old TARSy:
-1. Build a conversation with synthesis prompt + previous stage context
-2. Make a single LLM call (no tools)
-3. Return the result
+All three differences are handled at the config/Python layer, not the controller layer. One controller is strictly better.
 
-The `SynthesisNativeThinkingController` additionally:
-- Gets thinking content from the response (but new TARSy's `LLMResponse` already captures `ThinkingText` from `ThinkingChunk`s regardless of controller)
-- Uses Google Native SDK instead of LangChain (but this is handled by the backend field in config, transparent to the controller)
-
-**Options:**
-
-**Option A (Recommended): Single `SynthesisController`**
-- Both strategies use the same controller
-- Thinking content is already captured by `collectStream` for any backend
-- Backend selection is transparent (config-driven)
-- Pros: DRY, simpler
-- Cons: None identified — no behavioral difference exists
-
-**Option B: Two separate controllers**
-- `SynthesisController` and `SynthesisNativeThinkingController`
-- Pros: Mirrors old TARSy
-- Cons: Code duplication with zero behavioral difference
-
-**Recommendation:** Option A. There is no behavioral difference between the two — the thinking content collection and backend selection are already handled at layers below the controller. One controller is strictly better.
+**Rejected alternatives:**
+- Option B (two separate controllers) — code duplication with zero behavioral difference
 
 ---
 
 ### Q5: Per-Iteration Timeout — How Should It Work in Go?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Per-iteration `context.WithTimeout`**
 
 **Context:**
 
-Old TARSy wraps each iteration with `asyncio.wait_for(run_iteration(), timeout=iteration_timeout)`. The `iteration_timeout` is a global setting (`settings.llm_iteration_timeout`).
+Old TARSy wraps each iteration with `asyncio.wait_for(run_iteration(), timeout=iteration_timeout)`. Per-iteration timeouts prevent a single stuck iteration from consuming the entire session budget — especially important for parallel agents where one stuck agent shouldn't prevent the synthesis stage from running.
 
-In Go, timeouts are handled via `context.Context`. The session-level timeout is already handled by the queue system (context deadline). But individual iterations within a controller also need timeout protection to prevent a single stuck LLM call or tool execution from consuming the entire session timeout.
+#### Decision
 
-**Question:** How should per-iteration timeouts be implemented?
+Each iteration creates a child context with its own deadline: `iterCtx, cancel := context.WithTimeout(ctx, iterationTimeout)`. LLM calls and tool executions use `iterCtx`. If the iteration times out, `iterCtx` is cancelled, the LLM stream is terminated, and the controller records a timeout failure and moves on.
 
-**Options:**
+The parent `ctx` (session-level) still carries the overall session timeout and user cancellation signal. The per-iteration `iterCtx` is a child — if the parent is cancelled (user cancellation), all iteration contexts are cancelled too. This gives us both:
+- **Per-iteration timeout**: prevents wasting session budget on one stuck call
+- **User cancellation**: propagates immediately through the context chain
 
-**Option A (Recommended): Per-iteration context deadline**
-- Each iteration creates a child context with its own deadline: `iterCtx, cancel := context.WithTimeout(ctx, iterationTimeout)`
-- LLM calls and tool executions use `iterCtx`
-- If the iteration times out, `iterCtx` is cancelled, the LLM stream is terminated, and the controller moves to the next iteration (or records a timeout failure)
-- `iterationTimeout` comes from `ResolvedAgentConfig` (configurable per chain/agent)
-- Pros: Go-native, clean cancellation propagation, configurable
-- Cons: Need to be careful that `iterCtx` cancellation doesn't interfere with parent `ctx`
-
-**Option B: No per-iteration timeout — rely on session timeout only**
-- The session context already has a deadline
-- If a single iteration takes too long, eventually the session times out
-- Pros: Simple
-- Cons: One stuck iteration wastes the entire session timeout; no feedback about which iteration was slow
-
-**Option C: Channel-based timeout (select with timer)**
-- Use `select` with `time.After()` to race LLM calls against a timer
-- Pros: Explicit control
-- Cons: More complex than context-based, doesn't compose as well
-
-**Recommendation:** Option A. Go's `context.WithTimeout` is the idiomatic approach. The iteration timeout should be added to `ResolvedAgentConfig` (from chain/agent config) with a sensible default (e.g., 120 seconds). This gives each iteration its own deadline while the parent session context controls the overall timeout.
+`iterationTimeout` comes from `ResolvedAgentConfig` (configurable per chain/agent) with a sensible default (e.g., 120 seconds).
 
 **Config addition needed:**
 ```go
@@ -225,80 +154,45 @@ type ResolvedAgentConfig struct {
 }
 ```
 
+**Rejected alternatives:**
+- Option B (session timeout only) — one stuck iteration wastes the entire session budget; especially bad for parallel agents
+- Option C (channel-based timeout) — more complex, doesn't compose as well as context-based
+
 ---
 
 ### Q6: ReAct Parser — Port Exact Old TARSy Logic or Simplify?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Port complete parser logic**
 
 **Context:**
 
-Old TARSy's `react_parser.py` has extensive multi-tier detection logic:
-- Section-based extraction (Thought/Action/Action Input/Final Answer)
-- Multi-format action input parsing (JSON, YAML, key-value, raw)
-- Missing action recovery (look for tool-like patterns without explicit `Action:` marker)
-- Specific error feedback generation for different malformed response types
-- Tool name validation against available tools
+Old TARSy's `react_parser.py` has extensive multi-tier detection logic evolved over time after facing multiple malformed ReAct responses from LLMs.
 
-Some of this complexity was added over time to handle specific LLM format deviations. The question is whether to port all of this or start simpler.
+#### Decision
 
-**Options:**
+Port the complete parser logic from old TARSy. The multi-tier detection, multi-format action input parsing (JSON, YAML, key-value, raw), missing action recovery, and specific error feedback were all added to handle real LLM format deviations encountered in production. The current parser is proven to work well — it's very forgiving and capable of extracting needed parts even from badly formatted responses. Simplifying it would mean re-learning the same lessons.
 
-**Option A: Port complete parser logic**
-- Implement all detection tiers, multi-format parsing, and recovery logic
-- Pros: Full parity; handles all edge cases old TARSy encountered
-- Cons: Complex; some recovery logic may be for models/prompts we no longer use
-
-**Option B (Recommended): Port core logic, simplify recovery**
-- Implement section-based detection (Thought/Action/Action Input/Final Answer)
-- Implement JSON action input parsing (primary format)
-- Implement specific error feedback for common cases
-- Skip: YAML parsing, key-value parsing, missing action recovery
-- Add recovery logic later if/when we encounter specific failures
-- Pros: Simpler, covers 95% of cases, easy to extend
-- Cons: May need to add recovery logic later
-
-**Option C: Minimal parser — just regex extraction**
-- Simple regex patterns for `Action:`, `Action Input:`, `Final Answer:`
-- Pros: Very simple
-- Cons: Too brittle; real LLM output is messy
-
-**Recommendation:** Option B. Start with robust core parsing (section detection + JSON action input + error feedback) and skip the exotic recovery logic. If we encounter format deviations in production, we can add specific recovery handlers. The parser should be designed for extensibility (add new detection strategies without changing existing ones).
+**Rejected alternatives:**
+- Option B (core logic only, skip exotic recovery) — would lose battle-tested recovery logic and require re-discovering the same edge cases
+- Option C (minimal regex) — too brittle for real LLM output
 
 ---
 
 ### Q7: Thinking Content — Separate Timeline Events or LLMInteraction Only?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Create `llm_thinking` timeline events**
 
 **Context:**
 
-Old TARSy stores thinking content (from Gemini native thinking) in `LLMInteraction.metadata['thinking_content']`. It does NOT create separate timeline events for thinking content.
+Old TARSy stores thinking content only in `LLMInteraction.metadata`. Phase 2 introduced timeline events as a first-class concept with `llm_thinking` as a defined event type.
 
-The Phase 2 database design defines a `llm_thinking` event type in the `TimelineEvent` enum. The design doc proposes creating `llm_thinking` timeline events for thinking content.
+#### Decision
 
-**Question:** Should thinking content create timeline events, or stay in LLMInteraction only?
+Create `llm_thinking` timeline events when thinking content is present. Timeline events are the primary data model for real-time frontend updates — this was a key Phase 2 architectural decision and should be fully implemented. LLMInteraction records serve a different purpose (debugging/observability). The duplication is intentional: timeline for real-time display, LLMInteraction for detailed audit.
 
-**Options:**
-
-**Option A (Recommended): Create `llm_thinking` timeline events**
-- For native thinking and synthesis-native-thinking, when `ThinkingText` is present, create a `llm_thinking` timeline event
-- Also store in `LLMInteraction.thinking_content` (already planned)
-- Pros: Thinking appears in the timeline (frontend can show it), consistent with event type enum, enriches the real-time update stream
-- Cons: More timeline events (potentially verbose), thinking content stored in two places
-
-**Option B: LLMInteraction only (old TARSy pattern)**
-- Store thinking content only in `LLMInteraction.thinking_content`
-- No timeline events for thinking
-- Pros: Less verbose timeline, matches old TARSy
-- Cons: Thinking content not visible in timeline, event type enum value unused
-
-**Option C: Configurable per agent**
-- Add `show_thinking_in_timeline: true/false` to agent config
-- Pros: Flexible
-- Cons: More configuration; premature flexibility
-
-**Recommendation:** Option A. The `llm_thinking` event type already exists in the schema, and thinking content is valuable for debugging and transparency. The frontend can choose whether to display thinking events. The duplication (timeline + LLMInteraction) is intentional — timeline is for real-time updates, LLMInteraction is for detailed audit.
+**Rejected alternatives:**
+- Option B (LLMInteraction only) — underutilizes the timeline event system we deliberately designed in Phase 2
+- Option C (configurable per agent) — premature flexibility
 
 ---
 
@@ -306,104 +200,61 @@ The Phase 2 database design defines a `llm_thinking` event type in the `Timeline
 
 ### Q8: ToolExecutor Integration with ExecutionContext — When to Wire?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option A: Wire `StubToolExecutor` in Phase 3.2**
 
 **Context:**
 
 The design introduces a `ToolExecutor` interface in `ExecutionContext`. Phase 3.2 provides a `StubToolExecutor`. Phase 4 replaces it with a real MCP client.
 
-**Question:** Should the `StubToolExecutor` be wired into `ExecutionContext` in Phase 3.2, or should `ToolExecutor` remain nil until Phase 4?
+#### Decision
 
-**Options:**
+Wire `StubToolExecutor` in Phase 3.2. Controllers are testable end-to-end with stub tool responses without waiting for Phase 4 MCP integration.
 
-**Option A (Recommended): Wire `StubToolExecutor` in Phase 3.2**
-- `SessionExecutor` creates and injects `StubToolExecutor` for all tool-using strategies
-- Controllers can be tested end-to-end with stub tool responses
-- Pros: Controllers are testable in Phase 3.2 without Phase 4
-- Cons: Need to update `SessionExecutor` to create stubs
-
-**Option B: Leave nil until Phase 4**
-- Controllers check `execCtx.ToolExecutor != nil` before calling
-- ReAct/NativeThinking return an error if no tool executor and tools are needed
-- Pros: Clean separation; no stub code
-- Cons: Can't test tool-using controllers until Phase 4
-
-**Recommendation:** Option A. The whole point of the `ToolExecutor` interface is to enable Phase 3.2 testing. The stub should be wired in `SessionExecutor` with the tool definitions from the agent config (which references MCP server tools — for Phase 3.2 these will be empty or mock).
+**Rejected alternatives:**
+- Option B (leave nil until Phase 4) — can't test tool-using controllers until Phase 4
 
 ---
 
 ### Q9: Backend Selection for Phase 3.2 — Does LangChainProvider Need to Exist?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option C: Minimal `LangChainProvider` stub delegating to `GoogleNativeProvider`**
 
 **Context:**
 
-Phase 3.1 Q1 decided on a dual-provider model: `LangChainProvider` for multi-provider and `GoogleNativeProvider` for Gemini-specific features. The backend mapping is:
-- `react`, `synthesis` → `langchain` backend
-- `native-thinking`, `synthesis-native-thinking` → `google-native` backend
+Phase 3.1 Q1 decided on a dual-provider model. `LangChainProvider` hasn't been implemented yet. The question was whether Phase 3.2 needs it.
 
-But `LangChainProvider` has not been implemented yet — Phase 3.1 only delivered `GoogleNativeProvider`. The question is whether Phase 3.2 needs `LangChainProvider` to test ReAct and Synthesis controllers.
+#### Decision
 
-**Key insight:** ReAct doesn't use function calling at all — it's pure text generation. `GoogleNativeProvider` can do text generation without using any Gemini-specific features. The multi-provider benefit of LangChain only matters in Phase 6 (multi-LLM support).
+Implement a minimal `LangChainProvider` stub that internally delegates to `GoogleNativeProvider`. This gets all the wiring correct from day one:
+- Go correctly routes `react`/`synthesis` → `langchain` backend
+- Python's `LangChainProvider` receives the request and delegates to `GoogleNativeProvider`
+- Backend routing, interface, and all Go-side code are production-correct
 
-**Options:**
+When Phase 6 arrives, we only need to replace `LangChainProvider` internals with real LangChain SDK calls — no refactoring of Go config resolution or Python routing needed.
 
-**Option A (Recommended): Use `GoogleNativeProvider` for all strategies in Phase 3.2**
-- Temporarily route all strategies through `google-native` backend
-- ReAct works because it doesn't use function calling (just text generation)
-- Synthesis works because it's also just text generation
-- Implement `LangChainProvider` in Phase 6 when we actually need multi-provider
-- Pros: No LangChain dependency in Phase 3.2, simpler, ReAct/Synthesis work fine with any text-generating backend
-- Cons: Delays LangChain integration; if there are provider-specific text generation quirks, they won't surface until Phase 6
-
-**Option B: Implement `LangChainProvider` in Phase 3.2**
-- Build the LangChain provider now to establish the dual-provider architecture
-- Pros: Architecture ready for Phase 6, tests exercise both backends
-- Cons: More work in Phase 3.2 for a feature (multi-provider) that isn't needed yet
-
-**Option C: Implement a minimal `LangChainProvider` stub**
-- `LangChainProvider` exists but internally delegates to `GoogleNativeProvider`
-- Backend routing works, but actual LangChain SDK isn't used
-- Pros: Architecture tested, no LangChain dependency yet
-- Cons: Misleading name; stub that pretends to be something it isn't
-
-**Recommendation:** Option A. Since we're only supporting Gemini in Phases 3-5, all strategies can use `GoogleNativeProvider` for text generation. ReAct just needs text output (no function calling). Implementing LangChain now adds complexity for a feature that won't be used until Phase 6. When Phase 6 arrives, we can implement `LangChainProvider` and update the backend routing.
-
-**Impact on design doc:** If accepted, the "Backend Selection" table changes — all strategies use `google-native` in Phase 3.2. The `backend` field in proto/config still exists but is set to `google-native` for all strategies until Phase 6.
+**Rejected alternatives:**
+- Option A (use GoogleNativeProvider for all, route everything to `google-native`) — requires changing Go's config resolution in Phase 6 on top of implementing LangChainProvider; unnecessary refactoring
+- Option B (implement real LangChainProvider now) — more work for a feature (multi-provider) not needed until Phase 6
 
 ---
 
 ### Q10: Sequence Number Management — Global Counter or Per-Type?
 
-**Status**: 🔄
+**Status**: ✅ Decided — **Option B: Separate counters per type**
 
 **Context:**
 
-Timeline events and messages both have `sequence_number` fields. The `SingleCallController` (Phase 3.1) uses a simple counter. But Phase 3.2 controllers create many more records (multiple iterations, tool calls, tool results, thinking events), and the sequence numbering needs to be consistent and correct.
+Timeline events and messages both have `sequence_number` fields. Phase 3.2 controllers create many more records than Phase 3.1.
 
-**Question:** How should sequence numbers be managed across the iteration loop?
+#### Decision
 
-**Options:**
+Separate counters per type. Messages get their own sequence (1, 2, 3...), timeline events get their own (1, 2, 3...). The `sequence_number` fields already exist in the schema and are already used by `SingleCallController`.
 
-**Option A (Recommended): Single atomic counter per execution**
-- `ExecutionContext` gets a `NextSequenceNumber() int` method
-- All timeline events, messages, and interactions use this counter
-- Monotonically increasing across the entire execution
-- Pros: Simple, correct ordering, no confusion about relative order of events vs messages
-- Cons: Messages and timeline events share numbering space (not separated)
+Messages and timeline events are always queried independently (messages feed the LLM conversation, timeline events feed the frontend), so a shared counter across types adds no practical value. Each type being self-consistent is sufficient — `ORDER BY sequence_number` within each type gives correct ordering.
 
-**Option B: Separate counters for messages and timeline events**
-- Messages have their own sequence: 1, 2, 3...
-- Timeline events have their own sequence: 1, 2, 3...
-- Pros: Cleaner per-type ordering
-- Cons: Can't determine relative order between a message and a timeline event
-
-**Option C: Timestamp-based ordering only**
-- No sequence numbers — use `created_at` timestamps
-- Pros: No counter management needed
-- Cons: Timestamps can collide in fast loops; less reliable ordering
-
-**Recommendation:** Option A. A single counter ensures a total order across all records created during an execution. This makes reconstructing the exact execution timeline straightforward. The counter should be a simple `int` on `ExecutionContext` (or a helper struct), incremented atomically.
+**Rejected alternatives:**
+- Option A (single shared counter) — messages and events are never queried together; shared counter adds complexity for no benefit
+- Option C (timestamps only) — timestamps can collide in fast loops; `sequence_number` fields already exist
 
 ---
 
@@ -412,12 +263,12 @@ Timeline events and messages both have `sequence_number` fields. The `SingleCall
 | Question | Topic | Priority | Recommendation |
 |---|---|---|---|
 | Q1 | Dropping session pause/resume | 🔥 Critical | Option A: Drop, always force conclusion or fail |
-| Q2 | Final Analysis as strategy or prompt | 🔥 Critical | Option B: Handle via synthesis + prompt (Phase 3.3) |
-| Q3 | Chat handling approach | 🔥 Critical | Option A: Controllers chat-unaware, prompt concern |
+| Q2 | Final Analysis — drop entirely | 🔥 Critical | Drop: not a real strategy, investigation agents produce final answers naturally |
+| Q3 | Chat handling approach | 🔥 Critical | Option A: Controllers chat-unaware, prompt concern (Phase 3.3) |
 | Q4 | Synthesis — one or two controllers | ⚠️ Important | Option A: Single `SynthesisController` |
 | Q5 | Per-iteration timeout mechanism | ⚠️ Important | Option A: Per-iteration `context.WithTimeout` |
-| Q6 | ReAct parser completeness | ⚠️ Important | Option B: Core logic, skip exotic recovery |
+| Q6 | ReAct parser completeness | ⚠️ Important | Option A: Port complete parser logic from old TARSy |
 | Q7 | Thinking content in timeline | ⚠️ Important | Option A: Create `llm_thinking` timeline events |
 | Q8 | ToolExecutor wiring in Phase 3.2 | 📋 Clarification | Option A: Wire `StubToolExecutor` |
-| Q9 | Backend selection for Phase 3.2 | 📋 Clarification | Option A: Use `GoogleNativeProvider` for all |
-| Q10 | Sequence number management | 📋 Clarification | Option A: Single atomic counter per execution |
+| Q9 | Backend selection for Phase 3.2 | 📋 Clarification | Option C: Stub `LangChainProvider` delegating to `GoogleNativeProvider` |
+| Q10 | Sequence number management | 📋 Clarification | Option B: Separate counters per type |

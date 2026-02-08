@@ -113,7 +113,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [x] Cleanup: remove `react-stage` and `react-final-analysis` from Phase 2 code (enums, config examples, validation, built-in configs) — **Complete**: No references found in codebase
 - [ ] Synthesis controller (tool-less, single LLM call)
 - [ ] Chat controller (investigation context + chat history)
-- [ ] Final analysis controller (tool-less comprehensive analysis)
+- ~~Final analysis controller — dropped, not a real strategy. Investigation agents (ReAct/NativeThinking) naturally produce final answers; synthesis handles parallel result merging.~~
 
 **3.3: Prompt System (Go)**
 - [ ] Prompt builder framework
