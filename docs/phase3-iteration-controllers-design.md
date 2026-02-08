@@ -471,15 +471,14 @@ func (c *ReActController) Run(
 
         if err != nil {
             iterCancel()
-            // Handle LLM call failure
+            createTimelineEvent(ctx, execCtx, "error", err.Error())
             state.RecordFailure(err.Error(), isTimeoutError(err))
             messages = appendObservation(messages, formatErrorObservation(err))
             continue
         }
 
-        // Record LLM interaction
+        // Record LLM interaction (observability — always, regardless of parse result)
         accumulateUsage(&totalUsage, resp)
-        // Store assistant message
         assistantMsg := storeAssistantMessage(ctx, execCtx, messages, resp)
         recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
@@ -489,14 +488,21 @@ func (c *ReActController) Run(
             Content: resp.Text,
         })
 
-        // Parse ReAct response
+        // Parse ReAct response — extract structured parts from text
         parsed := ParseReActResponse(resp.Text)
         state.RecordSuccess()
 
+        // Create timeline events based on what the response actually contains.
+        // ReAct "Thought:" is shown to users as llm_thinking (same UX as native thinking).
+        // No llm_response event — the raw ReAct text isn't useful to users;
+        // the meaningful parts are extracted into thinking/tool_call/final_analysis.
+        if parsed.Thought != "" {
+            createTimelineEvent(ctx, execCtx, "llm_thinking", parsed.Thought)
+        }
+
         switch {
         case parsed.IsFinalAnswer:
-            // Complete — create final_analysis timeline event
-            createFinalAnalysisEvent(ctx, execCtx, parsed.FinalAnswer)
+            createTimelineEvent(ctx, execCtx, "final_analysis", parsed.FinalAnswer)
             return &agent.ExecutionResult{
                 Status:        agent.ExecutionStatusCompleted,
                 FinalAnalysis: parsed.FinalAnswer,
@@ -593,6 +599,7 @@ func (c *ReActController) forceConclusion(
         Tools:       nil,
     })
     if err != nil {
+        createTimelineEvent(ctx, execCtx, "error", err.Error())
         return &agent.ExecutionResult{
             Status:     agent.ExecutionStatusFailed,
             Error:      fmt.Errorf("forced conclusion LLM call failed: %w", err),
@@ -601,9 +608,13 @@ func (c *ReActController) forceConclusion(
     }
 
     accumulateUsage(totalUsage, resp)
-    // Extract final answer from forced conclusion (may or may not have ReAct format)
-    finalAnswer := extractForcedConclusionAnswer(resp.Text)
-    createFinalAnalysisEvent(ctx, execCtx, finalAnswer)
+    // Parse forced conclusion — may or may not have ReAct format
+    parsed := ParseReActResponse(resp.Text)
+    if parsed.Thought != "" {
+        createTimelineEvent(ctx, execCtx, "llm_thinking", parsed.Thought)
+    }
+    finalAnswer := extractForcedConclusionAnswer(parsed)
+    createTimelineEvent(ctx, execCtx, "final_analysis", finalAnswer)
 
     return &agent.ExecutionResult{
         Status:        agent.ExecutionStatusCompleted,
@@ -847,10 +858,8 @@ func (c *NativeThinkingController) Run(
 
         if err != nil {
             iterCancel()
+            createTimelineEvent(ctx, execCtx, "error", err.Error())
             state.RecordFailure(err.Error(), isTimeoutError(err))
-            // For native thinking, on LLM error we can't easily append an observation
-            // because the conversation uses structured messages.
-            // We append a user message with the error context instead.
             messages = append(messages, agent.ConversationMessage{
                 Role:    "user",
                 Content: fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error()),
@@ -861,13 +870,22 @@ func (c *NativeThinkingController) Run(
         accumulateUsage(&totalUsage, resp)
         state.RecordSuccess()
 
-        // Store thinking content as timeline event (if present)
+        // Create timeline events based on what the response actually contains.
+        // A single response can have any combination of: thinking, text, tool calls.
+
+        // Thinking content (if present)
         if resp.ThinkingText != "" {
-            createThinkingEvent(ctx, execCtx, resp.ThinkingText)
+            createTimelineEvent(ctx, execCtx, "llm_thinking", resp.ThinkingText)
         }
 
         // Check for tool calls
         if len(resp.ToolCalls) > 0 {
+            // LLM may include text alongside tool calls (e.g., reasoning or
+            // status updates). Show it to the user as llm_response.
+            if resp.Text != "" {
+                createTimelineEvent(ctx, execCtx, "llm_response", resp.Text)
+            }
+
             // Store assistant message with tool calls
             assistantMsg := storeAssistantMessageWithToolCalls(ctx, execCtx, messages, resp)
             recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
@@ -912,7 +930,7 @@ func (c *NativeThinkingController) Run(
             assistantMsg := storeAssistantMessage(ctx, execCtx, messages, resp)
             recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
-            createFinalAnalysisEvent(ctx, execCtx, resp.Text)
+            createTimelineEvent(ctx, execCtx, "final_analysis", resp.Text)
 
             return &agent.ExecutionResult{
                 Status:        agent.ExecutionStatusCompleted,
@@ -963,6 +981,7 @@ func (c *NativeThinkingController) forceConclusion(
         Tools:       nil, // No tools — force text conclusion
     })
     if err != nil {
+        createTimelineEvent(ctx, execCtx, "error", err.Error())
         return &agent.ExecutionResult{
             Status:     agent.ExecutionStatusFailed,
             Error:      fmt.Errorf("forced conclusion LLM call failed: %w", err),
@@ -971,7 +990,10 @@ func (c *NativeThinkingController) forceConclusion(
     }
 
     accumulateUsage(totalUsage, resp)
-    createFinalAnalysisEvent(ctx, execCtx, resp.Text)
+    if resp.ThinkingText != "" {
+        createTimelineEvent(ctx, execCtx, "llm_thinking", resp.ThinkingText)
+    }
+    createTimelineEvent(ctx, execCtx, "final_analysis", resp.Text)
 
     return &agent.ExecutionResult{
         Status:        agent.ExecutionStatusCompleted,
@@ -1018,10 +1040,7 @@ func (c *SynthesisController) Run(
     // 2. Store messages
     storeMessages(ctx, execCtx, messages)
 
-    // 3. Create timeline event for streaming
-    event := createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis)
-
-    // 4. Single LLM call (no tools)
+    // 3. Single LLM call (no tools)
     resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
         SessionID:   execCtx.SessionID,
         ExecutionID: execCtx.ExecutionID,
@@ -1030,22 +1049,21 @@ func (c *SynthesisController) Run(
         Tools:       nil, // Synthesis never uses tools
     })
     if err != nil {
+        createTimelineEvent(ctx, execCtx, "error", err.Error())
         return nil, fmt.Errorf("synthesis LLM call failed: %w", err)
     }
 
-    // 5. Complete timeline event
-    completeTimelineEvent(ctx, execCtx, event.ID, resp.Text)
-
-    // 6. Store thinking content if present (synthesis-native-thinking)
+    // 4. Create timeline events based on what the response contains
     if resp.ThinkingText != "" {
-        createThinkingEvent(ctx, execCtx, resp.ThinkingText)
+        createTimelineEvent(ctx, execCtx, "llm_thinking", resp.ThinkingText)
     }
+    createTimelineEvent(ctx, execCtx, "final_analysis", resp.Text)
 
-    // 7. Store assistant message + LLM interaction
+    // 5. Store assistant message + LLM interaction
     assistantMsg := storeAssistantMessage(ctx, execCtx, messages, resp)
     recordLLMInteraction(ctx, execCtx, 1, "synthesis", len(messages), resp, &assistantMsg.ID, startTime)
 
-    // 8. Return result
+    // 6. Return result
     return &agent.ExecutionResult{
         Status:        agent.ExecutionStatusCompleted,
         FinalAnalysis: resp.Text,
@@ -1157,23 +1175,84 @@ func (f *Factory) CreateController(
 
 ## Timeline Events
 
-Controllers create timeline events for real-time frontend updates. Each event type maps to specific controller actions:
+Controllers create timeline events for real-time frontend updates. Each event type maps to specific controller actions.
+
+### Event Creation Philosophy
+
+**Create events when they actually occur, not speculatively.**
+
+Events are created after we know what the LLM response contains — not before the LLM call. This avoids:
+- Dangling empty events when the LLM call fails
+- Speculative events for content that never materializes (e.g., creating `llm_response` before knowing if native thinking will even produce text)
+- Confusing WebSocket notifications for events that don't represent real activity
+
+**Phase 3.2 (buffered):** The full LLM response is collected via `collectStream`, then events are created based on what the response actually contains.
+
+**Phase 3.4 (streaming):** Events are created when the **first chunk of that type** arrives from the stream:
+- First `ThinkingChunk` → create `llm_thinking` event, stream subsequent thinking chunks into it
+- First `TextChunk` → create `llm_response` event, stream subsequent text chunks into it
+- `ToolCallChunk` → wait until tool call is fully formed, then create `tool_call` event
+- `completeTimelineEvent` is called when the stream ends or the chunk type changes
+
+This means `completeTimelineEvent` is only needed in Phase 3.4 for streaming updates. In Phase 3.2, all events are created with their final content.
+
+### Timeline Event Flow Per Controller
+
+**ReAct — per iteration:**
+1. LLM called, stream collected into `resp`
+2. LLM interaction recorded (observability)
+3. Response parsed by ReAct parser
+4. If `Thought:` present → `llm_thinking` created with thought content
+5. Branch on parsed result:
+   - **Final answer** → `final_analysis` created with answer content → **done**
+   - **Tool call** → `tool_call` created with action+input → tool executed → `tool_result` created with output
+   - **Malformed/error** → `error` created with details
+6. On forced conclusion: forced-conclusion LLM call → `final_analysis` created with text
+
+> **Note:** ReAct does NOT create `llm_response` events. The raw LLM response contains the full ReAct format (Thought + Action + Action Input), which is not useful to the user. Instead, the meaningful parts are extracted: `Thought:` becomes `llm_thinking` (same UX as native thinking), `Action:` becomes `tool_call`, and `Final Answer:` becomes `final_analysis`.
+
+**Native Thinking — per iteration:**
+1. LLM called with bound tools, stream collected into `resp`
+2. LLM interaction recorded (observability)
+3. If `resp.ThinkingText` present → `llm_thinking` created with thinking content
+4. Branch on tool calls:
+   - **Has tool calls** → if `resp.Text` present → `llm_response` created with text; then for each tool call: `tool_call` created → tool executed → `tool_result` created
+   - **No tool calls** → `final_analysis` created with `resp.Text` → **done**
+5. If error → `error` created
+6. On forced conclusion: forced-conclusion LLM call (no tools) → `final_analysis` created with text
+
+> **Note:** A single Native Thinking iteration can produce multiple event types: `llm_thinking` + `llm_response` + `tool_call` events (thinking, text, and tool calls). Or just `llm_thinking` + `tool_call` (no text). Or just text as `final_analysis` (final answer with no thinking). Events are created only for what's actually present in the response.
+
+**Synthesis:**
+1. LLM called, stream collected into `resp`
+2. If `resp.ThinkingText` present → `llm_thinking` created with thinking content
+3. `final_analysis` created with `resp.Text` (synthesis result)
 
 ### Event Types by Controller
 
 | Event Type | ReAct | Native Thinking | Synthesis |
 |---|---|---|---|
-| `llm_response` | ✅ (each iteration) | ✅ (each iteration) | — |
-| `llm_thinking` | — | ✅ (if thinking content) | ✅ (if thinking content) |
+| `llm_response` | — (see note) | ✅ (if text present) | — |
+| `llm_thinking` | ✅ (parsed Thought:) | ✅ (if ThinkingText) | ✅ (if ThinkingText) |
 | `tool_call` | ✅ (parsed action) | ✅ (structured call) | — |
 | `tool_result` | ✅ (observation) | ✅ (tool output) | — |
 | `final_analysis` | ✅ (completion) | ✅ (completion) | ✅ |
 | `error` | ✅ (on failure) | ✅ (on failure) | ✅ (on failure) |
 
-### Event Creation Pattern
+> **ReAct `llm_response`**: ReAct does not produce `llm_response` events because the raw ReAct-formatted text is not meaningful to users. The parser extracts the useful parts into `llm_thinking` (Thought:), `tool_call` (Action:), and `final_analysis` (Final Answer:).
+
+> **Gemini native tools** (`code_execution`, `google_search`, `url_context`): Not covered in Phase 3.2. These produce results inline in the Gemini response stream (code execution is already collected into `LLMResponse.CodeExecutions`; grounding/URL context are not yet captured). Timeline event types and controller logic for these are deferred to **Phase 3.2.1** — see project plan for details.
+
+### Event Creation Helper
 
 ```go
-// Shared helper used by all controllers.
+// createTimelineEvent creates a new timeline event with content.
+// In Phase 3.2, events are always created with their final content
+// (after the LLM response is fully collected and parsed).
+//
+// Phase 3.4 will add a streaming variant where events are created
+// on first chunk arrival and completed via completeTimelineEvent.
+//
 // Sequence numbers are managed per type — timeline events have their own
 // counter (1, 2, 3...), separate from the message sequence counter.
 func createTimelineEvent(
@@ -1193,6 +1272,21 @@ func createTimelineEvent(
         EventType:      eventType,
         Content:        content,
         Metadata:       metadata,
+    })
+}
+
+// completeTimelineEvent updates an existing timeline event with final content.
+// NOT USED in Phase 3.2 (all events created with final content).
+// Phase 3.4 will use this when streaming: events are created on first chunk
+// arrival, streamed into, then completed here when the stream ends.
+func completeTimelineEvent(
+    ctx context.Context,
+    execCtx *agent.ExecutionContext,
+    eventID uuid.UUID,
+    content string,
+) error {
+    return execCtx.Services.Timeline.UpdateTimelineEvent(ctx, eventID, models.UpdateTimelineEventRequest{
+        Content: content,
     })
 }
 ```
@@ -1357,7 +1451,7 @@ func (m *MockToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*a
 1. **Shared infrastructure** (build first, used by all controllers):
    - [ ] `pkg/agent/tool_executor.go` — ToolExecutor interface + StubToolExecutor
    - [ ] `pkg/agent/iteration.go` — IterationState, shared constants
-   - [ ] `pkg/agent/controller/helpers.go` — collectStream, callLLM, recordLLMInteraction, accumulateUsage
+   - [ ] `pkg/agent/controller/helpers.go` — collectStream, callLLM, recordLLMInteraction, accumulateUsage, createTimelineEvent, completeTimelineEvent, createToolCallEvent, createToolResultEvent
    - [ ] Update `pkg/agent/context.go` — add ToolExecutor, ChatContext
 
 2. **ReAct Parser** (needed before ReAct controller):
