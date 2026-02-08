@@ -8,6 +8,7 @@ from proto import llm_service_pb2 as pb
 from proto import llm_service_pb2_grpc as pb_grpc
 from llm.providers.registry import ProviderRegistry
 from llm.providers.google_native import GoogleNativeProvider
+from llm.providers.langchain_stub import LangChainStubProvider
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,11 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
         self._registry = ProviderRegistry()
 
         # Register providers
-        self._registry.register("google-native", GoogleNativeProvider())
-        # Future: self._registry.register("langchain", LangChainProvider())
+        google = GoogleNativeProvider()
+        self._registry.register("google-native", google)
+        self._registry.register("langchain", LangChainStubProvider(google))
 
-        logger.info("LLM Servicer initialized with providers: google-native")
+        logger.info("LLM Servicer initialized with providers: google-native, langchain")
 
     async def Generate(
         self,

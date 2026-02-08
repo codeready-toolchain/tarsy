@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"time"
+
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
@@ -23,10 +25,13 @@ type ExecutionContext struct {
 	Config *ResolvedAgentConfig
 
 	// Dependencies (injected by executor)
-	LLMClient LLMClient
-	Services  *ServiceBundle
-	// MCPClient     MCPClient        // Phase 4
+	LLMClient    LLMClient
+	ToolExecutor ToolExecutor // Phase 3.2: stub, Phase 4: MCP client
+	Services     *ServiceBundle
 	// EventPublisher EventPublisher  // Phase 3.4
+
+	// Chat context (nil for non-chat sessions)
+	ChatContext *ChatContext
 }
 
 // ServiceBundle groups all service dependencies needed during execution.
@@ -44,7 +49,16 @@ type ResolvedAgentConfig struct {
 	IterationStrategy  config.IterationStrategy
 	LLMProvider        *config.LLMProviderConfig
 	MaxIterations      int
+	IterationTimeout   time.Duration // Per-iteration timeout (default: 120s)
 	MCPServers         []string
 	CustomInstructions string
 	// MCPSelection *models.MCPSelectionConfig  // Phase 4
+}
+
+// ChatContext carries chat-specific data for controllers.
+// Phase 3.3 prompt builder will use this to compose chat-aware prompts.
+type ChatContext struct {
+	UserQuestion        string
+	InvestigationContext string
+	ChatHistory         []ConversationMessage
 }
