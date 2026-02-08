@@ -38,9 +38,12 @@ func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMes
 		return nil, NewValidationError("role", "required")
 	}
 	if err := message.RoleValidator(req.Role); err != nil {
-		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: must be one of system, user, assistant, tool", req.Role))
+		return nil, NewValidationError("role", fmt.Sprintf("invalid role %q: %v", req.Role, err))
 	}
-	if req.Content == "" {
+	// Content is required for most messages, but assistant messages that
+	// contain tool calls can legally have empty content (the LLM responds
+	// with only tool invocations and no accompanying text).
+	if req.Content == "" && !(req.Role == message.RoleAssistant && len(req.ToolCalls) > 0) {
 		return nil, NewValidationError("content", "required")
 	}
 

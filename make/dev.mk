@@ -56,8 +56,7 @@ test-go-coverage: test-go ## Run Go tests and show coverage report
 # -----------------------------------------------------------------------------
 
 .PHONY: test-python
-test-python: ## Run all Python tests (alias for test-llm)
-	@$(MAKE) test-llm
+test-python: test-llm ## Run all Python tests (alias for test-llm)
 
 .PHONY: test-llm
 test-llm: ## Run LLM service Python tests

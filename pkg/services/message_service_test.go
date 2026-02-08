@@ -127,6 +127,42 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Equal(t, `{"namespace":"default"}`, msg.ToolCalls[0].Arguments)
 	})
 
+	t.Run("creates assistant message with tool calls and empty content", func(t *testing.T) {
+		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 15,
+			Role:           message.RoleAssistant,
+			Content:        "", // LLM responded with only tool calls, no text
+			ToolCalls: []models.ToolCallData{
+				{
+					ID:        "call_empty",
+					Name:      "get_events",
+					Arguments: `{"namespace":"kube-system"}`,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, message.RoleAssistant, msg.Role)
+		assert.Equal(t, "", msg.Content)
+		assert.Len(t, msg.ToolCalls, 1)
+		assert.Equal(t, "call_empty", msg.ToolCalls[0].ID)
+	})
+
+	t.Run("rejects assistant message with empty content and no tool calls", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 16,
+			Role:           message.RoleAssistant,
+			Content:        "",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "content")
+	})
+
 	t.Run("creates tool response message", func(t *testing.T) {
 		toolCallID := "call_789"
 		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
@@ -182,7 +218,8 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		// Get all messages for the stage
 		messages, err := messageService.GetStageMessages(ctx, stg.ID)
 		require.NoError(t, err)
-		// Should have all messages from both executions (original 2 + tool call + tool response + 2 new = 6)
-		assert.Len(t, messages, 6)
+		// Should have all messages from both executions
+		// (original 2 + tool call + empty-content tool call + tool response + 2 new = 7)
+		assert.Len(t, messages, 7)
 	})
 }

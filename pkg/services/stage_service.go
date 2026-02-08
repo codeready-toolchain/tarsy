@@ -187,6 +187,11 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 		return fmt.Errorf("failed to get stage: %w", err)
 	}
 
+	// Guard: if no agent executions exist, don't finalize
+	if len(stg.Edges.AgentExecutions) == 0 {
+		return nil
+	}
+
 	// Check if any agent is still pending or active
 	hasActive := false
 	hasPending := false
@@ -208,11 +213,6 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 				SetStartedAt(time.Now()).
 				Exec(writeCtx)
 		}
-		return nil
-	}
-
-	// Guard: if no agent executions exist, don't finalize
-	if len(stg.Edges.AgentExecutions) == 0 {
 		return nil
 	}
 

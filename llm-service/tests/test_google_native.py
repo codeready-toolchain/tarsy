@@ -370,7 +370,8 @@ class TestGoogleNativeProvider:
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
-    async def test_generate_retries_on_empty_stream(self, mock_client_class, provider):
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_retries_on_empty_stream(self, mock_sleep, mock_client_class, provider):
         """Test that retries happen when zero chunks were produced."""
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client

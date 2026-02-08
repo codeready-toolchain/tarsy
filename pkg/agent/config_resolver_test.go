@@ -12,10 +12,10 @@ func intPtr(i int) *int { return &i }
 
 func TestResolveAgentConfig(t *testing.T) {
 	// Setup: build a Config with registries
-	maxIter20 := 20
+	maxIter25 := 25
 	defaults := &config.Defaults{
 		LLMProvider:       "google-default",
-		MaxIterations:     &maxIter20,
+		MaxIterations:     &maxIter25,
 		IterationStrategy: config.IterationStrategyReact,
 	}
 
@@ -61,7 +61,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		// Agent def overrides defaults for iteration strategy
 		assert.Equal(t, config.IterationStrategyNativeThinking, resolved.IterationStrategy)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
-		assert.Equal(t, 20, resolved.MaxIterations)
+		assert.Equal(t, 25, resolved.MaxIterations)
 		assert.Equal(t, []string{"kubernetes-server"}, resolved.MCPServers)
 		assert.Equal(t, "You are a K8s agent", resolved.CustomInstructions)
 	})
@@ -124,5 +124,71 @@ func TestResolveAgentConfig(t *testing.T) {
 		_, err := ResolveAgentConfig(cfg, nil, stageConfig, agentConfig)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "chain configuration cannot be nil")
+	})
+
+	t.Run("MCPServers follows five-level precedence", func(t *testing.T) {
+		// Test that chain overrides agent-def
+		t.Run("chain overrides agent-def", func(t *testing.T) {
+			chain := &config.ChainConfig{
+				MCPServers: []string{"chain-server"},
+			}
+			stageConfig := config.StageConfig{}
+			agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+
+			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"chain-server"}, resolved.MCPServers)
+		})
+
+		// Test that stage overrides chain
+		t.Run("stage overrides chain and agent-def", func(t *testing.T) {
+			chain := &config.ChainConfig{
+				MCPServers: []string{"chain-server"},
+			}
+			stageConfig := config.StageConfig{
+				MCPServers: []string{"stage-server"},
+			}
+			agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+
+			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"stage-server"}, resolved.MCPServers)
+		})
+
+		// Test that stage-agent overrides all
+		t.Run("stage-agent overrides stage, chain, and agent-def", func(t *testing.T) {
+			chain := &config.ChainConfig{
+				MCPServers: []string{"chain-server"},
+			}
+			stageConfig := config.StageConfig{
+				MCPServers: []string{"stage-server"},
+			}
+			agentConfig := config.StageAgentConfig{
+				Name:       "KubernetesAgent",
+				MCPServers: []string{"stage-agent-server"},
+			}
+
+			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"stage-agent-server"}, resolved.MCPServers)
+		})
+
+		// Test that empty lists don't override
+		t.Run("empty lists don't override previous levels", func(t *testing.T) {
+			chain := &config.ChainConfig{
+				MCPServers: []string{"chain-server"},
+			}
+			stageConfig := config.StageConfig{
+				MCPServers: []string{}, // empty, should not override
+			}
+			agentConfig := config.StageAgentConfig{
+				Name:       "KubernetesAgent",
+				MCPServers: []string{}, // empty, should not override
+			}
+
+			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"chain-server"}, resolved.MCPServers)
+		})
 	})
 }

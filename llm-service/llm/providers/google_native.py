@@ -115,6 +115,10 @@ class GoogleNativeProvider(LLMProvider):
                     try:
                         args = json.loads(tc.arguments) if tc.arguments else {}
                     except json.JSONDecodeError:
+                        logger.warning(
+                            "Failed to parse tool call arguments as JSON, using empty args: %s",
+                            tc.arguments,
+                        )
                         args = {}
                     parts.append(
                         genai_types.Part(
@@ -411,10 +415,10 @@ class GoogleNativeProvider(LLMProvider):
                         )
 
         except asyncio.TimeoutError as exc:
-            raise _RetryableError(f"Generation timed out after {timeout_seconds}s") from exc
+            raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
 
         if not has_content:
-            raise _RetryableError("Empty response from LLM (no content generated)")
+            raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
         # Final chunk
         yield pb.GenerateResponse(is_final=True)

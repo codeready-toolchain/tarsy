@@ -113,6 +113,22 @@ func TestFromProtoResponse(t *testing.T) {
 		assert.Equal(t, "k8s.get_pods", tc.Name)
 	})
 
+	t.Run("code execution delta", func(t *testing.T) {
+		resp := &llmv1.GenerateResponse{
+			Content: &llmv1.GenerateResponse_CodeExecution{
+				CodeExecution: &llmv1.CodeExecutionDelta{
+					Code:   "print('hi')",
+					Result: "hi",
+				},
+			},
+		}
+		chunk := fromProtoResponse(resp)
+		ce, ok := chunk.(*CodeExecutionChunk)
+		require.True(t, ok)
+		assert.Equal(t, "print('hi')", ce.Code)
+		assert.Equal(t, "hi", ce.Result)
+	})
+
 	t.Run("usage info", func(t *testing.T) {
 		resp := &llmv1.GenerateResponse{
 			Content: &llmv1.GenerateResponse_Usage{

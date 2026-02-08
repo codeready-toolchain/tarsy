@@ -41,6 +41,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		"session_id", session.ID,
 		"chain_id", session.ChainID,
 		"alert_type", session.AlertType,
+		"alert_data_bytes", len(session.AlertData),
 	)
 	logger.Info("Session executor: starting execution")
 
@@ -189,6 +190,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 }
 
 // mapAgentStatusToEntStatus converts agent.ExecutionStatus to ent agentexecution.Status.
+// Pending status falls through to Failed intentionally — it should never reach
+// this mapper since BaseAgent always sets a terminal status before returning.
 func mapAgentStatusToEntStatus(status agent.ExecutionStatus) agentexecution.Status {
 	switch status {
 	case agent.ExecutionStatusCompleted:
@@ -207,6 +210,8 @@ func mapAgentStatusToEntStatus(status agent.ExecutionStatus) agentexecution.Stat
 }
 
 // mapAgentStatusToSessionStatus converts agent.ExecutionStatus to alertsession.Status.
+// Pending/Active statuses fall through to Failed intentionally — they should never
+// reach this mapper since BaseAgent always sets a terminal status before returning.
 func mapAgentStatusToSessionStatus(status agent.ExecutionStatus) alertsession.Status {
 	switch status {
 	case agent.ExecutionStatusCompleted:

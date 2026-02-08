@@ -70,8 +70,17 @@ func ResolveAgentConfig(
 		maxIter = *agentConfig.MaxIterations
 	}
 
-	// Resolve MCP servers (stage-agent > agent-def)
-	mcpServers := agentDef.MCPServers
+	// Resolve MCP servers (stage-agent > stage > chain > agent-def > defaults)
+	var mcpServers []string
+	if len(agentDef.MCPServers) > 0 {
+		mcpServers = agentDef.MCPServers
+	}
+	if len(chain.MCPServers) > 0 {
+		mcpServers = chain.MCPServers
+	}
+	if len(stageConfig.MCPServers) > 0 {
+		mcpServers = stageConfig.MCPServers
+	}
 	if len(agentConfig.MCPServers) > 0 {
 		mcpServers = agentConfig.MCPServers
 	}

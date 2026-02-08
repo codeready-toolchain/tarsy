@@ -21,7 +21,11 @@ type BaseAgent struct {
 }
 
 // NewBaseAgent creates an agent with the given iteration controller.
+// Panics if controller is nil (programming error in the factory).
 func NewBaseAgent(controller Controller) *BaseAgent {
+	if controller == nil {
+		panic("NewBaseAgent: controller must not be nil")
+	}
 	return &BaseAgent{controller: controller}
 }
 

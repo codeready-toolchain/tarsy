@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -115,11 +116,11 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	pc := &llmv1.LLMConfig{
 		Provider:            string(cfg.Type),
 		Model:               cfg.Model,
-		ApiKeyEnv:           cfg.APIKeyEnv,
+		ApiKeyEnv:           cfg.APIKeyEnv, // Sent as env-var name; Python resolves the secret
 		BaseUrl:             cfg.BaseURL,
 		MaxToolResultTokens: int32(cfg.MaxToolResultTokens),
 	}
-	// Resolve VertexAI fields
+	// Resolve VertexAI fields — values (not env names) are sent over gRPC
 	if cfg.ProjectEnv != "" {
 		pc.Project = os.Getenv(cfg.ProjectEnv)
 	}
@@ -189,6 +190,8 @@ func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
 			Retryable: c.Error.Retryable,
 		}
 	default:
+		slog.Warn("Unknown GenerateResponse content type, skipping chunk",
+			"type", fmt.Sprintf("%T", resp.Content))
 		return nil
 	}
 }
