@@ -213,6 +213,38 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Equal(t, "get_pods", *msg.ToolName)
 	})
 
+	t.Run("rejects tool calls on non-assistant messages", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 19,
+			Role:           message.RoleUser,
+			Content:        "Hello",
+			ToolCalls: []models.ToolCallData{
+				{ID: "call_invalid", Name: "get_pods", Arguments: `{}`},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_calls")
+		assert.Contains(t, err.Error(), "only allowed for assistant messages")
+	})
+
+	t.Run("rejects tool_call_id on non-tool messages", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 20,
+			Role:           message.RoleUser,
+			Content:        "Hello",
+			ToolCallID:     "call_123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_call_id")
+		assert.Contains(t, err.Error(), "only allowed for tool messages")
+	})
+
 	t.Run("gets stage messages across executions", func(t *testing.T) {
 		// Create a second execution in the same stage
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
@@ -250,6 +282,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		require.NoError(t, err)
 		// Should have all messages from both executions
 		// (original 2 + tool call + empty-content tool call + tool response + 2 new = 7)
+		// Note: validation test failures don't create messages
 		assert.Len(t, messages, 7)
 	})
 }

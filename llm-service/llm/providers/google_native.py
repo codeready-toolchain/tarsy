@@ -256,12 +256,16 @@ class GoogleNativeProvider(LLMProvider):
             )
             return
 
-        # Convert messages
-        system_instruction, contents = self._convert_messages(list(request.messages))
-
-        # Convert tools
-        native_tools = dict(config.native_tools) if config.native_tools else {}
-        tools = self._convert_tools(list(request.tools), native_tools)
+        try:
+            system_instruction, contents = self._convert_messages(list(request.messages))
+            native_tools = dict(config.native_tools) if config.native_tools else {}
+            tools = self._convert_tools(list(request.tools), native_tools)
+        except ValueError as e:
+            yield pb.GenerateResponse(
+                error=pb.ErrorInfo(message=str(e), code="invalid_request", retryable=False),
+                is_final=True,
+            )
+            return
 
         # Build generation config
         thinking_config = self._get_thinking_config(config.model)
@@ -290,7 +294,7 @@ class GoogleNativeProvider(LLMProvider):
             except _RetryableError as e:
                 if chunks_yielded > 0:
                     # Partial output already sent — retrying would duplicate data
-                    logger.error(
+                    logger.exception(
                         "[%s] Retryable error after %d chunks already yielded, "
                         "cannot retry safely: %s",
                         request_id, chunks_yielded, e,
@@ -344,6 +348,10 @@ class GoogleNativeProvider(LLMProvider):
     ) -> AsyncIterator[pb.GenerateResponse]:
         """Stream from the Gemini API with timeout handling."""
         has_content = False
+        # Buffer usage info instead of yielding immediately. Usage-only
+        # chunks are metadata, not content — yielding them would increment
+        # chunks_yielded in generate(), preventing safe retries on empty streams.
+        last_usage: pb.GenerateResponse | None = None
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -354,10 +362,32 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 async for chunk in stream:
                     if not chunk.candidates or len(chunk.candidates) == 0:
+                        # Still check for usage on content-less chunks
+                        if chunk.usage_metadata:
+                            um = chunk.usage_metadata
+                            last_usage = pb.GenerateResponse(
+                                usage=pb.UsageInfo(
+                                    input_tokens=um.prompt_token_count or 0,
+                                    output_tokens=um.candidates_token_count or 0,
+                                    total_tokens=um.total_token_count or 0,
+                                    thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
+                                )
+                            )
                         continue
 
                     candidate = chunk.candidates[0]
                     if not candidate.content or not candidate.content.parts:
+                        # Still check for usage on content-less chunks
+                        if chunk.usage_metadata:
+                            um = chunk.usage_metadata
+                            last_usage = pb.GenerateResponse(
+                                usage=pb.UsageInfo(
+                                    input_tokens=um.prompt_token_count or 0,
+                                    output_tokens=um.candidates_token_count or 0,
+                                    total_tokens=um.total_token_count or 0,
+                                    thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
+                                )
+                            )
                         continue
 
                     for part in candidate.content.parts:
@@ -402,10 +432,10 @@ class GoogleNativeProvider(LLMProvider):
                                 text=pb.TextDelta(content=part.text)
                             )
 
-                    # Extract usage info
+                    # Buffer usage info (will be yielded after content is confirmed)
                     if chunk.usage_metadata:
                         um = chunk.usage_metadata
-                        yield pb.GenerateResponse(
+                        last_usage = pb.GenerateResponse(
                             usage=pb.UsageInfo(
                                 input_tokens=um.prompt_token_count or 0,
                                 output_tokens=um.candidates_token_count or 0,
@@ -419,6 +449,10 @@ class GoogleNativeProvider(LLMProvider):
 
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
+
+        # Yield buffered usage info after confirming content was produced
+        if last_usage is not None:
+            yield last_usage
 
         # Final chunk
         yield pb.GenerateResponse(is_final=True)

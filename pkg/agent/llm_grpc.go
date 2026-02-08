@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -26,7 +27,7 @@ type GRPCLLMClient struct {
 func NewGRPCLLMClient(addr string) (*GRPCLLMClient, error) {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to LLM service at %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to create LLM client for %s: %w", addr, err)
 	}
 	return &GRPCLLMClient{
 		conn:   conn,
@@ -121,7 +122,7 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 		Model:               cfg.Model,
 		ApiKeyEnv:           cfg.APIKeyEnv, // Sent as env-var name; Python resolves the secret
 		BaseUrl:             cfg.BaseURL,
-		MaxToolResultTokens: int32(cfg.MaxToolResultTokens),
+		MaxToolResultTokens: clampToInt32(cfg.MaxToolResultTokens),
 	}
 	// Resolve VertexAI fields — values (not env names) are sent over gRPC
 	if cfg.ProjectEnv != "" {
@@ -153,6 +154,16 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 		pc.Backend = "langchain"
 	}
 	return pc
+}
+
+// clampToInt32 converts an int to int32, clamping to math.MaxInt32 if needed.
+func clampToInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		slog.Warn("int value exceeds int32 range, clamping",
+			"value", v, "clamped_to", math.MaxInt32)
+		return math.MaxInt32
+	}
+	return int32(v)
 }
 
 func toProtoTools(tools []ToolDefinition) []*llmv1.ToolDefinition {

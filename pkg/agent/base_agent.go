@@ -30,6 +30,14 @@ func NewBaseAgent(controller Controller) *BaseAgent {
 }
 
 // Execute runs the agent's investigation by delegating to the controller.
+//
+// Error handling contract:
+//   - Infrastructure failures (e.g. database errors) return (nil, error)
+//   - Controller failures return (*ExecutionResult, nil) with result.Error set
+//
+// Callers MUST check both the returned error AND result.Error to handle all
+// failure modes. Infrastructure errors prevent result creation, while controller
+// errors are domain failures that occur after execution has started.
 func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error) {
 	// 1. Mark agent execution as active
 	if err := execCtx.Services.Stage.UpdateAgentExecutionStatus(

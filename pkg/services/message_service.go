@@ -43,8 +43,13 @@ func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMes
 	// Content is required for most messages, but assistant messages that
 	// contain tool calls can legally have empty content (the LLM responds
 	// with only tool invocations and no accompanying text).
-	if req.Content == "" && (req.Role != message.RoleAssistant || len(req.ToolCalls) == 0) {
+	if req.Content == "" && !(req.Role == message.RoleAssistant && len(req.ToolCalls) > 0) {
 		return nil, NewValidationError("content", "required")
+	}
+
+	// Tool calls are only valid for assistant messages.
+	if len(req.ToolCalls) > 0 && req.Role != message.RoleAssistant {
+		return nil, NewValidationError("tool_calls", "only allowed for assistant messages")
 	}
 
 	// Tool response messages must link back to the original tool call.
@@ -55,6 +60,11 @@ func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMes
 		if req.ToolName == "" {
 			return nil, NewValidationError("tool_name", "required for tool messages")
 		}
+	}
+
+	// ToolCallID and ToolName are only valid for tool messages.
+	if (req.ToolCallID != "" || req.ToolName != "") && req.Role != message.RoleTool {
+		return nil, NewValidationError("tool_call_id", "only allowed for tool messages")
 	}
 
 	messageID := uuid.New().String()
