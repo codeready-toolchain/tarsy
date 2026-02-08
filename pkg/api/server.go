@@ -7,6 +7,7 @@ import (
 	"time"
 
 	echo "github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
@@ -48,18 +49,13 @@ func NewServer(
 	return s
 }
 
-// maxRequestBodySize is the server-wide body size limit.
-// Set slightly above MaxAlertDataSize (1 MB) to account for JSON envelope
-// overhead (alert_type, runbook, mcp fields). Rejects oversized payloads
-// during the read phase, before full memory allocation.
-const maxRequestBodySize = 2 * 1024 * 1024 // 2 MB
-
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
-	// Server-wide body size limit — rejects multi-MB/GB payloads at the
-	// HTTP read level before deserialization, complementing the
+	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
+	// (1 MB) to account for JSON envelope overhead. Rejects multi-MB/GB payloads
+	// at the HTTP read level before deserialization, complementing the
 	// application-level MaxAlertDataSize check in submitAlertHandler.
-	s.echo.Use(bodyLimitMiddleware(maxRequestBodySize))
+	s.echo.Use(middleware.BodyLimit(2 * 1024 * 1024))
 
 	// Health check
 	s.echo.GET("/health", s.healthHandler)
@@ -69,19 +65,6 @@ func (s *Server) setupRoutes() {
 	v1.POST("/alerts", s.submitAlertHandler)
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
-}
-
-// bodyLimitMiddleware returns Echo middleware that limits request body size.
-// Uses http.MaxBytesReader to reject oversized payloads during the read
-// phase, preventing full memory allocation of malicious/accidental large bodies.
-func bodyLimitMiddleware(maxBytes int64) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
-			r := c.Request()
-			r.Body = http.MaxBytesReader(c.Response(), r.Body, maxBytes)
-			return next(c)
-		}
-	}
 }
 
 // Start starts the HTTP server on the given address (non-blocking).

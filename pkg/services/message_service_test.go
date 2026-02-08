@@ -163,6 +163,36 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Contains(t, err.Error(), "content")
 	})
 
+	t.Run("rejects tool message without tool_call_id", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 17,
+			Role:           message.RoleTool,
+			Content:        `{"result": "data"}`,
+			ToolName:       "get_pods",
+			// ToolCallID intentionally missing
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_call_id")
+	})
+
+	t.Run("rejects tool message without tool_name", func(t *testing.T) {
+		_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 18,
+			Role:           message.RoleTool,
+			Content:        `{"result": "data"}`,
+			ToolCallID:     "call_abc",
+			// ToolName intentionally missing
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool_name")
+	})
+
 	t.Run("creates tool response message", func(t *testing.T) {
 		toolCallID := "call_789"
 		msg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{

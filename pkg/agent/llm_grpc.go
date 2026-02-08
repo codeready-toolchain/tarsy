@@ -20,6 +20,9 @@ type GRPCLLMClient struct {
 }
 
 // NewGRPCLLMClient creates a new gRPC LLM client.
+// Uses insecure (plaintext) transport — the Python LLM service is expected to
+// run as a sidecar or on localhost. If the service is ever deployed across a
+// network boundary, this must be upgraded to TLS.
 func NewGRPCLLMClient(addr string) (*GRPCLLMClient, error) {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -123,9 +126,17 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	// Resolve VertexAI fields — values (not env names) are sent over gRPC
 	if cfg.ProjectEnv != "" {
 		pc.Project = os.Getenv(cfg.ProjectEnv)
+		if pc.Project == "" {
+			slog.Warn("VertexAI project env var is configured but empty",
+				"env_var", cfg.ProjectEnv)
+		}
 	}
 	if cfg.LocationEnv != "" {
 		pc.Location = os.Getenv(cfg.LocationEnv)
+		if pc.Location == "" {
+			slog.Warn("VertexAI location env var is configured but empty",
+				"env_var", cfg.LocationEnv)
+		}
 	}
 	// Map native tools
 	if len(cfg.NativeTools) > 0 {
@@ -160,6 +171,15 @@ func toProtoTools(tools []ToolDefinition) []*llmv1.ToolDefinition {
 }
 
 func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
+	// Final-only responses (is_final=true with no content) are normal —
+	// the Python service sends these to mark stream completion.
+	if resp.Content == nil {
+		if !resp.IsFinal {
+			slog.Warn("GenerateResponse with nil content and is_final=false, skipping")
+		}
+		return nil
+	}
+
 	switch c := resp.Content.(type) {
 	case *llmv1.GenerateResponse_Text:
 		return &TextChunk{Content: c.Text.Content}

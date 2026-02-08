@@ -384,14 +384,14 @@ class GoogleNativeProvider(LLMProvider):
                         # Code execution result
                         elif hasattr(part, "executable_code") and part.executable_code:
                             has_content = True
-                            code = part.executable_code.code if part.executable_code else ""
+                            code = part.executable_code.code or ""
                             result = ""
                             yield pb.GenerateResponse(
                                 code_execution=pb.CodeExecutionDelta(code=code, result=result)
                             )
                         elif hasattr(part, "code_execution_result") and part.code_execution_result:
                             has_content = True
-                            result = part.code_execution_result.output if part.code_execution_result else ""
+                            result = part.code_execution_result.output or ""
                             yield pb.GenerateResponse(
                                 code_execution=pb.CodeExecutionDelta(code="", result=result)
                             )

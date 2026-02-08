@@ -162,7 +162,9 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 8. Update AgentExecution status based on result
+	// 8. Update AgentExecution status based on result.
+	// If DB updates fail, override the result to Failed so the session
+	// isn't marked as completed while internal records are inconsistent.
 	entStatus := mapAgentStatusToEntStatus(agentResult.Status)
 	errMsg := ""
 	if agentResult.Error != nil {
@@ -170,11 +172,21 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	}
 	if err := stageService.UpdateAgentExecutionStatus(ctx, exec.ID, entStatus, errMsg); err != nil {
 		logger.Error("Failed to update agent execution status", "error", err)
+		return &ExecutionResult{
+			Status:        alertsession.StatusFailed,
+			FinalAnalysis: agentResult.FinalAnalysis,
+			Error:         fmt.Errorf("agent completed but status update failed: %w", err),
+		}
 	}
 
 	// 9. Aggregate stage status
 	if err := stageService.UpdateStageStatus(ctx, stg.ID); err != nil {
 		logger.Error("Failed to update stage status", "error", err)
+		return &ExecutionResult{
+			Status:        alertsession.StatusFailed,
+			FinalAnalysis: agentResult.FinalAnalysis,
+			Error:         fmt.Errorf("agent completed but stage status update failed: %w", err),
+		}
 	}
 
 	// 10. Map agent result -> queue result
@@ -190,8 +202,10 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 }
 
 // mapAgentStatusToEntStatus converts agent.ExecutionStatus to ent agentexecution.Status.
-// Pending status falls through to Failed intentionally — it should never reach
-// this mapper since BaseAgent always sets a terminal status before returning.
+// Pending/Active statuses fall through to Failed intentionally — they should
+// never reach this mapper since BaseAgent always sets a terminal status before
+// returning. Mapping Active to Failed (rather than Active) prevents leaving
+// AgentExecution records in a non-terminal state permanently.
 func mapAgentStatusToEntStatus(status agent.ExecutionStatus) agentexecution.Status {
 	switch status {
 	case agent.ExecutionStatusCompleted:
@@ -202,8 +216,6 @@ func mapAgentStatusToEntStatus(status agent.ExecutionStatus) agentexecution.Stat
 		return agentexecution.StatusTimedOut
 	case agent.ExecutionStatusCancelled:
 		return agentexecution.StatusCancelled
-	case agent.ExecutionStatusActive:
-		return agentexecution.StatusActive
 	default:
 		return agentexecution.StatusFailed
 	}

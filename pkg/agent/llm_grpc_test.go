@@ -166,7 +166,13 @@ func TestFromProtoResponse(t *testing.T) {
 		assert.True(t, ec.Retryable)
 	})
 
-	t.Run("nil content returns nil", func(t *testing.T) {
+	t.Run("final-only response returns nil without warning", func(t *testing.T) {
+		resp := &llmv1.GenerateResponse{IsFinal: true}
+		chunk := fromProtoResponse(resp)
+		assert.Nil(t, chunk)
+	})
+
+	t.Run("nil content non-final returns nil", func(t *testing.T) {
 		resp := &llmv1.GenerateResponse{}
 		chunk := fromProtoResponse(resp)
 		assert.Nil(t, chunk)

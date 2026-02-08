@@ -54,5 +54,14 @@ func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prev
 		return &ExecutionResult{Status: ExecutionStatusFailed, Error: err}, nil
 	}
 
+	// 4. Defensive nil-check: ensure controller returned a valid result.
+	// A nil result without an error indicates a programming bug in the controller.
+	if result == nil {
+		return &ExecutionResult{
+			Status: ExecutionStatusFailed,
+			Error:  fmt.Errorf("controller returned nil result"),
+		}, nil
+	}
+
 	return result, nil
 }
