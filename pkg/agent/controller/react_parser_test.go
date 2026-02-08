@@ -1101,30 +1101,47 @@ func TestGetFormatCorrectionReminder(t *testing.T) {
 }
 
 func TestFormatToolErrorObservation(t *testing.T) {
-	err := fmt.Errorf("connection timeout")
-	obs := FormatToolErrorObservation(err)
+	t.Run("with error", func(t *testing.T) {
+		obs := FormatToolErrorObservation(fmt.Errorf("connection timeout"))
+		if !strings.Contains(obs, "Observation:") {
+			t.Errorf("Should start with Observation:")
+		}
+		if !strings.Contains(obs, "connection timeout") {
+			t.Errorf("Should contain error message")
+		}
+	})
 
-	if !strings.Contains(obs, "Observation:") {
-		t.Errorf("Should start with Observation:")
-	}
-	if !strings.Contains(obs, "connection timeout") {
-		t.Errorf("Should contain error message")
-	}
+	t.Run("nil error", func(t *testing.T) {
+		obs := FormatToolErrorObservation(nil)
+		if !strings.Contains(obs, "unknown error") {
+			t.Errorf("Should contain fallback message, got: %s", obs)
+		}
+	})
 }
 
 func TestFormatErrorObservation(t *testing.T) {
-	err := fmt.Errorf("LLM provider unavailable")
-	obs := FormatErrorObservation(err)
+	t.Run("with error", func(t *testing.T) {
+		obs := FormatErrorObservation(fmt.Errorf("LLM provider unavailable"))
+		if !strings.Contains(obs, "Observation:") {
+			t.Errorf("Should start with Observation:")
+		}
+		if !strings.Contains(obs, "LLM provider unavailable") {
+			t.Errorf("Should contain error message")
+		}
+		if !strings.Contains(obs, "try again") {
+			t.Errorf("Should contain retry instruction")
+		}
+	})
 
-	if !strings.Contains(obs, "Observation:") {
-		t.Errorf("Should start with Observation:")
-	}
-	if !strings.Contains(obs, "LLM provider unavailable") {
-		t.Errorf("Should contain error message")
-	}
-	if !strings.Contains(obs, "try again") {
-		t.Errorf("Should contain retry instruction")
-	}
+	t.Run("nil error", func(t *testing.T) {
+		obs := FormatErrorObservation(nil)
+		if !strings.Contains(obs, "unknown error") {
+			t.Errorf("Should contain fallback message, got: %s", obs)
+		}
+		if !strings.Contains(obs, "try again") {
+			t.Errorf("Should contain retry instruction, got: %s", obs)
+		}
+	})
 }
 
 func TestExtractForcedConclusionAnswer_Comprehensive(t *testing.T) {

@@ -237,6 +237,9 @@ func storeAssistantMessage(
 	resp *LLMResponse,
 	msgSeq *int,
 ) (*ent.Message, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("storeAssistantMessage: resp is nil")
+	}
 	*msgSeq++
 	return execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,
@@ -255,6 +258,9 @@ func storeAssistantMessageWithToolCalls(
 	resp *LLMResponse,
 	msgSeq *int,
 ) (*ent.Message, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("storeAssistantMessageWithToolCalls: resp is nil")
+	}
 	*msgSeq++
 
 	var toolCallData []models.ToolCallData
