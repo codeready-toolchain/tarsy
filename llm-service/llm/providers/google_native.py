@@ -150,6 +150,11 @@ class GoogleNativeProvider(LLMProvider):
                         ],
                     )
                 )
+            else:
+                raise ValueError(
+                    f"Unrecognized message role {msg.role!r} at index {idx}. "
+                    f"Expected one of: system, user, assistant, tool."
+                )
 
         return system_instruction, contents
 
@@ -270,7 +275,6 @@ class GoogleNativeProvider(LLMProvider):
         # Build generation config
         thinking_config = self._get_thinking_config(config.model)
         gen_config = genai_types.GenerateContentConfig(
-            temperature=1.0,
             thinking_config=thinking_config,
             system_instruction=system_instruction,
         )
@@ -296,8 +300,8 @@ class GoogleNativeProvider(LLMProvider):
                     # Partial output already sent — retrying would duplicate data
                     logger.exception(
                         "[%s] Retryable error after %d chunks already yielded, "
-                        "cannot retry safely: %s",
-                        request_id, chunks_yielded, e,
+                        "cannot retry safely",
+                        request_id, chunks_yielded,
                     )
                     yield pb.GenerateResponse(
                         error=pb.ErrorInfo(
@@ -316,7 +320,7 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
-                logger.exception("[%s] Non-retryable error: %s", request_id, e)
+                logger.exception("[%s] Non-retryable error", request_id)
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
                         message=f"Generation failed: {e}",
@@ -351,7 +355,7 @@ class GoogleNativeProvider(LLMProvider):
         # Buffer usage info instead of yielding immediately. Usage-only
         # chunks are metadata, not content — yielding them would increment
         # chunks_yielded in generate(), preventing safe retries on empty streams.
-        last_usage: pb.GenerateResponse | None = None
+        last_usage: Optional[pb.GenerateResponse] = None
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -361,7 +365,7 @@ class GoogleNativeProvider(LLMProvider):
                     config=gen_config,
                 )
                 async for chunk in stream:
-                    if not chunk.candidates or len(chunk.candidates) == 0:
+                    if not chunk.candidates:
                         # Still check for usage on content-less chunks
                         if chunk.usage_metadata:
                             um = chunk.usage_metadata

@@ -16,6 +16,9 @@ type LLMProviderConfig struct {
 	// Environment variable name for API key
 	APIKeyEnv string `yaml:"api_key_env,omitempty"`
 
+	// Environment variable name for credentials file (e.g., "GOOGLE_APPLICATION_CREDENTIALS" for VertexAI)
+	CredentialsEnv string `yaml:"credentials_env,omitempty"`
+
 	// For VertexAI/GCP
 	ProjectEnv  string `yaml:"project_env,omitempty"`
 	LocationEnv string `yaml:"location_env,omitempty"`

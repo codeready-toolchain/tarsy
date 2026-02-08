@@ -63,8 +63,15 @@ func (s *MessageService) CreateMessage(ctx context.Context, req models.CreateMes
 	}
 
 	// ToolCallID and ToolName are only valid for tool messages.
-	if (req.ToolCallID != "" || req.ToolName != "") && req.Role != message.RoleTool {
-		return nil, NewValidationError("tool_call_id", "only allowed for tool messages")
+	if req.Role != message.RoleTool {
+		switch {
+		case req.ToolCallID != "" && req.ToolName != "":
+			return nil, NewValidationError("tool_call_id,tool_name", "only allowed for tool messages")
+		case req.ToolCallID != "":
+			return nil, NewValidationError("tool_call_id", "only allowed for tool messages")
+		case req.ToolName != "":
+			return nil, NewValidationError("tool_name", "only allowed for tool messages")
+		}
 	}
 
 	messageID := uuid.New().String()
