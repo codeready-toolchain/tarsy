@@ -112,7 +112,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - ~~Stage controller variants (react-stage, react-final-analysis) — dropped, never used in old TARSy production. Strategy pattern allows adding new controllers later if needed.~~
 - [x] Cleanup: remove `react-stage` and `react-final-analysis` from Phase 2 code (enums, config examples, validation, built-in configs) — **Complete**: No references found in codebase
 - [ ] Synthesis controller (tool-less, single LLM call)
-- [ ] Chat controller (investigation context + chat history)
+- [ ] Chat support via prompt composition (reuse ReAct/NativeThinking controllers; investigation context + chat history handled in Phase 3.3 prompt builder — no separate ChatReActController or ChatNativeThinkingController)
 - ~~Final analysis controller — dropped, not a real strategy. Investigation agents (ReAct/NativeThinking) naturally produce final answers; synthesis handles parallel result merging.~~
 
 **3.2.1: Gemini Native Tool Timeline Events (Go + Python)**
