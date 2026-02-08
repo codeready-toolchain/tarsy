@@ -55,6 +55,9 @@ func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
 				ThinkingTokens: c.ThinkingTokens,
 			}
 		case *agent.ErrorChunk:
+			// Intentionally discards any partially accumulated text/thinking/tool-call
+			// data. Callers treat LLM errors as complete failures and retry from scratch,
+			// so partial data is not useful in the current design.
 			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
 				c.Message, c.Code, c.Retryable)
 		}
@@ -353,8 +356,8 @@ func failedResult(state *agent.IterationState, totalUsage agent.TokenUsage) *age
 
 // tokenUsageFromResp extracts token usage from an LLM response.
 func tokenUsageFromResp(resp *LLMResponse) agent.TokenUsage {
-	if resp.Usage != nil {
-		return *resp.Usage
+	if resp == nil || resp.Usage == nil {
+		return agent.TokenUsage{}
 	}
-	return agent.TokenUsage{}
+	return *resp.Usage
 }

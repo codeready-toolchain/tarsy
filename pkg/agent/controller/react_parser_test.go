@@ -458,6 +458,7 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 		name          string
 		input         string
 		wantAction    bool
+		wantFinal     bool
 		wantThought   string
 		wantNoThought bool
 	}{
@@ -473,14 +474,18 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 			wantAction: true,
 		},
 		{
-			name:   "don't stop on continuation prompt with 'Please specify'",
-			input:  "Thought: Thinking.\nObservation: Please specify what Action you want to take.\nFinal Answer: Done.",
-			wantAction: false,
+			// Parser doesn't stop on "Please specify" observation — it continues
+			// and reaches Final Answer.
+			name:      "don't stop on continuation prompt with 'Please specify'",
+			input:     "Thought: Thinking.\nObservation: Please specify what Action you want to take.\nFinal Answer: Done.",
+			wantFinal: true,
 		},
 		{
-			name:   "don't stop on 'Error in reasoning' observation",
-			input:  "Thought: Thinking.\nObservation: Error in reasoning - try again.\nFinal Answer: Done.",
-			wantAction: false,
+			// Parser doesn't stop on "Error in reasoning" observation — it
+			// continues and reaches Final Answer.
+			name:      "don't stop on 'Error in reasoning' observation",
+			input:     "Thought: Thinking.\nObservation: Error in reasoning - try again.\nFinal Answer: Done.",
+			wantFinal: true,
 		},
 	}
 
@@ -490,6 +495,9 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 
 			if tt.wantAction && !parsed.HasAction {
 				t.Errorf("Expected HasAction=true")
+			}
+			if tt.wantFinal && !parsed.IsFinalAnswer {
+				t.Errorf("Expected IsFinalAnswer=true")
 			}
 			if tt.wantThought != "" && parsed.Thought != tt.wantThought {
 				t.Errorf("Thought = %q, want %q", parsed.Thought, tt.wantThought)
@@ -603,9 +611,23 @@ func TestParseReActResponse_MidlineDetectionComprehensive(t *testing.T) {
 			wantAction: true, // Backtick is in the pattern
 		},
 		{
-			name:      "mid-line with multiple punctuation",
+			// Unicode ellipsis (U+2026) is a single character, not [.!?], so
+			// midlineFinalAnswerPattern won't match — no valid sentence boundary.
+			name:      "mid-line with unicode ellipsis does not trigger detection",
+			input:     "Thought: Wait\u2026Final Answer: Done.",
+			wantFinal: false,
+		},
+		{
+			// Three ASCII dots contain a period that midlineFinalAnswerPattern
+			// matches as a valid sentence boundary before "Final Answer:".
+			name:      "mid-line with three ASCII dots triggers detection",
 			input:     "Thought: Wait...Final Answer: Done.",
-			wantFinal: false, // ... doesn't match the pattern (only . ! ? are valid)
+			wantFinal: true,
+			checkFunc: func(t *testing.T, p *ParsedReActResponse) {
+				if p.FinalAnswer != "Done." {
+					t.Errorf("FinalAnswer = %q, want %q", p.FinalAnswer, "Done.")
+				}
+			},
 		},
 	}
 
@@ -668,6 +690,14 @@ func TestParseReActResponse_ActionRecoveryComprehensive(t *testing.T) {
 			name:          "invalid tool name in recovery stays malformed",
 			input:         "Thought: Check.\nAction\nthis is not a valid tool name\nAction Input: {}",
 			wantMalformed: true,
+		},
+		{
+			// Unicode text before "Action Input:" — verifies the regex-based
+			// search finds the correct byte offset in the original string.
+			name:          "recovery with unicode text before action input",
+			input:         "Thought: Überprüfung läuft.\nAction: k8s-server.get_pods\nAction Input: {}",
+			wantAction:    true,
+			wantActionStr: "k8s-server.get_pods",
 		},
 		{
 			name: "real-world mid-line Action without colon then tool on next line",

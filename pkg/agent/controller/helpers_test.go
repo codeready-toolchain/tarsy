@@ -286,6 +286,11 @@ func TestTokenUsageFromResp(t *testing.T) {
 		usage := tokenUsageFromResp(resp)
 		assert.Equal(t, 0, usage.TotalTokens)
 	})
+
+	t.Run("nil resp returns zero", func(t *testing.T) {
+		usage := tokenUsageFromResp(nil)
+		assert.Equal(t, 0, usage.TotalTokens)
+	})
 }
 
 // ============================================================================

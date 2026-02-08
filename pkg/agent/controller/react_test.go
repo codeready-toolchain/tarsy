@@ -293,7 +293,9 @@ func TestReActController_ToolExecutionError(t *testing.T) {
 }
 
 func TestReActController_ForcedConclusionWithFailedLast(t *testing.T) {
-	// All iterations produce tool calls, last one errors — forced conclusion returns failed
+	// 4 tool-call responses consumed by iterations 0-3, then iteration 4 errors.
+	// After the loop, forceConclusion sees LastInteractionFailed=true and returns
+	// a failed result wrapping the original error in a "max iterations" message.
 	var responses []mockLLMResponse
 	for i := 0; i < 4; i++ {
 		responses = append(responses, mockLLMResponse{
@@ -324,7 +326,10 @@ func TestReActController_ForcedConclusionWithFailedLast(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusFailed, result.Status)
 	require.NotNil(t, result.Error)
-	require.Contains(t, result.Error.Error(), "max iterations")
+	// Verify the error indicates iteration exhaustion and propagates the original cause.
+	errMsg := result.Error.Error()
+	require.Contains(t, errMsg, "max iterations")
+	require.Contains(t, errMsg, "service unavailable")
 }
 
 func TestReActController_ToolNotInAvailableList(t *testing.T) {
@@ -434,6 +439,9 @@ func (m *mockToolExecutorFunc) ListTools(_ context.Context) ([]agent.ToolDefinit
 }
 
 // newTestExecCtx creates a test ExecutionContext backed by a real test database.
+// Defaults: MaxIterations=20, IterationTimeout=120s.
+// Tests that need different limits should override execCtx.Config.MaxIterations.
+// Note: ChatContext is left zero-valued — controllers don't rely on it in Phase 3.2.
 func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecutor) *agent.ExecutionContext {
 	t.Helper()
 

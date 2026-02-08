@@ -40,8 +40,9 @@ var (
 	// server.tool format validation
 	toolNamePattern = regexp.MustCompile(`^([\w\-]+)\.([\w\-]+)$`)
 	// Recovery patterns for recoverMissingAction (compiled once)
-	recoverActionColonPattern = regexp.MustCompile(`(?i)\bAction:`)
-	recoverActionWordPattern  = regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
+	recoverActionColonPattern  = regexp.MustCompile(`(?i)\bAction:`)
+	recoverActionWordPattern   = regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
+	recoverActionInputPattern  = regexp.MustCompile(`(?i)Action Input:`)
 )
 
 // ParseReActResponse parses LLM text output into a structured ReAct response.
@@ -51,8 +52,13 @@ var (
 func ParseReActResponse(text string) *ParsedReActResponse {
 	if text == "" {
 		return &ParsedReActResponse{
-			IsMalformed:   true,
-			FoundSections: map[string]bool{},
+			IsMalformed: true,
+			FoundSections: map[string]bool{
+				"thought":      false,
+				"action":       false,
+				"action_input": false,
+				"final_answer": false,
+			},
 		}
 	}
 
@@ -419,13 +425,15 @@ func deref(s *string) string {
 // recoverMissingAction attempts to recover a missing action when Action Input exists
 // but Action doesn't. Searches backwards from "Action Input:" for "Action:" or "Action".
 func recoverMissingAction(response string) string {
-	// Find "Action Input:" position
-	actionInputIdx := strings.Index(strings.ToLower(response), "action input:")
-	if actionInputIdx == -1 {
+	// Find "Action Input:" position using a case-insensitive regex so byte
+	// indices are from the original string (strings.ToLower can shift byte
+	// offsets when multi-byte Unicode characters change size on case-fold).
+	loc := recoverActionInputPattern.FindStringIndex(response)
+	if loc == nil {
 		return ""
 	}
 
-	textBefore := response[:actionInputIdx]
+	textBefore := response[:loc[0]]
 
 	// Try "Action:" first (more specific)
 	matches := recoverActionColonPattern.FindAllStringIndex(textBefore, -1)
