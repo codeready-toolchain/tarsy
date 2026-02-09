@@ -94,7 +94,7 @@ NativeThinkingController / SynthesisController
 |---|---|---|
 | NativeThinkingController | Yes | Uses `google-native` backend; native tools available when no MCP tools |
 | SynthesisController | Yes (synthesis-native-thinking only) | Uses `google-native` backend; synthesis never has MCP tools |
-| ReActController | Yes (defensive) | Uses `langchain` backend; native tools not expected but handled defensively (Q7) |
+| ReActController | No (warning log only) | Uses `langchain` backend; logs warning if native tool data appears (Q7 revised) |
 | SingleCallController | No | Phase 3.1 validation only, not production |
 
 **Edge case: NativeThinkingController forced conclusion** — When forcing a conclusion, the controller calls LLM **without tools** (`Tools: nil`). If the agent's config had native tools enabled, they could theoretically activate during this tool-less call. The forced conclusion logic already uses `callLLM` → `collectStream` → the existing pipeline, so native tool events would be captured naturally.
@@ -593,7 +593,9 @@ New helper functions in `pkg/agent/controller/helpers.go`:
 
 ```go
 // createCodeExecutionEvents creates timeline events for Gemini code executions.
-// Each executable_code + code_execution_result pair becomes a separate event.
+// Gemini streams executable_code and code_execution_result as separate response
+// parts that may arrive non-consecutively. This function buffers code chunks and
+// pairs them with their results to produce one timeline event per execution.
 // Returns the number of events created.
 func createCodeExecutionEvents(
     ctx context.Context,
@@ -603,17 +605,31 @@ func createCodeExecutionEvents(
 ) int {
     created := 0
 
-    // Pair up code and result chunks.
-    // Gemini streams them as: executable_code (code only), code_execution_result (result only).
-    // The Python provider yields them as separate CodeExecutionDelta messages:
-    //   {code: "...", result: ""} followed by {code: "", result: "..."}
-    // We pair consecutive code+result into single timeline events.
+    // Gemini may stream executable_code and code_execution_result as separate,
+    // potentially non-consecutive response parts. Other content parts (text, thinking)
+    // can appear between them. The Python provider yields each as a separate
+    // CodeExecutionDelta routed by part type:
+    //   - executable_code part  → CodeExecutionDelta{code: "...", result: ""}
+    //   - code_execution_result → CodeExecutionDelta{code: "",   result: "..."}
+    // After collectStream drains the gRPC stream, codeExecutions contains these
+    // chunks in arrival order. We use pendingCode to buffer an executable_code
+    // chunk until its matching code_execution_result arrives, then emit the
+    // pair as a single timeline event. This buffering is intentional and necessary
+    // because the two parts are not guaranteed to arrive as a single chunk.
+    //
+    // Handling branches:
+    //   - Code only (no result yet)  → buffer in pendingCode, wait for result
+    //   - Result only (no code)      → pair with pendingCode, emit event, clear buffer
+    //   - Both present in one chunk  → flush any pending, emit self-contained event
+    //   - Code arrives while pendingCode is set → emit previous code without result,
+    //     buffer the new code (handles cases where result was lost or never sent)
+    //   - End of slice with pendingCode set → emit remaining code without result
     var pendingCode string
     for _, ce := range codeExecutions {
         if ce.Code != "" && ce.Result == "" {
-            // This is an executable_code part — buffer the code
+            // executable_code part — buffer the code until its result arrives
             if pendingCode != "" {
-                // Previous code had no result — emit it alone
+                // Previous code never got a result — emit it alone
                 content := formatCodeExecution(pendingCode, "")
                 createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
                     content, map[string]interface{}{"source": "gemini"}, eventSeq)
@@ -621,14 +637,15 @@ func createCodeExecutionEvents(
             }
             pendingCode = ce.Code
         } else if ce.Result != "" && ce.Code == "" {
-            // This is a code_execution_result — pair with pending code
+            // code_execution_result part — pair with buffered pendingCode
             content := formatCodeExecution(pendingCode, ce.Result)
             createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
                 content, map[string]interface{}{"source": "gemini"}, eventSeq)
             pendingCode = ""
             created++
         } else if ce.Code != "" && ce.Result != "" {
-            // Both present (shouldn't happen with current Python, but handle gracefully)
+            // Both present in one chunk (defensive — not expected from current Python
+            // provider, but handles future changes or alternative providers gracefully)
             if pendingCode != "" {
                 content := formatCodeExecution(pendingCode, "")
                 createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
@@ -849,9 +866,9 @@ createGroundingEvents(ctx, execCtx, resp.Groundings, &eventSeq)
 createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, ...)
 ```
 
-### ReActController Update (Q7 — Defensive)
+### ReActController — No Native Tool Events (Q7 Revised)
 
-ReActController uses the `langchain` backend where native tools are not normally exposed. However, native tool event creation is added defensively to prevent silent data loss if native tool results appear (e.g., via the Phase 3.2 LangChain stub delegating to GoogleNativeProvider, future LangChain native tool support, or config errors).
+ReActController uses the `langchain` backend where native tools are not exposed. It does **not** create native tool timeline events — native tools are a `google-native` concern. If native tool data unexpectedly appears (via the Phase 3.2 LangChain stub or config error), a warning is logged. The data is still recorded in `LLMInteraction.response_metadata` for debugging.
 
 ```go
 // In ReActController.Run() — after collecting resp (in the iteration loop)
@@ -859,14 +876,16 @@ ReActController uses the `langchain` backend where native tools are not normally
 // Parse text for tool calls (existing ReAct logic)
 parsed := parseReActResponse(resp.Text)
 
-// Defensive: create native tool events if present in the response.
-// ReAct uses the langchain backend where native tools are not normally exposed.
-// However, the Phase 3.2 LangChain stub delegates to GoogleNativeProvider,
-// and future LangChain versions may expose Gemini native tools.
-// If collectStream captured any native tool data, surface it rather than
-// silently discarding it.
-createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, &eventSeq)
-createGroundingEvents(ctx, execCtx, resp.Groundings, &eventSeq)
+// Log warning if native tool data appears — this indicates stub delegation
+// or a configuration issue. Native tool events are only created by controllers
+// that use the google-native backend (NativeThinking, Synthesis).
+// Data is still available in LLMInteraction.response_metadata for debugging.
+if len(resp.CodeExecutions) > 0 || len(resp.Groundings) > 0 {
+    execCtx.Logger.Warn("native tool data present in ReAct response (not creating timeline events)",
+        "code_executions", len(resp.CodeExecutions),
+        "groundings", len(resp.Groundings),
+    )
+}
 
 // Continue with existing tool call / tool result logic...
 ```
@@ -970,7 +989,7 @@ This ordering reflects the logical flow: the model thinks, executes code, search
 - NativeThinkingController creates google_search_result events when grounding present
 - NativeThinkingController creates url_context_result events when URL context grounding present
 - SynthesisController creates native tool events (synthesis-native-thinking path)
-- ReActController creates native tool events defensively if data present (Q7)
+- ReActController does NOT create native tool events — logs warning if data present (Q7 revised)
 - Events created in correct sequence order
 - forceConclusion creates native tool events if present in response
 
@@ -1065,7 +1084,7 @@ resp := &LLMResponse{
    - [ ] Update `NativeThinkingController.Run()` — add native tool event creation after response collection
    - [ ] Update `NativeThinkingController.forceConclusion()` — add native tool event creation
    - [ ] Update `SynthesisController.Run()` — add native tool event creation
-   - [ ] Update `ReActController.Run()` — add defensive native tool event creation with comments (Q7)
+   - [ ] Update `ReActController.Run()` — add warning log if native tool data present (Q7 revised)
    - [ ] Write controller unit tests with mock native tool responses
 
 ---

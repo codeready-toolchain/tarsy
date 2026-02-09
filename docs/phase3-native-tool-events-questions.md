@@ -150,7 +150,7 @@ Skip storing the search entry point HTML for now. Simplest implementation with n
 
 ### Q7: Should ReActController Ever Create Native Tool Events?
 
-**Status**: ✅ Decided — **Option B: Defensive — all controllers create native tool events if data present, with explanatory comments**
+**Status**: ✅ Decided — **Revised to Option A: ReAct does not create native tool events, but logs a warning if data is present**
 
 **Context:**
 
@@ -158,10 +158,18 @@ ReActController uses the `langchain` backend where native tools are not exposed.
 
 #### Decision
 
-All controllers (including ReAct) create native tool events if `CodeExecutions` or `Groundings` are present in the response. This is defensive programming — if `collectStream` collected the data, surface it. Code in ReActController must include comments explaining why native tool event creation exists there (defensive against stub delegation, future LangChain native tool support, config errors).
+Only NativeThinkingController and SynthesisController create native tool events (they use the `google-native` backend where native tools are expected). ReActController does **not** create native tool events — native tools are a `google-native` concern, and adding them to ReAct muddies the design boundary.
+
+If native tool data unexpectedly appears in a ReAct response (via stub delegation or config error), a warning is logged. The data is still available in `LLMInteraction.response_metadata` for debugging.
+
+Rationale for revision (from original Option B):
+- The LangChain stub is temporary (Phase 3.2 only, replaced by real LangChain in Phase 6)
+- "Future LangChain native tools" is speculative — if it happens, Phase 6 would redesign the controller anyway
+- Adding native tool handling to ReAct creates conceptual overhead ("why does ReAct handle native tools?")
+- YAGNI — solve it when it's actually a problem
 
 **Rejected alternatives:**
-- Option A (ReAct never creates native tool events) — silently loses data if native tool results appear via stub delegation or future LangChain changes
+- Option B (defensive — all controllers create native tool events) — adds conceptual complexity and maintenance burden to every controller for a scenario that's temporary (stub) or speculative (future LangChain)
 
 ---
 
@@ -192,5 +200,5 @@ Keep the slice type. Consistent with `CodeExecutions`, forward-compatible if Gem
 | Q4 | Code execution pairing location | ✅ Decided | Option A: Pair in Go controller helpers |
 | Q5 | Grounding content format | ✅ Decided | Option B: Human-readable content + structured metadata |
 | Q6 | Search entry point HTML storage | ✅ Decided | Option C: Don't store — skip for now |
-| Q7 | ReAct native tool events | ✅ Decided | Option B: Defensive — all controllers create events if data present, with comments |
+| Q7 | ReAct native tool events | ✅ Decided | Revised: Option A — ReAct does not create events, logs warning if data present |
 | Q8 | Multiple grounding events per response | ✅ Decided | Option A: Support slice but expect single entry |
