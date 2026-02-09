@@ -356,6 +356,9 @@ class GoogleNativeProvider(LLMProvider):
         # chunks are metadata, not content — yielding them would increment
         # chunks_yielded in generate(), preventing safe retries on empty streams.
         last_usage: Optional[pb.GenerateResponse] = None
+        # Buffer grounding metadata (available on the candidate level,
+        # typically on the last chunk of a streaming response).
+        last_grounding_metadata = None
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -380,6 +383,11 @@ class GoogleNativeProvider(LLMProvider):
                         continue
 
                     candidate = chunk.candidates[0]
+
+                    # Capture grounding_metadata when available
+                    if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                        last_grounding_metadata = candidate.grounding_metadata
+
                     if not candidate.content or not candidate.content.parts:
                         # Still check for usage on content-less chunks
                         if chunk.usage_metadata:
@@ -454,12 +462,56 @@ class GoogleNativeProvider(LLMProvider):
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
+        # Yield grounding metadata after content (before usage)
+        if last_grounding_metadata is not None:
+            yield self._build_grounding_delta(last_grounding_metadata)
+
         # Yield buffered usage info after confirming content was produced
         if last_usage is not None:
             yield last_usage
 
         # Final chunk
         yield pb.GenerateResponse(is_final=True)
+
+
+    def _build_grounding_delta(self, gm) -> pb.GenerateResponse:
+        """Convert Gemini GroundingMetadata to proto GroundingDelta."""
+        delta = pb.GroundingDelta()
+
+        # Web search queries
+        if hasattr(gm, 'web_search_queries') and gm.web_search_queries:
+            delta.web_search_queries.extend(gm.web_search_queries)
+
+        # Grounding chunks (web sources)
+        if hasattr(gm, 'grounding_chunks') and gm.grounding_chunks:
+            for chunk in gm.grounding_chunks:
+                if hasattr(chunk, 'web') and chunk.web:
+                    delta.grounding_chunks.append(
+                        pb.GroundingChunkInfo(
+                            uri=chunk.web.uri or "",
+                            title=chunk.web.title or "",
+                        )
+                    )
+
+        # Grounding supports (text-source links)
+        if hasattr(gm, 'grounding_supports') and gm.grounding_supports:
+            for support in gm.grounding_supports:
+                segment = support.segment if hasattr(support, 'segment') else None
+                gs = pb.GroundingSupport(
+                    start_index=segment.start_index if segment else 0,
+                    end_index=segment.end_index if segment else 0,
+                    text=segment.text if segment and hasattr(segment, 'text') else "",
+                )
+                if hasattr(support, 'grounding_chunk_indices') and support.grounding_chunk_indices:
+                    gs.grounding_chunk_indices.extend(support.grounding_chunk_indices)
+                delta.grounding_supports.append(gs)
+
+        # Search entry point HTML — extracted for completeness but not stored in timeline events (Q6)
+        if hasattr(gm, 'search_entry_point') and gm.search_entry_point:
+            if hasattr(gm.search_entry_point, 'rendered_content'):
+                delta.search_entry_point_html = gm.search_entry_point.rendered_content or ""
+
+        return pb.GenerateResponse(grounding=delta)
 
 
 class _RetryableError(Exception):

@@ -21,13 +21,14 @@ class GenerateRequest(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[ConversationMessage, _Mapping]]] = ..., llm_config: _Optional[_Union[LLMConfig, _Mapping]] = ..., tools: _Optional[_Iterable[_Union[ToolDefinition, _Mapping]]] = ..., execution_id: _Optional[str] = ...) -> None: ...
 
 class GenerateResponse(_message.Message):
-    __slots__ = ("text", "thinking", "tool_call", "usage", "error", "code_execution", "is_final")
+    __slots__ = ("text", "thinking", "tool_call", "usage", "error", "code_execution", "grounding", "is_final")
     TEXT_FIELD_NUMBER: _ClassVar[int]
     THINKING_FIELD_NUMBER: _ClassVar[int]
     TOOL_CALL_FIELD_NUMBER: _ClassVar[int]
     USAGE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CODE_EXECUTION_FIELD_NUMBER: _ClassVar[int]
+    GROUNDING_FIELD_NUMBER: _ClassVar[int]
     IS_FINAL_FIELD_NUMBER: _ClassVar[int]
     text: TextDelta
     thinking: ThinkingDelta
@@ -35,8 +36,9 @@ class GenerateResponse(_message.Message):
     usage: UsageInfo
     error: ErrorInfo
     code_execution: CodeExecutionDelta
+    grounding: GroundingDelta
     is_final: bool
-    def __init__(self, text: _Optional[_Union[TextDelta, _Mapping]] = ..., thinking: _Optional[_Union[ThinkingDelta, _Mapping]] = ..., tool_call: _Optional[_Union[ToolCallDelta, _Mapping]] = ..., usage: _Optional[_Union[UsageInfo, _Mapping]] = ..., error: _Optional[_Union[ErrorInfo, _Mapping]] = ..., code_execution: _Optional[_Union[CodeExecutionDelta, _Mapping]] = ..., is_final: bool = ...) -> None: ...
+    def __init__(self, text: _Optional[_Union[TextDelta, _Mapping]] = ..., thinking: _Optional[_Union[ThinkingDelta, _Mapping]] = ..., tool_call: _Optional[_Union[ToolCallDelta, _Mapping]] = ..., usage: _Optional[_Union[UsageInfo, _Mapping]] = ..., error: _Optional[_Union[ErrorInfo, _Mapping]] = ..., code_execution: _Optional[_Union[CodeExecutionDelta, _Mapping]] = ..., grounding: _Optional[_Union[GroundingDelta, _Mapping]] = ..., is_final: bool = ...) -> None: ...
 
 class ConversationMessage(_message.Message):
     __slots__ = ("role", "content", "tool_calls", "tool_call_id", "tool_name")
@@ -101,6 +103,38 @@ class CodeExecutionDelta(_message.Message):
     code: str
     result: str
     def __init__(self, code: _Optional[str] = ..., result: _Optional[str] = ...) -> None: ...
+
+class GroundingDelta(_message.Message):
+    __slots__ = ("web_search_queries", "grounding_chunks", "grounding_supports", "search_entry_point_html")
+    WEB_SEARCH_QUERIES_FIELD_NUMBER: _ClassVar[int]
+    GROUNDING_CHUNKS_FIELD_NUMBER: _ClassVar[int]
+    GROUNDING_SUPPORTS_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_ENTRY_POINT_HTML_FIELD_NUMBER: _ClassVar[int]
+    web_search_queries: _containers.RepeatedScalarFieldContainer[str]
+    grounding_chunks: _containers.RepeatedCompositeFieldContainer[GroundingChunkInfo]
+    grounding_supports: _containers.RepeatedCompositeFieldContainer[GroundingSupport]
+    search_entry_point_html: str
+    def __init__(self, web_search_queries: _Optional[_Iterable[str]] = ..., grounding_chunks: _Optional[_Iterable[_Union[GroundingChunkInfo, _Mapping]]] = ..., grounding_supports: _Optional[_Iterable[_Union[GroundingSupport, _Mapping]]] = ..., search_entry_point_html: _Optional[str] = ...) -> None: ...
+
+class GroundingChunkInfo(_message.Message):
+    __slots__ = ("uri", "title")
+    URI_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    uri: str
+    title: str
+    def __init__(self, uri: _Optional[str] = ..., title: _Optional[str] = ...) -> None: ...
+
+class GroundingSupport(_message.Message):
+    __slots__ = ("start_index", "end_index", "text", "grounding_chunk_indices")
+    START_INDEX_FIELD_NUMBER: _ClassVar[int]
+    END_INDEX_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    GROUNDING_CHUNK_INDICES_FIELD_NUMBER: _ClassVar[int]
+    start_index: int
+    end_index: int
+    text: str
+    grounding_chunk_indices: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, start_index: _Optional[int] = ..., end_index: _Optional[int] = ..., text: _Optional[str] = ..., grounding_chunk_indices: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class UsageInfo(_message.Message):
     __slots__ = ("input_tokens", "output_tokens", "total_tokens", "thinking_tokens")

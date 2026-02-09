@@ -328,3 +328,163 @@ func TestNativeThinkingController_TextAlongsideToolCalls(t *testing.T) {
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, "Everything is running fine.", result.FinalAnalysis)
 }
+
+func TestNativeThinkingController_CodeExecution(t *testing.T) {
+	// LLM returns code execution chunks alongside text — should create code_execution events
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "I computed the result."},
+				&agent.CodeExecutionChunk{Code: "print(2 + 2)", Result: ""},
+				&agent.CodeExecutionChunk{Code: "", Result: "4"},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// Verify code_execution event was recorded
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundCodeExec := false
+	for _, ev := range events {
+		if ev.EventType == "code_execution" {
+			foundCodeExec = true
+			require.Contains(t, ev.Content, "print(2 + 2)")
+			require.Contains(t, ev.Content, "4")
+			break
+		}
+	}
+	require.True(t, foundCodeExec, "code_execution event should be recorded")
+}
+
+func TestNativeThinkingController_GoogleSearch(t *testing.T) {
+	// LLM returns grounding with search queries — should create google_search_result event
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "According to my research, Kubernetes 1.30 was released."},
+				&agent.GroundingChunk{
+					WebSearchQueries: []string{"Kubernetes latest version"},
+					Sources:          []agent.GroundingSource{{URI: "https://k8s.io", Title: "Kubernetes"}},
+				},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// Verify google_search_result event was recorded
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundSearch := false
+	for _, ev := range events {
+		if ev.EventType == "google_search_result" {
+			foundSearch = true
+			require.Contains(t, ev.Content, "Kubernetes latest version")
+			require.Contains(t, ev.Content, "https://k8s.io")
+			break
+		}
+	}
+	require.True(t, foundSearch, "google_search_result event should be recorded")
+}
+
+func TestNativeThinkingController_UrlContext(t *testing.T) {
+	// LLM returns grounding WITHOUT search queries — should create url_context_result event
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Based on the documentation."},
+				&agent.GroundingChunk{
+					Sources: []agent.GroundingSource{{URI: "https://docs.example.com/guide", Title: "Guide"}},
+				},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundUrl := false
+	for _, ev := range events {
+		if ev.EventType == "url_context_result" {
+			foundUrl = true
+			require.Contains(t, ev.Content, "https://docs.example.com/guide")
+			break
+		}
+	}
+	require.True(t, foundUrl, "url_context_result event should be recorded")
+}
+
+func TestNativeThinkingController_ForcedConclusionWithGrounding(t *testing.T) {
+	// Verify grounding events are created during forced conclusion too
+	var responses []mockLLMResponse
+	for i := 0; i < 3; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: fmt.Sprintf("call-%d", i), Name: "k8s.get_pods", Arguments: "{}"},
+			},
+		})
+	}
+	// Forced conclusion response with grounding
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Based on investigation and research."},
+			&agent.GroundingChunk{
+				WebSearchQueries: []string{"k8s troubleshooting"},
+				Sources:          []agent.GroundingSource{{URI: "https://k8s.io/docs", Title: "K8s Docs"}},
+			},
+		},
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"k8s.get_pods": {Content: "pod-1 Running"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 3
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundSearch := false
+	for _, ev := range events {
+		if ev.EventType == "google_search_result" {
+			foundSearch = true
+			break
+		}
+	}
+	require.True(t, foundSearch, "google_search_result event should be created during forced conclusion")
+}

@@ -101,6 +101,17 @@ func (x *GenerateRequest) GetExecutionId() string {
 
 // GenerateResponse is a streaming chunk from the LLM.
 // Multiple chunks form a complete response.
+//
+// Error handling has two layers:
+//   - ErrorInfo (in the oneof): application-level errors from the LLM provider
+//     (e.g., rate limits, invalid request, provider timeouts). The stream
+//     remains open and the error is delivered as a typed chunk with is_final=true.
+//   - gRPC status codes: transport-level failures (e.g., connection lost,
+//     Python service crashed, deadline exceeded). These surface as errors on
+//     stream.Recv() in Go and are NOT delivered as ErrorInfo chunks.
+//
+// Consumers must handle both: ErrorChunk from the channel for provider errors,
+// and gRPC errors from the Generate call / stream for transport failures.
 type GenerateResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Content:
@@ -111,6 +122,7 @@ type GenerateResponse struct {
 	//	*GenerateResponse_Usage
 	//	*GenerateResponse_Error
 	//	*GenerateResponse_CodeExecution
+	//	*GenerateResponse_Grounding
 	Content isGenerateResponse_Content `protobuf_oneof:"content"`
 	// True when this is the last chunk for this Generate call.
 	IsFinal       bool `protobuf:"varint,10,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"`
@@ -209,6 +221,15 @@ func (x *GenerateResponse) GetCodeExecution() *CodeExecutionDelta {
 	return nil
 }
 
+func (x *GenerateResponse) GetGrounding() *GroundingDelta {
+	if x != nil {
+		if x, ok := x.Content.(*GenerateResponse_Grounding); ok {
+			return x.Grounding
+		}
+	}
+	return nil
+}
+
 func (x *GenerateResponse) GetIsFinal() bool {
 	if x != nil {
 		return x.IsFinal
@@ -244,6 +265,10 @@ type GenerateResponse_CodeExecution struct {
 	CodeExecution *CodeExecutionDelta `protobuf:"bytes,6,opt,name=code_execution,json=codeExecution,proto3,oneof"`
 }
 
+type GenerateResponse_Grounding struct {
+	Grounding *GroundingDelta `protobuf:"bytes,7,opt,name=grounding,proto3,oneof"`
+}
+
 func (*GenerateResponse_Text) isGenerateResponse_Content() {}
 
 func (*GenerateResponse_Thinking) isGenerateResponse_Content() {}
@@ -255,6 +280,8 @@ func (*GenerateResponse_Usage) isGenerateResponse_Content() {}
 func (*GenerateResponse_Error) isGenerateResponse_Content() {}
 
 func (*GenerateResponse_CodeExecution) isGenerateResponse_Content() {}
+
+func (*GenerateResponse_Grounding) isGenerateResponse_Content() {}
 
 // ConversationMessage represents a message in the LLM conversation.
 // Supports all roles: system, user, assistant, tool.
@@ -345,10 +372,14 @@ func (x *ConversationMessage) GetToolName() string {
 // Names use canonical "server.tool" format (e.g., "kubernetes-server.resources_get").
 // Python providers convert to/from provider-specific formats as needed.
 type ToolDefinition struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                 // Canonical tool name: "server.tool" format
-	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`                                   // Human-readable description
-	ParametersSchema string                 `protobuf:"bytes,3,opt,name=parameters_schema,json=parametersSchema,proto3" json:"parameters_schema,omitempty"` // JSON Schema string for tool parameters
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`               // Canonical tool name: "server.tool" format
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"` // Human-readable description
+	// JSON Schema string describing the tool's input parameters.
+	// This is an opaque string at the proto level — no structural validation
+	// is performed here. The Python LLM provider must parse and validate it
+	// before passing to the upstream API (e.g., Gemini, OpenAI).
+	ParametersSchema string `protobuf:"bytes,3,opt,name=parameters_schema,json=parametersSchema,proto3" json:"parameters_schema,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -669,6 +700,212 @@ func (x *CodeExecutionDelta) GetResult() string {
 	return ""
 }
 
+// GroundingDelta carries grounding metadata from Gemini.
+// Covers both Google Search grounding and URL Context grounding.
+// Sent as a late delta (after content parts, before UsageInfo).
+//
+// Google Search: has web_search_queries populated
+// URL Context: has grounding_chunks but no web_search_queries
+//
+// Go determines the source type when creating timeline events.
+type GroundingDelta struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Search queries used by the model (Google Search only).
+	// Empty for URL Context grounding.
+	WebSearchQueries []string `protobuf:"bytes,1,rep,name=web_search_queries,json=webSearchQueries,proto3" json:"web_search_queries,omitempty"`
+	// Web sources referenced by the model.
+	GroundingChunks []*GroundingChunkInfo `protobuf:"bytes,2,rep,name=grounding_chunks,json=groundingChunks,proto3" json:"grounding_chunks,omitempty"`
+	// Text segments supported by grounding sources.
+	// Links model response text to specific grounding_chunks.
+	GroundingSupports []*GroundingSupport `protobuf:"bytes,3,rep,name=grounding_supports,json=groundingSupports,proto3" json:"grounding_supports,omitempty"`
+	// Rendered HTML/CSS for the Google Search widget (Google Search only).
+	// Empty for URL Context.
+	// NOTE: Streamed from Python but not stored in timeline events (Q6 decision — skip for now).
+	SearchEntryPointHtml string `protobuf:"bytes,4,opt,name=search_entry_point_html,json=searchEntryPointHtml,proto3" json:"search_entry_point_html,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GroundingDelta) Reset() {
+	*x = GroundingDelta{}
+	mi := &file_proto_llm_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroundingDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroundingDelta) ProtoMessage() {}
+
+func (x *GroundingDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroundingDelta.ProtoReflect.Descriptor instead.
+func (*GroundingDelta) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GroundingDelta) GetWebSearchQueries() []string {
+	if x != nil {
+		return x.WebSearchQueries
+	}
+	return nil
+}
+
+func (x *GroundingDelta) GetGroundingChunks() []*GroundingChunkInfo {
+	if x != nil {
+		return x.GroundingChunks
+	}
+	return nil
+}
+
+func (x *GroundingDelta) GetGroundingSupports() []*GroundingSupport {
+	if x != nil {
+		return x.GroundingSupports
+	}
+	return nil
+}
+
+func (x *GroundingDelta) GetSearchEntryPointHtml() string {
+	if x != nil {
+		return x.SearchEntryPointHtml
+	}
+	return ""
+}
+
+// GroundingChunkInfo represents a single web source.
+type GroundingChunkInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uri           string                 `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`     // Web source URL
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"` // Page title
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroundingChunkInfo) Reset() {
+	*x = GroundingChunkInfo{}
+	mi := &file_proto_llm_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroundingChunkInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroundingChunkInfo) ProtoMessage() {}
+
+func (x *GroundingChunkInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroundingChunkInfo.ProtoReflect.Descriptor instead.
+func (*GroundingChunkInfo) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GroundingChunkInfo) GetUri() string {
+	if x != nil {
+		return x.Uri
+	}
+	return ""
+}
+
+func (x *GroundingChunkInfo) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+// GroundingSupport links a text segment to its grounding sources.
+type GroundingSupport struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	StartIndex            int32                  `protobuf:"varint,1,opt,name=start_index,json=startIndex,proto3" json:"start_index,omitempty"`                                           // Start of text segment
+	EndIndex              int32                  `protobuf:"varint,2,opt,name=end_index,json=endIndex,proto3" json:"end_index,omitempty"`                                                 // End of text segment
+	Text                  string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`                                                                          // The supported text
+	GroundingChunkIndices []int32                `protobuf:"varint,4,rep,packed,name=grounding_chunk_indices,json=groundingChunkIndices,proto3" json:"grounding_chunk_indices,omitempty"` // Indices into grounding_chunks
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *GroundingSupport) Reset() {
+	*x = GroundingSupport{}
+	mi := &file_proto_llm_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroundingSupport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroundingSupport) ProtoMessage() {}
+
+func (x *GroundingSupport) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_llm_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroundingSupport.ProtoReflect.Descriptor instead.
+func (*GroundingSupport) Descriptor() ([]byte, []int) {
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GroundingSupport) GetStartIndex() int32 {
+	if x != nil {
+		return x.StartIndex
+	}
+	return 0
+}
+
+func (x *GroundingSupport) GetEndIndex() int32 {
+	if x != nil {
+		return x.EndIndex
+	}
+	return 0
+}
+
+func (x *GroundingSupport) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *GroundingSupport) GetGroundingChunkIndices() []int32 {
+	if x != nil {
+		return x.GroundingChunkIndices
+	}
+	return nil
+}
+
 // UsageInfo reports token consumption for this LLM call.
 type UsageInfo struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -682,7 +919,7 @@ type UsageInfo struct {
 
 func (x *UsageInfo) Reset() {
 	*x = UsageInfo{}
-	mi := &file_proto_llm_service_proto_msgTypes[9]
+	mi := &file_proto_llm_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -694,7 +931,7 @@ func (x *UsageInfo) String() string {
 func (*UsageInfo) ProtoMessage() {}
 
 func (x *UsageInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[9]
+	mi := &file_proto_llm_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +944,7 @@ func (x *UsageInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageInfo.ProtoReflect.Descriptor instead.
 func (*UsageInfo) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{9}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UsageInfo) GetInputTokens() int32 {
@@ -750,7 +987,7 @@ type ErrorInfo struct {
 
 func (x *ErrorInfo) Reset() {
 	*x = ErrorInfo{}
-	mi := &file_proto_llm_service_proto_msgTypes[10]
+	mi := &file_proto_llm_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +999,7 @@ func (x *ErrorInfo) String() string {
 func (*ErrorInfo) ProtoMessage() {}
 
 func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[10]
+	mi := &file_proto_llm_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +1012,7 @@ func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorInfo.ProtoReflect.Descriptor instead.
 func (*ErrorInfo) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{10}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ErrorInfo) GetMessage() string {
@@ -818,7 +1055,7 @@ type LLMConfig struct {
 
 func (x *LLMConfig) Reset() {
 	*x = LLMConfig{}
-	mi := &file_proto_llm_service_proto_msgTypes[11]
+	mi := &file_proto_llm_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +1067,7 @@ func (x *LLMConfig) String() string {
 func (*LLMConfig) ProtoMessage() {}
 
 func (x *LLMConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_llm_service_proto_msgTypes[11]
+	mi := &file_proto_llm_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +1080,7 @@ func (x *LLMConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMConfig.ProtoReflect.Descriptor instead.
 func (*LLMConfig) Descriptor() ([]byte, []int) {
-	return file_proto_llm_service_proto_rawDescGZIP(), []int{11}
+	return file_proto_llm_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LLMConfig) GetProvider() string {
@@ -928,14 +1165,15 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"\n" +
 	"llm_config\x18\x03 \x01(\v2\x11.llm.v1.LLMConfigR\tllmConfig\x12,\n" +
 	"\x05tools\x18\x04 \x03(\v2\x16.llm.v1.ToolDefinitionR\x05tools\x12!\n" +
-	"\fexecution_id\x18\x05 \x01(\tR\vexecutionId\"\xe7\x02\n" +
+	"\fexecution_id\x18\x05 \x01(\tR\vexecutionId\"\x9f\x03\n" +
 	"\x10GenerateResponse\x12'\n" +
 	"\x04text\x18\x01 \x01(\v2\x11.llm.v1.TextDeltaH\x00R\x04text\x123\n" +
 	"\bthinking\x18\x02 \x01(\v2\x15.llm.v1.ThinkingDeltaH\x00R\bthinking\x124\n" +
 	"\ttool_call\x18\x03 \x01(\v2\x15.llm.v1.ToolCallDeltaH\x00R\btoolCall\x12)\n" +
 	"\x05usage\x18\x04 \x01(\v2\x11.llm.v1.UsageInfoH\x00R\x05usage\x12)\n" +
 	"\x05error\x18\x05 \x01(\v2\x11.llm.v1.ErrorInfoH\x00R\x05error\x12C\n" +
-	"\x0ecode_execution\x18\x06 \x01(\v2\x1a.llm.v1.CodeExecutionDeltaH\x00R\rcodeExecution\x12\x19\n" +
+	"\x0ecode_execution\x18\x06 \x01(\v2\x1a.llm.v1.CodeExecutionDeltaH\x00R\rcodeExecution\x126\n" +
+	"\tgrounding\x18\a \x01(\v2\x16.llm.v1.GroundingDeltaH\x00R\tgrounding\x12\x19\n" +
 	"\bis_final\x18\n" +
 	" \x01(\bR\aisFinalB\t\n" +
 	"\acontent\"\xb3\x01\n" +
@@ -965,7 +1203,21 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"\targuments\x18\x03 \x01(\tR\targuments\"@\n" +
 	"\x12CodeExecutionDelta\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
-	"\x06result\x18\x02 \x01(\tR\x06result\"\x9f\x01\n" +
+	"\x06result\x18\x02 \x01(\tR\x06result\"\x85\x02\n" +
+	"\x0eGroundingDelta\x12,\n" +
+	"\x12web_search_queries\x18\x01 \x03(\tR\x10webSearchQueries\x12E\n" +
+	"\x10grounding_chunks\x18\x02 \x03(\v2\x1a.llm.v1.GroundingChunkInfoR\x0fgroundingChunks\x12G\n" +
+	"\x12grounding_supports\x18\x03 \x03(\v2\x18.llm.v1.GroundingSupportR\x11groundingSupports\x125\n" +
+	"\x17search_entry_point_html\x18\x04 \x01(\tR\x14searchEntryPointHtml\"<\n" +
+	"\x12GroundingChunkInfo\x12\x10\n" +
+	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\"\x9c\x01\n" +
+	"\x10GroundingSupport\x12\x1f\n" +
+	"\vstart_index\x18\x01 \x01(\x05R\n" +
+	"startIndex\x12\x1b\n" +
+	"\tend_index\x18\x02 \x01(\x05R\bendIndex\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x126\n" +
+	"\x17grounding_chunk_indices\x18\x04 \x03(\x05R\x15groundingChunkIndices\"\x9f\x01\n" +
 	"\tUsageInfo\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
@@ -1006,7 +1258,7 @@ func file_proto_llm_service_proto_rawDescGZIP() []byte {
 	return file_proto_llm_service_proto_rawDescData
 }
 
-var file_proto_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_llm_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_proto_llm_service_proto_goTypes = []any{
 	(*GenerateRequest)(nil),     // 0: llm.v1.GenerateRequest
 	(*GenerateResponse)(nil),    // 1: llm.v1.GenerateResponse
@@ -1017,30 +1269,36 @@ var file_proto_llm_service_proto_goTypes = []any{
 	(*ThinkingDelta)(nil),       // 6: llm.v1.ThinkingDelta
 	(*ToolCallDelta)(nil),       // 7: llm.v1.ToolCallDelta
 	(*CodeExecutionDelta)(nil),  // 8: llm.v1.CodeExecutionDelta
-	(*UsageInfo)(nil),           // 9: llm.v1.UsageInfo
-	(*ErrorInfo)(nil),           // 10: llm.v1.ErrorInfo
-	(*LLMConfig)(nil),           // 11: llm.v1.LLMConfig
-	nil,                         // 12: llm.v1.LLMConfig.NativeToolsEntry
+	(*GroundingDelta)(nil),      // 9: llm.v1.GroundingDelta
+	(*GroundingChunkInfo)(nil),  // 10: llm.v1.GroundingChunkInfo
+	(*GroundingSupport)(nil),    // 11: llm.v1.GroundingSupport
+	(*UsageInfo)(nil),           // 12: llm.v1.UsageInfo
+	(*ErrorInfo)(nil),           // 13: llm.v1.ErrorInfo
+	(*LLMConfig)(nil),           // 14: llm.v1.LLMConfig
+	nil,                         // 15: llm.v1.LLMConfig.NativeToolsEntry
 }
 var file_proto_llm_service_proto_depIdxs = []int32{
 	2,  // 0: llm.v1.GenerateRequest.messages:type_name -> llm.v1.ConversationMessage
-	11, // 1: llm.v1.GenerateRequest.llm_config:type_name -> llm.v1.LLMConfig
+	14, // 1: llm.v1.GenerateRequest.llm_config:type_name -> llm.v1.LLMConfig
 	3,  // 2: llm.v1.GenerateRequest.tools:type_name -> llm.v1.ToolDefinition
 	5,  // 3: llm.v1.GenerateResponse.text:type_name -> llm.v1.TextDelta
 	6,  // 4: llm.v1.GenerateResponse.thinking:type_name -> llm.v1.ThinkingDelta
 	7,  // 5: llm.v1.GenerateResponse.tool_call:type_name -> llm.v1.ToolCallDelta
-	9,  // 6: llm.v1.GenerateResponse.usage:type_name -> llm.v1.UsageInfo
-	10, // 7: llm.v1.GenerateResponse.error:type_name -> llm.v1.ErrorInfo
+	12, // 6: llm.v1.GenerateResponse.usage:type_name -> llm.v1.UsageInfo
+	13, // 7: llm.v1.GenerateResponse.error:type_name -> llm.v1.ErrorInfo
 	8,  // 8: llm.v1.GenerateResponse.code_execution:type_name -> llm.v1.CodeExecutionDelta
-	4,  // 9: llm.v1.ConversationMessage.tool_calls:type_name -> llm.v1.ToolCall
-	12, // 10: llm.v1.LLMConfig.native_tools:type_name -> llm.v1.LLMConfig.NativeToolsEntry
-	0,  // 11: llm.v1.LLMService.Generate:input_type -> llm.v1.GenerateRequest
-	1,  // 12: llm.v1.LLMService.Generate:output_type -> llm.v1.GenerateResponse
-	12, // [12:13] is the sub-list for method output_type
-	11, // [11:12] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	9,  // 9: llm.v1.GenerateResponse.grounding:type_name -> llm.v1.GroundingDelta
+	4,  // 10: llm.v1.ConversationMessage.tool_calls:type_name -> llm.v1.ToolCall
+	10, // 11: llm.v1.GroundingDelta.grounding_chunks:type_name -> llm.v1.GroundingChunkInfo
+	11, // 12: llm.v1.GroundingDelta.grounding_supports:type_name -> llm.v1.GroundingSupport
+	15, // 13: llm.v1.LLMConfig.native_tools:type_name -> llm.v1.LLMConfig.NativeToolsEntry
+	0,  // 14: llm.v1.LLMService.Generate:input_type -> llm.v1.GenerateRequest
+	1,  // 15: llm.v1.LLMService.Generate:output_type -> llm.v1.GenerateResponse
+	15, // [15:16] is the sub-list for method output_type
+	14, // [14:15] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_proto_llm_service_proto_init() }
@@ -1055,6 +1313,7 @@ func file_proto_llm_service_proto_init() {
 		(*GenerateResponse_Usage)(nil),
 		(*GenerateResponse_Error)(nil),
 		(*GenerateResponse_CodeExecution)(nil),
+		(*GenerateResponse_Grounding)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1062,7 +1321,7 @@ func file_proto_llm_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_llm_service_proto_rawDesc), len(file_proto_llm_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -72,3 +72,74 @@ func TestSynthesisController_LLMError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "synthesis LLM call failed")
 }
+
+func TestSynthesisController_WithGrounding(t *testing.T) {
+	// Synthesis response includes grounding — should create google_search_result event
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "The analysis shows OOM is the root cause."},
+				&agent.GroundingChunk{
+					WebSearchQueries: []string{"kubernetes OOM troubleshooting"},
+					Sources:          []agent.GroundingSource{{URI: "https://k8s.io/docs/oom", Title: "K8s OOM"}},
+				},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.IterationStrategy = config.IterationStrategySynthesisNativeThinking
+	ctrl := NewSynthesisController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found OOM.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundSearch := false
+	for _, ev := range events {
+		if ev.EventType == "google_search_result" {
+			foundSearch = true
+			require.Contains(t, ev.Content, "kubernetes OOM troubleshooting")
+			break
+		}
+	}
+	require.True(t, foundSearch, "google_search_result event should be created in synthesis")
+}
+
+func TestSynthesisController_WithCodeExecution(t *testing.T) {
+	// Synthesis response includes code execution — should create code_execution event
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "After computing metrics."},
+				&agent.CodeExecutionChunk{Code: "avg = sum(values) / len(values)", Result: ""},
+				&agent.CodeExecutionChunk{Code: "", Result: "42.5"},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.IterationStrategy = config.IterationStrategySynthesisNativeThinking
+	ctrl := NewSynthesisController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 collected metrics.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	foundCodeExec := false
+	for _, ev := range events {
+		if ev.EventType == "code_execution" {
+			foundCodeExec = true
+			require.Contains(t, ev.Content, "avg = sum(values) / len(values)")
+			require.Contains(t, ev.Content, "42.5")
+			break
+		}
+	}
+	require.True(t, foundCodeExec, "code_execution event should be created in synthesis")
+}

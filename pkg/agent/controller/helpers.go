@@ -21,6 +21,7 @@ type LLMResponse struct {
 	ThinkingText   string
 	ToolCalls      []agent.ToolCall
 	CodeExecutions []agent.CodeExecutionChunk
+	Groundings     []agent.GroundingChunk
 	Usage          *agent.TokenUsage
 }
 
@@ -47,6 +48,8 @@ func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
 				Code:   c.Code,
 				Result: c.Result,
 			})
+		case *agent.GroundingChunk:
+			resp.Groundings = append(resp.Groundings, *c)
 		case *agent.UsageChunk:
 			resp.Usage = &agent.TokenUsage{
 				InputTokens:    c.InputTokens,
@@ -130,6 +133,28 @@ func recordLLMInteraction(
 		toolCallsCount = len(resp.ToolCalls)
 	}
 
+	llmResponseMeta := map[string]any{
+		"text_length":      textLen,
+		"tool_calls_count": toolCallsCount,
+	}
+
+	// Add code execution data if present
+	if resp != nil && len(resp.CodeExecutions) > 0 {
+		var codeExecs []map[string]string
+		for _, ce := range resp.CodeExecutions {
+			codeExecs = append(codeExecs, map[string]string{
+				"code":   ce.Code,
+				"result": ce.Result,
+			})
+		}
+		llmResponseMeta["code_executions"] = codeExecs
+	}
+
+	// Add grounding data if present
+	if resp != nil && len(resp.Groundings) > 0 {
+		llmResponseMeta["groundings_count"] = len(resp.Groundings)
+	}
+
 	_, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       execCtx.SessionID,
 		StageID:         execCtx.StageID,
@@ -138,7 +163,7 @@ func recordLLMInteraction(
 		ModelName:       execCtx.Config.LLMProvider.Model,
 		LastMessageID:   lastMessageID,
 		LLMRequest:      map[string]any{"messages_count": messagesCount, "iteration": iteration},
-		LLMResponse:     map[string]any{"text_length": textLen, "tool_calls_count": toolCallsCount},
+		LLMResponse:     llmResponseMeta,
 		ThinkingContent: thinkingPtr,
 		InputTokens:     inputTokens,
 		OutputTokens:    outputTokens,
@@ -380,4 +405,217 @@ func tokenUsageFromResp(resp *LLMResponse) agent.TokenUsage {
 		return agent.TokenUsage{}
 	}
 	return *resp.Usage
+}
+
+// ============================================================================
+// Native tool event helpers (Phase 3.2.1)
+// ============================================================================
+
+// createCodeExecutionEvents creates timeline events for Gemini code executions.
+// Gemini streams executable_code and code_execution_result as separate response
+// parts that may arrive non-consecutively. This function buffers code chunks and
+// pairs them with their results to produce one timeline event per execution.
+// Returns the number of events created.
+func createCodeExecutionEvents(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	codeExecutions []agent.CodeExecutionChunk,
+	eventSeq *int,
+) int {
+	created := 0
+
+	// Gemini may stream executable_code and code_execution_result as separate,
+	// potentially non-consecutive response parts. The Python provider yields each
+	// as a separate CodeExecutionDelta:
+	//   - executable_code part  → CodeExecutionDelta{code: "...", result: ""}
+	//   - code_execution_result → CodeExecutionDelta{code: "",   result: "..."}
+	// After collectStream drains the gRPC stream, codeExecutions contains these
+	// chunks in arrival order. We use pendingCode to buffer an executable_code
+	// chunk until its matching code_execution_result arrives, then emit the
+	// pair as a single timeline event.
+	var pendingCode string
+	for _, ce := range codeExecutions {
+		if ce.Code != "" && ce.Result == "" {
+			// executable_code part — buffer the code until its result arrives
+			if pendingCode != "" {
+				// Previous code never got a result — emit it alone
+				content := formatCodeExecution(pendingCode, "")
+				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
+					content, map[string]interface{}{"source": "gemini"}, eventSeq)
+				created++
+			}
+			pendingCode = ce.Code
+		} else if ce.Result != "" && ce.Code == "" {
+			// code_execution_result part — pair with buffered pendingCode
+			content := formatCodeExecution(pendingCode, ce.Result)
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
+				content, map[string]interface{}{"source": "gemini"}, eventSeq)
+			pendingCode = ""
+			created++
+		} else if ce.Code != "" && ce.Result != "" {
+			// Both present in one chunk (defensive — not expected from current Python
+			// provider, but handles future changes or alternative providers gracefully)
+			if pendingCode != "" {
+				content := formatCodeExecution(pendingCode, "")
+				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
+					content, map[string]interface{}{"source": "gemini"}, eventSeq)
+				created++
+			}
+			content := formatCodeExecution(ce.Code, ce.Result)
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
+				content, map[string]interface{}{"source": "gemini"}, eventSeq)
+			pendingCode = ""
+			created++
+		}
+	}
+
+	// Emit any remaining code without result
+	if pendingCode != "" {
+		content := formatCodeExecution(pendingCode, "")
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeCodeExecution,
+			content, map[string]interface{}{"source": "gemini"}, eventSeq)
+		created++
+	}
+
+	return created
+}
+
+// formatCodeExecution formats a code execution pair for timeline event content.
+func formatCodeExecution(code, result string) string {
+	var sb strings.Builder
+	if code != "" {
+		sb.WriteString("```python\n")
+		sb.WriteString(code)
+		sb.WriteString("\n```\n")
+	}
+	if result != "" {
+		sb.WriteString("\nOutput:\n```\n")
+		sb.WriteString(result)
+		sb.WriteString("\n```")
+	}
+	return sb.String()
+}
+
+// createGroundingEvents creates timeline events for grounding results.
+// Determines event type based on whether web_search_queries are present:
+//   - With queries → google_search_result
+//   - Without queries → url_context_result
+//
+// Content is human-readable; structured data goes in metadata (Q5 decision).
+func createGroundingEvents(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	groundings []agent.GroundingChunk,
+	eventSeq *int,
+) int {
+	created := 0
+
+	for _, g := range groundings {
+		if len(g.Sources) == 0 {
+			continue // No sources — skip empty grounding
+		}
+
+		// Build structured metadata (full data for frontend rich rendering)
+		metadata := map[string]interface{}{
+			"source":  "gemini",
+			"sources": formatGroundingSources(g.Sources),
+		}
+		if len(g.Supports) > 0 {
+			metadata["supports"] = formatGroundingSupports(g.Supports)
+		}
+
+		var eventType timelineevent.EventType
+		var content string
+
+		if len(g.WebSearchQueries) > 0 {
+			// Google Search grounding
+			eventType = timelineevent.EventTypeGoogleSearchResult
+			metadata["queries"] = g.WebSearchQueries
+			content = formatGoogleSearchContent(g.WebSearchQueries, g.Sources)
+		} else {
+			// URL Context grounding
+			eventType = timelineevent.EventTypeURLContextResult
+			content = formatUrlContextContent(g.Sources)
+		}
+
+		createTimelineEvent(ctx, execCtx, eventType, content, metadata, eventSeq)
+		created++
+	}
+
+	return created
+}
+
+// formatGoogleSearchContent creates a human-readable summary for google_search_result events.
+func formatGoogleSearchContent(queries []string, sources []agent.GroundingSource) string {
+	var sb strings.Builder
+	sb.WriteString("Google Search: ")
+	for i, q := range queries {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("'")
+		sb.WriteString(q)
+		sb.WriteString("'")
+	}
+	sb.WriteString(" → Sources: ")
+	for i, s := range sources {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		if s.Title != "" {
+			sb.WriteString(s.Title)
+			sb.WriteString(" (")
+			sb.WriteString(s.URI)
+			sb.WriteString(")")
+		} else {
+			sb.WriteString(s.URI)
+		}
+	}
+	return sb.String()
+}
+
+// formatUrlContextContent creates a human-readable summary for url_context_result events.
+func formatUrlContextContent(sources []agent.GroundingSource) string {
+	var sb strings.Builder
+	sb.WriteString("URL Context → Sources: ")
+	for i, s := range sources {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		if s.Title != "" {
+			sb.WriteString(s.Title)
+			sb.WriteString(" (")
+			sb.WriteString(s.URI)
+			sb.WriteString(")")
+		} else {
+			sb.WriteString(s.URI)
+		}
+	}
+	return sb.String()
+}
+
+// formatGroundingSources converts grounding sources to a serializable format for metadata.
+func formatGroundingSources(sources []agent.GroundingSource) []map[string]string {
+	result := make([]map[string]string, 0, len(sources))
+	for _, s := range sources {
+		result = append(result, map[string]string{
+			"uri":   s.URI,
+			"title": s.Title,
+		})
+	}
+	return result
+}
+
+// formatGroundingSupports converts grounding supports to a serializable format for metadata.
+func formatGroundingSupports(supports []agent.GroundingSupport) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(supports))
+	for _, s := range supports {
+		result = append(result, map[string]interface{}{
+			"start_index":             s.StartIndex,
+			"end_index":               s.EndIndex,
+			"text":                    s.Text,
+			"grounding_chunk_indices": s.GroundingChunkIndices,
+		})
+	}
+	return result
 }

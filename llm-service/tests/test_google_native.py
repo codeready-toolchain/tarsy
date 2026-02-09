@@ -280,6 +280,7 @@ class TestGoogleNativeProvider:
         mock_candidate = MagicMock()
         mock_candidate.content = MagicMock()
         mock_candidate.content.parts = [mock_part]
+        mock_candidate.grounding_metadata = None
         
         mock_chunk = MagicMock()
         mock_chunk.candidates = [mock_candidate]
@@ -328,6 +329,7 @@ class TestGoogleNativeProvider:
         mock_candidate = MagicMock()
         mock_candidate.content = MagicMock()
         mock_candidate.content.parts = [mock_part]
+        mock_candidate.grounding_metadata = None
         
         mock_usage = MagicMock()
         mock_usage.prompt_token_count = 10
@@ -389,6 +391,7 @@ class TestGoogleNativeProvider:
         mock_candidate = MagicMock()
         mock_candidate.content = MagicMock()
         mock_candidate.content.parts = [mock_part]
+        mock_candidate.grounding_metadata = None
 
         mock_chunk = MagicMock()
         mock_chunk.candidates = [mock_candidate]
@@ -478,3 +481,240 @@ class TestGoogleNativeProvider:
         assert responses[1].HasField("error")
         assert responses[1].error.code == "partial_stream_error"
         assert responses[1].is_final
+
+
+class TestBuildGroundingDelta:
+    """Tests for _build_grounding_delta method."""
+
+    @pytest.fixture
+    def provider(self):
+        return GoogleNativeProvider()
+
+    def test_google_search_grounding(self, provider):
+        """Test conversion of Google Search grounding metadata."""
+        gm = MagicMock()
+        gm.web_search_queries = ["UEFA Euro 2024 winner", "Spain Euro 2024"]
+        web1 = MagicMock()
+        web1.uri = "https://www.uefa.com/euro2024/"
+        web1.title = "UEFA.com"
+        chunk1 = MagicMock()
+        chunk1.web = web1
+        gm.grounding_chunks = [chunk1]
+        segment = MagicMock()
+        segment.start_index = 0
+        segment.end_index = 20
+        segment.text = "Spain won Euro 2024"
+        support = MagicMock()
+        support.segment = segment
+        support.grounding_chunk_indices = [0]
+        gm.grounding_supports = [support]
+        gm.search_entry_point = MagicMock()
+        gm.search_entry_point.rendered_content = "<div>search widget</div>"
+
+        result = provider._build_grounding_delta(gm)
+
+        assert result.HasField("grounding")
+        delta = result.grounding
+        assert list(delta.web_search_queries) == ["UEFA Euro 2024 winner", "Spain Euro 2024"]
+        assert len(delta.grounding_chunks) == 1
+        assert delta.grounding_chunks[0].uri == "https://www.uefa.com/euro2024/"
+        assert delta.grounding_chunks[0].title == "UEFA.com"
+        assert len(delta.grounding_supports) == 1
+        assert delta.grounding_supports[0].start_index == 0
+        assert delta.grounding_supports[0].end_index == 20
+        assert delta.grounding_supports[0].text == "Spain won Euro 2024"
+        assert list(delta.grounding_supports[0].grounding_chunk_indices) == [0]
+        assert delta.search_entry_point_html == "<div>search widget</div>"
+
+    def test_url_context_grounding(self, provider):
+        """Test conversion of URL Context grounding (no queries)."""
+        gm = MagicMock()
+        gm.web_search_queries = None
+        web1 = MagicMock()
+        web1.uri = "https://docs.k8s.io/pods"
+        web1.title = "Kubernetes Pods"
+        chunk1 = MagicMock()
+        chunk1.web = web1
+        gm.grounding_chunks = [chunk1]
+        gm.grounding_supports = []
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert len(delta.web_search_queries) == 0
+        assert len(delta.grounding_chunks) == 1
+        assert delta.grounding_chunks[0].uri == "https://docs.k8s.io/pods"
+        assert delta.grounding_chunks[0].title == "Kubernetes Pods"
+        assert len(delta.grounding_supports) == 0
+        assert delta.search_entry_point_html == ""
+
+    def test_empty_grounding_metadata(self, provider):
+        """Test conversion with empty grounding metadata."""
+        gm = MagicMock()
+        gm.web_search_queries = None
+        gm.grounding_chunks = None
+        gm.grounding_supports = None
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert len(delta.web_search_queries) == 0
+        assert len(delta.grounding_chunks) == 0
+        assert len(delta.grounding_supports) == 0
+        assert delta.search_entry_point_html == ""
+
+    def test_partial_grounding_metadata(self, provider):
+        """Test conversion with only some fields populated."""
+        gm = MagicMock()
+        gm.web_search_queries = ["test query"]
+        gm.grounding_chunks = None
+        gm.grounding_supports = None
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert list(delta.web_search_queries) == ["test query"]
+        assert len(delta.grounding_chunks) == 0
+        assert len(delta.grounding_supports) == 0
+
+    def test_grounding_chunk_without_web(self, provider):
+        """Test that grounding chunks without web attribute are skipped."""
+        gm = MagicMock()
+        gm.web_search_queries = None
+        chunk1 = MagicMock()
+        chunk1.web = None  # No web attribute
+        gm.grounding_chunks = [chunk1]
+        gm.grounding_supports = None
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert len(delta.grounding_chunks) == 0
+
+    def test_multiple_sources_and_supports(self, provider):
+        """Test conversion with multiple grounding chunks and supports."""
+        gm = MagicMock()
+        gm.web_search_queries = ["query1"]
+        web1 = MagicMock()
+        web1.uri = "https://example1.com"
+        web1.title = "Example 1"
+        web2 = MagicMock()
+        web2.uri = "https://example2.com"
+        web2.title = "Example 2"
+        chunk1 = MagicMock()
+        chunk1.web = web1
+        chunk2 = MagicMock()
+        chunk2.web = web2
+        gm.grounding_chunks = [chunk1, chunk2]
+
+        segment1 = MagicMock()
+        segment1.start_index = 0
+        segment1.end_index = 10
+        segment1.text = "First part"
+        support1 = MagicMock()
+        support1.segment = segment1
+        support1.grounding_chunk_indices = [0]
+
+        segment2 = MagicMock()
+        segment2.start_index = 11
+        segment2.end_index = 20
+        segment2.text = "Second part"
+        support2 = MagicMock()
+        support2.segment = segment2
+        support2.grounding_chunk_indices = [0, 1]
+
+        gm.grounding_supports = [support1, support2]
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert len(delta.grounding_chunks) == 2
+        assert len(delta.grounding_supports) == 2
+        assert list(delta.grounding_supports[1].grounding_chunk_indices) == [0, 1]
+
+    def test_support_without_segment(self, provider):
+        """Test grounding support without segment attribute."""
+        gm = MagicMock()
+        gm.web_search_queries = None
+        gm.grounding_chunks = None
+        support = MagicMock(spec=[])  # No attributes at all
+        gm.grounding_supports = [support]
+        gm.search_entry_point = None
+
+        result = provider._build_grounding_delta(gm)
+
+        delta = result.grounding
+        assert len(delta.grounding_supports) == 1
+        assert delta.grounding_supports[0].start_index == 0
+        assert delta.grounding_supports[0].end_index == 0
+        assert delta.grounding_supports[0].text == ""
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_grounding_yielded_in_stream(self, mock_client_class, provider):
+        """Test that grounding metadata is yielded after content, before usage."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        # Build a mock chunk with text content and grounding metadata
+        mock_part = MagicMock()
+        mock_part.thought = False
+        mock_part.text = "Spain won Euro 2024"
+        mock_part.function_call = None
+        mock_part.executable_code = None
+        mock_part.code_execution_result = None
+
+        mock_gm = MagicMock()
+        mock_gm.web_search_queries = ["Euro 2024 winner"]
+        mock_gm.grounding_chunks = []
+        mock_gm.grounding_supports = []
+        mock_gm.search_entry_point = None
+
+        mock_candidate = MagicMock()
+        mock_candidate.content = MagicMock()
+        mock_candidate.content.parts = [mock_part]
+        mock_candidate.grounding_metadata = mock_gm
+
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 10
+        mock_usage.candidates_token_count = 20
+        mock_usage.total_token_count = 30
+        mock_usage.thinking_token_count = 0
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
+        mock_chunk.usage_metadata = mock_usage
+
+        async def mock_stream():
+            yield mock_chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Who won Euro 2024?")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        # Expected order: text, grounding, usage, is_final
+        assert len(responses) == 4
+        assert responses[0].HasField("text")
+        assert responses[1].HasField("grounding")
+        assert list(responses[1].grounding.web_search_queries) == ["Euro 2024 winner"]
+        assert responses[2].HasField("usage")
+        assert responses[3].is_final

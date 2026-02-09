@@ -139,16 +139,19 @@ type EventType string
 
 // EventType values.
 const (
-	EventTypeLlmThinking      EventType = "llm_thinking"
-	EventTypeLlmResponse      EventType = "llm_response"
-	EventTypeLlmToolCall      EventType = "llm_tool_call"
-	EventTypeToolResult       EventType = "tool_result"
-	EventTypeMcpToolCall      EventType = "mcp_tool_call"
-	EventTypeMcpToolSummary   EventType = "mcp_tool_summary"
-	EventTypeError            EventType = "error"
-	EventTypeUserQuestion     EventType = "user_question"
-	EventTypeExecutiveSummary EventType = "executive_summary"
-	EventTypeFinalAnalysis    EventType = "final_analysis"
+	EventTypeLlmThinking        EventType = "llm_thinking"
+	EventTypeLlmResponse        EventType = "llm_response"
+	EventTypeLlmToolCall        EventType = "llm_tool_call"
+	EventTypeToolResult         EventType = "tool_result"
+	EventTypeMcpToolCall        EventType = "mcp_tool_call"
+	EventTypeMcpToolSummary     EventType = "mcp_tool_summary"
+	EventTypeError              EventType = "error"
+	EventTypeUserQuestion       EventType = "user_question"
+	EventTypeExecutiveSummary   EventType = "executive_summary"
+	EventTypeFinalAnalysis      EventType = "final_analysis"
+	EventTypeCodeExecution      EventType = "code_execution"
+	EventTypeGoogleSearchResult EventType = "google_search_result"
+	EventTypeURLContextResult   EventType = "url_context_result"
 )
 
 func (et EventType) String() string {
@@ -158,7 +161,7 @@ func (et EventType) String() string {
 // EventTypeValidator is a validator for the "event_type" field enum values. It is called by the builders before save.
 func EventTypeValidator(et EventType) error {
 	switch et {
-	case EventTypeLlmThinking, EventTypeLlmResponse, EventTypeLlmToolCall, EventTypeToolResult, EventTypeMcpToolCall, EventTypeMcpToolSummary, EventTypeError, EventTypeUserQuestion, EventTypeExecutiveSummary, EventTypeFinalAnalysis:
+	case EventTypeLlmThinking, EventTypeLlmResponse, EventTypeLlmToolCall, EventTypeToolResult, EventTypeMcpToolCall, EventTypeMcpToolSummary, EventTypeError, EventTypeUserQuestion, EventTypeExecutiveSummary, EventTypeFinalAnalysis, EventTypeCodeExecution, EventTypeGoogleSearchResult, EventTypeURLContextResult:
 		return nil
 	default:
 		return fmt.Errorf("timelineevent: invalid enum value for event_type field: %q", et)

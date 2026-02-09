@@ -497,7 +497,7 @@ var (
 		{Name: "sequence_number", Type: field.TypeInt},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "tool_result", "mcp_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis"}},
+		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "tool_result", "mcp_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"streaming", "completed", "failed", "cancelled", "timed_out"}, Default: "streaming"},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
