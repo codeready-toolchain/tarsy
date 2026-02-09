@@ -337,5 +337,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
   - [Iteration Controllers Questions](phase3-iteration-controllers-questions.md)
   - [Native Tool Timeline Events Design](phase3-native-tool-events-design.md)
   - [Native Tool Timeline Events Questions](phase3-native-tool-events-questions.md)
+  - [Prompt System Design](phase3-prompt-system-design.md)
+  - [Prompt System Questions](phase3-prompt-system-questions.md)
 - **Phase 4 Design**:
   - [Open Questions](phase4-open-questions.md)
