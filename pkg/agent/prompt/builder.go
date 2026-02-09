@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -99,12 +100,16 @@ func (b *PromptBuilder) BuildNativeThinkingMessages(
 }
 
 // BuildSynthesisMessages builds the conversation for a synthesis stage.
+// Synthesis is a tool-less, single-shot stage that combines parallel results.
+// Unlike ReAct/NativeThinking, it does NOT append taskFocus because the
+// synthesis agent's own CustomInstructions already define its focus
+// ("Focus on solving the original alert/issue...").
+// Synthesis is never used in chat sessions, so no ChatContext handling.
 func (b *PromptBuilder) BuildSynthesisMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
-	composed := b.ComposeInstructions(execCtx)
-	systemContent := composed + "\n\n" + taskFocus
+	systemContent := b.ComposeInstructions(execCtx)
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},
@@ -131,6 +136,8 @@ func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int, strategy conf
 	case config.IterationStrategyNativeThinking:
 		formatInstructions = nativeThinkingForcedConclusionFormat
 	default:
+		slog.Warn("unknown iteration strategy for forced conclusion, using native-thinking format",
+			"strategy", strategy)
 		formatInstructions = nativeThinkingForcedConclusionFormat
 	}
 	return fmt.Sprintf(forcedConclusionTemplate, iteration, formatInstructions)

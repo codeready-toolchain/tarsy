@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -91,7 +92,9 @@ func (b *PromptBuilder) appendMCPInstructions(sections []string, execCtx *agent.
 	for _, serverID := range execCtx.Config.MCPServers {
 		serverConfig, err := b.mcpRegistry.Get(serverID)
 		if err != nil {
-			continue // Skip servers not in registry (logged elsewhere)
+			slog.Debug("MCP server not found in registry, skipping instructions",
+				"serverID", serverID, "error", err)
+			continue
 		}
 		if serverConfig.Instructions != "" {
 			sections = append(sections, "## "+serverID+" Instructions\n\n"+serverConfig.Instructions)

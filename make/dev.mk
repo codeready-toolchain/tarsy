@@ -3,7 +3,7 @@
 # =============================================================================
 
 .PHONY: check
-check: build lint-fix test ## Build, lint-fix, and run all tests
+check: fmt build lint-fix test ## Format, build, lint, and run all tests
 	@echo ""
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 

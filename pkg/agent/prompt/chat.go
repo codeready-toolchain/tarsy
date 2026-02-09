@@ -75,14 +75,18 @@ func FormatChatHistory(exchanges []agent.ChatExchange) string {
 		sb.WriteString(exchange.UserQuestion)
 		sb.WriteString("\n\n")
 
-		// Format the conversation messages (assistant responses, observations)
+		// Format the conversation messages (assistant responses, tool results, observations)
 		for _, msg := range exchange.Messages {
-			if msg.Role == agent.RoleAssistant {
+			switch msg.Role {
+			case agent.RoleAssistant:
 				sb.WriteString("**ASSISTANT:**\n")
 				sb.WriteString(msg.Content)
 				sb.WriteString("\n\n")
-			} else if msg.Role == agent.RoleUser {
-				// Observation messages (tool results)
+			case agent.RoleTool:
+				sb.WriteString("**Observation (tool):**\n\n")
+				sb.WriteString(msg.Content)
+				sb.WriteString("\n\n")
+			case agent.RoleUser:
 				sb.WriteString("**Observation:**\n\n")
 				sb.WriteString(msg.Content)
 				sb.WriteString("\n\n")

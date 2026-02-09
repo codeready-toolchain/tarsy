@@ -78,25 +78,25 @@ func (c *ReActController) Run(
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
 			state.RecordFailure(err.Error(), isTimeoutError(err))
 			observation := FormatErrorObservation(err)
-		messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
-		storeObservationMessage(ctx, execCtx, observation, &msgSeq)
-		continue
-	}
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
+			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
+			continue
+		}
 
-	// Record LLM interaction
-	accumulateUsage(&totalUsage, resp)
-	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
-	if storeErr != nil {
-		iterCancel()
-		return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
-	}
-	recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+		// Record LLM interaction
+		accumulateUsage(&totalUsage, resp)
+		assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+		if storeErr != nil {
+			iterCancel()
+			return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
+		}
+		recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
-	// Append assistant response to conversation
-	messages = append(messages, agent.ConversationMessage{
-		Role:    agent.RoleAssistant,
-		Content: resp.Text,
-	})
+		// Append assistant response to conversation
+		messages = append(messages, agent.ConversationMessage{
+			Role:    agent.RoleAssistant,
+			Content: resp.Text,
+		})
 
 		// Parse ReAct response
 		parsed := ParseReActResponse(resp.Text)
@@ -138,41 +138,41 @@ func (c *ReActController) Run(
 				// Tool exists in ReAct format but not in our tool list
 				observation := FormatUnknownToolError(parsed.Action,
 					fmt.Sprintf("Unknown tool '%s'", parsed.Action), tools)
-			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
-			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
-		} else {
-			// Execute tool
-			createToolCallEvent(ctx, execCtx, parsed.Action, parsed.ActionInput, &eventSeq)
-
-			result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, agent.ToolCall{
-				ID:        generateCallID(),
-				Name:      parsed.Action,
-				Arguments: parsed.ActionInput,
-			})
-
-			if toolErr != nil {
-				state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
-				observation := FormatToolErrorObservation(toolErr)
-				createToolResultEvent(ctx, execCtx, observation, true, &eventSeq)
 				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 				storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			} else {
-				observation := FormatObservation(result)
-				createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
-				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
-				storeObservationMessage(ctx, execCtx, observation, &msgSeq)
+				// Execute tool
+				createToolCallEvent(ctx, execCtx, parsed.Action, parsed.ActionInput, &eventSeq)
+
+				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, agent.ToolCall{
+					ID:        generateCallID(),
+					Name:      parsed.Action,
+					Arguments: parsed.ActionInput,
+				})
+
+				if toolErr != nil {
+					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
+					observation := FormatToolErrorObservation(toolErr)
+					createToolResultEvent(ctx, execCtx, observation, true, &eventSeq)
+					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
+					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
+				} else {
+					observation := FormatObservation(result)
+					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
+					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
+					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
+				}
 			}
-		}
 
-	case parsed.IsUnknownTool:
-		observation := FormatUnknownToolError(parsed.Action, parsed.ErrorMessage, tools)
-		messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
-		storeObservationMessage(ctx, execCtx, observation, &msgSeq)
+		case parsed.IsUnknownTool:
+			observation := FormatUnknownToolError(parsed.Action, parsed.ErrorMessage, tools)
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
+			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 
-	default:
-		// Malformed response — keep it, add format feedback
-		feedback := GetFormatErrorFeedback(parsed)
-		messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: feedback})
+		default:
+			// Malformed response — keep it, add format feedback
+			feedback := GetFormatErrorFeedback(parsed)
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: feedback})
 			storeObservationMessage(ctx, execCtx, feedback, &msgSeq)
 		}
 
@@ -264,4 +264,3 @@ func (c *ReActController) forceConclusion(
 		TokensUsed:    *totalUsage,
 	}, nil
 }
-

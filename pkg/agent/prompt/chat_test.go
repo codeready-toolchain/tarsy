@@ -75,6 +75,23 @@ func TestFormatChatHistory_WithObservations(t *testing.T) {
 	assert.Contains(t, result, "Logs show OOM events")
 }
 
+func TestFormatChatHistory_WithToolResults(t *testing.T) {
+	exchanges := []agent.ChatExchange{
+		{
+			UserQuestion: "Check the pods",
+			Messages: []agent.ConversationMessage{
+				{Role: agent.RoleAssistant, Content: "Checking pods now."},
+				{Role: agent.RoleTool, Content: "pod-1 Running\npod-2 CrashLoopBackOff", ToolCallID: "tc1", ToolName: "k8s.pods_list"},
+				{Role: agent.RoleAssistant, Content: "Pod-2 is crashing."},
+			},
+		},
+	}
+
+	result := FormatChatHistory(exchanges)
+	assert.Contains(t, result, "**Observation (tool):**")
+	assert.Contains(t, result, "pod-2 CrashLoopBackOff")
+}
+
 func TestPluralS(t *testing.T) {
 	assert.Equal(t, "", pluralS(1))
 	assert.Equal(t, "s", pluralS(0))
