@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -66,4 +67,48 @@ func TestWorkerHealth(t *testing.T) {
 	h = w.Health()
 	assert.Equal(t, "idle", h.Status)
 	assert.Equal(t, "", h.CurrentSessionID)
+}
+
+func TestWorker_PublishSessionStatusNilPublisher(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	// Should not panic with nil eventPublisher
+	assert.NotPanics(t, func() {
+		w.publishSessionStatus(t.Context(), "session-123", "in_progress")
+	})
+	assert.NotPanics(t, func() {
+		w.publishSessionStatus(t.Context(), "session-456", "completed")
+	})
+}
+
+func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
+	cfg := testQueueConfig()
+	pub := &mockEventPublisher{}
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, pub)
+
+	w.publishSessionStatus(t.Context(), "session-abc", "in_progress")
+
+	// Should have published to both session and global channels
+	assert.Equal(t, 1, pub.publishCount, "should call Publish for session channel")
+	assert.Equal(t, 1, pub.transientCount, "should call PublishTransient for global channel")
+	assert.Equal(t, "session:session-abc", pub.lastChannel)
+}
+
+// mockEventPublisher implements agent.EventPublisher for unit tests.
+type mockEventPublisher struct {
+	publishCount   int
+	transientCount int
+	lastChannel    string
+}
+
+func (m *mockEventPublisher) Publish(_ context.Context, _ string, channel string, _ map[string]interface{}) error {
+	m.publishCount++
+	m.lastChannel = channel
+	return nil
+}
+
+func (m *mockEventPublisher) PublishTransient(_ context.Context, _ string, _ map[string]interface{}) error {
+	m.transientCount++
+	return nil
 }

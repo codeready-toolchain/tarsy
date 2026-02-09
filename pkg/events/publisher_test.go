@@ -22,7 +22,6 @@ func TestMarshalPayload(t *testing.T) {
 	})
 
 	t.Run("truncates oversized payload", func(t *testing.T) {
-		// Create a payload that exceeds 7900 bytes
 		longContent := make([]byte, 8000)
 		for i := range longContent {
 			longContent[i] = 'a'
@@ -36,8 +35,6 @@ func TestMarshalPayload(t *testing.T) {
 
 		result, err := marshalPayload(payload)
 		require.NoError(t, err)
-
-		// Should be truncated — contains "truncated" flag
 		assert.Contains(t, result, "truncated")
 		assert.Less(t, len(result), 8000)
 	})
@@ -52,4 +49,60 @@ func TestMarshalPayload(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, result, "truncated")
 	})
+
+	t.Run("truncated payload preserves key fields", func(t *testing.T) {
+		longContent := make([]byte, 8000)
+		for i := range longContent {
+			longContent[i] = 'x'
+		}
+		payload := map[string]interface{}{
+			"type":       "timeline_event.created",
+			"event_id":   "evt-456",
+			"session_id": "sess-789",
+			"content":    string(longContent),
+			"metadata":   map[string]string{"key": "value"},
+		}
+
+		result, err := marshalPayload(payload)
+		require.NoError(t, err)
+
+		// Key fields preserved in truncated form
+		assert.Contains(t, result, "timeline_event.created")
+		assert.Contains(t, result, "evt-456")
+		assert.Contains(t, result, "sess-789")
+		assert.Contains(t, result, `"truncated":true`)
+		// Large content and metadata stripped
+		assert.NotContains(t, result, "xxxx")
+	})
+
+	t.Run("boundary: payload just under limit is not truncated", func(t *testing.T) {
+		// Build a payload that is just under 7900 bytes
+		// The JSON overhead for {"content":"...","type":"t"} is ~24 bytes
+		contentSize := 7900 - 30 // well under limit after JSON encoding
+		content := make([]byte, contentSize)
+		for i := range content {
+			content[i] = 'b'
+		}
+		payload := map[string]interface{}{
+			"type":    "t",
+			"content": string(content),
+		}
+
+		result, err := marshalPayload(payload)
+		require.NoError(t, err)
+		assert.NotContains(t, result, "truncated")
+	})
+
+	t.Run("empty payload", func(t *testing.T) {
+		payload := map[string]interface{}{}
+		result, err := marshalPayload(payload)
+		require.NoError(t, err)
+		assert.Equal(t, "{}", result)
+	})
+}
+
+func TestNewEventPublisher(t *testing.T) {
+	publisher := NewEventPublisher(nil)
+	assert.NotNil(t, publisher)
+	assert.Nil(t, publisher.db)
 }

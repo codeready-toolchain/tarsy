@@ -342,6 +342,142 @@ func TestConnectionManager_Unsubscribe(t *testing.T) {
 	assert.Error(t, err, "should not receive message after unsubscribe")
 }
 
+func TestConnectionManager_CatchupNormal(t *testing.T) {
+	// Normal catchup: events under the limit are delivered in order
+	events := []CatchupEvent{
+		{ID: 10, Payload: map[string]interface{}{"type": "timeline_event.created", "seq": float64(1)}},
+		{ID: 11, Payload: map[string]interface{}{"type": "stream.chunk", "seq": float64(2)}},
+		{ID: 12, Payload: map[string]interface{}{"type": "timeline_event.completed", "seq": float64(3)}},
+	}
+
+	manager := NewConnectionManager(&mockCatchupQuerier{events: events}, 5*time.Second)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	conn := connectWS(t, server)
+	readJSON(t, conn) // connection.established
+
+	// Subscribe
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:catchup-test"})
+	conn.Write(ctx, websocket.MessageText, subMsg)
+	readJSON(t, conn) // subscription.confirmed
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Request catchup from event 0 — should receive all 3 events, no overflow
+	lastEventID := 0
+	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
+	conn.Write(ctx, websocket.MessageText, catchupMsg)
+
+	// Read all 3 catchup events
+	for i := 0; i < 3; i++ {
+		msg := readJSON(t, conn)
+		assert.Equal(t, float64(i+1), msg["seq"])
+	}
+
+	// No overflow should follow — try read with short timeout
+	readCtx, readCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer readCancel()
+	_, _, err := conn.Read(readCtx)
+	assert.Error(t, err, "should not receive overflow message for small catchup")
+}
+
+func TestConnectionManager_CatchupError(t *testing.T) {
+	// Catchup error should be logged but not crash the connection.
+	// Verify the connection remains usable after a catchup query failure.
+	manager := NewConnectionManager(&mockCatchupQuerier{err: fmt.Errorf("database unreachable")}, 5*time.Second)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	conn := connectWS(t, server)
+	readJSON(t, conn) // connection.established
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:err-test"})
+	conn.Write(ctx, websocket.MessageText, subMsg)
+	readJSON(t, conn) // subscription.confirmed
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Request catchup — error should be silently handled
+	lastEventID := 0
+	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "session:err-test", LastEventID: &lastEventID})
+	conn.Write(ctx, websocket.MessageText, catchupMsg)
+
+	// Give server time to process catchup and log error
+	time.Sleep(100 * time.Millisecond)
+
+	// Connection should still be alive — ping/pong works
+	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
+	conn.Write(ctx, websocket.MessageText, pingMsg)
+	msg := readJSON(t, conn)
+	assert.Equal(t, "pong", msg["type"])
+}
+
+func TestConnectionManager_BroadcastIsolation(t *testing.T) {
+	// Client subscribed to ch1 should NOT receive ch2 broadcasts
+	manager, server := setupTestManager(t)
+
+	conn1 := connectWS(t, server)
+	conn2 := connectWS(t, server)
+	readJSON(t, conn1) // connection.established
+	readJSON(t, conn2) // connection.established
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// conn1 subscribes to ch1, conn2 subscribes to ch2
+	sub1, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch1"})
+	conn1.Write(ctx, websocket.MessageText, sub1)
+	readJSON(t, conn1) // subscription.confirmed
+
+	sub2, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch2"})
+	conn2.Write(ctx, websocket.MessageText, sub2)
+	readJSON(t, conn2) // subscription.confirmed
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Broadcast to ch1 — only conn1 should receive
+	payload1, _ := json.Marshal(map[string]string{"type": "test", "target": "ch1"})
+	manager.Broadcast("session:ch1", payload1)
+
+	msg := readJSON(t, conn1)
+	assert.Equal(t, "ch1", msg["target"])
+
+	// conn2 should NOT receive ch1's message — verify with timeout
+	readCtx, readCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer readCancel()
+	_, _, err := conn2.Read(readCtx)
+	assert.Error(t, err, "conn2 should not receive ch1 broadcast")
+}
+
+func TestConnectionManager_SetListener(t *testing.T) {
+	manager := NewConnectionManager(&mockCatchupQuerier{}, 5*time.Second)
+	assert.Nil(t, manager.listener)
+
+	listener := NewNotifyListener("host=localhost", manager)
+	manager.SetListener(listener)
+
+	manager.listenerMu.RLock()
+	assert.Equal(t, listener, manager.listener)
+	manager.listenerMu.RUnlock()
+}
+
 func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
 	manager, server := setupTestManager(t)
 

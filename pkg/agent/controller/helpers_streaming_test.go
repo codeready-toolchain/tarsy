@@ -117,3 +117,87 @@ func TestCollectStreamWithCallback_ToolCalls(t *testing.T) {
 	require.Len(t, resp.ToolCalls, 1)
 	assert.Equal(t, "get_pods", resp.ToolCalls[0].Name)
 }
+
+func TestCollectStreamWithCallback_EmptyStream(t *testing.T) {
+	ch := make(chan agent.Chunk)
+	close(ch) // Immediately closed — no chunks
+
+	resp, err := collectStreamWithCallback(ch, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", resp.Text)
+	assert.Equal(t, "", resp.ThinkingText)
+	assert.Nil(t, resp.ToolCalls)
+	assert.Nil(t, resp.Usage)
+	assert.Nil(t, resp.Groundings)
+	assert.Nil(t, resp.CodeExecutions)
+}
+
+func TestCollectStreamWithCallback_GroundingChunks(t *testing.T) {
+	ch := make(chan agent.Chunk, 2)
+	ch <- &agent.GroundingChunk{
+		Sources: []agent.GroundingSource{
+			{URI: "https://example.com", Title: "Example"},
+		},
+		WebSearchQueries: []string{"test query"},
+	}
+	ch <- &agent.TextChunk{Content: "Based on search results..."}
+	close(ch)
+
+	resp, err := collectStreamWithCallback(ch, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "Based on search results...", resp.Text)
+	require.Len(t, resp.Groundings, 1)
+	assert.Equal(t, "https://example.com", resp.Groundings[0].Sources[0].URI)
+	assert.Equal(t, []string{"test query"}, resp.Groundings[0].WebSearchQueries)
+}
+
+func TestCollectStreamWithCallback_CodeExecutionChunks(t *testing.T) {
+	ch := make(chan agent.Chunk, 3)
+	ch <- &agent.CodeExecutionChunk{Code: "print('hello')", Result: ""}
+	ch <- &agent.CodeExecutionChunk{Code: "", Result: "hello"}
+	ch <- &agent.TextChunk{Content: "Executed successfully."}
+	close(ch)
+
+	resp, err := collectStreamWithCallback(ch, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "Executed successfully.", resp.Text)
+	require.Len(t, resp.CodeExecutions, 2)
+	assert.Equal(t, "print('hello')", resp.CodeExecutions[0].Code)
+	assert.Equal(t, "hello", resp.CodeExecutions[1].Result)
+}
+
+func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
+	// Comprehensive test: all chunk types in one stream
+	var callbacks []string
+
+	callback := func(chunkType string, _ string) {
+		callbacks = append(callbacks, chunkType)
+	}
+
+	ch := make(chan agent.Chunk, 10)
+	ch <- &agent.ThinkingChunk{Content: "Hmm..."}
+	ch <- &agent.TextChunk{Content: "Answer: "}
+	ch <- &agent.TextChunk{Content: "42"}
+	ch <- &agent.ToolCallChunk{CallID: "tc-1", Name: "get_info", Arguments: "{}"}
+	ch <- &agent.CodeExecutionChunk{Code: "x = 1", Result: "1"}
+	ch <- &agent.GroundingChunk{
+		Sources: []agent.GroundingSource{{URI: "http://example.com"}},
+	}
+	ch <- &agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150, ThinkingTokens: 20}
+	close(ch)
+
+	resp, err := collectStreamWithCallback(ch, callback)
+	require.NoError(t, err)
+	assert.Equal(t, "Answer: 42", resp.Text)
+	assert.Equal(t, "Hmm...", resp.ThinkingText)
+	require.Len(t, resp.ToolCalls, 1)
+	require.Len(t, resp.CodeExecutions, 1)
+	require.Len(t, resp.Groundings, 1)
+	require.NotNil(t, resp.Usage)
+	assert.Equal(t, 150, resp.Usage.TotalTokens)
+	assert.Equal(t, 20, resp.Usage.ThinkingTokens)
+
+	// Callback should fire for thinking (1) + text (2) = 3 times
+	// (Tool calls, code executions, groundings, usage don't trigger callback)
+	assert.Equal(t, []string{ChunkTypeThinking, ChunkTypeText, ChunkTypeText}, callbacks)
+}
