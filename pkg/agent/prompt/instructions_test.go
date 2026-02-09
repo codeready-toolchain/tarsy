@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -128,18 +129,9 @@ func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 	result := builder.ComposeInstructions(execCtx)
 
 	// Verify ordering: Tier 1 < Tier 2 < Tier 3
-	idxT1 := indexOf(result, "General SRE Agent Instructions")
-	idxT2 := indexOf(result, "MCP_TIER2_MARKER")
-	idxT3 := indexOf(result, "CUSTOM_TIER3_MARKER")
+	idxT1 := strings.Index(result, "General SRE Agent Instructions")
+	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
+	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
 	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
 	assert.Greater(t, idxT3, idxT2, "Tier 3 should come after Tier 2")
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

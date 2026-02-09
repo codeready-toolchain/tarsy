@@ -114,7 +114,7 @@ The "Final Answer:" marker is required for proper parsing. Begin your conclusion
 const nativeThinkingForcedConclusionFormat = `Provide a clear, structured conclusion that directly addresses the investigation question.`
 
 // mcpSummarizationSystemTemplate is the system prompt for MCP result summarization.
-// %s = server.tool name, %s = server.tool name again, %d = max summary tokens.
+// %s = server name, %s = tool name, %d = max summary tokens.
 const mcpSummarizationSystemTemplate = `You are an expert at summarizing technical output from system administration and monitoring tools for ongoing incident investigation.
 
 Your specific task is to summarize output from **%s.%s** in a way that:

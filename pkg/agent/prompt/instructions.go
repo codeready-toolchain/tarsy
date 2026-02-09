@@ -55,7 +55,7 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 	sections = append(sections, generalInstructions)
 
 	// Tier 2: MCP server instructions (from registry, keyed by server IDs in config)
-	sections = appendMCPInstructions(sections, b, execCtx)
+	sections = b.appendMCPInstructions(sections, execCtx)
 
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -73,7 +73,7 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 	sections = append(sections, chatGeneralInstructions)
 
 	// Tier 2: MCP server instructions (same logic as investigation)
-	sections = appendMCPInstructions(sections, b, execCtx)
+	sections = b.appendMCPInstructions(sections, execCtx)
 
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -87,7 +87,7 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 }
 
 // appendMCPInstructions adds Tier 2 MCP server instructions to a sections slice.
-func appendMCPInstructions(sections []string, b *PromptBuilder, execCtx *agent.ExecutionContext) []string {
+func (b *PromptBuilder) appendMCPInstructions(sections []string, execCtx *agent.ExecutionContext) []string {
 	for _, serverID := range execCtx.Config.MCPServers {
 		serverConfig, err := b.mcpRegistry.Get(serverID)
 		if err != nil {

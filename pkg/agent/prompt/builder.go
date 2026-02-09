@@ -199,7 +199,8 @@ func (b *PromptBuilder) buildSynthesisUserMessage(
 
 	sb.WriteString("Synthesize the investigation results and provide recommendations.\n\n")
 
-	// Alert section
+	// Alert section — alertType intentionally omitted for synthesis; the synthesizer
+	// focuses on combining parallel results, not re-analyzing alert metadata.
 	sb.WriteString(FormatAlertSection("", execCtx.AlertData))
 	sb.WriteString("\n")
 

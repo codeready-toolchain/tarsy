@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
 
 const investigationSeparator = "═══════════════════════════════════════════════════════════════════════════════"
@@ -19,24 +20,27 @@ func FormatInvestigationContext(events []*ent.TimelineEvent) string {
 	sb.WriteString("# Original Investigation\n\n")
 
 	for _, event := range events {
-		switch string(event.EventType) {
-		case "llm_thinking":
+		if event == nil {
+			continue
+		}
+		switch event.EventType {
+		case timelineevent.EventTypeLlmThinking:
 			sb.WriteString("**Internal Reasoning:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case "llm_response":
+		case timelineevent.EventTypeLlmResponse:
 			sb.WriteString("**Agent Response:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case "llm_tool_call", "mcp_tool_call":
+		case timelineevent.EventTypeLlmToolCall, timelineevent.EventTypeMcpToolCall:
 			sb.WriteString("**Tool Call:** ")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case "tool_result":
+		case timelineevent.EventTypeToolResult:
 			sb.WriteString("**Observation:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case "final_analysis":
+		case timelineevent.EventTypeFinalAnalysis:
 			sb.WriteString("**Final Analysis:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")

@@ -41,7 +41,7 @@ func TestFormatRunbookSection_WithContent(t *testing.T) {
 	assert.Contains(t, result, "<!-- RUNBOOK START -->")
 	assert.Contains(t, result, "# My Runbook")
 	assert.Contains(t, result, "<!-- RUNBOOK END -->")
-	assert.Contains(t, result, "```markdown")
+	assert.Contains(t, result, "````markdown")
 }
 
 func TestFormatRunbookSection_Empty(t *testing.T) {

@@ -133,12 +133,12 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [x] Controllers: NativeThinkingController and SynthesisController create native tool timeline events
 - [x] Note: Native tools suppressed when MCP tools present (Python handles). Improvement over old TARSy: native tool results become first-class timeline events.
 
-**3.3: Prompt System (Go)**
-- [ ] Prompt builder framework
-- [ ] Template system (Go text/template or string builders)
-- [ ] Component-based prompts (alert section, runbook section, tool instructions)
-- [ ] Chain context injection (previous stage results formatting)
-- [ ] Three-tier instruction composition (general → MCP server → custom)
+**3.3: Prompt System (Go)** ✅ Complete
+- [x] Prompt builder framework
+- [x] Template system (Go text/template or string builders)
+- [x] Component-based prompts (alert section, runbook section, tool instructions)
+- [x] Chain context injection (previous stage results formatting)
+- [x] Three-tier instruction composition (general → MCP server → custom)
 
 **3.4: Real-time Streaming**
 - [ ] WebSocket endpoint (Echo + coder/websocket)

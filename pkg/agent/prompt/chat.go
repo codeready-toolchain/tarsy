@@ -13,6 +13,9 @@ func (b *PromptBuilder) buildChatUserMessage(
 	tools []agent.ToolDefinition,
 ) string {
 	chat := execCtx.ChatContext
+	if chat == nil {
+		return ""
+	}
 
 	var sb strings.Builder
 

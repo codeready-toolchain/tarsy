@@ -73,7 +73,7 @@ func (c *NativeThinkingController) Run(
 
 			// Add error context as user message
 			errMsg := fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
-			messages = append(messages, agent.ConversationMessage{Role: "user", Content: errMsg})
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: errMsg})
 			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
 			continue
 		}
@@ -108,11 +108,11 @@ func (c *NativeThinkingController) Run(
 			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
 			// Append assistant message to conversation
-			messages = append(messages, agent.ConversationMessage{
-				Role:      "assistant",
-				Content:   resp.Text,
-				ToolCalls: resp.ToolCalls,
-			})
+		messages = append(messages, agent.ConversationMessage{
+			Role:      agent.RoleAssistant,
+			Content:   resp.Text,
+			ToolCalls: resp.ToolCalls,
+		})
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
@@ -125,24 +125,24 @@ func (c *NativeThinkingController) Run(
 					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
 
-					// Append error as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       "tool",
-						Content:    errContent,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
+				// Append error as tool result message
+				messages = append(messages, agent.ConversationMessage{
+					Role:       agent.RoleTool,
+					Content:    errContent,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+				})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
 				} else {
 					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
 
-					// Append result as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       "tool",
-						Content:    result.Content,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
+				// Append result as tool result message
+				messages = append(messages, agent.ConversationMessage{
+					Role:       agent.RoleTool,
+					Content:    result.Content,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+				})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
 				}
 			}
@@ -193,7 +193,7 @@ func (c *NativeThinkingController) forceConclusion(
 
 	// Append forced conclusion prompt
 	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyNativeThinking)
-	messages = append(messages, agent.ConversationMessage{Role: "user", Content: conclusionPrompt})
+	messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 
 	startTime := time.Now()

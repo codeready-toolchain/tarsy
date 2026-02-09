@@ -3,6 +3,7 @@ package prompt
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -24,7 +25,10 @@ func FormatToolDescriptions(tools []agent.ToolDefinition) string {
 		// Parse JSON Schema from string
 		var schema map[string]any
 		if tool.ParametersSchema != "" {
-			_ = json.Unmarshal([]byte(tool.ParametersSchema), &schema)
+			if err := json.Unmarshal([]byte(tool.ParametersSchema), &schema); err != nil {
+				slog.Debug("failed to parse tool ParametersSchema",
+					"tool", tool.Name, "error", err)
+			}
 		}
 
 		// Parameters from JSON Schema
@@ -84,19 +88,19 @@ func extractParameters(schema map[string]any) []string {
 			continue
 		}
 
+		reqLabel := "optional"
+		if required[name] {
+			reqLabel = "required"
+		}
+		typeSuffix := ""
+		if t, ok := prop["type"].(string); ok {
+			typeSuffix = ", " + t
+		}
+		qualifier := fmt.Sprintf(" (%s%s)", reqLabel, typeSuffix)
+
 		var parts []string
 		parts = append(parts, name)
-
-		// Required/optional + type
-		if required[name] {
-			parts = append(parts, " (required")
-		} else {
-			parts = append(parts, " (optional")
-		}
-		if t, ok := prop["type"].(string); ok {
-			parts = append(parts, ", "+t)
-		}
-		parts[len(parts)-1] += ")"
+		parts = append(parts, qualifier)
 
 		// Description
 		if desc, ok := prop["description"].(string); ok && desc != "" {

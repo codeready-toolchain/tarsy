@@ -39,11 +39,11 @@ func FormatRunbookSection(runbookContent string) string {
 
 	var sb strings.Builder
 	sb.WriteString("## Runbook Content\n")
-	sb.WriteString("```markdown\n")
+	sb.WriteString("````markdown\n")
 	sb.WriteString("<!-- RUNBOOK START -->\n")
 	sb.WriteString(runbookContent)
 	sb.WriteString("\n<!-- RUNBOOK END -->\n")
-	sb.WriteString("```\n")
+	sb.WriteString("````\n")
 	return sb.String()
 }
 
