@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
 // NativeThinkingController implements the Gemini native function calling loop.
@@ -32,8 +32,11 @@ func (c *NativeThinkingController) Run(
 	msgSeq := 0
 	eventSeq := 0
 
-	// 1. Build initial conversation
-	messages := c.buildMessages(execCtx, prevStageContext)
+	// 1. Build initial conversation via prompt builder
+	if execCtx.PromptBuilder == nil {
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildNativeThinkingMessages")
+	}
+	messages := execCtx.PromptBuilder.BuildNativeThinkingMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages in DB
 	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
@@ -73,7 +76,7 @@ func (c *NativeThinkingController) Run(
 
 			// Add error context as user message
 			errMsg := fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
-			messages = append(messages, agent.ConversationMessage{Role: "user", Content: errMsg})
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: errMsg})
 			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
 			continue
 		}
@@ -108,11 +111,11 @@ func (c *NativeThinkingController) Run(
 			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
 			// Append assistant message to conversation
-			messages = append(messages, agent.ConversationMessage{
-				Role:      "assistant",
-				Content:   resp.Text,
-				ToolCalls: resp.ToolCalls,
-			})
+		messages = append(messages, agent.ConversationMessage{
+			Role:      agent.RoleAssistant,
+			Content:   resp.Text,
+			ToolCalls: resp.ToolCalls,
+		})
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
@@ -125,24 +128,24 @@ func (c *NativeThinkingController) Run(
 					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
 
-					// Append error as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       "tool",
-						Content:    errContent,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
+				// Append error as tool result message
+				messages = append(messages, agent.ConversationMessage{
+					Role:       agent.RoleTool,
+					Content:    errContent,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+				})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
 				} else {
 					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
 
-					// Append result as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       "tool",
-						Content:    result.Content,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
+				// Append result as tool result message
+				messages = append(messages, agent.ConversationMessage{
+					Role:       agent.RoleTool,
+					Content:    result.Content,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+				})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
 				}
 			}
@@ -192,8 +195,8 @@ func (c *NativeThinkingController) forceConclusion(
 	}
 
 	// Append forced conclusion prompt
-	conclusionPrompt := buildForcedConclusionPrompt(state.CurrentIteration)
-	messages = append(messages, agent.ConversationMessage{Role: "user", Content: conclusionPrompt})
+	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyNativeThinking)
+	messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 
 	startTime := time.Now()
@@ -242,33 +245,3 @@ func (c *NativeThinkingController) forceConclusion(
 	}, nil
 }
 
-// buildMessages creates the initial conversation for a native thinking investigation.
-// Phase 3.3 will replace this with the prompt builder.
-func (c *NativeThinkingController) buildMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-) []agent.ConversationMessage {
-	messages := []agent.ConversationMessage{
-		{
-			Role: "system",
-			Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s",
-				execCtx.AgentName, execCtx.Config.CustomInstructions),
-		},
-	}
-
-	var userContent strings.Builder
-	if prevStageContext != "" {
-		userContent.WriteString("Previous investigation context:\n")
-		userContent.WriteString(prevStageContext)
-		userContent.WriteString("\n\nContinue the investigation based on the alert below.\n\n")
-	}
-	userContent.WriteString("## Alert Data\n\n")
-	userContent.WriteString(execCtx.AlertData)
-
-	messages = append(messages, agent.ConversationMessage{
-		Role:    "user",
-		Content: userContent.String(),
-	})
-
-	return messages
-}

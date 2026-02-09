@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
 // ReActController implements the standard Reason + Act loop with text-based
@@ -33,18 +33,21 @@ func (c *ReActController) Run(
 	msgSeq := 0
 	eventSeq := 0
 
-	// 1. Build initial conversation
-	messages := c.buildMessages(execCtx, prevStageContext)
-
-	// 2. Store initial messages in DB
-	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
-		return nil, err
-	}
-
-	// 3. Get available tools
+	// 1. Get available tools (needed for prompt and validation)
 	tools, err := execCtx.ToolExecutor.ListTools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tools: %w", err)
+	}
+
+	// 2. Build initial conversation via prompt builder
+	if execCtx.PromptBuilder == nil {
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildReActMessages")
+	}
+	messages := execCtx.PromptBuilder.BuildReActMessages(execCtx, prevStageContext, tools)
+
+	// 3. Store initial messages in DB
+	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
+		return nil, err
 	}
 
 	// 4. Build tool name set for validation
@@ -78,7 +81,7 @@ func (c *ReActController) Run(
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
 			state.RecordFailure(err.Error(), isTimeoutError(err))
 			observation := FormatErrorObservation(err)
-			messages = append(messages, agent.ConversationMessage{Role: "user", Content: observation})
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			continue
 		}
@@ -94,7 +97,7 @@ func (c *ReActController) Run(
 
 		// Append assistant response to conversation
 		messages = append(messages, agent.ConversationMessage{
-			Role:    "assistant",
+			Role:    agent.RoleAssistant,
 			Content: resp.Text,
 		})
 
@@ -138,7 +141,7 @@ func (c *ReActController) Run(
 				// Tool exists in ReAct format but not in our tool list
 				observation := FormatUnknownToolError(parsed.Action,
 					fmt.Sprintf("Unknown tool '%s'", parsed.Action), tools)
-				messages = append(messages, agent.ConversationMessage{Role: "user", Content: observation})
+				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 				storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			} else {
 				// Execute tool
@@ -154,25 +157,25 @@ func (c *ReActController) Run(
 					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
 					observation := FormatToolErrorObservation(toolErr)
 					createToolResultEvent(ctx, execCtx, observation, true, &eventSeq)
-					messages = append(messages, agent.ConversationMessage{Role: "user", Content: observation})
+					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				} else {
 					observation := FormatObservation(result)
 					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
-					messages = append(messages, agent.ConversationMessage{Role: "user", Content: observation})
+					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				}
 			}
 
 		case parsed.IsUnknownTool:
 			observation := FormatUnknownToolError(parsed.Action, parsed.ErrorMessage, tools)
-			messages = append(messages, agent.ConversationMessage{Role: "user", Content: observation})
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 
 		default:
 			// Malformed response — keep it, add format feedback
 			feedback := GetFormatErrorFeedback(parsed)
-			messages = append(messages, agent.ConversationMessage{Role: "user", Content: feedback})
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: feedback})
 			storeObservationMessage(ctx, execCtx, feedback, &msgSeq)
 		}
 
@@ -204,8 +207,8 @@ func (c *ReActController) forceConclusion(
 	}
 
 	// Append forced conclusion prompt and make one more LLM call
-	conclusionPrompt := buildForcedConclusionPrompt(state.CurrentIteration)
-	messages = append(messages, agent.ConversationMessage{Role: "user", Content: conclusionPrompt})
+	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyReact)
+	messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 
 	startTime := time.Now()
@@ -264,50 +267,3 @@ func (c *ReActController) forceConclusion(
 		TokensUsed:    *totalUsage,
 	}, nil
 }
-
-// buildMessages creates the initial conversation for a ReAct investigation.
-// Phase 3.3 will replace this with the prompt builder.
-func (c *ReActController) buildMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-) []agent.ConversationMessage {
-	messages := []agent.ConversationMessage{
-		{
-			Role: "system",
-			Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s\n\n%s",
-				execCtx.AgentName, execCtx.Config.CustomInstructions, reactFormatInstructions),
-		},
-	}
-
-	var userContent strings.Builder
-	if prevStageContext != "" {
-		userContent.WriteString("Previous investigation context:\n")
-		userContent.WriteString(prevStageContext)
-		userContent.WriteString("\n\nContinue the investigation based on the alert below.\n\n")
-	}
-	userContent.WriteString("## Alert Data\n\n")
-	userContent.WriteString(execCtx.AlertData)
-
-	messages = append(messages, agent.ConversationMessage{
-		Role:    "user",
-		Content: userContent.String(),
-	})
-
-	return messages
-}
-
-// reactFormatInstructions is the ReAct format instructions included in the system prompt.
-// Phase 3.3 prompt builder will provide a more comprehensive version.
-const reactFormatInstructions = `Use the following format for your responses:
-
-Thought: [your reasoning about the current situation]
-Action: [tool name in server.tool format]
-Action Input: [tool parameters as JSON]
-
-Wait for the Observation (tool result) before continuing.
-
-When you have enough information to conclude:
-Thought: [your final reasoning]
-Final Answer: [your complete analysis]
-
-IMPORTANT: Do NOT generate fake Observations. Stop after Action Input and wait for the system.`

@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -17,20 +18,22 @@ import (
 
 // RealSessionExecutor implements SessionExecutor using the agent framework.
 type RealSessionExecutor struct {
-	cfg          *config.Config
-	dbClient     *ent.Client
-	llmClient    agent.LLMClient
-	agentFactory *agent.AgentFactory
+	cfg           *config.Config
+	dbClient      *ent.Client
+	llmClient     agent.LLMClient
+	agentFactory  *agent.AgentFactory
+	promptBuilder *prompt.PromptBuilder
 }
 
 // NewRealSessionExecutor creates a new session executor.
 func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
-		cfg:          cfg,
-		dbClient:     dbClient,
-		llmClient:    llmClient,
-		agentFactory: agent.NewAgentFactory(controllerFactory),
+		cfg:           cfg,
+		dbClient:      dbClient,
+		llmClient:     llmClient,
+		agentFactory:  agent.NewAgentFactory(controllerFactory),
+		promptBuilder: prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 	}
 }
 
@@ -121,15 +124,18 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 	// 6. Build execution context
 	execCtx := &agent.ExecutionContext{
-		SessionID:    session.ID,
-		StageID:      stg.ID,
-		ExecutionID:  exec.ID,
-		AgentName:    agentConfig.Name,
-		AgentIndex:   1,
-		AlertData:    session.AlertData,
-		Config:       resolvedConfig,
-		LLMClient:    e.llmClient,
-		ToolExecutor: agent.NewStubToolExecutor(nil), // Phase 3.2 stub; Phase 4: MCP client
+		SessionID:      session.ID,
+		StageID:        stg.ID,
+		ExecutionID:    exec.ID,
+		AgentName:      agentConfig.Name,
+		AgentIndex:     1,
+		AlertData:      session.AlertData,
+		AlertType:      session.AlertType,
+		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 6 adds real runbook fetching
+		Config:         resolvedConfig,
+		LLMClient:      e.llmClient,
+		ToolExecutor:   agent.NewStubToolExecutor(nil), // Phase 3.2 stub; Phase 4: MCP client
+		PromptBuilder:  e.promptBuilder,
 		Services: &agent.ServiceBundle{
 			Timeline:    timelineService,
 			Message:     messageService,
