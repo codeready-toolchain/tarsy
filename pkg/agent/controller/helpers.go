@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -173,9 +175,8 @@ func recordLLMInteraction(
 	return err
 }
 
-// createTimelineEvent creates a new timeline event with content.
-// In Phase 3.2, events are always created with their final content
-// (after the LLM response is fully collected and parsed).
+// createTimelineEvent creates a new timeline event with content and publishes
+// it for real-time delivery via WebSocket.
 //
 // Best-effort: callers intentionally ignore both return values because timeline
 // events are non-critical observability data — a failure to record one should
@@ -194,7 +195,9 @@ func createTimelineEvent(
 	eventSeq *int,
 ) (*ent.TimelineEvent, error) {
 	*eventSeq++
-	return execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+
+	// 1. Create TimelineEvent in DB (existing behavior)
+	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
@@ -203,6 +206,274 @@ func createTimelineEvent(
 		Content:        content,
 		Metadata:       metadata,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Publish to WebSocket clients (non-blocking — don't fail execution on publish error)
+	publishTimelineCreated(ctx, execCtx, event, eventType, content, metadata, *eventSeq)
+
+	return event, nil
+}
+
+// publishTimelineCreated publishes a timeline_event.created message to WebSocket clients.
+func publishTimelineCreated(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	event *ent.TimelineEvent,
+	eventType timelineevent.EventType,
+	content string,
+	metadata map[string]interface{},
+	seqNum int,
+) {
+	if execCtx.EventPublisher == nil {
+		return
+	}
+	channel := events.SessionChannel(execCtx.SessionID)
+	publishErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		"type":            events.EventTypeTimelineCreated,
+		"event_id":        event.ID,
+		"session_id":      execCtx.SessionID,
+		"stage_id":        execCtx.StageID,
+		"execution_id":    execCtx.ExecutionID,
+		"event_type":      string(eventType),
+		"status":          "completed",
+		"content":         content,
+		"metadata":        metadata,
+		"sequence_number": seqNum,
+		"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+	})
+	if publishErr != nil {
+		slog.Warn("Failed to publish timeline event",
+			"event_id", event.ID, "error", publishErr)
+	}
+}
+
+// StreamCallback is called for each chunk during stream collection.
+// Used by controllers to publish real-time updates to WebSocket clients.
+// chunkType identifies the content type (text or thinking).
+// content is the accumulated content so far (not just the delta).
+type StreamCallback func(chunkType string, content string)
+
+// ChunkTypeText identifies accumulated text content in stream callbacks.
+const ChunkTypeText = "text"
+
+// ChunkTypeThinking identifies accumulated thinking content in stream callbacks.
+const ChunkTypeThinking = "thinking"
+
+// collectStreamWithCallback collects a stream while calling back for real-time delivery.
+// The callback is optional (nil = buffered mode, same as collectStream).
+func collectStreamWithCallback(
+	stream <-chan agent.Chunk,
+	callback StreamCallback,
+) (*LLMResponse, error) {
+	resp := &LLMResponse{}
+	var textBuf, thinkingBuf strings.Builder
+
+	for chunk := range stream {
+		switch c := chunk.(type) {
+		case *agent.TextChunk:
+			textBuf.WriteString(c.Content)
+			if callback != nil {
+				callback(ChunkTypeText, textBuf.String())
+			}
+		case *agent.ThinkingChunk:
+			thinkingBuf.WriteString(c.Content)
+			if callback != nil {
+				callback(ChunkTypeThinking, thinkingBuf.String())
+			}
+		case *agent.ToolCallChunk:
+			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
+				ID:        c.CallID,
+				Name:      c.Name,
+				Arguments: c.Arguments,
+			})
+		case *agent.CodeExecutionChunk:
+			resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
+				Code:   c.Code,
+				Result: c.Result,
+			})
+		case *agent.GroundingChunk:
+			resp.Groundings = append(resp.Groundings, *c)
+		case *agent.UsageChunk:
+			resp.Usage = &agent.TokenUsage{
+				InputTokens:    c.InputTokens,
+				OutputTokens:   c.OutputTokens,
+				TotalTokens:    c.TotalTokens,
+				ThinkingTokens: c.ThinkingTokens,
+			}
+		case *agent.ErrorChunk:
+			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+				c.Message, c.Code, c.Retryable)
+		}
+	}
+
+	resp.Text = textBuf.String()
+	resp.ThinkingText = thinkingBuf.String()
+	return resp, nil
+}
+
+// StreamedResponse wraps an LLMResponse with information about streaming
+// timeline events that were created during the LLM call. Controllers should
+// check these IDs and skip creating duplicate events.
+type StreamedResponse struct {
+	*LLMResponse
+	// ThinkingEventCreated is true if a streaming llm_thinking timeline event
+	// was created (and completed) during the LLM call.
+	ThinkingEventCreated bool
+	// TextEventCreated is true if a streaming llm_response timeline event
+	// was created (and completed) during the LLM call.
+	TextEventCreated bool
+}
+
+// callLLMWithStreaming performs an LLM call with real-time streaming of chunks
+// to WebSocket clients. When EventPublisher is available, it creates streaming
+// timeline events for thinking and text content, publishes chunks as they arrive,
+// and finalizes events when the stream completes. When EventPublisher is nil,
+// it behaves identically to callLLM.
+//
+// Controllers should check StreamedResponse.ThinkingEventCreated and
+// TextEventCreated to avoid creating duplicate timeline events.
+func callLLMWithStreaming(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	llmClient agent.LLMClient,
+	input *agent.GenerateInput,
+	eventSeq *int,
+) (*StreamedResponse, error) {
+	llmCtx, llmCancel := context.WithCancel(ctx)
+	defer llmCancel()
+
+	stream, err := llmClient.Generate(llmCtx, input)
+	if err != nil {
+		return nil, fmt.Errorf("LLM Generate failed: %w", err)
+	}
+
+	// If no EventPublisher, use simple collection (no streaming events)
+	if execCtx.EventPublisher == nil {
+		resp, err := collectStream(stream)
+		if err != nil {
+			return nil, err
+		}
+		return &StreamedResponse{LLMResponse: resp}, nil
+	}
+
+	// Track streaming timeline events
+	var thinkingEventID, textEventID string
+	channel := events.SessionChannel(execCtx.SessionID)
+
+	callback := func(chunkType string, content string) {
+		switch chunkType {
+		case ChunkTypeThinking:
+			if thinkingEventID == "" {
+				// First thinking chunk — create streaming TimelineEvent
+				*eventSeq++
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmThinking,
+					Content:        "",
+					Metadata:       map[string]interface{}{"source": "native"},
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create streaming thinking event", "error", createErr)
+					return
+				}
+				thinkingEventID = event.ID
+				execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        thinkingEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_thinking",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				})
+			}
+			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+				"type":      events.EventTypeStreamChunk,
+				"event_id":  thinkingEventID,
+				"content":   content,
+				"timestamp": time.Now().Format(time.RFC3339Nano),
+			})
+
+		case ChunkTypeText:
+			if textEventID == "" {
+				*eventSeq++
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmResponse,
+					Content:        "",
+					Metadata:       nil,
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create streaming text event", "error", createErr)
+					return
+				}
+				textEventID = event.ID
+				execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        textEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_response",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				})
+			}
+			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+				"type":      events.EventTypeStreamChunk,
+				"event_id":  textEventID,
+				"content":   content,
+				"timestamp": time.Now().Format(time.RFC3339Nano),
+			})
+		}
+	}
+
+	resp, err := collectStreamWithCallback(stream, callback)
+	if err != nil {
+		return nil, err
+	}
+
+	// Finalize streaming timeline events
+	if thinkingEventID != "" && resp.ThinkingText != "" {
+		execCtx.Services.Timeline.CompleteTimelineEvent(ctx, thinkingEventID, resp.ThinkingText, nil, nil)
+		execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  thinkingEventID,
+			"content":   resp.ThinkingText,
+			"status":    "completed",
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		})
+	}
+
+	if textEventID != "" && resp.Text != "" {
+		execCtx.Services.Timeline.CompleteTimelineEvent(ctx, textEventID, resp.Text, nil, nil)
+		execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  textEventID,
+			"content":   resp.Text,
+			"status":    "completed",
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		})
+	}
+
+	return &StreamedResponse{
+		LLMResponse:          resp,
+		ThinkingEventCreated: thinkingEventID != "",
+		TextEventCreated:     textEventID != "",
+	}, nil
 }
 
 // createToolCallEvent creates a timeline event for a tool call request.

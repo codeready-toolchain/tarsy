@@ -38,20 +38,43 @@ func (s *EventService) CreateEvent(httpCtx context.Context, req models.CreateEve
 	return evt, nil
 }
 
-// GetEventsSince retrieves events since a given ID
-func (s *EventService) GetEventsSince(ctx context.Context, channel string, sinceID int) ([]*ent.Event, error) {
-	events, err := s.client.Event.Query().
+// GetEventsSince retrieves events since a given ID, up to limit results.
+// Pass limit <= 0 for unlimited (not recommended for production use).
+func (s *EventService) GetEventsSince(ctx context.Context, channel string, sinceID, limit int) ([]*ent.Event, error) {
+	q := s.client.Event.Query().
 		Where(
 			event.ChannelEQ(channel),
 			event.IDGT(sinceID),
 		).
-		Order(ent.Asc(event.FieldID)).
-		All(ctx)
+		Order(ent.Asc(event.FieldID))
+
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+
+	events, err := q.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
 
 	return events, nil
+}
+
+// CreateEventTx creates a new event within an existing transaction.
+// Used by EventPublisher to atomically persist an event and fire pg_notify
+// in the same transaction.
+func (s *EventService) CreateEventTx(ctx context.Context, tx *ent.Tx, req models.CreateEventRequest) (*ent.Event, error) {
+	evt, err := tx.Event.Create().
+		SetSessionID(req.SessionID).
+		SetChannel(req.Channel).
+		SetPayload(req.Payload).
+		SetCreatedAt(time.Now()).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create event in tx: %w", err)
+	}
+
+	return evt, nil
 }
 
 // CleanupSessionEvents removes all events for a session

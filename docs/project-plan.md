@@ -92,7 +92,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ---
 
-### Phase 3: Agent Framework
+### ✅ Phase 3: Agent Framework
 
 **3.1: Base Agent Architecture** ✅ — See `docs/phase3-base-agent-architecture-design.md`
 - [x] Proto/gRPC evolution (remove PoC fields, add tool calls, tool definitions, usage metadata)
@@ -140,11 +140,11 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [x] Chain context injection (previous stage results formatting)
 - [x] Three-tier instruction composition (general → MCP server → custom)
 
-**3.4: Real-time Streaming**
-- [ ] WebSocket endpoint (Echo + coder/websocket)
-- [ ] PostgreSQL NOTIFY listener for cross-pod event delivery
-- [ ] Real-time TimelineEvent streaming to frontend
-- [ ] Frontend event protocol (create → stream chunks → complete)
+**3.4: Real-time Streaming** ✅ Complete
+- [x] WebSocket endpoint (Echo + coder/websocket)
+- [x] PostgreSQL NOTIFY listener for cross-pod event delivery
+- [x] Real-time TimelineEvent streaming to frontend
+- [x] Frontend event protocol (create → stream chunks → complete)
 
 ---
 
@@ -199,7 +199,27 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ---
 
-### Phase 6: Integrations
+### Phase 6: Dashboard
+
+**Real-time Features**
+- [ ] Live LLM streaming UI
+- [ ] Stage timeline visualization
+- [ ] Native thinking indicators
+
+**History Views**
+- [ ] Session list with filters
+- [ ] Detailed session view
+- [ ] Conversation replay
+- [ ] Chat interface
+
+**System Views**
+- [ ] MCP server status
+- [ ] System warnings display
+- [ ] Queue metrics dashboard
+
+---
+
+### Phase 7: Integrations
 
 **Runbook System (Go)**
 - [ ] GitHub integration
@@ -220,7 +240,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ---
 
-### Phase 7: Security
+### Phase 8: Security
 
 **Authentication & Authorization**
 - [ ] OAuth2-proxy integration
@@ -237,7 +257,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ---
 
-### Phase 8: History & Chat
+### Phase 9: History & Chat
 
 **History System (Go)**
 - [ ] History repository
@@ -254,7 +274,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 
 ---
 
-### Phase 9: Monitoring & Operations
+### Phase 10: Monitoring & Operations
 
 **System Health**
 - [ ] Health check endpoint enhancements
@@ -272,26 +292,6 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [ ] Retention policies
 - [ ] Cleanup service
 - [ ] Cascade deletes
-
----
-
-### Phase 10: Dashboard Enhancement
-
-**Real-time Features**
-- [ ] Live LLM streaming UI
-- [ ] Stage timeline visualization
-- [ ] Native thinking indicators
-
-**History Views**
-- [ ] Session list with filters
-- [ ] Detailed session view
-- [ ] Conversation replay
-- [ ] Chat interface
-
-**System Views**
-- [ ] MCP server status
-- [ ] System warnings display
-- [ ] Queue metrics dashboard
 
 ---
 

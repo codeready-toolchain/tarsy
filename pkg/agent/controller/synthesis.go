@@ -40,21 +40,22 @@ func (c *SynthesisController) Run(
 		return nil, err
 	}
 
-	// 3. Single LLM call (no tools)
-	resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+	// 3. Single LLM call with streaming (no tools)
+	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // Synthesis never uses tools
-	})
+	}, &eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
 		return nil, fmt.Errorf("synthesis LLM call failed: %w", err)
 	}
+	resp := streamed.LLMResponse
 
-	// 4. Record thinking content (synthesis-native-thinking may produce thinking)
-	if resp.ThinkingText != "" {
+	// 4. Record thinking content (only if not already created by streaming)
+	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
 			"source": "native",
 		}, &eventSeq)

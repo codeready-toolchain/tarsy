@@ -76,7 +76,7 @@ func TestForUpdateSkipLockedClaiming(t *testing.T) {
 
 	// Create worker and claim
 	cfg := intTestQueueConfig()
-	w := NewWorker("test-worker-0", "test-pod", client, cfg, nil, nil)
+	w := NewWorker("test-worker-0", "test-pod", client, cfg, nil, nil, nil)
 
 	claimed, err := w.claimNextSession(ctx)
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestConcurrentClaimsDifferentSessions(t *testing.T) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			w := NewWorker(fmt.Sprintf("worker-%d", workerID), "test-pod", client, cfg, nil, nil)
+			w := NewWorker(fmt.Sprintf("worker-%d", workerID), "test-pod", client, cfg, nil, nil, nil)
 			session, err := w.claimNextSession(ctx)
 			if err != nil {
 				errCh <- fmt.Errorf("worker-%d claim failed: %w", workerID, err)
@@ -322,7 +322,7 @@ func TestPoolEndToEndWithMockExecutor(t *testing.T) {
 	cfg.PollInterval = 50 * time.Millisecond
 
 	executor := &mockExecutor{}
-	pool := NewWorkerPool("test-pod", client, cfg, executor)
+	pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 	err := pool.Start(ctx)
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func TestCapacityLimits(t *testing.T) {
 	executor := &mockExecutor{
 		releaseCh: releaseCh,
 	}
-	pool := NewWorkerPool("test-pod", client, cfg, executor)
+	pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 	err := pool.Start(ctx)
 	require.NoError(t, err)
@@ -439,7 +439,7 @@ func TestHeartbeatUpdates(t *testing.T) {
 	executor := &mockExecutor{
 		releaseCh: releaseCh,
 	}
-	pool := NewWorkerPool("test-pod", client, cfg, executor)
+	pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 	err := pool.Start(ctx)
 	require.NoError(t, err)
@@ -507,7 +507,7 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		cfg.PollInterval = 50 * time.Millisecond
 
 		executor := &nilExecutor{blockUntilCtxDone: false}
-		pool := NewWorkerPool("test-pod", client, cfg, executor)
+		pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 		require.NoError(t, pool.Start(ctx))
 
@@ -538,7 +538,7 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		cfg.SessionTimeout = 200 * time.Millisecond
 
 		executor := &nilExecutor{blockUntilCtxDone: true}
-		pool := NewWorkerPool("test-pod", client, cfg, executor)
+		pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 		require.NoError(t, pool.Start(ctx))
 
@@ -572,7 +572,7 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		cfg.SessionTimeout = 30 * time.Second // Long timeout so cancellation wins
 
 		executor := &nilExecutor{blockUntilCtxDone: true}
-		pool := NewWorkerPool("test-pod", client, cfg, executor)
+		pool := NewWorkerPool("test-pod", client, cfg, executor, nil)
 
 		require.NoError(t, pool.Start(ctx))
 

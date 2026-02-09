@@ -24,7 +24,7 @@ func testQueueConfig() *config.QueueConfig {
 
 func TestWorkerPollInterval(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil)
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
 
 	// Poll interval should be within [base - jitter, base + jitter]
 	for i := 0; i < 100; i++ {
@@ -37,7 +37,7 @@ func TestWorkerPollInterval(t *testing.T) {
 func TestWorkerPollIntervalNoJitter(t *testing.T) {
 	cfg := testQueueConfig()
 	cfg.PollIntervalJitter = 0
-	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil)
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
 
 	for i := 0; i < 10; i++ {
 		d := w.pollInterval()
@@ -47,7 +47,7 @@ func TestWorkerPollIntervalNoJitter(t *testing.T) {
 
 func TestWorkerHealth(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil)
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
 
 	h := w.Health()
 	assert.Equal(t, "worker-1", h.ID)
