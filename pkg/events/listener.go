@@ -141,7 +141,7 @@ func (l *NotifyListener) reconnect(ctx context.Context) {
 
 	// Close old connection
 	if l.conn != nil {
-		l.conn.Close(ctx)
+		_ = l.conn.Close(ctx)
 		l.conn = nil
 	}
 
@@ -181,7 +181,7 @@ func (l *NotifyListener) Stop(ctx context.Context) {
 	l.connMu.Lock()
 	defer l.connMu.Unlock()
 	if l.conn != nil {
-		l.conn.Close(ctx)
+		_ = l.conn.Close(ctx)
 		l.conn = nil
 	}
 }

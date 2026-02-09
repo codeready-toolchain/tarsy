@@ -42,9 +42,8 @@ type ConnectionManager struct {
 	catchupQuerier CatchupQuerier
 
 	// NotifyListener for dynamic LISTEN/UNLISTEN (set after construction)
-	listener     *NotifyListener
-	listenerOnce sync.Once
-	listenerMu   sync.RWMutex
+	listener   *NotifyListener
+	listenerMu sync.RWMutex
 
 	// Write timeout for WebSocket sends
 	writeTimeout time.Duration
@@ -288,7 +287,7 @@ func (m *ConnectionManager) unregisterConnection(c *Connection) {
 	m.mu.Unlock()
 
 	c.cancel()
-	c.Conn.Close(websocket.StatusNormalClosure, "")
+	_ = c.Conn.Close(websocket.StatusNormalClosure, "")
 }
 
 // sendJSON marshals and sends a JSON message to a single connection.
