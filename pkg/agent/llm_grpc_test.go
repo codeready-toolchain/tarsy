@@ -129,6 +129,58 @@ func TestFromProtoResponse(t *testing.T) {
 		assert.Equal(t, "hi", ce.Result)
 	})
 
+	t.Run("grounding delta with all fields", func(t *testing.T) {
+		resp := &llmv1.GenerateResponse{
+			Content: &llmv1.GenerateResponse_Grounding{
+				Grounding: &llmv1.GroundingDelta{
+					WebSearchQueries: []string{"Euro 2024 winner", "Spain Euro"},
+					GroundingChunks: []*llmv1.GroundingChunkInfo{
+						{Uri: "https://uefa.com", Title: "UEFA"},
+						{Uri: "https://bbc.com", Title: "BBC Sport"},
+					},
+					GroundingSupports: []*llmv1.GroundingSupport{
+						{
+							StartIndex:           0,
+							EndIndex:             20,
+							Text:                 "Spain won Euro 2024",
+							GroundingChunkIndices: []int32{0, 1},
+						},
+					},
+					SearchEntryPointHtml: "<div>widget</div>",
+				},
+			},
+		}
+		chunk := fromProtoResponse(resp)
+		gc, ok := chunk.(*GroundingChunk)
+		require.True(t, ok)
+		assert.Equal(t, []string{"Euro 2024 winner", "Spain Euro"}, gc.WebSearchQueries)
+		require.Len(t, gc.Sources, 2)
+		assert.Equal(t, "https://uefa.com", gc.Sources[0].URI)
+		assert.Equal(t, "UEFA", gc.Sources[0].Title)
+		assert.Equal(t, "https://bbc.com", gc.Sources[1].URI)
+		require.Len(t, gc.Supports, 1)
+		assert.Equal(t, 0, gc.Supports[0].StartIndex)
+		assert.Equal(t, 20, gc.Supports[0].EndIndex)
+		assert.Equal(t, "Spain won Euro 2024", gc.Supports[0].Text)
+		assert.Equal(t, []int{0, 1}, gc.Supports[0].GroundingChunkIndices)
+		assert.Equal(t, "<div>widget</div>", gc.SearchEntryPointHTML)
+	})
+
+	t.Run("grounding delta empty", func(t *testing.T) {
+		resp := &llmv1.GenerateResponse{
+			Content: &llmv1.GenerateResponse_Grounding{
+				Grounding: &llmv1.GroundingDelta{},
+			},
+		}
+		chunk := fromProtoResponse(resp)
+		gc, ok := chunk.(*GroundingChunk)
+		require.True(t, ok)
+		assert.Empty(t, gc.WebSearchQueries)
+		assert.Empty(t, gc.Sources)
+		assert.Empty(t, gc.Supports)
+		assert.Empty(t, gc.SearchEntryPointHTML)
+	})
+
 	t.Run("usage info", func(t *testing.T) {
 		resp := &llmv1.GenerateResponse{
 			Content: &llmv1.GenerateResponse_Usage{
@@ -176,6 +228,21 @@ func TestFromProtoResponse(t *testing.T) {
 		resp := &llmv1.GenerateResponse{}
 		chunk := fromProtoResponse(resp)
 		assert.Nil(t, chunk)
+	})
+}
+
+func TestIntSliceFromInt32(t *testing.T) {
+	t.Run("converts values", func(t *testing.T) {
+		result := intSliceFromInt32([]int32{0, 1, 2, 42})
+		assert.Equal(t, []int{0, 1, 2, 42}, result)
+	})
+
+	t.Run("nil returns nil", func(t *testing.T) {
+		assert.Nil(t, intSliceFromInt32(nil))
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, intSliceFromInt32([]int32{}))
 	})
 }
 

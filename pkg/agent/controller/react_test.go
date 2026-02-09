@@ -359,6 +359,46 @@ func TestReActController_ToolNotInAvailableList(t *testing.T) {
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 }
 
+func TestReActController_NativeToolDataIgnored(t *testing.T) {
+	// When native tool data (code executions, groundings) appears in a ReAct response,
+	// the controller should NOT create native tool timeline events. It should complete
+	// normally with only standard ReAct events (llm_thinking, tool_call, etc.).
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: The system is healthy."},
+				&agent.CodeExecutionChunk{Code: "print(1)", Result: ""},
+				&agent.CodeExecutionChunk{Code: "", Result: "1"},
+				&agent.GroundingChunk{
+					WebSearchQueries: []string{"k8s health"},
+					Sources:          []agent.GroundingSource{{URI: "https://k8s.io", Title: "K8s"}},
+				},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "The system is healthy.", result.FinalAnalysis)
+
+	// Verify no native tool events were created
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		require.NotEqual(t, "code_execution", ev.EventType,
+			"ReAct should not create code_execution events")
+		require.NotEqual(t, "google_search_result", ev.EventType,
+			"ReAct should not create google_search_result events")
+		require.NotEqual(t, "url_context_result", ev.EventType,
+			"ReAct should not create url_context_result events")
+	}
+}
+
 // --- Test helpers / mocks ---
 
 // mockLLMResponse defines a single LLM call result.

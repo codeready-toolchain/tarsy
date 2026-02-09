@@ -124,14 +124,14 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 > **Open design questions** extracted to Phase 4 items below and tracked in `docs/phase4-open-questions.md`.
 
 **3.2.1: Gemini Native Tool Timeline Events (Go + Python)**
-- **Design Phase**: 🔄 In Progress — See `docs/phase3-native-tool-events-design.md` and `docs/phase3-native-tool-events-questions.md`
-- [ ] Proto: Add `GroundingDelta` message (Google Search + URL Context grounding results)
-- [ ] Python: Extract `GroundingMetadata` from Gemini response, stream as `GroundingDelta`
-- [ ] Go: Add `GroundingChunk` type, update `collectStream` and `LLMResponse`
-- [ ] Ent schema: Add `code_execution`, `google_search_result`, `url_context_result` event types
-- [ ] Controller helpers: `createCodeExecutionEvents()`, `createGroundingEvents()`
-- [ ] Controllers: NativeThinkingController and SynthesisController create native tool timeline events
-- [ ] Note: Native tools suppressed when MCP tools present (Python handles). Improvement over old TARSy: native tool results become first-class timeline events.
+- **Design Phase**: ✅ Complete — See `docs/phase3-native-tool-events-design.md` and `docs/phase3-native-tool-events-questions.md`
+- [x] Proto: Add `GroundingDelta` message (Google Search + URL Context grounding results)
+- [x] Python: Extract `GroundingMetadata` from Gemini response, stream as `GroundingDelta`
+- [x] Go: Add `GroundingChunk` type, update `collectStream` and `LLMResponse`
+- [x] Ent schema: Add `code_execution`, `google_search_result`, `url_context_result` event types
+- [x] Controller helpers: `createCodeExecutionEvents()`, `createGroundingEvents()`
+- [x] Controllers: NativeThinkingController and SynthesisController create native tool timeline events
+- [x] Note: Native tools suppressed when MCP tools present (Python handles). Improvement over old TARSy: native tool results become first-class timeline events.
 
 **3.3: Prompt System (Go)**
 - [ ] Prompt builder framework
