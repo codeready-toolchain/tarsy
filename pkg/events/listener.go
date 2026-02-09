@@ -156,6 +156,14 @@ func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error 
 	}
 }
 
+// isListening reports whether the listener is actively LISTENing on the
+// given channel. Unexported — used by tests to poll instead of sleeping.
+func (l *NotifyListener) isListening(channel string) bool {
+	l.channelsMu.RLock()
+	defer l.channelsMu.RUnlock()
+	return l.channels[channel]
+}
+
 // receiveLoop continuously receives notifications from PostgreSQL
 // and dispatches them to the ConnectionManager.
 // It is the sole goroutine that touches the pgx connection, avoiding

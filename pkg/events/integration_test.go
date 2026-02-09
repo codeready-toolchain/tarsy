@@ -143,9 +143,11 @@ func (env *streamingTestEnv) subscribeAndWait(t *testing.T) *websocket.Conn {
 	msg = readJSONTimeout(t, conn, 5*time.Second)
 	require.Equal(t, "subscription.confirmed", msg["type"])
 
-	// Give the LISTEN command time to execute on the NotifyListener's
-	// dedicated connection (Subscribe is called in a goroutine).
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the async LISTEN goroutine to complete on the NotifyListener's
+	// dedicated connection, polling instead of sleeping.
+	require.Eventually(t, func() bool {
+		return env.listener.isListening(env.channel)
+	}, 2*time.Second, 10*time.Millisecond, "LISTEN did not propagate for channel %s", env.channel)
 
 	return conn
 }

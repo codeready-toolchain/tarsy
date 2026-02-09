@@ -365,10 +365,11 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 	lastEventID := 0
 	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
 
-	// Read all 3 catchup events
+	// Read all 3 catchup events — each should have db_event_id injected
 	for i := 0; i < 3; i++ {
 		msg := readJSON(t, conn)
 		assert.Equal(t, float64(i+1), msg["seq"])
+		assert.NotNil(t, msg["db_event_id"], "catchup event should include db_event_id")
 	}
 
 	// No overflow should follow — try read with short timeout

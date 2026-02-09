@@ -289,8 +289,11 @@ func (m *ConnectionManager) handleCatchup(ctx context.Context, c *Connection, ch
 		events = events[:catchupLimit]
 	}
 
-	// Send missed events in order
+	// Send missed events in order, injecting db_event_id for position tracking.
+	// The stored payload doesn't contain db_event_id (it's only added to the
+	// NOTIFY payload at publish time), so we add it here from the DB row ID.
 	for _, evt := range events {
+		evt.Payload["db_event_id"] = evt.ID
 		payload, err := json.Marshal(evt.Payload)
 		if err != nil {
 			continue

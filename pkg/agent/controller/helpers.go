@@ -327,6 +327,10 @@ func callLLMWithStreaming(
 	channel := events.SessionChannel(execCtx.SessionID)
 
 	callback := func(chunkType string, delta string) {
+		if delta == "" {
+			return // Skip empty chunks — nothing to create or publish
+		}
+
 		switch chunkType {
 		case ChunkTypeThinking:
 			if thinkingCreateFailed {
@@ -436,39 +440,17 @@ func callLLMWithStreaming(
 		return nil, err
 	}
 
-	// Finalize streaming timeline events
-	if thinkingEventID != "" && resp.ThinkingText != "" {
-		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, thinkingEventID, resp.ThinkingText, nil, nil); complErr != nil {
-			slog.Warn("Failed to complete streaming thinking event",
-				"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", complErr)
-		}
-		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-			"type":      events.EventTypeTimelineCompleted,
-			"event_id":  thinkingEventID,
-			"content":   resp.ThinkingText,
-			"status":    "completed",
-			"timestamp": time.Now().Format(time.RFC3339Nano),
-		}); pubErr != nil {
-			slog.Warn("Failed to publish thinking completed",
-				"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
-		}
+	// Finalize streaming timeline events.
+	// Always finalize if the event was created (thinkingEventID/textEventID set),
+	// even when resp content is empty. Otherwise the event stays at "streaming"
+	// status indefinitely. The empty-delta guard above prevents event creation
+	// for purely empty chunks, but we handle the edge case defensively here.
+	if thinkingEventID != "" {
+		finalizeStreamingEvent(ctx, execCtx, channel, thinkingEventID, resp.ThinkingText, "thinking")
 	}
 
-	if textEventID != "" && resp.Text != "" {
-		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, textEventID, resp.Text, nil, nil); complErr != nil {
-			slog.Warn("Failed to complete streaming text event",
-				"event_id", textEventID, "session_id", execCtx.SessionID, "error", complErr)
-		}
-		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-			"type":      events.EventTypeTimelineCompleted,
-			"event_id":  textEventID,
-			"content":   resp.Text,
-			"status":    "completed",
-			"timestamp": time.Now().Format(time.RFC3339Nano),
-		}); pubErr != nil {
-			slog.Warn("Failed to publish text completed",
-				"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
-		}
+	if textEventID != "" {
+		finalizeStreamingEvent(ctx, execCtx, channel, textEventID, resp.Text, "text")
 	}
 
 	return &StreamedResponse{
@@ -476,6 +458,54 @@ func callLLMWithStreaming(
 		ThinkingEventCreated: thinkingEventID != "",
 		TextEventCreated:     textEventID != "",
 	}, nil
+}
+
+// finalizeStreamingEvent completes or fails a streaming timeline event.
+// If content is non-empty, the event is completed normally. If content is
+// empty (edge case: event created but all chunks were empty), it is marked
+// as failed to avoid leaving it stuck at "streaming" status.
+func finalizeStreamingEvent(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	channel, eventID, content, label string,
+) {
+	if content != "" {
+		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, eventID, content, nil, nil); complErr != nil {
+			slog.Warn("Failed to complete streaming "+label+" event",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", complErr)
+		}
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  eventID,
+			"content":   content,
+			"status":    "completed",
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish "+label+" completed",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+		return
+	}
+
+	// Edge case: event was created but content is empty.
+	// CompleteTimelineEvent rejects empty content, so mark as failed instead.
+	slog.Warn("Streaming "+label+" event has no content, marking as failed",
+		"event_id", eventID, "session_id", execCtx.SessionID)
+	failContent := "No content produced"
+	if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent); failErr != nil {
+		slog.Warn("Failed to fail empty streaming "+label+" event",
+			"event_id", eventID, "session_id", execCtx.SessionID, "error", failErr)
+	}
+	if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		"type":      events.EventTypeTimelineCompleted,
+		"event_id":  eventID,
+		"content":   failContent,
+		"status":    "failed",
+		"timestamp": time.Now().Format(time.RFC3339Nano),
+	}); pubErr != nil {
+		slog.Warn("Failed to publish "+label+" failure",
+			"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+	}
 }
 
 // markStreamingEventsFailed marks any in-flight streaming timeline events
