@@ -91,6 +91,13 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 	return entClient, db
 }
 
+// GetBaseConnectionString returns the base PostgreSQL connection string
+// (without schema search_path). Used by integration tests that need a raw
+// connection string for dedicated connections, e.g. NotifyListener's pgx.Conn.
+func GetBaseConnectionString(t *testing.T) string {
+	return getOrCreateSharedDatabase(t)
+}
+
 // getOrCreateSharedDatabase returns a connection string to the shared database.
 // In CI, uses CI_DATABASE_URL. In local dev, creates a shared testcontainer once.
 func getOrCreateSharedDatabase(t *testing.T) string {
