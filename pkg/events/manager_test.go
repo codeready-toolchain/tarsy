@@ -255,16 +255,18 @@ func TestConnectionManager_ConcurrentBroadcast(t *testing.T) {
 
 	// Read all 20 messages (order may vary due to concurrency)
 	received := 0
+	var firstErr error
 	for i := 0; i < 20; i++ {
 		readCtx, readCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, _, err := conn.Read(readCtx)
 		readCancel()
 		if err != nil {
+			firstErr = err
 			break
 		}
 		received++
 	}
-	assert.Equal(t, 20, received, "should receive all 20 broadcast messages")
+	assert.Equal(t, 20, received, "should receive all 20 broadcast messages; first error: %v", firstErr)
 }
 
 func TestConnectionManager_BroadcastToNonExistentChannel(t *testing.T) {
@@ -550,8 +552,4 @@ func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
 	assert.NotPanics(t, func() {
 		manager.Broadcast("session:cleanup-test", payload)
 	})
-
-	// Verify: should not receive anything (connection is closed)
-	// Just verify it doesn't panic - that's sufficient
-	_ = fmt.Sprintf("manager has %d active connections", manager.ActiveConnections())
 }

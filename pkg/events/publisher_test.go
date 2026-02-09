@@ -114,8 +114,8 @@ func TestMarshalPayload(t *testing.T) {
 	})
 
 	t.Run("boundary: payload just under limit is not truncated", func(t *testing.T) {
-		// Build a payload that is just under 7900 bytes
-		// The JSON overhead for {"content":"...","type":"t"} is ~24 bytes
+		// Build a payload that is just under 7900 bytes.
+		// JSON overhead for {"content":"...","type":"t"} is ~30 bytes.
 		contentSize := 7900 - 30 // well under limit after JSON encoding
 		content := make([]byte, contentSize)
 		for i := range content {

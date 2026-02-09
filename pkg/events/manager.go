@@ -53,7 +53,7 @@ type ConnectionManager struct {
 type Connection struct {
 	ID            string
 	Conn          *websocket.Conn
-	Subscriptions map[string]bool // channels this connection is subscribed to
+	subscriptions map[string]bool // channels this connection is subscribed to
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -86,7 +86,7 @@ func (m *ConnectionManager) HandleConnection(parentCtx context.Context, conn *we
 	c := &Connection{
 		ID:            connID,
 		Conn:          conn,
-		Subscriptions: make(map[string]bool),
+		subscriptions: make(map[string]bool),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -134,15 +134,23 @@ func (m *ConnectionManager) Broadcast(channel string, event []byte) {
 	}
 	m.channelMu.RUnlock()
 
+	// Snapshot connection pointers under the lock, then release before
+	// sending. This avoids holding mu.RLock during potentially slow
+	// writes (up to writeTimeout per connection), which would stall
+	// connection register/unregister operations.
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
+	conns := make([]*Connection, 0, len(ids))
 	for _, id := range ids {
 		if conn, ok := m.connections[id]; ok {
-			if err := m.sendRaw(conn, event); err != nil {
-				slog.Warn("Failed to send to WebSocket client",
-					"connection_id", id, "error", err)
-			}
+			conns = append(conns, conn)
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, conn := range conns {
+		if err := m.sendRaw(conn, event); err != nil {
+			slog.Warn("Failed to send to WebSocket client",
+				"connection_id", conn.ID, "error", err)
 		}
 	}
 }
@@ -215,7 +223,7 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 	m.channels[channel][c.ID] = true
 	m.channelMu.Unlock()
 
-	c.Subscriptions[channel] = true
+	c.subscriptions[channel] = true
 }
 
 // unsubscribe removes a connection from a channel and stops LISTEN if last subscriber.
@@ -240,7 +248,7 @@ func (m *ConnectionManager) unsubscribe(c *Connection, channel string) {
 	}
 	m.channelMu.Unlock()
 
-	delete(c.Subscriptions, channel)
+	delete(c.subscriptions, channel)
 }
 
 // handleCatchup sends missed events since lastEventID to the client.
@@ -296,7 +304,7 @@ func (m *ConnectionManager) registerConnection(c *Connection) {
 // unregisterConnection removes a connection and all its subscriptions.
 func (m *ConnectionManager) unregisterConnection(c *Connection) {
 	// Remove from all channel subscriptions
-	for ch := range c.Subscriptions {
+	for ch := range c.subscriptions {
 		m.unsubscribe(c, ch)
 	}
 

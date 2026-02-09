@@ -93,6 +93,12 @@ func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 	assert.Equal(t, 1, pub.publishCount, "should call Publish for session channel")
 	assert.Equal(t, 1, pub.transientCount, "should call PublishTransient for global channel")
 	assert.Equal(t, "session:session-abc", pub.lastChannel)
+
+	// Verify payload contents
+	assert.Equal(t, "session.status", pub.lastPayload["type"])
+	assert.Equal(t, "session-abc", pub.lastPayload["session_id"])
+	assert.Equal(t, "in_progress", pub.lastPayload["status"])
+	assert.NotEmpty(t, pub.lastPayload["timestamp"])
 }
 
 // mockEventPublisher implements agent.EventPublisher for unit tests.
@@ -100,11 +106,13 @@ type mockEventPublisher struct {
 	publishCount   int
 	transientCount int
 	lastChannel    string
+	lastPayload    map[string]interface{}
 }
 
-func (m *mockEventPublisher) Publish(_ context.Context, _ string, channel string, _ map[string]interface{}) error {
+func (m *mockEventPublisher) Publish(_ context.Context, _ string, channel string, payload map[string]interface{}) error {
 	m.publishCount++
 	m.lastChannel = channel
+	m.lastPayload = payload
 	return nil
 }
 

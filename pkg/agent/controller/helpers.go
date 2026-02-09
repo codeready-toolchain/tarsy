@@ -29,48 +29,9 @@ type LLMResponse struct {
 
 // collectStream drains an LLM chunk channel into a complete LLMResponse.
 // Returns an error if an ErrorChunk is received.
+// Delegates to collectStreamWithCallback with a nil callback.
 func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
-	resp := &LLMResponse{}
-	var textBuf, thinkingBuf strings.Builder
-
-	for chunk := range stream {
-		switch c := chunk.(type) {
-		case *agent.TextChunk:
-			textBuf.WriteString(c.Content)
-		case *agent.ThinkingChunk:
-			thinkingBuf.WriteString(c.Content)
-		case *agent.ToolCallChunk:
-			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
-				ID:        c.CallID,
-				Name:      c.Name,
-				Arguments: c.Arguments,
-			})
-		case *agent.CodeExecutionChunk:
-			resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
-				Code:   c.Code,
-				Result: c.Result,
-			})
-		case *agent.GroundingChunk:
-			resp.Groundings = append(resp.Groundings, *c)
-		case *agent.UsageChunk:
-			resp.Usage = &agent.TokenUsage{
-				InputTokens:    c.InputTokens,
-				OutputTokens:   c.OutputTokens,
-				TotalTokens:    c.TotalTokens,
-				ThinkingTokens: c.ThinkingTokens,
-			}
-		case *agent.ErrorChunk:
-			// Intentionally discards any partially accumulated text/thinking/tool-call
-			// data. Callers treat LLM errors as complete failures and retry from scratch,
-			// so partial data is not useful in the current design.
-			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-				c.Message, c.Code, c.Retryable)
-		}
-	}
-
-	resp.Text = textBuf.String()
-	resp.ThinkingText = thinkingBuf.String()
-	return resp, nil
+	return collectStreamWithCallback(stream, nil)
 }
 
 // callLLM performs a single LLM call with context cancellation support.
@@ -383,22 +344,22 @@ func callLLMWithStreaming(
 					slog.Warn("Failed to create streaming thinking event", "error", createErr)
 					return
 				}
-			thinkingEventID = event.ID
-			if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-				"type":            events.EventTypeTimelineCreated,
-				"event_id":        thinkingEventID,
-				"session_id":      execCtx.SessionID,
-				"stage_id":        execCtx.StageID,
-				"execution_id":    execCtx.ExecutionID,
-				"event_type":      "llm_thinking",
-				"status":          "streaming",
-				"content":         "",
-				"sequence_number": *eventSeq,
-				"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
-			}); pubErr != nil {
-				slog.Warn("Failed to publish streaming thinking created",
-					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+				thinkingEventID = event.ID
+				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        thinkingEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_thinking",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				}); pubErr != nil {
+					slog.Warn("Failed to publish streaming thinking created",
+						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+				}
 			}
 			// Publish only the new delta — clients concatenate locally.
 			// This keeps each pg_notify payload small (avoids 8 KB limit).
@@ -428,22 +389,22 @@ func callLLMWithStreaming(
 					slog.Warn("Failed to create streaming text event", "error", createErr)
 					return
 				}
-			textEventID = event.ID
-			if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-				"type":            events.EventTypeTimelineCreated,
-				"event_id":        textEventID,
-				"session_id":      execCtx.SessionID,
-				"stage_id":        execCtx.StageID,
-				"execution_id":    execCtx.ExecutionID,
-				"event_type":      "llm_response",
-				"status":          "streaming",
-				"content":         "",
-				"sequence_number": *eventSeq,
-				"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
-			}); pubErr != nil {
-				slog.Warn("Failed to publish streaming text created",
-					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+				textEventID = event.ID
+				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        textEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_response",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				}); pubErr != nil {
+					slog.Warn("Failed to publish streaming text created",
+						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+				}
 			}
 			// Publish only the new delta — clients concatenate locally.
 			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
