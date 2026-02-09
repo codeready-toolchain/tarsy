@@ -458,7 +458,7 @@ field.Enum("event_type").
 All timeline event content is human-readable text — consistent across every event type. Grounding events follow this convention:
 
 - **Content**: Human-readable summary of the grounding (queries + source titles/URIs). Works for cross-stage context formatting, DB browsing, and fallback rendering.
-- **Metadata**: Full structured data (queries, sources with URIs, grounding supports with text-to-source mappings, search entry point HTML). Frontend uses metadata for rich rendering (inline citations, clickable links, Google Search widget).
+- **Metadata**: Full structured data (queries, sources with URIs, grounding supports with text-to-source mappings). Frontend uses metadata for rich rendering (inline citations, clickable links).
 
 This follows the pattern established by `llm_tool_call` events: human-readable content (tool arguments) plus structured metadata (`tool_name`).
 
@@ -468,6 +468,120 @@ Code execution events use a human-readable format (markdown-style code blocks) b
 - Code and output are sequential text, not structured data
 - Easy to render in any frontend (even without special handling)
 - Multiple code executions per response → multiple events, each self-contained
+
+---
+
+## Versioned Migration Strategy
+
+Phase 3.2.1 is the first phase to introduce versioned database migrations. Until now, the app used Ent's auto-migration (`Schema.Create()`) which creates/updates tables directly from schema definitions. This is convenient for initial development but doesn't support rollbacks, doesn't track what's been applied, and isn't safe for production.
+
+### Why Now
+
+Adding new enum values to an existing table is the simplest possible migration — a good first test of the migration workflow before more complex schema changes arrive in later phases.
+
+### Migration Workflow
+
+The infrastructure already exists in `pkg/database/client.go` (golang-migrate with embedded `.sql` files) and `make/db.mk` (`migrate-create` target using Atlas CLI). What's missing is actual migration files.
+
+**Step 1: Generate baseline migration**
+
+```bash
+make migrate-create NAME=initial_schema
+```
+
+This diffs the current Ent schema against an empty database and generates `pkg/database/migrations/YYYYMMDDHHMMSS_initial_schema.up.sql` containing the full current schema (all tables, indexes, enums, constraints).
+
+**Step 2: Add GIN indexes to the baseline migration**
+
+Move the GIN index creation SQL from `CreateGINIndexes()` in `pkg/database/migrations.go` into the initial migration file. This ensures all schema setup is in one place (migration files) rather than split between migrations and Go code.
+
+```sql
+-- Append to initial_schema.up.sql
+CREATE INDEX IF NOT EXISTS idx_alert_sessions_alert_data_gin
+  ON alert_sessions USING gin(to_tsvector('english', alert_data));
+CREATE INDEX IF NOT EXISTS idx_alert_sessions_final_analysis_gin
+  ON alert_sessions USING gin(to_tsvector('english', COALESCE(final_analysis, '')));
+```
+
+Then remove `CreateGINIndexes()` and its call from `runMigrations()`.
+
+**Step 3: Modify Ent schema**
+
+Add the three new enum values to `ent/schema/timelineevent.go`, regenerate Ent code.
+
+**Step 4: Generate Phase 3.2.1 migration**
+
+```bash
+make migrate-create NAME=add_native_tool_event_types
+```
+
+Atlas diffs the updated Ent schema against the previous migration state and generates a migration containing only the `ALTER TYPE ... ADD VALUE` statements for the new enum values.
+
+**Step 5: Remove auto-migration fallback**
+
+Once we have real migration files, `runMigrations()` should use golang-migrate exclusively. Remove the `else` branch that calls `entClient.Schema.Create(ctx)`. If no migration files exist, that's an error — not a silent fallback.
+
+```go
+func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.Driver, entClient *ent.Client) error {
+    hasMigrations, err := hasEmbeddedMigrations()
+    if err != nil {
+        return fmt.Errorf("failed to check embedded migrations: %w", err)
+    }
+
+    if !hasMigrations {
+        return fmt.Errorf("no embedded migration files found — binary may be built incorrectly")
+    }
+
+    // Use golang-migrate with embedded migrations
+    driver, err := postgres.WithInstance(db, &postgres.Config{})
+    if err != nil {
+        return fmt.Errorf("failed to create postgres driver: %w", err)
+    }
+
+    sourceDriver, err := iofs.New(migrationsFS, "migrations")
+    if err != nil {
+        return fmt.Errorf("failed to create migration source: %w", err)
+    }
+
+    m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
+    if err != nil {
+        return fmt.Errorf("failed to create migrate instance: %w", err)
+    }
+
+    err = m.Up()
+    if err != nil && err != migrate.ErrNoChange {
+        return fmt.Errorf("failed to apply migrations: %w", err)
+    }
+
+    if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+        if srcErr != nil {
+            return fmt.Errorf("failed to close migration source: %w", srcErr)
+        }
+        return fmt.Errorf("failed to close migration database: %w", dbErr)
+    }
+
+    return nil
+}
+```
+
+**Step 6: Fresh start**
+
+```bash
+make db-reset    # Drop and recreate empty database
+# Start the app — golang-migrate applies initial_schema + add_native_tool_event_types
+```
+
+### Test Database
+
+Tests use `Schema.Create()` via testcontainers (in `test/database/client.go`) and always start with a fresh database. This is unaffected by the versioned migration change — tests don't need migration files because they recreate the schema from scratch every time. This is the standard Ent testing approach.
+
+### Result
+
+After this change:
+- `pkg/database/migrations/` contains two `.sql` files (baseline + Phase 3.2.1)
+- `runMigrations()` uses golang-migrate exclusively — no auto-migration fallback
+- GIN indexes are part of the initial migration — no separate Go function
+- Future schema changes follow the same pattern: modify Ent schema → `make migrate-create NAME=...` → review SQL → commit
 
 ---
 
@@ -928,10 +1042,16 @@ resp := &LLMResponse{
    - [ ] Add `case *agent.GroundingChunk` to `collectStream()`
    - [ ] Write unit tests for `collectStream` with grounding chunks
 
-5. **Ent schema changes** (new event types):
-   - [ ] Add `code_execution`, `google_search_result`, `url_context_result` to timeline event type enum
-   - [ ] Regenerate Ent code (`go generate ./ent`)
-   - [ ] Run auto-migration
+5. **Ent schema + versioned migrations** (new event types, first real migration):
+   - [ ] Generate initial baseline migration from current schema: `make migrate-create NAME=initial_schema`
+   - [ ] Add `code_execution`, `google_search_result`, `url_context_result` to timeline event type enum in `ent/schema/timelineevent.go`
+   - [ ] Regenerate Ent code (`make ent-generate`)
+   - [ ] Generate diff migration for the new enum values: `make migrate-create NAME=add_native_tool_event_types`
+   - [ ] Review both generated `.sql` files
+   - [ ] Move GIN index creation into the initial migration SQL (remove `CreateGINIndexes()` from Go code)
+   - [ ] Remove auto-migration fallback from `runMigrations()` — versioned migrations are now the only path
+   - [ ] `make db-reset` to start fresh, verify both migrations apply cleanly on startup
+   - [ ] Verify tests still work (tests use `Schema.Create()` via testcontainers — unaffected)
 
 6. **Controller helper functions** (create events):
    - [ ] Implement `createCodeExecutionEvents()` in `pkg/agent/controller/helpers.go`
@@ -945,6 +1065,7 @@ resp := &LLMResponse{
    - [ ] Update `NativeThinkingController.Run()` — add native tool event creation after response collection
    - [ ] Update `NativeThinkingController.forceConclusion()` — add native tool event creation
    - [ ] Update `SynthesisController.Run()` — add native tool event creation
+   - [ ] Update `ReActController.Run()` — add defensive native tool event creation with comments (Q7)
    - [ ] Write controller unit tests with mock native tool responses
 
 ---
