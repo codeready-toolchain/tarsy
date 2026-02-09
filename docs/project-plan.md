@@ -227,6 +227,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [ ] Token validation
 - [ ] GitHub OAuth flow
 - [ ] Session/user tracking
+- [ ] WebSocket origin validation — Phase 3.4 uses `InsecureSkipVerify: true` (accepts all origins, same as old TARSy). Replace with `OriginPatterns`-based allowlist from config via `coder/websocket` AcceptOptions. Should validate/sanitize configured patterns and reject by default if the list is empty.
 
 **Advanced Data Masking**
 - [ ] Kubernetes secret masker (code-based structural parser)

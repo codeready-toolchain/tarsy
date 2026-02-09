@@ -193,7 +193,10 @@ import (
 func (s *Server) wsHandler(c echo.Context) error {
     // Upgrade HTTP to WebSocket
     conn, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
-        // Allow all origins in development; restrict in production via config
+        // Phase 3.4: Accept all origins. Origin validation is deferred to Phase 7 (Security).
+        // Phase 7 should replace InsecureSkipVerify with OriginPatterns-based allowlist
+        // read from server config, rejecting connections by default if the list is empty.
+        // Old TARSy also had no WebSocket origin validation (only HTTP CORS via FastAPI middleware).
         InsecureSkipVerify: true,
     })
     if err != nil {
