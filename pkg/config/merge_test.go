@@ -12,6 +12,11 @@ func TestMergeAgents(t *testing.T) {
 			MCPServers:        []string{"builtin-server"},
 			IterationStrategy: IterationStrategyReact,
 		},
+		"builtin-with-instructions": {
+			MCPServers:         []string{"builtin-server"},
+			IterationStrategy:  IterationStrategySynthesis,
+			CustomInstructions: "Built-in custom instructions for synthesis.",
+		},
 		"override-me": {
 			MCPServers:        []string{"old-server"},
 			IterationStrategy: IterationStrategyReact,
@@ -32,13 +37,18 @@ func TestMergeAgents(t *testing.T) {
 
 	result := mergeAgents(builtin, user)
 
-	// Should have 3 agents total
-	assert.Len(t, result, 3)
+	// Should have 4 agents total
+	assert.Len(t, result, 4)
 
 	// Built-in agent should exist
 	assert.Contains(t, result, "builtin-agent")
 	assert.Equal(t, []string{"builtin-server"}, result["builtin-agent"].MCPServers)
 	assert.Equal(t, IterationStrategyReact, result["builtin-agent"].IterationStrategy)
+
+	// Built-in agent with custom instructions should preserve them
+	assert.Contains(t, result, "builtin-with-instructions")
+	assert.Equal(t, IterationStrategySynthesis, result["builtin-with-instructions"].IterationStrategy)
+	assert.Equal(t, "Built-in custom instructions for synthesis.", result["builtin-with-instructions"].CustomInstructions)
 
 	// User agent should exist
 	assert.Contains(t, result, "user-agent")

@@ -438,6 +438,109 @@ func TestNativeThinkingController_UrlContext(t *testing.T) {
 	require.True(t, foundURL, "url_context_result event should be recorded")
 }
 
+func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
+	// Verify the prompt builder produces the expected message structure for native thinking:
+	// system msg with three-tier instructions (NO ReAct format), user msg WITHOUT tool descriptions.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "The system is healthy."},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{
+		{Name: "k8s.get_pods", Description: "List pods"},
+	}
+	executor := &mockToolExecutor{tools: tools, results: map[string]*agent.ToolResult{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.AlertType = "kubernetes"
+	execCtx.RunbookContent = "# Test Runbook\nStep 1: Check pods"
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.CustomInstructions = "Custom native thinking instructions."
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Previous stage data.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	require.NotNil(t, llm.lastInput)
+	require.GreaterOrEqual(t, len(llm.lastInput.Messages), 2)
+
+	systemMsg := llm.lastInput.Messages[0]
+	userMsg := llm.lastInput.Messages[1]
+
+	// System message should have SRE instructions and task focus, but NO ReAct format
+	require.Equal(t, "system", systemMsg.Role)
+	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
+	require.Contains(t, systemMsg.Content, "Focus on investigation")
+	require.Contains(t, systemMsg.Content, "Custom native thinking instructions.")
+	require.NotContains(t, systemMsg.Content, "Action Input:")
+	require.NotContains(t, systemMsg.Content, "REQUIRED FORMAT")
+
+	// User message should have alert data, runbook, chain context, task — but NO tool descriptions
+	require.Equal(t, "user", userMsg.Role)
+	require.NotContains(t, userMsg.Content, "Available tools")
+	require.Contains(t, userMsg.Content, "Alert Details")
+	require.Contains(t, userMsg.Content, "Runbook Content")
+	require.Contains(t, userMsg.Content, "Test Runbook")
+	require.Contains(t, userMsg.Content, "Previous Stage Data")
+	require.Contains(t, userMsg.Content, "Previous stage data.")
+	require.Contains(t, userMsg.Content, "Your Task")
+
+	// Native thinking should pass tools natively (not in text)
+	require.NotNil(t, llm.lastInput.Tools)
+	require.Len(t, llm.lastInput.Tools, 1)
+	require.Equal(t, "k8s.get_pods", llm.lastInput.Tools[0].Name)
+}
+
+func TestNativeThinkingController_ForcedConclusionUsesNativeFormat(t *testing.T) {
+	// Verify the forced conclusion prompt uses native thinking format (no "Final Answer:" marker)
+	var responses []mockLLMResponse
+	for i := 0; i < 3; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: fmt.Sprintf("call-%d", i), Name: "k8s.get_pods", Arguments: "{}"},
+			},
+		})
+	}
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "System is healthy."},
+		},
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools:   tools,
+		results: map[string]*agent.ToolResult{"k8s.get_pods": {Content: "pod-1 Running"}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 3
+	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// The forced conclusion prompt should use native thinking format (not ReAct)
+	require.NotNil(t, llm.lastInput)
+	lastUserMsg := ""
+	for i := len(llm.lastInput.Messages) - 1; i >= 0; i-- {
+		if llm.lastInput.Messages[i].Role == "user" {
+			lastUserMsg = llm.lastInput.Messages[i].Content
+			break
+		}
+	}
+	require.Contains(t, lastUserMsg, "iteration limit")
+	require.Contains(t, lastUserMsg, "structured conclusion")
+	require.NotContains(t, lastUserMsg, "Final Answer:")
+}
+
 func TestNativeThinkingController_ForcedConclusionWithGrounding(t *testing.T) {
 	// Verify grounding events are created during forced conclusion too
 	var responses []mockLLMResponse

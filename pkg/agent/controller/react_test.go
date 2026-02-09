@@ -401,6 +401,117 @@ func TestReActController_NativeToolDataIgnored(t *testing.T) {
 	}
 }
 
+func TestReActController_PromptBuilderIntegration(t *testing.T) {
+	// Verify the prompt builder produces the expected message structure
+	// in the ReAct controller: system msg with three-tier instructions + ReAct format,
+	// user msg with tools, alert data, runbook, and analysis task.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: All clear."},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{
+		{Name: "k8s.get_pods", Description: "List pods", ParametersSchema: `{"properties":{"ns":{"type":"string","description":"Namespace"}},"required":["ns"]}`},
+	}
+	executor := &mockToolExecutor{tools: tools, results: map[string]*agent.ToolResult{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.AlertType = "kubernetes"
+	execCtx.RunbookContent = "# Test Runbook\nStep 1: Check pods"
+	execCtx.Config.CustomInstructions = "Custom agent instructions for test."
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Previous agent found high CPU.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// Inspect messages sent to LLM
+	require.NotNil(t, llm.lastInput)
+	require.GreaterOrEqual(t, len(llm.lastInput.Messages), 2)
+
+	systemMsg := llm.lastInput.Messages[0]
+	userMsg := llm.lastInput.Messages[1]
+
+	// System message should have: Tier 1 (SRE instructions), ReAct format, task focus
+	require.Equal(t, "system", systemMsg.Role)
+	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
+	require.Contains(t, systemMsg.Content, "ReAct")
+	require.Contains(t, systemMsg.Content, "Thought:")
+	require.Contains(t, systemMsg.Content, "Action:")
+	require.Contains(t, systemMsg.Content, "Final Answer:")
+	require.Contains(t, systemMsg.Content, "Focus on investigation")
+
+	// Custom instructions (Tier 3) in system
+	require.Contains(t, systemMsg.Content, "Custom agent instructions for test.")
+
+	// User message should have: tool descriptions, alert data, runbook, chain context, task
+	require.Equal(t, "user", userMsg.Role)
+	require.Contains(t, userMsg.Content, "Available tools")
+	require.Contains(t, userMsg.Content, "k8s.get_pods")
+	require.Contains(t, userMsg.Content, "ns (required, string): Namespace")
+	require.Contains(t, userMsg.Content, "Alert Details")
+	require.Contains(t, userMsg.Content, "CPU high on prod-server-1") // from execCtx.AlertData
+	require.Contains(t, userMsg.Content, "Alert Type")
+	require.Contains(t, userMsg.Content, "Runbook Content")
+	require.Contains(t, userMsg.Content, "Test Runbook")
+	require.Contains(t, userMsg.Content, "Previous Stage Data")
+	require.Contains(t, userMsg.Content, "Previous agent found high CPU.")
+	require.Contains(t, userMsg.Content, "Your Task")
+
+	// ReAct should NOT pass tools natively — they're described in text
+	require.Nil(t, llm.lastInput.Tools)
+}
+
+func TestReActController_ForcedConclusionUsesReActFormat(t *testing.T) {
+	// Verify the forced conclusion prompt specifically uses the ReAct format
+	// (requires "Final Answer:" marker)
+	var responses []mockLLMResponse
+	for i := 0; i < 3; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: More investigation.\nAction: k8s.get_pods\nAction Input: {}"},
+			},
+		})
+	}
+	// Forced conclusion response
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: Concluded.\nFinal Answer: System healthy."},
+		},
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools:   tools,
+		results: map[string]*agent.ToolResult{"k8s.get_pods": {Content: "pod-1 Running"}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 3
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// The forced conclusion call's messages should contain ReAct-specific format instructions
+	require.NotNil(t, llm.lastInput)
+	lastUserMsg := ""
+	for i := len(llm.lastInput.Messages) - 1; i >= 0; i-- {
+		if llm.lastInput.Messages[i].Role == "user" {
+			lastUserMsg = llm.lastInput.Messages[i].Content
+			break
+		}
+	}
+	require.Contains(t, lastUserMsg, "iteration limit")
+	require.Contains(t, lastUserMsg, "Final Answer:")
+	require.Contains(t, lastUserMsg, "CRITICAL")
+}
+
 // --- Test helpers / mocks ---
 
 // mockLLMResponse defines a single LLM call result.

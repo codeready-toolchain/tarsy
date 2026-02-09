@@ -73,6 +73,58 @@ func TestSynthesisController_LLMError(t *testing.T) {
 	require.Contains(t, err.Error(), "synthesis LLM call failed")
 }
 
+func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
+	// Verify the prompt builder produces synthesis-specific messages:
+	// system msg with SRE instructions + task focus, user msg with synthesis task,
+	// alert data, runbook, and previous stage context.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesized analysis: OOM on web-1."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.AlertType = "kubernetes"
+	execCtx.RunbookContent = "# Synthesis Runbook\nReview agent findings."
+	execCtx.Config.IterationStrategy = config.IterationStrategySynthesis
+	execCtx.Config.CustomInstructions = "Custom synthesis instructions."
+	ctrl := NewSynthesisController()
+
+	prevContext := "Agent 1: Pods show high memory.\nAgent 2: Logs show OOMKilled."
+	result, err := ctrl.Run(context.Background(), execCtx, prevContext)
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	require.NotNil(t, llm.lastInput)
+	require.GreaterOrEqual(t, len(llm.lastInput.Messages), 2)
+
+	systemMsg := llm.lastInput.Messages[0]
+	userMsg := llm.lastInput.Messages[1]
+
+	// System message: SRE instructions + custom instructions + task focus (no ReAct format)
+	require.Equal(t, "system", systemMsg.Role)
+	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
+	require.Contains(t, systemMsg.Content, "Custom synthesis instructions.")
+	require.Contains(t, systemMsg.Content, "Focus on investigation")
+	require.NotContains(t, systemMsg.Content, "Action Input:")
+
+	// User message: synthesis-specific structure
+	require.Equal(t, "user", userMsg.Role)
+	require.Contains(t, userMsg.Content, "Synthesize")
+	require.Contains(t, userMsg.Content, "Alert Details")
+	require.Contains(t, userMsg.Content, "Runbook Content")
+	require.Contains(t, userMsg.Content, "Synthesis Runbook")
+	require.Contains(t, userMsg.Content, "Previous Stage Data")
+	require.Contains(t, userMsg.Content, "Agent 1: Pods show high memory.")
+	require.Contains(t, userMsg.Content, "Agent 2: Logs show OOMKilled.")
+
+	// Synthesis should NOT pass tools
+	require.Nil(t, llm.lastInput.Tools)
+}
+
 func TestSynthesisController_WithGrounding(t *testing.T) {
 	// Synthesis response includes grounding — should create google_search_result event
 	llm := &mockLLMClient{

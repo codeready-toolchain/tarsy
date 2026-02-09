@@ -45,10 +45,12 @@ func TestBuiltinAgents(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
 	tests := []struct {
-		name      string
-		agentID   string
-		wantDesc  string
-		wantStrat IterationStrategy
+		name                    string
+		agentID                 string
+		wantDesc                string
+		wantStrat               IterationStrategy
+		wantCustomInstructions  bool   // Whether CustomInstructions should be non-empty
+		customInstructionsMatch string // Substring to check in CustomInstructions (if wantCustomInstructions)
 	}{
 		{
 			name:      "KubernetesAgent",
@@ -63,10 +65,12 @@ func TestBuiltinAgents(t *testing.T) {
 			wantStrat: IterationStrategyReact,
 		},
 		{
-			name:      "SynthesisAgent",
-			agentID:   "SynthesisAgent",
-			wantDesc:  "Synthesizes parallel investigation results",
-			wantStrat: IterationStrategySynthesis,
+			name:                    "SynthesisAgent",
+			agentID:                 "SynthesisAgent",
+			wantDesc:                "Synthesizes parallel investigation results",
+			wantStrat:               IterationStrategySynthesis,
+			wantCustomInstructions:  true,
+			customInstructionsMatch: "Incident Commander",
 		},
 	}
 
@@ -76,6 +80,11 @@ func TestBuiltinAgents(t *testing.T) {
 			require.True(t, exists, "Agent %s should exist", tt.agentID)
 			assert.Equal(t, tt.wantDesc, agent.Description)
 			assert.Equal(t, tt.wantStrat, agent.IterationStrategy)
+
+			if tt.wantCustomInstructions {
+				assert.NotEmpty(t, agent.CustomInstructions, "Agent %s should have custom instructions", tt.agentID)
+				assert.Contains(t, agent.CustomInstructions, tt.customInstructionsMatch)
+			}
 		})
 	}
 }
