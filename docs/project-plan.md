@@ -170,6 +170,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [ ] Custom MCP configuration per alert (mcp_selection override)
 - [ ] Tool result summarization (LLM-based, configurable threshold)
 - [ ] MCP server health tracking
+- [ ] Tool output streaming — extend Phase 3.4 streaming protocol with `stream.chunk` for live MCP tool output (stdout/stderr) during execution. Tool events go from instant created→completed pairs to created → stream chunks → completed.
 
 **Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports. The stdio transport in Go uses `os/exec.Cmd` with stdin/stdout pipes — straightforward and well-supported.
 
@@ -226,6 +227,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - [ ] Token validation
 - [ ] GitHub OAuth flow
 - [ ] Session/user tracking
+- [ ] WebSocket origin validation — Phase 3.4 uses `InsecureSkipVerify: true` (accepts all origins, same as old TARSy). Replace with `OriginPatterns`-based allowlist from config via `coder/websocket` AcceptOptions. Should validate/sanitize configured patterns and reject by default if the list is empty.
 
 **Advanced Data Masking**
 - [ ] Kubernetes secret masker (code-based structural parser)
@@ -339,5 +341,7 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
   - [Native Tool Timeline Events Questions](phase3-native-tool-events-questions.md)
   - [Prompt System Design](phase3-prompt-system-design.md)
   - [Prompt System Questions](phase3-prompt-system-questions.md)
+  - [Real-time Streaming Design](phase3-streaming-design.md)
+  - [Real-time Streaming Questions](phase3-streaming-open-questions.md)
 - **Phase 4 Design**:
   - [Open Questions](phase4-open-questions.md)
