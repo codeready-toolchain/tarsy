@@ -363,16 +363,6 @@ func isTimeoutError(err error) bool {
 	return strings.Contains(errStr, "timeout") || strings.Contains(errStr, "timed out")
 }
 
-// buildForcedConclusionPrompt returns the prompt to force an LLM conclusion.
-func buildForcedConclusionPrompt(iteration int) string {
-	return fmt.Sprintf(
-		"You have reached the maximum number of iterations (%d). "+
-			"Based on all the information gathered so far, provide your final analysis and conclusion. "+
-			"Do NOT call any more tools. Summarize your findings clearly.",
-		iteration,
-	)
-}
-
 // generateCallID creates a unique ID for a tool call.
 func generateCallID() string {
 	return uuid.New().String()

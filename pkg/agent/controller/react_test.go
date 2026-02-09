@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/codeready-toolchain/tarsy/test/util"
@@ -527,6 +528,10 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 		Save(ctx)
 	require.NoError(t, err)
 
+	// Create a real PromptBuilder with a test MCP registry
+	testRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
+	pb := prompt.NewPromptBuilder(testRegistry)
+
 	return &agent.ExecutionContext{
 		SessionID:   sessionID,
 		StageID:     stageID,
@@ -534,6 +539,7 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 		AgentName:   "test-agent",
 		AgentIndex:  1,
 		AlertData:   "Test alert: CPU high on prod-server-1",
+		AlertType:   "test-alert",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "test-agent",
 			IterationStrategy:  config.IterationStrategyReact,
@@ -542,9 +548,10 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 			IterationTimeout:   120 * time.Second,
 			CustomInstructions: "You are a test agent.",
 		},
-		LLMClient:    llm,
-		ToolExecutor: toolExec,
-		Services:     svc,
+		LLMClient:     llm,
+		ToolExecutor:  toolExec,
+		PromptBuilder: pb,
+		Services:      svc,
 	}
 }
 

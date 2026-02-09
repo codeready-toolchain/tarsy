@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -30,8 +29,8 @@ func (c *SynthesisController) Run(
 	msgSeq := 0
 	eventSeq := 0
 
-	// 1. Build messages from previous stage context
-	messages := c.buildMessages(execCtx, prevStageContext)
+	// 1. Build messages via prompt builder
+	messages := execCtx.PromptBuilder.BuildSynthesisMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages
 	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
@@ -94,36 +93,3 @@ func (c *SynthesisController) Run(
 	}, nil
 }
 
-// buildMessages creates the synthesis conversation.
-// Phase 3.3 will replace this with the prompt builder.
-func (c *SynthesisController) buildMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-) []agent.ConversationMessage {
-	messages := []agent.ConversationMessage{
-		{
-			Role: "system",
-			Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s\n\n"+
-				"Your task is to synthesize the investigation results from multiple agents "+
-				"into a single coherent analysis.",
-				execCtx.AgentName, execCtx.Config.CustomInstructions),
-		},
-	}
-
-	var userContent strings.Builder
-	if prevStageContext != "" {
-		userContent.WriteString("## Investigation Results from Previous Agents\n\n")
-		userContent.WriteString(prevStageContext)
-		userContent.WriteString("\n\n")
-	}
-	userContent.WriteString("## Alert Data\n\n")
-	userContent.WriteString(execCtx.AlertData)
-	userContent.WriteString("\n\nPlease synthesize the above investigation results into a comprehensive analysis.")
-
-	messages = append(messages, agent.ConversationMessage{
-		Role:    "user",
-		Content: userContent.String(),
-	})
-
-	return messages
-}

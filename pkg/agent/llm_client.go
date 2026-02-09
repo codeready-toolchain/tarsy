@@ -27,9 +27,17 @@ type GenerateInput struct {
 	Tools       []ToolDefinition // nil = no tools
 }
 
+// Conversation message roles.
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+
 // ConversationMessage is the Go-side message type.
 type ConversationMessage struct {
-	Role       string     // "system", "user", "assistant", "tool"
+	Role       string     // RoleSystem, RoleUser, RoleAssistant, RoleTool
 	Content    string
 	ToolCalls  []ToolCall // For assistant messages
 	ToolCallID string     // For tool result messages

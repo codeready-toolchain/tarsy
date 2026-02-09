@@ -339,18 +339,6 @@ func TestTokenUsageFromResp(t *testing.T) {
 }
 
 // ============================================================================
-// buildForcedConclusionPrompt tests
-// ============================================================================
-
-func TestBuildForcedConclusionPrompt(t *testing.T) {
-	prompt := buildForcedConclusionPrompt(5)
-	assert.Contains(t, prompt, "5")
-	assert.Contains(t, prompt, "maximum number of iterations")
-	assert.Contains(t, prompt, "final analysis")
-	assert.Contains(t, prompt, "Do NOT call any more tools")
-}
-
-// ============================================================================
 // formatCodeExecution tests
 // ============================================================================
 

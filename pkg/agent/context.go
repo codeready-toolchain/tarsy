@@ -21,6 +21,12 @@ type ExecutionContext struct {
 	// Arbitrary text — not parsed, not assumed to be JSON.
 	AlertData string
 
+	// Alert type (from session/chain config)
+	AlertType string
+
+	// Runbook content (fetched by executor, passed as text)
+	RunbookContent string
+
 	// Configuration (resolved from hierarchy)
 	Config *ResolvedAgentConfig
 
@@ -29,6 +35,10 @@ type ExecutionContext struct {
 	ToolExecutor ToolExecutor // Phase 3.2: stub, Phase 4: MCP client
 	Services     *ServiceBundle
 	// EventPublisher EventPublisher  // Phase 3.4
+
+	// Prompt builder (injected by executor, stateless, shared across executions).
+	// Implemented by prompt.PromptBuilder; interface avoids agent↔prompt import cycle.
+	PromptBuilder PromptBuilder
 
 	// Chat context (nil for non-chat sessions)
 	ChatContext *ChatContext
@@ -55,10 +65,29 @@ type ResolvedAgentConfig struct {
 	// MCPSelection *models.MCPSelectionConfig  // Phase 4
 }
 
+// PromptBuilder builds all prompt text for agent controllers.
+// Implemented by prompt.PromptBuilder; defined as interface here to
+// avoid a circular import between pkg/agent and pkg/agent/prompt.
+type PromptBuilder interface {
+	BuildReActMessages(execCtx *ExecutionContext, prevStageContext string, tools []ToolDefinition) []ConversationMessage
+	BuildNativeThinkingMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
+	BuildSynthesisMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
+	BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string
+	BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string
+	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
+	BuildExecutiveSummarySystemPrompt() string
+	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
+}
+
+// ChatExchange groups a user question with its complete conversation.
+type ChatExchange struct {
+	UserQuestion string
+	Messages     []ConversationMessage
+}
+
 // ChatContext carries chat-specific data for controllers.
-// Phase 3.3 prompt builder will use this to compose chat-aware prompts.
 type ChatContext struct {
 	UserQuestion        string
 	InvestigationContext string
-	ChatHistory         []ConversationMessage
+	ChatHistory         []ChatExchange
 }

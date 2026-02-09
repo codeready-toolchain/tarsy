@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
 // NativeThinkingController implements the Gemini native function calling loop.
@@ -32,8 +32,8 @@ func (c *NativeThinkingController) Run(
 	msgSeq := 0
 	eventSeq := 0
 
-	// 1. Build initial conversation
-	messages := c.buildMessages(execCtx, prevStageContext)
+	// 1. Build initial conversation via prompt builder
+	messages := execCtx.PromptBuilder.BuildNativeThinkingMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages in DB
 	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
@@ -192,7 +192,7 @@ func (c *NativeThinkingController) forceConclusion(
 	}
 
 	// Append forced conclusion prompt
-	conclusionPrompt := buildForcedConclusionPrompt(state.CurrentIteration)
+	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyNativeThinking)
 	messages = append(messages, agent.ConversationMessage{Role: "user", Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 
@@ -242,33 +242,3 @@ func (c *NativeThinkingController) forceConclusion(
 	}, nil
 }
 
-// buildMessages creates the initial conversation for a native thinking investigation.
-// Phase 3.3 will replace this with the prompt builder.
-func (c *NativeThinkingController) buildMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-) []agent.ConversationMessage {
-	messages := []agent.ConversationMessage{
-		{
-			Role: "system",
-			Content: fmt.Sprintf("You are %s, an AI SRE agent.\n\n%s",
-				execCtx.AgentName, execCtx.Config.CustomInstructions),
-		},
-	}
-
-	var userContent strings.Builder
-	if prevStageContext != "" {
-		userContent.WriteString("Previous investigation context:\n")
-		userContent.WriteString(prevStageContext)
-		userContent.WriteString("\n\nContinue the investigation based on the alert below.\n\n")
-	}
-	userContent.WriteString("## Alert Data\n\n")
-	userContent.WriteString(execCtx.AlertData)
-
-	messages = append(messages, agent.ConversationMessage{
-		Role:    "user",
-		Content: userContent.String(),
-	})
-
-	return messages
-}

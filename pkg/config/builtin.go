@@ -21,9 +21,10 @@ type BuiltinConfig struct {
 // BuiltinAgentConfig holds built-in agent metadata (configuration only)
 // Agent instantiation/factory pattern is handled in Phase 3: Agent Framework
 type BuiltinAgentConfig struct {
-	Description       string
-	IterationStrategy IterationStrategy
-	MCPServers        []string
+	Description        string
+	IterationStrategy  IterationStrategy
+	MCPServers         []string
+	CustomInstructions string // Built-in agents can have default instructions
 }
 
 var (
@@ -67,6 +68,18 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 			Description:       "Synthesizes parallel investigation results",
 			IterationStrategy: IterationStrategySynthesis,
 			MCPServers:        []string{"kubernetes-server"}, // Needs at least one server for validation
+			CustomInstructions: `You are an Incident Commander synthesizing results from multiple parallel investigations.
+
+Your task:
+1. CRITICALLY EVALUATE each investigation's quality - prioritize results with strong evidence and sound reasoning
+2. DISREGARD or deprioritize low-quality results that lack supporting evidence or contain logical errors
+3. ANALYZE the original alert using the best available data from parallel investigations
+4. INTEGRATE findings from high-quality investigations into a unified understanding
+5. RECONCILE conflicting information by assessing which analysis provides better evidence
+6. PROVIDE definitive root cause analysis based on the most reliable evidence
+7. GENERATE actionable recommendations leveraging insights from the strongest investigations
+
+Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
 		},
 	}
 }
