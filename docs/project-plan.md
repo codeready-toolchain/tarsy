@@ -124,26 +124,14 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 > **Open design questions** extracted to Phase 4 items below and tracked in `docs/phase4-open-questions.md`.
 
 **3.2.1: Gemini Native Tool Timeline Events (Go + Python)**
-> Deferred from Phase 3.2. Gemini provides built-in native tools (`google_search`, `code_execution`, `url_context`) that produce results inline in the response stream. These results need to be surfaced to users via timeline events. Currently, code execution is collected in `LLMResponse.CodeExecutions` and stored in `LLMInteraction.response_metadata` (debugging only) — not shown to users. Google Search grounding and URL context results are not captured from the stream at all.
-
-**What exists today:**
-- Config: `google_search`, `code_execution`, `url_context` enums in `pkg/config/enums.go`
-- Proto: `CodeExecutionDelta` message (code + result fields), `native_tools` map in `LLMConfig`
-- Python: `google_native.py` streams `CodeExecutionDelta` for `executable_code` and `code_execution_result` parts; enables `GoogleSearch`, `ToolCodeExecution`, `ToolUrlContext` when no MCP tools present
-- Go: `CodeExecutionChunk` type collected by `collectStream` into `LLMResponse.CodeExecutions`
-- **Missing**: No timeline event types, no controller logic to create events, no grounding/URL context streaming
-
-**What needs to be done:**
-- [ ] Add timeline event types to Ent schema (`ent/schema/timelineevent.go`):
-  - `code_execution` — Gemini-generated code + execution output
-  - `google_search_result` — Google Search grounding results (web references, sources)
-  - `url_context_result` — URL content fetching results
-- [ ] Python: Extract Google Search grounding metadata from Gemini response (`GroundingMetadata` — contains `grounding_chunks`, `search_entry_point`, web references). Stream as a new proto delta type.
-- [ ] Python: Extract URL context results from Gemini response. Stream as a new proto delta type.
-- [ ] Proto: Add `GroundingDelta` and/or `UrlContextDelta` messages to `llm_service.proto`
-- [ ] Go: Add corresponding chunk types (`GroundingChunk`, `UrlContextChunk`) and collect in `LLMResponse`
-- [ ] Controllers: Create timeline events for code execution, grounding, URL context — same "create when content arrives" pattern as other events
-- [ ] Note: Native tools are suppressed when MCP tools are present (mutual exclusivity, handled in Python). Only relevant for Native Thinking controller.
+- **Design Phase**: 🔄 In Progress — See `docs/phase3-native-tool-events-design.md` and `docs/phase3-native-tool-events-questions.md`
+- [ ] Proto: Add `GroundingDelta` message (Google Search + URL Context grounding results)
+- [ ] Python: Extract `GroundingMetadata` from Gemini response, stream as `GroundingDelta`
+- [ ] Go: Add `GroundingChunk` type, update `collectStream` and `LLMResponse`
+- [ ] Ent schema: Add `code_execution`, `google_search_result`, `url_context_result` event types
+- [ ] Controller helpers: `createCodeExecutionEvents()`, `createGroundingEvents()`
+- [ ] Controllers: NativeThinkingController and SynthesisController create native tool timeline events
+- [ ] Note: Native tools suppressed when MCP tools present (Python handles). Improvement over old TARSy: native tool results become first-class timeline events.
 
 **3.3: Prompt System (Go)**
 - [ ] Prompt builder framework
@@ -345,3 +333,9 @@ This means: iteration controllers are Go, prompt building is Go, MCP client is G
 - **Phase 3 Design**:
   - [Base Agent Architecture Design](phase3-base-agent-architecture-design.md)
   - [Base Agent Architecture Questions](phase3-base-agent-architecture-questions.md)
+  - [Iteration Controllers Design](phase3-iteration-controllers-design.md)
+  - [Iteration Controllers Questions](phase3-iteration-controllers-questions.md)
+  - [Native Tool Timeline Events Design](phase3-native-tool-events-design.md)
+  - [Native Tool Timeline Events Questions](phase3-native-tool-events-questions.md)
+- **Phase 4 Design**:
+  - [Open Questions](phase4-open-questions.md)
