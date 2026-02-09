@@ -14,7 +14,7 @@ This directory contains SQL migration files managed by [Atlas CLI](https://atlas
 
 Files follow the Atlas naming convention:
 
-```
+```text
 {timestamp}_{name}.sql
 ```
 

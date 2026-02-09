@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -390,11 +391,11 @@ func TestReActController_NativeToolDataIgnored(t *testing.T) {
 	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, err)
 	for _, ev := range events {
-		require.NotEqual(t, "code_execution", ev.EventType,
+		require.NotEqual(t, string(timelineevent.EventTypeCodeExecution), ev.EventType,
 			"ReAct should not create code_execution events")
-		require.NotEqual(t, "google_search_result", ev.EventType,
+		require.NotEqual(t, string(timelineevent.EventTypeGoogleSearchResult), ev.EventType,
 			"ReAct should not create google_search_result events")
-		require.NotEqual(t, "url_context_result", ev.EventType,
+		require.NotEqual(t, string(timelineevent.EventTypeURLContextResult), ev.EventType,
 			"ReAct should not create url_context_result events")
 	}
 }

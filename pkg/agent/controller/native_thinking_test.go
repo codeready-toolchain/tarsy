@@ -427,15 +427,15 @@ func TestNativeThinkingController_UrlContext(t *testing.T) {
 
 	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, err)
-	foundUrl := false
+	foundURL := false
 	for _, ev := range events {
 		if ev.EventType == "url_context_result" {
-			foundUrl = true
+			foundURL = true
 			require.Contains(t, ev.Content, "https://docs.example.com/guide")
 			break
 		}
 	}
-	require.True(t, foundUrl, "url_context_result event should be recorded")
+	require.True(t, foundURL, "url_context_result event should be recorded")
 }
 
 func TestNativeThinkingController_ForcedConclusionWithGrounding(t *testing.T) {

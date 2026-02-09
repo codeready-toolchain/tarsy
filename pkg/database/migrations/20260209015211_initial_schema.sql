@@ -59,8 +59,6 @@ CREATE INDEX "chat_created_at" ON "public"."chats" ("created_at");
 CREATE INDEX "chat_pod_id_last_interaction_at" ON "public"."chats" ("pod_id", "last_interaction_at");
 -- Create index "chat_session_id" to table: "chats"
 CREATE UNIQUE INDEX "chat_session_id" ON "public"."chats" ("session_id");
--- Create index "chats_session_id_key" to table: "chats"
-CREATE UNIQUE INDEX "chats_session_id_key" ON "public"."chats" ("session_id");
 -- Create "chat_user_messages" table
 CREATE TABLE "public"."chat_user_messages" (
   "message_id" character varying NOT NULL,
@@ -98,8 +96,6 @@ CREATE TABLE "public"."stages" (
 );
 -- Create index "stage_session_id_stage_index" to table: "stages"
 CREATE UNIQUE INDEX "stage_session_id_stage_index" ON "public"."stages" ("session_id", "stage_index");
--- Create index "stage_stage_id" to table: "stages"
-CREATE INDEX "stage_stage_id" ON "public"."stages" ("stage_id");
 -- Create index "stages_chat_user_message_id_key" to table: "stages"
 CREATE UNIQUE INDEX "stages_chat_user_message_id_key" ON "public"."stages" ("chat_user_message_id");
 -- Create "agent_executions" table
@@ -119,8 +115,6 @@ CREATE TABLE "public"."agent_executions" (
   CONSTRAINT "agent_executions_alert_sessions_agent_executions" FOREIGN KEY ("session_id") REFERENCES "public"."alert_sessions" ("session_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "agent_executions_stages_agent_executions" FOREIGN KEY ("stage_id") REFERENCES "public"."stages" ("stage_id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "agentexecution_execution_id" to table: "agent_executions"
-CREATE INDEX "agentexecution_execution_id" ON "public"."agent_executions" ("execution_id");
 -- Create index "agentexecution_session_id" to table: "agent_executions"
 CREATE INDEX "agentexecution_session_id" ON "public"."agent_executions" ("session_id");
 -- Create index "agentexecution_stage_id_agent_index" to table: "agent_executions"
@@ -192,8 +186,6 @@ CREATE TABLE "public"."llm_interactions" (
 );
 -- Create index "llminteraction_execution_id_created_at" to table: "llm_interactions"
 CREATE INDEX "llminteraction_execution_id_created_at" ON "public"."llm_interactions" ("execution_id", "created_at");
--- Create index "llminteraction_interaction_id" to table: "llm_interactions"
-CREATE INDEX "llminteraction_interaction_id" ON "public"."llm_interactions" ("interaction_id");
 -- Create index "llminteraction_stage_id_created_at" to table: "llm_interactions"
 CREATE INDEX "llminteraction_stage_id_created_at" ON "public"."llm_interactions" ("stage_id", "created_at");
 -- Create "mcp_interactions" table
@@ -218,8 +210,6 @@ CREATE TABLE "public"."mcp_interactions" (
 );
 -- Create index "mcpinteraction_execution_id_created_at" to table: "mcp_interactions"
 CREATE INDEX "mcpinteraction_execution_id_created_at" ON "public"."mcp_interactions" ("execution_id", "created_at");
--- Create index "mcpinteraction_interaction_id" to table: "mcp_interactions"
-CREATE INDEX "mcpinteraction_interaction_id" ON "public"."mcp_interactions" ("interaction_id");
 -- Create index "mcpinteraction_stage_id_created_at" to table: "mcp_interactions"
 CREATE INDEX "mcpinteraction_stage_id_created_at" ON "public"."mcp_interactions" ("stage_id", "created_at");
 -- Create "timeline_events" table
@@ -246,8 +236,6 @@ CREATE TABLE "public"."timeline_events" (
 );
 -- Create index "timelineevent_created_at" to table: "timeline_events"
 CREATE INDEX "timelineevent_created_at" ON "public"."timeline_events" ("created_at");
--- Create index "timelineevent_event_id" to table: "timeline_events"
-CREATE INDEX "timelineevent_event_id" ON "public"."timeline_events" ("event_id");
 -- Create index "timelineevent_execution_id_sequence_number" to table: "timeline_events"
 CREATE INDEX "timelineevent_execution_id_sequence_number" ON "public"."timeline_events" ("execution_id", "sequence_number");
 -- Create index "timelineevent_session_id_sequence_number" to table: "timeline_events"

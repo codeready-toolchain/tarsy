@@ -545,19 +545,9 @@ func createGroundingEvents(
 	return created
 }
 
-// formatGoogleSearchContent creates a human-readable summary for google_search_result events.
-func formatGoogleSearchContent(queries []string, sources []agent.GroundingSource) string {
+// formatSourceList formats a list of GroundingSource into a comma-separated string.
+func formatSourceList(sources []agent.GroundingSource) string {
 	var sb strings.Builder
-	sb.WriteString("Google Search: ")
-	for i, q := range queries {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString("'")
-		sb.WriteString(q)
-		sb.WriteString("'")
-	}
-	sb.WriteString(" → Sources: ")
 	for i, s := range sources {
 		if i > 0 {
 			sb.WriteString(", ")
@@ -574,24 +564,26 @@ func formatGoogleSearchContent(queries []string, sources []agent.GroundingSource
 	return sb.String()
 }
 
-// formatUrlContextContent creates a human-readable summary for url_context_result events.
-func formatUrlContextContent(sources []agent.GroundingSource) string {
+// formatGoogleSearchContent creates a human-readable summary for google_search_result events.
+func formatGoogleSearchContent(queries []string, sources []agent.GroundingSource) string {
 	var sb strings.Builder
-	sb.WriteString("URL Context → Sources: ")
-	for i, s := range sources {
+	sb.WriteString("Google Search: ")
+	for i, q := range queries {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		if s.Title != "" {
-			sb.WriteString(s.Title)
-			sb.WriteString(" (")
-			sb.WriteString(s.URI)
-			sb.WriteString(")")
-		} else {
-			sb.WriteString(s.URI)
-		}
+		sb.WriteString("'")
+		sb.WriteString(q)
+		sb.WriteString("'")
 	}
+	sb.WriteString(" → Sources: ")
+	sb.WriteString(formatSourceList(sources))
 	return sb.String()
+}
+
+// formatUrlContextContent creates a human-readable summary for url_context_result events.
+func formatUrlContextContent(sources []agent.GroundingSource) string {
+	return "URL Context → Sources: " + formatSourceList(sources)
 }
 
 // formatGroundingSources converts grounding sources to a serializable format for metadata.

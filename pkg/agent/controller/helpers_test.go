@@ -486,7 +486,7 @@ func TestCreateCodeExecutionEvents(t *testing.T) {
 		assert.Equal(t, 1, created)
 	})
 
-	t.Run("both in one chunk", func(t *testing.T) {
+	t.Run("code_only then self_contained", func(t *testing.T) {
 		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
 		eventSeq := 0
 

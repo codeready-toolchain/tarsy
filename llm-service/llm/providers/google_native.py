@@ -474,7 +474,7 @@ class GoogleNativeProvider(LLMProvider):
         yield pb.GenerateResponse(is_final=True)
 
 
-    def _build_grounding_delta(self, gm) -> pb.GenerateResponse:
+    def _build_grounding_delta(self, gm: "genai_types.GroundingMetadata") -> pb.GenerateResponse:
         """Convert Gemini GroundingMetadata to proto GroundingDelta."""
         delta = pb.GroundingDelta()
 
@@ -498,9 +498,9 @@ class GoogleNativeProvider(LLMProvider):
             for support in gm.grounding_supports:
                 segment = support.segment if hasattr(support, 'segment') else None
                 gs = pb.GroundingSupport(
-                    start_index=segment.start_index if segment else 0,
-                    end_index=segment.end_index if segment else 0,
-                    text=segment.text if segment and hasattr(segment, 'text') else "",
+                    start_index=int(segment.start_index or 0) if segment else 0,
+                    end_index=int(segment.end_index or 0) if segment else 0,
+                    text=str(segment.text) if segment and hasattr(segment, 'text') and segment.text else "",
                 )
                 if hasattr(support, 'grounding_chunk_indices') and support.grounding_chunk_indices:
                     gs.grounding_chunk_indices.extend(support.grounding_chunk_indices)

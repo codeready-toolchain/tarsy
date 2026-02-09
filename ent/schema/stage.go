@@ -111,7 +111,5 @@ func (Stage) Indexes() []ent.Index {
 		// Unique constraint for stage ordering within session
 		index.Fields("session_id", "stage_index").
 			Unique(),
-		// Primary lookups on id field (stored as stage_id)
-		index.Fields("id"),
 	}
 }

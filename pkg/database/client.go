@@ -152,12 +152,11 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.D
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	// Close the migrate instance to avoid resource leaks
-	if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
-		if srcErr != nil {
-			return fmt.Errorf("failed to close migration source: %w", srcErr)
-		}
-		return fmt.Errorf("failed to close migration database: %w", dbErr)
+	// Close only the migration source driver. We must NOT call m.Close() because
+	// that also closes the database driver, which calls db.Close() on the shared
+	// *sql.DB passed via postgres.WithInstance() — breaking the Ent client.
+	if err := sourceDriver.Close(); err != nil {
+		return fmt.Errorf("failed to close migration source: %w", err)
 	}
 
 	// Create GIN indexes (custom SQL not handled by Ent schema)

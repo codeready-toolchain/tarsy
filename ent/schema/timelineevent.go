@@ -148,8 +148,6 @@ func (TimelineEvent) Indexes() []ent.Index {
 		index.Fields("stage_id", "sequence_number"),
 		// Agent timeline filtering
 		index.Fields("execution_id", "sequence_number"),
-		// Updates by ID (stored as event_id)
-		index.Fields("id"),
 		// Chronological queries
 		index.Fields("created_at"),
 	}

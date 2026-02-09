@@ -486,10 +486,6 @@ class TestGoogleNativeProvider:
 class TestBuildGroundingDelta:
     """Tests for _build_grounding_delta method."""
 
-    @pytest.fixture
-    def provider(self):
-        return GoogleNativeProvider()
-
     def test_google_search_grounding(self, provider):
         """Test conversion of Google Search grounding metadata."""
         gm = MagicMock()
@@ -653,6 +649,7 @@ class TestBuildGroundingDelta:
         assert delta.grounding_supports[0].start_index == 0
         assert delta.grounding_supports[0].end_index == 0
         assert delta.grounding_supports[0].text == ""
+        assert list(delta.grounding_supports[0].grounding_chunk_indices) == []
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
