@@ -90,8 +90,9 @@ func (l *NotifyListener) Subscribe(ctx context.Context, channel string) error {
 		return fmt.Errorf("LISTEN connection not established")
 	}
 
+	sanitized := pgx.Identifier{channel}.Sanitize()
 	cmd := listenCmd{
-		sql:    fmt.Sprintf("LISTEN %q", channel),
+		sql:    "LISTEN " + sanitized,
 		result: make(chan error, 1),
 	}
 
@@ -104,7 +105,7 @@ func (l *NotifyListener) Subscribe(ctx context.Context, channel string) error {
 	select {
 	case err := <-cmd.result:
 		if err != nil {
-			return fmt.Errorf("LISTEN %q failed: %w", channel, err)
+			return fmt.Errorf("LISTEN %s failed: %w", sanitized, err)
 		}
 		l.channelsMu.Lock()
 		l.channels[channel] = true
@@ -129,8 +130,9 @@ func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error 
 		return nil
 	}
 
+	sanitized := pgx.Identifier{channel}.Sanitize()
 	cmd := listenCmd{
-		sql:    fmt.Sprintf("UNLISTEN %q", channel),
+		sql:    "UNLISTEN " + sanitized,
 		result: make(chan error, 1),
 	}
 
@@ -143,7 +145,7 @@ func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error 
 	select {
 	case err := <-cmd.result:
 		if err != nil {
-			return fmt.Errorf("UNLISTEN %q failed: %w", channel, err)
+			return fmt.Errorf("UNLISTEN %s failed: %w", sanitized, err)
 		}
 		l.channelsMu.Lock()
 		delete(l.channels, channel)
@@ -257,7 +259,8 @@ func (l *NotifyListener) reconnect(ctx context.Context) {
 		// Re-subscribe to all channels
 		l.channelsMu.RLock()
 		for ch := range l.channels {
-			if _, err := conn.Exec(ctx, fmt.Sprintf("LISTEN %q", ch)); err != nil {
+			sanitized := pgx.Identifier{ch}.Sanitize()
+			if _, err := conn.Exec(ctx, "LISTEN "+sanitized); err != nil {
 				slog.Error("Re-LISTEN failed", "channel", ch, "error", err)
 			}
 		}

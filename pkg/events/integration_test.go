@@ -190,6 +190,28 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 	assert.Greater(t, events[1].ID, events[0].ID)
 }
 
+func TestIntegration_PublishDoesNotMutatePayload(t *testing.T) {
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	payload := map[string]interface{}{
+		"type":    EventTypeTimelineCreated,
+		"content": "test event",
+	}
+
+	// Verify the payload does not contain db_event_id before Publish
+	_, hasDBEventID := payload["db_event_id"]
+	assert.False(t, hasDBEventID, "payload should not have db_event_id before Publish")
+
+	err := env.publisher.Publish(ctx, env.sessionID, env.channel, payload)
+	require.NoError(t, err)
+
+	// After Publish, the caller's payload map must NOT be mutated
+	_, hasDBEventID = payload["db_event_id"]
+	assert.False(t, hasDBEventID, "Publish should not mutate the caller's payload map")
+	assert.Len(t, payload, 2, "payload should still have only the original 2 keys")
+}
+
 func TestIntegration_TransientEventsNotPersisted(t *testing.T) {
 	env := setupStreamingTest(t)
 	ctx := context.Background()

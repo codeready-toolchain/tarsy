@@ -75,6 +75,44 @@ func TestMarshalPayload(t *testing.T) {
 		assert.NotContains(t, result, "xxxx")
 	})
 
+	t.Run("truncated payload preserves db_event_id", func(t *testing.T) {
+		longContent := make([]byte, 8000)
+		for i := range longContent {
+			longContent[i] = 'x'
+		}
+		payload := map[string]interface{}{
+			"type":        "timeline_event.created",
+			"event_id":    "evt-456",
+			"db_event_id": int64(42),
+			"session_id":  "sess-789",
+			"content":     string(longContent),
+		}
+
+		result, err := marshalPayload(payload)
+		require.NoError(t, err)
+		assert.Contains(t, result, `"truncated":true`)
+		assert.Contains(t, result, `"db_event_id":42`)
+		assert.Contains(t, result, "evt-456")
+	})
+
+	t.Run("truncated payload without db_event_id omits it", func(t *testing.T) {
+		longContent := make([]byte, 8000)
+		for i := range longContent {
+			longContent[i] = 'x'
+		}
+		// Transient events don't have db_event_id
+		payload := map[string]interface{}{
+			"type":     "stream.chunk",
+			"event_id": "evt-789",
+			"content":  string(longContent),
+		}
+
+		result, err := marshalPayload(payload)
+		require.NoError(t, err)
+		assert.Contains(t, result, `"truncated":true`)
+		assert.NotContains(t, result, "db_event_id")
+	})
+
 	t.Run("boundary: payload just under limit is not truncated", func(t *testing.T) {
 		// Build a payload that is just under 7900 bytes
 		// The JSON overhead for {"content":"...","type":"t"} is ~24 bytes

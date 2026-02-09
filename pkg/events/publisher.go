@@ -51,9 +51,14 @@ func (p *EventPublisher) Publish(ctx context.Context, sessionID, channel string,
 		return fmt.Errorf("failed to persist event: %w", err)
 	}
 
-	// Include the DB event ID in the payload for catchup tracking
-	payload["db_event_id"] = eventID
-	notifyPayload, err := marshalPayload(payload)
+	// Build NOTIFY payload with db_event_id for catchup tracking.
+	// Shallow-copy to avoid mutating the caller's map.
+	notifyMap := make(map[string]interface{}, len(payload)+1)
+	for k, v := range payload {
+		notifyMap[k] = v
+	}
+	notifyMap["db_event_id"] = eventID
+	notifyPayload, err := marshalPayload(notifyMap)
 	if err != nil {
 		return err
 	}
@@ -132,6 +137,11 @@ func marshalPayload(payload map[string]interface{}) (string, error) {
 			"event_id":   payload["event_id"],
 			"session_id": payload["session_id"],
 			"truncated":  true,
+		}
+		// Include db_event_id if present (set by Publish) so the client
+		// can use it for catchup tracking on truncated events.
+		if dbEventID, ok := payload["db_event_id"]; ok {
+			truncated["db_event_id"] = dbEventID
 		}
 		payloadBytes, _ = json.Marshal(truncated)
 		payloadStr = string(payloadBytes)

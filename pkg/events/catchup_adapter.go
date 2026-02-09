@@ -3,22 +3,28 @@ package events
 import (
 	"context"
 
-	"github.com/codeready-toolchain/tarsy/pkg/services"
+	"github.com/codeready-toolchain/tarsy/ent"
 )
 
-// EventServiceAdapter wraps services.EventService to implement CatchupQuerier.
+// eventQuerier abstracts the event query method needed by EventServiceAdapter.
+// Implemented by *services.EventService.
+type eventQuerier interface {
+	GetEventsSince(ctx context.Context, channel string, sinceID, limit int) ([]*ent.Event, error)
+}
+
+// EventServiceAdapter wraps an eventQuerier to implement CatchupQuerier.
 type EventServiceAdapter struct {
-	eventService *services.EventService
+	querier eventQuerier
 }
 
 // NewEventServiceAdapter creates a CatchupQuerier from an EventService.
-func NewEventServiceAdapter(es *services.EventService) *EventServiceAdapter {
-	return &EventServiceAdapter{eventService: es}
+func NewEventServiceAdapter(es eventQuerier) *EventServiceAdapter {
+	return &EventServiceAdapter{querier: es}
 }
 
 // GetCatchupEvents queries events since sinceID up to limit for the catchup mechanism.
 func (a *EventServiceAdapter) GetCatchupEvents(ctx context.Context, channel string, sinceID, limit int) ([]CatchupEvent, error) {
-	events, err := a.eventService.GetEventsSince(ctx, channel, sinceID, limit)
+	events, err := a.querier.GetEventsSince(ctx, channel, sinceID, limit)
 	if err != nil {
 		return nil, err
 	}

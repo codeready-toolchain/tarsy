@@ -383,28 +383,34 @@ func callLLMWithStreaming(
 					slog.Warn("Failed to create streaming thinking event", "error", createErr)
 					return
 				}
-				thinkingEventID = event.ID
-				execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-					"type":            events.EventTypeTimelineCreated,
-					"event_id":        thinkingEventID,
-					"session_id":      execCtx.SessionID,
-					"stage_id":        execCtx.StageID,
-					"execution_id":    execCtx.ExecutionID,
-					"event_type":      "llm_thinking",
-					"status":          "streaming",
-					"content":         "",
-					"sequence_number": *eventSeq,
-					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
-				})
+			thinkingEventID = event.ID
+			if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+				"type":            events.EventTypeTimelineCreated,
+				"event_id":        thinkingEventID,
+				"session_id":      execCtx.SessionID,
+				"stage_id":        execCtx.StageID,
+				"execution_id":    execCtx.ExecutionID,
+				"event_type":      "llm_thinking",
+				"status":          "streaming",
+				"content":         "",
+				"sequence_number": *eventSeq,
+				"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish streaming thinking created",
+					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
 			}
 			// Publish only the new delta — clients concatenate locally.
 			// This keeps each pg_notify payload small (avoids 8 KB limit).
-			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
 				"type":      events.EventTypeStreamChunk,
 				"event_id":  thinkingEventID,
 				"delta":     delta,
 				"timestamp": time.Now().Format(time.RFC3339Nano),
-			})
+			}); pubErr != nil {
+				slog.Warn("Failed to publish thinking stream chunk",
+					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
 
 		case ChunkTypeText:
 			if textEventID == "" {
@@ -422,56 +428,77 @@ func callLLMWithStreaming(
 					slog.Warn("Failed to create streaming text event", "error", createErr)
 					return
 				}
-				textEventID = event.ID
-				execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-					"type":            events.EventTypeTimelineCreated,
-					"event_id":        textEventID,
-					"session_id":      execCtx.SessionID,
-					"stage_id":        execCtx.StageID,
-					"execution_id":    execCtx.ExecutionID,
-					"event_type":      "llm_response",
-					"status":          "streaming",
-					"content":         "",
-					"sequence_number": *eventSeq,
-					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
-				})
+			textEventID = event.ID
+			if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+				"type":            events.EventTypeTimelineCreated,
+				"event_id":        textEventID,
+				"session_id":      execCtx.SessionID,
+				"stage_id":        execCtx.StageID,
+				"execution_id":    execCtx.ExecutionID,
+				"event_type":      "llm_response",
+				"status":          "streaming",
+				"content":         "",
+				"sequence_number": *eventSeq,
+				"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish streaming text created",
+					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
 			}
 			// Publish only the new delta — clients concatenate locally.
-			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
 				"type":      events.EventTypeStreamChunk,
 				"event_id":  textEventID,
 				"delta":     delta,
 				"timestamp": time.Now().Format(time.RFC3339Nano),
-			})
+			}); pubErr != nil {
+				slog.Warn("Failed to publish text stream chunk",
+					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
 		}
 	}
 
 	resp, err := collectStreamWithCallback(stream, callback)
 	if err != nil {
+		// Mark any streaming timeline events as failed so they don't stay
+		// stuck at status "streaming" indefinitely.
+		markStreamingEventsFailed(ctx, execCtx, thinkingEventID, textEventID, channel, err)
 		return nil, err
 	}
 
 	// Finalize streaming timeline events
 	if thinkingEventID != "" && resp.ThinkingText != "" {
-		execCtx.Services.Timeline.CompleteTimelineEvent(ctx, thinkingEventID, resp.ThinkingText, nil, nil)
-		execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, thinkingEventID, resp.ThinkingText, nil, nil); complErr != nil {
+			slog.Warn("Failed to complete streaming thinking event",
+				"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", complErr)
+		}
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
 			"type":      events.EventTypeTimelineCompleted,
 			"event_id":  thinkingEventID,
 			"content":   resp.ThinkingText,
 			"status":    "completed",
 			"timestamp": time.Now().Format(time.RFC3339Nano),
-		})
+		}); pubErr != nil {
+			slog.Warn("Failed to publish thinking completed",
+				"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
 	}
 
 	if textEventID != "" && resp.Text != "" {
-		execCtx.Services.Timeline.CompleteTimelineEvent(ctx, textEventID, resp.Text, nil, nil)
-		execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, textEventID, resp.Text, nil, nil); complErr != nil {
+			slog.Warn("Failed to complete streaming text event",
+				"event_id", textEventID, "session_id", execCtx.SessionID, "error", complErr)
+		}
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
 			"type":      events.EventTypeTimelineCompleted,
 			"event_id":  textEventID,
 			"content":   resp.Text,
 			"status":    "completed",
 			"timestamp": time.Now().Format(time.RFC3339Nano),
-		})
+		}); pubErr != nil {
+			slog.Warn("Failed to publish text completed",
+				"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
 	}
 
 	return &StreamedResponse{
@@ -479,6 +506,44 @@ func callLLMWithStreaming(
 		ThinkingEventCreated: thinkingEventID != "",
 		TextEventCreated:     textEventID != "",
 	}, nil
+}
+
+// markStreamingEventsFailed marks any in-flight streaming timeline events
+// as failed. Called when collectStreamWithCallback returns an error so that
+// events don't remain stuck at status "streaming" indefinitely.
+func markStreamingEventsFailed(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	thinkingEventID, textEventID, channel string,
+	streamErr error,
+) {
+	failEvent := func(eventID string) {
+		if eventID == "" {
+			return
+		}
+		// Update DB status to failed with error message as content
+		failContent := fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+		updateErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent)
+		if updateErr != nil {
+			slog.Warn("Failed to mark streaming event as failed",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", updateErr)
+			return
+		}
+		// Notify WebSocket clients
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  eventID,
+			"status":    "failed",
+			"content":   failContent,
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish streaming event failure",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+
+	failEvent(thinkingEventID)
+	failEvent(textEventID)
 }
 
 // createToolCallEvent creates a timeline event for a tool call request.

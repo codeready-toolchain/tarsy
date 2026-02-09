@@ -466,6 +466,43 @@ func TestConnectionManager_BroadcastIsolation(t *testing.T) {
 	assert.Error(t, err, "conn2 should not receive ch1 broadcast")
 }
 
+func TestConnectionManager_EmptyChannelValidation(t *testing.T) {
+	_, server := setupTestManager(t)
+	conn := connectWS(t, server)
+	readJSON(t, conn) // connection.established
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Subscribe with empty channel should return error
+	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: ""})
+	conn.Write(ctx, websocket.MessageText, subMsg)
+	msg := readJSON(t, conn)
+	assert.Equal(t, "error", msg["type"])
+	assert.Contains(t, msg["message"], "channel is required")
+
+	// Unsubscribe with empty channel should return error
+	unsubMsg, _ := json.Marshal(ClientMessage{Action: "unsubscribe", Channel: ""})
+	conn.Write(ctx, websocket.MessageText, unsubMsg)
+	msg = readJSON(t, conn)
+	assert.Equal(t, "error", msg["type"])
+	assert.Contains(t, msg["message"], "channel is required")
+
+	// Catchup with empty channel should return error
+	lastEventID := 0
+	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "", LastEventID: &lastEventID})
+	conn.Write(ctx, websocket.MessageText, catchupMsg)
+	msg = readJSON(t, conn)
+	assert.Equal(t, "error", msg["type"])
+	assert.Contains(t, msg["message"], "channel is required")
+
+	// Connection should still be alive after validation errors
+	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
+	conn.Write(ctx, websocket.MessageText, pingMsg)
+	msg = readJSON(t, conn)
+	assert.Equal(t, "pong", msg["type"])
+}
+
 func TestConnectionManager_SetListener(t *testing.T) {
 	manager := NewConnectionManager(&mockCatchupQuerier{}, 5*time.Second)
 	assert.Nil(t, manager.listener)

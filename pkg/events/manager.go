@@ -158,6 +158,10 @@ func (m *ConnectionManager) ActiveConnections() int {
 func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connection, msg *ClientMessage) {
 	switch msg.Action {
 	case "subscribe":
+		if msg.Channel == "" {
+			m.sendJSON(c, map[string]string{"type": "error", "message": "channel is required for subscribe"})
+			return
+		}
 		m.subscribe(c, msg.Channel)
 		m.sendJSON(c, map[string]string{
 			"type":    "subscription.confirmed",
@@ -165,9 +169,17 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 		})
 
 	case "unsubscribe":
+		if msg.Channel == "" {
+			m.sendJSON(c, map[string]string{"type": "error", "message": "channel is required for unsubscribe"})
+			return
+		}
 		m.unsubscribe(c, msg.Channel)
 
 	case "catchup":
+		if msg.Channel == "" {
+			m.sendJSON(c, map[string]string{"type": "error", "message": "channel is required for catchup"})
+			return
+		}
 		if msg.LastEventID != nil {
 			m.handleCatchup(ctx, c, msg.Channel, *msg.LastEventID)
 		}
@@ -190,6 +202,12 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 			go func() {
 				if err := l.Subscribe(context.Background(), channel); err != nil {
 					slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
+					// Remove the channel entry so the next subscriber retries LISTEN.
+					// Existing subscribers for this channel won't receive real-time
+					// events until LISTEN succeeds on a future subscribe attempt.
+					m.channelMu.Lock()
+					delete(m.channels, channel)
+					m.channelMu.Unlock()
 				}
 			}()
 		}
