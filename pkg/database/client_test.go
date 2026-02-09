@@ -295,6 +295,7 @@ func TestQuoteConnValue(t *testing.T) {
 		{"it's", `'it\'s'`},
 		{`back\slash`, `'back\\slash'`},
 		{`all 'three\ together`, `'all \'three\\ together'`},
+		{"foo=bar", "'foo=bar'"},
 	}
 
 	for _, tt := range tests {

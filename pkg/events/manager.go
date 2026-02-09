@@ -162,6 +162,14 @@ func (m *ConnectionManager) ActiveConnections() int {
 	return len(m.connections)
 }
 
+// subscriberCount returns the number of subscribers for a channel.
+// Unexported — used by tests to poll instead of sleeping.
+func (m *ConnectionManager) subscriberCount(channel string) int {
+	m.channelMu.RLock()
+	defer m.channelMu.RUnlock()
+	return len(m.channels[channel])
+}
+
 // handleClientMessage dispatches a client message to the appropriate handler.
 func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connection, msg *ClientMessage) {
 	switch msg.Action {
@@ -200,27 +208,38 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 // subscribe registers a connection for a channel and starts LISTEN if first subscriber.
 func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 	m.channelMu.Lock()
+	needsListen := false
 	if _, exists := m.channels[channel]; !exists {
 		m.channels[channel] = make(map[string]bool)
+		needsListen = true
+	}
+	m.channels[channel][c.ID] = true
+
+	if needsListen {
 		// First subscriber on this channel — start LISTEN
 		m.listenerMu.RLock()
 		l := m.listener
 		m.listenerMu.RUnlock()
 		if l != nil {
+			// Capture subscriber count after c.ID is added. The goroutine
+			// can only acquire channelMu after we release it below, so
+			// initialCount correctly reflects the post-add state.
+			initialCount := len(m.channels[channel])
 			go func() {
 				if err := l.Subscribe(context.Background(), channel); err != nil {
 					slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
-					// Remove the channel entry so the next subscriber retries LISTEN.
-					// Existing subscribers for this channel won't receive real-time
-					// events until LISTEN succeeds on a future subscribe attempt.
+					// Only remove the channel entry if no new subscribers were
+					// added since we started. This avoids wiping subscribers
+					// that joined while the LISTEN call was in flight.
 					m.channelMu.Lock()
-					delete(m.channels, channel)
+					if len(m.channels[channel]) == initialCount {
+						delete(m.channels, channel)
+					}
 					m.channelMu.Unlock()
 				}
 			}()
 		}
 	}
-	m.channels[channel][c.ID] = true
 	m.channelMu.Unlock()
 
 	c.subscriptions[channel] = true

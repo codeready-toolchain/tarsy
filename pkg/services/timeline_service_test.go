@@ -388,6 +388,12 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
 	})
+
+	t.Run("validates empty content", func(t *testing.T) {
+		err := timelineService.FailTimelineEvent(ctx, event.ID, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
 }
 
 func TestTimelineService_GetTimelines(t *testing.T) {

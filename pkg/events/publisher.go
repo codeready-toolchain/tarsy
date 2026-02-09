@@ -143,8 +143,11 @@ func marshalPayload(payload map[string]interface{}) (string, error) {
 		if dbEventID, ok := payload["db_event_id"]; ok {
 			truncated["db_event_id"] = dbEventID
 		}
-		payloadBytes, _ = json.Marshal(truncated)
-		payloadStr = string(payloadBytes)
+		truncBytes, truncErr := json.Marshal(truncated)
+		if truncErr != nil {
+			return "", fmt.Errorf("failed to marshal truncated payload: %w", truncErr)
+		}
+		payloadStr = string(truncBytes)
 	}
 
 	return payloadStr, nil

@@ -323,11 +323,15 @@ func callLLMWithStreaming(
 
 	// Track streaming timeline events
 	var thinkingEventID, textEventID string
+	var thinkingCreateFailed, textCreateFailed bool
 	channel := events.SessionChannel(execCtx.SessionID)
 
 	callback := func(chunkType string, delta string) {
 		switch chunkType {
 		case ChunkTypeThinking:
+			if thinkingCreateFailed {
+				return // event creation already failed — skip to avoid retry spam
+			}
 			if thinkingEventID == "" {
 				// First thinking chunk — create streaming TimelineEvent
 				*eventSeq++
@@ -342,6 +346,7 @@ func callLLMWithStreaming(
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming thinking event", "error", createErr)
+					thinkingCreateFailed = true
 					return
 				}
 				thinkingEventID = event.ID
@@ -374,6 +379,9 @@ func callLLMWithStreaming(
 			}
 
 		case ChunkTypeText:
+			if textCreateFailed {
+				return // event creation already failed — skip to avoid retry spam
+			}
 			if textEventID == "" {
 				*eventSeq++
 				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
@@ -387,6 +395,7 @@ func callLLMWithStreaming(
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming text event", "error", createErr)
+					textCreateFailed = true
 					return
 				}
 				textEventID = event.ID

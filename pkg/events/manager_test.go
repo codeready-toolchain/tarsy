@@ -75,6 +75,16 @@ func readJSON(t *testing.T, conn *websocket.Conn) map[string]interface{} {
 	return msg
 }
 
+// writeJSON marshals and writes a ClientMessage, failing the test on error.
+func writeJSON(t *testing.T, conn *websocket.Conn, msg ClientMessage) {
+	t.Helper()
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, conn.Write(ctx, websocket.MessageText, data))
+}
+
 func TestConnectionManager_ConnectionEstablished(t *testing.T) {
 	_, server := setupTestManager(t)
 	conn := connectWS(t, server)
@@ -92,13 +102,7 @@ func TestConnectionManager_SubscribeUnsubscribe(t *testing.T) {
 	readJSON(t, conn)
 
 	// Subscribe
-	ctx := context.Background()
-	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:test-123"})
-	err := conn.Write(writeCtx, websocket.MessageText, subMsg)
-	require.NoError(t, err)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:test-123"})
 
 	// Read subscription confirmation
 	msg := readJSON(t, conn)
@@ -106,8 +110,9 @@ func TestConnectionManager_SubscribeUnsubscribe(t *testing.T) {
 	assert.Equal(t, "session:test-123", msg["channel"])
 
 	// Verify active connections count
-	time.Sleep(50 * time.Millisecond) // Let subscription propagate
-	assert.Equal(t, 1, manager.ActiveConnections())
+	require.Eventually(t, func() bool {
+		return manager.ActiveConnections() == 1
+	}, 2*time.Second, 10*time.Millisecond, "expected 1 active connection")
 }
 
 func TestConnectionManager_Broadcast(t *testing.T) {
@@ -123,20 +128,17 @@ func TestConnectionManager_Broadcast(t *testing.T) {
 
 	// Subscribe both to the same channel
 	channel := "session:broadcast-test"
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: channel})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	conn1.Write(ctx, websocket.MessageText, subMsg)
-	conn2.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn1, ClientMessage{Action: "subscribe", Channel: channel})
+	writeJSON(t, conn2, ClientMessage{Action: "subscribe", Channel: channel})
 
 	// Read subscription confirmations
 	readJSON(t, conn1)
 	readJSON(t, conn2)
 
-	// Wait for subscriptions to propagate
-	time.Sleep(100 * time.Millisecond)
+	// Wait for subscriptions to be fully registered
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount(channel) == 2
+	}, 2*time.Second, 10*time.Millisecond, "expected 2 subscribers")
 
 	// Broadcast a message
 	payload, _ := json.Marshal(map[string]string{"type": "test", "data": "hello"})
@@ -160,11 +162,7 @@ func TestConnectionManager_PingPong(t *testing.T) {
 	readJSON(t, conn)
 
 	// Send ping
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
-	err := conn.Write(ctx, websocket.MessageText, pingMsg)
-	require.NoError(t, err)
+	writeJSON(t, conn, ClientMessage{Action: "ping"})
 
 	// Expect pong
 	msg := readJSON(t, conn)
@@ -200,18 +198,16 @@ func TestConnectionManager_CatchupOverflow(t *testing.T) {
 	readJSON(t, conn) // connection.established
 
 	// Subscribe
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:overflow-test"})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:overflow-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount("session:overflow-test") == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Request catchup
 	lastEventID := 0
-	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "session:overflow-test", LastEventID: &lastEventID})
-	conn.Write(ctx, websocket.MessageText, catchupMsg)
+	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:overflow-test", LastEventID: &lastEventID})
 
 	// Read catchup events (up to limit) and then overflow message
 	var overflowReceived bool
@@ -232,14 +228,12 @@ func TestConnectionManager_ConcurrentBroadcast(t *testing.T) {
 	readJSON(t, conn) // connection.established
 
 	channel := "session:concurrent-test"
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: channel})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: channel})
 	readJSON(t, conn) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount(channel) == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Broadcast 20 messages concurrently
 	var wg sync.WaitGroup
@@ -282,19 +276,16 @@ func TestConnectionManager_MultipleChannels(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	// Subscribe to two channels
-	subMsg1, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch1"})
-	conn.Write(ctx, websocket.MessageText, subMsg1)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:ch1"})
 	readJSON(t, conn) // subscription.confirmed
 
-	subMsg2, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch2"})
-	conn.Write(ctx, websocket.MessageText, subMsg2)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:ch2"})
 	readJSON(t, conn) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount("session:ch1") == 1 && manager.subscriberCount("session:ch2") == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Broadcast to channel 1 only
 	payload, _ := json.Marshal(map[string]string{"type": "test", "channel": "ch1"})
@@ -316,21 +307,18 @@ func TestConnectionManager_Unsubscribe(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	channel := "session:unsub-test"
 
 	// Subscribe
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: channel})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: channel})
 	readJSON(t, conn) // subscription.confirmed
 
 	// Unsubscribe
-	unsubMsg, _ := json.Marshal(ClientMessage{Action: "unsubscribe", Channel: channel})
-	conn.Write(ctx, websocket.MessageText, unsubMsg)
+	writeJSON(t, conn, ClientMessage{Action: "unsubscribe", Channel: channel})
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount(channel) == 0
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Broadcast — should NOT be received
 	payload, _ := json.Marshal(map[string]string{"type": "should-not-receive"})
@@ -366,18 +354,16 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 	readJSON(t, conn) // connection.established
 
 	// Subscribe
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:catchup-test"})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:catchup-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount("session:catchup-test") == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Request catchup from event 0 — should receive all 3 events, no overflow
 	lastEventID := 0
-	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
-	conn.Write(ctx, websocket.MessageText, catchupMsg)
+	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
 
 	// Read all 3 catchup events
 	for i := 0; i < 3; i++ {
@@ -408,25 +394,22 @@ func TestConnectionManager_CatchupError(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:err-test"})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:err-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount("session:err-test") == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Request catchup — error should be silently handled
 	lastEventID := 0
-	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "session:err-test", LastEventID: &lastEventID})
-	conn.Write(ctx, websocket.MessageText, catchupMsg)
+	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:err-test", LastEventID: &lastEventID})
 
 	// Give server time to process catchup and log error
 	time.Sleep(100 * time.Millisecond)
 
 	// Connection should still be alive — ping/pong works
-	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
-	conn.Write(ctx, websocket.MessageText, pingMsg)
+	writeJSON(t, conn, ClientMessage{Action: "ping"})
 	msg := readJSON(t, conn)
 	assert.Equal(t, "pong", msg["type"])
 }
@@ -440,19 +423,16 @@ func TestConnectionManager_BroadcastIsolation(t *testing.T) {
 	readJSON(t, conn1) // connection.established
 	readJSON(t, conn2) // connection.established
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	// conn1 subscribes to ch1, conn2 subscribes to ch2
-	sub1, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch1"})
-	conn1.Write(ctx, websocket.MessageText, sub1)
+	writeJSON(t, conn1, ClientMessage{Action: "subscribe", Channel: "session:ch1"})
 	readJSON(t, conn1) // subscription.confirmed
 
-	sub2, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:ch2"})
-	conn2.Write(ctx, websocket.MessageText, sub2)
+	writeJSON(t, conn2, ClientMessage{Action: "subscribe", Channel: "session:ch2"})
 	readJSON(t, conn2) // subscription.confirmed
 
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return manager.subscriberCount("session:ch1") == 1 && manager.subscriberCount("session:ch2") == 1
+	}, 2*time.Second, 10*time.Millisecond)
 
 	// Broadcast to ch1 — only conn1 should receive
 	payload1, _ := json.Marshal(map[string]string{"type": "test", "target": "ch1"})
@@ -473,34 +453,27 @@ func TestConnectionManager_EmptyChannelValidation(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	// Subscribe with empty channel should return error
-	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: ""})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: ""})
 	msg := readJSON(t, conn)
 	assert.Equal(t, "error", msg["type"])
 	assert.Contains(t, msg["message"], "channel is required")
 
 	// Unsubscribe with empty channel should return error
-	unsubMsg, _ := json.Marshal(ClientMessage{Action: "unsubscribe", Channel: ""})
-	conn.Write(ctx, websocket.MessageText, unsubMsg)
+	writeJSON(t, conn, ClientMessage{Action: "unsubscribe", Channel: ""})
 	msg = readJSON(t, conn)
 	assert.Equal(t, "error", msg["type"])
 	assert.Contains(t, msg["message"], "channel is required")
 
 	// Catchup with empty channel should return error
 	lastEventID := 0
-	catchupMsg, _ := json.Marshal(ClientMessage{Action: "catchup", Channel: "", LastEventID: &lastEventID})
-	conn.Write(ctx, websocket.MessageText, catchupMsg)
+	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "", LastEventID: &lastEventID})
 	msg = readJSON(t, conn)
 	assert.Equal(t, "error", msg["type"])
 	assert.Contains(t, msg["message"], "channel is required")
 
 	// Connection should still be alive after validation errors
-	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
-	conn.Write(ctx, websocket.MessageText, pingMsg)
+	writeJSON(t, conn, ClientMessage{Action: "ping"})
 	msg = readJSON(t, conn)
 	assert.Equal(t, "pong", msg["type"])
 }
@@ -534,18 +507,21 @@ func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
 
 	// Subscribe
 	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: "session:cleanup-test"})
-	conn.Write(ctx, websocket.MessageText, subMsg)
+	require.NoError(t, conn.Write(ctx, websocket.MessageText, subMsg))
 	_, _, err = conn.Read(ctx) // subscription.confirmed
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, manager.ActiveConnections())
+	require.Eventually(t, func() bool {
+		return manager.ActiveConnections() == 1
+	}, 2*time.Second, 10*time.Millisecond, "expected 1 active connection")
 
 	// Close the connection
 	conn.Close(websocket.StatusNormalClosure, "")
-	time.Sleep(200 * time.Millisecond)
 
 	// Connection should be cleaned up
-	assert.Equal(t, 0, manager.ActiveConnections())
+	require.Eventually(t, func() bool {
+		return manager.ActiveConnections() == 0
+	}, 2*time.Second, 10*time.Millisecond, "expected 0 active connections after close")
 
 	// Broadcast should not panic
 	payload, _ := json.Marshal(map[string]string{"type": "test"})

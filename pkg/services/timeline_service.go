@@ -133,6 +133,9 @@ func (s *TimelineService) FailTimelineEvent(ctx context.Context, eventID string,
 	if eventID == "" {
 		return NewValidationError("eventID", "required")
 	}
+	if content == "" {
+		return NewValidationError("content", "required")
+	}
 
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

@@ -412,7 +412,9 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 		Channel:     env.channel,
 		LastEventID: &catchupFrom,
 	})
-	require.NoError(t, conn.Write(writeCtx, websocket.MessageText, catchupMsg2))
+	writeCtx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	require.NoError(t, conn.Write(writeCtx2, websocket.MessageText, catchupMsg2))
 
 	for i := 2; i <= 3; i++ {
 		msg = readJSONTimeout(t, conn, 5*time.Second)

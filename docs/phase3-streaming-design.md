@@ -3,6 +3,14 @@
 **Status**: 🟢 Implemented
 **Last Updated**: 2026-02-09
 
+> **Note**: Code snippets in this document are illustrative and reflect the
+> pre-implementation design. The final API signatures diverged during
+> implementation (e.g. `NewEventPublisher` takes `*sql.DB` instead of
+> `*services.EventService` + `*ent.Client`; `marshalPayload` is a package-level
+> function, not a method; `ConnectionManager` accepts a `CatchupQuerier`
+> interface instead of `EventService`). Refer to the source code for the
+> authoritative API.
+
 ## Overview
 
 This document details the Real-time Streaming system for the new TARSy. Phase 3.4 connects the agent execution pipeline (Phase 3.1–3.3) to WebSocket clients, enabling real-time delivery of timeline events and LLM streaming tokens to the frontend dashboard.
@@ -1411,49 +1419,49 @@ streaming:
 ### Phase 3.4 Implementation Order
 
 1. **Event types and protocol** (foundation):
-   - [ ] `pkg/events/types.go` — event type constants, channel naming, protocol message types
-   - [ ] Write tests for event type helpers
+   - [x] `pkg/events/types.go` — event type constants, channel naming, protocol message types
+   - [x] Write tests for event type helpers
 
 2. **EventPublisher** (publishing layer):
-   - [ ] `pkg/events/publisher.go` — Publish, PublishTransient, NOTIFY integration
-   - [ ] Update `pkg/services/event_service.go` if needed for `GetEventsSince` improvements
-   - [ ] Write unit tests
+   - [x] `pkg/events/publisher.go` — Publish, PublishTransient, NOTIFY integration
+   - [x] Update `pkg/services/event_service.go` if needed for `GetEventsSince` improvements
+   - [x] Write unit tests
 
 3. **ConnectionManager** (WebSocket hub):
-   - [ ] `pkg/events/manager.go` — connection tracking, subscribe/unsubscribe, broadcast, catchup
-   - [ ] Write unit tests
+   - [x] `pkg/events/manager.go` — connection tracking, subscribe/unsubscribe, broadcast, catchup
+   - [x] Write unit tests
 
 4. **NotifyListener** (cross-pod delivery):
-   - [ ] `pkg/events/listener.go` — dedicated connection, LISTEN/UNLISTEN, reconnection
-   - [ ] Write integration tests with real PostgreSQL
+   - [x] `pkg/events/listener.go` — dedicated connection, LISTEN/UNLISTEN, reconnection
+   - [x] Write integration tests with real PostgreSQL
 
 5. **WebSocket handler**:
-   - [ ] `pkg/api/handler_ws.go` — HTTP→WebSocket upgrade, client message handling
-   - [ ] Register route in `pkg/api/server.go`
-   - [ ] Write handler tests
+   - [x] `pkg/api/handler_ws.go` — HTTP→WebSocket upgrade, client message handling
+   - [x] Register route in `pkg/api/server.go`
+   - [x] Write handler tests
 
 6. **Controller integration**:
-   - [ ] Add `EventPublisher` to `ExecutionContext`
-   - [ ] Update `createTimelineEvent` helper to publish events
-   - [ ] Add streaming callback support to `collectStream`
-   - [ ] Update controllers (ReAct, NativeThinking, Synthesis) for streaming events
-   - [ ] Write integration tests
+   - [x] Add `EventPublisher` to `ExecutionContext`
+   - [x] Update `createTimelineEvent` helper to publish events
+   - [x] Add streaming callback support to `collectStream`
+   - [x] Update controllers (ReAct, NativeThinking, Synthesis) for streaming events
+   - [x] Write integration tests
 
 7. **Worker integration**:
-   - [ ] Publish session status events (started, completed, failed, etc.)
-   - [ ] Wire EventPublisher in `queue/executor.go`
+   - [x] Publish session status events (started, completed, failed, etc.)
+   - [x] Wire EventPublisher in `queue/executor.go`
 
 8. **Startup wiring**:
-   - [ ] Update `cmd/tarsy/main.go` — initialize EventPublisher, ConnectionManager, NotifyListener
-   - [ ] Pass ConnectionManager to HTTP server
-   - [ ] Pass EventPublisher to session executor
-   - [ ] Add streaming configuration
+   - [x] Update `cmd/tarsy/main.go` — initialize EventPublisher, ConnectionManager, NotifyListener
+   - [x] Pass ConnectionManager to HTTP server
+   - [x] Pass EventPublisher to session executor
+   - [x] Add streaming configuration
 
 9. **Testing**:
-   - [ ] Unit tests for all new packages
-   - [ ] Integration tests with real PostgreSQL (NOTIFY/LISTEN)
-   - [ ] End-to-end test: WebSocket subscribe → agent execution → event delivery
-   - [ ] Reconnection and catchup tests
+   - [x] Unit tests for all new packages
+   - [x] Integration tests with real PostgreSQL (NOTIFY/LISTEN)
+   - [x] End-to-end test: WebSocket subscribe → agent execution → event delivery
+   - [x] Reconnection and catchup tests
 
 ---
 

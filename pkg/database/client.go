@@ -73,7 +73,7 @@ func (c Config) DSN() string {
 // contains spaces, single-quotes, or backslashes. This prevents malformed
 // DSNs when fields (especially passwords) contain special characters.
 func quoteConnValue(v string) string {
-	if !strings.ContainsAny(v, ` '\`) {
+	if !strings.ContainsAny(v, ` '\=`) {
 		return v
 	}
 	replacer := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
