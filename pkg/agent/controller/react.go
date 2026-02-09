@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -100,6 +101,19 @@ func (c *ReActController) Run(
 		// Parse ReAct response
 		parsed := ParseReActResponse(resp.Text)
 		state.RecordSuccess()
+
+		// Log warning if native tool data appears — this indicates stub delegation
+		// or a configuration issue. Native tool events are only created by controllers
+		// that use the google-native backend (NativeThinking, Synthesis).
+		// Data is still available in LLMInteraction.response_metadata for debugging.
+		if len(resp.CodeExecutions) > 0 || len(resp.Groundings) > 0 {
+			slog.Warn("native tool data present in ReAct response (not creating timeline events)",
+				"session_id", execCtx.SessionID,
+				"execution_id", execCtx.ExecutionID,
+				"code_executions", len(resp.CodeExecutions),
+				"groundings", len(resp.Groundings),
+			)
+		}
 
 		// Create timeline event for thinking content
 		if parsed.Thought != "" {

@@ -88,6 +88,10 @@ func (c *NativeThinkingController) Run(
 			}, &eventSeq)
 		}
 
+		// Create native tool events (code execution, grounding)
+		createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, &eventSeq)
+		createGroundingEvents(ctx, execCtx, resp.Groundings, &eventSeq)
+
 		// Check for tool calls in response
 		if len(resp.ToolCalls) > 0 {
 			// Record text alongside tool calls (if any)
@@ -224,6 +228,11 @@ func (c *NativeThinkingController) forceConclusion(
 			"source": "native",
 		}, eventSeq)
 	}
+
+	// Create native tool events (can occur during forced conclusion too)
+	createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, eventSeq)
+	createGroundingEvents(ctx, execCtx, resp.Groundings, eventSeq)
+
 	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, eventSeq)
 
 	return &agent.ExecutionResult{

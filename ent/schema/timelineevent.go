@@ -82,6 +82,9 @@ func (TimelineEvent) Fields() []ent.Field {
 				"user_question",
 				"executive_summary",
 				"final_analysis",
+				"code_execution",
+				"google_search_result",
+				"url_context_result",
 			),
 		field.Enum("status").
 			Values("streaming", "completed", "failed", "cancelled", "timed_out").
@@ -145,8 +148,6 @@ func (TimelineEvent) Indexes() []ent.Index {
 		index.Fields("stage_id", "sequence_number"),
 		// Agent timeline filtering
 		index.Fields("execution_id", "sequence_number"),
-		// Updates by ID (stored as event_id)
-		index.Fields("id"),
 		// Chronological queries
 		index.Fields("created_at"),
 	}

@@ -63,6 +63,7 @@ const (
 	ChunkTypeThinking      ChunkType = "thinking"
 	ChunkTypeToolCall      ChunkType = "tool_call"
 	ChunkTypeCodeExecution ChunkType = "code_execution"
+	ChunkTypeGrounding     ChunkType = "grounding"
 	ChunkTypeUsage         ChunkType = "usage"
 	ChunkTypeError         ChunkType = "error"
 )
@@ -79,6 +80,29 @@ type ToolCallChunk struct{ CallID, Name, Arguments string }
 // CodeExecutionChunk carries Gemini code execution results.
 type CodeExecutionChunk struct{ Code, Result string }
 
+// GroundingChunk carries grounding metadata from the LLM response.
+// Covers both Google Search grounding and URL Context grounding.
+type GroundingChunk struct {
+	WebSearchQueries     []string
+	Sources              []GroundingSource
+	Supports             []GroundingSupport
+	SearchEntryPointHTML string // Populated from proto but not stored in timeline events (Q6)
+}
+
+// GroundingSource represents a web source referenced by the LLM.
+type GroundingSource struct {
+	URI   string
+	Title string
+}
+
+// GroundingSupport links a text segment to its grounding sources.
+type GroundingSupport struct {
+	StartIndex            int
+	EndIndex              int
+	Text                  string
+	GroundingChunkIndices []int
+}
+
 // UsageChunk reports token consumption for this LLM call.
 type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int }
 
@@ -93,5 +117,6 @@ func (c *TextChunk) chunkType() ChunkType          { return ChunkTypeText }
 func (c *ThinkingChunk) chunkType() ChunkType       { return ChunkTypeThinking }
 func (c *ToolCallChunk) chunkType() ChunkType       { return ChunkTypeToolCall }
 func (c *CodeExecutionChunk) chunkType() ChunkType  { return ChunkTypeCodeExecution }
+func (c *GroundingChunk) chunkType() ChunkType      { return ChunkTypeGrounding }
 func (c *UsageChunk) chunkType() ChunkType          { return ChunkTypeUsage }
 func (c *ErrorChunk) chunkType() ChunkType          { return ChunkTypeError }

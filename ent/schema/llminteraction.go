@@ -116,7 +116,5 @@ func (LLMInteraction) Indexes() []ent.Index {
 		index.Fields("execution_id", "created_at"),
 		// Stage's LLM calls
 		index.Fields("stage_id", "created_at"),
-		// Primary lookups on id field (stored as interaction_id)
-		index.Fields("id"),
 	}
 }

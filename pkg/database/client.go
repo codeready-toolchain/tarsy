@@ -91,7 +91,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	entClient := ent.NewClient(ent.Driver(drv))
 
 	// Run migrations
-	if err := runMigrations(ctx, db, cfg, drv, entClient); err != nil {
+	if err := runMigrations(ctx, db, cfg, drv); err != nil {
 		_ = entClient.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
@@ -105,13 +105,12 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	return client, nil
 }
 
-// runMigrations runs database migrations using golang-migrate with embedded migration files,
-// or falls back to Ent's auto-migration for initial setup.
+// runMigrations runs database migrations using golang-migrate with embedded migration files.
 //
 // Migration files are embedded into the binary using go:embed, ensuring they're available
 // in production deployments without requiring external files.
 //
-// Migration workflow (once migrations are generated):
+// Migration workflow:
 //  1. Developer changes schema: Edit ent/schema/*.go
 //  2. Generate migration: make migrate-create NAME=add_feature
 //  3. Migrations saved to pkg/database/migrations/*.sql
@@ -119,54 +118,45 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 //  5. Review & commit: Check SQL files, commit to git
 //  6. Deploy: Build binary (migrations embedded automatically)
 //  7. Auto-apply: App applies pending migrations on startup (this function)
-//
-// For initial setup (before first migration is generated):
-//   - Uses Ent's Schema.Create() to initialize database from schema definitions
-//   - This is the standard Ent approach and matches test behavior
-func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.Driver, entClient *ent.Client) error {
+func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.Driver) error {
 	// Check if embedded migrations exist
 	hasMigrations, err := hasEmbeddedMigrations()
 	if err != nil {
 		return fmt.Errorf("failed to check embedded migrations: %w", err)
 	}
 
-	if hasMigrations {
-		// Use golang-migrate with embedded migrations
-		driver, err := postgres.WithInstance(db, &postgres.Config{})
-		if err != nil {
-			return fmt.Errorf("failed to create postgres driver: %w", err)
-		}
+	if !hasMigrations {
+		return fmt.Errorf("no embedded migration files found — binary may be built incorrectly")
+	}
 
-		// Create source from embedded FS
-		sourceDriver, err := iofs.New(migrationsFS, "migrations")
-		if err != nil {
-			return fmt.Errorf("failed to create migration source: %w", err)
-		}
+	// Use golang-migrate with embedded migrations
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create postgres driver: %w", err)
+	}
 
-		m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
-		if err != nil {
-			return fmt.Errorf("failed to create migrate instance: %w", err)
-		}
+	// Create source from embedded FS
+	sourceDriver, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("failed to create migration source: %w", err)
+	}
 
-		// Apply all pending migrations
-		err = m.Up()
-		if err != nil && err != migrate.ErrNoChange {
-			return fmt.Errorf("failed to apply migrations: %w", err)
-		}
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, cfg.Database, driver)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
 
-		// Close the migrate instance to avoid resource leaks
-		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
-			if srcErr != nil {
-				return fmt.Errorf("failed to close migration source: %w", srcErr)
-			}
-			return fmt.Errorf("failed to close migration database: %w", dbErr)
-		}
-	} else {
-		// Fall back to auto-migration for initial setup
-		// This is safe when no migration files exist yet
-		if err := entClient.Schema.Create(ctx); err != nil {
-			return fmt.Errorf("failed to create schema: %w", err)
-		}
+	// Apply all pending migrations
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+
+	// Close only the migration source driver. We must NOT call m.Close() because
+	// that also closes the database driver, which calls db.Close() on the shared
+	// *sql.DB passed via postgres.WithInstance() — breaking the Ent client.
+	if err := sourceDriver.Close(); err != nil {
+		return fmt.Errorf("failed to close migration source: %w", err)
 	}
 
 	// Create GIN indexes (custom SQL not handled by Ent schema)

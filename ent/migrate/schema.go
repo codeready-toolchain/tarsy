@@ -49,11 +49,6 @@ var (
 				Columns: []*schema.Column{AgentExecutionsColumns[10], AgentExecutionsColumns[2]},
 			},
 			{
-				Name:    "agentexecution_execution_id",
-				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[0]},
-			},
-			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
 				Columns: []*schema.Column{AgentExecutionsColumns[9]},
@@ -318,11 +313,6 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{LlmInteractionsColumns[16], LlmInteractionsColumns[1]},
 			},
-			{
-				Name:    "llminteraction_interaction_id",
-				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[0]},
-			},
 		},
 	}
 	// McpInteractionsColumns holds the columns for the "mcp_interactions" table.
@@ -376,11 +366,6 @@ var (
 				Name:    "mcpinteraction_stage_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{McpInteractionsColumns[12], McpInteractionsColumns[1]},
-			},
-			{
-				Name:    "mcpinteraction_interaction_id",
-				Unique:  false,
-				Columns: []*schema.Column{McpInteractionsColumns[0]},
 			},
 		},
 	}
@@ -484,11 +469,6 @@ var (
 				Unique:  true,
 				Columns: []*schema.Column{StagesColumns[11], StagesColumns[2]},
 			},
-			{
-				Name:    "stage_stage_id",
-				Unique:  false,
-				Columns: []*schema.Column{StagesColumns[0]},
-			},
 		},
 	}
 	// TimelineEventsColumns holds the columns for the "timeline_events" table.
@@ -497,7 +477,7 @@ var (
 		{Name: "sequence_number", Type: field.TypeInt},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "tool_result", "mcp_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis"}},
+		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "tool_result", "mcp_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"streaming", "completed", "failed", "cancelled", "timed_out"}, Default: "streaming"},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
@@ -559,11 +539,6 @@ var (
 				Name:    "timelineevent_execution_id_sequence_number",
 				Unique:  false,
 				Columns: []*schema.Column{TimelineEventsColumns[8], TimelineEventsColumns[1]},
-			},
-			{
-				Name:    "timelineevent_event_id",
-				Unique:  false,
-				Columns: []*schema.Column{TimelineEventsColumns[0]},
 			},
 			{
 				Name:    "timelineevent_created_at",

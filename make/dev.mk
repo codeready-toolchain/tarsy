@@ -2,6 +2,11 @@
 # Development Workflow
 # =============================================================================
 
+.PHONY: check
+check: build lint-fix test ## Build, lint-fix, and run all tests
+	@echo ""
+	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
+
 .PHONY: dev-setup
 dev-setup: db-start ent-generate ## Setup development environment
 	@echo ""

@@ -45,6 +45,7 @@ message GenerateResponse {
     UsageInfo usage = 4;
     ErrorInfo error = 5;
     CodeExecutionDelta code_execution = 6;
+    GroundingDelta grounding = 7;
   }
 
   // True when this is the last chunk for this Generate call.
@@ -126,6 +127,46 @@ message ToolCallDelta {
 message CodeExecutionDelta {
   string code = 1;    // The generated Python code
   string result = 2;  // Execution output (stdout/stderr)
+}
+
+// GroundingDelta carries grounding metadata from Gemini.
+// Covers both Google Search grounding and URL Context grounding.
+// Sent as a late delta (after content parts, before UsageInfo).
+//
+// Google Search: has web_search_queries populated
+// URL Context: has grounding_chunks but no web_search_queries
+//
+// Go determines the source type when creating timeline events.
+message GroundingDelta {
+  // Search queries used by the model (Google Search only).
+  // Empty for URL Context grounding.
+  repeated string web_search_queries = 1;
+
+  // Web sources referenced by the model.
+  repeated GroundingChunkInfo grounding_chunks = 2;
+
+  // Text segments supported by grounding sources.
+  // Links model response text to specific grounding_chunks.
+  repeated GroundingSupport grounding_supports = 3;
+
+  // Rendered HTML/CSS for the Google Search widget (Google Search only).
+  // Empty for URL Context.
+  // NOTE: Streamed from Python but not stored in timeline events (Q6 decision — skip for now).
+  string search_entry_point_html = 4;
+}
+
+// GroundingChunkInfo represents a single web source.
+message GroundingChunkInfo {
+  string uri = 1;    // Web source URL
+  string title = 2;  // Page title
+}
+
+// GroundingSupport links a text segment to its grounding sources.
+message GroundingSupport {
+  int32 start_index = 1;                    // Start of text segment
+  int32 end_index = 2;                      // End of text segment
+  string text = 3;                          // The supported text
+  repeated int32 grounding_chunk_indices = 4; // Indices into grounding_chunks
 }
 
 // UsageInfo reports token consumption for this LLM call.

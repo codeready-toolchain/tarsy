@@ -208,6 +208,27 @@ func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
 			Code:   c.CodeExecution.Code,
 			Result: c.CodeExecution.Result,
 		}
+	case *llmv1.GenerateResponse_Grounding:
+		g := c.Grounding
+		chunk := &GroundingChunk{
+			WebSearchQueries:     g.WebSearchQueries,
+			SearchEntryPointHTML: g.SearchEntryPointHtml,
+		}
+		for _, gc := range g.GroundingChunks {
+			chunk.Sources = append(chunk.Sources, GroundingSource{
+				URI:   gc.Uri,
+				Title: gc.Title,
+			})
+		}
+		for _, gs := range g.GroundingSupports {
+			chunk.Supports = append(chunk.Supports, GroundingSupport{
+				StartIndex:            int(gs.StartIndex),
+				EndIndex:              int(gs.EndIndex),
+				Text:                  gs.Text,
+				GroundingChunkIndices: intSliceFromInt32(gs.GroundingChunkIndices),
+			})
+		}
+		return chunk
 	case *llmv1.GenerateResponse_Usage:
 		return &UsageChunk{
 			InputTokens:    int(c.Usage.InputTokens),
@@ -226,4 +247,16 @@ func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
 			"type", fmt.Sprintf("%T", resp.Content))
 		return nil
 	}
+}
+
+// intSliceFromInt32 converts a []int32 to []int.
+func intSliceFromInt32(s []int32) []int {
+	if len(s) == 0 {
+		return nil
+	}
+	out := make([]int, len(s))
+	for i, v := range s {
+		out[i] = int(v)
+	}
+	return out
 }

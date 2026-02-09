@@ -58,6 +58,10 @@ func (c *SynthesisController) Run(
 		}, &eventSeq)
 	}
 
+	// Create native tool events (code execution, grounding)
+	createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, &eventSeq)
+	createGroundingEvents(ctx, execCtx, resp.Groundings, &eventSeq)
+
 	// 5. Compute final analysis with fallback to thinking text when resp.Text is empty
 	// (e.g., when the LLM only produced ThinkingChunks)
 	finalAnalysis := resp.Text

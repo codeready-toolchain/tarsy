@@ -89,8 +89,6 @@ func (AgentExecution) Indexes() []ent.Index {
 		// Unique constraint for agent ordering within stage
 		index.Fields("stage_id", "agent_index").
 			Unique(),
-		// Primary lookups on id field (stored as execution_id)
-		index.Fields("id"),
 		// Session-wide queries
 		index.Fields("session_id"),
 	}
