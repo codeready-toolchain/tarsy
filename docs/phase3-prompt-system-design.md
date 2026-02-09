@@ -839,7 +839,7 @@ When a controller reaches `maxIterations`, it sends a forced conclusion prompt. 
 
 // BuildForcedConclusionPrompt returns a prompt to force an LLM conclusion
 // at the iteration limit. The format depends on the iteration strategy.
-func BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string {
+func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string {
     var formatInstructions string
     switch strategy {
     case config.IterationStrategyReact:
@@ -1063,12 +1063,12 @@ When an MCP tool result exceeds the configured size threshold (`SummarizationCon
 // pkg/agent/prompt/builder.go
 
 // BuildMCPSummarizationSystemPrompt builds the system prompt for MCP result summarization.
-func BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string {
+func (b *PromptBuilder) BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string {
     return fmt.Sprintf(mcpSummarizationSystemTemplate, serverName, toolName, maxSummaryTokens)
 }
 
 // BuildMCPSummarizationUserPrompt builds the user prompt for MCP result summarization.
-func BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string {
+func (b *PromptBuilder) BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string {
     return fmt.Sprintf(mcpSummarizationUserTemplate, conversationContext, serverName, toolName, resultText)
 }
 ```
@@ -1134,12 +1134,12 @@ After an investigation completes, the system generates a brief executive summary
 
 ```go
 // BuildExecutiveSummarySystemPrompt returns the system prompt for executive summary generation.
-func BuildExecutiveSummarySystemPrompt() string {
+func (b *PromptBuilder) BuildExecutiveSummarySystemPrompt() string {
     return executiveSummarySystemPrompt
 }
 
 // BuildExecutiveSummaryUserPrompt builds the user prompt for generating an executive summary.
-func BuildExecutiveSummaryUserPrompt(finalAnalysis string) string {
+func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string) string {
     return fmt.Sprintf(executiveSummaryUserTemplate, finalAnalysis)
 }
 ```
@@ -1252,7 +1252,7 @@ prompt := buildForcedConclusionPrompt(iteration)
 
 **Forced conclusion** — after:
 ```go
-prompt := prompt.BuildForcedConclusionPrompt(iteration, execCtx.Config.IterationStrategy)
+conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(iteration, execCtx.Config.IterationStrategy)
 ```
 
 ### helpers.go Cleanup
