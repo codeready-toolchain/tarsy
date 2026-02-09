@@ -413,6 +413,7 @@ func TestIntegration_SynthesisSystemHasNoTaskFocus(t *testing.T) {
 	execCtx := newSynthesisExecCtx()
 
 	messages := builder.BuildSynthesisMessages(execCtx, "some results")
+	require.NotEmpty(t, messages, "BuildSynthesisMessages returned empty slice")
 	systemMsg := messages[0].Content
 
 	// Synthesis should NOT have the taskFocus suffix
@@ -426,6 +427,7 @@ func TestIntegration_ChatSystemUsesCorrectTier1(t *testing.T) {
 	execCtx := newChatExecCtx()
 
 	messages := builder.BuildReActMessages(execCtx, "", nil)
+	require.NotEmpty(t, messages, "BuildReActMessages returned empty slice")
 	systemMsg := messages[0].Content
 
 	// Chat mode should use chat instructions, not investigation

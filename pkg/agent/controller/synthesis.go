@@ -30,6 +30,9 @@ func (c *SynthesisController) Run(
 	eventSeq := 0
 
 	// 1. Build messages via prompt builder
+	if execCtx.PromptBuilder == nil {
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildSynthesisMessages")
+	}
 	messages := execCtx.PromptBuilder.BuildSynthesisMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages

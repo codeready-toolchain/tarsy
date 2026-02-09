@@ -40,6 +40,9 @@ func (c *ReActController) Run(
 	}
 
 	// 2. Build initial conversation via prompt builder
+	if execCtx.PromptBuilder == nil {
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildReActMessages")
+	}
 	messages := execCtx.PromptBuilder.BuildReActMessages(execCtx, prevStageContext, tools)
 
 	// 3. Store initial messages in DB

@@ -18,7 +18,11 @@ type PromptBuilder struct {
 }
 
 // NewPromptBuilder creates a PromptBuilder with access to MCP server configs.
+// Panics if mcpRegistry is nil — callers must provide a valid registry.
 func NewPromptBuilder(mcpRegistry *config.MCPServerRegistry) *PromptBuilder {
+	if mcpRegistry == nil {
+		panic("prompt.NewPromptBuilder: mcpRegistry must not be nil")
+	}
 	return &PromptBuilder{
 		mcpRegistry: mcpRegistry,
 	}

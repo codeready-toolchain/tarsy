@@ -33,6 +33,9 @@ func (c *NativeThinkingController) Run(
 	eventSeq := 0
 
 	// 1. Build initial conversation via prompt builder
+	if execCtx.PromptBuilder == nil {
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildNativeThinkingMessages")
+	}
 	messages := execCtx.PromptBuilder.BuildNativeThinkingMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages in DB
