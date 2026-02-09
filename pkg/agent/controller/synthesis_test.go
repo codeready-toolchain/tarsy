@@ -106,7 +106,7 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 
 	// System message: SRE instructions + custom instructions (no ReAct format, no taskFocus)
 	require.Equal(t, "system", systemMsg.Role)
-	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
+	require.Contains(t, systemMsg.Content, "General SRE Analysis Instructions")
 	require.Contains(t, systemMsg.Content, "Custom synthesis instructions.")
 	require.NotContains(t, systemMsg.Content, "Focus on investigation") // synthesis has its own focus in custom instructions
 	require.NotContains(t, systemMsg.Content, "Action Input:")

@@ -108,15 +108,15 @@ func (b *PromptBuilder) BuildNativeThinkingMessages(
 
 // BuildSynthesisMessages builds the conversation for a synthesis stage.
 // Synthesis is a tool-less, single-shot stage that combines parallel results.
-// Unlike ReAct/NativeThinking, it does NOT append taskFocus because the
-// synthesis agent's own CustomInstructions already define its focus
-// ("Focus on solving the original alert/issue...").
+// It uses synthesisGeneralInstructions (no tool references) instead of the
+// standard generalInstructions. No taskFocus — the synthesis agent's own
+// CustomInstructions already define its focus.
 // Synthesis is never used in chat sessions, so no ChatContext handling.
 func (b *PromptBuilder) BuildSynthesisMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
-	systemContent := b.ComposeInstructions(execCtx)
+	systemContent := b.composeSynthesisInstructions(execCtx)
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},

@@ -25,6 +25,26 @@ Analyze alerts thoroughly and provide actionable insights based on:
 Always be specific, reference actual data, and provide clear next steps.
 Focus on root cause analysis and sustainable solutions.`
 
+// synthesisGeneralInstructions is Tier 1 for synthesis agents.
+// Unlike generalInstructions, this does not mention tools since synthesis
+// is a tool-less stage that analyzes results from prior investigations.
+const synthesisGeneralInstructions = `## General SRE Analysis Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze investigation results thoroughly and provide actionable insights based on:
+1. The original alert information and context
+2. Findings from parallel investigations
+3. Associated runbook procedures
+
+Always be specific, reference actual data from the investigations, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.`
+
 // chatGeneralInstructions is Tier 1 for chat follow-up sessions.
 const chatGeneralInstructions = `## Chat Assistant Instructions
 
@@ -83,6 +103,20 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 
 	// Chat-specific guidelines
 	sections = append(sections, chatResponseGuidelines)
+
+	return strings.Join(sections, "\n\n")
+}
+
+// composeSynthesisInstructions builds the system prompt for synthesis agents.
+// Uses synthesisGeneralInstructions (Tier 1, no tool references) + custom instructions (Tier 3).
+// Skips MCP instructions (Tier 2) since synthesis is a tool-less stage.
+func (b *PromptBuilder) composeSynthesisInstructions(execCtx *agent.ExecutionContext) string {
+	sections := []string{synthesisGeneralInstructions}
+
+	// Tier 3: Agent-specific custom instructions
+	if execCtx.Config.CustomInstructions != "" {
+		sections = append(sections, "## Agent-Specific Instructions\n\n"+execCtx.Config.CustomInstructions)
+	}
 
 	return strings.Join(sections, "\n\n")
 }
