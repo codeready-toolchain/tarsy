@@ -486,6 +486,8 @@ func (b *PromptBuilder) BuildNativeThinkingMessages(
 
 Synthesis is a tool-less single LLM call that combines results from parallel agents. The system message emphasizes the synthesis task. The user message focuses on previous stage results.
 
+The synthesis system message is intentionally lightweight — the detailed synthesis guidance (e.g., "Incident Commander" role, quality evaluation, conflict reconciliation) comes from the `SynthesisAgent`'s built-in `CustomInstructions` via three-tier composition (Tier 3). This matches old TARSy's approach where `SynthesisAgent.custom_instructions()` provided the rich guidance and the prompt template was minimal.
+
 ```go
 // BuildSynthesisMessages builds the conversation for a synthesis stage.
 func (b *PromptBuilder) BuildSynthesisMessages(
@@ -494,8 +496,6 @@ func (b *PromptBuilder) BuildSynthesisMessages(
 ) []agent.ConversationMessage {
     composed := b.ComposeInstructions(execCtx)
     systemContent := composed + "\n\n" +
-        "Your task is to synthesize the investigation results from multiple agents " +
-        "into a single coherent analysis.\n\n" +
         "Focus on investigation and providing recommendations for human operators to execute."
     
     messages := []agent.ConversationMessage{
@@ -610,14 +610,7 @@ func (b *PromptBuilder) buildSynthesisUserMessage(
     return sb.String()
 }
 
-const synthesisTask = `## Your Task
-Based on the investigation results above, provide a comprehensive synthesis:
-1. Combined root cause analysis from all investigations
-2. Correlated findings across agents
-3. Prioritized remediation steps
-4. Overall assessment and recommendations
-
-Focus on correlating findings across the different investigations and providing a unified analysis.`
+const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 ```
 
 ---
@@ -1170,6 +1163,44 @@ Executive Summary (1-4 lines, facts only):`
 
 ## Required Changes to Existing Code
 
+### BuiltinAgentConfig Updates
+
+Add `CustomInstructions` field to `BuiltinAgentConfig` and populate the `SynthesisAgent` with its Incident Commander instructions (matching old TARSy's `SynthesisAgent.custom_instructions()`):
+
+```go
+// pkg/config/builtin.go
+
+type BuiltinAgentConfig struct {
+    Description        string
+    IterationStrategy  IterationStrategy
+    MCPServers         []string
+    CustomInstructions string // New: built-in agents can have default instructions
+}
+
+// In initBuiltinAgents():
+"SynthesisAgent": {
+    Description:       "Synthesizes parallel investigation results",
+    IterationStrategy: IterationStrategySynthesis,
+    MCPServers:        []string{"kubernetes-server"},
+    CustomInstructions: `You are an Incident Commander synthesizing results from multiple parallel investigations.
+
+Your task:
+1. CRITICALLY EVALUATE each investigation's quality - prioritize results with strong evidence and sound reasoning
+2. DISREGARD or deprioritize low-quality results that lack supporting evidence or contain logical errors
+3. ANALYZE the original alert using the best available data from parallel investigations
+4. INTEGRATE findings from high-quality investigations into a unified understanding
+5. RECONCILE conflicting information by assessing which analysis provides better evidence
+6. PROVIDE definitive root cause analysis based on the most reliable evidence
+7. GENERATE actionable recommendations leveraging insights from the strongest investigations
+
+Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
+},
+```
+
+**Note**: The `CustomInstructions` from `BuiltinAgentConfig` is merged into `ResolvedAgentConfig.CustomInstructions` during config resolution. User-defined `custom_instructions` in YAML overrides the built-in value (same merge behavior as other fields). The merge logic in `pkg/config/merge.go` needs a minor update to propagate `CustomInstructions` from built-in agents.
+
+**Edge case — empty string override**: If a user explicitly sets `custom_instructions: ""` (empty string) in their YAML agent config, this should clear the built-in default. The merge logic should treat a present-but-empty string as an intentional override (user wants no custom instructions), not as "not set." This matches Go's zero-value semantics — an `AgentConfig` loaded from YAML with `custom_instructions` present but empty has `CustomInstructions == ""`, which is distinguishable from "field not in YAML" only if we use a pointer (`*string`) or track which fields were explicitly set. For simplicity, the current `string` type means any user-defined agent config replaces the built-in entirely (including its `CustomInstructions`), which is the correct behavior: if you override an agent, you own all its config.
+
 ### ExecutionContext Updates
 
 Add new fields to `ExecutionContext` and update `ChatContext` type:
@@ -1361,3 +1392,5 @@ Controller integration tests (existing) verify that the prompt builder produces 
 | `pkg/agent/controller/native_thinking.go` | **Modify** | Replace `buildMessages()` |
 | `pkg/agent/controller/synthesis.go` | **Modify** | Replace `buildMessages()` |
 | `pkg/agent/controller/helpers.go` | **Modify** | Remove `buildForcedConclusionPrompt()` |
+| `pkg/config/builtin.go` | **Modify** | Add `CustomInstructions` to `BuiltinAgentConfig`, add SynthesisAgent instructions |
+| `pkg/config/merge.go` | **Modify** | Propagate `CustomInstructions` from built-in agents during merge |
