@@ -242,8 +242,8 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 
 	// Publish transient event (no DB persistence)
 	payload := map[string]interface{}{
-		"type":    EventTypeStreamChunk,
-		"content": "streaming token",
+		"type":  EventTypeStreamChunk,
+		"delta": "streaming token",
 	}
 	err := env.publisher.PublishTransient(ctx, env.channel, payload)
 	require.NoError(t, err)
@@ -251,12 +251,87 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 	// Should arrive via WebSocket
 	msg := readJSONTimeout(t, conn, 5*time.Second)
 	assert.Equal(t, EventTypeStreamChunk, msg["type"])
-	assert.Equal(t, "streaming token", msg["content"])
+	assert.Equal(t, "streaming token", msg["delta"])
 
 	// Verify nothing was persisted
 	events, err := env.eventService.GetEventsSince(ctx, env.channel, 0, 100)
 	require.NoError(t, err)
 	assert.Empty(t, events, "transient events should not be persisted")
+}
+
+func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
+	// Verifies the full delta streaming protocol:
+	// 1. timeline_event.created (persistent, status=streaming)
+	// 2. stream.chunk deltas (transient, small payloads)
+	// 3. timeline_event.completed (persistent, full content)
+	// The client must concatenate deltas to reconstruct the content.
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	conn := env.subscribeAndWait(t)
+
+	eventID := uuid.New().String()
+
+	// 1. Publish timeline_event.created (persistent)
+	err := env.publisher.Publish(ctx, env.sessionID, env.channel, map[string]interface{}{
+		"type":       EventTypeTimelineCreated,
+		"event_id":   eventID,
+		"event_type": "llm_response",
+		"status":     "streaming",
+		"content":    "",
+	})
+	require.NoError(t, err)
+
+	msg := readJSONTimeout(t, conn, 5*time.Second)
+	assert.Equal(t, EventTypeTimelineCreated, msg["type"])
+	assert.Equal(t, eventID, msg["event_id"])
+	assert.Equal(t, "streaming", msg["status"])
+
+	// 2. Publish multiple stream.chunk deltas (transient)
+	deltas := []string{"The pod ", "is in ", "CrashLoopBackOff ", "due to ", "a missing ConfigMap."}
+	for _, delta := range deltas {
+		err := env.publisher.PublishTransient(ctx, env.channel, map[string]interface{}{
+			"type":     EventTypeStreamChunk,
+			"event_id": eventID,
+			"delta":    delta,
+		})
+		require.NoError(t, err)
+
+		msg := readJSONTimeout(t, conn, 5*time.Second)
+		assert.Equal(t, EventTypeStreamChunk, msg["type"])
+		assert.Equal(t, eventID, msg["event_id"])
+		assert.Equal(t, delta, msg["delta"], "each chunk should carry only the new delta")
+	}
+
+	// Client-side reconstruction: concatenating all deltas
+	var reconstructed string
+	for _, d := range deltas {
+		reconstructed += d
+	}
+	expectedFull := "The pod is in CrashLoopBackOff due to a missing ConfigMap."
+	assert.Equal(t, expectedFull, reconstructed)
+
+	// 3. Publish timeline_event.completed (persistent, full content)
+	err = env.publisher.Publish(ctx, env.sessionID, env.channel, map[string]interface{}{
+		"type":     EventTypeTimelineCompleted,
+		"event_id": eventID,
+		"content":  expectedFull,
+		"status":   "completed",
+	})
+	require.NoError(t, err)
+
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	assert.Equal(t, EventTypeTimelineCompleted, msg["type"])
+	assert.Equal(t, expectedFull, msg["content"])
+	assert.Equal(t, "completed", msg["status"])
+
+	// Only the 2 persistent events should be in DB (created + completed)
+	// The 5 stream.chunk deltas are transient — not persisted
+	events, err := env.eventService.GetEventsSince(ctx, env.channel, 0, 100)
+	require.NoError(t, err)
+	assert.Len(t, events, 2, "only persistent events should be in DB")
+	assert.Equal(t, EventTypeTimelineCreated, events[0].Payload["type"])
+	assert.Equal(t, EventTypeTimelineCompleted, events[1].Payload["type"])
 }
 
 func TestIntegration_CatchupFromRealDB(t *testing.T) {

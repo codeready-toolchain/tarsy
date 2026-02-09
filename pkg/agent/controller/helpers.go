@@ -252,13 +252,15 @@ func publishTimelineCreated(
 // StreamCallback is called for each chunk during stream collection.
 // Used by controllers to publish real-time updates to WebSocket clients.
 // chunkType identifies the content type (text or thinking).
-// content is the accumulated content so far (not just the delta).
-type StreamCallback func(chunkType string, content string)
+// delta is the new content from this chunk only (not accumulated). Clients
+// concatenate deltas locally. This keeps each pg_notify payload small and
+// avoids hitting PostgreSQL's 8 KB NOTIFY limit on long responses.
+type StreamCallback func(chunkType string, delta string)
 
-// ChunkTypeText identifies accumulated text content in stream callbacks.
+// ChunkTypeText identifies a text content delta in stream callbacks.
 const ChunkTypeText = "text"
 
-// ChunkTypeThinking identifies accumulated thinking content in stream callbacks.
+// ChunkTypeThinking identifies a thinking content delta in stream callbacks.
 const ChunkTypeThinking = "thinking"
 
 // collectStreamWithCallback collects a stream while calling back for real-time delivery.
@@ -275,12 +277,12 @@ func collectStreamWithCallback(
 		case *agent.TextChunk:
 			textBuf.WriteString(c.Content)
 			if callback != nil {
-				callback(ChunkTypeText, textBuf.String())
+				callback(ChunkTypeText, c.Content)
 			}
 		case *agent.ThinkingChunk:
 			thinkingBuf.WriteString(c.Content)
 			if callback != nil {
-				callback(ChunkTypeThinking, thinkingBuf.String())
+				callback(ChunkTypeThinking, c.Content)
 			}
 		case *agent.ToolCallChunk:
 			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
@@ -362,7 +364,7 @@ func callLLMWithStreaming(
 	var thinkingEventID, textEventID string
 	channel := events.SessionChannel(execCtx.SessionID)
 
-	callback := func(chunkType string, content string) {
+	callback := func(chunkType string, delta string) {
 		switch chunkType {
 		case ChunkTypeThinking:
 			if thinkingEventID == "" {
@@ -395,10 +397,12 @@ func callLLMWithStreaming(
 					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
 				})
 			}
+			// Publish only the new delta — clients concatenate locally.
+			// This keeps each pg_notify payload small (avoids 8 KB limit).
 			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
 				"type":      events.EventTypeStreamChunk,
 				"event_id":  thinkingEventID,
-				"content":   content,
+				"delta":     delta,
 				"timestamp": time.Now().Format(time.RFC3339Nano),
 			})
 
@@ -432,10 +436,11 @@ func callLLMWithStreaming(
 					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
 				})
 			}
+			// Publish only the new delta — clients concatenate locally.
 			execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
 				"type":      events.EventTypeStreamChunk,
 				"event_id":  textEventID,
-				"content":   content,
+				"delta":     delta,
 				"timestamp": time.Now().Format(time.RFC3339Nano),
 			})
 		}

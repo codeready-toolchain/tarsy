@@ -5,11 +5,16 @@
 
 ---
 
-## Q1: Stream Chunk Content — Accumulated vs Delta ✅ DECIDED
+## Q1: Stream Chunk Content — Accumulated vs Delta ✅ DECIDED (revised)
 
-**Decision**: **Accumulated content**. Each `stream.chunk` carries the full accumulated content from the start of the stream, not just the new delta.
+**Decision**: **Incremental deltas**. Each `stream.chunk` carries only the new tokens (the delta), not the full accumulated content. Clients concatenate deltas locally.
 
-**Rationale**: Simpler client implementation — any single chunk is a complete snapshot, no concatenation needed, handles out-of-order/duplicate delivery gracefully. Bandwidth trade-off (~800KB vs ~8KB per response) is acceptable at expected scale. Can switch to delta encoding later if bandwidth becomes measurable problem.
+**Original decision** was accumulated content for simpler client logic. **Revised** during implementation because:
+- PostgreSQL NOTIFY has a hard 8 KB payload limit. Accumulated content exceeds this for any LLM response longer than ~7.9 KB, causing silent truncation of transient `stream.chunk` events with no DB fallback. This is a data-loss bug, not a theoretical concern.
+- Events within a single session are delivered in strict order (see Q10), so out-of-order delivery — the main argument for accumulated content — does not apply in practice.
+- `timeline_event.completed` carries the full authoritative content from DB, correcting any deltas missed during a disconnect.
+- Frontend concatenation is trivial (`content += delta`).
+- Delta payloads are ~50-200 bytes each, well under the 8 KB limit.
 
 ---
 
@@ -89,7 +94,7 @@
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Accumulated vs delta content | ✅ Accumulated content — decided |
+| Q1 | Accumulated vs delta content | ✅ Incremental deltas — decided (revised from accumulated; avoids 8 KB NOTIFY limit) |
 | Q2 | Channel granularity | ✅ Per-session — decided |
 | Q3 | Catchup window size | ✅ 200 events cap; auto REST fallback — decided |
 | Q4 | Session list real-time | ✅ Global "sessions" channel — decided |

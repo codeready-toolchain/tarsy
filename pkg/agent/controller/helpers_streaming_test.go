@@ -25,14 +25,14 @@ func TestCollectStreamWithCallback_NilCallback(t *testing.T) {
 func TestCollectStreamWithCallback_TextCallback(t *testing.T) {
 	var callbacks []struct {
 		chunkType string
-		content   string
+		delta     string
 	}
 
-	callback := func(chunkType string, content string) {
+	callback := func(chunkType string, delta string) {
 		callbacks = append(callbacks, struct {
 			chunkType string
-			content   string
-		}{chunkType, content})
+			delta     string
+		}{chunkType, delta})
 	}
 
 	ch := make(chan agent.Chunk, 3)
@@ -45,25 +45,25 @@ func TestCollectStreamWithCallback_TextCallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Hello world", resp.Text)
 
-	// Should have 2 text callbacks with accumulated content
+	// Should have 2 text callbacks with delta content (not accumulated)
 	require.Len(t, callbacks, 2)
 	assert.Equal(t, ChunkTypeText, callbacks[0].chunkType)
-	assert.Equal(t, "Hello ", callbacks[0].content) // First chunk
+	assert.Equal(t, "Hello ", callbacks[0].delta) // First delta
 	assert.Equal(t, ChunkTypeText, callbacks[1].chunkType)
-	assert.Equal(t, "Hello world", callbacks[1].content) // Accumulated
+	assert.Equal(t, "world", callbacks[1].delta) // Second delta (not accumulated)
 }
 
 func TestCollectStreamWithCallback_ThinkingAndTextCallbacks(t *testing.T) {
 	var callbacks []struct {
 		chunkType string
-		content   string
+		delta     string
 	}
 
-	callback := func(chunkType string, content string) {
+	callback := func(chunkType string, delta string) {
 		callbacks = append(callbacks, struct {
 			chunkType string
-			content   string
-		}{chunkType, content})
+			delta     string
+		}{chunkType, delta})
 	}
 
 	ch := make(chan agent.Chunk, 4)
@@ -77,14 +77,14 @@ func TestCollectStreamWithCallback_ThinkingAndTextCallbacks(t *testing.T) {
 	assert.Equal(t, "The answer is 42.", resp.Text)
 	assert.Equal(t, "Let me think...", resp.ThinkingText)
 
-	// 2 thinking callbacks + 1 text callback
+	// 2 thinking deltas + 1 text delta
 	require.Len(t, callbacks, 3)
 	assert.Equal(t, ChunkTypeThinking, callbacks[0].chunkType)
-	assert.Equal(t, "Let me ", callbacks[0].content)
+	assert.Equal(t, "Let me ", callbacks[0].delta)
 	assert.Equal(t, ChunkTypeThinking, callbacks[1].chunkType)
-	assert.Equal(t, "Let me think...", callbacks[1].content) // Accumulated
+	assert.Equal(t, "think...", callbacks[1].delta) // Delta, not accumulated
 	assert.Equal(t, ChunkTypeText, callbacks[2].chunkType)
-	assert.Equal(t, "The answer is 42.", callbacks[2].content)
+	assert.Equal(t, "The answer is 42.", callbacks[2].delta)
 }
 
 func TestCollectStreamWithCallback_ErrorChunk(t *testing.T) {
