@@ -120,8 +120,8 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	pc := &llmv1.LLMConfig{
 		Provider:            string(cfg.Type),
 		Model:               cfg.Model,
-		ApiKeyEnv:           cfg.APIKeyEnv,        // Sent as env-var name; Python resolves the secret
-		CredentialsEnv:      cfg.CredentialsEnv,   // Sent as env-var name; Python resolves the credentials file path
+		ApiKeyEnv:           cfg.APIKeyEnv,      // Sent as env-var name; Python resolves the secret
+		CredentialsEnv:      cfg.CredentialsEnv, // Sent as env-var name; Python resolves the credentials file path
 		BaseUrl:             cfg.BaseURL,
 		MaxToolResultTokens: clampToInt32(cfg.MaxToolResultTokens),
 	}

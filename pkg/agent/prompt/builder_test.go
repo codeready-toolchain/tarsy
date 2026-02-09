@@ -18,10 +18,10 @@ func newBuilderForTest() *PromptBuilder {
 
 func newFullExecCtx() *agent.ExecutionContext {
 	return &agent.ExecutionContext{
-		SessionID:   "test-session",
-		AgentName:   "TestAgent",
-		AlertData:   `{"alert":"test-alert","severity":"critical"}`,
-		AlertType:   "kubernetes",
+		SessionID:      "test-session",
+		AgentName:      "TestAgent",
+		AlertData:      `{"alert":"test-alert","severity":"critical"}`,
+		AlertType:      "kubernetes",
 		RunbookContent: "# Test Runbook\n\nStep 1: Check pods",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "TestAgent",
@@ -212,9 +212,9 @@ func TestBuildReActMessages_ChatMode(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
 	execCtx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "What was the root cause?",
+		UserQuestion:         "What was the root cause?",
 		InvestigationContext: "Previous investigation found OOM.",
-		ChatHistory:         nil,
+		ChatHistory:          nil,
 	}
 
 	messages := builder.BuildReActMessages(execCtx, "", nil)
@@ -232,7 +232,7 @@ func TestBuildNativeThinkingMessages_ChatMode(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
 	execCtx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "Show me the pod status",
+		UserQuestion:         "Show me the pod status",
 		InvestigationContext: "Investigation context.",
 	}
 

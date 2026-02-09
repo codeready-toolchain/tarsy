@@ -218,7 +218,7 @@ Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database con
 func newChatExecCtx() *agent.ExecutionContext {
 	ctx := newIntegrationExecCtx()
 	ctx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "Can you check if the database service is running?",
+		UserQuestion:         "Can you check if the database service is running?",
 		InvestigationContext: realisticInvestigationContext,
 	}
 	return ctx

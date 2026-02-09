@@ -33,8 +33,8 @@ func TestResolveAgentConfig(t *testing.T) {
 	}
 
 	agentDef := &config.AgentConfig{
-		MCPServers:        []string{"kubernetes-server"},
-		IterationStrategy: config.IterationStrategyNativeThinking,
+		MCPServers:         []string{"kubernetes-server"},
+		IterationStrategy:  config.IterationStrategyNativeThinking,
 		CustomInstructions: "You are a K8s agent",
 	}
 

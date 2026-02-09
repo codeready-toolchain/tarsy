@@ -97,7 +97,7 @@ type ChatExchange struct {
 
 // ChatContext carries chat-specific data for controllers.
 type ChatContext struct {
-	UserQuestion        string
+	UserQuestion         string
 	InvestigationContext string
-	ChatHistory         []ChatExchange
+	ChatHistory          []ChatExchange
 }

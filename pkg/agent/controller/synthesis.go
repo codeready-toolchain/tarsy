@@ -96,4 +96,3 @@ func (c *SynthesisController) Run(
 		TokensUsed:    tokenUsageFromResp(resp),
 	}, nil
 }
-

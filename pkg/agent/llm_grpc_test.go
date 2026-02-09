@@ -140,9 +140,9 @@ func TestFromProtoResponse(t *testing.T) {
 					},
 					GroundingSupports: []*llmv1.GroundingSupport{
 						{
-							StartIndex:           0,
-							EndIndex:             20,
-							Text:                 "Spain won Euro 2024",
+							StartIndex:            0,
+							EndIndex:              20,
+							Text:                  "Spain won Euro 2024",
 							GroundingChunkIndices: []int32{0, 1},
 						},
 					},

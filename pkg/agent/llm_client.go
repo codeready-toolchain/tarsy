@@ -37,7 +37,7 @@ const (
 
 // ConversationMessage is the Go-side message type.
 type ConversationMessage struct {
-	Role       string     // RoleSystem, RoleUser, RoleAssistant, RoleTool
+	Role       string // RoleSystem, RoleUser, RoleAssistant, RoleTool
 	Content    string
 	ToolCalls  []ToolCall // For assistant messages
 	ToolCallID string     // For tool result messages
@@ -122,9 +122,9 @@ type ErrorChunk struct {
 }
 
 func (c *TextChunk) chunkType() ChunkType          { return ChunkTypeText }
-func (c *ThinkingChunk) chunkType() ChunkType       { return ChunkTypeThinking }
-func (c *ToolCallChunk) chunkType() ChunkType       { return ChunkTypeToolCall }
-func (c *CodeExecutionChunk) chunkType() ChunkType  { return ChunkTypeCodeExecution }
-func (c *GroundingChunk) chunkType() ChunkType      { return ChunkTypeGrounding }
-func (c *UsageChunk) chunkType() ChunkType          { return ChunkTypeUsage }
-func (c *ErrorChunk) chunkType() ChunkType          { return ChunkTypeError }
+func (c *ThinkingChunk) chunkType() ChunkType      { return ChunkTypeThinking }
+func (c *ToolCallChunk) chunkType() ChunkType      { return ChunkTypeToolCall }
+func (c *CodeExecutionChunk) chunkType() ChunkType { return ChunkTypeCodeExecution }
+func (c *GroundingChunk) chunkType() ChunkType     { return ChunkTypeGrounding }
+func (c *UsageChunk) chunkType() ChunkType         { return ChunkTypeUsage }
+func (c *ErrorChunk) chunkType() ChunkType         { return ChunkTypeError }

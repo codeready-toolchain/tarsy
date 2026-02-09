@@ -35,7 +35,7 @@ func SessionChannel(sessionID string) string {
 
 // ClientMessage is the JSON structure for client → server WebSocket messages.
 type ClientMessage struct {
-	Action      string `json:"action"`                 // "subscribe", "unsubscribe", "catchup", "ping"
+	Action      string `json:"action"`                  // "subscribe", "unsubscribe", "catchup", "ping"
 	Channel     string `json:"channel,omitempty"`       // Channel name (e.g., "session:abc-123")
 	LastEventID *int   `json:"last_event_id,omitempty"` // For catchup
 }
