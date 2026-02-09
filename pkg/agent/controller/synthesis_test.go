@@ -104,11 +104,11 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 	systemMsg := llm.lastInput.Messages[0]
 	userMsg := llm.lastInput.Messages[1]
 
-	// System message: SRE instructions + custom instructions + task focus (no ReAct format)
+	// System message: SRE instructions + custom instructions (no ReAct format, no taskFocus)
 	require.Equal(t, "system", systemMsg.Role)
 	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
 	require.Contains(t, systemMsg.Content, "Custom synthesis instructions.")
-	require.Contains(t, systemMsg.Content, "Focus on investigation")
+	require.NotContains(t, systemMsg.Content, "Focus on investigation") // synthesis has its own focus in custom instructions
 	require.NotContains(t, systemMsg.Content, "Action Input:")
 
 	// User message: synthesis-specific structure

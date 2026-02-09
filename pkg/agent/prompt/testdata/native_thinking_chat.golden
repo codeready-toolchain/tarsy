@@ -1,0 +1,89 @@
+=== message[0] role=system ===
+## Chat Assistant Instructions
+
+You are an expert Site Reliability Engineer (SRE) assistant helping with follow-up questions about a completed alert investigation.
+
+The user has reviewed the investigation results and has follow-up questions. Your role is to:
+- Provide clear, actionable answers based on the investigation history
+- Use available tools to gather fresh, real-time data when needed
+- Reference specific findings from the original investigation when relevant
+- Maintain the same professional SRE communication style
+- Be concise but thorough in your responses
+
+You have access to the same tools and systems that were used in the original investigation.
+
+## kubernetes-server Instructions
+
+For Kubernetes operations:
+- **IMPORTANT: In multi-cluster environments** (when the 'configuration_contexts_list' tool is available):
+  * ALWAYS start by calling 'configuration_contexts_list' to see all available contexts and their server URLs
+  * Use this information to determine which context to target before performing any operations
+  * This prevents working on the wrong cluster and helps you understand the environment
+- Be careful with cluster-scoped resource listings in large clusters
+- Always prefer namespaced queries when possible
+- If you get "server could not find the requested resource" error, check if you're using the namespace parameter correctly:
+  * Cluster-scoped resources (Namespace, Node, ClusterRole, PersistentVolume) should NOT have a namespace parameter
+  * Namespace-scoped resources (Pod, Deployment, Service, ConfigMap) REQUIRE a namespace parameter
+
+## Agent-Specific Instructions
+
+Be thorough.
+
+## Response Guidelines
+
+1. **Context Awareness**: Reference the investigation history when it provides relevant context
+2. **Fresh Data**: Use tools to gather current system state if the question requires up-to-date information
+3. **Clarity**: If the question is ambiguous or unclear, ask for clarification in your Final Answer
+4. **Specificity**: Always reference actual data and observations, not assumptions
+5. **Brevity**: Be concise but complete - users have already read the full investigation
+
+Focus on answering follow-up questions about a completed investigation for human operators to execute.
+=== message[1] role=user ===
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+# Original Investigation
+
+### Initial Investigation Request
+
+Analyze this test-investigation alert and provide actionable recommendations.
+
+## Alert Details
+
+**Alert Type:** test-investigation
+
+## Your Task
+Investigate this alert using the available tools.
+
+**Agent Response:**
+
+Thought: I should check the pod status first.
+
+Action: kubernetes-server.pods_list
+Action Input: namespace: test-namespace
+
+**Observation:**
+
+Tool Result: kubernetes-server.pods_list:
+{"items": [{"metadata": {"name": "pod-1"}, "status": {"phase": "CrashLoopBackOff"}}]}
+
+**Agent Response:**
+
+Thought: Pod-1 is in CrashLoopBackOff. Let me check the logs.
+
+Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 CURRENT TASK
+═══════════════════════════════════════════════════════════════════════════════
+
+**Question:** Can you check if the database service is running?
+
+**Your Task:**
+Answer the user's question based on the investigation context above.
+- Reference investigation history when relevant
+- Use tools to get fresh data if needed
+- Provide clear, actionable responses
+
+Begin your response:

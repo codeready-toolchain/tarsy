@@ -25,6 +25,7 @@ func NewPromptBuilder(mcpRegistry *config.MCPServerRegistry) *PromptBuilder {
 }
 
 const taskFocus = "Focus on investigation and providing recommendations for human operators to execute."
+const chatTaskFocus = "Focus on answering follow-up questions about a completed investigation for human operators to execute."
 
 // BuildReActMessages builds the initial conversation for a ReAct investigation.
 func (b *PromptBuilder) BuildReActMessages(
@@ -34,14 +35,18 @@ func (b *PromptBuilder) BuildReActMessages(
 ) []agent.ConversationMessage {
 	isChat := execCtx.ChatContext != nil
 
-	// System message
-	var composed string
+	// System message: use chat-specific variants when in chat mode
+	var composed, formatInstr, focus string
 	if isChat {
 		composed = b.ComposeChatInstructions(execCtx)
+		formatInstr = chatReActFormatInstructions
+		focus = chatTaskFocus
 	} else {
 		composed = b.ComposeInstructions(execCtx)
+		formatInstr = reactFormatInstructions
+		focus = taskFocus
 	}
-	systemContent := composed + "\n\n" + reactFormatInstructions + "\n\n" + taskFocus
+	systemContent := composed + "\n\n" + formatInstr + "\n\n" + focus
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},
@@ -71,13 +76,15 @@ func (b *PromptBuilder) BuildNativeThinkingMessages(
 	isChat := execCtx.ChatContext != nil
 
 	// System message (no ReAct format instructions, no tool descriptions in text)
-	var composed string
+	var composed, focus string
 	if isChat {
 		composed = b.ComposeChatInstructions(execCtx)
+		focus = chatTaskFocus
 	} else {
 		composed = b.ComposeInstructions(execCtx)
+		focus = taskFocus
 	}
-	systemContent := composed + "\n\n" + taskFocus
+	systemContent := composed + "\n\n" + focus
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},

@@ -1,0 +1,19 @@
+You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity, brevity, and actionable information.
+
+=== USER PROMPT ===
+
+Generate a 1-4 line executive summary of this incident analysis.
+
+CRITICAL RULES:
+- Only summarize what is EXPLICITLY stated in the analysis
+- Do NOT infer future actions or recommendations not mentioned
+- Do NOT add your own conclusions
+- Focus on: what happened, current status, and ONLY stated next steps
+
+Analysis to summarize:
+
+=================================================================================
+Root cause: OOM kill due to memory leak in pod-1. Recommendation: increase memory limit to 1Gi.
+=================================================================================
+
+Executive Summary (1-4 lines, facts only):

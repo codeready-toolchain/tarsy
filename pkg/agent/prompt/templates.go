@@ -6,11 +6,17 @@ package prompt
 // separator is a visual delimiter for prompt sections (matches old TARSy).
 const separator = "═══════════════════════════════════════════════════════════════════════════════"
 
-// reactFormatInstructions is the comprehensive ReAct format guide for LLMs.
-// Included in the system message for ReAct controllers only.
-const reactFormatInstructions = `You are an SRE agent using the ReAct framework to analyze incidents. Reason step by step, act with tools, observe results, and repeat until you identify root cause and resolution steps.
+// reactFormatOpener is the investigation-specific opening for ReAct instructions.
+const reactFormatOpener = `You are an SRE agent using the ReAct framework to analyze incidents. Reason step by step, act with tools, observe results, and repeat until you identify root cause and resolution steps.`
 
-REQUIRED FORMAT:
+// chatReActFormatOpener is the chat-specific opening for ReAct instructions.
+// Avoids contradicting the chat persona ("helping with follow-up questions")
+// with an investigation persona ("analyze incidents").
+const chatReActFormatOpener = `Use the ReAct framework to answer follow-up questions. Reason step by step, use tools when fresh data is needed, observe results, and repeat until you have a complete answer.`
+
+// reactFormatBody is the shared ReAct format specification (rules, examples).
+// Prefixed with either reactFormatOpener or chatReActFormatOpener.
+const reactFormatBody = `REQUIRED FORMAT:
 
 Question: [the incident question]
 Thought: [your step-by-step reasoning]
@@ -74,6 +80,12 @@ Final Answer:
 3. If still stuck, check for remaining resources: ` + "`" + `kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get -n superman-dev` + "`" + `
 
 **Preventive Measures:** Ensure cleanup scripts remove finalizers when deleting namespaces programmatically.`
+
+// reactFormatInstructions is the full ReAct format guide for investigation mode.
+var reactFormatInstructions = reactFormatOpener + "\n\n" + reactFormatBody
+
+// chatReActFormatInstructions is the full ReAct format guide for chat mode.
+var chatReActFormatInstructions = chatReActFormatOpener + "\n\n" + reactFormatBody
 
 // analysisTask is the investigation task instruction appended to the user message.
 const analysisTask = `## Your Task
