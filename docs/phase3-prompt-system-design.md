@@ -140,16 +140,16 @@ The session executor creates one `PromptBuilder` at startup (shared across all a
 
 ### Integration with Controllers
 
-Controllers replace their inline `buildMessages()` with calls to the prompt builder:
+Controllers replace their inline `buildMessages()` with calls to the prompt builder. Only `BuildReActMessages` takes a `tools` parameter (ReAct needs text-based tool descriptions in the user message). Native Thinking receives tools as native function declarations via gRPC, and Synthesis is tool-less.
 
 ```go
-// In ReActController.Run():
-messages := execCtx.PromptBuilder.BuildReActMessages(execCtx, prevStageContext)
+// In ReActController.Run() — tools passed for text-based tool descriptions:
+messages := execCtx.PromptBuilder.BuildReActMessages(execCtx, prevStageContext, tools)
 
-// In NativeThinkingController.Run():
+// In NativeThinkingController.Run() — no tools param (tools are native function declarations):
 messages := execCtx.PromptBuilder.BuildNativeThinkingMessages(execCtx, prevStageContext)
 
-// In SynthesisController.Run():
+// In SynthesisController.Run() — no tools (tool-less single call):
 messages := execCtx.PromptBuilder.BuildSynthesisMessages(execCtx, prevStageContext)
 ```
 
@@ -546,7 +546,7 @@ func (b *PromptBuilder) buildInvestigationUserMessage(
     }
     
     // Alert section
-    alertType := execCtx.Config.AlertType // from session/chain config
+    alertType := execCtx.AlertType
     sb.WriteString(FormatAlertSection(alertType, execCtx.AlertData))
     sb.WriteString("\n")
     
