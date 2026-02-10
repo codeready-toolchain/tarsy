@@ -21,7 +21,7 @@ import (
 func TestIntegration_E2E_ToolExecution(t *testing.T) {
 	// Create an in-memory MCP server with a tool that echoes its arguments
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			// Parse the arguments to echo them back
 			args := req.Params.Arguments
 			var parsed map[string]any
@@ -72,7 +72,7 @@ func TestIntegration_E2E_ToolExecution(t *testing.T) {
 func TestIntegration_MultiServer_Routing(t *testing.T) {
 	// Create two in-memory MCP servers
 	k8sServer := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "k8s: pods"}},
 			}, nil
@@ -80,7 +80,7 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 	})
 
 	ghServer := startTestServer(t, "github", map[string]mcpsdk.ToolHandler{
-		"list_repos": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"list_repos": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "gh: repos"}},
 			}, nil
@@ -126,7 +126,7 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 // TestIntegration_NativeThinking_Normalization tests the __ → . normalization through the full pipeline.
 func TestIntegration_NativeThinking_Normalization(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "native thinking works"}},
 			}, nil
@@ -150,7 +150,7 @@ func TestIntegration_NativeThinking_Normalization(t *testing.T) {
 // TestIntegration_NativeThinking_ListToolsConversion verifies the . → __ conversion for tool listing.
 func TestIntegration_NativeThinking_ListToolsConversion(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
 	})
@@ -175,7 +175,7 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 	callCount := make(chan string, 10)
 
 	ts1 := startTestServer(t, "server1", map[string]mcpsdk.ToolHandler{
-		"tool": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"tool": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			callCount <- "session1"
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "from session 1"}},
@@ -184,7 +184,7 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 	})
 
 	ts2 := startTestServer(t, "server2", map[string]mcpsdk.ToolHandler{
-		"tool": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"tool": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			callCount <- "session2"
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "from session 2"}},
@@ -222,7 +222,7 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 // TestIntegration_HealthMonitor_Lifecycle tests healthy → failure → recovery lifecycle.
 func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 	ts := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"ping": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"ping": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "pong"}}}, nil
 		},
 	})
@@ -270,7 +270,7 @@ func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 
 	// Phase 3: Simulate recovery (reconnect with new server)
 	ts2 := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"ping": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"ping": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "pong"}}}, nil
 		},
 	})
@@ -321,10 +321,10 @@ func wireSession(t *testing.T, client *Client, serverID string, transport *mcpsd
 // TestIntegration_ToolFilter tests that tool filtering works end-to-end.
 func TestIntegration_ToolFilter(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "pods"}}}, nil
 		},
-		"delete_pod": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"delete_pod": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "deleted"}}}, nil
 		},
 	})
@@ -378,10 +378,10 @@ func TestIntegration_FailedServers(t *testing.T) {
 // TestIntegration_HealthMonitor_ToolCaching tests that the health monitor populates tool cache.
 func TestIntegration_HealthMonitor_ToolCaching(t *testing.T) {
 	ts := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"tool_a": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"tool_a": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "a"}}}, nil
 		},
-		"tool_b": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"tool_b": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "b"}}}, nil
 		},
 	})

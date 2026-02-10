@@ -16,7 +16,7 @@ import (
 func TestHealthMonitor_HealthyServer(t *testing.T) {
 	// Setup in-memory server
 	ts := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
 	})
@@ -94,7 +94,7 @@ func TestHealthMonitor_UnhealthyServer(t *testing.T) {
 
 func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 	ts := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
 	})
@@ -128,7 +128,7 @@ func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 
 func TestHealthMonitor_StartStop(t *testing.T) {
 	ts := startTestServer(t, "test-server", map[string]mcpsdk.ToolHandler{
-		"ping": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"ping": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "pong"}}}, nil
 		},
 	})

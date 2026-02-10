@@ -45,7 +45,7 @@ func newTestExecutor(t *testing.T, servers map[string]map[string]mcpsdk.ToolHand
 func TestToolExecutor_Execute_JSON(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{
 					Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "pod-1, pod-2"}},
 				}, nil
@@ -68,7 +68,7 @@ func TestToolExecutor_Execute_JSON(t *testing.T) {
 func TestToolExecutor_Execute_KeyValue(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{
 					Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}},
 				}, nil
@@ -90,7 +90,7 @@ func TestToolExecutor_Execute_KeyValue(t *testing.T) {
 func TestToolExecutor_Execute_NativeThinkingName(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{
 					Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}},
 				}, nil
@@ -113,7 +113,7 @@ func TestToolExecutor_Execute_NativeThinkingName(t *testing.T) {
 func TestToolExecutor_Execute_UnknownServer(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
@@ -133,7 +133,7 @@ func TestToolExecutor_Execute_UnknownServer(t *testing.T) {
 func TestToolExecutor_Execute_InvalidToolName(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
@@ -153,7 +153,7 @@ func TestToolExecutor_Execute_InvalidToolName(t *testing.T) {
 func TestToolExecutor_Execute_MCPError(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"bad_tool": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"bad_tool": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{
 					Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "something went wrong"}},
 					IsError: true,
@@ -176,10 +176,10 @@ func TestToolExecutor_Execute_MCPError(t *testing.T) {
 func TestToolExecutor_ListTools(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
-			"get_logs": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_logs": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
@@ -200,12 +200,12 @@ func TestToolExecutor_ListTools(t *testing.T) {
 func TestToolExecutor_ListTools_MultiServer(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
 		"github": {
-			"list_repos": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"list_repos": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
@@ -228,13 +228,13 @@ func TestToolExecutor_ListTools_WithFilter(t *testing.T) {
 	client := newClient(registry)
 
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
-		"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
-		"get_logs": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"get_logs": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
-		"delete_pod": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		"delete_pod": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 		},
 	})
@@ -270,7 +270,7 @@ func TestToolExecutor_ListTools_WithFilter(t *testing.T) {
 func TestToolExecutor_Close(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
-			"get_pods": func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
 			},
 		},
