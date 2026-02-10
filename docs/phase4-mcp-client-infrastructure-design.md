@@ -7,7 +7,7 @@
 
 This document details the MCP Client Infrastructure for the new TARSy implementation. Phase 4.1 replaces the `StubToolExecutor` with a production MCP-backed `ToolExecutor`, enabling real tool execution against external MCP servers.
 
-**Phase 4.1 Scope**: MCP client (Go SDK wrapper), transport layer, tool registry & discovery, error handling & recovery, per-session isolation, health monitoring, ActionInput parameter parsing, tool name validation.
+**Phase 4.1 Scope**: MCP client (Go SDK wrapper), transport layer, tool registry & discovery, error handling & recovery, per-session isolation, health monitoring, system warnings service, ActionInput parameter parsing, tool name validation.
 
 **What This Phase Delivers:**
 - `MCPClient` — manages MCP SDK sessions for multiple servers, per-session lifecycle
@@ -18,6 +18,7 @@ This document details the MCP Client Infrastructure for the new TARSy implementa
 - Tool name `server.tool` routing and validation
 - Error classification, retry, and session recreation
 - `MCPHealthMonitor` — background health checks with tool cache
+- `SystemWarningsService` — in-memory warning store for MCP health and other system issues
 - Integration with existing controllers and session executor
 
 **What This Phase Does NOT Deliver:**
@@ -695,11 +696,28 @@ const (
 
 // Recovery configuration constants.
 const (
-    MaxRetries          = 1           // Single retry per operation
-    ReinitTimeout       = 10 * time.Second
-    OperationTimeout    = 60 * time.Second
-    RetryBackoffMin     = 250 * time.Millisecond
-    RetryBackoffMax     = 750 * time.Millisecond
+    // MaxRetries is the number of retry attempts after the initial failure.
+    // One retry balances recovery from transient failures without hammering a sick server.
+    MaxRetries = 1
+
+    // ReinitTimeout is the deadline for recreating an MCP session during recovery.
+    // Covers transport setup + MCP Initialize handshake. Stdio subprocesses (npx)
+    // can be slow to start, so 10s gives enough room.
+    ReinitTimeout = 10 * time.Second
+
+    // OperationTimeout is the per-call deadline for CallTool and ListTools.
+    // The MCP Go SDK has no built-in timeout — it relies on context.Context.
+    // This wraps each MCP call with context.WithTimeout.
+    // Set conservatively: some tools are legitimately slow (large K8s queries,
+    // log retrieval, monitoring data). The iteration timeout (120s) is the hard
+    // ceiling above this — OperationTimeout should be comfortably below it to
+    // leave room for LLM processing in the same iteration.
+    OperationTimeout = 90 * time.Second
+
+    // RetryBackoffMin/Max define the jittered backoff range between retries.
+    // Randomized within [min, max] to avoid thundering herd on shared servers.
+    RetryBackoffMin = 250 * time.Millisecond
+    RetryBackoffMax = 750 * time.Millisecond
 )
 
 // ClassifyError determines the recovery action for an MCP operation error.
@@ -836,6 +854,8 @@ type MCPHealthMonitor struct {
     checkInterval time.Duration
     pingTimeout   time.Duration
 
+    warningsService *services.SystemWarningsService
+
     mu       sync.RWMutex
     statuses map[string]*HealthStatus // serverID → status
     client   *MCPClient              // Dedicated health-check client
@@ -848,14 +868,19 @@ type MCPHealthMonitor struct {
 }
 
 // NewMCPHealthMonitor creates a new health monitor.
-func NewMCPHealthMonitor(factory *MCPClientFactory, registry *config.MCPServerRegistry) *MCPHealthMonitor {
+func NewMCPHealthMonitor(
+    factory *MCPClientFactory,
+    registry *config.MCPServerRegistry,
+    warnings *services.SystemWarningsService,
+) *MCPHealthMonitor {
     return &MCPHealthMonitor{
-        factory:       factory,
-        registry:      registry,
-        checkInterval: 15 * time.Second,
-        pingTimeout:   5 * time.Second,
-        statuses:      make(map[string]*HealthStatus),
-        toolCache:     make(map[string][]mcpsdk.Tool),
+        factory:         factory,
+        registry:        registry,
+        warningsService: warnings,
+        checkInterval:   15 * time.Second,
+        pingTimeout:     5 * time.Second,
+        statuses:        make(map[string]*HealthStatus),
+        toolCache:       make(map[string][]mcpsdk.Tool),
     }
 }
 
@@ -873,10 +898,6 @@ func (m *MCPHealthMonitor) GetCachedTools() map[string][]mcpsdk.Tool
 
 // IsHealthy returns true if all configured servers are healthy.
 func (m *MCPHealthMonitor) IsHealthy() bool
-
-// Warnings returns health warnings for unhealthy servers
-// (for integration with system warnings / health endpoint).
-func (m *MCPHealthMonitor) Warnings() []string
 ```
 
 **Health check flow (per server, every 15s):**
@@ -886,20 +907,95 @@ checkServer(ctx, serverID)
   │
   ├─ Has session?
   │    ├─ Yes → listTools(ctx, serverID) with 5s timeout
-  │    │    ├─ Success → update cache, mark healthy, clear warning
+  │    │    ├─ Success → update cache, mark healthy, warningsService.ClearByServerID()
   │    │    └─ Failure → try reinitialize
   │    └─ No → try reinitialize
   │
   └─ reinitialize:
        ├─ client.InitializeServer(ctx, serverID)
-       │    ├─ Success → listTools → update cache, mark healthy
-       │    └─ Failure → mark unhealthy, set warning
+       │    ├─ Success → listTools → update cache, mark healthy, warningsService.ClearByServerID()
+       │    └─ Failure → mark unhealthy, warningsService.AddWarning()
 ```
 
 **Key differences from old TARSy**:
 - Startup failures are **fatal** (readiness probe fails) — old TARSy logged warnings but continued
 - The health monitor is for **runtime degradation only** — it doesn't need to handle first-time initialization failures
-- No `SystemWarningsService` integration in Phase 4.1 (Phase 10). Exposes `Warnings()` for the `/health` endpoint and dashboard
+
+### 9. SystemWarningsService
+
+In-memory warning store for non-fatal system issues visible in the dashboard. Ported from old TARSy's `SystemWarningsService` (identical concept, ~40 lines of Go).
+
+```go
+package services
+
+import (
+    "sync"
+    "time"
+
+    "github.com/google/uuid"
+)
+
+// WarningCategory constants for categorizing system warnings.
+const (
+    WarningCategoryMCPHealth = "mcp_health"       // MCP server became unhealthy at runtime
+)
+
+// SystemWarning represents a non-fatal system issue.
+type SystemWarning struct {
+    ID        string    `json:"id"`
+    Category  string    `json:"category"`
+    Message   string    `json:"message"`
+    Details   string    `json:"details,omitempty"`
+    ServerID  string    `json:"server_id,omitempty"` // For MCP-related warnings
+    CreatedAt time.Time `json:"created_at"`
+}
+
+// SystemWarningsService manages in-memory system warnings.
+// Thread-safe. Not persisted — warnings are transient and reset on restart.
+type SystemWarningsService struct {
+    mu       sync.RWMutex
+    warnings map[string]*SystemWarning // warningID → warning
+}
+
+func NewSystemWarningsService() *SystemWarningsService
+
+// AddWarning adds a warning and returns its ID.
+func (s *SystemWarningsService) AddWarning(category, message, details, serverID string) string
+
+// GetWarnings returns all active warnings.
+func (s *SystemWarningsService) GetWarnings() []*SystemWarning
+
+// ClearByServerID removes a warning matching category + serverID.
+// Used by MCPHealthMonitor to clear warnings when servers recover.
+func (s *SystemWarningsService) ClearByServerID(category, serverID string) bool
+```
+
+**Integration points:**
+
+1. **MCPHealthMonitor** — calls `AddWarning` when a server becomes unhealthy, `ClearByServerID` when it recovers:
+
+```go
+// In health monitor check loop:
+if healthy {
+    s.warningsService.ClearByServerID(WarningCategoryMCPHealth, serverID)
+} else {
+    s.warningsService.AddWarning(WarningCategoryMCPHealth,
+        fmt.Sprintf("MCP server %q is unreachable", serverID),
+        err.Error(), serverID)
+}
+```
+
+2. **`/health` endpoint** — includes warnings in the response:
+
+```go
+// In health handler:
+warnings := warningsService.GetWarnings()
+// Include in health response JSON (warnings don't cause 503 — they're informational)
+```
+
+3. **Dashboard** (Phase 6) — polls health endpoint and displays warnings.
+
+**Location**: `pkg/services/system_warnings.go` — alongside other services, not in `pkg/mcp/` (it's a general-purpose service that future phases will also use for non-MCP warnings).
 
 ---
 
@@ -980,6 +1076,9 @@ for i, t := range tools {
 Startup performs eager MCP initialization. If any configured server fails, TARSy does not become ready — the readiness probe fails. This catches broken configs before taking traffic (decided in Q7). Rolling updates in OpenShift/K8s ensure no downtime.
 
 ```go
+// Create system warnings service (in-memory, for dashboard / health endpoint)
+warningsService := services.NewSystemWarningsService()
+
 // Create MCP client factory
 mcpFactory := mcp.NewMCPClientFactory(cfg.MCPServerRegistry)
 
@@ -997,7 +1096,7 @@ if failed := startupClient.FailedServers(); len(failed) > 0 {
 startupClient.Close() // Startup client is just for validation
 
 // Create health monitor (runtime degradation detection — Q7)
-healthMonitor := mcp.NewMCPHealthMonitor(mcpFactory, cfg.MCPServerRegistry)
+healthMonitor := mcp.NewMCPHealthMonitor(mcpFactory, cfg.MCPServerRegistry, warningsService)
 if err := healthMonitor.Start(ctx); err != nil {
     logger.Error("MCP health monitor failed to start", "error", err)
     os.Exit(1)
@@ -1006,6 +1105,9 @@ defer healthMonitor.Stop()
 
 // Pass factory to session executor
 executor := queue.NewRealSessionExecutor(cfg, dbClient, llmClient, publisher, mcpFactory)
+
+// Pass warningsService to health handler
+healthHandler := api.NewHealthHandler(healthMonitor, warningsService)
 ```
 
 ### Prompt Builder Integration (Q5: Failed Server Warnings)
@@ -1107,6 +1209,8 @@ func extractTextContent(result *mcpsdk.CallToolResult) string {
 
 ## Testing Strategy
 
+The MCP Go SDK provides `mcp.NewInMemoryTransports()` — a pair of connected in-memory transports that allow spinning up real MCP servers in-process with zero external dependencies. This enables comprehensive integration testing without real clusters, subprocesses, or network.
+
 ### Unit Tests
 
 | Component | Test Focus |
@@ -1115,41 +1219,183 @@ func extractTextContent(result *mcpsdk.CallToolResult) string {
 | `router_test.go` | Tool name normalization, splitting, validation, error messages |
 | `recovery_test.go` | Error classification for all error types |
 | `transport_test.go` | Transport creation from config (no actual connections) |
-| `executor_test.go` | MCPToolExecutor with mock MCPClient; full Execute/ListTools flow |
-| `health_test.go` | Health monitor state transitions, tool cache |
+| `executor_test.go` | MCPToolExecutor with mock MCPClient interface; isolated Execute/ListTools logic |
+| `health_test.go` | Health monitor state transitions with mock client |
+| `system_warnings_test.go` | Warning add/get/clear, thread safety, category filtering |
 
-### Integration Tests
+### Integration Tests (In-Memory MCP Servers)
 
-| Test | Description |
-|------|-------------|
-| Stdio transport | Spawn a test MCP server subprocess, list tools, call tool |
-| HTTP transport | In-process HTTP MCP server, streamable transport test |
-| Full flow | Alert → queue → executor → MCP tool call → result |
-| Recovery | Kill subprocess mid-call, verify session recreation |
+All integration tests use `mcp.NewInMemoryTransports()` to create real MCP servers in-process. No build tags, no external dependencies — these run in CI alongside unit tests.
 
-### Mock MCP Server for Testing
+#### Test Helper: In-Memory MCP Test Server
 
 ```go
-// test/mcp/mock_server.go
-// A minimal MCP server that runs in-process or as a subprocess for testing.
-// Registers configurable tools and returns canned responses.
-type MockMCPServer struct {
-    tools    map[string]MockToolHandler
-    // ...
+// pkg/mcp/testutil_test.go (test-only, not exported)
+
+// testServer creates an in-memory MCP server with the given tools.
+// Returns a connected MCPClient session ready for use.
+type testTool struct {
+    name        string
+    description string
+    handler     any // MCP SDK tool handler function
+}
+
+// startTestServer spins up an in-memory MCP server and returns a connected client session.
+func startTestServer(t *testing.T, serverName string, tools []testTool) *mcpsdk.ClientSession {
+    t.Helper()
+    ctx := context.Background()
+
+    server := mcpsdk.NewServer(&mcpsdk.Implementation{
+        Name: serverName, Version: "test",
+    }, nil)
+
+    for _, tool := range tools {
+        mcpsdk.AddTool(server, &mcpsdk.Tool{
+            Name:        tool.name,
+            Description: tool.description,
+        }, tool.handler)
+    }
+
+    clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
+
+    // Start server in background — stops when test context ends
+    go server.Connect(ctx, serverTransport, nil)
+
+    client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "tarsy-test", Version: "test"}, nil)
+    session, err := client.Connect(ctx, clientTransport, nil)
+    require.NoError(t, err)
+    t.Cleanup(func() { session.Close() })
+
+    return session
 }
 ```
 
-### Testing with Real MCP Servers
+#### Integration Test Cases
 
-Integration tests that require real MCP servers (e.g., `kubernetes-mcp-server`) are gated behind build tags:
+| Test | What It Covers |
+|------|----------------|
+| **Tool discovery** | ListTools across multiple in-memory servers, verify tool names and schemas |
+| **Tool execution E2E** | `MCPToolExecutor.Execute("server.tool", rawInput)` → ActionInput parsing → routing → MCP CallTool → ToolResult |
+| **Multi-server routing** | Two in-memory servers with overlapping tool names, verify correct routing by `server.tool` prefix |
+| **Error tool** | Server tool returns `IsError: true` — verify `ToolResult.IsError` is set, Go `error` is nil |
+| **Tool execution failure** | Server tool returns Go error — verify retry classification and error propagation |
+| **Slow tool + timeout** | Server tool sleeps beyond context deadline — verify context cancellation propagates |
+| **Unknown tool** | Execute a tool that doesn't exist on the server — verify error message |
+| **Invalid server** | Execute with unknown server prefix — verify validation error before MCP call |
+| **ActionInput formats** | Execute with JSON, YAML, key-value, and raw string ActionInput — verify each parses correctly through the full pipeline |
+| **NativeThinking tool names** | `server__tool` normalization → `server.tool` → correct MCP routing |
+| **Health monitor lifecycle** | Start monitor with in-memory servers, verify healthy status, stop a server, verify unhealthy + warning added, restart, verify recovery + warning cleared |
+| **Session close** | Create MCPToolExecutor, execute tool, Close() — verify all sessions cleaned up |
+| **Per-session isolation** | Two concurrent MCPToolExecutors from same factory — verify independent sessions |
+
+#### Example: Full E2E Tool Execution Test
 
 ```go
-//go:build mcp_integration
+func TestMCPToolExecutor_Execute_E2E(t *testing.T) {
+    ctx := context.Background()
 
-func TestKubernetesServerIntegration(t *testing.T) {
-    // Requires: npx, kubernetes-mcp-server, KUBECONFIG
+    // Create in-memory MCP server with a "get_pods" tool
+    server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "kubernetes", Version: "test"}, nil)
+    mcpsdk.AddTool(server, &mcpsdk.Tool{
+        Name:        "get_pods",
+        Description: "List pods in a namespace",
+    }, func(ctx context.Context, req *mcpsdk.CallToolRequest, input struct {
+        Namespace string `json:"namespace"`
+    }) (*mcpsdk.CallToolResult, struct {
+        Pods string `json:"pods"`
+    }, error) {
+        return nil, struct {
+            Pods string `json:"pods"`
+        }{Pods: fmt.Sprintf("pod-1, pod-2 (ns: %s)", input.Namespace)}, nil
+    })
+
+    clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
+    go server.Connect(ctx, serverTransport, nil)
+
+    // Wire up MCPToolExecutor with the in-memory transport
+    // (details depend on factory/client wiring — simplified here)
+    executor := createTestExecutor(t, map[string]mcpsdk.Transport{
+        "kubernetes": clientTransport,
+    })
+    defer executor.Close()
+
+    // Execute via the same interface the agent uses
+    result, err := executor.Execute(ctx, "kubernetes.get_pods", `{"namespace": "production"}`)
+    require.NoError(t, err)
+    assert.False(t, result.IsError)
+    assert.Contains(t, result.Content, "pod-1, pod-2")
+    assert.Contains(t, result.Content, "production")
 }
 ```
+
+#### Example: Health Monitor with SystemWarningsService
+
+```go
+func TestMCPHealthMonitor_DetectsFailureAndRecovery(t *testing.T) {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    warnings := services.NewSystemWarningsService()
+
+    // Start with a healthy in-memory server
+    server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "test-server", Version: "test"}, nil)
+    mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "ping", Description: "health check tool"}, pingHandler)
+
+    // Create factory that uses in-memory transports
+    factory := createTestFactory(t, server)
+    monitor := mcp.NewMCPHealthMonitor(factory, registry, warnings)
+    monitor.Start(ctx)
+    defer monitor.Stop()
+
+    // Initially healthy — no warnings
+    require.Eventually(t, func() bool { return monitor.IsHealthy() }, 5*time.Second, 100*time.Millisecond)
+    assert.Empty(t, warnings.GetWarnings())
+
+    // Simulate server failure (cancel the server's context)
+    killTestServer(t, "test-server")
+
+    // Monitor detects failure — warning added
+    require.Eventually(t, func() bool { return !monitor.IsHealthy() }, 20*time.Second, 500*time.Millisecond)
+    assert.Len(t, warnings.GetWarnings(), 1)
+    assert.Equal(t, services.WarningCategoryMCPHealth, warnings.GetWarnings()[0].Category)
+
+    // Restart server — monitor detects recovery, warning cleared
+    restartTestServer(t, "test-server")
+    require.Eventually(t, func() bool { return monitor.IsHealthy() }, 20*time.Second, 500*time.Millisecond)
+    assert.Empty(t, warnings.GetWarnings())
+}
+```
+
+#### Example: Multi-Server Routing
+
+```go
+func TestMCPToolExecutor_MultiServerRouting(t *testing.T) {
+    ctx := context.Background()
+
+    // Two servers, each with a tool named "list"
+    k8sServer := createToolServer(t, "kubernetes", "list", k8sListHandler)
+    gitServer := createToolServer(t, "github", "list", gitListHandler)
+
+    executor := createTestExecutor(t, map[string]mcpsdk.Transport{
+        "kubernetes": k8sServer.transport,
+        "github":     gitServer.transport,
+    })
+    defer executor.Close()
+
+    // Same tool name, different server prefix → different results
+    k8sResult, err := executor.Execute(ctx, "kubernetes.list", `{}`)
+    require.NoError(t, err)
+    assert.Contains(t, k8sResult.Content, "pods")
+
+    gitResult, err := executor.Execute(ctx, "github.list", `{}`)
+    require.NoError(t, err)
+    assert.Contains(t, gitResult.Content, "repos")
+}
+```
+
+### No Real MCP Server Tests
+
+We deliberately avoid tests that require real external MCP servers (e.g., `kubernetes-mcp-server` with a live cluster). The in-memory transport approach tests the identical SDK code paths (protocol, serialization, tool dispatch) without external dependencies. If manual validation against a real server is needed, it can be done locally — not in CI.
 
 ---
 
@@ -1157,16 +1403,17 @@ func TestKubernetesServerIntegration(t *testing.T) {
 
 No new configuration types needed — Phase 2 already defined `MCPServerConfig`, `TransportConfig`, `MaskingConfig`, `SummarizationConfig`. The `MCPServerRegistry` is already populated at startup.
 
-### New Constants (to be added to config)
+### Hardcoded Constants (`pkg/mcp/`)
+
+Not configurable via YAML — these are operational defaults that match old TARSy. Can be promoted to config if real-world usage reveals the need.
 
 ```go
-// MCP operation timeouts
+// MCP operation timeouts (MCP Go SDK has no built-in timeouts — all via context.Context)
 const (
-    MCPInitTimeout      = 30 * time.Second // Per-server initialization timeout
-    MCPListToolsTimeout = 10 * time.Second // list_tools call timeout
-    MCPCallToolTimeout  = 60 * time.Second // call_tool default timeout
-    MCPHealthPingTimeout = 5 * time.Second // Health check ping timeout
-    MCPHealthInterval   = 15 * time.Second // Health check interval
+    MCPInitTimeout       = 30 * time.Second // Per-server initialization timeout (transport + handshake)
+    MCPOperationTimeout  = 90 * time.Second // CallTool / ListTools deadline (must be < iteration timeout of 120s)
+    MCPHealthPingTimeout = 5 * time.Second  // Health check ping timeout (fast fail for monitoring)
+    MCPHealthInterval    = 15 * time.Second // Health check loop interval
 )
 ```
 
@@ -1217,14 +1464,15 @@ The `MCPToolExecutor` includes stub hooks for data masking. Phase 4.2 will imple
 | 5 | `client.go` + tests | Medium | transport, recovery, MCP SDK |
 | 6 | `executor.go` + tests | Medium | client, params, router |
 | 7 | `client_factory.go` | Small | client |
-| 8 | Executor integration | Medium | executor, factory, queue/executor.go changes |
-| 9 | `health.go` + tests | Medium | client, factory |
-| 10 | Server startup wiring | Small | factory, health |
-| 11 | Integration tests | Medium | All above |
+| 8 | `system_warnings.go` + tests | Small | None (standalone service) |
+| 9 | Executor integration | Medium | executor, factory, queue/executor.go changes |
+| 10 | `health.go` + tests | Medium | client, factory, system_warnings |
+| 11 | Server startup wiring | Small | factory, health, system_warnings |
+| 12 | Integration tests | Medium | All above |
 
 Steps 1-4 are parallelizable (pure logic, no dependencies).
-Steps 5-7 build on 1-4.
-Steps 8-10 are the integration layer.
+Steps 5-8 build on 1-4 (step 8 is also independent).
+Steps 9-11 are the integration layer.
 
 ---
 
