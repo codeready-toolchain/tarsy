@@ -26,19 +26,21 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 4.1: MCP Client Infrastructure** -- MCP client wrapping official Go SDK (v1.3.0), transport layer (stdio/HTTP/SSE), tool executor implementing `agent.ToolExecutor` interface, ActionInput parameter parsing (JSON/YAML/key-value/raw cascade), tool name routing (`server.tool` ↔ `server__tool`), error classification with retry/session recreation, per-session client isolation, health monitor with system warnings service, eager startup validation (fatal on failure).
 
+**Phase 4.2: Data Masking** -- MaskingService singleton with 15 built-in regex patterns, pattern groups, custom regex from YAML config, and KubernetesSecretMasker (code-based, structural YAML/JSON parsing to mask Secrets but not ConfigMaps). Two integration points: MCP tool results (fail-closed) and alert payloads (fail-open). Replacement format `[MASKED_X]`. Alert masking configurable under `defaults.alert_masking`.
+
 Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
 ### Phase 4: MCP Integration (continued)
 
-**Data Masking (Phase 4.2)**
-- [ ] Masking service (Go)
-- [ ] Regex-based maskers (15 patterns defined in builtin.go)
-- [ ] Custom data masking (reg-ex) in chain configuration
-- [ ] MCP tool result masking integration
-- [ ] Alert payload sanitization
-- [ ] Distinguish K8s Secrets vs ConfigMaps
+**Data Masking (Phase 4.2)** -- COMPLETED
+- [x] Masking service (Go)
+- [x] Regex-based maskers (15 patterns defined in builtin.go)
+- [x] Custom data masking (regex) in configuration
+- [x] MCP tool result masking integration
+- [x] Alert payload sanitization
+- [x] Distinguish K8s Secrets vs ConfigMaps
 
 **MCP Features (Phase 4.3)**
 - [ ] Custom MCP configuration per alert (mcp_selection override)
