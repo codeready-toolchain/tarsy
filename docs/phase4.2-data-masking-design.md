@@ -292,7 +292,7 @@ Distinguishes Kubernetes `Secret` resources from `ConfigMap` resources and masks
 ### Implementation (`pkg/masking/kubernetes_secret.go`)
 
 ```go
-const MaskedSecretValue = "__MASKED_SECRET_DATA__"
+const MaskedSecretValue = "[MASKED_SECRET_DATA]"
 
 type KubernetesSecretMasker struct{}
 
@@ -324,7 +324,7 @@ func (m *KubernetesSecretMasker) Mask(data string) string {
 
 1. Parse with `gopkg.in/yaml.v3` using `yaml.Decoder` to handle multi-document YAML (`---` separators)
 2. For each document, check if `kind: Secret`
-3. If Secret: replace `data` and `stringData` map values with `__MASKED_SECRET_DATA__`
+3. If Secret: replace `data` and `stringData` map values with `[MASKED_SECRET_DATA]`
 4. If ConfigMap or other kind: leave untouched
 5. Re-serialize to YAML, preserving document boundaries
 6. Also handle JSON-in-annotations (e.g., `kubectl.kubernetes.io/last-applied-configuration`)
@@ -534,7 +534,7 @@ mcp_servers:
       patterns: ["certificate", "token", "email"]
       custom_patterns:
         - pattern: "CUSTOM_SECRET_.*"
-          replacement: "__MASKED_CUSTOM__"
+          replacement: "[MASKED_CUSTOM]"
           description: "Custom secret pattern"
 ```
 
@@ -608,6 +608,14 @@ if masker.AppliesTo(masked) {
 
 ## Implementation Plan
 
+### Step 0: Update Replacement Format in builtin.go
+
+**Files**: `pkg/config/builtin.go`
+
+1. Update all 15 pattern replacements from `__MASKED_X__` to `[MASKED_X]` format
+2. Update `KubernetesSecretMasker` placeholder constant reference
+3. Avoids Markdown rendering issues (`__X__` gets interpreted as bold)
+
 ### Step 1: Core Masking Package
 
 **Files**: `pkg/masking/masker.go`, `pkg/masking/pattern.go`, `pkg/masking/service.go`
@@ -662,12 +670,47 @@ if masker.AppliesTo(masked) {
 3. Replace TODO stub in `Execute()` with `MaskToolResult()` call
 4. Update `ClientFactory` to hold and pass masking service
 5. Update all `NewToolExecutor` / `NewClientFactory` call sites
+6. Update `newTestExecutor` test helper to accept optional masking service
 
 **Tests**: Update `pkg/mcp/executor_test.go`
-- Tool execution with masking enabled → content masked
-- Tool execution with masking disabled → content unchanged
-- Tool execution with nil masking service → content unchanged
-- Masking failure → `[REDACTED: data masking failure — tool result could not be safely processed]` returned
+
+Existing tests continue to pass with `nil` masking service (backward compat). New tests use real in-memory MCP servers that return sensitive content:
+
+```go
+// MCP tool returns content containing an API key → executor masks it
+func TestToolExecutor_Execute_MaskingApplied(t *testing.T) {
+    // MCP server returns: `api_key: "sk-1234567890abcdef1234"`
+    // Server config has data_masking enabled with "secrets" group
+    // Assert: result.Content contains [MASKED_API_KEY], not the original key
+}
+
+// MCP tool returns a K8s Secret YAML → code masker masks data fields
+func TestToolExecutor_Execute_MaskingK8sSecret(t *testing.T) {
+    // MCP server returns kubectl get secret output (YAML with data: fields)
+    // Server config has "kubernetes" pattern group (includes kubernetes_secret masker)
+    // Assert: result.Content has [MASKED_SECRET_DATA] in data fields
+    // Assert: kind: Secret still visible, only data values masked
+}
+
+// MCP tool returns a K8s ConfigMap → NOT masked
+func TestToolExecutor_Execute_MaskingSkipsConfigMap(t *testing.T) {
+    // MCP server returns kubectl get configmap output
+    // Server config has "kubernetes" pattern group
+    // Assert: result.Content is unchanged (ConfigMap data not masked)
+}
+
+// Server has masking disabled → content passes through unchanged
+func TestToolExecutor_Execute_MaskingDisabled(t *testing.T) {
+    // Server config has data_masking.enabled = false
+    // Assert: result.Content is the raw MCP output
+}
+
+// Nil masking service (backward compat) → content passes through
+func TestToolExecutor_Execute_NilMaskingService(t *testing.T) {
+    // ToolExecutor created without masking service (like existing tests)
+    // Assert: result.Content is the raw MCP output
+}
+```
 
 ### Step 4: Alert Masking Integration
 
@@ -680,11 +723,35 @@ if masker.AppliesTo(masked) {
 5. Update `AlertService` constructor to accept `MaskingService`
 6. Add masking call in `SubmitAlert()` before DB insert
 7. Update YAML example config
+8. Update `setupTestAlertService` test helper to accept optional masking service
 
 **Tests**: Update `pkg/services/alert_service_test.go`
-- Alert submission with masking enabled → stored data is masked
-- Alert submission with masking disabled → stored data unchanged
-- Alert submission with nil masking service → stored data unchanged
+
+Existing tests continue to pass with `nil` masking service. New tests submit alerts with sensitive data and verify DB content:
+
+```go
+// Alert contains an API key → stored alert_data has it masked
+func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
+    // Create MaskingService with alertMasking enabled, "security" group
+    // Submit alert with Data containing: `password: "s3cret123"` and `token: "eyJhbGc..."`
+    // Read back session from DB
+    // Assert: session.AlertData contains [MASKED_PASSWORD] and [MASKED_TOKEN]
+    // Assert: session.AlertData does NOT contain "s3cret123" or "eyJhbGc..."
+}
+
+// Alert masking disabled → stored data is unchanged
+func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
+    // Create MaskingService with alertMasking.Enabled = false
+    // Submit alert with sensitive data
+    // Assert: session.AlertData is exactly the original input
+}
+
+// Nil masking service → stored data is unchanged (backward compat)
+func TestAlertService_SubmitAlert_NilMaskingService(t *testing.T) {
+    // Use existing setupTestAlertService (no masking service)
+    // Assert: behaves exactly as before
+}
+```
 
 ### Step 5: Wiring & Validation
 
@@ -710,10 +777,12 @@ if masker.AppliesTo(masked) {
 
 ### Integration Tests
 
+These extend the existing test suites — not new files. Each test uses real infrastructure (in-memory MCP servers for executor, testcontainers Postgres for alert service) to verify masking is applied end-to-end.
+
 | Area | Test File | Key Scenarios |
 |------|-----------|---------------|
-| ToolExecutor + masking | `executor_test.go` | End-to-end: MCP result → masked ToolResult |
-| AlertService + masking | `alert_service_test.go` | Submit alert → verify stored data is masked |
+| ToolExecutor + masking | `executor_test.go` | MCP returns API key → `[MASKED_API_KEY]` in ToolResult; MCP returns K8s Secret YAML → data fields masked, ConfigMap unchanged; masking disabled → passthrough; nil service → passthrough |
+| AlertService + masking | `alert_service_test.go` | Submit alert with password/token → DB row has `[MASKED_PASSWORD]`; masking disabled → original stored; nil service → original stored |
 
 ### Test Data Strategy
 
@@ -735,8 +804,8 @@ func TestBuiltinPatterns(t *testing.T) {
         input    string
         expected string
     }{
-        {"api_key", `api_key: "sk-1234567890abcdef1234"`, `"api_key": "__MASKED_API_KEY__"`},
-        {"password", `password: "myS3cretP@ss"`, `"password": "__MASKED_PASSWORD__"`},
+        {"api_key", `api_key: "sk-1234567890abcdef1234"`, `"api_key": "[MASKED_API_KEY]"`},
+        {"password", `password: "myS3cretP@ss"`, `"password": "[MASKED_PASSWORD]"`},
         // ... all 15 patterns
     }
 }
@@ -758,7 +827,7 @@ func TestBuiltinPatterns(t *testing.T) {
 | Fail-safe (MCP) | `[REDACTED: masking failure]` | `[REDACTED: data masking failure — ...]` | Improved: explains why, no retry suggestion |
 | Fail-safe (Alert) | Return original (fail-open) | Return original (fail-open) | Same behavior |
 | Custom patterns | Compiled per-request | Compiled at startup | Improvement: no repeated compilation |
-| Replacement format | `***MASKED_X***` | `__MASKED_X__` | Cosmetic difference (already in builtin.go) |
+| Replacement format | `***MASKED_X***` | `[MASKED_X]` | Changed from `__X__` to avoid Markdown rendering issues (underscores get interpreted as bold). Update all 15 patterns in `builtin.go` |
 | Config structure | MaskingConfig on MCPServerConfig | Same structure | 1:1 mapping |
 
 ---
