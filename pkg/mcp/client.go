@@ -56,6 +56,10 @@ func newClient(registry *config.MCPServerRegistry) *Client {
 // The caller decides whether failures are fatal:
 //   - Startup (readiness probe): check FailedServers() and fail if non-empty
 //   - Per-session: partial initialization is acceptable
+//
+// Always returns nil today; the error return is retained so the signature can
+// evolve (e.g., returning an error when *all* servers fail) without breaking
+// callers.
 func (c *Client) Initialize(ctx context.Context, serverIDs []string) error {
 	for _, serverID := range serverIDs {
 		if err := c.InitializeServer(ctx, serverID); err != nil {
@@ -273,6 +277,9 @@ func (c *Client) callToolOnce(ctx context.Context, serverID string, params *mcps
 // A staleness guard (checking if session exists after lock) doesn't work here
 // because the first caller also sees the broken session in the map.
 // The cost is an extra recreation, which is acceptable for simplicity.
+// Future optimisation: a per-server generation counter (incremented on each
+// recreation) would let the second goroutine detect the session was already
+// refreshed and skip re-creation. Worth adding if this becomes a hot path.
 func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 	// Get or create per-server mutex
 	muI, _ := c.reinitMu.LoadOrStore(serverID, &sync.Mutex{})

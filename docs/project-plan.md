@@ -80,7 +80,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 6:
+### Phase 6: End-to-End Testing
 
 **E2E tests**
 - [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for external services (MCP, LLMs, GitHub)

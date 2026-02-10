@@ -105,6 +105,16 @@ func (m *HealthMonitor) Stop() {
 	}
 	m.clientMu.Unlock()
 
+	// Clear stale health data so a subsequent Start begins with a clean slate
+	// and IsHealthy() doesn't return results for removed/changed servers.
+	m.statusesMu.Lock()
+	m.statuses = make(map[string]*HealthStatus)
+	m.statusesMu.Unlock()
+
+	m.toolCacheMu.Lock()
+	m.toolCache = make(map[string][]*mcpsdk.Tool)
+	m.toolCacheMu.Unlock()
+
 	// Reset so Start can be called again.
 	m.cancel = nil
 	m.done = nil
