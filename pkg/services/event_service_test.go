@@ -75,16 +75,22 @@ func TestEventService_GetEventsSince(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("retrieves events since ID", func(t *testing.T) {
-		events, err := eventService.GetEventsSince(ctx, channel, evt1.ID)
+		events, err := eventService.GetEventsSince(ctx, channel, evt1.ID, 0)
 		require.NoError(t, err)
 		assert.Len(t, events, 1)
 		assert.Equal(t, evt2.ID, events[0].ID)
 	})
 
 	t.Run("retrieves all events when sinceID is 0", func(t *testing.T) {
-		events, err := eventService.GetEventsSince(ctx, channel, 0)
+		events, err := eventService.GetEventsSince(ctx, channel, 0, 0)
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(events), 2)
+	})
+
+	t.Run("respects limit parameter", func(t *testing.T) {
+		events, err := eventService.GetEventsSince(ctx, channel, 0, 1)
+		require.NoError(t, err)
+		assert.Len(t, events, 1)
 	})
 }
 
@@ -118,7 +124,7 @@ func TestEventService_CleanupSessionEvents(t *testing.T) {
 		assert.Equal(t, 3, count)
 
 		// Verify deleted
-		events, err := eventService.GetEventsSince(ctx, "session:"+session.ID, 0)
+		events, err := eventService.GetEventsSince(ctx, "session:"+session.ID, 0, 0)
 		require.NoError(t, err)
 		assert.Len(t, events, 0)
 	})

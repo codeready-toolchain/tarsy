@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect"
@@ -57,13 +58,31 @@ func NewClientFromEnt(entClient *ent.Client, db *stdsql.DB) *Client {
 	}
 }
 
+// DSN returns a pgx-compatible connection string for this configuration.
+// Used by NewClient for the connection pool and by NotifyListener for a
+// dedicated LISTEN connection.
+func (c Config) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		quoteConnValue(c.Host), c.Port, quoteConnValue(c.User),
+		quoteConnValue(c.Password), quoteConnValue(c.Database), quoteConnValue(c.SSLMode),
+	)
+}
+
+// quoteConnValue single-quotes a libpq connection-string value if it
+// contains spaces, single-quotes, or backslashes. This prevents malformed
+// DSNs when fields (especially passwords) contain special characters.
+func quoteConnValue(v string) string {
+	if !strings.ContainsAny(v, ` '\=`) {
+		return v
+	}
+	replacer := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	return "'" + replacer.Replace(v) + "'"
+}
+
 // NewClient creates a new database client with connection pooling and migrations
 func NewClient(ctx context.Context, cfg Config) (*Client, error) {
-	// Build pgx-compatible connection string
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
+	dsn := cfg.DSN()
 
 	// Open database connection using pgx driver
 	db, err := stdsql.Open("pgx", dsn)

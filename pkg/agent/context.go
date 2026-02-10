@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -31,10 +32,10 @@ type ExecutionContext struct {
 	Config *ResolvedAgentConfig
 
 	// Dependencies (injected by executor)
-	LLMClient    LLMClient
-	ToolExecutor ToolExecutor // Phase 3.2: stub, Phase 4: MCP client
-	Services     *ServiceBundle
-	// EventPublisher EventPublisher  // Phase 3.4
+	LLMClient      LLMClient
+	ToolExecutor   ToolExecutor   // Phase 3.2: stub, Phase 4: MCP client
+	EventPublisher EventPublisher // Real-time event delivery to WebSocket clients
+	Services       *ServiceBundle
 
 	// Prompt builder (injected by executor, stateless, shared across executions).
 	// Implemented by prompt.PromptBuilder; interface avoids agent↔prompt import cycle.
@@ -79,6 +80,15 @@ type PromptBuilder interface {
 	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
 }
 
+// EventPublisher publishes events for WebSocket delivery.
+// Implemented by events.EventPublisher; defined as interface here to
+// avoid a circular import between pkg/agent and pkg/events and to
+// enable testing with mocks.
+type EventPublisher interface {
+	Publish(ctx context.Context, sessionID, channel string, payload map[string]interface{}) error
+	PublishTransient(ctx context.Context, channel string, payload map[string]interface{}) error
+}
+
 // ChatExchange groups a user question with its complete conversation.
 type ChatExchange struct {
 	UserQuestion string
@@ -87,7 +97,7 @@ type ChatExchange struct {
 
 // ChatContext carries chat-specific data for controllers.
 type ChatContext struct {
-	UserQuestion        string
+	UserQuestion         string
 	InvestigationContext string
-	ChatHistory         []ChatExchange
+	ChatHistory          []ChatExchange
 }

@@ -1,7 +1,15 @@
 # Phase 3.4: Real-time Streaming — Detailed Design
 
-**Status**: ✅ Design Complete — Ready for Implementation  
+**Status**: 🟢 Implemented
 **Last Updated**: 2026-02-09
+
+> **Note**: Code snippets in this document are illustrative and reflect the
+> pre-implementation design. The final API signatures diverged during
+> implementation (e.g. `NewEventPublisher` takes `*sql.DB` instead of
+> `*services.EventService` + `*ent.Client`; `marshalPayload` is a package-level
+> function, not a method; `ConnectionManager` accepts a `CatchupQuerier`
+> interface instead of `EventService`). Refer to the source code for the
+> authoritative API.
 
 ## Overview
 
@@ -256,10 +264,12 @@ func (s *Server) wsHandler(c echo.Context) error {
 }
 
 // LLM token streaming chunk (transient — NOTIFY only, no DB persistence)
+// Uses delta encoding: each chunk carries only the new content.
+// Clients concatenate deltas locally to build the full text.
 {
     "type": "stream.chunk",
     "event_id": "evt-uuid",
-    "content": "Analyzing the pod status...",
+    "delta": "Analyzing",
     "timestamp": "2026-02-09T10:30:01Z"
 }
 
@@ -940,7 +950,7 @@ func createTimelineEvent(
 The key change for real-time LLM streaming is to move from the Phase 3.2 "buffered" pattern (collect all chunks, then create events) to a "streaming" pattern where:
 
 1. When the **first chunk of a type** arrives → create TimelineEvent with `status: streaming` + publish `timeline_event.created`
-2. As **chunks arrive** → publish `stream.chunk` events with accumulated content (transient, no DB)
+2. As **chunks arrive** → publish `stream.chunk` events with **delta content only** (transient, no DB). Each chunk carries only the new tokens, not the accumulated buffer. This avoids hitting PostgreSQL's 8 KB NOTIFY payload limit.
 3. When the **stream completes** → update TimelineEvent with final content + publish `timeline_event.completed`
 
 This requires updating `collectStream` to accept a callback for streaming chunk delivery:
@@ -950,7 +960,10 @@ This requires updating `collectStream` to accept a callback for streaming chunk 
 
 // StreamCallback is called for each chunk during stream collection.
 // Used by controllers to publish real-time updates to WebSocket clients.
-type StreamCallback func(chunkType agent.ChunkType, content string)
+// delta is the new content from this chunk only (not accumulated). Clients
+// concatenate deltas locally. This keeps each pg_notify payload small and
+// avoids hitting PostgreSQL's 8 KB NOTIFY limit on long responses.
+type StreamCallback func(chunkType string, delta string)
 
 // collectStreamWithCallback collects a stream while calling back for real-time delivery.
 // The callback is optional (nil = buffered mode, same as Phase 3.2 collectStream).
@@ -966,12 +979,12 @@ func collectStreamWithCallback(
         case *agent.TextChunk:
             textBuf.WriteString(c.Content)
             if callback != nil {
-                callback(agent.ChunkTypeText, textBuf.String())
+                callback(ChunkTypeText, c.Content) // delta, not accumulated
             }
         case *agent.ThinkingChunk:
             thinkingBuf.WriteString(c.Content)
             if callback != nil {
-                callback(agent.ChunkTypeThinking, thinkingBuf.String())
+                callback(ChunkTypeThinking, c.Content) // delta, not accumulated
             }
         case *agent.ToolCallChunk:
             resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
@@ -1015,11 +1028,11 @@ For controllers, the integration looks like:
 // 1. Call LLM and stream chunks in real-time
 var thinkingEventID, textEventID *string
 
-streamCallback := func(chunkType agent.ChunkType, content string) {
+streamCallback := func(chunkType string, delta string) {
     channel := events.SessionChannel(execCtx.SessionID)
 
     switch chunkType {
-    case agent.ChunkTypeThinking:
+    case ChunkTypeThinking:
         if thinkingEventID == nil {
             // First thinking chunk → create streaming TimelineEvent
             event, _ := execCtx.Services.Timeline.CreateStreamingTimelineEvent(ctx, ...)
@@ -1033,14 +1046,14 @@ streamCallback := func(chunkType agent.ChunkType, content string) {
                 // ...
             })
         }
-        // Publish streaming chunk (transient — no DB)
+        // Publish delta (transient — no DB). Client concatenates locally.
         execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
             "type":     events.EventTypeStreamChunk,
             "event_id": *thinkingEventID,
-            "content":  content, // Accumulated content
+            "delta":    delta, // Only the new tokens
         })
 
-    case agent.ChunkTypeText:
+    case ChunkTypeText:
         // Same pattern for text chunks
         // ...
     }
@@ -1071,27 +1084,29 @@ The frontend maintains a map of timeline events keyed by `event_id`. The state m
 ```
 1. timeline_event.created (status: "streaming")
    → Frontend creates placeholder for event_id
+   → Initializes empty content buffer
    → Shows spinner/typing indicator
 
 2. stream.chunk (event_id matches)
-   → Frontend updates content for event_id (replace, not append)
-   → Content is accumulated server-side, sent as full content each time
+   → Frontend appends delta to content buffer: content += delta
+   → Each chunk carries only the new tokens (not accumulated)
 
 3. timeline_event.completed (event_id matches)
-   → Frontend replaces content with final version
+   → Frontend replaces content buffer with authoritative final content
    → Marks event as complete, removes spinner
 
 4. stream.chunk arrives AFTER completed
    → Ignored (stale — status never goes backward)
 ```
 
-**Key design: accumulated content, not incremental deltas.**
+**Key design: incremental deltas, not accumulated content.**
 
-Each `stream.chunk` contains the full accumulated content so far (not just the new delta). This means:
-- Frontend always has the latest complete content by simple replacement
-- Out-of-order delivery doesn't cause missing text
-- Reconnecting clients get the full content in the next chunk or `timeline_event.completed`
-- No client-side concatenation logic needed
+Each `stream.chunk` carries only the new content delta (a few tokens). Clients concatenate deltas locally to build the full text. This approach was chosen because:
+- Each `stream.chunk` payload is tiny (~50-200 bytes), well under PostgreSQL's 8 KB NOTIFY limit
+- Accumulated content would exceed the 8 KB NOTIFY limit for any LLM response longer than ~7.9 KB, causing silent truncation with no DB fallback for transient events
+- Events within a single session are delivered in order (see Event Ordering below), so out-of-order delivery — the main argument for accumulated content — does not apply in practice
+- `timeline_event.completed` carries the full authoritative content from DB, correcting any deltas missed during a disconnect
+- Bandwidth is proportional to content generated, not content-squared (accumulated resends everything each time)
 
 ### Session Page Data Loading
 
@@ -1305,10 +1320,9 @@ If a WebSocket send fails for a specific client:
 
 ### NOTIFY Payload Size
 
-PostgreSQL NOTIFY payload is limited to 8000 bytes. For large events:
-- The publisher checks payload size before NOTIFY
-- If over 7900 bytes, sends a truncated notification with `"truncated": true`
-- The client fetches the full event from the REST API using the event_id
+PostgreSQL NOTIFY payload is limited to 8000 bytes. Mitigation strategies:
+- **Streaming chunks use delta encoding** — each `stream.chunk` carries only the new tokens (~50-200 bytes), never approaching the 8 KB limit. This was a key reason for choosing deltas over accumulated content.
+- **Persistent events** (e.g., `timeline_event.completed` with full content) are checked before NOTIFY. If over 7900 bytes, the publisher sends a truncated notification with `"truncated": true`. The client fetches the full event from the REST API using the event_id.
 
 ---
 
@@ -1405,49 +1419,49 @@ streaming:
 ### Phase 3.4 Implementation Order
 
 1. **Event types and protocol** (foundation):
-   - [ ] `pkg/events/types.go` — event type constants, channel naming, protocol message types
-   - [ ] Write tests for event type helpers
+   - [x] `pkg/events/types.go` — event type constants, channel naming, protocol message types
+   - [x] Write tests for event type helpers
 
 2. **EventPublisher** (publishing layer):
-   - [ ] `pkg/events/publisher.go` — Publish, PublishTransient, NOTIFY integration
-   - [ ] Update `pkg/services/event_service.go` if needed for `GetEventsSince` improvements
-   - [ ] Write unit tests
+   - [x] `pkg/events/publisher.go` — Publish, PublishTransient, NOTIFY integration
+   - [x] Update `pkg/services/event_service.go` if needed for `GetEventsSince` improvements
+   - [x] Write unit tests
 
 3. **ConnectionManager** (WebSocket hub):
-   - [ ] `pkg/events/manager.go` — connection tracking, subscribe/unsubscribe, broadcast, catchup
-   - [ ] Write unit tests
+   - [x] `pkg/events/manager.go` — connection tracking, subscribe/unsubscribe, broadcast, catchup
+   - [x] Write unit tests
 
 4. **NotifyListener** (cross-pod delivery):
-   - [ ] `pkg/events/listener.go` — dedicated connection, LISTEN/UNLISTEN, reconnection
-   - [ ] Write integration tests with real PostgreSQL
+   - [x] `pkg/events/listener.go` — dedicated connection, LISTEN/UNLISTEN, reconnection
+   - [x] Write integration tests with real PostgreSQL
 
 5. **WebSocket handler**:
-   - [ ] `pkg/api/handler_ws.go` — HTTP→WebSocket upgrade, client message handling
-   - [ ] Register route in `pkg/api/server.go`
-   - [ ] Write handler tests
+   - [x] `pkg/api/handler_ws.go` — HTTP→WebSocket upgrade, client message handling
+   - [x] Register route in `pkg/api/server.go`
+   - [x] Write handler tests
 
 6. **Controller integration**:
-   - [ ] Add `EventPublisher` to `ExecutionContext`
-   - [ ] Update `createTimelineEvent` helper to publish events
-   - [ ] Add streaming callback support to `collectStream`
-   - [ ] Update controllers (ReAct, NativeThinking, Synthesis) for streaming events
-   - [ ] Write integration tests
+   - [x] Add `EventPublisher` to `ExecutionContext`
+   - [x] Update `createTimelineEvent` helper to publish events
+   - [x] Add streaming callback support to `collectStream`
+   - [x] Update controllers (ReAct, NativeThinking, Synthesis) for streaming events
+   - [x] Write integration tests
 
 7. **Worker integration**:
-   - [ ] Publish session status events (started, completed, failed, etc.)
-   - [ ] Wire EventPublisher in `queue/executor.go`
+   - [x] Publish session status events (started, completed, failed, etc.)
+   - [x] Wire EventPublisher in `queue/executor.go`
 
 8. **Startup wiring**:
-   - [ ] Update `cmd/tarsy/main.go` — initialize EventPublisher, ConnectionManager, NotifyListener
-   - [ ] Pass ConnectionManager to HTTP server
-   - [ ] Pass EventPublisher to session executor
-   - [ ] Add streaming configuration
+   - [x] Update `cmd/tarsy/main.go` — initialize EventPublisher, ConnectionManager, NotifyListener
+   - [x] Pass ConnectionManager to HTTP server
+   - [x] Pass EventPublisher to session executor
+   - [x] Add streaming configuration
 
 9. **Testing**:
-   - [ ] Unit tests for all new packages
-   - [ ] Integration tests with real PostgreSQL (NOTIFY/LISTEN)
-   - [ ] End-to-end test: WebSocket subscribe → agent execution → event delivery
-   - [ ] Reconnection and catchup tests
+   - [x] Unit tests for all new packages
+   - [x] Integration tests with real PostgreSQL (NOTIFY/LISTEN)
+   - [x] End-to-end test: WebSocket subscribe → agent execution → event delivery
+   - [x] Reconnection and catchup tests
 
 ---
 
@@ -1460,7 +1474,7 @@ streaming:
 | WebSocket library | FastAPI WebSockets (ASGI) | coder/websocket (RFC 6455) | Already a project dependency; integrates with Echo v5 |
 | Event listener | asyncpg LISTEN (async) | pgx WaitForNotification (goroutine) | Go-native; pgx is the PostgreSQL driver already in use |
 | Connection manager | Python class with asyncio | Go struct with sync.RWMutex + goroutines | Go concurrency primitives; simpler than Python async |
-| Streaming content | Incremental deltas | Accumulated content per chunk | Simpler client logic; handles out-of-order delivery |
+| Streaming content | Accumulated content per chunk | Incremental deltas per chunk | Avoids PostgreSQL 8 KB NOTIFY limit; less bandwidth; events are ordered within a session so out-of-order is not a real concern |
 | Frontend dedup | Match streaming items to DB items by `llm_interaction_id` | Use `event_id` from TimelineEvent (created before streaming starts) | Phase 2 TimelineEvent design eliminates dedup entirely |
 | Event model | Events published to both `"sessions"` and `"session:{id}"` channels | Same dual-channel model: `"sessions"` (status only) + `"session:{id}"` (all events) | Same approach; global channel carries only lightweight session status events, not timeline/streaming |
 | Payload limit | No explicit handling | Truncation + `truncated` flag for >8KB payloads | PostgreSQL NOTIFY limit is 8000 bytes |

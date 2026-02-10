@@ -11,6 +11,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
@@ -24,6 +25,7 @@ type Server struct {
 	alertService   *services.AlertService
 	sessionService *services.SessionService
 	workerPool     *queue.WorkerPool
+	connManager    *events.ConnectionManager
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -33,6 +35,7 @@ func NewServer(
 	alertService *services.AlertService,
 	sessionService *services.SessionService,
 	workerPool *queue.WorkerPool,
+	connManager *events.ConnectionManager,
 ) *Server {
 	e := echo.New()
 
@@ -43,6 +46,7 @@ func NewServer(
 		alertService:   alertService,
 		sessionService: sessionService,
 		workerPool:     workerPool,
+		connManager:    connManager,
 	}
 
 	s.setupRoutes()
@@ -65,6 +69,11 @@ func (s *Server) setupRoutes() {
 	v1.POST("/alerts", s.submitAlertHandler)
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
+
+	// WebSocket endpoint for real-time event streaming.
+	// Auth deferred to Phase 8 (Security) — currently open to any client,
+	// consistent with the InsecureSkipVerify origin policy in handler_ws.go.
+	s.echo.GET("/ws", s.wsHandler)
 }
 
 // Start starts the HTTP server on the given address (non-blocking).

@@ -9,29 +9,29 @@ import (
 
 func TestIterationState_ShouldAbortOnTimeouts(t *testing.T) {
 	tests := []struct {
-		name               string
+		name                string
 		consecutiveTimeouts int
-		want               bool
+		want                bool
 	}{
 		{
-			name:               "zero timeouts - no abort",
+			name:                "zero timeouts - no abort",
 			consecutiveTimeouts: 0,
-			want:               false,
+			want:                false,
 		},
 		{
-			name:               "one timeout - no abort",
+			name:                "one timeout - no abort",
 			consecutiveTimeouts: 1,
-			want:               false,
+			want:                false,
 		},
 		{
-			name:               "at threshold - abort",
+			name:                "at threshold - abort",
 			consecutiveTimeouts: MaxConsecutiveTimeouts,
-			want:               true,
+			want:                true,
 		},
 		{
-			name:               "above threshold - abort",
+			name:                "above threshold - abort",
 			consecutiveTimeouts: MaxConsecutiveTimeouts + 1,
-			want:               true,
+			want:                true,
 		},
 	}
 

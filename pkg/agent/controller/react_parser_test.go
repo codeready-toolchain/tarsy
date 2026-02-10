@@ -518,10 +518,10 @@ func TestParseReActResponse_StopConditions(t *testing.T) {
 
 func TestParseReActResponse_SectionHeaderVariations(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      string
-		wantAction bool
-		wantFinal  bool
+		name        string
+		input       string
+		wantAction  bool
+		wantFinal   bool
 		wantThought bool
 	}{
 		{
@@ -531,14 +531,14 @@ func TestParseReActResponse_SectionHeaderVariations(t *testing.T) {
 			wantAction:  true,
 		},
 		{
-			name:        "Action with extra spaces after colon",
-			input:       "Action:     server.tool\nAction Input: {}",
-			wantAction:  true,
+			name:       "Action with extra spaces after colon",
+			input:      "Action:     server.tool\nAction Input: {}",
+			wantAction: true,
 		},
 		{
-			name:       "Final Answer with leading spaces",
-			input:      "  Final Answer: Done.",
-			wantFinal:  true,
+			name:      "Final Answer with leading spaces",
+			input:     "  Final Answer: Done.",
+			wantFinal: true,
 		},
 		{
 			name:       "Action Input with trailing content",

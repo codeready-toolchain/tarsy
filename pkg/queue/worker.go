@@ -13,7 +13,9 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
 // WorkerStatus represents the current state of a worker.
@@ -32,6 +34,7 @@ type Worker struct {
 	client          *ent.Client
 	config          *config.QueueConfig
 	sessionExecutor SessionExecutor
+	eventPublisher  agent.EventPublisher
 	pool            SessionRegistry
 	stopCh          chan struct{}
 	stopOnce        sync.Once
@@ -52,13 +55,15 @@ type SessionRegistry interface {
 }
 
 // NewWorker creates a new queue worker.
-func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, pool SessionRegistry) *Worker {
+// eventPublisher may be nil (streaming disabled).
+func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, pool SessionRegistry, eventPublisher agent.EventPublisher) *Worker {
 	return &Worker{
 		id:              id,
 		podID:           podID,
 		client:          client,
 		config:          cfg,
 		sessionExecutor: executor,
+		eventPublisher:  eventPublisher,
 		pool:            pool,
 		stopCh:          make(chan struct{}),
 		status:          WorkerStatusIdle,
@@ -151,6 +156,9 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	log := slog.With("session_id", session.ID, "worker_id", w.id)
 	log.Info("Session claimed")
 
+	// Publish session status "in_progress" to both session and global channels
+	w.publishSessionStatus(ctx, session.ID, "in_progress")
+
 	w.setStatus(WorkerStatusWorking, session.ID)
 	defer w.setStatus(WorkerStatusIdle, "")
 
@@ -216,11 +224,12 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 		return err
 	}
 
-	// 11. Cleanup transient events
-	if err := w.cleanupSessionEvents(context.Background(), session.ID); err != nil {
-		log.Warn("Failed to cleanup session events", "error", err)
-		// Non-fatal
-	}
+	// 10a. Publish terminal session status event
+	w.publishSessionStatus(context.Background(), session.ID, string(result.Status))
+
+	// 11. Cleanup transient events after grace period (60s) to allow clients
+	// to receive final events before they are deleted.
+	w.scheduleEventCleanup(session.ID)
 
 	w.mu.Lock()
 	w.sessionsProcessed++
@@ -312,6 +321,44 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 	}
 
 	return update.Exec(ctx)
+}
+
+// publishSessionStatus publishes a session status event to both the session-specific
+// and global channels for real-time WebSocket delivery. Non-blocking: errors are logged.
+func (w *Worker) publishSessionStatus(ctx context.Context, sessionID, status string) {
+	if w.eventPublisher == nil {
+		return
+	}
+	payload := map[string]interface{}{
+		"type":       events.EventTypeSessionStatus,
+		"session_id": sessionID,
+		"status":     status,
+		"timestamp":  time.Now().Format(time.RFC3339Nano),
+	}
+
+	// Publish to session channel
+	sessionChannel := events.SessionChannel(sessionID)
+	if err := w.eventPublisher.Publish(ctx, sessionID, sessionChannel, payload); err != nil {
+		slog.Warn("Failed to publish session status to session channel",
+			"session_id", sessionID, "status", status, "error", err)
+	}
+
+	// Publish to global sessions channel
+	if err := w.eventPublisher.PublishTransient(ctx, events.GlobalSessionsChannel, payload); err != nil {
+		slog.Warn("Failed to publish session status to global channel",
+			"session_id", sessionID, "status", status, "error", err)
+	}
+}
+
+// scheduleEventCleanup schedules deletion of transient events after a 60-second
+// grace period, allowing WebSocket clients to receive final events.
+func (w *Worker) scheduleEventCleanup(sessionID string) {
+	time.AfterFunc(60*time.Second, func() {
+		if err := w.cleanupSessionEvents(context.Background(), sessionID); err != nil {
+			slog.Warn("Failed to cleanup session events after grace period",
+				"session_id", sessionID, "error", err)
+		}
+	})
 }
 
 // cleanupSessionEvents removes transient Event records used for WebSocket delivery.

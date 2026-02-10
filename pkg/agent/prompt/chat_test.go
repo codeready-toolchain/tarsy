@@ -103,7 +103,7 @@ func TestBuildChatUserMessage(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
 	execCtx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "What caused the crash?",
+		UserQuestion:         "What caused the crash?",
 		InvestigationContext: "Investigation found memory issues.",
 		ChatHistory: []agent.ChatExchange{
 			{
@@ -129,7 +129,7 @@ func TestBuildChatUserMessage_WithTools(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
 	execCtx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "List pods",
+		UserQuestion:         "List pods",
 		InvestigationContext: "Context.",
 	}
 
@@ -146,7 +146,7 @@ func TestBuildChatUserMessage_NoChatHistory(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
 	execCtx.ChatContext = &agent.ChatContext{
-		UserQuestion:        "Simple question",
+		UserQuestion:         "Simple question",
 		InvestigationContext: "Context.",
 	}
 

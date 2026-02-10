@@ -18,22 +18,25 @@ import (
 
 // RealSessionExecutor implements SessionExecutor using the agent framework.
 type RealSessionExecutor struct {
-	cfg           *config.Config
-	dbClient      *ent.Client
-	llmClient     agent.LLMClient
-	agentFactory  *agent.AgentFactory
-	promptBuilder *prompt.PromptBuilder
+	cfg            *config.Config
+	dbClient       *ent.Client
+	llmClient      agent.LLMClient
+	eventPublisher agent.EventPublisher
+	agentFactory   *agent.AgentFactory
+	promptBuilder  *prompt.PromptBuilder
 }
 
 // NewRealSessionExecutor creates a new session executor.
-func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient) *RealSessionExecutor {
+// eventPublisher may be nil (streaming disabled).
+func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
-		cfg:           cfg,
-		dbClient:      dbClient,
-		llmClient:     llmClient,
-		agentFactory:  agent.NewAgentFactory(controllerFactory),
-		promptBuilder: prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		cfg:            cfg,
+		dbClient:       dbClient,
+		llmClient:      llmClient,
+		eventPublisher: eventPublisher,
+		agentFactory:   agent.NewAgentFactory(controllerFactory),
+		promptBuilder:  prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 	}
 }
 
@@ -135,6 +138,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		ToolExecutor:   agent.NewStubToolExecutor(nil), // Phase 3.2 stub; Phase 4: MCP client
+		EventPublisher: e.eventPublisher,
 		PromptBuilder:  e.promptBuilder,
 		Services: &agent.ServiceBundle{
 			Timeline:    timelineService,

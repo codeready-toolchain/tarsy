@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
@@ -119,17 +120,35 @@ func main() {
 	}()
 	slog.Info("LLM client initialized", "addr", llmAddr)
 
-	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient)
+	// 5a. Initialize streaming infrastructure
+	eventService := services.NewEventService(dbClient.Client)
+	eventPublisher := events.NewEventPublisher(dbClient.DB())
+	catchupQuerier := events.NewEventServiceAdapter(eventService)
+	connManager := events.NewConnectionManager(catchupQuerier, 10*time.Second)
+
+	// Start NotifyListener (dedicated pgx connection for LISTEN)
+	notifyListener := events.NewNotifyListener(dbConfig.DSN(), connManager)
+	if err := notifyListener.Start(ctx); err != nil {
+		slog.Error("Failed to start NotifyListener", "error", err)
+		os.Exit(1)
+	}
+	defer notifyListener.Stop(ctx)
+
+	// Wire listener ↔ manager bidirectional link
+	connManager.SetListener(notifyListener)
+	slog.Info("Streaming infrastructure initialized")
+
+	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher)
 
 	// 6. Start worker pool (before HTTP server)
-	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor)
+	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher)
 	if err := workerPool.Start(ctx); err != nil {
 		slog.Error("Failed to start worker pool", "error", err)
 		os.Exit(1)
 	}
 
 	// 7. Create HTTP server
-	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool)
+	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool, connManager)
 
 	// 8. Start HTTP server (non-blocking)
 	errCh := make(chan error, 1)

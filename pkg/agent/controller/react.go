@@ -67,14 +67,14 @@ func (c *ReActController) Run(
 
 		startTime := time.Now()
 
-		// Call LLM (text only — tools described in system prompt, not bound)
-		resp, err := callLLM(iterCtx, execCtx.LLMClient, &agent.GenerateInput{
+		// Call LLM with streaming (text only — tools described in system prompt, not bound)
+		streamed, err := callLLMWithStreaming(iterCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       nil, // ReAct uses text-based tool calling
-		})
+		}, &eventSeq)
 
 		if err != nil {
 			iterCancel()
@@ -85,6 +85,7 @@ func (c *ReActController) Run(
 			storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			continue
 		}
+		resp := streamed.LLMResponse
 
 		// Record LLM interaction
 		accumulateUsage(&totalUsage, resp)
@@ -217,13 +218,13 @@ func (c *ReActController) forceConclusion(
 	conclusionCtx, conclusionCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 	defer conclusionCancel()
 
-	resp, err := callLLM(conclusionCtx, execCtx.LLMClient, &agent.GenerateInput{
+	streamed, err := callLLMWithStreaming(conclusionCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil,
-	})
+	}, eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
 		return &agent.ExecutionResult{
@@ -232,6 +233,7 @@ func (c *ReActController) forceConclusion(
 			TokensUsed: *totalUsage,
 		}, nil
 	}
+	resp := streamed.LLMResponse
 
 	accumulateUsage(totalUsage, resp)
 	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, msgSeq)

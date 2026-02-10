@@ -40,9 +40,9 @@ var (
 	// server.tool format validation
 	toolNamePattern = regexp.MustCompile(`^([\w\-]+)\.([\w\-]+)$`)
 	// Recovery patterns for recoverMissingAction (compiled once)
-	recoverActionColonPattern  = regexp.MustCompile(`(?i)\bAction:`)
-	recoverActionWordPattern   = regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
-	recoverActionInputPattern  = regexp.MustCompile(`(?i)Action Input:`)
+	recoverActionColonPattern = regexp.MustCompile(`(?i)\bAction:`)
+	recoverActionWordPattern  = regexp.MustCompile(`(?i)\bAction(?:\s|$)`)
+	recoverActionInputPattern = regexp.MustCompile(`(?i)Action Input:`)
 )
 
 // ParseReActResponse parses LLM text output into a structured ReAct response.

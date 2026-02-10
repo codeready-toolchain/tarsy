@@ -284,6 +284,41 @@ func TestHealthStatus_JSONMilliseconds(t *testing.T) {
 	t.Logf("Response time: %d ms (if this were nanoseconds, it would be > 1,000,000)", health.ResponseTime)
 }
 
+func TestQuoteConnValue(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"simple", "simple"},
+		{"", ""},
+		{"with space", "'with space'"},
+		{"it's", `'it\'s'`},
+		{`back\slash`, `'back\\slash'`},
+		{`all 'three\ together`, `'all \'three\\ together'`},
+		{"foo=bar", "'foo=bar'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := quoteConnValue(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConfig_DSN_SpecialCharacters(t *testing.T) {
+	cfg := Config{
+		Host:     "localhost",
+		Port:     5432,
+		User:     "admin",
+		Password: "p@ss w0rd's",
+		Database: "mydb",
+		SSLMode:  "disable",
+	}
+	dsn := cfg.DSN()
+	assert.Equal(t, `host=localhost port=5432 user=admin password='p@ss w0rd\'s' dbname=mydb sslmode=disable`, dsn)
+}
+
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

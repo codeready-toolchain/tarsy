@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -27,48 +29,9 @@ type LLMResponse struct {
 
 // collectStream drains an LLM chunk channel into a complete LLMResponse.
 // Returns an error if an ErrorChunk is received.
+// Delegates to collectStreamWithCallback with a nil callback.
 func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
-	resp := &LLMResponse{}
-	var textBuf, thinkingBuf strings.Builder
-
-	for chunk := range stream {
-		switch c := chunk.(type) {
-		case *agent.TextChunk:
-			textBuf.WriteString(c.Content)
-		case *agent.ThinkingChunk:
-			thinkingBuf.WriteString(c.Content)
-		case *agent.ToolCallChunk:
-			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
-				ID:        c.CallID,
-				Name:      c.Name,
-				Arguments: c.Arguments,
-			})
-		case *agent.CodeExecutionChunk:
-			resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
-				Code:   c.Code,
-				Result: c.Result,
-			})
-		case *agent.GroundingChunk:
-			resp.Groundings = append(resp.Groundings, *c)
-		case *agent.UsageChunk:
-			resp.Usage = &agent.TokenUsage{
-				InputTokens:    c.InputTokens,
-				OutputTokens:   c.OutputTokens,
-				TotalTokens:    c.TotalTokens,
-				ThinkingTokens: c.ThinkingTokens,
-			}
-		case *agent.ErrorChunk:
-			// Intentionally discards any partially accumulated text/thinking/tool-call
-			// data. Callers treat LLM errors as complete failures and retry from scratch,
-			// so partial data is not useful in the current design.
-			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-				c.Message, c.Code, c.Retryable)
-		}
-	}
-
-	resp.Text = textBuf.String()
-	resp.ThinkingText = thinkingBuf.String()
-	return resp, nil
+	return collectStreamWithCallback(stream, nil)
 }
 
 // callLLM performs a single LLM call with context cancellation support.
@@ -173,9 +136,8 @@ func recordLLMInteraction(
 	return err
 }
 
-// createTimelineEvent creates a new timeline event with content.
-// In Phase 3.2, events are always created with their final content
-// (after the LLM response is fully collected and parsed).
+// createTimelineEvent creates a new timeline event with content and publishes
+// it for real-time delivery via WebSocket.
 //
 // Best-effort: callers intentionally ignore both return values because timeline
 // events are non-critical observability data — a failure to record one should
@@ -194,7 +156,9 @@ func createTimelineEvent(
 	eventSeq *int,
 ) (*ent.TimelineEvent, error) {
 	*eventSeq++
-	return execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+
+	// 1. Create TimelineEvent in DB (existing behavior)
+	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
@@ -203,6 +167,383 @@ func createTimelineEvent(
 		Content:        content,
 		Metadata:       metadata,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Publish to WebSocket clients (non-blocking — don't fail execution on publish error)
+	publishTimelineCreated(ctx, execCtx, event, eventType, content, metadata, *eventSeq)
+
+	return event, nil
+}
+
+// publishTimelineCreated publishes a timeline_event.created message to WebSocket clients.
+func publishTimelineCreated(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	event *ent.TimelineEvent,
+	eventType timelineevent.EventType,
+	content string,
+	metadata map[string]interface{},
+	seqNum int,
+) {
+	if execCtx.EventPublisher == nil {
+		return
+	}
+	channel := events.SessionChannel(execCtx.SessionID)
+	publishErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		"type":            events.EventTypeTimelineCreated,
+		"event_id":        event.ID,
+		"session_id":      execCtx.SessionID,
+		"stage_id":        execCtx.StageID,
+		"execution_id":    execCtx.ExecutionID,
+		"event_type":      string(eventType),
+		"status":          "completed",
+		"content":         content,
+		"metadata":        metadata,
+		"sequence_number": seqNum,
+		"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+	})
+	if publishErr != nil {
+		slog.Warn("Failed to publish timeline event",
+			"event_id", event.ID, "error", publishErr)
+	}
+}
+
+// StreamCallback is called for each chunk during stream collection.
+// Used by controllers to publish real-time updates to WebSocket clients.
+// chunkType identifies the content type (text or thinking).
+// delta is the new content from this chunk only (not accumulated). Clients
+// concatenate deltas locally. This keeps each pg_notify payload small and
+// avoids hitting PostgreSQL's 8 KB NOTIFY limit on long responses.
+type StreamCallback func(chunkType string, delta string)
+
+// ChunkTypeText identifies a text content delta in stream callbacks.
+const ChunkTypeText = "text"
+
+// ChunkTypeThinking identifies a thinking content delta in stream callbacks.
+const ChunkTypeThinking = "thinking"
+
+// collectStreamWithCallback collects a stream while calling back for real-time delivery.
+// The callback is optional (nil = buffered mode, same as collectStream).
+func collectStreamWithCallback(
+	stream <-chan agent.Chunk,
+	callback StreamCallback,
+) (*LLMResponse, error) {
+	resp := &LLMResponse{}
+	var textBuf, thinkingBuf strings.Builder
+
+	for chunk := range stream {
+		switch c := chunk.(type) {
+		case *agent.TextChunk:
+			textBuf.WriteString(c.Content)
+			if callback != nil {
+				callback(ChunkTypeText, c.Content)
+			}
+		case *agent.ThinkingChunk:
+			thinkingBuf.WriteString(c.Content)
+			if callback != nil {
+				callback(ChunkTypeThinking, c.Content)
+			}
+		case *agent.ToolCallChunk:
+			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
+				ID:        c.CallID,
+				Name:      c.Name,
+				Arguments: c.Arguments,
+			})
+		case *agent.CodeExecutionChunk:
+			resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
+				Code:   c.Code,
+				Result: c.Result,
+			})
+		case *agent.GroundingChunk:
+			resp.Groundings = append(resp.Groundings, *c)
+		case *agent.UsageChunk:
+			resp.Usage = &agent.TokenUsage{
+				InputTokens:    c.InputTokens,
+				OutputTokens:   c.OutputTokens,
+				TotalTokens:    c.TotalTokens,
+				ThinkingTokens: c.ThinkingTokens,
+			}
+		case *agent.ErrorChunk:
+			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+				c.Message, c.Code, c.Retryable)
+		}
+	}
+
+	resp.Text = textBuf.String()
+	resp.ThinkingText = thinkingBuf.String()
+	return resp, nil
+}
+
+// StreamedResponse wraps an LLMResponse with information about streaming
+// timeline events that were created during the LLM call. Controllers should
+// check these IDs and skip creating duplicate events.
+type StreamedResponse struct {
+	*LLMResponse
+	// ThinkingEventCreated is true if a streaming llm_thinking timeline event
+	// was created (and completed) during the LLM call.
+	ThinkingEventCreated bool
+	// TextEventCreated is true if a streaming llm_response timeline event
+	// was created (and completed) during the LLM call.
+	TextEventCreated bool
+}
+
+// callLLMWithStreaming performs an LLM call with real-time streaming of chunks
+// to WebSocket clients. When EventPublisher is available, it creates streaming
+// timeline events for thinking and text content, publishes chunks as they arrive,
+// and finalizes events when the stream completes. When EventPublisher is nil,
+// it behaves identically to callLLM.
+//
+// Controllers should check StreamedResponse.ThinkingEventCreated and
+// TextEventCreated to avoid creating duplicate timeline events.
+func callLLMWithStreaming(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	llmClient agent.LLMClient,
+	input *agent.GenerateInput,
+	eventSeq *int,
+) (*StreamedResponse, error) {
+	llmCtx, llmCancel := context.WithCancel(ctx)
+	defer llmCancel()
+
+	stream, err := llmClient.Generate(llmCtx, input)
+	if err != nil {
+		return nil, fmt.Errorf("LLM Generate failed: %w", err)
+	}
+
+	// If no EventPublisher, use simple collection (no streaming events)
+	if execCtx.EventPublisher == nil {
+		resp, err := collectStream(stream)
+		if err != nil {
+			return nil, err
+		}
+		return &StreamedResponse{LLMResponse: resp}, nil
+	}
+
+	// Track streaming timeline events
+	var thinkingEventID, textEventID string
+	var thinkingCreateFailed, textCreateFailed bool
+	channel := events.SessionChannel(execCtx.SessionID)
+
+	callback := func(chunkType string, delta string) {
+		if delta == "" {
+			return // Skip empty chunks — nothing to create or publish
+		}
+
+		switch chunkType {
+		case ChunkTypeThinking:
+			if thinkingCreateFailed {
+				return // event creation already failed — skip to avoid retry spam
+			}
+			if thinkingEventID == "" {
+				// First thinking chunk — create streaming TimelineEvent
+				*eventSeq++
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmThinking,
+					Content:        "",
+					Metadata:       map[string]interface{}{"source": "native"},
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create streaming thinking event", "error", createErr)
+					thinkingCreateFailed = true
+					return
+				}
+				thinkingEventID = event.ID
+				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        thinkingEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_thinking",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				}); pubErr != nil {
+					slog.Warn("Failed to publish streaming thinking created",
+						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+				}
+			}
+			// Publish only the new delta — clients concatenate locally.
+			// This keeps each pg_notify payload small (avoids 8 KB limit).
+			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+				"type":      events.EventTypeStreamChunk,
+				"event_id":  thinkingEventID,
+				"delta":     delta,
+				"timestamp": time.Now().Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish thinking stream chunk",
+					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+
+		case ChunkTypeText:
+			if textCreateFailed {
+				return // event creation already failed — skip to avoid retry spam
+			}
+			if textEventID == "" {
+				*eventSeq++
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmResponse,
+					Content:        "",
+					Metadata:       nil,
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create streaming text event", "error", createErr)
+					textCreateFailed = true
+					return
+				}
+				textEventID = event.ID
+				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+					"type":            events.EventTypeTimelineCreated,
+					"event_id":        textEventID,
+					"session_id":      execCtx.SessionID,
+					"stage_id":        execCtx.StageID,
+					"execution_id":    execCtx.ExecutionID,
+					"event_type":      "llm_response",
+					"status":          "streaming",
+					"content":         "",
+					"sequence_number": *eventSeq,
+					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				}); pubErr != nil {
+					slog.Warn("Failed to publish streaming text created",
+						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+				}
+			}
+			// Publish only the new delta — clients concatenate locally.
+			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
+				"type":      events.EventTypeStreamChunk,
+				"event_id":  textEventID,
+				"delta":     delta,
+				"timestamp": time.Now().Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish text stream chunk",
+					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+		}
+	}
+
+	resp, err := collectStreamWithCallback(stream, callback)
+	if err != nil {
+		// Mark any streaming timeline events as failed so they don't stay
+		// stuck at status "streaming" indefinitely.
+		markStreamingEventsFailed(ctx, execCtx, thinkingEventID, textEventID, channel, err)
+		return nil, err
+	}
+
+	// Finalize streaming timeline events.
+	// Always finalize if the event was created (thinkingEventID/textEventID set),
+	// even when resp content is empty. Otherwise the event stays at "streaming"
+	// status indefinitely. The empty-delta guard above prevents event creation
+	// for purely empty chunks, but we handle the edge case defensively here.
+	if thinkingEventID != "" {
+		finalizeStreamingEvent(ctx, execCtx, channel, thinkingEventID, resp.ThinkingText, "thinking")
+	}
+
+	if textEventID != "" {
+		finalizeStreamingEvent(ctx, execCtx, channel, textEventID, resp.Text, "text")
+	}
+
+	return &StreamedResponse{
+		LLMResponse:          resp,
+		ThinkingEventCreated: thinkingEventID != "",
+		TextEventCreated:     textEventID != "",
+	}, nil
+}
+
+// finalizeStreamingEvent completes or fails a streaming timeline event.
+// If content is non-empty, the event is completed normally. If content is
+// empty (edge case: event created but all chunks were empty), it is marked
+// as failed to avoid leaving it stuck at "streaming" status.
+func finalizeStreamingEvent(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	channel, eventID, content, label string,
+) {
+	if content != "" {
+		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, eventID, content, nil, nil); complErr != nil {
+			slog.Warn("Failed to complete streaming "+label+" event",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", complErr)
+		}
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  eventID,
+			"content":   content,
+			"status":    "completed",
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish "+label+" completed",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+		return
+	}
+
+	// Edge case: event was created but content is empty.
+	// CompleteTimelineEvent rejects empty content, so mark as failed instead.
+	slog.Warn("Streaming "+label+" event has no content, marking as failed",
+		"event_id", eventID, "session_id", execCtx.SessionID)
+	failContent := "No content produced"
+	if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent); failErr != nil {
+		slog.Warn("Failed to fail empty streaming "+label+" event",
+			"event_id", eventID, "session_id", execCtx.SessionID, "error", failErr)
+	}
+	if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+		"type":      events.EventTypeTimelineCompleted,
+		"event_id":  eventID,
+		"content":   failContent,
+		"status":    "failed",
+		"timestamp": time.Now().Format(time.RFC3339Nano),
+	}); pubErr != nil {
+		slog.Warn("Failed to publish "+label+" failure",
+			"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+	}
+}
+
+// markStreamingEventsFailed marks any in-flight streaming timeline events
+// as failed. Called when collectStreamWithCallback returns an error so that
+// events don't remain stuck at status "streaming" indefinitely.
+func markStreamingEventsFailed(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	thinkingEventID, textEventID, channel string,
+	streamErr error,
+) {
+	failEvent := func(eventID string) {
+		if eventID == "" {
+			return
+		}
+		// Update DB status to failed with error message as content
+		failContent := fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+		updateErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent)
+		if updateErr != nil {
+			slog.Warn("Failed to mark streaming event as failed",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", updateErr)
+			return
+		}
+		// Notify WebSocket clients
+		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+			"type":      events.EventTypeTimelineCompleted,
+			"event_id":  eventID,
+			"status":    "failed",
+			"content":   failContent,
+			"timestamp": time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish streaming event failure",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+
+	failEvent(thinkingEventID)
+	failEvent(textEventID)
 }
 
 // createToolCallEvent creates a timeline event for a tool call request.

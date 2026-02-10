@@ -8,6 +8,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
@@ -17,6 +18,7 @@ type WorkerPool struct {
 	client          *ent.Client
 	config          *config.QueueConfig
 	sessionExecutor SessionExecutor
+	eventPublisher  agent.EventPublisher
 	workers         []*Worker
 	stopCh          chan struct{}
 	stopOnce        sync.Once
@@ -32,12 +34,14 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a new worker pool.
-func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor) *WorkerPool {
+// eventPublisher may be nil (streaming disabled).
+func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, eventPublisher agent.EventPublisher) *WorkerPool {
 	return &WorkerPool{
 		podID:           podID,
 		client:          client,
 		config:          cfg,
 		sessionExecutor: executor,
+		eventPublisher:  eventPublisher,
 		workers:         make([]*Worker, 0, cfg.WorkerCount),
 		stopCh:          make(chan struct{}),
 		activeSessions:  make(map[string]context.CancelFunc),
@@ -57,7 +61,7 @@ func (p *WorkerPool) Start(ctx context.Context) error {
 
 	for i := 0; i < p.config.WorkerCount; i++ {
 		workerID := fmt.Sprintf("%s-worker-%d", p.podID, i)
-		worker := NewWorker(workerID, p.podID, p.client, p.config, p.sessionExecutor, p)
+		worker := NewWorker(workerID, p.podID, p.client, p.config, p.sessionExecutor, p, p.eventPublisher)
 		p.workers = append(p.workers, worker)
 		worker.Start(ctx)
 	}

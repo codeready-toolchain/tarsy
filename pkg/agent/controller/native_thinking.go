@@ -60,14 +60,14 @@ func (c *NativeThinkingController) Run(
 		iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 		startTime := time.Now()
 
-		// Call LLM WITH tools (native function calling)
-		resp, err := callLLM(iterCtx, execCtx.LLMClient, &agent.GenerateInput{
+		// Call LLM WITH tools and streaming (native function calling)
+		streamed, err := callLLMWithStreaming(iterCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       tools, // Tools bound for native calling
-		})
+		}, &eventSeq)
 
 		if err != nil {
 			iterCancel()
@@ -80,12 +80,13 @@ func (c *NativeThinkingController) Run(
 			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
 			continue
 		}
+		resp := streamed.LLMResponse
 
 		accumulateUsage(&totalUsage, resp)
 		state.RecordSuccess()
 
-		// Record thinking content
-		if resp.ThinkingText != "" {
+		// Record thinking content (only if not already created by streaming)
+		if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
 				"source": "native",
 			}, &eventSeq)
@@ -97,8 +98,8 @@ func (c *NativeThinkingController) Run(
 
 		// Check for tool calls in response
 		if len(resp.ToolCalls) > 0 {
-			// Record text alongside tool calls (if any)
-			if resp.Text != "" {
+			// Record text alongside tool calls (only if not already created by streaming)
+			if !streamed.TextEventCreated && resp.Text != "" {
 				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmResponse, resp.Text, nil, &eventSeq)
 			}
 
@@ -111,11 +112,11 @@ func (c *NativeThinkingController) Run(
 			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
 
 			// Append assistant message to conversation
-		messages = append(messages, agent.ConversationMessage{
-			Role:      agent.RoleAssistant,
-			Content:   resp.Text,
-			ToolCalls: resp.ToolCalls,
-		})
+			messages = append(messages, agent.ConversationMessage{
+				Role:      agent.RoleAssistant,
+				Content:   resp.Text,
+				ToolCalls: resp.ToolCalls,
+			})
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
@@ -128,24 +129,24 @@ func (c *NativeThinkingController) Run(
 					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
 
-				// Append error as tool result message
-				messages = append(messages, agent.ConversationMessage{
-					Role:       agent.RoleTool,
-					Content:    errContent,
-					ToolCallID: tc.ID,
-					ToolName:   tc.Name,
-				})
+					// Append error as tool result message
+					messages = append(messages, agent.ConversationMessage{
+						Role:       agent.RoleTool,
+						Content:    errContent,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Name,
+					})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
 				} else {
 					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
 
-				// Append result as tool result message
-				messages = append(messages, agent.ConversationMessage{
-					Role:       agent.RoleTool,
-					Content:    result.Content,
-					ToolCallID: tc.ID,
-					ToolName:   tc.Name,
-				})
+					// Append result as tool result message
+					messages = append(messages, agent.ConversationMessage{
+						Role:       agent.RoleTool,
+						Content:    result.Content,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Name,
+					})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
 				}
 			}
@@ -201,14 +202,14 @@ func (c *NativeThinkingController) forceConclusion(
 
 	startTime := time.Now()
 
-	// Call LLM WITHOUT tools — forces text-only response
-	resp, err := callLLM(ctx, execCtx.LLMClient, &agent.GenerateInput{
+	// Call LLM WITHOUT tools with streaming — forces text-only response
+	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools — force conclusion
-	})
+	}, eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
 		return &agent.ExecutionResult{
@@ -217,6 +218,7 @@ func (c *NativeThinkingController) forceConclusion(
 			TokensUsed: *totalUsage,
 		}, nil
 	}
+	resp := streamed.LLMResponse
 
 	accumulateUsage(totalUsage, resp)
 	assistantMsg, _ := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
@@ -226,7 +228,7 @@ func (c *NativeThinkingController) forceConclusion(
 	}
 	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, msgID, startTime)
 
-	if resp.ThinkingText != "" {
+	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
 			"source": "native",
 		}, eventSeq)
@@ -244,4 +246,3 @@ func (c *NativeThinkingController) forceConclusion(
 		TokensUsed:    *totalUsage,
 	}, nil
 }
-
