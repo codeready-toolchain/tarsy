@@ -575,6 +575,22 @@ FAKE-EC-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 	}
 }
 
+func TestMaskingPatternReplacementFormat(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	// All replacements should use [MASKED_X] format (not __MASKED_X__ or ***MASKED_X***)
+	for name, pattern := range cfg.MaskingPatterns {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, pattern.Replacement, "[MASKED_",
+				"Pattern %s replacement should use [MASKED_X] format, got: %s", name, pattern.Replacement)
+			assert.NotContains(t, pattern.Replacement, "__MASKED_",
+				"Pattern %s replacement should not use old __MASKED_X__ format", name)
+			assert.NotContains(t, pattern.Replacement, "***MASKED_",
+				"Pattern %s replacement should not use ***MASKED_X*** format", name)
+		})
+	}
+}
+
 func TestAllMaskingPatternsCompile(t *testing.T) {
 	cfg := GetBuiltinConfig()
 

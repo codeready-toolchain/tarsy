@@ -1400,3 +1400,116 @@ func TestValidateMCPServersSSETransport(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		defaults *Defaults
+		wantErr  bool
+		errMsg   string
+	}{
+		{
+			name:     "nil defaults passes",
+			defaults: nil,
+			wantErr:  false,
+		},
+		{
+			name:     "nil alert masking passes",
+			defaults: &Defaults{AlertMasking: nil},
+			wantErr:  false,
+		},
+		{
+			name: "valid pattern group passes",
+			defaults: &Defaults{
+				AlertMasking: &AlertMaskingDefaults{
+					Enabled:      true,
+					PatternGroup: "security",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "all built-in groups pass",
+			defaults: &Defaults{
+				AlertMasking: &AlertMaskingDefaults{
+					Enabled:      true,
+					PatternGroup: "basic",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "unknown pattern group fails",
+			defaults: &Defaults{
+				AlertMasking: &AlertMaskingDefaults{
+					Enabled:      true,
+					PatternGroup: "nonexistent-group",
+				},
+			},
+			wantErr: true,
+			errMsg:  "pattern group 'nonexistent-group' not found",
+		},
+		{
+			name: "disabled masking with invalid group passes",
+			defaults: &Defaults{
+				AlertMasking: &AlertMaskingDefaults{
+					Enabled:      false,
+					PatternGroup: "nonexistent-group",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty pattern group passes when enabled",
+			defaults: &Defaults{
+				AlertMasking: &AlertMaskingDefaults{
+					Enabled:      true,
+					PatternGroup: "",
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Defaults: tt.defaults,
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateDefaults()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateDefaults_IntegrationWithValidateAll(t *testing.T) {
+	// Verify validateDefaults is called as part of ValidateAll
+	cfg := &Config{
+		Queue:               DefaultQueueConfig(),
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{}),
+		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+		ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{}),
+		Defaults: &Defaults{
+			AlertMasking: &AlertMaskingDefaults{
+				Enabled:      true,
+				PatternGroup: "nonexistent-group",
+			},
+		},
+	}
+
+	validator := NewValidator(cfg)
+	err := validator.ValidateAll()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "defaults validation failed")
+	assert.Contains(t, err.Error(), "pattern group 'nonexistent-group' not found")
+}

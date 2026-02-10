@@ -287,6 +287,37 @@ Done.`
 	assert.Contains(t, result, "Done.")
 }
 
+func TestMaskToolResult_CombinedCodeMaskerAndRegex(t *testing.T) {
+	// The "kubernetes" group includes both the kubernetes_secret code masker
+	// and regex patterns (api_key, password, certificate_authority_data).
+	// This test verifies both masking phases work together on a single Secret.
+	svc := newTestMaskingService(t, []string{"kubernetes"}, nil)
+
+	content := `apiVersion: v1
+kind: Secret
+metadata:
+  name: db-creds
+  annotations:
+    note: "certificate-authority-data: FAKECERTDATANOTREALDATAXXXXXXXXXX"
+type: Opaque
+data:
+  token: c3VwZXJzZWNyZXQ=
+  tls.key: RkFLRS10bHMta2V5LW5vdC1yZWFs`
+
+	result := svc.MaskToolResult(content, "test-server")
+
+	// Code masker (phase 1) should mask the Secret data field values
+	assert.NotContains(t, result, "c3VwZXJzZWNyZXQ=", "Secret data should be masked by code masker")
+	assert.NotContains(t, result, "RkFLRS10bHMta2V5LW5vdC1yZWFs", "TLS key data should be masked by code masker")
+
+	// Regex patterns (phase 2) should mask CA data in annotations
+	assert.NotContains(t, result, "FAKECERTDATANOTREALDATAXXXXXXXXXX", "CA data in annotation should be masked by regex")
+	assert.Contains(t, result, "[MASKED_CA_CERTIFICATE]")
+
+	// Metadata should be preserved
+	assert.Contains(t, result, "name: db-creds")
+}
+
 func TestBuiltinPatternRegression(t *testing.T) {
 	// Table-driven regression tests for each of the 15 built-in patterns.
 	svc := NewMaskingService(config.NewMCPServerRegistry(nil), AlertMaskingConfig{})
@@ -389,6 +420,27 @@ FAKE-CERT-DATA-NOT-REAL
 			input:       `SLACK_TOKEN=xoxb-FAKE-NOT-REAL-SLACK-BOT-TOKEN-XXXXXXXXXX`,
 			shouldMask:  true,
 			maskContain: "[MASKED_SLACK_TOKEN]",
+		},
+		{
+			name:        "base64_secret masks long base64",
+			pattern:     "base64_secret",
+			input:       `data: RkFLRS1CQVNFNTY0LUZBVEFMT05HLU5PVC1SRUFMLURYWFJJU1hYWFhYWFhYWFhYWFg=`,
+			shouldMask:  true,
+			maskContain: "[MASKED_BASE64_VALUE]",
+		},
+		{
+			name:        "base64_short masks short base64 value",
+			pattern:     "base64_short",
+			input:       `key: dGVzdA==`,
+			shouldMask:  true,
+			maskContain: "[MASKED_SHORT_BASE64]",
+		},
+		{
+			name:        "aws_secret_key masks 40 char format",
+			pattern:     "aws_secret_key",
+			input:       `aws_secret_access_key: "FAKESECRETNOTREAL1234567890XXXXXXXXXXXABC"`,
+			shouldMask:  true,
+			maskContain: "[MASKED_AWS_SECRET]",
 		},
 	}
 
