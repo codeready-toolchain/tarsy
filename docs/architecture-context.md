@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 4.1 (MCP Client Infrastructure)
+**Last updated after**: Phase 4.2 (Data Masking)
 
 ---
 
@@ -43,6 +43,7 @@ pkg/
 ├── config/           # Loader, registries, builtin config, enums, validator
 ├── database/         # Client, migrations
 ├── events/           # EventPublisher, ConnectionManager, NotifyListener
+├── masking/          # Data masking service (regex patterns, code maskers, K8s Secret masker)
 ├── mcp/              # MCP client infrastructure (client, executor, transport, health)
 ├── models/           # MCP selection, shared types
 ├── queue/            # Worker, WorkerPool, orphan detection, session executor
@@ -406,6 +407,110 @@ Every alert session gets its own `Client` instance with independent MCP SDK sess
 
 ---
 
+## Data Masking (`pkg/masking/`)
+
+### Design Principles
+
+1. **Fail-closed for MCP** — on masking failure, redact entire content rather than leaking secrets
+2. **Fail-open for alerts** — on masking failure, continue with unmasked data (availability over secrecy for user-provided data)
+3. **One-way masking** — original values never stored or recoverable
+4. **Code maskers before regex** — structural maskers (K8s Secrets) run first for precision, then regex patterns sweep
+5. **Compile once** — all patterns compiled at service creation; no hot-reload
+6. **Single chokepoint** — MCP content masked in `ToolExecutor.Execute()` before `ToolResult` is returned; all downstream consumers see masked content
+
+### Package Layout
+
+```
+pkg/masking/
+├── service.go              # MaskingService — core orchestrator
+├── pattern.go              # CompiledPattern, pattern resolution, group expansion
+├── masker.go               # Masker interface for code-based maskers
+├── kubernetes_secret.go    # KubernetesSecretMasker implementation
+├── service_test.go
+├── pattern_test.go
+├── kubernetes_secret_test.go
+└── testdata/               # K8s Secret/ConfigMap YAML/JSON fixtures
+```
+
+### Data Flow
+
+```
+MCP Tool Call:
+  MCP Server → Client.CallTool() → extractTextContent()
+    → MaskingService.MaskToolResult(content, serverID) → masked content
+    → ToolResult → Controller → Timeline/Messages/LLM (all see masked content)
+
+Alert Submission:
+  POST /api/v1/alerts → AlertService.SubmitAlert()
+    → MaskingService.MaskAlertData(alertData) → masked data
+    → DB INSERT (masked alert_data stored)
+```
+
+### Masker Interface (`pkg/masking/masker.go`)
+
+```go
+type Masker interface {
+    Name() string                  // Unique identifier (matches config.GetBuiltinConfig().CodeMaskers key)
+    AppliesTo(data string) bool    // Lightweight pre-check (string contains, not parsing)
+    Mask(data string) string       // Apply masking; defensive — returns original on error
+}
+```
+
+### MaskingService (`pkg/masking/service.go`)
+
+```go
+type MaskingService struct {
+    registry      *config.MCPServerRegistry
+    patterns      map[string]*CompiledPattern  // Built-in + custom compiled patterns
+    patternGroups map[string][]string          // Group name → pattern names
+    codeMaskers   map[string]Masker            // Registered code-based maskers
+    alertMasking  AlertMaskingConfig           // Alert payload masking settings
+}
+
+func NewMaskingService(registry *config.MCPServerRegistry, alertCfg AlertMaskingConfig) *MaskingService
+func (s *MaskingService) MaskToolResult(content string, serverID string) string  // Fail-closed
+func (s *MaskingService) MaskAlertData(data string) string                       // Fail-open
+```
+
+Singleton created once at startup. Thread-safe, stateless aside from compiled patterns.
+
+### CompiledPattern (`pkg/masking/pattern.go`)
+
+```go
+type CompiledPattern struct {
+    Name        string
+    Regex       *regexp.Regexp
+    Replacement string
+    Description string
+}
+```
+
+### KubernetesSecretMasker (`pkg/masking/kubernetes_secret.go`)
+
+Structural code masker that distinguishes K8s `Secret` from `ConfigMap` resources. Parses YAML (multi-document) and JSON to mask only Secret `data`/`stringData` fields. Handles `SecretList`, `List` with mixed items, and JSON-in-annotations (`last-applied-configuration`). Returns original data on parse errors (defensive).
+
+### Masking Execution Order
+
+1. Code-based maskers run first (structural, context-aware)
+2. Regex patterns sweep remaining content (general)
+
+### Integration Points
+
+- **ToolExecutor** (`pkg/mcp/executor.go`): `maskingService` field, called after `extractTextContent()` in `Execute()`. Nil-safe (backward compat).
+- **ClientFactory** (`pkg/mcp/client_factory.go`): Holds `maskingService`, passes through to `ToolExecutor`.
+- **AlertService** (`pkg/services/alert_service.go`): `maskingService` field, called in `SubmitAlert()` before DB insert. Nil-safe.
+- **Startup wiring**: `MaskingService` created once, passed to both `ClientFactory` and `AlertService`.
+
+### Configuration
+
+Per-server MCP masking (existing `MCPServerConfig.DataMasking`): `enabled`, `pattern_groups`, `patterns`, `custom_patterns`.
+
+Alert masking under `defaults.alert_masking`: `enabled` (default: true), `pattern_group` (default: "security").
+
+Replacement format: `[MASKED_X]` (not `__X__` to avoid Markdown bold rendering).
+
+---
+
 ## Key Types
 
 ### ExecutionContext (`pkg/agent/context.go`)
@@ -504,6 +609,9 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Tool errors as content** | MCP tool errors → `ToolResult{IsError: true}` (LLM-observable). Go errors → `error` return (infrastructure only) |
 | **Eager startup validation** | All configured MCP servers must initialize at startup (readiness probe fails otherwise); runtime degradation detected by HealthMonitor |
 | **Multi-format input parsing** | ActionInput cascade: JSON → YAML → key-value → raw string; parsing in executor, not parser |
+| **Fail-closed masking (MCP)** | Masking failure on MCP tool results → full redaction notice; secrets never leak to LLM/timeline |
+| **Fail-open masking (alerts)** | Masking failure on alert payloads → continue with unmasked data; availability over secrecy for user-provided data |
+| **Code maskers before regex** | Structural maskers (K8s Secrets) run first for precision, then regex patterns sweep remaining secrets |
 
 ---
 
@@ -528,12 +636,6 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 ---
 
 ## Deferred Items Tracker
-
-### Deferred to Phase 4.2 (Data Masking)
-
-- **Masking service**: Regex-based maskers (15 patterns), code-based maskers (K8s Secrets), custom regex from chain config.
-- **MCP tool result masking**: Integration point in `ToolExecutor.Execute()` after MCP call (stub hook exists).
-- **Alert payload sanitization**: Mask sensitive data in alert payloads before LLM processing.
 
 ### Deferred to Phase 4.3 (MCP Features)
 
