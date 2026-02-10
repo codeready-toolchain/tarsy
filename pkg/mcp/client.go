@@ -144,6 +144,7 @@ func (c *Client) initializeServerLocked(ctx context.Context, serverID string) er
 // ListTools returns tools from a specific server. Uses cache if available.
 func (c *Client) ListTools(ctx context.Context, serverID string) ([]*mcpsdk.Tool, error) {
 	// Check cache first
+	// Lock ordering: never acquire c.mu while holding toolCacheMu.
 	c.toolCacheMu.RLock()
 	if cached, ok := c.toolCache[serverID]; ok {
 		c.toolCacheMu.RUnlock()
@@ -168,12 +169,17 @@ func (c *Client) ListTools(ctx context.Context, serverID string) ([]*mcpsdk.Tool
 		return nil, fmt.Errorf("list tools from %q: %w", serverID, err)
 	}
 
-	// Cache results
+	// Cache results (nil-guard: ensure we always cache a non-nil slice so
+	// cache hits don't return nil to callers).
+	tools := result.Tools
+	if tools == nil {
+		tools = []*mcpsdk.Tool{}
+	}
 	c.toolCacheMu.Lock()
-	c.toolCache[serverID] = result.Tools
+	c.toolCache[serverID] = tools
 	c.toolCacheMu.Unlock()
 
-	return result.Tools, nil
+	return tools, nil
 }
 
 // ListAllTools returns tools from all connected servers.
@@ -208,6 +214,8 @@ func (c *Client) ListAllTools(ctx context.Context) (map[string][]*mcpsdk.Tool, e
 
 // CallTool executes a tool call on the specified server.
 // Handles recovery (retry with session recreation) on transport failures.
+// At most one retry is attempted after a jittered backoff; if the retry also
+// fails the error is returned to the caller.
 func (c *Client) CallTool(ctx context.Context, serverID, toolName string, args map[string]any) (*mcpsdk.CallToolResult, error) {
 	params := &mcpsdk.CallToolParams{
 		Name:      toolName,
@@ -334,6 +342,7 @@ func (c *Client) Close() error {
 
 // InvalidateToolCache removes the cached tool list for a server,
 // forcing the next ListTools call to re-probe the server.
+// Lock ordering: never acquire c.mu while holding toolCacheMu.
 func (c *Client) InvalidateToolCache(serverID string) {
 	c.toolCacheMu.Lock()
 	delete(c.toolCache, serverID)

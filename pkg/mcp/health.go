@@ -198,11 +198,11 @@ func (m *HealthMonitor) checkServer(ctx context.Context, serverID string) {
 		defer reconCancel()
 
 		if reinitErr := client.recreateSession(reconCtx, serverID); reinitErr != nil {
-			m.setStatus(serverID, false, fmt.Sprintf("health check failed: %s", err.Error()), 0)
+			m.setStatus(serverID, false, fmt.Sprintf("health check failed: %s (reinit: %s)", err.Error(), reinitErr.Error()), 0)
 			m.warningService.AddWarning(
 				services.WarningCategoryMCPHealth,
 				fmt.Sprintf("MCP server %q is unhealthy", serverID),
-				err.Error(), serverID)
+				fmt.Sprintf("%s (reinit: %s)", err.Error(), reinitErr.Error()), serverID)
 			return
 		}
 
@@ -271,12 +271,13 @@ func (m *HealthMonitor) GetCachedTools() map[string][]*mcpsdk.Tool {
 }
 
 // IsHealthy returns true if all monitored servers are healthy.
-// Returns false when no statuses exist yet (before first check completes).
+// Returns true when no statuses exist (no servers configured or before first
+// check completes) so that an empty registry doesn't cause spurious failures.
 func (m *HealthMonitor) IsHealthy() bool {
 	m.statusesMu.RLock()
 	defer m.statusesMu.RUnlock()
 	if len(m.statuses) == 0 {
-		return false
+		return true
 	}
 	for _, s := range m.statuses {
 		if !s.Healthy {
