@@ -1005,12 +1005,59 @@ pkg/
 
 ### Integration Tests
 
-| Scenario | Validates |
-|----------|-----------|
-| Alert with MCP override → only specified servers used | Override wiring, tool filtering |
-| Tool result > threshold → summarized | Summarization pipeline end-to-end |
-| Summarization LLM fails → raw result used | Fail-open behavior |
-| Tool execution → started/completed events published | Streaming lifecycle |
+Follow existing patterns: real PostgreSQL via `testdb.NewTestClient(t)`, in-memory MCP servers via `startTestServer(t, ...)`, real event streaming via `setupStreamingTest(t)`. See `pkg/mcp/integration_test.go`, `pkg/queue/integration_test.go`, `pkg/events/integration_test.go`, and `pkg/services/integration_test.go` for reference.
+
+#### Feature 1: Per-Alert MCP Selection Override (`pkg/queue/integration_test.go`)
+
+Uses real DB + mock executor to verify the override wiring in `RealSessionExecutor`:
+
+| Scenario | Setup | Validates |
+|----------|-------|-----------|
+| Session with MCP override → only override servers used | Create session with `mcp_selection` JSON containing 1 of 2 configured servers. Mock executor captures `CreateToolExecutor` args. | `serverIDs` matches override, not chain config |
+| Session with tool filter → only specified tools available | Override with `"tools": ["get_pods"]` for one server. | `toolFilter` passed correctly to `CreateToolExecutor` |
+| Session with invalid server in override → execution fails | Override references `"nonexistent-server"`. | `resolveMCPSelection` returns error, session status = failed |
+| Session without MCP override → chain config used | No `mcp_selection` on session. | `serverIDs` matches chain config servers |
+| Native tools override applied | Override with `native_tools: {google_search: false}`. | `ResolvedAgentConfig.NativeToolsOverride` set correctly |
+
+#### Feature 2: Tool Result Summarization (`pkg/agent/controller/integration_test.go`)
+
+New integration test file for controller-level flows. Uses real DB for timeline/interaction records, in-memory MCP servers for tool execution, and a mock LLM client for controlled responses:
+
+| Scenario | Setup | Validates |
+|----------|-------|-----------|
+| Tool result exceeds threshold → summarized | MCP server returns large result (> 5000 tokens). Mock LLM returns summary on summarization call. Server config has `summarization.enabled: true`. | `mcp_tool_summary` timeline event created in DB with summary content. `LLMInteraction` record with `type: "summarization"` in DB. Conversation message contains summary (not raw). |
+| Tool result below threshold → not summarized | MCP server returns small result. | No `mcp_tool_summary` event. No summarization `LLMInteraction`. Conversation message contains raw result. |
+| Summarization disabled for server → not summarized | Large result but `summarization.enabled: false`. | No summarization attempted. Raw result used. |
+| Summarization LLM fails → fail-open with raw result | Mock LLM returns error on summarization call. | No `mcp_tool_summary` event created. Raw result used in conversation. Investigation continues (no error propagation). |
+| Summarization LLM returns empty → fail-open | Mock LLM returns empty string. | Same as LLM failure — raw result used. |
+| Storage truncation applied to large result | MCP server returns result > storage limit. | `llm_tool_call` completion content is truncated at newline boundary. MCPInteraction record also truncated. Full (non-truncated) result still sent to summarization LLM. |
+| Multiple tool calls in one iteration → each independently handled | Two tool calls: one large (summarized), one small (raw). | Correct summarization decision per tool call. Both `llm_tool_call` events in DB with correct lifecycle. |
+
+#### Feature 3: Tool Call Streaming (`pkg/events/integration_test.go` or `pkg/agent/controller/integration_test.go`)
+
+Uses real DB + real event streaming infrastructure to verify the full lifecycle:
+
+| Scenario | Setup | Validates |
+|----------|-------|-----------|
+| Tool call lifecycle events published | Execute tool via controller. Subscribe to session WebSocket. | `timeline_event.created` with `event_type: llm_tool_call`, `status: streaming`, metadata has `{server_name, tool_name, arguments}`. Then `timeline_event.completed` with `status: completed`, content has result, metadata has `{is_error}`. |
+| Tool call event persisted correctly | Execute tool. Query DB. | Single `llm_tool_call` event in DB with `status: completed`, content = storage-truncated result, metadata = merged (creation + completion). |
+| Summarization streaming lifecycle | Large tool result triggers summarization. Subscribe to WebSocket. | `timeline_event.created` with `event_type: mcp_tool_summary`, `status: streaming`. One or more `stream.chunk` events with deltas. Then `timeline_event.completed` for the summary. |
+| Catchup on reconnect shows correct state | Execute tool, complete it, then query timeline. | Timeline query returns `llm_tool_call` with `completed` status and result in content. No orphaned `streaming` events. |
+
+#### End-to-End: Full Pipeline (`pkg/queue/integration_test.go`)
+
+Combines all three features in a single flow. This is the most comprehensive test — exercises the full path from session creation through tool execution with override, summarization, and streaming:
+
+| Scenario | Setup | Validates |
+|----------|-------|-----------|
+| Alert with MCP override → tool execution → summarization → timeline | Create session with `mcp_selection` override (1 server). MCP server returns large result. Mock LLM handles both iteration and summarization calls. | (1) Only override server used. (2) `llm_tool_call` event with streaming lifecycle. (3) `mcp_tool_summary` event with summary. (4) `LLMInteraction` with `type: "summarization"`. (5) Conversation message contains summary. |
+
+#### Test Infrastructure Notes
+
+- **Mock LLM client**: Needs to handle multiple calls (iteration + summarization) with distinguishable behavior. The mock should inspect the system prompt to distinguish summarization calls from iteration calls and return appropriate responses.
+- **In-memory MCP servers**: Use `startTestServer(t, name, tools)` from `pkg/mcp/client_test.go`. Configure tools to return configurable-size responses for threshold testing.
+- **Timeline assertions**: Query `TimelineEvent` records from DB, verify `event_type`, `status`, `content`, and `metadata` fields.
+- **Interaction assertions**: Query `LLMInteraction` and `MCPInteraction` records, verify types and linked timeline events.
 
 ---
 
