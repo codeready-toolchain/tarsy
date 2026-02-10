@@ -64,7 +64,9 @@ func NewToolExecutor(
 //  5. Parse Arguments string into map[string]any
 //  6. Call Client.CallTool(ctx, serverID, toolName, params)
 //  7. Convert MCP result to ToolResult
-//  8. Return ToolResult
+//  8. Apply data masking (if masking service configured)
+//  9. Summarization (Phase 4.3 stub)
+//  10. Return ToolResult
 func (e *ToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
 	// Step 1: Normalize name
 	name := NormalizeToolName(call.Name)

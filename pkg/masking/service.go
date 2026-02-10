@@ -4,6 +4,7 @@
 package masking
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -113,7 +114,16 @@ func (s *Service) MaskAlertData(data string) string {
 }
 
 // applyMasking applies code-based maskers then regex patterns to content.
-func (s *Service) applyMasking(content string, resolved *resolvedPatterns) (string, error) {
+// Recovers from panics in maskers to ensure fail-closed/fail-open guarantees.
+func (s *Service) applyMasking(content string, resolved *resolvedPatterns) (result string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Masking panic recovered", "panic", r)
+			result = ""
+			err = fmt.Errorf("masking panic: %v", r)
+		}
+	}()
+
 	masked := content
 
 	// Phase 1: Code-based maskers (more specific, structural awareness)

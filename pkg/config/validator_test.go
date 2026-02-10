@@ -1460,14 +1460,15 @@ func TestValidateDefaults(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "empty pattern group passes when enabled",
+			name: "empty pattern group fails when enabled",
 			defaults: &Defaults{
 				AlertMasking: &AlertMaskingDefaults{
 					Enabled:      true,
 					PatternGroup: "",
 				},
 			},
-			wantErr: false,
+			wantErr: true,
+			errMsg:  "pattern_group is required when alert masking is enabled",
 		},
 	}
 

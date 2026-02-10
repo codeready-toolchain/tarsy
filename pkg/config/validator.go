@@ -100,11 +100,13 @@ func (v *Validator) validateDefaults() error {
 	if defaults.AlertMasking != nil && defaults.AlertMasking.Enabled {
 		builtin := GetBuiltinConfig()
 		groupName := defaults.AlertMasking.PatternGroup
-		if groupName != "" {
-			if _, exists := builtin.PatternGroups[groupName]; !exists {
-				return NewValidationError("defaults", "", "alert_masking.pattern_group",
-					fmt.Errorf("pattern group '%s' not found in built-in groups", groupName))
-			}
+		if groupName == "" {
+			return NewValidationError("defaults", "", "alert_masking.pattern_group",
+				fmt.Errorf("pattern_group is required when alert masking is enabled"))
+		}
+		if _, exists := builtin.PatternGroups[groupName]; !exists {
+			return NewValidationError("defaults", "", "alert_masking.pattern_group",
+				fmt.Errorf("pattern group '%s' not found in built-in groups", groupName))
 		}
 	}
 

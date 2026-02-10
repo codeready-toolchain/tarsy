@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestAlertService(t *testing.T, client *database.Client) *AlertService {
+func setupTestAlertService(t *testing.T, client *database.Client, maskingSvc ...*masking.Service) *AlertService {
 	t.Helper()
 
 	// Create chain registry with test chains
@@ -45,7 +45,12 @@ func setupTestAlertService(t *testing.T, client *database.Client) *AlertService 
 		AlertType: "generic",
 	}
 
-	return NewAlertService(client.Client, chainRegistry, defaults, nil)
+	var svc *masking.Service
+	if len(maskingSvc) > 0 {
+		svc = maskingSvc[0]
+	}
+
+	return NewAlertService(client.Client, chainRegistry, defaults, svc)
 }
 
 func TestNewAlertService(t *testing.T) {
@@ -66,11 +71,6 @@ func TestNewAlertService(t *testing.T) {
 	})
 
 	t.Run("succeeds with valid inputs", func(t *testing.T) {
-		service := NewAlertService(client.Client, chainRegistry, defaults, nil)
-		assert.NotNil(t, service)
-	})
-
-	t.Run("succeeds with nil masking service", func(t *testing.T) {
 		service := NewAlertService(client.Client, chainRegistry, defaults, nil)
 		assert.NotNil(t, service)
 	})
@@ -202,36 +202,13 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 
 // --- Alert masking tests ---
 
-func setupTestAlertServiceWithMasking(t *testing.T, client *database.Client, maskingSvc *masking.Service) *AlertService {
-	t.Helper()
-
-	chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
-		"default-chain": {
-			AlertTypes:  []string{"generic"},
-			Description: "Default generic analysis",
-			Stages: []config.StageConfig{
-				{
-					Name:   "analysis",
-					Agents: []config.StageAgentConfig{{Name: "GenericAgent"}},
-				},
-			},
-		},
-	})
-
-	defaults := &config.Defaults{
-		AlertType: "generic",
-	}
-
-	return NewAlertService(client.Client, chainRegistry, defaults, maskingSvc)
-}
-
 func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	maskingSvc := masking.NewService(
 		config.NewMCPServerRegistry(nil),
 		masking.AlertMaskingConfig{Enabled: true, PatternGroup: "security"},
 	)
-	service := setupTestAlertServiceWithMasking(t, client, maskingSvc)
+	service := setupTestAlertService(t, client, maskingSvc)
 	ctx := context.Background()
 
 	input := SubmitAlertInput{
@@ -258,7 +235,7 @@ func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
 		config.NewMCPServerRegistry(nil),
 		masking.AlertMaskingConfig{Enabled: false, PatternGroup: "security"},
 	)
-	service := setupTestAlertServiceWithMasking(t, client, maskingSvc)
+	service := setupTestAlertService(t, client, maskingSvc)
 	ctx := context.Background()
 
 	input := SubmitAlertInput{
@@ -277,7 +254,7 @@ func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
 
 func TestAlertService_SubmitAlert_NilService(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	service := setupTestAlertServiceWithMasking(t, client, nil)
+	service := setupTestAlertService(t, client, nil)
 	ctx := context.Background()
 
 	input := SubmitAlertInput{

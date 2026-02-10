@@ -116,25 +116,12 @@ func (s *Service) resolvePatterns(cfg *config.MaskingConfig, serverID string) *r
 }
 
 // resolvePatternsFromGroup resolves a single pattern group name into resolvedPatterns.
+// Delegates to resolvePatterns with a minimal MaskingConfig for the given group.
 func (s *Service) resolvePatternsFromGroup(groupName string) *resolvedPatterns {
-	seen := make(map[string]bool)
-	resolved := &resolvedPatterns{}
-	builtin := config.GetBuiltinConfig()
-
-	groupPatterns, ok := s.patternGroups[groupName]
-	if !ok {
-		return resolved
-	}
-
-	for _, name := range groupPatterns {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		s.addToResolved(resolved, name, builtin)
-	}
-
-	return resolved
+	return s.resolvePatterns(&config.MaskingConfig{
+		Enabled:       true,
+		PatternGroups: []string{groupName},
+	}, "")
 }
 
 // addToResolved adds a pattern name to the resolved set, categorizing it as

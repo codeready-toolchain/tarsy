@@ -42,6 +42,16 @@ func TestKubernetesSecretMasker_AppliesTo(t *testing.T) {
 			expect: true,
 		},
 		{
+			name:   "YAML SecretList",
+			input:  "apiVersion: v1\nkind: SecretList\nitems: []",
+			expect: true,
+		},
+		{
+			name:   "JSON SecretList",
+			input:  `{"apiVersion": "v1", "kind": "SecretList", "items": []}`,
+			expect: true,
+		},
+		{
 			name:   "ConfigMap",
 			input:  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test",
 			expect: false,
@@ -141,27 +151,34 @@ func TestKubernetesSecretMasker_JSON_List(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(result), &parsed))
 
-	items := parsed["items"].([]any)
-	require.Len(t, items, 3)
+	rawItems, ok := parsed["items"].([]any)
+	require.True(t, ok, "items should be an array")
+	require.Len(t, rawItems, 3)
 
 	// First item: Secret — should be masked
-	secret1 := items[0].(map[string]any)
+	secret1, ok := rawItems[0].(map[string]any)
+	require.True(t, ok, "item 0 should be a map")
 	assert.Equal(t, "Secret", secret1["kind"])
-	data1 := secret1["data"].(map[string]any)
+	data1, ok := secret1["data"].(map[string]any)
+	require.True(t, ok, "item 0 data should be a map")
 	assert.Equal(t, MaskedSecretValue, data1["API_KEY"])
 	assert.Equal(t, MaskedSecretValue, data1["API_SECRET"])
 
 	// Second item: ConfigMap — should NOT be masked
-	configMap := items[1].(map[string]any)
+	configMap, ok := rawItems[1].(map[string]any)
+	require.True(t, ok, "item 1 should be a map")
 	assert.Equal(t, "ConfigMap", configMap["kind"])
-	cmData := configMap["data"].(map[string]any)
+	cmData, ok := configMap["data"].(map[string]any)
+	require.True(t, ok, "item 1 data should be a map")
 	assert.Equal(t, "staging", cmData["ENVIRONMENT"])
 	assert.Equal(t, "false", cmData["DEBUG"])
 
 	// Third item: Secret — should be masked
-	secret2 := items[2].(map[string]any)
+	secret2, ok := rawItems[2].(map[string]any)
+	require.True(t, ok, "item 2 should be a map")
 	assert.Equal(t, "Secret", secret2["kind"])
-	data2 := secret2["data"].(map[string]any)
+	data2, ok := secret2["data"].(map[string]any)
+	require.True(t, ok, "item 2 data should be a map")
 	assert.Equal(t, MaskedSecretValue, data2["tls.crt"])
 	assert.Equal(t, MaskedSecretValue, data2["tls.key"])
 }
@@ -281,12 +298,15 @@ func TestKubernetesSecretMasker_JSONSecretList(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(result), &parsed))
 
-	items := parsed["items"].([]any)
-	require.Len(t, items, 2)
+	rawItems, ok := parsed["items"].([]any)
+	require.True(t, ok, "items should be an array")
+	require.Len(t, rawItems, 2)
 
-	for _, item := range items {
-		itemMap := item.(map[string]any)
-		data := itemMap["data"].(map[string]any)
+	for i, item := range rawItems {
+		itemMap, ok := item.(map[string]any)
+		require.True(t, ok, "item %d should be a map", i)
+		data, ok := itemMap["data"].(map[string]any)
+		require.True(t, ok, "item %d data should be a map", i)
 		for _, v := range data {
 			assert.Equal(t, MaskedSecretValue, v)
 		}
@@ -536,12 +556,12 @@ kind: SecretStore
 metadata:
   name: not-a-secret
 `
-	// Even though "SecretStore" contains "Secret", yamlSecretPattern requires exact "kind: Secret"
+	// Even though "SecretStore" contains "Secret", yamlSecretPattern only matches "Secret" or "SecretList"
 	assert.False(t, m.AppliesTo(input), "Should not apply to SecretStore")
 }
 
-func TestKubernetesSecretMasker_IntegrationWithService(t *testing.T) {
-	// Verify the masker works correctly when invoked through the Service
+func TestKubernetesSecretMasker_FullLifecycle(t *testing.T) {
+	// Verify the full AppliesTo → Mask lifecycle against a real test fixture
 	m := &KubernetesSecretMasker{}
 
 	input := readTestdata(t, "secret_yaml.txt")

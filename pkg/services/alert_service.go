@@ -18,7 +18,7 @@ import (
 type SubmitAlertInput struct {
 	AlertType string
 	Runbook   string
-	Data      string                     // Alert payload (opaque text, stored as-is)
+	Data      string                     // Alert payload (opaque text, may be masked before storage)
 	MCP       *models.MCPSelectionConfig // MCP selection config (optional)
 	Author    string                     // From oauth2-proxy headers
 }

@@ -14,9 +14,10 @@ import (
 const MaskedSecretValue = "[MASKED_SECRET_DATA]"
 
 // Pre-compiled patterns for fast AppliesTo checks.
+// Match both Secret and SecretList kinds, consistent with isKubernetesSecret.
 var (
-	yamlSecretPattern = regexp.MustCompile(`(?m)^kind:\s*Secret\s*$`)
-	jsonSecretPattern = regexp.MustCompile(`"kind"\s*:\s*"Secret"`)
+	yamlSecretPattern = regexp.MustCompile(`(?m)^kind:\s*Secret(?:List)?\s*$`)
+	jsonSecretPattern = regexp.MustCompile(`"kind"\s*:\s*"Secret(?:List)?"`)
 )
 
 // KubernetesSecretMasker masks data/stringData fields in Kubernetes Secret resources
@@ -130,7 +131,7 @@ func (m *KubernetesSecretMasker) maskJSON(data string) string {
 		maskAnnotationSecrets(obj)
 		anyMasked = true
 	} else if isKubernetesList(obj) {
-		if m.maskJSONListItems(obj) {
+		if m.maskListItems(obj) {
 			anyMasked = true
 		}
 	}
@@ -154,39 +155,11 @@ func (m *KubernetesSecretMasker) maskJSON(data string) string {
 	return output
 }
 
-// maskListItems masks Secret items within a Kubernetes List in YAML-parsed data.
+// maskListItems masks Secret items within a Kubernetes List resource.
+// Works for both YAML-parsed and JSON-parsed data (same map[string]any representation).
 // Returns true if any items were masked.
 func (m *KubernetesSecretMasker) maskListItems(doc map[string]any) bool {
 	items, ok := doc["items"]
-	if !ok {
-		return false
-	}
-
-	itemList, ok := items.([]any)
-	if !ok {
-		return false
-	}
-
-	anyMasked := false
-	for _, item := range itemList {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if isKubernetesSecret(itemMap) {
-			maskSecretFields(itemMap)
-			maskAnnotationSecrets(itemMap)
-			anyMasked = true
-		}
-	}
-
-	return anyMasked
-}
-
-// maskJSONListItems masks Secret items within a JSON List object.
-// Returns true if any items were masked.
-func (m *KubernetesSecretMasker) maskJSONListItems(obj map[string]any) bool {
-	items, ok := obj["items"]
 	if !ok {
 		return false
 	}

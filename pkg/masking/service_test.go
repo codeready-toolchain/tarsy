@@ -233,6 +233,27 @@ func TestMaskToolResult_FailClosed(t *testing.T) {
 	assert.Contains(t, result, "[MASKED_API_KEY]")
 }
 
+func TestMaskToolResult_FailClosed_Panic(t *testing.T) {
+	// Verify that a panic in a code masker is recovered and returns an error.
+	// The fail-closed redaction in MaskToolResult depends on applyMasking returning
+	// an error, which we verify here at the applyMasking level.
+	// The MaskToolResult → redaction wiring is already covered by TestMaskToolResult_FailClosed.
+	svc := newTestService(t, []string{"basic"}, nil)
+
+	// Register a masker that panics
+	svc.codeMaskers["panic_masker"] = &panicMasker{}
+
+	content := "some sensitive data"
+	resolved := &resolvedPatterns{
+		codeMaskerNames: []string{"panic_masker"},
+	}
+
+	result, err := svc.applyMasking(content, resolved)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "masking panic")
+	assert.Empty(t, result, "Result should be empty on panic (fail-closed returns redaction notice)")
+}
+
 func TestMaskAlertData_FailOpen(t *testing.T) {
 	// Alert masking should return original data on failure (fail-open).
 	// The current implementation doesn't have a code path that returns an error,
@@ -249,6 +270,36 @@ func TestMaskAlertData_FailOpen(t *testing.T) {
 	assert.NotEqual(t, data, result)
 	assert.Contains(t, result, "[MASKED_PASSWORD]")
 }
+
+func TestMaskAlertData_FailOpen_Panic(t *testing.T) {
+	// Verify that a panic in a code masker is recovered and returns an error.
+	// MaskAlertData returns the original data on error (fail-open).
+	// We verify the applyMasking level here; the MaskAlertData → passthrough
+	// wiring is already covered by TestMaskAlertData_FailOpen.
+	svc := NewService(
+		config.NewMCPServerRegistry(nil),
+		AlertMaskingConfig{Enabled: true, PatternGroup: "basic"},
+	)
+	svc.codeMaskers["panic_masker"] = &panicMasker{}
+
+	data := "some alert data"
+	resolved := &resolvedPatterns{
+		codeMaskerNames: []string{"panic_masker"},
+	}
+
+	result, err := svc.applyMasking(data, resolved)
+	require.Error(t, err, "Panic should be recovered as an error")
+	assert.Contains(t, err.Error(), "masking panic")
+	assert.Empty(t, result, "Result should be empty on panic")
+	// MaskAlertData would return 'data' (fail-open) when it gets this error.
+}
+
+// panicMasker is a test masker that always panics when Mask is called.
+type panicMasker struct{}
+
+func (m *panicMasker) Name() string            { return "panic_masker" }
+func (m *panicMasker) AppliesTo(_ string) bool { return true }
+func (m *panicMasker) Mask(_ string) string    { panic("intentional test panic in masker") }
 
 func TestApplyMasking_CodeMaskersBeforeRegex(t *testing.T) {
 	// Verify code maskers run before regex patterns.
