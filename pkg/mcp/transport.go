@@ -77,7 +77,10 @@ func buildHTTPClient(cfg config.TransportConfig) *http.Client {
 
 	// TLS verification
 	if cfg.VerifySSL != nil && !*cfg.VerifySSL {
-		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-configured
+		httpTransport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,             //nolint:gosec // user-configured
+			MinVersion:         tls.VersionTLS12, // prevent protocol downgrade even in relaxed mode
+		}
 	}
 
 	client := &http.Client{

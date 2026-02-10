@@ -43,12 +43,10 @@ func (s *SystemWarningsService) AddWarning(category, message, details, serverID 
 	defer s.mu.Unlock()
 
 	// Replace existing warning with same category+serverID to avoid duplicates
-	if serverID != "" {
-		for id, w := range s.warnings {
-			if w.Category == category && w.ServerID == serverID {
-				delete(s.warnings, id)
-				break
-			}
+	for id, w := range s.warnings {
+		if w.Category == category && w.ServerID == serverID {
+			delete(s.warnings, id)
+			break
 		}
 	}
 
@@ -64,14 +62,16 @@ func (s *SystemWarningsService) AddWarning(category, message, details, serverID 
 	return id
 }
 
-// GetWarnings returns all active warnings.
+// GetWarnings returns all active warnings as value copies.
+// Callers may safely read or compare the returned structs without holding locks.
 func (s *SystemWarningsService) GetWarnings() []*SystemWarning {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]*SystemWarning, 0, len(s.warnings))
 	for _, w := range s.warnings {
-		result = append(result, w)
+		cp := *w
+		result = append(result, &cp)
 	}
 	return result
 }

@@ -13,6 +13,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/version"
 )
 
 // Client manages MCP SDK sessions for multiple servers.
@@ -69,8 +70,21 @@ func (c *Client) Initialize(ctx context.Context, serverIDs []string) error {
 
 // InitializeServer connects to a single MCP server.
 // Returns nil if already connected. Used for lazy initialization and recovery.
+// Uses per-server mutex to prevent concurrent initialization of the same server.
 func (c *Client) InitializeServer(ctx context.Context, serverID string) error {
-	// Check if already connected
+	// Acquire per-server mutex to serialize initialization attempts
+	muI, _ := c.reinitMu.LoadOrStore(serverID, &sync.Mutex{})
+	mu := muI.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
+	return c.initializeServerLocked(ctx, serverID)
+}
+
+// initializeServerLocked performs the actual server initialization.
+// Caller must hold the per-server reinitMu lock.
+func (c *Client) initializeServerLocked(ctx context.Context, serverID string) error {
+	// Check if already connected (under per-server lock, no TOCTOU race)
 	c.mu.RLock()
 	if _, exists := c.sessions[serverID]; exists {
 		c.mu.RUnlock()
@@ -95,8 +109,8 @@ func (c *Client) InitializeServer(ctx context.Context, serverID string) error {
 	defer cancel()
 
 	client := mcpsdk.NewClient(&mcpsdk.Implementation{
-		Name:    "tarsy",
-		Version: "1.0.0",
+		Name:    version.AppName,
+		Version: version.GitCommit,
 	}, nil)
 
 	session, err := client.Connect(initCtx, transport, nil)
@@ -104,7 +118,7 @@ func (c *Client) InitializeServer(ctx context.Context, serverID string) error {
 		return fmt.Errorf("failed to connect to %q: %w", serverID, err)
 	}
 
-	// Store session
+	// Store session and clear failure record
 	c.mu.Lock()
 	c.sessions[serverID] = session
 	c.clients[serverID] = client
@@ -152,6 +166,7 @@ func (c *Client) ListTools(ctx context.Context, serverID string) ([]*mcpsdk.Tool
 
 // ListAllTools returns tools from all connected servers.
 // Returns partial results if some servers fail (logs errors, does not abort).
+// Returns an error only when every server fails (no tools available at all).
 func (c *Client) ListAllTools(ctx context.Context) (map[string][]*mcpsdk.Tool, error) {
 	c.mu.RLock()
 	serverIDs := make([]string, 0, len(c.sessions))
@@ -161,14 +176,20 @@ func (c *Client) ListAllTools(ctx context.Context) (map[string][]*mcpsdk.Tool, e
 	c.mu.RUnlock()
 
 	result := make(map[string][]*mcpsdk.Tool)
+	var lastErr error
 	for _, id := range serverIDs {
 		tools, err := c.ListTools(ctx, id)
 		if err != nil {
+			lastErr = err
 			c.logger.Warn("Failed to list tools from MCP server",
 				"server", id, "error", err)
 			continue
 		}
 		result[id] = tools
+	}
+
+	if len(result) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("all servers failed to list tools: %w", lastErr)
 	}
 	return result, nil
 }
@@ -238,6 +259,12 @@ func (c *Client) callToolOnce(ctx context.Context, serverID string, params *mcps
 
 // recreateSession tears down and recreates the session for a server.
 // Uses per-server mutex to prevent concurrent recreation.
+//
+// Note: if two goroutines race into recreateSession, the second will
+// unnecessarily tear down the freshly recreated session and create another.
+// A staleness guard (checking if session exists after lock) doesn't work here
+// because the first caller also sees the broken session in the map.
+// The cost is an extra recreation, which is acceptable for simplicity.
 func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 	// Get or create per-server mutex
 	muI, _ := c.reinitMu.LoadOrStore(serverID, &sync.Mutex{})
@@ -259,11 +286,11 @@ func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 	delete(c.toolCache, serverID)
 	c.toolCacheMu.Unlock()
 
-	// Reinitialize with timeout
+	// Reinitialize with timeout (use locked variant — we already hold reinitMu)
 	reinitCtx, cancel := context.WithTimeout(ctx, ReinitTimeout)
 	defer cancel()
 
-	return c.InitializeServer(reinitCtx, serverID)
+	return c.initializeServerLocked(reinitCtx, serverID)
 }
 
 // Close shuts down all sessions and transports gracefully.
@@ -281,6 +308,7 @@ func (c *Client) Close() error {
 	// Clear all state
 	c.sessions = make(map[string]*mcpsdk.ClientSession)
 	c.clients = make(map[string]*mcpsdk.Client)
+	c.failedServers = make(map[string]string)
 
 	c.toolCacheMu.Lock()
 	c.toolCache = make(map[string][]*mcpsdk.Tool)

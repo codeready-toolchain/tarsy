@@ -7,6 +7,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
 // RecoveryAction determines how to handle an MCP operation failure.
@@ -16,6 +18,8 @@ const (
 	// NoRetry — the error is not recoverable (bad request, auth failure, timeout).
 	NoRetry RecoveryAction = iota
 	// RetrySameSession — transient error, retry with existing session (rate limit).
+	// Reserved for future use: ClassifyError does not currently return this value.
+	// Intended for rate-limit / throttle errors once server-side rate limiting is detected.
 	RetrySameSession
 	// RetryNewSession — transport failure, recreate session and retry.
 	RetryNewSession
@@ -86,7 +90,7 @@ func ClassifyError(err error) RecoveryAction {
 
 // isConnectionError detects connection-level transport failures.
 func isConnectionError(err error) bool {
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 
@@ -107,20 +111,20 @@ func isConnectionError(err error) bool {
 }
 
 // isMCPProtocolError detects MCP JSON-RPC protocol errors from the SDK.
-// These are client-side errors like bad request, method not found, etc.
+// Uses the SDK's typed jsonrpc.Error (WireError) with standard JSON-RPC 2.0
+// error codes rather than string matching for robustness.
 func isMCPProtocolError(err error) bool {
-	msg := err.Error()
-	// MCP SDK returns structured errors with JSON-RPC error codes
-	protocolIndicators := []string{
-		"method not found",
-		"invalid params",
-		"invalid request",
-		"parse error",
+	var wireErr *jsonrpc.Error
+	if !errors.As(err, &wireErr) {
+		return false
 	}
-	for _, indicator := range protocolIndicators {
-		if strings.Contains(strings.ToLower(msg), indicator) {
-			return true
-		}
+	switch wireErr.Code {
+	case jsonrpc.CodeParseError,
+		jsonrpc.CodeInvalidRequest,
+		jsonrpc.CodeMethodNotFound,
+		jsonrpc.CodeInvalidParams:
+		return true
+	default:
+		return false
 	}
-	return false
 }

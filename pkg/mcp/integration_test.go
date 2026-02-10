@@ -172,11 +172,8 @@ func TestIntegration_NativeThinking_ListToolsConversion(t *testing.T) {
 // TestIntegration_PerSessionIsolation tests that two concurrent executors from the same factory
 // operate independently.
 func TestIntegration_PerSessionIsolation(t *testing.T) {
-	callCount := make(chan string, 10)
-
 	ts1 := startTestServer(t, "server1", map[string]mcpsdk.ToolHandler{
 		"tool": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-			callCount <- "session1"
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "from session 1"}},
 			}, nil
@@ -185,7 +182,6 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 
 	ts2 := startTestServer(t, "server2", map[string]mcpsdk.ToolHandler{
 		"tool": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-			callCount <- "session2"
 			return &mcpsdk.CallToolResult{
 				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "from session 2"}},
 			}, nil
@@ -235,6 +231,7 @@ func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 	// Wire healthy client
 	client := newClient(registry)
 	wireSession(t, client, "test-server", ts.clientTransport)
+	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
 
 	// Phase 1: Healthy
@@ -283,8 +280,6 @@ func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 	require.NotNil(t, status)
 	assert.True(t, status.Healthy)
 	assert.Empty(t, status.Error)
-
-	_ = client.Close()
 }
 
 // --- Test helpers ---
@@ -397,6 +392,7 @@ func TestIntegration_HealthMonitor_ToolCaching(t *testing.T) {
 	// Wire client
 	client := newClient(registry)
 	wireSession(t, client, "test-server", ts.clientTransport)
+	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
 
 	// Run health check
@@ -406,6 +402,4 @@ func TestIntegration_HealthMonitor_ToolCaching(t *testing.T) {
 	cached := monitor.GetCachedTools()
 	require.Contains(t, cached, "test-server")
 	assert.Len(t, cached["test-server"], 2)
-
-	_ = client.Close()
 }

@@ -3,10 +3,12 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,19 +64,44 @@ func TestClassifyError(t *testing.T) {
 			expected: RetryNewSession,
 		},
 		{
-			name:     "connection closed",
+			name:     "connection closed string (not sentinel)",
 			err:      errors.New("use of closed network connection"),
-			expected: NoRetry, // This is a generic error, not matched by connectionErrors
+			expected: NoRetry, // errors.New creates a distinct error, not net.ErrClosed
 		},
 		{
-			name:     "MCP method not found",
+			name:     "net.ErrClosed sentinel",
+			err:      net.ErrClosed,
+			expected: RetryNewSession,
+		},
+		{
+			name:     "wrapped net.ErrClosed",
+			err:      fmt.Errorf("operation failed: %w", net.ErrClosed),
+			expected: RetryNewSession,
+		},
+		{
+			name:     "MCP method not found (typed)",
+			err:      &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found"},
+			expected: NoRetry,
+		},
+		{
+			name:     "MCP invalid params (typed)",
+			err:      &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "invalid params"},
+			expected: NoRetry,
+		},
+		{
+			name:     "MCP parse error (typed)",
+			err:      &jsonrpc.Error{Code: jsonrpc.CodeParseError, Message: "parse error"},
+			expected: NoRetry,
+		},
+		{
+			name:     "wrapped MCP error",
+			err:      fmt.Errorf("call failed: %w", &jsonrpc.Error{Code: jsonrpc.CodeInvalidRequest, Message: "invalid request"}),
+			expected: NoRetry,
+		},
+		{
+			name:     "MCP protocol error string (not typed)",
 			err:      errors.New("JSON-RPC error: method not found"),
-			expected: NoRetry,
-		},
-		{
-			name:     "MCP invalid params",
-			err:      errors.New("invalid params: missing required field"),
-			expected: NoRetry,
+			expected: NoRetry, // Not a typed error, falls to default NoRetry
 		},
 		{
 			name:     "unknown error",

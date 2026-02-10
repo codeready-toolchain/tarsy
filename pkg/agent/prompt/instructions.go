@@ -3,6 +3,7 @@ package prompt
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -136,8 +137,13 @@ func (b *PromptBuilder) appendUnavailableServerWarnings(sections []string, faile
 	var sb strings.Builder
 	sb.WriteString("## Unavailable MCP Servers\n\n")
 	sb.WriteString("The following servers failed to initialize and their tools are NOT available:\n")
-	for serverID, errMsg := range failedServers {
-		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", serverID, errMsg))
+	keys := make([]string, 0, len(failedServers))
+	for k := range failedServers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, serverID := range keys {
+		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", serverID, failedServers[serverID]))
 	}
 	sb.WriteString("\nDo not attempt to use tools from these servers.")
 	return append(sections, sb.String())

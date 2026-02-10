@@ -37,6 +37,7 @@ func TestHealthMonitor_HealthyServer(t *testing.T) {
 	require.NoError(t, err)
 	client.sessions["test-server"] = session
 	client.clients["test-server"] = sdkClient
+	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
 
 	// Manually run a check
@@ -58,8 +59,6 @@ func TestHealthMonitor_HealthyServer(t *testing.T) {
 	cached := monitor.GetCachedTools()
 	assert.Contains(t, cached, "test-server")
 	assert.Len(t, cached["test-server"], 1)
-
-	_ = client.Close()
 }
 
 func TestHealthMonitor_UnhealthyServer(t *testing.T) {
@@ -115,6 +114,7 @@ func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 	require.NoError(t, err)
 	client.sessions["test-server"] = session
 	client.clients["test-server"] = sdkClient
+	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
 
 	// Check should pass and clear the warning
@@ -122,8 +122,6 @@ func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 
 	assert.Empty(t, warningsSvc.GetWarnings())
 	assert.True(t, monitor.IsHealthy())
-
-	_ = client.Close()
 }
 
 func TestHealthMonitor_StartStop(t *testing.T) {
@@ -163,12 +161,12 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 	ctx := context.Background()
 	monitor.Start(ctx)
 
-	// Wait for at least one check cycle
-	time.Sleep(150 * time.Millisecond)
+	// Poll until at least one check has run (avoids timing-dependent flakes on slow CI)
+	require.Eventually(t, func() bool {
+		statuses := monitor.GetStatuses()
+		_, ok := statuses["test-server"]
+		return ok
+	}, 2*time.Second, 25*time.Millisecond, "health check should have run at least once")
 
 	monitor.Stop()
-
-	// Should have performed at least one check
-	statuses := monitor.GetStatuses()
-	assert.Contains(t, statuses, "test-server")
 }

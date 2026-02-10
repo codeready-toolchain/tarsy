@@ -40,9 +40,12 @@ func startTestServer(t *testing.T, name string, tools map[string]mcpsdk.ToolHand
 
 	clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
 
-	// Start server in background
+	// Start server in background with cancellable context to avoid leaked goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
 	go func() {
-		_ = server.Run(context.Background(), serverTransport)
+		_ = server.Run(ctx, serverTransport)
 	}()
 
 	return &testMCPServer{

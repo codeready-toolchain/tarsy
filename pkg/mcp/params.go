@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 
@@ -44,10 +45,19 @@ func ParseActionInput(input string) (map[string]any, error) {
 }
 
 // tryParseJSON attempts to parse input as JSON.
-// Returns (result, true) on success.
+// Returns (result, true) on success. Handles objects, arrays, strings,
+// numbers, booleans, and null. Non-object values are wrapped as {"input": value}.
 func tryParseJSON(input string) (map[string]any, bool) {
-	// Quick-reject: must start with JSON-like character
-	if len(input) == 0 || (input[0] != '{' && input[0] != '[' && input[0] != '"') {
+	// Quick-reject: first non-space byte must be a JSON-compatible character
+	trimmed := strings.TrimSpace(input)
+	if len(trimmed) == 0 {
+		return nil, false
+	}
+	b := trimmed[0]
+	isJSONStart := b == '{' || b == '[' || b == '"' ||
+		(b >= '0' && b <= '9') || b == '-' ||
+		b == 't' || b == 'f' || b == 'n'
+	if !isJSONStart {
 		return nil, false
 	}
 
@@ -61,7 +71,7 @@ func tryParseJSON(input string) (map[string]any, bool) {
 		return m, true
 	}
 
-	// Non-object JSON: wrap in {"input": value}
+	// Non-object JSON (array, string, number, bool, null): wrap in {"input": value}
 	return map[string]any{"input": raw}, true
 }
 
@@ -123,6 +133,9 @@ func tryParseKeyValue(input string) (map[string]any, bool) {
 }
 
 // splitKeyValueParts splits input on commas and newlines, trimming whitespace.
+// Known limitation: values containing commas (e.g., "tags: a,b,c, name: foo")
+// will be mis-split. The input falls through to the raw-string fallback in that
+// case, which is safe but loses structured parsing.
 func splitKeyValueParts(input string) []string {
 	// Normalize newlines to commas for uniform splitting
 	normalized := strings.ReplaceAll(input, "\n", ",")
@@ -194,8 +207,11 @@ func coerceValue(s string) any {
 		return i
 	}
 
-	// Float
+	// Float (reject NaN/Inf — not valid in JSON)
 	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return s
+		}
 		return f
 	}
 

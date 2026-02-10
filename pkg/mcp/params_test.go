@@ -58,17 +58,29 @@ func TestParseActionInput_JSON(t *testing.T) {
 		{
 			name:  "json number wraps in input",
 			input: `42`,
-			// 42 doesn't start with { [ or " so it falls through to key-value/raw
 			expected: map[string]any{
-				"input": "42",
+				"input": float64(42),
 			},
 		},
 		{
-			name:  "json boolean falls to raw",
+			name:  "json boolean wraps in input",
 			input: `true`,
-			// "true" doesn't start with { [ or " so it falls through to coerceValue via raw
 			expected: map[string]any{
-				"input": "true",
+				"input": true,
+			},
+		},
+		{
+			name:  "json false wraps in input",
+			input: `false`,
+			expected: map[string]any{
+				"input": false,
+			},
+		},
+		{
+			name:  "json null wraps in input",
+			input: `null`,
+			expected: map[string]any{
+				"input": nil,
 			},
 		},
 	}

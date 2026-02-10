@@ -104,6 +104,9 @@ func (m *HealthMonitor) Stop() {
 func (m *HealthMonitor) loop(ctx context.Context) {
 	defer close(m.done)
 
+	// Attempt client recovery if it wasn't created during Start
+	m.ensureClient(ctx)
+
 	// Run first check immediately
 	m.checkAll(ctx)
 
@@ -115,9 +118,30 @@ func (m *HealthMonitor) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			m.ensureClient(ctx)
 			m.checkAll(ctx)
 		}
 	}
+}
+
+// ensureClient attempts to create the health client if it is nil.
+// Handles recovery from transient factory failures without requiring restart.
+func (m *HealthMonitor) ensureClient(ctx context.Context) {
+	m.clientMu.Lock()
+	defer m.clientMu.Unlock()
+
+	if m.client != nil {
+		return
+	}
+
+	serverIDs := m.registry.ServerIDs()
+	client, err := m.factory.CreateClient(ctx, serverIDs)
+	if err != nil {
+		m.logger.Warn("Health monitor: failed to recreate client", "error", err)
+		return
+	}
+	m.client = client
+	m.logger.Info("Health monitor: client recovered successfully")
 }
 
 func (m *HealthMonitor) checkAll(ctx context.Context) {
@@ -144,16 +168,19 @@ func (m *HealthMonitor) checkServer(ctx context.Context, serverID string) {
 	delete(client.toolCache, serverID)
 	client.toolCacheMu.Unlock()
 
-	checkCtx, cancel := context.WithTimeout(ctx, m.pingTimeout)
-	defer cancel()
+	checkCtx, checkCancel := context.WithTimeout(ctx, m.pingTimeout)
+	defer checkCancel()
 
 	tools, err := client.ListTools(checkCtx, serverID)
 	if err != nil {
 		m.logger.Debug("Health check failed, attempting reinitialize",
 			"server", serverID, "error", err)
 
-		// Try to reinitialize the session
-		if reinitErr := client.recreateSession(ctx, serverID); reinitErr != nil {
+		// Try to reinitialize the session with a bounded context
+		reconCtx, reconCancel := context.WithTimeout(ctx, m.pingTimeout)
+		defer reconCancel()
+
+		if reinitErr := client.recreateSession(reconCtx, serverID); reinitErr != nil {
 			m.setStatus(serverID, false, fmt.Sprintf("health check failed: %s", err.Error()), 0)
 			m.warningService.AddWarning(
 				services.WarningCategoryMCPHealth,
@@ -162,8 +189,11 @@ func (m *HealthMonitor) checkServer(ctx context.Context, serverID string) {
 			return
 		}
 
-		// Retry after reinit
-		tools, err = client.ListTools(checkCtx, serverID)
+		// Retry after reinit with a fresh timeout context
+		retryCtx, retryCancel := context.WithTimeout(ctx, m.pingTimeout)
+		defer retryCancel()
+
+		tools, err = client.ListTools(retryCtx, serverID)
 		if err != nil {
 			m.setStatus(serverID, false, fmt.Sprintf("health check failed after reinit: %s", err.Error()), 0)
 			m.warningService.AddWarning(
@@ -222,9 +252,13 @@ func (m *HealthMonitor) GetCachedTools() map[string][]*mcpsdk.Tool {
 }
 
 // IsHealthy returns true if all monitored servers are healthy.
+// Returns false when no statuses exist yet (before first check completes).
 func (m *HealthMonitor) IsHealthy() bool {
 	m.statusesMu.RLock()
 	defer m.statusesMu.RUnlock()
+	if len(m.statuses) == 0 {
+		return false
+	}
 	for _, s := range m.statuses {
 		if !s.Healthy {
 			return false
