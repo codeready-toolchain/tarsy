@@ -40,6 +40,10 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("chain validation failed: %w", err)
 	}
 
+	if err := v.validateDefaults(); err != nil {
+		return fmt.Errorf("defaults validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -81,6 +85,29 @@ func (v *Validator) validateQueue() error {
 	}
 	if q.HeartbeatInterval >= q.OrphanThreshold {
 		return fmt.Errorf("heartbeat_interval must be less than orphan_threshold to prevent false orphan detection, got heartbeat=%v threshold=%v", q.HeartbeatInterval, q.OrphanThreshold)
+	}
+
+	return nil
+}
+
+func (v *Validator) validateDefaults() error {
+	defaults := v.cfg.Defaults
+	if defaults == nil {
+		return nil
+	}
+
+	// Validate alert masking configuration
+	if defaults.AlertMasking != nil && defaults.AlertMasking.Enabled {
+		builtin := GetBuiltinConfig()
+		groupName := defaults.AlertMasking.PatternGroup
+		if groupName == "" {
+			return NewValidationError("defaults", "", "alert_masking.pattern_group",
+				fmt.Errorf("pattern_group is required when alert masking is enabled"))
+		}
+		if _, exists := builtin.PatternGroups[groupName]; !exists {
+			return NewValidationError("defaults", "", "alert_masking.pattern_group",
+				fmt.Errorf("pattern group '%s' not found in built-in groups", groupName))
+		}
 	}
 
 	return nil

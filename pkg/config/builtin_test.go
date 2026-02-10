@@ -2,6 +2,7 @@ package config
 
 import (
 	"regexp"
+	"slices"
 	"sync"
 	"testing"
 
@@ -258,7 +259,7 @@ func TestBuiltinPatternGroups(t *testing.T) {
 			// Verify all patterns in group exist (either as regex patterns or code-based maskers)
 			for _, patternName := range group {
 				_, existsInPatterns := cfg.MaskingPatterns[patternName]
-				_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
+				existsInCodeMaskers := slices.Contains(cfg.CodeMaskers, patternName)
 				assert.True(t, existsInPatterns || existsInCodeMaskers,
 					"Pattern %s in group %s should exist in either MaskingPatterns or CodeMaskers",
 					patternName, tt.groupName)
@@ -271,9 +272,8 @@ func TestBuiltinCodeMaskers(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
 	t.Run("kubernetes_secret masker", func(t *testing.T) {
-		masker, exists := cfg.CodeMaskers["kubernetes_secret"]
-		require.True(t, exists, "kubernetes_secret masker should exist")
-		assert.NotEmpty(t, masker)
+		assert.Contains(t, cfg.CodeMaskers, "kubernetes_secret",
+			"kubernetes_secret masker should exist")
 	})
 }
 
@@ -575,6 +575,22 @@ FAKE-EC-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 	}
 }
 
+func TestMaskingPatternReplacementFormat(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	// All replacements should use [MASKED_X] format (not __MASKED_X__ or ***MASKED_X***)
+	for name, pattern := range cfg.MaskingPatterns {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, pattern.Replacement, "[MASKED_",
+				"Pattern %s replacement should use [MASKED_X] format, got: %s", name, pattern.Replacement)
+			assert.NotContains(t, pattern.Replacement, "__MASKED_",
+				"Pattern %s replacement should not use old __MASKED_X__ format", name)
+			assert.NotContains(t, pattern.Replacement, "***MASKED_",
+				"Pattern %s replacement should not use ***MASKED_X*** format", name)
+		})
+	}
+}
+
 func TestAllMaskingPatternsCompile(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
@@ -596,7 +612,7 @@ func TestPatternGroupMembersResolve(t *testing.T) {
 		t.Run(groupName, func(t *testing.T) {
 			for _, patternName := range patternNames {
 				_, existsInPatterns := cfg.MaskingPatterns[patternName]
-				_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
+				existsInCodeMaskers := slices.Contains(cfg.CodeMaskers, patternName)
 
 				assert.True(t, existsInPatterns || existsInCodeMaskers,
 					"Pattern '%s' in group '%s' must exist in either MaskingPatterns or CodeMaskers. "+
@@ -618,8 +634,8 @@ func TestKubernetesPatternGroupSpecifically(t *testing.T) {
 	})
 
 	t.Run("kubernetes_secret in CodeMaskers", func(t *testing.T) {
-		_, exists := cfg.CodeMaskers["kubernetes_secret"]
-		require.True(t, exists, "kubernetes_secret should exist in CodeMaskers")
+		assert.Contains(t, cfg.CodeMaskers, "kubernetes_secret",
+			"kubernetes_secret should exist in CodeMaskers")
 	})
 
 	t.Run("kubernetes group references kubernetes_secret", func(t *testing.T) {
@@ -632,7 +648,7 @@ func TestKubernetesPatternGroupSpecifically(t *testing.T) {
 		kubernetesGroup := cfg.PatternGroups["kubernetes"]
 		for _, patternName := range kubernetesGroup {
 			_, existsInPatterns := cfg.MaskingPatterns[patternName]
-			_, existsInCodeMaskers := cfg.CodeMaskers[patternName]
+			existsInCodeMaskers := slices.Contains(cfg.CodeMaskers, patternName)
 
 			assert.True(t, existsInPatterns || existsInCodeMaskers,
 				"Pattern '%s' in kubernetes group must exist in either MaskingPatterns or CodeMaskers",

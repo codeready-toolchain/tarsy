@@ -18,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -101,8 +102,16 @@ func main() {
 		// Non-fatal — continue
 	}
 
-	// 4. Initialize services
-	alertService := services.NewAlertService(dbClient.Client, cfg.ChainRegistry, cfg.Defaults)
+	// 4. Initialize masking service and domain services
+	maskingService := masking.NewService(
+		cfg.MCPServerRegistry,
+		masking.AlertMaskingConfig{
+			Enabled:      cfg.Defaults.AlertMasking.Enabled,
+			PatternGroup: cfg.Defaults.AlertMasking.PatternGroup,
+		},
+	)
+
+	alertService := services.NewAlertService(dbClient.Client, cfg.ChainRegistry, cfg.Defaults, maskingService)
 	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
 	slog.Info("Services initialized")
 
@@ -141,7 +150,7 @@ func main() {
 
 	// 5b. Initialize MCP infrastructure
 	warningsService := services.NewSystemWarningsService()
-	mcpFactory := mcp.NewClientFactory(cfg.MCPServerRegistry)
+	mcpFactory := mcp.NewClientFactory(cfg.MCPServerRegistry, maskingService)
 
 	// Eager MCP validation: verify all configured servers can connect.
 	// If any server fails, the process exits — prevents silent broken configs.

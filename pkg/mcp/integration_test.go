@@ -93,7 +93,7 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 	wireSession(t, client, "kubernetes", k8sServer.clientTransport)
 	wireSession(t, client, "github", ghServer.clientTransport)
 
-	executor := NewToolExecutor(client, registry, []string{"kubernetes", "github"}, nil)
+	executor := NewToolExecutor(client, registry, []string{"kubernetes", "github"}, nil, nil)
 	t.Cleanup(func() { _ = executor.Close() })
 
 	// List tools should show both servers' tools
@@ -193,12 +193,12 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 
 	client1 := newClient(registry)
 	wireSession(t, client1, "server1", ts1.clientTransport)
-	exec1 := NewToolExecutor(client1, registry, []string{"server1"}, nil)
+	exec1 := NewToolExecutor(client1, registry, []string{"server1"}, nil, nil)
 	t.Cleanup(func() { _ = exec1.Close() })
 
 	client2 := newClient(registry)
 	wireSession(t, client2, "server2", ts2.clientTransport)
-	exec2 := NewToolExecutor(client2, registry, []string{"server2"}, nil)
+	exec2 := NewToolExecutor(client2, registry, []string{"server2"}, nil, nil)
 	t.Cleanup(func() { _ = exec2.Close() })
 
 	// Execute on each
@@ -225,7 +225,7 @@ func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 
 	registry := config.NewMCPServerRegistry(nil)
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 
 	// Wire healthy client
@@ -292,7 +292,7 @@ func newTestExecutorFromTransport(t *testing.T, serverID string, transport *mcps
 	client := newClient(registry)
 	wireSession(t, client, serverID, transport)
 
-	executor := NewToolExecutor(client, registry, []string{serverID}, nil)
+	executor := NewToolExecutor(client, registry, []string{serverID}, nil, nil)
 	t.Cleanup(func() { _ = executor.Close() })
 	return executor
 }
@@ -330,7 +330,7 @@ func TestIntegration_ToolFilter(t *testing.T) {
 
 	// Only allow get_pods
 	filter := map[string][]string{"kubernetes": {"get_pods"}}
-	executor := NewToolExecutor(client, registry, []string{"kubernetes"}, filter)
+	executor := NewToolExecutor(client, registry, []string{"kubernetes"}, filter, nil)
 	t.Cleanup(func() { _ = executor.Close() })
 
 	// ListTools should only return get_pods
@@ -385,7 +385,7 @@ func TestIntegration_HealthMonitor_ToolCaching(t *testing.T) {
 		"test-server": {Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"}},
 	})
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 	monitor.pingTimeout = 5 * time.Second
 

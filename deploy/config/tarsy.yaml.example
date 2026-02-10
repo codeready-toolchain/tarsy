@@ -58,6 +58,12 @@ defaults:
   # Default alert type for new sessions (used in UI dropdown)
   alert_type: "kubernetes"
   
+  # Alert data masking configuration
+  # Masks sensitive data in alert payloads before DB storage
+  alert_masking:
+    enabled: true
+    pattern_group: "security"  # Options: basic, secrets, security, kubernetes, cloud, all
+
   # Default runbook content for new sessions
   # Override with your organization's troubleshooting guide
   runbook: |
@@ -114,7 +120,7 @@ mcp_servers:
         - "email"
       # custom_patterns:  # Optional: define your own patterns
       #   - pattern: "CUSTOM_SECRET_.*"
-      #     replacement: "__MASKED_CUSTOM__"
+      #     replacement: "[MASKED_CUSTOM]"
       #     description: "Custom secret pattern"
     
     summarization:

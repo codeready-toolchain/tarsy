@@ -4,16 +4,19 @@ import (
 	"context"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/masking"
 )
 
 // ClientFactory creates Client instances for sessions.
 type ClientFactory struct {
-	registry *config.MCPServerRegistry
+	registry       *config.MCPServerRegistry
+	maskingService *masking.Service
 }
 
 // NewClientFactory creates a new factory.
-func NewClientFactory(registry *config.MCPServerRegistry) *ClientFactory {
-	return &ClientFactory{registry: registry}
+// maskingService may be nil (masking disabled).
+func NewClientFactory(registry *config.MCPServerRegistry, maskingService *masking.Service) *ClientFactory {
+	return &ClientFactory{registry: registry, maskingService: maskingService}
 }
 
 // CreateClient creates a new Client connected to the specified servers.
@@ -38,5 +41,5 @@ func (f *ClientFactory) CreateToolExecutor(
 	if err != nil {
 		return nil, nil, err
 	}
-	return NewToolExecutor(client, f.registry, serverIDs, toolFilter), client, nil
+	return NewToolExecutor(client, f.registry, serverIDs, toolFilter, f.maskingService), client, nil
 }
