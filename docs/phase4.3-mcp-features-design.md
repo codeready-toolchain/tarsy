@@ -298,37 +298,39 @@ This is cleaner because:
 ```
 Controller iteration loop:
   │
-  ├─ 1. LLM returns tool call → create llm_tool_call timeline event
+  ├─ 1. LLM returns tool call
+  │     → Extract serverID, toolName via mcp.SplitToolName()
+  │     → Create llm_tool_call timeline event (status: streaming, args in metadata)
+  │     → Dashboard shows: "Calling server.tool..." with spinner
   │
-  ├─ 2. Create mcp_tool_call timeline event (persistent, status: streaming)
+  ├─ 2. ToolExecutor.Execute(toolCall) → raw ToolResult (masked by Phase 4.2)
   │
-  ├─ 3. ToolExecutor.Execute(toolCall) → raw ToolResult (masked by Phase 4.2)
+  ├─ 3. Complete llm_tool_call event (status: completed)
+  │     → content = truncateForStorage(rawResult) — UI/DB-safe
+  │     → metadata enriched with {is_error}
+  │     → Dashboard shows: tool result
   │
-  ├─ 4. Complete mcp_tool_call event (status: completed)
-  │
-  ├─ 5. Create tool_result timeline event (storage-truncated raw result)
-  │
-  ├─ 6. Check summarization:
+  ├─ 4. Check summarization:
   │     a. Look up SummarizationConfig for this server
-  │     b. If disabled or not configured → use raw result, skip to step 8
+  │     b. If disabled or not configured → use raw result, skip to step 6
   │     c. Estimate token count of raw result
-  │     d. If below threshold → use raw result, skip to step 8
+  │     d. If below threshold → use raw result, skip to step 6
   │
-  ├─ 7. Summarize (threshold exceeded):
-  │     a. Publish mcp_tool_call.summarizing event (transient) → frontend shows indicator
-  │     b. Safety-net truncate raw result for summarization LLM input
-  │     c. Build summarization prompts (system + user with full conversation context)
-  │     d. Create mcp_tool_summary timeline event (status: streaming)
-  │     e. Call LLM with streaming → publish stream.chunk for each delta
-  │     f. Complete mcp_tool_summary timeline event with full summary text
-  │     g. Record LLM interaction (type: "summarization")
-  │     h. Result for conversation = summary (not raw)
+  ├─ 5. Summarize (threshold exceeded):
+  │     a. Safety-net truncate raw result for summarization LLM input
+  │     b. Build summarization prompts (system + user with full conversation context)
+  │     c. Create mcp_tool_summary timeline event (status: streaming)
+  │        → Dashboard sees streaming status → shows "Summarizing..." indicator
+  │     d. Call LLM with streaming → publish stream.chunk for each delta
+  │     e. Complete mcp_tool_summary timeline event with full summary text
+  │     f. Record LLM interaction (type: "summarization")
+  │     g. Result for conversation = summary (not raw)
   │
-  ├─ 8. Use result in conversation:
+  ├─ 6. Use result in conversation:
   │     - ReAct: append as "Observation: {result}" user message
   │     - NativeThinking: append as tool result message (role=tool)
   │
-  └─ 9. Continue iteration loop
+  └─ 7. Continue iteration loop
 ```
 
 ### Token Estimation (`pkg/mcp/tokens.go`)
@@ -432,7 +434,7 @@ func maybeSummarize(
     // 6. Wrap summary with context note
     wrappedSummary := fmt.Sprintf(
         "[NOTE: The output from %s.%s was %d tokens (estimated) and has been summarized to preserve context window. "+
-            "The full output is available in the tool_result timeline event above.]\n\n%s",
+            "The full output is available in the tool call event above.]\n\n%s",
         serverID, toolName, estimatedTokens, summary)
 
     return &SummarizationResult{
@@ -540,7 +542,7 @@ func buildConversationContext(messages []agent.ConversationMessage) string {
 
 Large tool results require truncation at two independent points:
 
-**1. Storage truncation** (UI/DB protection) — Always applied to raw results stored in `tool_result` timeline events and MCPInteraction records. Uses a lower threshold to protect the dashboard from rendering massive text. Applied regardless of whether summarization is triggered.
+**1. Storage truncation** (UI/DB protection) — Always applied to raw results stored in `llm_tool_call` completion content and MCPInteraction records. Uses a lower threshold to protect the dashboard from rendering massive text. Applied regardless of whether summarization is triggered.
 
 **2. Summarization input safety net** — When feeding the summarization LLM, truncate to a larger limit (model's context window minus prompt overhead). The summarizer should get as much data as possible for quality, but bounded as a safety net against extremely large results.
 
@@ -577,7 +579,7 @@ func truncateForSummarization(content string, maxTokens int) string {
 
 ```
 Raw MCP result (masked)
-  ├─ truncateForStorage() → timeline event + MCPInteraction (lower limit, UI-safe)
+  ├─ truncateForStorage() → llm_tool_call completion + MCPInteraction (lower limit, UI-safe)
   ├─ If summarization triggered:
   │     ├─ truncateForSummarization() → summarization LLM input (larger limit)
   │     └─ Summary → agent conversation
@@ -594,19 +596,20 @@ Both ReAct and NativeThinking controllers need the same summarization logic. The
 ```go
 // In the tool execution section of the iteration loop:
 
-// Create mcp_tool_call timeline event (persistent, status: streaming)
-mcpToolCallEvent, _ := createMCPToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, &eventSeq)
+// Extract server/tool info for events and summarization
+normalizedName := mcp.NormalizeToolName(toolCall.Name)
+serverID, toolName, _ := mcp.SplitToolName(normalizedName)
+
+// Create llm_tool_call timeline event (status: streaming — dashboard shows spinner)
+toolCallEvent, _ := createToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, &eventSeq)
 
 // Execute tool
 result, err := execCtx.ToolExecutor.Execute(iterCtx, toolCall)
 // ... (existing error handling) ...
 
-// Complete mcp_tool_call event
-completeMCPToolCallEvent(ctx, execCtx, mcpToolCallEvent, result)
-
-// Create tool_result timeline event (storage-truncated raw result)
+// Complete llm_tool_call event with storage-truncated raw result
 storageTruncated := truncateForStorage(result.Content, storageMaxTokens)
-createToolResultEvent(ctx, execCtx, storageTruncated, result.IsError, &eventSeq)
+completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
 
 // Check summarization (only for non-error results)
 observationContent := result.Content
@@ -630,19 +633,20 @@ messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Cont
 ```go
 // In the tool execution loop:
 
-// Create mcp_tool_call timeline event (persistent, status: streaming)
-mcpToolCallEvent, _ := createMCPToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, &eventSeq)
+// Extract server/tool info for events and summarization
+normalizedName := mcp.NormalizeToolName(toolCall.Name)
+serverID, toolName, _ := mcp.SplitToolName(normalizedName)
+
+// Create llm_tool_call timeline event (status: streaming — dashboard shows spinner)
+toolCallEvent, _ := createToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, &eventSeq)
 
 // Execute tool
 result, err := execCtx.ToolExecutor.Execute(iterCtx, toolCall)
 // ... (existing error handling) ...
 
-// Complete mcp_tool_call event
-completeMCPToolCallEvent(ctx, execCtx, mcpToolCallEvent, result)
-
-// Create tool_result timeline event (storage-truncated raw result)
+// Complete llm_tool_call event with storage-truncated raw result
 storageTruncated := truncateForStorage(result.Content, storageMaxTokens)
-createToolResultEvent(ctx, execCtx, storageTruncated, result.IsError, &eventSeq)
+completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
 
 // Check summarization (only for non-error results)
 toolResultContent := result.Content
@@ -696,91 +700,75 @@ If the summarization LLM call fails (timeout, LLM error, empty response), the ra
 
 ### Context
 
-Currently, when a controller executes a tool, the frontend has no visibility until the tool result timeline event appears after completion. For long-running MCP calls (10–90 seconds), the UI appears frozen. This feature adds real-time events for tool call lifecycle.
+Currently, when a controller executes a tool, the frontend has no visibility until the tool result timeline event appears after completion. For long-running MCP calls (10–90 seconds), the UI appears frozen. This feature adds real-time lifecycle tracking to tool calls.
 
 ### Current State
 
 | Component | Status |
 |-----------|--------|
+| `llm_tool_call` timeline event type | ✅ Exists (created once, no lifecycle) |
+| `tool_result` timeline event type | ✅ Exists (separate event for result) |
 | `stream.chunk` event type | ✅ Exists (for LLM streaming) |
 | `EventPublisher.PublishTransient()` | ✅ Exists |
 | `callLLMWithStreaming` pattern | ✅ Exists |
-| MCP tool call start event | ❌ Not implemented |
+| Tool call lifecycle (start → complete) | ❌ Not implemented |
 | Summarization streaming | ❌ Not implemented |
 
-### Design
+### Design: Single-Event Tool Call Lifecycle
 
-#### MCP Tool Call Lifecycle Events
+**Key insight**: From the dashboard's perspective, a tool call is **one thing** with a lifecycle (started → completed). Having separate `llm_tool_call`, `mcp_tool_call`, and `tool_result` events forces the dashboard to correlate three events per tool call — complex, fragile, and prone to race conditions on reconnect.
 
-MCP tool calls are request-response (the MCP SDK does not support streaming tool results). What we can stream is the lifecycle:
+**Solution**: Reuse the existing `llm_tool_call` event with a streaming lifecycle pattern (same as `llm_response`). One event per tool call, two states:
 
 ```
 Frontend Timeline:
 
-1. [llm_tool_call]          ← LLM decided to call a tool (already exists)
-2. [mcp_tool_call]          ← Tool execution begins (NEW — persistent timeline event)
-3.   ... waiting ...         ← Frontend shows spinner/progress (status: streaming)
-4. [mcp_tool_call completed] ← Tool execution finished (status update on same event)
-5. [tool_result]             ← Raw result stored (already exists)
-6. [mcp_tool_call.summarizing] ← Summarization starts (NEW — transient, only if summarizing)
-7.   [stream.chunk] ...      ← Summarization LLM streaming (NEW — transient)
-8. [mcp_tool_summary]        ← Summary stored (NEW — persistent)
+1. [llm_tool_call] created (status: streaming)
+     → metadata: {server_name, tool_name, arguments}
+     → Dashboard shows: "Calling server.tool..." with spinner
+
+2. [llm_tool_call] completed (status: completed)
+     → content: storage-truncated raw result
+     → metadata enriched: {is_error}
+     → Dashboard shows: tool result
+
+3. (if summarization triggered):
+     [mcp_tool_summary] created (status: streaming)  ← Dashboard shows "Summarizing..."
+     [stream.chunk] ...                               ← Summarization LLM token deltas
+     [mcp_tool_summary] completed (status: completed) ← Summary stored
 ```
 
-#### New Timeline Event Type: `mcp_tool_call`
+**This eliminates `tool_result` as a separate event type.** The raw result lives on the completed `llm_tool_call` event. No correlation needed — the dashboard receives created/completed events for the same event ID.
 
-The `mcp_tool_call` timeline event is persistent (stored in DB). This gives full durability, reliable correlation with `tool_result`, proper catchup on reconnect, and full UI control for rendering tool call lifecycle. The event starts with status `streaming` (execution in progress) and is completed when the MCP call returns.
+On catchup: one event in DB, status tells you the state. If status is `streaming`, tool is still executing. If `completed`, result is in content.
 
-Metadata:
+#### Changes to `llm_tool_call` Event Format
 
-```go
-metadata := map[string]interface{}{
-    "server_name": serverID,
-    "tool_name":   toolName,
-    "arguments":   arguments,
-}
-```
+**Before (Phase 3):**
+- Created once with content=arguments, metadata={tool_name}
+- Separate `tool_result` event created later with content=result
 
-This requires adding `"mcp_tool_call"` to the `TimelineEvent.event_type` enum in the schema.
+**After (Phase 4.3):**
+- Created with status=`streaming`, content="" (empty, like streaming LLM events), metadata={tool_name, server_name, arguments}
+- Completed with content=storage-truncated result, metadata enriched with {is_error}
 
-#### New Transient Event Type: `mcp_tool_call.summarizing`
+Arguments move from `content` to `metadata` so they survive the content update on completion and remain accessible to the dashboard at all times.
 
-```go
-// pkg/events/types.go
-
-// Transient event types (NOTIFY only, no DB persistence).
-const (
-    // LLM streaming chunks — high-frequency, ephemeral.
-    EventTypeStreamChunk = "stream.chunk"
-
-    // MCP tool call summarization indicator — ephemeral.
-    EventTypeMCPToolCallSummarizing = "mcp_tool_call.summarizing"
-)
-```
-
-#### Publishing Tool Call Started (Persistent)
-
-In both controllers, before calling `ToolExecutor.Execute()`:
+#### Changes to `createToolCallEvent` Helper
 
 ```go
-// Create mcp_tool_call timeline event (persistent, status: streaming)
-mcpToolCallEvent, _ := createMCPToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, &eventSeq)
-```
-
-Helper function:
-
-```go
-// createMCPToolCallEvent creates a persistent timeline event indicating an MCP tool call
-// has started execution. The event is created with status "streaming" and completed
-// after the tool call returns. The frontend uses this to show a progress indicator.
-// Returns the event (for later completion) and any error.
-func createMCPToolCallEvent(
+// createToolCallEvent creates a streaming llm_tool_call timeline event.
+// The event starts with status "streaming" and is completed after tool execution
+// via completeToolCallEvent. Arguments are in metadata (not content) so they
+// survive the content update on completion.
+func createToolCallEvent(
     ctx context.Context,
     execCtx *agent.ExecutionContext,
-    serverID, toolName, arguments string,
+    serverID, toolName string,
+    arguments string,
     eventSeq *int,
 ) (*ent.TimelineEvent, error) {
-    return createTimelineEvent(ctx, execCtx, timelineevent.EventTypeMcpToolCall, "", map[string]interface{}{
+    return createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmToolCall, "", map[string]interface{}{
         "server_name": serverID,
         "tool_name":   toolName,
         "arguments":   arguments,
@@ -788,44 +776,45 @@ func createMCPToolCallEvent(
 }
 ```
 
-After `ToolExecutor.Execute()` returns, the event is completed:
+**Note**: `createTimelineEvent` already publishes `timeline_event.created` with status `streaming` (content is empty). This matches the existing LLM streaming pattern.
+
+#### New: `completeToolCallEvent` Helper
 
 ```go
-// Complete the mcp_tool_call timeline event
-if mcpToolCallEvent != nil {
-    execCtx.Services.Timeline.CompleteTimelineEvent(ctx, mcpToolCallEvent.ID, result.Content, nil, nil)
-    // Publish completion to WebSocket
-    publishTimelineCompleted(ctx, execCtx, mcpToolCallEvent.ID, "completed")
-}
-```
-
-#### Publishing Summarization Started (Transient)
-
-Before the summarization LLM call:
-
-```go
-func publishMCPToolCallSummarizing(
+// completeToolCallEvent completes an llm_tool_call timeline event with the tool result.
+// Called after ToolExecutor.Execute() returns. The content is the storage-truncated
+// raw result. Metadata is enriched with is_error.
+func completeToolCallEvent(
     ctx context.Context,
     execCtx *agent.ExecutionContext,
-    serverID, toolName string,
-    estimatedTokens int,
+    event *ent.TimelineEvent,
+    content string,
+    isError bool,
 ) {
-    if execCtx.EventPublisher == nil {
+    if event == nil {
         return
     }
-    channel := events.SessionChannel(execCtx.SessionID)
-    _ = execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
-        "type":             events.EventTypeMCPToolCallSummarizing,
-        "session_id":       execCtx.SessionID,
-        "stage_id":         execCtx.StageID,
-        "execution_id":     execCtx.ExecutionID,
-        "server_name":      serverID,
-        "tool_name":        toolName,
-        "estimated_tokens": estimatedTokens,
-        "timestamp":        time.Now().Format(time.RFC3339Nano),
-    })
+    metadata := map[string]interface{}{"is_error": isError}
+    execCtx.Services.Timeline.CompleteTimelineEvent(ctx, event.ID, content, metadata, nil)
+
+    // Publish completion to WebSocket
+    if execCtx.EventPublisher != nil {
+        channel := events.SessionChannel(execCtx.SessionID)
+        execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
+            "type":      events.EventTypeTimelineCompleted,
+            "event_id":  event.ID,
+            "content":   content,
+            "status":    "completed",
+            "metadata":  metadata,
+            "timestamp": time.Now().Format(time.RFC3339Nano),
+        })
+    }
 }
 ```
+
+#### `createToolResultEvent` Removed
+
+The existing `createToolResultEvent` helper is no longer used. The raw result is stored as the completion content of the `llm_tool_call` event.
 
 #### Summarization LLM Streaming
 
@@ -841,25 +830,25 @@ Metadata on the `mcp_tool_summary` timeline event:
 
 ```go
 metadata := map[string]interface{}{
-    "server_name":        serverID,
-    "tool_name":          toolName,
-    "original_tokens":    estimatedTokens,
+    "server_name":         serverID,
+    "tool_name":           toolName,
+    "original_tokens":     estimatedTokens,
     "summarization_model": execCtx.Config.LLMProvider.Model,
 }
 ```
 
-### Tool Name Extraction for Streaming
+### Tool Name Extraction
 
-Both controllers need to extract `serverID` and `toolName` from the tool call name to pass to streaming helpers. This uses the existing `mcp.SplitToolName()`:
+Both controllers need to extract `serverID` and `toolName` from the tool call name for event metadata and summarization. This uses the existing `mcp.SplitToolName()`:
 
 ```go
 // In controller, when processing a tool call:
 normalizedName := mcp.NormalizeToolName(toolCall.Name) // server__tool → server.tool
 serverID, toolName, _ := mcp.SplitToolName(normalizedName)
-// serverID and toolName used for streaming events and summarization
+// serverID and toolName used for tool call events and summarization
 ```
 
-If `SplitToolName` fails (shouldn't happen at this point since ToolExecutor validates), the full name is used as fallback.
+If `SplitToolName` fails (shouldn't happen since ToolExecutor validates), the full name is used as fallback.
 
 ---
 
@@ -873,14 +862,14 @@ pkg/
 ├── agent/
 │   ├── context.go             # NativeToolsOverride field added to ResolvedAgentConfig
 │   └── controller/
-│       ├── helpers.go         # createMCPToolCallEvent, publishMCPToolCallSummarizing added
-│       ├── summarize.go       # maybeSummarize, callSummarizationLLM (NEW)
+│       ├── helpers.go         # createToolCallEvent, completeToolCallEvent
+│       ├── summarize.go       # maybeSummarize, callSummarizationLLMWithStreaming (NEW)
 │       ├── react.go           # Tool execution + summarization integration
 │       └── native_thinking.go # Tool execution + summarization integration
 ├── models/
 │   └── mcp_selection.go       # ParseMCPSelectionConfig added
 ├── events/
-│   └── types.go               # New transient event type (mcp_tool_call.summarizing)
+│   └── types.go               # (no changes needed for Phase 4.3)
 └── queue/
     └── executor.go            # resolveMCPSelection, MCP override wiring
 ```
@@ -896,13 +885,11 @@ pkg/
 | `pkg/queue/executor.go` | Add `resolveMCPSelection()`, wire override to `CreateToolExecutor` |
 | `pkg/models/mcp_selection.go` | Add `ParseMCPSelectionConfig()` |
 | `pkg/agent/context.go` | Add `NativeToolsOverride` to `ResolvedAgentConfig` |
-| `pkg/agent/controller/react.go` | Add summarization check after tool execution, tool call started event |
+| `pkg/agent/controller/react.go` | Replace tool call/result events with single-event lifecycle, add summarization |
 | `pkg/agent/controller/native_thinking.go` | Same as ReAct |
-| `pkg/agent/controller/helpers.go` | Add `createMCPToolCallEvent`, `publishMCPToolCallSummarizing` |
-| `pkg/events/types.go` | Add `EventTypeMCPToolCallSummarizing` |
+| `pkg/agent/controller/helpers.go` | Rewrite `createToolCallEvent` (streaming pattern), add `completeToolCallEvent`, remove `createToolResultEvent` |
 | `pkg/mcp/executor.go` | Remove Phase 4.3 stub comment |
 | `ent/schema/llminteraction.go` | Add `"summarization"` to interaction_type enum |
-| `ent/schema/timelineevent.go` | Add `"mcp_tool_call"` to event_type enum |
 
 ### New Files
 
@@ -932,13 +919,13 @@ pkg/
 1. Create `pkg/mcp/tokens.go` with `EstimateTokens`
 2. Write tests for edge cases (empty string, short text, long text)
 
-### Step 3: Tool Call Streaming Events
+### Step 3: Tool Call Lifecycle Events
 
-1. Add `"mcp_tool_call"` to `TimelineEvent.event_type` enum + generate migration
-2. Add `EventTypeMCPToolCallSummarizing` constant to `pkg/events/types.go`
-3. Add `createMCPToolCallEvent` and `publishMCPToolCallSummarizing` helpers
-4. Integrate into ReAct and NativeThinking controllers (before/after tool execution)
-5. Write tests for event creation and publishing
+1. Rewrite `createToolCallEvent` to use streaming pattern (content="", args in metadata)
+2. Add `completeToolCallEvent` helper
+3. Remove `createToolResultEvent` helper
+4. Update ReAct and NativeThinking controllers to use single-event lifecycle
+5. Write tests for event creation, completion, and publishing
 
 ### Step 4: Tool Result Summarization
 
@@ -970,7 +957,7 @@ pkg/
 | `resolveMCPSelection` | No override, valid override, invalid server, tool filtering |
 | `maybeSummarize` | Below threshold, above threshold, disabled, LLM failure, empty summary |
 | `buildConversationContext` | System messages excluded, multi-turn context |
-| `createMCPToolCallEvent` | Event creation, completion after tool returns |
+| `createToolCallEvent` / `completeToolCallEvent` | Streaming lifecycle: creation with args in metadata, completion with result in content |
 
 ### Integration Tests
 
@@ -1029,7 +1016,7 @@ mcp_servers:
 | Summarization LLM | Same model as agent | Same model as agent (configurable later) | Simplicity; Phase 8 can add dedicated summarization model |
 | Token estimation | tiktoken (Python) | Character-based heuristic (Go) | Zero dependency; accurate enough for threshold checks |
 | MCP override semantics | Replace chain servers | Replace chain servers | Same behavior — override is the authoritative server set |
-| Tool call streaming | `mcp.tool_call.started` event | `mcp_tool_call` persistent timeline event | Persistent for reliable UI correlation and history replay |
+| Tool call streaming | `mcp.tool_call.started` event | `llm_tool_call` with streaming lifecycle (created → completed) | Single-event lifecycle — no correlation needed, reliable catchup on reconnect |
 | Summarization streaming | `llm.stream.chunk` with `stream_type: summarization` | `stream.chunk` with `mcp_tool_summary` timeline event | Reuses existing streaming pattern with appropriate event type |
-| Raw result storage | Stored before summarization | `tool_result` timeline event (always raw) | Same — raw always preserved for observability |
+| Raw result storage | Stored before summarization | `llm_tool_call` completion content (storage-truncated) | Simpler — raw result lives on the same event, no separate `tool_result` |
 | Fail-open summarization | Yes | Yes | Same — availability over perfection |

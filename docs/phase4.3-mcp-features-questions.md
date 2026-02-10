@@ -58,7 +58,7 @@
 
 **Decision:** Two independent truncation concerns:
 
-1. **Storage truncation** (UI/DB protection) — Always truncate raw results stored in `tool_result` timeline events and MCPInteraction records. Lower threshold. Applies to ALL results regardless of whether summarization is triggered. Protects the dashboard from rendering massive text blobs.
+1. **Storage truncation** (UI/DB protection) — Always truncate raw results stored in `llm_tool_call` completion content and MCPInteraction records. Lower threshold. Applies to ALL results regardless of whether summarization is triggered. Protects the dashboard from rendering massive text blobs.
 
 2. **Summarization input safety net** — When feeding the summarization LLM, truncate to a larger limit (model's context window minus prompt overhead). The summarizer should get as much data as possible for quality, but bounded as a safety net.
 
@@ -66,7 +66,7 @@ No separate conversation truncation for non-summarized results. If a result is b
 
 ```
 Raw MCP result (masked)
-  ├─ Store truncated version → timeline event + MCPInteraction (lower limit, UI-safe)
+  ├─ Store truncated version → llm_tool_call completion + MCPInteraction (lower limit, UI-safe)
   ├─ If summarization triggered:
   │     ├─ Safety-net truncate → summarization LLM input (larger limit)
   │     └─ Summary → agent conversation
@@ -85,9 +85,16 @@ Raw MCP result (masked)
 
 ---
 
-## Q8: Should `mcp_tool_call.started` Be Persistent or Transient?
+## Q8: Tool Call Event Model — Separate Events or Single-Event Lifecycle?
 
-**Status**: ✅ Decided — **Option B**
-**Source**: Event storage trade-off
+**Status**: ✅ Decided — **Single-event lifecycle on `llm_tool_call`**
+**Source**: Event storage trade-off, dashboard consumption simplicity
 
-**Decision:** Persistent — new `mcp_tool_call` timeline event type. Stored in DB with metadata including `server_name`, `tool_name`, and `arguments`. This gives full durability, reliable correlation between tool call start and `tool_result` via event IDs, proper catchup on reconnect, and full UI control for rendering tool call lifecycle (progress indicators, history replay). The extra DB write per tool call is negligible.
+**Decision:** Reuse the existing `llm_tool_call` timeline event with a streaming lifecycle (same pattern as `llm_response`). One event per tool call, two states:
+
+- **Created** (status: `streaming`): content="", metadata={server_name, tool_name, arguments}. Dashboard shows spinner.
+- **Completed** (status: `completed`): content=storage-truncated raw result, metadata enriched with {is_error}. Dashboard shows result.
+
+This eliminates both `mcp_tool_call` (no new event type needed) and `tool_result` (raw result lives on the completed `llm_tool_call`). Arguments move from content to metadata so they survive the content update on completion. No schema migration needed for the event type enum.
+
+The decisive factor is dashboard simplicity: one event ID per tool call, no multi-event correlation, no race conditions on reconnect, reliable catchup from DB. Additional metadata can be attached on completion if different components need to contribute data.
