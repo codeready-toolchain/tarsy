@@ -25,7 +25,7 @@ type resolvedPatterns struct {
 
 // compileBuiltinPatterns compiles all built-in regex patterns from config.
 // Invalid patterns are logged and skipped.
-func (s *MaskingService) compileBuiltinPatterns() {
+func (s *Service) compileBuiltinPatterns() {
 	for name, pattern := range config.GetBuiltinConfig().MaskingPatterns {
 		compiled, err := regexp.Compile(pattern.Pattern)
 		if err != nil {
@@ -44,7 +44,7 @@ func (s *MaskingService) compileBuiltinPatterns() {
 
 // compileCustomPatterns compiles custom patterns from all MCP server configs.
 // Custom patterns are keyed as "custom:{serverID}:{index}" to avoid collisions.
-func (s *MaskingService) compileCustomPatterns() {
+func (s *Service) compileCustomPatterns() {
 	for serverID, serverCfg := range s.registry.GetAll() {
 		if serverCfg.DataMasking == nil || !serverCfg.DataMasking.Enabled {
 			continue
@@ -70,7 +70,7 @@ func (s *MaskingService) compileCustomPatterns() {
 }
 
 // resolvePatterns expands a MaskingConfig into a deduplicated resolvedPatterns.
-func (s *MaskingService) resolvePatterns(cfg *config.MaskingConfig, serverID string) *resolvedPatterns {
+func (s *Service) resolvePatterns(cfg *config.MaskingConfig, serverID string) *resolvedPatterns {
 	seen := make(map[string]bool)
 	resolved := &resolvedPatterns{}
 	builtin := config.GetBuiltinConfig()
@@ -116,7 +116,7 @@ func (s *MaskingService) resolvePatterns(cfg *config.MaskingConfig, serverID str
 }
 
 // resolvePatternsFromGroup resolves a single pattern group name into resolvedPatterns.
-func (s *MaskingService) resolvePatternsFromGroup(groupName string) *resolvedPatterns {
+func (s *Service) resolvePatternsFromGroup(groupName string) *resolvedPatterns {
 	seen := make(map[string]bool)
 	resolved := &resolvedPatterns{}
 	builtin := config.GetBuiltinConfig()
@@ -139,7 +139,7 @@ func (s *MaskingService) resolvePatternsFromGroup(groupName string) *resolvedPat
 
 // addToResolved adds a pattern name to the resolved set, categorizing it as
 // either a code masker or a regex pattern.
-func (s *MaskingService) addToResolved(resolved *resolvedPatterns, name string, builtin *config.BuiltinConfig) {
+func (s *Service) addToResolved(resolved *resolvedPatterns, name string, builtin *config.BuiltinConfig) {
 	// Check if it's a code-based masker
 	if slices.Contains(builtin.CodeMaskers, name) {
 		resolved.codeMaskerNames = append(resolved.codeMaskerNames, name)

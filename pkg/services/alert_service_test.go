@@ -202,7 +202,7 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 
 // --- Alert masking tests ---
 
-func setupTestAlertServiceWithMasking(t *testing.T, client *database.Client, maskingSvc *masking.MaskingService) *AlertService {
+func setupTestAlertServiceWithMasking(t *testing.T, client *database.Client, maskingSvc *masking.Service) *AlertService {
 	t.Helper()
 
 	chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
@@ -227,7 +227,7 @@ func setupTestAlertServiceWithMasking(t *testing.T, client *database.Client, mas
 
 func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	maskingSvc := masking.NewMaskingService(
+	maskingSvc := masking.NewService(
 		config.NewMCPServerRegistry(nil),
 		masking.AlertMaskingConfig{Enabled: true, PatternGroup: "security"},
 	)
@@ -243,7 +243,7 @@ func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
 	require.NotNil(t, session)
 
 	// Read back from DB to verify masking was applied before storage
-	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	stored, err := client.AlertSession.Get(ctx, session.ID)
 	require.NoError(t, err)
 
 	assert.NotContains(t, stored.AlertData, "FAKE-S3CRET-NOT-REAL", "Password should be masked")
@@ -254,7 +254,7 @@ func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
 
 func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
 	client := testdb.NewTestClient(t)
-	maskingSvc := masking.NewMaskingService(
+	maskingSvc := masking.NewService(
 		config.NewMCPServerRegistry(nil),
 		masking.AlertMaskingConfig{Enabled: false, PatternGroup: "security"},
 	)
@@ -269,13 +269,13 @@ func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, session)
 
-	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	stored, err := client.AlertSession.Get(ctx, session.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, input.Data, stored.AlertData, "Data should be stored as-is when masking disabled")
 }
 
-func TestAlertService_SubmitAlert_NilMaskingService(t *testing.T) {
+func TestAlertService_SubmitAlert_NilService(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestAlertServiceWithMasking(t, client, nil)
 	ctx := context.Background()
@@ -288,7 +288,7 @@ func TestAlertService_SubmitAlert_NilMaskingService(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, session)
 
-	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	stored, err := client.AlertSession.Get(ctx, session.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, input.Data, stored.AlertData, "Data should be stored as-is with nil masking service")

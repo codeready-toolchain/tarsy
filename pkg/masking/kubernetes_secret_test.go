@@ -540,8 +540,8 @@ metadata:
 	assert.False(t, m.AppliesTo(input), "Should not apply to SecretStore")
 }
 
-func TestKubernetesSecretMasker_IntegrationWithMaskingService(t *testing.T) {
-	// Verify the masker works correctly when invoked through the MaskingService
+func TestKubernetesSecretMasker_IntegrationWithService(t *testing.T) {
+	// Verify the masker works correctly when invoked through the Service
 	m := &KubernetesSecretMasker{}
 
 	input := readTestdata(t, "secret_yaml.txt")

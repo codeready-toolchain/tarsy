@@ -9,11 +9,11 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-// newTestMaskingService creates a MaskingService with a registry containing a server
+// newTestService creates a Service with a registry containing a server
 // with data masking enabled for the given pattern groups and patterns.
-func newTestMaskingService(t *testing.T, groups []string, patterns []string) *MaskingService {
+func newTestService(t *testing.T, groups []string, patterns []string) *Service {
 	t.Helper()
-	return NewMaskingService(
+	return NewService(
 		config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
@@ -28,9 +28,9 @@ func newTestMaskingService(t *testing.T, groups []string, patterns []string) *Ma
 	)
 }
 
-func TestNewMaskingService(t *testing.T) {
+func TestNewService(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{Enabled: true, PatternGroup: "security"})
+	svc := NewService(registry, AlertMaskingConfig{Enabled: true, PatternGroup: "security"})
 
 	assert.NotNil(t, svc)
 	assert.NotEmpty(t, svc.patterns, "Should have compiled patterns")
@@ -39,14 +39,14 @@ func TestNewMaskingService(t *testing.T) {
 }
 
 func TestMaskToolResult_EmptyContent(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"basic"}, nil)
+	svc := newTestService(t, []string{"basic"}, nil)
 	result := svc.MaskToolResult("", "test-server")
 	assert.Empty(t, result)
 }
 
 func TestMaskToolResult_NoMaskingConfigured(t *testing.T) {
 	// Server exists but no masking configured
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"no-masking-server": {
 				Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
@@ -61,7 +61,7 @@ func TestMaskToolResult_NoMaskingConfigured(t *testing.T) {
 }
 
 func TestMaskToolResult_MaskingDisabled(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"disabled-server": {
 				Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
@@ -80,14 +80,14 @@ func TestMaskToolResult_MaskingDisabled(t *testing.T) {
 }
 
 func TestMaskToolResult_UnknownServer(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"basic"}, nil)
+	svc := newTestService(t, []string{"basic"}, nil)
 	content := `api_key: "sk-FAKE-NOT-REAL-API-KEY-XXXX"`
 	result := svc.MaskToolResult(content, "nonexistent-server")
 	assert.Equal(t, content, result, "Content should pass through for unknown server")
 }
 
 func TestMaskToolResult_MasksAPIKey(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"basic"}, nil)
+	svc := newTestService(t, []string{"basic"}, nil)
 	content := `Configuration:
 api_key: "sk-FAKE-NOT-REAL-API-KEY-XXXX"
 debug: true`
@@ -100,7 +100,7 @@ debug: true`
 }
 
 func TestMaskToolResult_MasksPassword(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"basic"}, nil)
+	svc := newTestService(t, []string{"basic"}, nil)
 	content := `password: "FAKE-S3CRET-PASS-NOT-REAL"`
 
 	result := svc.MaskToolResult(content, "test-server")
@@ -110,7 +110,7 @@ func TestMaskToolResult_MasksPassword(t *testing.T) {
 }
 
 func TestMaskToolResult_MasksMultiplePatterns(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"security"}, nil)
+	svc := newTestService(t, []string{"security"}, nil)
 	content := `api_key: "sk-FAKE-NOT-REAL-API-KEY-XXXX"
 password: "FAKE-S3CRET-PASS-NOT-REAL"
 user@example.com contacted us`
@@ -127,7 +127,7 @@ user@example.com contacted us`
 
 func TestMaskToolResult_NoPatterns(t *testing.T) {
 	// Server has masking enabled but no patterns/groups configured
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"empty-server": {
 				Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
@@ -146,7 +146,7 @@ func TestMaskToolResult_NoPatterns(t *testing.T) {
 }
 
 func TestMaskToolResult_CustomPatterns(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"custom-server": {
 				Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
@@ -173,7 +173,7 @@ func TestMaskToolResult_CustomPatterns(t *testing.T) {
 }
 
 func TestMaskAlertData_Enabled(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(nil),
 		AlertMaskingConfig{Enabled: true, PatternGroup: "security"},
 	)
@@ -188,7 +188,7 @@ func TestMaskAlertData_Enabled(t *testing.T) {
 }
 
 func TestMaskAlertData_Disabled(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(nil),
 		AlertMaskingConfig{Enabled: false, PatternGroup: "security"},
 	)
@@ -199,7 +199,7 @@ func TestMaskAlertData_Disabled(t *testing.T) {
 }
 
 func TestMaskAlertData_EmptyData(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(nil),
 		AlertMaskingConfig{Enabled: true, PatternGroup: "security"},
 	)
@@ -209,7 +209,7 @@ func TestMaskAlertData_EmptyData(t *testing.T) {
 }
 
 func TestMaskAlertData_UnknownPatternGroup(t *testing.T) {
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(nil),
 		AlertMaskingConfig{Enabled: true, PatternGroup: "nonexistent"},
 	)
@@ -224,7 +224,7 @@ func TestMaskToolResult_FailClosed(t *testing.T) {
 	// from applyMasking, but we test that MaskToolResult returns the redaction
 	// notice when content would leak. This test verifies that content is masked
 	// and the fail-closed behavior is wired correctly in the service.
-	svc := newTestMaskingService(t, []string{"basic"}, nil)
+	svc := newTestService(t, []string{"basic"}, nil)
 	content := `api_key: "sk-FAKE-NOT-REAL-API-KEY-XXXX"`
 	result := svc.MaskToolResult(content, "test-server")
 
@@ -237,7 +237,7 @@ func TestMaskAlertData_FailOpen(t *testing.T) {
 	// Alert masking should return original data on failure (fail-open).
 	// The current implementation doesn't have a code path that returns an error,
 	// but this test verifies the fail-open behavior is wired.
-	svc := NewMaskingService(
+	svc := NewService(
 		config.NewMCPServerRegistry(nil),
 		AlertMaskingConfig{Enabled: true, PatternGroup: "basic"},
 	)
@@ -253,12 +253,12 @@ func TestMaskAlertData_FailOpen(t *testing.T) {
 func TestApplyMasking_CodeMaskersBeforeRegex(t *testing.T) {
 	// Verify code maskers run before regex patterns.
 	// We use the kubernetes_secret masker as our code masker.
-	svc := newTestMaskingService(t, []string{"kubernetes"}, nil)
+	svc := newTestService(t, []string{"kubernetes"}, nil)
 
 	resolved := &resolvedPatterns{
 		codeMaskerNames: []string{"kubernetes_secret"},
-		regexPatterns:   svc.resolvePatterns(&config.MaskingConfig{
-			Enabled: true,
+		regexPatterns: svc.resolvePatterns(&config.MaskingConfig{
+			Enabled:  true,
 			Patterns: []string{"api_key"},
 		}, "").regexPatterns,
 	}
@@ -272,7 +272,7 @@ func TestApplyMasking_CodeMaskersBeforeRegex(t *testing.T) {
 }
 
 func TestMaskToolResult_Certificate(t *testing.T) {
-	svc := newTestMaskingService(t, []string{"security"}, nil)
+	svc := newTestService(t, []string{"security"}, nil)
 	content := `Config:
 -----BEGIN RSA PRIVATE KEY-----
 FAKE-RSA-KEY-DATA-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -291,7 +291,7 @@ func TestMaskToolResult_CombinedCodeMaskerAndRegex(t *testing.T) {
 	// The "kubernetes" group includes both the kubernetes_secret code masker
 	// and regex patterns (api_key, password, certificate_authority_data).
 	// This test verifies both masking phases work together on a single Secret.
-	svc := newTestMaskingService(t, []string{"kubernetes"}, nil)
+	svc := newTestService(t, []string{"kubernetes"}, nil)
 
 	content := `apiVersion: v1
 kind: Secret
@@ -320,7 +320,7 @@ data:
 
 func TestBuiltinPatternRegression(t *testing.T) {
 	// Table-driven regression tests for each of the 15 built-in patterns.
-	svc := NewMaskingService(config.NewMCPServerRegistry(nil), AlertMaskingConfig{})
+	svc := NewService(config.NewMCPServerRegistry(nil), AlertMaskingConfig{})
 
 	tests := []struct {
 		name        string
@@ -350,7 +350,7 @@ func TestBuiltinPatternRegression(t *testing.T) {
 			shouldMask: false,
 		},
 		{
-			name: "certificate masks PEM block",
+			name:    "certificate masks PEM block",
 			pattern: "certificate",
 			input: `-----BEGIN CERTIFICATE-----
 FAKE-CERT-DATA-NOT-REAL

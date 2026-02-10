@@ -28,12 +28,12 @@ type AlertService struct {
 	client         *ent.Client
 	chainRegistry  *config.ChainRegistry
 	defaults       *config.Defaults
-	maskingService *masking.MaskingService // Optional — nil means no masking
+	maskingService *masking.Service // Optional — nil means no masking
 }
 
 // NewAlertService creates a new AlertService.
 // maskingService may be nil (masking disabled).
-func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, defaults *config.Defaults, maskingService *masking.MaskingService) *AlertService {
+func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, defaults *config.Defaults, maskingService *masking.Service) *AlertService {
 	if client == nil {
 		panic("NewAlertService: client must not be nil")
 	}

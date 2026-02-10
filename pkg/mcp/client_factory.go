@@ -10,12 +10,12 @@ import (
 // ClientFactory creates Client instances for sessions.
 type ClientFactory struct {
 	registry       *config.MCPServerRegistry
-	maskingService *masking.MaskingService
+	maskingService *masking.Service
 }
 
 // NewClientFactory creates a new factory.
 // maskingService may be nil (masking disabled).
-func NewClientFactory(registry *config.MCPServerRegistry, maskingService *masking.MaskingService) *ClientFactory {
+func NewClientFactory(registry *config.MCPServerRegistry, maskingService *masking.Service) *ClientFactory {
 	return &ClientFactory{registry: registry, maskingService: maskingService}
 }
 

@@ -297,7 +297,7 @@ func newTestExecutorWithMasking(
 		serverID: serverCfg,
 	})
 
-	maskingService := masking.NewMaskingService(registry, masking.AlertMaskingConfig{})
+	maskingService := masking.NewService(registry, masking.AlertMaskingConfig{})
 
 	ts := startTestServer(t, serverID, tools)
 	client := newClient(registry)
@@ -444,7 +444,7 @@ func TestToolExecutor_Execute_MaskingDisabled(t *testing.T) {
 		&config.MCPServerConfig{
 			Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "echo"},
 			DataMasking: &config.MaskingConfig{
-				Enabled: false, // Masking disabled
+				Enabled:       false, // Masking disabled
 				PatternGroups: []string{"basic"},
 			},
 		},
@@ -459,7 +459,7 @@ func TestToolExecutor_Execute_MaskingDisabled(t *testing.T) {
 		"Content should pass through when masking is disabled")
 }
 
-func TestToolExecutor_Execute_NilMaskingService(t *testing.T) {
+func TestToolExecutor_Execute_NilService(t *testing.T) {
 	// Use the standard newTestExecutor which passes nil for masking
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {

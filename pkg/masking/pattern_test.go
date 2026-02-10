@@ -11,7 +11,7 @@ import (
 
 func TestCompileBuiltinPatterns(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	// All 15 built-in patterns should compile successfully
 	builtin := config.GetBuiltinConfig()
@@ -42,7 +42,7 @@ func TestCompileCustomPatterns(t *testing.T) {
 		},
 	})
 
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	// Built-in patterns + 1 custom pattern
 	builtinCount := len(config.GetBuiltinConfig().MaskingPatterns)
@@ -74,7 +74,7 @@ func TestCompileCustomPatterns_InvalidRegex(t *testing.T) {
 		},
 	})
 
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	// Invalid pattern should be skipped, valid one compiled
 	_, invalidExists := svc.patterns["custom:test-server:0"]
@@ -97,7 +97,7 @@ func TestCompileCustomPatterns_MaskingDisabled(t *testing.T) {
 		},
 	})
 
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	// Custom patterns from disabled servers should not be compiled
 	_, exists := svc.patterns["custom:test-server:0"]
@@ -106,7 +106,7 @@ func TestCompileCustomPatterns_MaskingDisabled(t *testing.T) {
 
 func TestResolvePatterns_GroupExpansion(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	tests := []struct {
 		name           string
@@ -173,7 +173,7 @@ func TestResolvePatterns_GroupExpansion(t *testing.T) {
 
 func TestResolvePatterns_IndividualPatterns(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	cfg := &config.MaskingConfig{
 		Enabled:  true,
@@ -193,7 +193,7 @@ func TestResolvePatterns_IndividualPatterns(t *testing.T) {
 
 func TestResolvePatterns_UnknownGroup(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	cfg := &config.MaskingConfig{
 		Enabled:       true,
@@ -219,7 +219,7 @@ func TestResolvePatterns_WithCustomPatterns(t *testing.T) {
 		},
 	})
 
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	cfg := &config.MaskingConfig{
 		Enabled:       true,
@@ -236,7 +236,7 @@ func TestResolvePatterns_WithCustomPatterns(t *testing.T) {
 
 func TestResolvePatternsFromGroup(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	t.Run("valid group", func(t *testing.T) {
 		resolved := svc.resolvePatternsFromGroup("security")
@@ -252,13 +252,13 @@ func TestResolvePatternsFromGroup(t *testing.T) {
 
 func TestResolvePatterns_Deduplication(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	svc := NewMaskingService(registry, AlertMaskingConfig{})
+	svc := NewService(registry, AlertMaskingConfig{})
 
 	// api_key appears in both the group and the individual patterns list
 	cfg := &config.MaskingConfig{
 		Enabled:       true,
-		PatternGroups: []string{"basic"},     // Contains api_key, password
-		Patterns:      []string{"api_key"},   // Duplicate
+		PatternGroups: []string{"basic"},   // Contains api_key, password
+		Patterns:      []string{"api_key"}, // Duplicate
 	}
 	resolved := svc.resolvePatterns(cfg, "")
 

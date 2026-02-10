@@ -33,7 +33,7 @@ type ToolExecutor struct {
 
 	// Optional masking service for redacting sensitive data in tool results.
 	// nil means no masking is applied.
-	maskingService *masking.MaskingService
+	maskingService *masking.Service
 }
 
 // NewToolExecutor creates a new executor for the given servers.
@@ -43,7 +43,7 @@ func NewToolExecutor(
 	registry *config.MCPServerRegistry,
 	serverIDs []string,
 	toolFilter map[string][]string,
-	maskingService *masking.MaskingService,
+	maskingService *masking.Service,
 ) *ToolExecutor {
 	return &ToolExecutor{
 		client:         client,

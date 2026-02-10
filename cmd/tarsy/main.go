@@ -103,7 +103,7 @@ func main() {
 	}
 
 	// 4. Initialize masking service and domain services
-	maskingService := masking.NewMaskingService(
+	maskingService := masking.NewService(
 		cfg.MCPServerRegistry,
 		masking.AlertMaskingConfig{
 			Enabled:      cfg.Defaults.AlertMasking.Enabled,

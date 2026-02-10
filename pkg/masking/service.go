@@ -1,3 +1,6 @@
+// Package masking provides data masking capabilities for MCP tool results
+// and alert payloads. It supports both regex-based pattern matching and
+// code-based maskers with structural awareness (e.g., Kubernetes Secrets).
 package masking
 
 import (
@@ -12,10 +15,10 @@ type AlertMaskingConfig struct {
 	PatternGroup string
 }
 
-// MaskingService applies data masking to MCP tool results and alert payloads.
+// Service applies data masking to MCP tool results and alert payloads.
 // Created once at application startup (singleton). Thread-safe and stateless
 // aside from compiled patterns.
-type MaskingService struct {
+type Service struct {
 	registry             *config.MCPServerRegistry
 	patterns             map[string]*CompiledPattern // Built-in + custom compiled patterns
 	patternGroups        map[string][]string         // Group name → pattern names
@@ -24,13 +27,13 @@ type MaskingService struct {
 	serverCustomPatterns map[string][]string         // serverID → custom pattern keys
 }
 
-// NewMaskingService creates a masking service with compiled patterns and registered maskers.
+// NewService creates a masking service with compiled patterns and registered maskers.
 // All patterns are compiled eagerly at creation time. Invalid patterns are logged and skipped.
-func NewMaskingService(
+func NewService(
 	registry *config.MCPServerRegistry,
 	alertCfg AlertMaskingConfig,
-) *MaskingService {
-	s := &MaskingService{
+) *Service {
+	s := &Service{
 		registry:             registry,
 		patterns:             make(map[string]*CompiledPattern),
 		patternGroups:        config.GetBuiltinConfig().PatternGroups,
@@ -59,7 +62,7 @@ func NewMaskingService(
 
 // MaskToolResult applies server-specific masking to MCP tool result content.
 // Returns masked content. On masking failure, returns a redaction notice (fail-closed).
-func (s *MaskingService) MaskToolResult(content string, serverID string) string {
+func (s *Service) MaskToolResult(content string, serverID string) string {
 	if content == "" {
 		return content
 	}
@@ -89,7 +92,7 @@ func (s *MaskingService) MaskToolResult(content string, serverID string) string 
 
 // MaskAlertData applies masking to alert payload data using the configured pattern group.
 // Returns masked data. On masking failure, returns original data (fail-open for alerts).
-func (s *MaskingService) MaskAlertData(data string) string {
+func (s *Service) MaskAlertData(data string) string {
 	if !s.alertMasking.Enabled || data == "" {
 		return data
 	}
@@ -110,7 +113,7 @@ func (s *MaskingService) MaskAlertData(data string) string {
 }
 
 // applyMasking applies code-based maskers then regex patterns to content.
-func (s *MaskingService) applyMasking(content string, resolved *resolvedPatterns) (string, error) {
+func (s *Service) applyMasking(content string, resolved *resolvedPatterns) (string, error) {
 	masked := content
 
 	// Phase 1: Code-based maskers (more specific, structural awareness)
@@ -133,6 +136,6 @@ func (s *MaskingService) applyMasking(content string, resolved *resolvedPatterns
 }
 
 // registerMasker registers a code-based masker by its name.
-func (s *MaskingService) registerMasker(m Masker) {
+func (s *Service) registerMasker(m Masker) {
 	s.codeMaskers[m.Name()] = m
 }
