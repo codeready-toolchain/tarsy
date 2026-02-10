@@ -31,7 +31,7 @@ Full design docs for completed phases are in `docs/archive/`.
 ### Phase 4: MCP Integration
 
 **MCP Client Infrastructure (Go)**
-- [ ] MCP client implementation (Go -- uses `mark3labs/mcp-go` or similar)
+- [ ] MCP client implementation (Go -- uses official mcp go sdk)
 - [ ] Transport layer -- stdio (subprocess via `os/exec`), HTTP, SSE
 - [ ] Tool registry & discovery (list tools from MCP servers)
 - [ ] Error handling & recovery (retry, session recreation)
