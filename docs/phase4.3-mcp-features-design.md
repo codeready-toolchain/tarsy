@@ -874,7 +874,8 @@ metadata := map[string]interface{}{
     "server_name":         serverID,
     "tool_name":           toolName,
     "original_tokens":     estimatedTokens,
-    "summarization_model": execCtx.Config.LLMProvider.Model,
+    "summarization_backend": execCtx.Config.LLMProvider.Backend, // e.g. "gemini_native", "langchain"
+    "summarization_model":   execCtx.Config.LLMProvider.Model,
 }
 ```
 
@@ -963,15 +964,16 @@ pkg/
 
 ### Step 3: Tool Call Lifecycle Events
 
-1. Rewrite `createToolCallEvent` to use streaming pattern (content="", args in metadata)
-2. Add `completeToolCallEvent` helper
-3. Remove `createToolResultEvent` helper
-4. Update ReAct and NativeThinking controllers to use single-event lifecycle
-5. Write tests for event creation, completion, and publishing
+1. Remove `tool_result` and `mcp_tool_call` from TimelineEvent schema enum + update `llm_tool_call` comment + `make ent-generate`
+2. Rewrite `createToolCallEvent` to use streaming pattern (content="", args in metadata)
+3. Add `completeToolCallEvent` helper
+4. Remove `createToolResultEvent` helper
+5. Update ReAct and NativeThinking controllers to use single-event lifecycle
+6. Write tests for event creation, completion, and publishing
 
 ### Step 4: Tool Result Summarization
 
-1. Add `"summarization"` to LLMInteraction schema enum + generate migration
+1. Add `"summarization"` to LLMInteraction schema enum + `make ent-generate` (no migration needed — VARCHAR enum)
 2. Create `pkg/agent/controller/summarize.go` with `maybeSummarize` and `callSummarizationLLMWithStreaming`
 3. Integrate into ReAct controller (after tool result, before observation append)
 4. Integrate into NativeThinking controller (after tool result, before tool result message)
