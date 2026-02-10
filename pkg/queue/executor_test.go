@@ -15,7 +15,7 @@ func TestResolveMCPSelection(t *testing.T) {
 	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {},
 		"argocd-server":     {},
-		"prometheus-server":  {},
+		"prometheus-server": {},
 	})
 	cfg := &config.Config{
 		MCPServerRegistry: registry,

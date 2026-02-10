@@ -16,8 +16,8 @@ import (
 
 // SummarizationResult holds the outcome of a summarization attempt.
 type SummarizationResult struct {
-	Content       string           // Summary text (or original if not summarized)
-	WasSummarized bool             // Whether summarization was performed
+	Content       string            // Summary text (or original if not summarized)
+	WasSummarized bool              // Whether summarization was performed
 	Usage         *agent.TokenUsage // Token usage from summarization LLM call (nil if not summarized)
 }
 

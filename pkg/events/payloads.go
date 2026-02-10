@@ -3,14 +3,14 @@ package events
 // TimelineCreatedPayload is the payload for timeline_event.created events.
 // Published when a new timeline event is created (streaming or completed).
 type TimelineCreatedPayload struct {
-	Type           string         `json:"type"`            // always EventTypeTimelineCreated
-	EventID        string         `json:"event_id"`        // timeline event UUID
-	SessionID      string         `json:"session_id"`      // owning session
-	StageID        string         `json:"stage_id"`        // owning stage
-	ExecutionID    string         `json:"execution_id"`    // owning agent execution
-	EventType      string         `json:"event_type"`      // e.g. "llm_thinking", "llm_tool_call"
-	Status         string         `json:"status"`          // "streaming" or "completed"
-	Content        string         `json:"content"`         // event content (may be empty for streaming)
+	Type           string         `json:"type"`         // always EventTypeTimelineCreated
+	EventID        string         `json:"event_id"`     // timeline event UUID
+	SessionID      string         `json:"session_id"`   // owning session
+	StageID        string         `json:"stage_id"`     // owning stage
+	ExecutionID    string         `json:"execution_id"` // owning agent execution
+	EventType      string         `json:"event_type"`   // e.g. "llm_thinking", "llm_tool_call"
+	Status         string         `json:"status"`       // "streaming" or "completed"
+	Content        string         `json:"content"`      // event content (may be empty for streaming)
 	Metadata       map[string]any `json:"metadata,omitempty"`
 	SequenceNumber int            `json:"sequence_number"` // order in timeline
 	Timestamp      string         `json:"timestamp"`       // RFC3339Nano
