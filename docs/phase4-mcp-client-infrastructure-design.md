@@ -28,7 +28,7 @@ This document details the MCP Client Infrastructure for the new TARSy implementa
 
 **Dependencies:**
 - Phase 3 complete (ToolExecutor interface, controllers, streaming)
-- Official MCP Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.2.0 — decided in Q9)
+- Official MCP Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.3.0)
 - Existing `config.MCPServerRegistry` with transport configs
 
 ---

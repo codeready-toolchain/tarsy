@@ -89,7 +89,7 @@ This is stricter than old TARSy (which logged warnings on startup failures but c
 **Status**: ✅ Decided — **Option A**
 **Source**: Dependency decision
 
-**Decision:** Use v1.2.0 (latest stable). Minor version bump from v1.0.0, backwards-compatible, latest bug fixes.
+**Decision:** Use v1.3.0 (latest stable, released Feb 2026).
 
 ---
 
