@@ -31,12 +31,13 @@ Full design docs for completed phases are in `docs/archive/`.
 ### Phase 4: MCP Integration
 
 **MCP Client Infrastructure (Go)**
-- [ ] MCP client implementation (Go -- uses `mark3labs/mcp-go` or similar)
+- [ ] MCP client implementation (Go -- uses official mcp go sdk)
 - [ ] Transport layer -- stdio (subprocess via `os/exec`), HTTP, SSE
 - [ ] Tool registry & discovery (list tools from MCP servers)
 - [ ] Error handling & recovery (retry, session recreation)
 - [ ] Per-session MCP client isolation
 - [ ] MCP server health monitoring
+- [ ] System warnings service (in-memory, used by health monitor and dashboard)
 - [ ] ReAct `ActionInput` parameter parsing -- parse raw text into structured MCP parameters (JSON/YAML/key-value/raw string cascade, type coercion). See deferred items in `docs/architecture-context.md`.
 - [ ] Tool name validation -- split `"server.tool"` string, validate both parts, route to correct MCP server.
 
@@ -158,8 +159,6 @@ Full design docs for completed phases are in `docs/archive/`.
 
 **System Health**
 - [ ] Health check endpoint enhancements
-- [ ] System warnings service
-- [ ] MCP health monitoring
 - [ ] Queue metrics
 
 **Observability**
