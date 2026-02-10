@@ -339,6 +339,39 @@ items:
 	assert.Contains(t, result, MaskedSecretValue)
 }
 
+func TestKubernetesSecretMasker_SecretListAnnotationsMasked(t *testing.T) {
+	// Verify that annotations on individual items inside a SecretList are masked.
+	// This is the key behavior that requires SecretList to go through maskListItems
+	// (via isKubernetesList) rather than isKubernetesSecret.
+	m := &KubernetesSecretMasker{}
+	input := `{
+  "apiVersion": "v1",
+  "kind": "SecretList",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Secret",
+      "metadata": {
+        "name": "test-fake-annotated",
+        "annotations": {
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"data\":{\"pw\":\"RkFLRS1wd2Q=\"}}"
+        }
+      },
+      "data": {"token": "RkFLRS10b2tlbg=="}
+    }
+  ]
+}`
+
+	result := m.Mask(input)
+
+	assert.NotEqual(t, input, result)
+	// Data fields should be masked
+	assert.NotContains(t, result, "RkFLRS10b2tlbg==", "Item data should be masked")
+	// Embedded annotation JSON should also be masked
+	assert.NotContains(t, result, "RkFLRS1wd2Q=", "Annotation embedded Secret data should be masked")
+	assert.Contains(t, result, MaskedSecretValue)
+}
+
 func TestKubernetesSecretMasker_PreservesNonSecretContent(t *testing.T) {
 	m := &KubernetesSecretMasker{}
 	input := `apiVersion: v1
@@ -390,9 +423,9 @@ func TestIsKubernetesSecret(t *testing.T) {
 			expect:   true,
 		},
 		{
-			name:     "SecretList",
+			name:     "SecretList is not a Secret (handled as List)",
 			resource: map[string]any{"kind": "SecretList"},
-			expect:   true,
+			expect:   false,
 		},
 		{
 			name:     "ConfigMap",

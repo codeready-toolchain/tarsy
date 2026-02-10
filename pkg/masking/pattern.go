@@ -136,5 +136,8 @@ func (s *Service) addToResolved(resolved *resolvedPatterns, name string, builtin
 	// Otherwise, look up in compiled regex patterns
 	if cp, ok := s.patterns[name]; ok {
 		resolved.regexPatterns = append(resolved.regexPatterns, cp)
+		return
 	}
+
+	slog.Warn("Unknown masking pattern name referenced, skipping", "pattern", name)
 }

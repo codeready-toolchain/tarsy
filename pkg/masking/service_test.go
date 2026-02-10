@@ -301,9 +301,12 @@ func (m *panicMasker) Name() string            { return "panic_masker" }
 func (m *panicMasker) AppliesTo(_ string) bool { return true }
 func (m *panicMasker) Mask(_ string) string    { panic("intentional test panic in masker") }
 
-func TestApplyMasking_CodeMaskersBeforeRegex(t *testing.T) {
-	// Verify code maskers run before regex patterns.
-	// We use the kubernetes_secret masker as our code masker.
+func TestApplyMasking_CodeMaskersAndRegexCoexist(t *testing.T) {
+	// Verify that code maskers and regex patterns coexist in the same resolved set.
+	// The input only triggers the regex phase (no K8s Secret), confirming
+	// code maskers in the pipeline don't interfere with regex processing.
+	// For a test exercising both phases on the same content, see
+	// TestMaskToolResult_CombinedCodeMaskerAndRegex.
 	svc := newTestService(t, []string{"kubernetes"}, nil)
 
 	resolved := &resolvedPatterns{
