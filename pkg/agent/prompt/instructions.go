@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -78,6 +79,9 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 	// Tier 2: MCP server instructions (from registry, keyed by server IDs in config)
 	sections = b.appendMCPInstructions(sections, execCtx)
 
+	// Unavailable server warnings (from per-session MCP initialization failures)
+	sections = b.appendUnavailableServerWarnings(sections, execCtx.FailedServers)
+
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
 		sections = append(sections, "## Agent-Specific Instructions\n\n"+execCtx.Config.CustomInstructions)
@@ -95,6 +99,9 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 
 	// Tier 2: MCP server instructions (same logic as investigation)
 	sections = b.appendMCPInstructions(sections, execCtx)
+
+	// Unavailable server warnings
+	sections = b.appendUnavailableServerWarnings(sections, execCtx.FailedServers)
 
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -119,6 +126,21 @@ func (b *PromptBuilder) composeSynthesisInstructions(execCtx *agent.ExecutionCon
 	}
 
 	return strings.Join(sections, "\n\n")
+}
+
+// appendUnavailableServerWarnings adds a warning section when MCP servers failed to initialize.
+func (b *PromptBuilder) appendUnavailableServerWarnings(sections []string, failedServers map[string]string) []string {
+	if len(failedServers) == 0 {
+		return sections
+	}
+	var sb strings.Builder
+	sb.WriteString("## Unavailable MCP Servers\n\n")
+	sb.WriteString("The following servers failed to initialize and their tools are NOT available:\n")
+	for serverID, errMsg := range failedServers {
+		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", serverID, errMsg))
+	}
+	sb.WriteString("\nDo not attempt to use tools from these servers.")
+	return append(sections, sb.String())
 }
 
 // appendMCPInstructions adds Tier 2 MCP server instructions to a sections slice.

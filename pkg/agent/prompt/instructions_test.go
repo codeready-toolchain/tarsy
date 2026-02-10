@@ -114,6 +114,55 @@ func TestComposeChatInstructions_UsesChatGeneralInstructions(t *testing.T) {
 	assert.Contains(t, result, "Context Awareness")
 }
 
+func TestComposeInstructions_FailedServers(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+		FailedServers: map[string]string{
+			"kubernetes-server": "connection refused",
+			"github-server":     "timeout after 30s",
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.Contains(t, result, "Unavailable MCP Servers")
+	assert.Contains(t, result, "kubernetes-server")
+	assert.Contains(t, result, "connection refused")
+	assert.Contains(t, result, "github-server")
+	assert.Contains(t, result, "timeout after 30s")
+	assert.Contains(t, result, "Do not attempt to use tools from these servers")
+}
+
+func TestComposeChatInstructions_FailedServers(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+		FailedServers: map[string]string{
+			"broken-server": "EOF",
+		},
+	}
+
+	result := builder.ComposeChatInstructions(execCtx)
+
+	assert.Contains(t, result, "Unavailable MCP Servers")
+	assert.Contains(t, result, "broken-server")
+	assert.Contains(t, result, "EOF")
+}
+
+func TestComposeInstructions_NoFailedServers(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+	assert.NotContains(t, result, "Unavailable MCP Servers")
+}
+
 func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
@@ -124,14 +173,19 @@ func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 			MCPServers:         []string{"kubernetes-server"},
 			CustomInstructions: "CUSTOM_TIER3_MARKER",
 		},
+		FailedServers: map[string]string{
+			"broken-server": "FAILED_SERVER_MARKER",
+		},
 	}
 
 	result := builder.ComposeInstructions(execCtx)
 
-	// Verify ordering: Tier 1 < Tier 2 < Tier 3
+	// Verify ordering: Tier 1 < Tier 2 < Unavailable warnings < Tier 3
 	idxT1 := strings.Index(result, "General SRE Agent Instructions")
 	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
+	idxWarn := strings.Index(result, "FAILED_SERVER_MARKER")
 	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
 	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
-	assert.Greater(t, idxT3, idxT2, "Tier 3 should come after Tier 2")
+	assert.Greater(t, idxWarn, idxT2, "Unavailable warnings should come after Tier 2")
+	assert.Greater(t, idxT3, idxWarn, "Tier 3 should come after unavailable warnings")
 }

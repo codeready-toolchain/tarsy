@@ -577,6 +577,8 @@ func (m *mockToolExecutor) ListTools(_ context.Context) ([]agent.ToolDefinition,
 	return m.tools, nil
 }
 
+func (m *mockToolExecutor) Close() error { return nil }
+
 // mockToolExecutorFunc is a flexible test mock that allows custom execute functions.
 type mockToolExecutorFunc struct {
 	tools     []agent.ToolDefinition
@@ -590,6 +592,8 @@ func (m *mockToolExecutorFunc) Execute(ctx context.Context, call agent.ToolCall)
 func (m *mockToolExecutorFunc) ListTools(_ context.Context) ([]agent.ToolDefinition, error) {
 	return m.tools, nil
 }
+
+func (m *mockToolExecutorFunc) Close() error { return nil }
 
 // newTestExecCtx creates a test ExecutionContext backed by a real test database.
 // Defaults: MaxIterations=20, IterationTimeout=120s.

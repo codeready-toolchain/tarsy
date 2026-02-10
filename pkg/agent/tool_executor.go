@@ -15,6 +15,10 @@ type ToolExecutor interface {
 	// ListTools returns available tool definitions for the current execution.
 	// Returns nil if no tools are configured.
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
+
+	// Close releases resources (MCP transports, subprocesses).
+	// No-op for StubToolExecutor.
+	Close() error
 }
 
 // ToolResult represents the output of a tool execution.
@@ -48,3 +52,5 @@ func (s *StubToolExecutor) Execute(_ context.Context, call ToolCall) (*ToolResul
 func (s *StubToolExecutor) ListTools(_ context.Context) ([]ToolDefinition, error) {
 	return s.tools, nil
 }
+
+func (s *StubToolExecutor) Close() error { return nil }

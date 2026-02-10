@@ -7,8 +7,9 @@ type TransportConfig struct {
 	Type TransportType `yaml:"type" validate:"required"`
 
 	// For stdio transport
-	Command string   `yaml:"command,omitempty"`
-	Args    []string `yaml:"args,omitempty"`
+	Command string            `yaml:"command,omitempty"`
+	Args    []string          `yaml:"args,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty"` // Environment overrides for stdio subprocess
 
 	// For http/sse transport
 	URL         string `yaml:"url,omitempty"`

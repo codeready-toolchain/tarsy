@@ -18,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
@@ -138,7 +139,39 @@ func main() {
 	connManager.SetListener(notifyListener)
 	slog.Info("Streaming infrastructure initialized")
 
-	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher)
+	// 5b. Initialize MCP infrastructure
+	warningsService := services.NewSystemWarningsService()
+	mcpFactory := mcp.NewClientFactory(cfg.MCPServerRegistry)
+
+	// Eager MCP validation: verify all configured servers can connect.
+	// If any server fails, the process exits — prevents silent broken configs.
+	mcpServerIDs := cfg.AllMCPServerIDs()
+	if len(mcpServerIDs) > 0 {
+		validationClient, mcpErr := mcpFactory.CreateClient(ctx, mcpServerIDs)
+		if mcpErr != nil {
+			slog.Error("MCP startup validation failed", "error", mcpErr)
+			os.Exit(1)
+		}
+		failed := validationClient.FailedServers()
+		if len(failed) > 0 {
+			slog.Error("MCP servers failed startup validation", "failed_servers", failed)
+			_ = validationClient.Close()
+			os.Exit(1)
+		}
+		_ = validationClient.Close()
+		slog.Info("MCP servers validated", "count", len(mcpServerIDs))
+	}
+
+	// Start HealthMonitor (background goroutine)
+	var healthMonitor *mcp.HealthMonitor
+	if len(mcpServerIDs) > 0 {
+		healthMonitor = mcp.NewHealthMonitor(mcpFactory, cfg.MCPServerRegistry, warningsService)
+		healthMonitor.Start(ctx)
+		defer healthMonitor.Stop()
+		slog.Info("MCP health monitor started")
+	}
+
+	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher)
@@ -149,6 +182,10 @@ func main() {
 
 	// 7. Create HTTP server
 	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool, connManager)
+	if healthMonitor != nil {
+		httpServer.SetHealthMonitor(healthMonitor)
+	}
+	httpServer.SetWarningsService(warningsService)
 
 	// 8. Start HTTP server (non-blocking)
 	errCh := make(chan error, 1)

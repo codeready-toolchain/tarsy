@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
@@ -26,6 +27,8 @@ type Server struct {
 	sessionService *services.SessionService
 	workerPool     *queue.WorkerPool
 	connManager    *events.ConnectionManager
+	healthMonitor  *mcp.HealthMonitor              // nil if MCP disabled
+	warningService *services.SystemWarningsService // nil if MCP disabled
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -51,6 +54,16 @@ func NewServer(
 
 	s.setupRoutes()
 	return s
+}
+
+// SetHealthMonitor sets the MCP health monitor for the health endpoint.
+func (s *Server) SetHealthMonitor(monitor *mcp.HealthMonitor) {
+	s.healthMonitor = monitor
+}
+
+// SetWarningsService sets the system warnings service for the health endpoint.
+func (s *Server) SetWarningsService(svc *services.SystemWarningsService) {
+	s.warningService = svc
 }
 
 // setupRoutes registers all API routes.
@@ -122,6 +135,22 @@ func (s *Server) healthHandler(c *echo.Context) error {
 	if s.workerPool != nil {
 		poolHealth := s.workerPool.Health()
 		response.WorkerPool = poolHealth
+	}
+
+	// MCP health statuses
+	if s.healthMonitor != nil {
+		response.MCPHealth = s.healthMonitor.GetStatuses()
+		if !s.healthMonitor.IsHealthy() {
+			response.Status = "degraded"
+		}
+	}
+
+	// System warnings
+	if s.warningService != nil {
+		warnings := s.warningService.GetWarnings()
+		if len(warnings) > 0 {
+			response.Warnings = warnings
+		}
 	}
 
 	return c.JSON(http.StatusOK, response)

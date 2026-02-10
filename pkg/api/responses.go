@@ -2,7 +2,9 @@ package api
 
 import (
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
 // AlertResponse is returned by POST /api/v1/alerts.
@@ -20,11 +22,13 @@ type CancelResponse struct {
 
 // HealthResponse is returned by GET /health.
 type HealthResponse struct {
-	Status        string                 `json:"status"`
-	Database      *database.HealthStatus `json:"database"`
-	Phase         string                 `json:"phase"`
-	Configuration ConfigurationStats     `json:"configuration"`
-	WorkerPool    *queue.PoolHealth      `json:"worker_pool,omitempty"`
+	Status        string                       `json:"status"`
+	Database      *database.HealthStatus       `json:"database"`
+	Phase         string                       `json:"phase"`
+	Configuration ConfigurationStats           `json:"configuration"`
+	WorkerPool    *queue.PoolHealth            `json:"worker_pool,omitempty"`
+	MCPHealth     map[string]*mcp.HealthStatus `json:"mcp_health,omitempty"`
+	Warnings      []*services.SystemWarning    `json:"warnings,omitempty"`
 }
 
 // ConfigurationStats contains counts of loaded configuration items.
