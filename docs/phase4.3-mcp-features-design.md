@@ -335,7 +335,7 @@ Controller iteration loop:
 
 ### Token Estimation (`pkg/mcp/tokens.go`)
 
-Go doesn't have tiktoken. For threshold checking, approximate estimation is sufficient — we're comparing against a configurable threshold (default 5000 tokens), not computing exact costs.
+Go has tiktoken ports (e.g., `pkoukk/tiktoken-go` with 866+ stars, listed in OpenAI's official cookbook; `tiktoken-go/tokenizer` as a pure Go alternative with embedded vocabularies). However, for threshold checking, approximate estimation is sufficient — we're comparing against a configurable threshold (default 5000 tokens), not computing exact costs.
 
 ```go
 package mcp
@@ -490,14 +490,11 @@ func callSummarizationLLM(
 
     return summary, streamed.Usage, nil
 }
+```
 
 ### Summarization Timeline Events
 
-The existing `callLLMWithStreaming` creates `llm_response` type events. For summarization, we need `mcp_tool_summary` events. Two approaches:
-
-**Approach: Dedicated summarization streaming function**
-
-Rather than modifying `callLLMWithStreaming` (which is well-tested for iteration LLM calls), create a parallel function `callSummarizationLLMWithStreaming` that uses `mcp_tool_summary` as the event type. This avoids adding conditional logic to the existing streaming path.
+The existing `callLLMWithStreaming` creates `llm_response` type events. For summarization, we need `mcp_tool_summary` events. Rather than modifying `callLLMWithStreaming` (which is well-tested for iteration LLM calls), we create a dedicated `callSummarizationLLMWithStreaming` that uses `mcp_tool_summary` as the event type. This avoids adding conditional logic to the existing streaming path.
 
 ```go
 // callSummarizationLLMWithStreaming is analogous to callLLMWithStreaming but
@@ -549,31 +546,38 @@ Large tool results require truncation at two independent points:
 No separate conversation truncation for non-summarized results. If a result is below the summarization threshold, it's already small enough. If summarization is disabled, that's a deliberate choice. Summarization *is* the mechanism for controlling result size in the conversation.
 
 ```go
-// truncateForStorage truncates tool output for timeline events and MCPInteraction records.
-// This protects the UI from rendering massive text blobs. Applied to ALL raw results.
+// truncateAtLineBoundary is the shared truncation logic. It cuts at the last newline
+// before the limit to avoid splitting mid-line — important when the content is
+// indented JSON, YAML, or log output (preserves logical line boundaries).
+// Old TARSy used the same rfind('\n') approach.
+func truncateAtLineBoundary(content string, maxChars int, marker string) string {
+    if maxChars <= 0 || len(content) <= maxChars {
+        return content
+    }
+    truncated := content[:maxChars]
+    if idx := strings.LastIndex(truncated, "\n"); idx > 0 {
+        truncated = truncated[:idx]
+    }
+    return truncated + fmt.Sprintf(
+        "\n\n[TRUNCATED: %s — Original size: %dKB, limit: %dKB]",
+        marker, len(content)/1024, maxChars/1024,
+    )
+}
+
+// truncateForStorage truncates tool output for llm_tool_call completion content
+// and MCPInteraction records. Protects the UI from rendering massive text blobs.
+// Applied to ALL raw results, regardless of whether summarization is triggered.
 func truncateForStorage(content string, maxTokens int) string {
-    if maxTokens <= 0 {
-        return content
-    }
-    maxChars := maxTokens * charsPerToken
-    if len(content) <= maxChars {
-        return content
-    }
-    return content[:maxChars] + "\n\n[TRUNCATED: Output exceeded storage display limit]"
+    return truncateAtLineBoundary(content, maxTokens*charsPerToken,
+        "Output exceeded storage display limit")
 }
 
 // truncateForSummarization truncates tool output before sending to the summarization LLM.
 // Safety net — summarization prompt + truncated output must fit in the model's context window.
 // Uses a larger limit than storage truncation to give the summarizer maximum data.
 func truncateForSummarization(content string, maxTokens int) string {
-    if maxTokens <= 0 {
-        return content
-    }
-    maxChars := maxTokens * charsPerToken
-    if len(content) <= maxChars {
-        return content
-    }
-    return content[:maxChars] + "\n\n[TRUNCATED: Output exceeded summarization input limit]"
+    return truncateAtLineBoundary(content, maxTokens*charsPerToken,
+        "Output exceeded summarization input limit")
 }
 ```
 
@@ -671,6 +675,14 @@ messages = append(messages, agent.ConversationMessage{
 
 ### Schema Changes
 
+#### Migration Reference
+
+See `pkg/database/migrations/README.md` for the full migration conventions. Key facts:
+
+- **Ent enums are VARCHAR** — Ent stores enum fields as `character varying`, not PostgreSQL ENUM types. Adding or removing enum values does **not** require a database migration. Validation happens at the application level.
+- **Workflow for enum-only changes**: Edit `ent/schema/*.go` → `make ent-generate` → `make build && make test`.
+- **Workflow for structural changes** (new columns, tables, indexes): Edit `ent/schema/*.go` → `make ent-generate` → `make db-start` → `make migrate-create NAME=describe_change` → review generated SQL → `make build && make test`.
+
 #### LLMInteraction: Add "summarization" interaction type
 
 ```go
@@ -679,7 +691,36 @@ field.Enum("interaction_type").
     Values("iteration", "final_analysis", "executive_summary", "chat_response", "summarization"),
 ```
 
-This requires a migration to add the new enum value.
+**No database migration required** — enum-only change (VARCHAR column, app-level validation).
+
+#### TimelineEvent: Enum Cleanup
+
+The `event_type` enum already includes `mcp_tool_summary` (added in Phase 3 anticipating Phase 4). No new values needed.
+
+However, Phase 4.3 changes the event model, making two existing enum values obsolete:
+
+| Enum value | Current usage | Phase 4.3 status |
+|------------|---------------|------------------|
+| `llm_tool_call` | Created once per tool call | **Kept** — now uses streaming lifecycle (created → completed) |
+| `tool_result` | Separate event per tool result | **Remove** — result moves to `llm_tool_call` completion content |
+| `mcp_tool_call` | Never used (added anticipating Phase 4) | **Remove** — `llm_tool_call` lifecycle replaces this |
+| `mcp_tool_summary` | Never used (added anticipating Phase 4) | **Kept** — used for summarization streaming |
+
+Changes to `ent/schema/timelineevent.go`:
+
+1. **Remove `mcp_tool_call`** from the `Values()` list (never used, no data to migrate).
+2. **Remove `tool_result`** from the `Values()` list. Phase 4.3 updates the Phase 3 controllers to stop creating these. Since there is no production database, there are no existing rows to migrate.
+3. **Update the comment block** for `llm_tool_call` to document the streaming lifecycle pattern:
+
+```go
+//   llm_tool_call      — Tool call lifecycle event. Created with status "streaming" when the
+//                        LLM requests a tool call (metadata: server_name, tool_name, arguments).
+//                        Completed with the storage-truncated raw result in content and
+//                        is_error in metadata after ToolExecutor.Execute() returns.
+//                        Replaces the separate tool_result event from Phase 3.
+```
+
+**No database migration required** — all enum-only changes.
 
 ### Remove Phase 4.3 Stub from ToolExecutor
 
@@ -889,13 +930,14 @@ pkg/
 | `pkg/agent/controller/native_thinking.go` | Same as ReAct |
 | `pkg/agent/controller/helpers.go` | Rewrite `createToolCallEvent` (streaming pattern), add `completeToolCallEvent`, remove `createToolResultEvent` |
 | `pkg/mcp/executor.go` | Remove Phase 4.3 stub comment |
-| `ent/schema/llminteraction.go` | Add `"summarization"` to interaction_type enum |
+| `ent/schema/llminteraction.go` | Add `"summarization"` to interaction_type enum (no migration) |
+| `ent/schema/timelineevent.go` | Remove `mcp_tool_call` and `tool_result` from enum, update `llm_tool_call` comment (no migration) |
 
 ### New Files
 
 | File | Purpose |
 |------|---------|
-| `pkg/mcp/tokens.go` | `EstimateTokens`, `truncateForStorage`, `truncateForSummarization` |
+| `pkg/mcp/tokens.go` | `EstimateTokens`, `truncateAtLineBoundary`, `truncateForStorage`, `truncateForSummarization` |
 | `pkg/mcp/tokens_test.go` | Token estimation and truncation tests |
 | `pkg/agent/controller/summarize.go` | `maybeSummarize`, `callSummarizationLLMWithStreaming`, `buildConversationContext` |
 | `pkg/agent/controller/summarize_test.go` | Summarization tests |
@@ -953,7 +995,7 @@ pkg/
 |------|-------|
 | `ParseMCPSelectionConfig` | Valid input, empty servers, malformed JSON, nil input |
 | `EstimateTokens` | Empty, short, long, Unicode |
-| `truncateForStorage` / `truncateForSummarization` | Below limit, at limit, above limit, zero limit |
+| `truncateAtLineBoundary` / `truncateForStorage` / `truncateForSummarization` | Below limit, at limit, above limit, zero limit, newline boundary respected, no newlines (hard cut fallback), indented JSON content |
 | `resolveMCPSelection` | No override, valid override, invalid server, tool filtering |
 | `maybeSummarize` | Below threshold, above threshold, disabled, LLM failure, empty summary |
 | `buildConversationContext` | System messages excluded, multi-turn context |
