@@ -8,6 +8,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -24,13 +25,15 @@ type SubmitAlertInput struct {
 
 // AlertService handles alert submission and session creation.
 type AlertService struct {
-	client        *ent.Client
-	chainRegistry *config.ChainRegistry
-	defaults      *config.Defaults
+	client         *ent.Client
+	chainRegistry  *config.ChainRegistry
+	defaults       *config.Defaults
+	maskingService *masking.MaskingService // Optional — nil means no masking
 }
 
 // NewAlertService creates a new AlertService.
-func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, defaults *config.Defaults) *AlertService {
+// maskingService may be nil (masking disabled).
+func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, defaults *config.Defaults, maskingService *masking.MaskingService) *AlertService {
 	if client == nil {
 		panic("NewAlertService: client must not be nil")
 	}
@@ -41,9 +44,10 @@ func NewAlertService(client *ent.Client, chainRegistry *config.ChainRegistry, de
 		panic("NewAlertService: defaults must not be nil")
 	}
 	return &AlertService{
-		client:        client,
-		chainRegistry: chainRegistry,
-		defaults:      defaults,
+		client:         client,
+		chainRegistry:  chainRegistry,
+		defaults:       defaults,
+		maskingService: maskingService,
 	}
 }
 
@@ -81,12 +85,18 @@ func (s *AlertService) SubmitAlert(ctx context.Context, input SubmitAlertInput) 
 		}
 	}
 
+	// Apply alert data masking (before DB storage)
+	alertData := input.Data
+	if s.maskingService != nil {
+		alertData = s.maskingService.MaskAlertData(alertData)
+	}
+
 	// Create session in "pending" status
 	// Note: created_at is set automatically by schema default
 	// started_at will be set by the worker when it claims the session
 	builder := s.client.AlertSession.Create().
 		SetID(sessionID).
-		SetAlertData(input.Data).
+		SetAlertData(alertData).
 		SetAgentType(alertType). // Use alert type as agent type
 		SetAlertType(alertType).
 		SetChainID(chainID).

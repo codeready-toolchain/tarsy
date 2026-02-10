@@ -13,7 +13,7 @@ type BuiltinConfig struct {
 	ChainDefinitions map[string]ChainConfig
 	MaskingPatterns  map[string]MaskingPattern
 	PatternGroups    map[string][]string
-	CodeMaskers      map[string]string
+	CodeMaskers      []string
 	DefaultRunbook   string
 	DefaultAlertType string
 }
@@ -185,77 +185,77 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 	return map[string]MaskingPattern{
 		"api_key": {
 			Pattern:     `(?i)(?:api[_-]?key|apikey|key)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-]{20,})["\']?`,
-			Replacement: `"api_key": "__MASKED_API_KEY__"`,
+			Replacement: `"api_key": "[MASKED_API_KEY]"`,
 			Description: "API keys",
 		},
 		"password": {
 			Pattern:     `(?i)(?:password|pwd|pass)["\']?\s*[:=]\s*["\']?([^"\'\s\n]{6,})["\']?`,
-			Replacement: `"password": "__MASKED_PASSWORD__"`,
+			Replacement: `"password": "[MASKED_PASSWORD]"`,
 			Description: "Passwords",
 		},
 		"certificate": {
 			Pattern:     `(?s)-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----`,
-			Replacement: `__MASKED_CERTIFICATE__`,
+			Replacement: `[MASKED_CERTIFICATE]`,
 			Description: "SSL/TLS certificates",
 		},
 		"certificate_authority_data": {
 			Pattern:     `(?i)certificate-authority-data:\s*([A-Za-z0-9+/]{20,}={0,2})`,
-			Replacement: `certificate-authority-data: __MASKED_CA_CERTIFICATE__`,
+			Replacement: `certificate-authority-data: [MASKED_CA_CERTIFICATE]`,
 			Description: "K8s CA data",
 		},
 		"token": {
 			Pattern:     `(?i)(?:token|bearer|jwt)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?`,
-			Replacement: `"token": "__MASKED_TOKEN__"`,
+			Replacement: `"token": "[MASKED_TOKEN]"`,
 			Description: "Access tokens",
 		},
 		"email": {
 			Pattern:     `\b[A-Za-z0-9._%+-]+@[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*\.[A-Za-z]{2,63}\b`,
-			Replacement: `__MASKED_EMAIL__`,
+			Replacement: `[MASKED_EMAIL]`,
 			Description: "Email addresses",
 		},
 		"ssh_key": {
 			Pattern:     `ssh-(?:rsa|dss|ed25519|ecdsa)\s+[A-Za-z0-9+/=]+`,
-			Replacement: `__MASKED_SSH_KEY__`,
+			Replacement: `[MASKED_SSH_KEY]`,
 			Description: "SSH public keys",
 		},
 		"base64_secret": {
 			Pattern:     `\b([A-Za-z0-9+/]{20,}={0,2})\b`,
-			Replacement: `__MASKED_BASE64_VALUE__`,
+			Replacement: `[MASKED_BASE64_VALUE]`,
 			Description: "Base64 values (20+ chars)",
 		},
 		"base64_short": {
 			Pattern:     `:\s+([A-Za-z0-9+/]{4,19}={0,2})(?:\s|$)`,
-			Replacement: `: __MASKED_SHORT_BASE64__`,
+			Replacement: `: [MASKED_SHORT_BASE64]`,
 			Description: "Short base64 values",
 		},
 		"private_key": {
 			Pattern:     `(?i)(?:private[_-]?key)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?`,
-			Replacement: `"private_key": "__MASKED_PRIVATE_KEY__"`,
+			Replacement: `"private_key": "[MASKED_PRIVATE_KEY]"`,
 			Description: "Private keys",
 		},
 		"secret_key": {
 			Pattern:     `(?i)(?:secret[_-]?key)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?`,
-			Replacement: `"secret_key": "__MASKED_SECRET_KEY__"`,
+			Replacement: `"secret_key": "[MASKED_SECRET_KEY]"`,
 			Description: "Secret keys",
 		},
 		"aws_access_key": {
 			Pattern:     `(?i)(?:aws[_-]?access[_-]?key[_-]?id)["\']?\s*[:=]\s*["\']?(AKIA[A-Z0-9]{16})["\']?`,
-			Replacement: `"aws_access_key_id": "__MASKED_AWS_KEY__"`,
+			Replacement: `"aws_access_key_id": "[MASKED_AWS_KEY]"`,
 			Description: "AWS access keys",
 		},
 		"aws_secret_key": {
 			Pattern:     `(?i)(?:aws[_-]?secret[_-]?access[_-]?key)["\']?\s*[:=]\s*["\']?([A-Za-z0-9/+=]{40})["\']?`,
-			Replacement: `"aws_secret_access_key": "__MASKED_AWS_SECRET__"`,
+			Replacement: `"aws_secret_access_key": "[MASKED_AWS_SECRET]"`,
 			Description: "AWS secret keys",
 		},
 		"github_token": {
 			Pattern:     `(?i)(?:github[_-]?token|gh[ps]_[A-Za-z0-9_]{36,255})`,
-			Replacement: `__MASKED_GITHUB_TOKEN__`,
+			Replacement: `[MASKED_GITHUB_TOKEN]`,
 			Description: "GitHub tokens",
 		},
 		"slack_token": {
 			Pattern:     `(?i)xox[baprs]-[A-Za-z0-9-]{10,72}`,
-			Replacement: `__MASKED_SLACK_TOKEN__`,
+			Replacement: `[MASKED_SLACK_TOKEN]`,
 			Description: "Slack tokens",
 		},
 	}
@@ -263,45 +263,32 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 
 // initBuiltinPatternGroups returns predefined groups of masking patterns.
 // Pattern group members can reference either:
-//   - MaskingPatterns: regex-based patterns (implemented)
-//   - CodeMaskers: code-based maskers for complex structural parsing (TODO - Phase 7)
+//   - MaskingPatterns: regex-based patterns
+//   - CodeMaskers: code-based maskers for complex structural parsing (e.g., kubernetes_secret)
 //
 // Example: "kubernetes_secret" is a code-based masker that parses YAML/JSON
 // to mask only Secret data (not ConfigMaps), so it appears in CodeMaskers
-// instead of MaskingPatterns. This is a placeholder for Phase 7 implementation.
+// instead of MaskingPatterns. Implemented in pkg/masking/kubernetes_secret.go.
 func initBuiltinPatternGroups() map[string][]string {
 	return map[string][]string{
 		"basic":      {"api_key", "password"},                                                                                                                                                                                                            // Most common secrets
 		"secrets":    {"api_key", "password", "token", "private_key", "secret_key"},                                                                                                                                                                      // Basic + tokens
 		"security":   {"api_key", "password", "token", "certificate", "certificate_authority_data", "email", "ssh_key"},                                                                                                                                  // Full security focus
-		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                                                                                                                                                         // Kubernetes-specific - kubernetes_secret is TODO (Phase 7), others are regex-based
+		"kubernetes": {"kubernetes_secret", "api_key", "password", "certificate_authority_data"},                                                                                                                                                         // Kubernetes-specific — kubernetes_secret is a code-based masker
 		"cloud":      {"aws_access_key", "aws_secret_key", "api_key", "token"},                                                                                                                                                                           // Cloud provider secrets
 		"all":        {"base64_secret", "base64_short", "api_key", "password", "certificate", "certificate_authority_data", "email", "token", "ssh_key", "private_key", "secret_key", "aws_access_key", "aws_secret_key", "github_token", "slack_token"}, // All patterns
 	}
 }
 
-// initBuiltinCodeMaskers returns code-based maskers for complex masking scenarios.
+// initBuiltinCodeMaskers returns names of code-based maskers for complex masking scenarios.
 // These maskers require structural parsing and can be referenced in PatternGroups.
 // Unlike regex patterns in MaskingPatterns, code-based maskers implement custom logic.
 //
-// Example: kubernetes_secret masker parses YAML/JSON to distinguish between
-// Kubernetes Secrets (which should be masked) and ConfigMaps (which should not).
-// This masker is referenced in the "kubernetes" pattern group.
-//
-// TODO: Code-based maskers are not yet implemented - they are placeholders for Phase 7.
-// See docs/project-plan.md Phase 7: Security & Data → Data Masking
-func initBuiltinCodeMaskers() map[string]string {
-	return map[string]string{
-		// TODO (Phase 7): Implement KubernetesSecretMasker
-		// This masker needs to:
-		//   1. Parse YAML/JSON structures from MCP tool results
-		//   2. Identify Kubernetes Secret resources (kind: Secret)
-		//   3. Mask Secret.data fields (base64-encoded sensitive data)
-		//   4. Leave ConfigMaps untouched (kind: ConfigMap)
-		//   5. Handle both single resources and lists (e.g., kubectl get secrets -o yaml)
-		// Referenced in: "kubernetes" pattern group
-		// Implementation path: pkg/maskers/kubernetes_secret.go
-		"kubernetes_secret": "pkg/maskers.KubernetesSecretMasker",
+// Each name must match a Masker registered in pkg/masking/service.go (registerMasker).
+// Implementations live in pkg/masking/ — see each masker's Name() method.
+func initBuiltinCodeMaskers() []string {
+	return []string{
+		"kubernetes_secret", // pkg/masking/kubernetes_secret.go
 	}
 }
 

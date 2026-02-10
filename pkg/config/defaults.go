@@ -20,4 +20,14 @@ type Defaults struct {
 
 	// Default runbook content for new sessions (application state default)
 	Runbook string `yaml:"runbook,omitempty"`
+
+	// Alert data masking configuration
+	AlertMasking *AlertMaskingDefaults `yaml:"alert_masking,omitempty"`
+}
+
+// AlertMaskingDefaults holds alert payload masking settings.
+// Applied system-wide to all alert data before DB storage.
+type AlertMaskingDefaults struct {
+	Enabled      bool   `yaml:"enabled"`
+	PatternGroup string `yaml:"pattern_group"`
 }

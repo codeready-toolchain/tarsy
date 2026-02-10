@@ -7,6 +7,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
+	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +45,7 @@ func setupTestAlertService(t *testing.T, client *database.Client) *AlertService 
 		AlertType: "generic",
 	}
 
-	return NewAlertService(client.Client, chainRegistry, defaults)
+	return NewAlertService(client.Client, chainRegistry, defaults, nil)
 }
 
 func TestNewAlertService(t *testing.T) {
@@ -54,18 +55,23 @@ func TestNewAlertService(t *testing.T) {
 
 	t.Run("panics when chainRegistry is nil", func(t *testing.T) {
 		assert.Panics(t, func() {
-			NewAlertService(client.Client, nil, defaults)
+			NewAlertService(client.Client, nil, defaults, nil)
 		})
 	})
 
 	t.Run("panics when defaults is nil", func(t *testing.T) {
 		assert.Panics(t, func() {
-			NewAlertService(client.Client, chainRegistry, nil)
+			NewAlertService(client.Client, chainRegistry, nil, nil)
 		})
 	})
 
 	t.Run("succeeds with valid inputs", func(t *testing.T) {
-		service := NewAlertService(client.Client, chainRegistry, defaults)
+		service := NewAlertService(client.Client, chainRegistry, defaults, nil)
+		assert.NotNil(t, service)
+	})
+
+	t.Run("succeeds with nil masking service", func(t *testing.T) {
+		service := NewAlertService(client.Client, chainRegistry, defaults, nil)
 		assert.NotNil(t, service)
 	})
 }
@@ -192,4 +198,98 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 		assert.Nil(t, session.Author)
 		assert.Nil(t, session.RunbookURL)
 	})
+}
+
+// --- Alert masking tests ---
+
+func setupTestAlertServiceWithMasking(t *testing.T, client *database.Client, maskingSvc *masking.MaskingService) *AlertService {
+	t.Helper()
+
+	chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
+		"default-chain": {
+			AlertTypes:  []string{"generic"},
+			Description: "Default generic analysis",
+			Stages: []config.StageConfig{
+				{
+					Name:   "analysis",
+					Agents: []config.StageAgentConfig{{Name: "GenericAgent"}},
+				},
+			},
+		},
+	})
+
+	defaults := &config.Defaults{
+		AlertType: "generic",
+	}
+
+	return NewAlertService(client.Client, chainRegistry, defaults, maskingSvc)
+}
+
+func TestAlertService_SubmitAlert_MaskingApplied(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	maskingSvc := masking.NewMaskingService(
+		config.NewMCPServerRegistry(nil),
+		masking.AlertMaskingConfig{Enabled: true, PatternGroup: "security"},
+	)
+	service := setupTestAlertServiceWithMasking(t, client, maskingSvc)
+	ctx := context.Background()
+
+	input := SubmitAlertInput{
+		Data: `Alert: password: "FAKE-S3CRET-NOT-REAL" found in config. Contact user@example.com`,
+	}
+
+	session, err := service.SubmitAlert(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	// Read back from DB to verify masking was applied before storage
+	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+
+	assert.NotContains(t, stored.AlertData, "FAKE-S3CRET-NOT-REAL", "Password should be masked")
+	assert.NotContains(t, stored.AlertData, "user@example.com", "Email should be masked")
+	assert.Contains(t, stored.AlertData, "[MASKED_PASSWORD]")
+	assert.Contains(t, stored.AlertData, "[MASKED_EMAIL]")
+}
+
+func TestAlertService_SubmitAlert_MaskingDisabled(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	maskingSvc := masking.NewMaskingService(
+		config.NewMCPServerRegistry(nil),
+		masking.AlertMaskingConfig{Enabled: false, PatternGroup: "security"},
+	)
+	service := setupTestAlertServiceWithMasking(t, client, maskingSvc)
+	ctx := context.Background()
+
+	input := SubmitAlertInput{
+		Data: `password: "FAKE-S3CRET-NOT-REAL"`,
+	}
+
+	session, err := service.SubmitAlert(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, input.Data, stored.AlertData, "Data should be stored as-is when masking disabled")
+}
+
+func TestAlertService_SubmitAlert_NilMaskingService(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestAlertServiceWithMasking(t, client, nil)
+	ctx := context.Background()
+
+	input := SubmitAlertInput{
+		Data: `password: "FAKE-S3CRET-NOT-REAL"`,
+	}
+
+	session, err := service.SubmitAlert(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	stored, err := client.Client.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, input.Data, stored.AlertData, "Data should be stored as-is with nil masking service")
 }

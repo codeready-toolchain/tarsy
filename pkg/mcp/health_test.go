@@ -24,7 +24,7 @@ func TestHealthMonitor_HealthyServer(t *testing.T) {
 	// Create health monitor with pre-wired client
 	registry := config.NewMCPServerRegistry(nil)
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 	monitor.checkInterval = 50 * time.Millisecond // Fast for tests
@@ -64,7 +64,7 @@ func TestHealthMonitor_HealthyServer(t *testing.T) {
 func TestHealthMonitor_UnhealthyServer(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 	monitor.pingTimeout = 1 * time.Second
@@ -100,7 +100,7 @@ func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 
 	registry := config.NewMCPServerRegistry(nil)
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 
 	// Pre-add a warning
 	warningsSvc.AddWarning(services.WarningCategoryMCPHealth, "unhealthy", "", "test-server")
@@ -141,7 +141,7 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 		"test-server": serverCfg,
 	})
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewClientFactory(registry)
+	factory := NewClientFactory(registry, nil)
 
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 	monitor.checkInterval = 50 * time.Millisecond

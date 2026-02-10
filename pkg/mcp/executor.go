@@ -12,6 +12,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/masking"
 )
 
 // Compile-time check that ToolExecutor implements agent.ToolExecutor.
@@ -29,20 +30,27 @@ type ToolExecutor struct {
 	// Optional tool filter per server (from MCP selection override).
 	// nil means all tools for that server are available.
 	toolFilter map[string][]string // serverID → allowed tool names (nil = all)
+
+	// Optional masking service for redacting sensitive data in tool results.
+	// nil means no masking is applied.
+	maskingService *masking.MaskingService
 }
 
 // NewToolExecutor creates a new executor for the given servers.
+// maskingService may be nil (masking disabled).
 func NewToolExecutor(
 	client *Client,
 	registry *config.MCPServerRegistry,
 	serverIDs []string,
 	toolFilter map[string][]string,
+	maskingService *masking.MaskingService,
 ) *ToolExecutor {
 	return &ToolExecutor{
-		client:     client,
-		registry:   registry,
-		serverIDs:  serverIDs,
-		toolFilter: toolFilter,
+		client:         client,
+		registry:       registry,
+		serverIDs:      serverIDs,
+		toolFilter:     toolFilter,
+		maskingService: maskingService,
 	}
 }
 
@@ -97,8 +105,12 @@ func (e *ToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent
 	// Step 7: Convert to ToolResult
 	content := extractTextContent(result)
 
-	// Steps 8-9: masking and summarization (stubs for Phase 4.1)
-	// TODO (Phase 4.2): content = e.maskingService.MaskResult(content, serverID)
+	// Step 8: Apply data masking
+	if e.maskingService != nil {
+		content = e.maskingService.MaskToolResult(content, serverID)
+	}
+
+	// Step 9: Summarization (Phase 4.3 stub)
 	// TODO (Phase 4.3): content = e.maybeSummarize(ctx, content, serverID, toolName)
 
 	return &agent.ToolResult{

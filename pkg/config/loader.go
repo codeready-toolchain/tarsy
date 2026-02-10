@@ -108,6 +108,12 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	if defaults.Runbook == "" {
 		defaults.Runbook = builtin.DefaultRunbook
 	}
+	if defaults.AlertMasking == nil {
+		defaults.AlertMasking = &AlertMaskingDefaults{
+			Enabled:      true,
+			PatternGroup: "security",
+		}
+	}
 
 	// Resolve queue config (merge user YAML with built-in defaults)
 	// Start with defaults, then merge user config on top to preserve unset defaults
