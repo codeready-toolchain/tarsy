@@ -81,3 +81,8 @@ func (c *Config) GetMCPServer(serverID string) (*MCPServerConfig, error) {
 func (c *Config) GetLLMProvider(name string) (*LLMProviderConfig, error) {
 	return c.LLMProviderRegistry.Get(name)
 }
+
+// AllMCPServerIDs returns a sorted list of all configured MCP server IDs.
+func (c *Config) AllMCPServerIDs() []string {
+	return c.MCPServerRegistry.ServerIDs()
+}

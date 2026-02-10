@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
@@ -24,11 +25,13 @@ type RealSessionExecutor struct {
 	eventPublisher agent.EventPublisher
 	agentFactory   *agent.AgentFactory
 	promptBuilder  *prompt.PromptBuilder
+	mcpFactory     *mcp.ClientFactory
 }
 
 // NewRealSessionExecutor creates a new session executor.
 // eventPublisher may be nil (streaming disabled).
-func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher) *RealSessionExecutor {
+// mcpFactory may be nil (MCP disabled — uses stub tool executor).
+func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
 		cfg:            cfg,
@@ -37,6 +40,7 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 		eventPublisher: eventPublisher,
 		agentFactory:   agent.NewAgentFactory(controllerFactory),
 		promptBuilder:  prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		mcpFactory:     mcpFactory,
 	}
 }
 
@@ -125,7 +129,27 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 6. Build execution context
+	// 6. Create MCP tool executor (or fall back to stub)
+	var toolExecutor agent.ToolExecutor
+	var failedServers map[string]string
+	if e.mcpFactory != nil && len(resolvedConfig.MCPServers) > 0 {
+		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, resolvedConfig.MCPServers, nil)
+		if mcpErr != nil {
+			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
+			toolExecutor = agent.NewStubToolExecutor(nil)
+		} else {
+			toolExecutor = mcpExecutor
+			if mcpClient != nil {
+				failedServers = mcpClient.FailedServers()
+			}
+		}
+	} else {
+		// No MCP tools needed: either mcpFactory is nil (MCP disabled) or
+		// this agent has no MCPServers configured (e.g., synthesis agents).
+		toolExecutor = agent.NewStubToolExecutor(nil)
+	}
+
+	// 7. Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      session.ID,
 		StageID:        stg.ID,
@@ -137,9 +161,10 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 6 adds real runbook fetching
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
-		ToolExecutor:   agent.NewStubToolExecutor(nil), // Phase 3.2 stub; Phase 4: MCP client
+		ToolExecutor:   toolExecutor,
 		EventPublisher: e.eventPublisher,
 		PromptBuilder:  e.promptBuilder,
+		FailedServers:  failedServers,
 		Services: &agent.ServiceBundle{
 			Timeline:    timelineService,
 			Message:     messageService,
@@ -147,8 +172,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			Stage:       stageService,
 		},
 	}
+	defer func() { _ = execCtx.ToolExecutor.Close() }()
 
-	// 7. Create and run agent
 	agentInstance, err := e.agentFactory.CreateAgent(execCtx)
 	if err != nil {
 		logger.Error("Failed to create agent", "error", err)

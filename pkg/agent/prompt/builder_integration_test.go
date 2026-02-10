@@ -357,6 +357,24 @@ func TestIntegration_NativeThinkingChat(t *testing.T) {
 }
 
 // ===========================================================================
+// Failed MCP servers test
+// ===========================================================================
+
+func TestIntegration_ReActInvestigationWithFailedServers(t *testing.T) {
+	builder := newIntegrationBuilder()
+	execCtx := newIntegrationExecCtx()
+	execCtx.FailedServers = map[string]string{
+		"github-server": "connection refused",
+	}
+	tools := integrationTools()
+
+	messages := builder.BuildReActMessages(execCtx, "", tools)
+
+	require.Len(t, messages, 2)
+	assertGolden(t, "react_investigation_failed_servers", serializeMessages(messages))
+}
+
+// ===========================================================================
 // Forced conclusion tests
 // ===========================================================================
 

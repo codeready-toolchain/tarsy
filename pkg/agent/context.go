@@ -43,6 +43,11 @@ type ExecutionContext struct {
 
 	// Chat context (nil for non-chat sessions)
 	ChatContext *ChatContext
+
+	// FailedServers maps serverID → error message for MCP servers that
+	// failed to initialize. Used by the prompt builder to warn the LLM.
+	// nil when all servers initialized successfully.
+	FailedServers map[string]string
 }
 
 // ServiceBundle groups all service dependencies needed during execution.

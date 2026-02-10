@@ -80,7 +80,14 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 6: Dashboard
+### Phase 6: End-to-End Testing
+
+**E2E tests**
+- [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for external services (MCP, LLMs, GitHub)
+
+---
+
+### Phase 7: Dashboard
 
 **Real-time Features**
 - [ ] Live LLM streaming UI
@@ -100,7 +107,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 7: Integrations
+### Phase 8: Integrations
 
 **Runbook System (Go)**
 - [ ] GitHub integration
@@ -121,7 +128,13 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 8: Security
+### Phase 9: Security
+
+**Advanced Data Masking**
+- [ ] Kubernetes secret masker (structural parser)
+- [ ] Parse YAML/JSON structures
+- [ ] Distinguish K8s Secrets vs ConfigMaps
+- [ ] Integrate with masking pattern groups
 
 **Authentication & Authorization**
 - [ ] OAuth2-proxy integration
@@ -130,15 +143,9 @@ Full design docs for completed phases are in `docs/archive/`.
 - [ ] Session/user tracking
 - [ ] WebSocket origin validation (replace InsecureSkipVerify)
 
-**Advanced Data Masking**
-- [ ] Kubernetes secret masker (structural parser)
-- [ ] Parse YAML/JSON structures
-- [ ] Distinguish K8s Secrets vs ConfigMaps
-- [ ] Integrate with masking pattern groups
-
 ---
 
-### Phase 9: History & Chat
+### Phase 10: History & Chat
 
 **History System (Go)**
 - [ ] History repository
@@ -155,7 +162,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 10: Monitoring & Operations
+### Phase 11: Monitoring & Operations
 
 **System Health**
 - [ ] Health check endpoint enhancements
@@ -174,7 +181,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 11: Deployment, DevOps & CI/CD
+### Phase 12: Deployment, DevOps & CI/CD
 
 **Containerization**
 - [ ] Multi-stage Docker builds

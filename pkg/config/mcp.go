@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -77,4 +78,16 @@ func (r *MCPServerRegistry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.servers)
+}
+
+// ServerIDs returns a sorted list of all registered MCP server IDs (thread-safe)
+func (r *MCPServerRegistry) ServerIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.servers))
+	for id := range r.servers {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }

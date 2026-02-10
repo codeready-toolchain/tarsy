@@ -492,7 +492,8 @@ func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
 	// Native thinking should pass tools natively (not in text)
 	require.NotNil(t, llm.lastInput.Tools)
 	require.Len(t, llm.lastInput.Tools, 1)
-	require.Equal(t, "k8s.get_pods", llm.lastInput.Tools[0].Name)
+	// NativeThinking converts "." → "__" for Gemini function name compatibility
+	require.Equal(t, "k8s__get_pods", llm.lastInput.Tools[0].Name)
 }
 
 func TestNativeThinkingController_ForcedConclusionUsesNativeFormat(t *testing.T) {
