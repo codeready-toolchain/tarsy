@@ -67,3 +67,6 @@ deploy/config/.env
 
 # Logs
 *.log
+
+# Temporary files
+temp/
