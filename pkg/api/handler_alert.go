@@ -30,7 +30,17 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 			fmt.Sprintf("alert data exceeds maximum size of %d bytes", agent.MaxAlertDataSize))
 	}
 
-	// 4. Transform to service input
+	// 4. Validate MCP selection override servers (if provided)
+	if req.MCP != nil && s.cfg.MCPServerRegistry != nil {
+		for _, sel := range req.MCP.Servers {
+			if !s.cfg.MCPServerRegistry.Has(sel.Name) {
+				return echo.NewHTTPError(http.StatusBadRequest,
+					fmt.Sprintf("MCP server %q not found in configuration", sel.Name))
+			}
+		}
+	}
+
+	// 5. Transform to service input
 	input := services.SubmitAlertInput{
 		AlertType: req.AlertType,
 		Runbook:   req.Runbook,
@@ -39,13 +49,13 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 		Author:    extractAuthor(c),
 	}
 
-	// 5. Call service
+	// 6. Call service
 	session, err := s.alertService.SubmitAlert(c.Request().Context(), input)
 	if err != nil {
 		return mapServiceError(err)
 	}
 
-	// 6. Return response
+	// 7. Return response
 	return c.JSON(http.StatusAccepted, &AlertResponse{
 		SessionID: session.ID,
 		Status:    "queued",

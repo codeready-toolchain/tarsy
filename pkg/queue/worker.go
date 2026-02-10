@@ -329,23 +329,13 @@ func (w *Worker) publishSessionStatus(ctx context.Context, sessionID, status str
 	if w.eventPublisher == nil {
 		return
 	}
-	payload := map[string]interface{}{
-		"type":       events.EventTypeSessionStatus,
-		"session_id": sessionID,
-		"status":     status,
-		"timestamp":  time.Now().Format(time.RFC3339Nano),
-	}
-
-	// Publish to session channel
-	sessionChannel := events.SessionChannel(sessionID)
-	if err := w.eventPublisher.Publish(ctx, sessionID, sessionChannel, payload); err != nil {
-		slog.Warn("Failed to publish session status to session channel",
-			"session_id", sessionID, "status", status, "error", err)
-	}
-
-	// Publish to global sessions channel
-	if err := w.eventPublisher.PublishTransient(ctx, events.GlobalSessionsChannel, payload); err != nil {
-		slog.Warn("Failed to publish session status to global channel",
+	if err := w.eventPublisher.PublishSessionStatus(ctx, sessionID, events.SessionStatusPayload{
+		Type:      events.EventTypeSessionStatus,
+		SessionID: sessionID,
+		Status:    status,
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	}); err != nil {
+		slog.Warn("Failed to publish session status",
 			"session_id", sessionID, "status", status, "error", err)
 	}
 }

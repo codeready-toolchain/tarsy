@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 )
 
 // ReActController implements the standard Reason + Act loop with text-based
@@ -145,24 +146,58 @@ func (c *ReActController) Run(
 				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 				storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			} else {
-				// Execute tool
-				createToolCallEvent(ctx, execCtx, parsed.Action, parsed.ActionInput, &eventSeq)
+				// Extract server/tool info for events and summarization
+				normalizedName := mcp.NormalizeToolName(parsed.Action)
+				serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+				if splitErr != nil {
+					// Fallback: use full name as both serverID and toolName
+					serverID = ""
+					toolName = parsed.Action
+				}
 
-				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, agent.ToolCall{
+				// Create streaming llm_tool_call event (dashboard shows spinner)
+				toolCallEvent, _ := createToolCallEvent(ctx, execCtx, serverID, toolName, parsed.ActionInput, &eventSeq)
+
+				// Execute tool
+				toolCall := agent.ToolCall{
 					ID:        generateCallID(),
 					Name:      parsed.Action,
 					Arguments: parsed.ActionInput,
-				})
+				}
+				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, toolCall)
 
 				if toolErr != nil {
 					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
 					observation := FormatToolErrorObservation(toolErr)
-					createToolResultEvent(ctx, execCtx, observation, true, &eventSeq)
+					// Complete tool call event with error
+					completeToolCallEvent(ctx, execCtx, toolCallEvent, observation, true)
 					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				} else {
-					observation := FormatObservation(result)
-					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
+					// Complete tool call event with storage-truncated result
+					storageTruncated := mcp.TruncateForStorage(result.Content)
+					completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
+
+					// Check summarization (only for non-error results)
+					observationContent := result.Content
+					if !result.IsError {
+						convContext := buildConversationContext(messages)
+						sumResult, sumErr := maybeSummarize(iterCtx, execCtx, serverID, toolName,
+							result.Content, convContext, &eventSeq)
+						if sumErr == nil && sumResult.WasSummarized {
+							observationContent = sumResult.Content
+							if sumResult.Usage != nil {
+								accumulateUsage(&totalUsage, &LLMResponse{Usage: sumResult.Usage})
+							}
+						}
+					}
+
+					observation := FormatObservation(&agent.ToolResult{
+						CallID:  toolCall.ID,
+						Name:    toolCall.Name,
+						Content: observationContent,
+						IsError: result.IsError,
+					})
 					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				}

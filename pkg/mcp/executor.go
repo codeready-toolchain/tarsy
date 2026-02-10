@@ -112,8 +112,9 @@ func (e *ToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent
 		content = e.maskingService.MaskToolResult(content, serverID)
 	}
 
-	// Step 9: Summarization (Phase 4.3 stub)
-	// TODO (Phase 4.3): content = e.maybeSummarize(ctx, content, serverID, toolName)
+	// Note: Summarization is performed at the controller level (not here),
+	// because it requires LLM access, conversation context, and event publishing
+	// which are not available to ToolExecutor. See pkg/agent/controller/summarize.go.
 
 	return &agent.ToolResult{
 		CallID:  call.ID,

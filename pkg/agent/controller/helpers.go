@@ -142,7 +142,7 @@ func recordLLMInteraction(
 // Best-effort: callers intentionally ignore both return values because timeline
 // events are non-critical observability data — a failure to record one should
 // never abort the investigation loop. The same applies to createToolCallEvent
-// and createToolResultEvent below.
+// and completeToolCallEvent below.
 //
 // Note: *eventSeq is incremented before the DB call. If the call fails (and
 // the caller ignores the error), the next event will have a gap in its sequence
@@ -190,19 +190,18 @@ func publishTimelineCreated(
 	if execCtx.EventPublisher == nil {
 		return
 	}
-	channel := events.SessionChannel(execCtx.SessionID)
-	publishErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-		"type":            events.EventTypeTimelineCreated,
-		"event_id":        event.ID,
-		"session_id":      execCtx.SessionID,
-		"stage_id":        execCtx.StageID,
-		"execution_id":    execCtx.ExecutionID,
-		"event_type":      string(eventType),
-		"status":          "completed",
-		"content":         content,
-		"metadata":        metadata,
-		"sequence_number": seqNum,
-		"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+	publishErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+		Type:           events.EventTypeTimelineCreated,
+		EventID:        event.ID,
+		SessionID:      execCtx.SessionID,
+		StageID:        execCtx.StageID,
+		ExecutionID:    execCtx.ExecutionID,
+		EventType:      string(eventType),
+		Status:         string(timelineevent.StatusCompleted),
+		Content:        content,
+		Metadata:       metadata,
+		SequenceNumber: seqNum,
+		Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 	})
 	if publishErr != nil {
 		slog.Warn("Failed to publish timeline event",
@@ -324,7 +323,6 @@ func callLLMWithStreaming(
 	// Track streaming timeline events
 	var thinkingEventID, textEventID string
 	var thinkingCreateFailed, textCreateFailed bool
-	channel := events.SessionChannel(execCtx.SessionID)
 
 	callback := func(chunkType string, delta string) {
 		if delta == "" {
@@ -354,17 +352,17 @@ func callLLMWithStreaming(
 					return
 				}
 				thinkingEventID = event.ID
-				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-					"type":            events.EventTypeTimelineCreated,
-					"event_id":        thinkingEventID,
-					"session_id":      execCtx.SessionID,
-					"stage_id":        execCtx.StageID,
-					"execution_id":    execCtx.ExecutionID,
-					"event_type":      "llm_thinking",
-					"status":          "streaming",
-					"content":         "",
-					"sequence_number": *eventSeq,
-					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+					Type:           events.EventTypeTimelineCreated,
+					EventID:        thinkingEventID,
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					EventType:      string(timelineevent.EventTypeLlmThinking),
+					Status:         string(timelineevent.StatusStreaming),
+					Content:        "",
+					SequenceNumber: *eventSeq,
+					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming thinking created",
 						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -372,11 +370,11 @@ func callLLMWithStreaming(
 			}
 			// Publish only the new delta — clients concatenate locally.
 			// This keeps each pg_notify payload small (avoids 8 KB limit).
-			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
-				"type":      events.EventTypeStreamChunk,
-				"event_id":  thinkingEventID,
-				"delta":     delta,
-				"timestamp": time.Now().Format(time.RFC3339Nano),
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				Type:      events.EventTypeStreamChunk,
+				EventID:   thinkingEventID,
+				Delta:     delta,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
 				slog.Warn("Failed to publish thinking stream chunk",
 					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -403,28 +401,28 @@ func callLLMWithStreaming(
 					return
 				}
 				textEventID = event.ID
-				if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-					"type":            events.EventTypeTimelineCreated,
-					"event_id":        textEventID,
-					"session_id":      execCtx.SessionID,
-					"stage_id":        execCtx.StageID,
-					"execution_id":    execCtx.ExecutionID,
-					"event_type":      "llm_response",
-					"status":          "streaming",
-					"content":         "",
-					"sequence_number": *eventSeq,
-					"timestamp":       event.CreatedAt.Format(time.RFC3339Nano),
+				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+					Type:           events.EventTypeTimelineCreated,
+					EventID:        textEventID,
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					EventType:      string(timelineevent.EventTypeLlmResponse),
+					Status:         string(timelineevent.StatusStreaming),
+					Content:        "",
+					SequenceNumber: *eventSeq,
+					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming text created",
 						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
 				}
 			}
 			// Publish only the new delta — clients concatenate locally.
-			if pubErr := execCtx.EventPublisher.PublishTransient(ctx, channel, map[string]interface{}{
-				"type":      events.EventTypeStreamChunk,
-				"event_id":  textEventID,
-				"delta":     delta,
-				"timestamp": time.Now().Format(time.RFC3339Nano),
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				Type:      events.EventTypeStreamChunk,
+				EventID:   textEventID,
+				Delta:     delta,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
 				slog.Warn("Failed to publish text stream chunk",
 					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -436,7 +434,7 @@ func callLLMWithStreaming(
 	if err != nil {
 		// Mark any streaming timeline events as failed so they don't stay
 		// stuck at status "streaming" indefinitely.
-		markStreamingEventsFailed(ctx, execCtx, thinkingEventID, textEventID, channel, err)
+		markStreamingEventsFailed(ctx, execCtx, thinkingEventID, textEventID, err)
 		return nil, err
 	}
 
@@ -446,11 +444,11 @@ func callLLMWithStreaming(
 	// status indefinitely. The empty-delta guard above prevents event creation
 	// for purely empty chunks, but we handle the edge case defensively here.
 	if thinkingEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, channel, thinkingEventID, resp.ThinkingText, "thinking")
+		finalizeStreamingEvent(ctx, execCtx, thinkingEventID, resp.ThinkingText, "thinking")
 	}
 
 	if textEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, channel, textEventID, resp.Text, "text")
+		finalizeStreamingEvent(ctx, execCtx, textEventID, resp.Text, "text")
 	}
 
 	return &StreamedResponse{
@@ -467,19 +465,19 @@ func callLLMWithStreaming(
 func finalizeStreamingEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
-	channel, eventID, content, label string,
+	eventID, content, label string,
 ) {
 	if content != "" {
 		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, eventID, content, nil, nil); complErr != nil {
 			slog.Warn("Failed to complete streaming "+label+" event",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", complErr)
 		}
-		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-			"type":      events.EventTypeTimelineCompleted,
-			"event_id":  eventID,
-			"content":   content,
-			"status":    "completed",
-			"timestamp": time.Now().Format(time.RFC3339Nano),
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			Type:      events.EventTypeTimelineCompleted,
+			EventID:   eventID,
+			Content:   content,
+			Status:    string(timelineevent.StatusCompleted),
+			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish "+label+" completed",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -496,12 +494,12 @@ func finalizeStreamingEvent(
 		slog.Warn("Failed to fail empty streaming "+label+" event",
 			"event_id", eventID, "session_id", execCtx.SessionID, "error", failErr)
 	}
-	if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-		"type":      events.EventTypeTimelineCompleted,
-		"event_id":  eventID,
-		"content":   failContent,
-		"status":    "failed",
-		"timestamp": time.Now().Format(time.RFC3339Nano),
+	if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+		Type:      events.EventTypeTimelineCompleted,
+		EventID:   eventID,
+		Content:   failContent,
+		Status:    string(timelineevent.StatusFailed),
+		Timestamp: time.Now().Format(time.RFC3339Nano),
 	}); pubErr != nil {
 		slog.Warn("Failed to publish "+label+" failure",
 			"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -514,7 +512,7 @@ func finalizeStreamingEvent(
 func markStreamingEventsFailed(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
-	thinkingEventID, textEventID, channel string,
+	thinkingEventID, textEventID string,
 	streamErr error,
 ) {
 	failEvent := func(eventID string) {
@@ -530,12 +528,12 @@ func markStreamingEventsFailed(
 			return
 		}
 		// Notify WebSocket clients
-		if pubErr := execCtx.EventPublisher.Publish(ctx, execCtx.SessionID, channel, map[string]interface{}{
-			"type":      events.EventTypeTimelineCompleted,
-			"event_id":  eventID,
-			"status":    "failed",
-			"content":   failContent,
-			"timestamp": time.Now().Format(time.RFC3339Nano),
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			Type:      events.EventTypeTimelineCompleted,
+			EventID:   eventID,
+			Status:    string(timelineevent.StatusFailed),
+			Content:   failContent,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish streaming event failure",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -546,30 +544,100 @@ func markStreamingEventsFailed(
 	failEvent(textEventID)
 }
 
-// createToolCallEvent creates a timeline event for a tool call request.
+// createToolCallEvent creates a streaming llm_tool_call timeline event.
+// The event starts with status "streaming" (DB default) and empty content.
+// Arguments are stored in metadata (not content) so they survive the content
+// update on completion. Publishes timeline_event.created with "streaming" status.
+// Completed via completeToolCallEvent after tool execution returns.
 func createToolCallEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
-	toolName string,
-	args string,
+	serverID, toolName string,
+	arguments string,
 	eventSeq *int,
 ) (*ent.TimelineEvent, error) {
-	return createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmToolCall, args, map[string]interface{}{
-		"tool_name": toolName,
-	}, eventSeq)
+	*eventSeq++
+
+	metadata := map[string]interface{}{
+		"server_name": serverID,
+		"tool_name":   toolName,
+		"arguments":   arguments,
+	}
+
+	// Create event with empty content (streaming lifecycle — content set on completion)
+	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      execCtx.SessionID,
+		StageID:        execCtx.StageID,
+		ExecutionID:    execCtx.ExecutionID,
+		SequenceNumber: *eventSeq,
+		EventType:      timelineevent.EventTypeLlmToolCall,
+		Content:        "",
+		Metadata:       metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Publish with "streaming" status (not "completed" — tool is still executing)
+	if execCtx.EventPublisher != nil {
+		if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+			Type:           events.EventTypeTimelineCreated,
+			EventID:        event.ID,
+			SessionID:      execCtx.SessionID,
+			StageID:        execCtx.StageID,
+			ExecutionID:    execCtx.ExecutionID,
+			EventType:      string(timelineevent.EventTypeLlmToolCall),
+			Status:         string(timelineevent.StatusStreaming),
+			Content:        "",
+			Metadata:       metadata,
+			SequenceNumber: *eventSeq,
+			Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish tool call created",
+				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+
+	return event, nil
 }
 
-// createToolResultEvent creates a timeline event for a tool execution result.
-func createToolResultEvent(
+// completeToolCallEvent completes an llm_tool_call timeline event with the tool result.
+// Called after ToolExecutor.Execute() returns. The content is the storage-truncated
+// raw result. Metadata is enriched with is_error via read-modify-write merge.
+func completeToolCallEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
+	event *ent.TimelineEvent,
 	content string,
 	isError bool,
-	eventSeq *int,
-) (*ent.TimelineEvent, error) {
-	return createTimelineEvent(ctx, execCtx, timelineevent.EventTypeToolResult, content, map[string]interface{}{
-		"is_error": isError,
-	}, eventSeq)
+) {
+	if event == nil {
+		return
+	}
+
+	completionMeta := map[string]interface{}{"is_error": isError}
+
+	if err := execCtx.Services.Timeline.CompleteTimelineEventWithMetadata(
+		ctx, event.ID, content, completionMeta, nil, nil,
+	); err != nil {
+		slog.Warn("Failed to complete tool call event",
+			"event_id", event.ID, "session_id", execCtx.SessionID, "error", err)
+	}
+
+	// Publish completion to WebSocket
+	if execCtx.EventPublisher != nil {
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			Type:      events.EventTypeTimelineCompleted,
+			EventID:   event.ID,
+			Content:   content,
+			Status:    string(timelineevent.StatusCompleted),
+			Metadata:  completionMeta,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish tool call completed",
+				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
 }
 
 // storeMessages persists initial conversation messages to DB.
@@ -739,7 +807,7 @@ func tokenUsageFromResp(resp *LLMResponse) agent.TokenUsage {
 }
 
 // ============================================================================
-// Native tool event helpers (Phase 3.2.1)
+// Native tool event helpers
 // ============================================================================
 
 // createCodeExecutionEvents creates timeline events for Gemini code executions.

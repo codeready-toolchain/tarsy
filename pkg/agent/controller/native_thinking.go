@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 )
 
 // NativeThinkingController implements the Gemini native function calling loop.
@@ -128,14 +129,25 @@ func (c *NativeThinkingController) Run(
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
-				createToolCallEvent(ctx, execCtx, tc.Name, tc.Arguments, &eventSeq)
+				// Extract server/tool info for events and summarization
+				normalizedName := mcp.NormalizeToolName(tc.Name)
+				serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+				if splitErr != nil {
+					serverID = ""
+					toolName = tc.Name
+				}
+
+				// Create streaming llm_tool_call event (dashboard shows spinner)
+				toolCallEvent, _ := createToolCallEvent(ctx, execCtx, serverID, toolName, tc.Arguments, &eventSeq)
 
 				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, tc)
 				if toolErr != nil {
 					// Tool execution failed
 					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
 					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
-					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
+
+					// Complete tool call event with error
+					completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
 
 					// Append error as tool result message
 					messages = append(messages, agent.ConversationMessage{
@@ -146,16 +158,32 @@ func (c *NativeThinkingController) Run(
 					})
 					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
 				} else {
-					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
+					// Complete tool call event with storage-truncated result
+					storageTruncated := mcp.TruncateForStorage(result.Content)
+					completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
 
-					// Append result as tool result message
+					// Check summarization (only for non-error results)
+					toolResultContent := result.Content
+					if !result.IsError {
+						convContext := buildConversationContext(messages)
+						sumResult, sumErr := maybeSummarize(iterCtx, execCtx, serverID, toolName,
+							result.Content, convContext, &eventSeq)
+						if sumErr == nil && sumResult.WasSummarized {
+							toolResultContent = sumResult.Content
+							if sumResult.Usage != nil {
+								accumulateUsage(&totalUsage, &LLMResponse{Usage: sumResult.Usage})
+							}
+						}
+					}
+
+					// Append result as tool result message (uses summarized content if applicable)
 					messages = append(messages, agent.ConversationMessage{
 						Role:       agent.RoleTool,
-						Content:    result.Content,
+						Content:    toolResultContent,
 						ToolCallID: tc.ID,
 						ToolName:   tc.Name,
 					})
-					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
+					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, toolResultContent, &msgSeq)
 				}
 			}
 		} else {

@@ -32,12 +32,12 @@ func FormatInvestigationContext(events []*ent.TimelineEvent) string {
 			sb.WriteString("**Agent Response:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case timelineevent.EventTypeLlmToolCall, timelineevent.EventTypeMcpToolCall:
+		case timelineevent.EventTypeLlmToolCall:
 			sb.WriteString("**Tool Call:** ")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-		case timelineevent.EventTypeToolResult:
-			sb.WriteString("**Observation:**\n\n")
+		case timelineevent.EventTypeMcpToolSummary:
+			sb.WriteString("**Tool Result Summary:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 		case timelineevent.EventTypeFinalAnalysis:

@@ -57,13 +57,13 @@ func (TimelineEvent) Fields() []ent.Field {
 		//   llm_response       — Regular LLM text during intermediate iterations. The LLM may produce
 		//                        text alongside tool calls (native thinking) or as an intermediate step.
 		//                        Maps to old TARSy's INTERMEDIATE_RESPONSE.
-		//   llm_tool_call      — LLM requested a tool call (native function calling or ReAct-parsed).
-		//                        Metadata: tool_name, server_name, arguments.
-		//   tool_result        — Tool execution result (output from ToolExecutor).
-		//                        Used by Phase 3.2 controllers. Metadata: tool_name, is_error.
-		//   mcp_tool_call      — MCP tool execution (tool was invoked). Phase 4.
-		//                        Metadata: tool_name, server_name.
-		//   mcp_tool_summary   — MCP tool result summary for the timeline. Phase 4.
+		//   llm_tool_call      — Tool call lifecycle event. Created with status "streaming" when the
+		//                        LLM requests a tool call (metadata: server_name, tool_name, arguments).
+		//                        Completed with the storage-truncated raw result in content and
+		//                        is_error in metadata after ToolExecutor.Execute() returns.
+		//   mcp_tool_summary   — MCP tool result summary (Phase 4.3). Created with status "streaming"
+		//                        when summarization starts. Completed with the LLM-generated summary.
+		//                        Metadata: server_name, tool_name, original_tokens, summarization_model.
 		//   error              — Error during iteration (LLM failure, tool failure, etc.).
 		//   user_question      — User question in chat mode.
 		//   executive_summary  — High-level session summary.
@@ -75,8 +75,6 @@ func (TimelineEvent) Fields() []ent.Field {
 				"llm_thinking",
 				"llm_response",
 				"llm_tool_call",
-				"tool_result",
-				"mcp_tool_call",
 				"mcp_tool_summary",
 				"error",
 				"user_question",

@@ -129,11 +129,21 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 6. Create MCP tool executor (or fall back to stub)
+	// 6. Resolve MCP servers and tool filter (per-alert override or chain config)
+	serverIDs, toolFilter, err := e.resolveMCPSelection(session, resolvedConfig)
+	if err != nil {
+		logger.Error("Failed to resolve MCP selection", "error", err)
+		return &ExecutionResult{
+			Status: alertsession.StatusFailed,
+			Error:  fmt.Errorf("invalid MCP selection: %w", err),
+		}
+	}
+
+	// 7. Create MCP tool executor (or fall back to stub)
 	var toolExecutor agent.ToolExecutor
 	var failedServers map[string]string
-	if e.mcpFactory != nil && len(resolvedConfig.MCPServers) > 0 {
-		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, resolvedConfig.MCPServers, nil)
+	if e.mcpFactory != nil && len(serverIDs) > 0 {
+		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
 			toolExecutor = agent.NewStubToolExecutor(nil)
@@ -149,7 +159,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		toolExecutor = agent.NewStubToolExecutor(nil)
 	}
 
-	// 7. Build execution context
+	// 8. Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      session.ID,
 		StageID:        stg.ID,
@@ -235,6 +245,60 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		FinalAnalysis: agentResult.FinalAnalysis,
 		Error:         agentResult.Error,
 	}
+}
+
+// resolveMCPSelection determines the MCP servers and tool filter for this session.
+// If the session has an MCP override (mcp_selection JSON), it replaces the chain
+// config entirely (replace semantics, not merge). Also applies NativeToolsOverride
+// to the resolved config if present.
+// Returns (serverIDs, toolFilter, error).
+func (e *RealSessionExecutor) resolveMCPSelection(
+	session *ent.AlertSession,
+	resolvedConfig *agent.ResolvedAgentConfig,
+) ([]string, map[string][]string, error) {
+	// No override — use chain config (existing behavior)
+	if len(session.McpSelection) == 0 {
+		return resolvedConfig.MCPServers, nil, nil
+	}
+
+	// Deserialize override
+	override, err := models.ParseMCPSelectionConfig(session.McpSelection)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse MCP selection: %w", err)
+	}
+	if override == nil {
+		// ParseMCPSelectionConfig returns nil for empty maps
+		return resolvedConfig.MCPServers, nil, nil
+	}
+
+	// Build serverIDs and toolFilter from override
+	serverIDs := make([]string, 0, len(override.Servers))
+	toolFilter := make(map[string][]string)
+
+	for _, sel := range override.Servers {
+		// Validate server exists in registry
+		if !e.cfg.MCPServerRegistry.Has(sel.Name) {
+			return nil, nil, fmt.Errorf("MCP server %q from override not found in configuration", sel.Name)
+		}
+		serverIDs = append(serverIDs, sel.Name)
+
+		// Only add to toolFilter if specific tools are requested
+		if len(sel.Tools) > 0 {
+			toolFilter[sel.Name] = sel.Tools
+		}
+	}
+
+	// Return nil toolFilter if no server has tool restrictions
+	if len(toolFilter) == 0 {
+		toolFilter = nil
+	}
+
+	// Apply native tools override to the resolved config
+	if override.NativeTools != nil {
+		resolvedConfig.NativeToolsOverride = override.NativeTools
+	}
+
+	return serverIDs, toolFilter, nil
 }
 
 // mapAgentStatusToEntStatus converts agent.ExecutionStatus to ent agentexecution.Status.

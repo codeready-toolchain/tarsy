@@ -158,20 +158,24 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 	env := setupStreamingTest(t)
 	ctx := context.Background()
 
-	// Publish first event
-	payload1 := map[string]interface{}{
-		"type":    EventTypeTimelineCreated,
-		"content": "first event",
-	}
-	err := env.publisher.Publish(ctx, env.sessionID, env.channel, payload1)
+	// Publish first event (timeline created)
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		Type:      EventTypeTimelineCreated,
+		EventID:   "evt-1",
+		SessionID: env.sessionID,
+		Content:   "first event",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	})
 	require.NoError(t, err)
 
-	// Publish second event
-	payload2 := map[string]interface{}{
-		"type":    EventTypeTimelineCompleted,
-		"content": "second event",
-	}
-	err = env.publisher.Publish(ctx, env.sessionID, env.channel, payload2)
+	// Publish second event (timeline completed)
+	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
+		Type:      EventTypeTimelineCompleted,
+		EventID:   "evt-1",
+		Content:   "second event",
+		Status:    "completed",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	})
 	require.NoError(t, err)
 
 	// Query persisted events via EventService
@@ -192,38 +196,17 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 	assert.Greater(t, events[1].ID, events[0].ID)
 }
 
-func TestIntegration_PublishDoesNotMutatePayload(t *testing.T) {
-	env := setupStreamingTest(t)
-	ctx := context.Background()
-
-	payload := map[string]interface{}{
-		"type":    EventTypeTimelineCreated,
-		"content": "test event",
-	}
-
-	// Verify the payload does not contain db_event_id before Publish
-	_, hasDBEventID := payload["db_event_id"]
-	assert.False(t, hasDBEventID, "payload should not have db_event_id before Publish")
-
-	err := env.publisher.Publish(ctx, env.sessionID, env.channel, payload)
-	require.NoError(t, err)
-
-	// After Publish, the caller's payload map must NOT be mutated
-	_, hasDBEventID = payload["db_event_id"]
-	assert.False(t, hasDBEventID, "Publish should not mutate the caller's payload map")
-	assert.Len(t, payload, 2, "payload should still have only the original 2 keys")
-}
-
 func TestIntegration_TransientEventsNotPersisted(t *testing.T) {
 	env := setupStreamingTest(t)
 	ctx := context.Background()
 
-	// Publish transient event (like a stream.chunk)
-	payload := map[string]interface{}{
-		"type":    EventTypeStreamChunk,
-		"content": "token data",
-	}
-	err := env.publisher.PublishTransient(ctx, env.channel, payload)
+	// Publish transient event (stream chunk)
+	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
+		Type:      EventTypeStreamChunk,
+		EventID:   "evt-1",
+		Delta:     "token data",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	})
 	require.NoError(t, err)
 
 	// Query DB — should have zero persisted events
@@ -240,12 +223,13 @@ func TestIntegration_EndToEnd_PublishToWebSocket(t *testing.T) {
 	conn := env.subscribeAndWait(t)
 
 	// Publish a persistent event via EventPublisher
-	payload := map[string]interface{}{
-		"type":       EventTypeTimelineCreated,
-		"content":    "hello from publisher",
-		"session_id": env.sessionID,
-	}
-	err := env.publisher.Publish(ctx, env.sessionID, env.channel, payload)
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		Type:      EventTypeTimelineCreated,
+		EventID:   "evt-ws-1",
+		SessionID: env.sessionID,
+		Content:   "hello from publisher",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	})
 	require.NoError(t, err)
 
 	// Read from WebSocket — the event should arrive via pg_notify → listener → manager
@@ -253,7 +237,7 @@ func TestIntegration_EndToEnd_PublishToWebSocket(t *testing.T) {
 	assert.Equal(t, EventTypeTimelineCreated, msg["type"])
 	assert.Equal(t, "hello from publisher", msg["content"])
 	assert.Equal(t, env.sessionID, msg["session_id"])
-	// db_event_id should be present (added by Publish after INSERT)
+	// db_event_id should be present (added by persistAndNotify after INSERT)
 	assert.NotNil(t, msg["db_event_id"])
 }
 
@@ -265,11 +249,12 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 	conn := env.subscribeAndWait(t)
 
 	// Publish transient event (no DB persistence)
-	payload := map[string]interface{}{
-		"type":  EventTypeStreamChunk,
-		"delta": "streaming token",
-	}
-	err := env.publisher.PublishTransient(ctx, env.channel, payload)
+	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
+		Type:      EventTypeStreamChunk,
+		EventID:   "evt-stream-1",
+		Delta:     "streaming token",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
+	})
 	require.NoError(t, err)
 
 	// Should arrive via WebSocket
@@ -297,12 +282,14 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	eventID := uuid.New().String()
 
 	// 1. Publish timeline_event.created (persistent)
-	err := env.publisher.Publish(ctx, env.sessionID, env.channel, map[string]interface{}{
-		"type":       EventTypeTimelineCreated,
-		"event_id":   eventID,
-		"event_type": "llm_response",
-		"status":     "streaming",
-		"content":    "",
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		Type:      EventTypeTimelineCreated,
+		EventID:   eventID,
+		SessionID: env.sessionID,
+		EventType: "llm_response",
+		Status:    "streaming",
+		Content:   "",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -314,10 +301,11 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	// 2. Publish multiple stream.chunk deltas (transient)
 	deltas := []string{"The pod ", "is in ", "CrashLoopBackOff ", "due to ", "a missing ConfigMap."}
 	for _, delta := range deltas {
-		err := env.publisher.PublishTransient(ctx, env.channel, map[string]interface{}{
-			"type":     EventTypeStreamChunk,
-			"event_id": eventID,
-			"delta":    delta,
+		err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
+			Type:      EventTypeStreamChunk,
+			EventID:   eventID,
+			Delta:     delta,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
 		})
 		require.NoError(t, err)
 
@@ -336,11 +324,12 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	assert.Equal(t, expectedFull, reconstructed)
 
 	// 3. Publish timeline_event.completed (persistent, full content)
-	err = env.publisher.Publish(ctx, env.sessionID, env.channel, map[string]interface{}{
-		"type":     EventTypeTimelineCompleted,
-		"event_id": eventID,
-		"content":  expectedFull,
-		"status":   "completed",
+	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
+		Type:      EventTypeTimelineCompleted,
+		EventID:   eventID,
+		Content:   expectedFull,
+		Status:    "completed",
+		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -364,11 +353,13 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 
 	// Pre-populate DB with 3 persistent events
 	for i := 1; i <= 3; i++ {
-		payload := map[string]interface{}{
-			"type": EventTypeTimelineCreated,
-			"seq":  float64(i),
-		}
-		err := env.publisher.Publish(ctx, env.sessionID, env.channel, payload)
+		err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+			Type:           EventTypeTimelineCreated,
+			EventID:        uuid.New().String(),
+			SessionID:      env.sessionID,
+			SequenceNumber: i,
+			Timestamp:      time.Now().Format(time.RFC3339Nano),
+		})
 		require.NoError(t, err)
 	}
 
@@ -404,7 +395,7 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		msg = readJSONTimeout(t, conn, 5*time.Second)
 		assert.Equal(t, EventTypeTimelineCreated, msg["type"])
-		assert.Equal(t, float64(i), msg["seq"])
+		assert.Equal(t, float64(i), msg["sequence_number"])
 	}
 
 	// Now test catchup from the first event's ID — should return only events 2 and 3
@@ -420,7 +411,7 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 
 	for i := 2; i <= 3; i++ {
 		msg = readJSONTimeout(t, conn, 5*time.Second)
-		assert.Equal(t, float64(i), msg["seq"])
+		assert.Equal(t, float64(i), msg["sequence_number"])
 	}
 
 	// No more messages — verify with short timeout

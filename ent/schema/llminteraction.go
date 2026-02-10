@@ -37,7 +37,7 @@ func (LLMInteraction) Fields() []ent.Field {
 
 		// Interaction Details
 		field.Enum("interaction_type").
-			Values("iteration", "final_analysis", "executive_summary", "chat_response"),
+			Values("iteration", "final_analysis", "executive_summary", "chat_response", "summarization"),
 		field.String("model_name").
 			Comment("e.g., 'gemini-2.0-flash-thinking-exp'"),
 

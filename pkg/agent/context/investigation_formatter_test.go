@@ -19,7 +19,6 @@ func TestFormatInvestigationContext_VariousEventTypes(t *testing.T) {
 		{EventType: timelineevent.EventTypeLlmThinking, Content: "Thinking about the problem."},
 		{EventType: timelineevent.EventTypeLlmResponse, Content: "I need to check the pods."},
 		{EventType: timelineevent.EventTypeLlmToolCall, Content: "k8s.pods_list(ns=default)"},
-		{EventType: timelineevent.EventTypeToolResult, Content: "Pod web-1 is CrashLoopBackOff"},
 		{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
 	}
 
@@ -31,20 +30,18 @@ func TestFormatInvestigationContext_VariousEventTypes(t *testing.T) {
 	assert.Contains(t, result, "I need to check the pods.")
 	assert.Contains(t, result, "**Tool Call:**")
 	assert.Contains(t, result, "k8s.pods_list(ns=default)")
-	assert.Contains(t, result, "**Observation:**")
-	assert.Contains(t, result, "Pod web-1 is CrashLoopBackOff")
 	assert.Contains(t, result, "**Final Analysis:**")
 	assert.Contains(t, result, "Root cause: OOM.")
 }
 
-func TestFormatInvestigationContext_MCPToolCall(t *testing.T) {
+func TestFormatInvestigationContext_MCPToolSummary(t *testing.T) {
 	events := []*ent.TimelineEvent{
-		{EventType: timelineevent.EventTypeMcpToolCall, Content: "mcp_call(param=value)"},
+		{EventType: timelineevent.EventTypeMcpToolSummary, Content: "Summary of tool output"},
 	}
 
 	result := FormatInvestigationContext(events)
-	assert.Contains(t, result, "**Tool Call:**")
-	assert.Contains(t, result, "mcp_call(param=value)")
+	assert.Contains(t, result, "**Tool Result Summary:**")
+	assert.Contains(t, result, "Summary of tool output")
 }
 
 func TestFormatInvestigationContext_UnknownEventType(t *testing.T) {
