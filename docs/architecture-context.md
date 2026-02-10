@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 3.4 (Real-time Streaming)
+**Last updated after**: Phase 4.1 (MCP Client Infrastructure)
 
 ---
 
@@ -43,9 +43,10 @@ pkg/
 ├── config/           # Loader, registries, builtin config, enums, validator
 ├── database/         # Client, migrations
 ├── events/           # EventPublisher, ConnectionManager, NotifyListener
+├── mcp/              # MCP client infrastructure (client, executor, transport, health)
 ├── models/           # MCP selection, shared types
 ├── queue/            # Worker, WorkerPool, orphan detection, session executor
-└── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert
+└── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
 ├── schema/           # Ent schema definitions
 deploy/
@@ -191,10 +192,11 @@ type LLMClient interface {
 type ToolExecutor interface {
     Execute(ctx context.Context, call ToolCall) (*ToolResult, error)
     ListTools(ctx context.Context) ([]ToolDefinition, error)
+    Close() error // Cleanup transports and subprocesses
 }
 ```
 
-Phase 3.2 provides a `StubToolExecutor`; Phase 4 will provide the MCP-backed implementation.
+Implementations: `StubToolExecutor` (no-op Close, for testing), `mcp.ToolExecutor` (real MCP-backed execution).
 
 ### SessionExecutor (`pkg/queue/types.go`)
 
@@ -236,6 +238,171 @@ func (p *EventPublisher) PublishTransient(ctx, channel, payload) error          
 func (m *ConnectionManager) HandleConnection(parentCtx, conn)
 func (m *ConnectionManager) Broadcast(channel, event)
 ```
+
+### MCP Client (`pkg/mcp/client.go`)
+
+```go
+type Client struct { /* manages MCP SDK sessions for multiple servers */ }
+
+func (c *Client) Initialize(ctx context.Context, serverIDs []string) error
+func (c *Client) InitializeServer(ctx context.Context, serverID string) error
+func (c *Client) ListTools(ctx context.Context, serverID string) ([]*mcpsdk.Tool, error)
+func (c *Client) ListAllTools(ctx context.Context) (map[string][]*mcpsdk.Tool, error)
+func (c *Client) CallTool(ctx context.Context, serverID, toolName string, args map[string]any) (*mcpsdk.CallToolResult, error)
+func (c *Client) Close() error
+func (c *Client) HasSession(serverID string) bool
+func (c *Client) FailedServers() map[string]string
+```
+
+Thread-safe session manager wrapping the official MCP Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.3.0). One `Client` instance per alert session (short-lived). Per-session tool cache (never invalidated — natural freshness). Per-server `sync.Mutex` for session recreation to prevent thundering herd.
+
+### MCP Tool Executor (`pkg/mcp/executor.go`)
+
+```go
+type ToolExecutor struct { /* implements agent.ToolExecutor backed by MCP */ }
+
+func (e *ToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error)
+func (e *ToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefinition, error)
+func (e *ToolExecutor) Close() error
+```
+
+Bridge between controllers and MCP. Execute flow: normalize tool name → split `server.tool` → validate server/tool access → parse ActionInput → `Client.CallTool()` → convert result. Tool errors returned as `ToolResult{IsError: true}` (MCP convention), Go errors reserved for infrastructure failures.
+
+### MCP Client Factory (`pkg/mcp/client_factory.go`)
+
+```go
+type ClientFactory struct { /* creates per-session Client instances */ }
+
+func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string) (*Client, error)
+func (f *ClientFactory) CreateToolExecutor(ctx, serverIDs, toolFilter) (*ToolExecutor, *Client, error)
+```
+
+`CreateToolExecutor` is the primary entry point used by the session executor.
+
+### MCP Health Monitor (`pkg/mcp/health.go`)
+
+```go
+type HealthMonitor struct { /* background health check loop */ }
+
+func (m *HealthMonitor) Start(ctx context.Context)
+func (m *HealthMonitor) Stop()
+func (m *HealthMonitor) GetStatuses() map[string]*HealthStatus
+func (m *HealthMonitor) GetCachedTools() map[string][]*mcpsdk.Tool
+func (m *HealthMonitor) IsHealthy() bool
+```
+
+Dedicated long-lived `Client` for health probing (not shared with sessions). Checks every 15s via `ListTools`. On failure: attempts session recreation, then marks unhealthy + adds `SystemWarning`. On recovery: clears warning.
+
+### System Warnings Service (`pkg/services/system_warnings.go`)
+
+```go
+type SystemWarningsService struct { /* in-memory warning store */ }
+
+func (s *SystemWarningsService) AddWarning(category, message, details, serverID string) string
+func (s *SystemWarningsService) GetWarnings() []*SystemWarning
+func (s *SystemWarningsService) ClearByServerID(category, serverID string) bool
+```
+
+Thread-safe, not persisted. Warnings are transient and reset on restart. `AddWarning` deduplicates by category+serverID (replaces existing). Used by `HealthMonitor` for MCP health warnings; general-purpose for future non-MCP warnings. Exposed via health endpoint for dashboard.
+
+---
+
+## MCP Client Infrastructure
+
+### Package Layout (`pkg/mcp/`)
+
+```
+pkg/mcp/
+├── client.go           # Client — MCP SDK session manager
+├── client_factory.go   # ClientFactory — per-session creation
+├── executor.go         # ToolExecutor — implements agent.ToolExecutor
+├── params.go           # ActionInput parameter parsing (multi-format cascade)
+├── router.go           # Tool name normalization, splitting, validation
+├── recovery.go         # Error classification, retry constants
+├── health.go           # HealthMonitor — background health checks
+└── transport.go        # Transport creation from config (stdio/HTTP/SSE)
+```
+
+### Tool Lifecycle During Execution
+
+```
+Controller (ReAct: "server.tool" + raw text | NativeThinking: "server__tool" + JSON)
+  → ToolExecutor.Execute(ToolCall)
+    → NormalizeToolName: server__tool → server.tool (NativeThinking reverse mapping)
+    → SplitToolName: "server" + "tool"
+    → resolveToolCall: validate server in allowed list, check tool filter
+    → ParseActionInput: JSON → YAML → key-value → raw string cascade
+    → Client.CallTool(ctx, serverID, toolName, params)
+      → session.CallTool() with 90s timeout
+      → On error: ClassifyError → NoRetry / RetryNewSession → retry once with jittered backoff
+    → extractTextContent(result) — concatenate TextContent items
+    → Return ToolResult{Content, IsError}
+```
+
+### ActionInput Parameter Parsing (`params.go`)
+
+Multi-format cascade (first successful parse wins):
+1. JSON object → `map[string]any`
+2. JSON non-object (string, number, array) → `{"input": value}`
+3. YAML with complex structures (arrays, nested maps) → `map[string]any`
+4. Key-value pairs (`key: value` or `key=value`, comma/newline separated) → `map[string]any`
+5. Single raw string → `{"input": string}`
+
+Type coercion for key-value: `true/false` → bool, `null/none` → nil, integers, floats, strings.
+
+### Tool Name Routing (`router.go`)
+
+- **NormalizeToolName**: `server__tool` → `server.tool` (reverse Gemini function name mapping)
+- **SplitToolName**: strict regex validation, splits into serverID + toolName
+- NativeThinking controller does `.` → `__` when passing tools to LLM; executor reverses transparently
+
+### Error Classification & Recovery (`recovery.go`)
+
+| Error Type | Recovery Action |
+|------------|-----------------|
+| Context cancelled/deadline | NoRetry |
+| Network timeout | NoRetry |
+| Network error (connection refused, reset, etc.) | RetryNewSession |
+| EOF, broken pipe, connection closed | RetryNewSession |
+| MCP JSON-RPC protocol error (parse, invalid request/params, method not found) | NoRetry |
+| Unknown errors | NoRetry (safe default) |
+
+Recovery: max 1 retry, jittered backoff (250–750ms), session recreation for transport failures.
+
+### Transport Layer (`transport.go`)
+
+Maps `config.TransportConfig` to MCP SDK transports:
+- **stdio**: `CommandTransport` wrapping `os/exec.Command`. Inherits parent env + config overrides.
+- **HTTP**: `StreamableClientTransport`. Optional bearer token (via `http.RoundTripper` wrapper), TLS config, timeout.
+- **SSE**: `SSEClientTransport`. Same HTTP client customization as HTTP transport.
+
+### MCP Operation Timeouts
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `MCPInitTimeout` | 30s | Per-server initialization (transport + MCP handshake) |
+| `OperationTimeout` | 90s | CallTool / ListTools deadline (must be < iteration timeout of 120s) |
+| `MCPHealthPingTimeout` | 5s | Health check ping (fast fail for monitoring) |
+| `MCPHealthInterval` | 15s | Health check loop interval |
+| `ReinitTimeout` | 10s | Session recreation during recovery |
+| `RetryBackoffMin/Max` | 250–750ms | Jittered backoff between retries |
+
+### Startup & Runtime Health
+
+**Startup (eager, fatal on failure)**: All configured MCP servers must initialize before TARSy becomes ready. Broken configs or unreachable servers prevent the readiness probe from passing. Rolling updates in OpenShift/K8s ensure no downtime.
+
+**Runtime (HealthMonitor)**: Background checks every 15s detect degradation. Unhealthy servers surface as `SystemWarning`s in the health endpoint/dashboard. On recovery, warnings are cleared automatically.
+
+### Per-Session Isolation
+
+Every alert session gets its own `Client` instance with independent MCP SDK sessions. No shared state between sessions. Go's `http.Client` handles HTTP connection pooling internally, so per-session overhead for HTTP/SSE is just the MCP `Initialize` handshake. Stdio transports spawn a subprocess per session.
+
+### Integration Points
+
+- **Session executor** (`pkg/queue/executor.go`): calls `ClientFactory.CreateToolExecutor()` instead of `StubToolExecutor`. Falls back to stub if MCP initialization fails (non-fatal for tool-less agents).
+- **NativeThinking controller**: replaces `.` → `__` in tool names for Gemini function calling compatibility. Executor reverses transparently.
+- **Prompt builder**: `appendUnavailableServerWarnings()` warns the LLM about servers that failed per-session initialization.
+- **Health endpoint**: includes `SystemWarningsService.GetWarnings()` in response (informational, does not cause 503).
 
 ---
 
@@ -333,6 +500,10 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Queue = sessions table** | `FOR UPDATE SKIP LOCKED` claim pattern; `pod_id` ownership; orphan detection (all pods, no leader) |
 | **Soft deletes** | `deleted_at` on AlertSession; 90-day retention; hard delete can be added later |
 | **Native tools suppression** | When MCP tools are present, native tools (code execution, search) are disabled in Python |
+| **Per-session MCP isolation** | Each alert session gets its own MCP Client with independent SDK sessions; no shared state |
+| **Tool errors as content** | MCP tool errors → `ToolResult{IsError: true}` (LLM-observable). Go errors → `error` return (infrastructure only) |
+| **Eager startup validation** | All configured MCP servers must initialize at startup (readiness probe fails otherwise); runtime degradation detected by HealthMonitor |
+| **Multi-format input parsing** | ActionInput cascade: JSON → YAML → key-value → raw string; parsing in executor, not parser |
 
 ---
 
@@ -351,20 +522,24 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | Config format | YAML with `{{.VAR}}` env interpolation |
 | Local dev | Podman Compose |
 | Testing | testcontainers-go for integration tests |
+| MCP client | MCP Go SDK v1.3.0 (`github.com/modelcontextprotocol/go-sdk`) |
 | Python LLM | google-genai (Gemini native), LangChain (multi-provider) |
 
 ---
 
 ## Deferred Items Tracker
 
-### Deferred to Phase 4 (MCP Integration)
+### Deferred to Phase 4.2 (Data Masking)
 
-- **ActionInput parameter parsing**: ReAct parser keeps `ActionInput` as raw string. MCP client must parse into structured params (JSON → YAML → key-value → raw string cascade). See `docs/archive/phase3-iteration-controllers-design.md` deferred notes.
-- **Tool name `server.tool` validation**: Currently validates dot exists. MCP client must split and validate both server and tool parts.
-- **Real ToolExecutor implementation**: Replace `StubToolExecutor` with MCP-backed implementation.
-- **Tool output streaming**: Phase 3.4 only publishes `timeline_event.created/completed` for tool calls. Phase 4 should add `stream.chunk` for live MCP output during execution.
-- **MCP summarization call sites**: Prompt templates exist (Phase 3.3) but are not called yet.
-- **Data masking**: Required for MCP tool results (moved from Phase 7).
+- **Masking service**: Regex-based maskers (15 patterns), code-based maskers (K8s Secrets), custom regex from chain config.
+- **MCP tool result masking**: Integration point in `ToolExecutor.Execute()` after MCP call (stub hook exists).
+- **Alert payload sanitization**: Mask sensitive data in alert payloads before LLM processing.
+
+### Deferred to Phase 4.3 (MCP Features)
+
+- **Tool result summarization**: LLM-based, using existing `PromptBuilder.BuildMCPSummarizationSystemPrompt`. Stub hook in `ToolExecutor.Execute()`.
+- **Per-alert MCP selection override**: `MCPSelectionConfig` from alert payload.
+- **Tool output streaming**: Extend streaming protocol with `stream.chunk` for live MCP tool output during execution.
 
 ### Deferred to Phase 5 (Chain Execution)
 
