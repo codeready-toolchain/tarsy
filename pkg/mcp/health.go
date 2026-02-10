@@ -68,7 +68,11 @@ func NewHealthMonitor(
 }
 
 // Start launches the background health check loop.
+// Calling Start on an already-running monitor is a no-op.
 func (m *HealthMonitor) Start(ctx context.Context) {
+	if m.cancel != nil {
+		return // already started
+	}
 	ctx, m.cancel = context.WithCancel(ctx)
 	m.done = make(chan struct{})
 
@@ -86,6 +90,7 @@ func (m *HealthMonitor) Start(ctx context.Context) {
 }
 
 // Stop gracefully shuts down the health monitor.
+// After Stop returns, Start may be called again.
 func (m *HealthMonitor) Stop() {
 	if m.cancel != nil {
 		m.cancel()
@@ -99,6 +104,10 @@ func (m *HealthMonitor) Stop() {
 		m.client = nil
 	}
 	m.clientMu.Unlock()
+
+	// Reset so Start can be called again.
+	m.cancel = nil
+	m.done = nil
 }
 
 func (m *HealthMonitor) loop(ctx context.Context) {
@@ -164,9 +173,7 @@ func (m *HealthMonitor) checkServer(ctx context.Context, serverID string) {
 
 	// Clear the tool cache for this server so the health check actually
 	// probes the connection rather than returning stale cached data.
-	client.toolCacheMu.Lock()
-	delete(client.toolCache, serverID)
-	client.toolCacheMu.Unlock()
+	client.InvalidateToolCache(serverID)
 
 	checkCtx, checkCancel := context.WithTimeout(ctx, m.pingTimeout)
 	defer checkCancel()
@@ -241,6 +248,8 @@ func (m *HealthMonitor) GetStatuses() map[string]*HealthStatus {
 }
 
 // GetCachedTools returns the cached tools from the last successful health check.
+// The returned map is a shallow copy: slices share the same underlying Tool
+// pointers with the monitor's cache. Callers must not mutate the slices.
 func (m *HealthMonitor) GetCachedTools() map[string][]*mcpsdk.Tool {
 	m.toolCacheMu.RLock()
 	defer m.toolCacheMu.RUnlock()

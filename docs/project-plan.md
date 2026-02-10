@@ -83,7 +83,7 @@ Full design docs for completed phases are in `docs/archive/`.
 ### Phase 6:
 
 **E2E tests**
-- [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for exernal services (MCP, LLMs, GitHub)
+- [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for external services (MCP, LLMs, GitHub)
 
 ---
 
@@ -145,7 +145,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 9: History & Chat
+### Phase 10: History & Chat
 
 **History System (Go)**
 - [ ] History repository
@@ -162,7 +162,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 10: Monitoring & Operations
+### Phase 11: Monitoring & Operations
 
 **System Health**
 - [ ] Health check endpoint enhancements
@@ -181,7 +181,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 11: Deployment, DevOps & CI/CD
+### Phase 12: Deployment, DevOps & CI/CD
 
 **Containerization**
 - [ ] Multi-stage Docker builds

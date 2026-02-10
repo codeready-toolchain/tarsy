@@ -202,6 +202,7 @@ func marshalSchema(schema any) string {
 	}
 	data, err := json.Marshal(schema)
 	if err != nil {
+		slog.Debug("Failed to marshal tool input schema", "error", err)
 		return ""
 	}
 	return string(data)

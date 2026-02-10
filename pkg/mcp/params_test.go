@@ -238,6 +238,10 @@ func TestCoerceValue(t *testing.T) {
 		{name: "integer", input: "42", expected: int64(42)},
 		{name: "negative integer", input: "-5", expected: int64(-5)},
 		{name: "float", input: "3.14", expected: 3.14},
+		{name: "NaN stays string", input: "NaN", expected: "NaN"},
+		{name: "Inf stays string", input: "Inf", expected: "Inf"},
+		{name: "-Inf stays string", input: "-Inf", expected: "-Inf"},
+		{name: "+Inf stays string", input: "+Inf", expected: "+Inf"},
 		{name: "string", input: "hello", expected: "hello"},
 		{name: "whitespace", input: "  hello  ", expected: "hello"},
 	}

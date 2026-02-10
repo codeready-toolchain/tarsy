@@ -84,7 +84,11 @@ func ClassifyError(err error) RecoveryAction {
 		return NoRetry
 	}
 
-	// Default: no retry (unknown errors are not safe to retry)
+	// Default: no retry (unknown errors are not safe to retry).
+	// Note: server-side JSON-RPC errors (e.g., CodeInternalError) intentionally
+	// fall here. Although some may be transient, retrying blindly could mask bugs
+	// in tool implementations. Callers should handle server errors explicitly if
+	// retry semantics are desired.
 	return NoRetry
 }
 

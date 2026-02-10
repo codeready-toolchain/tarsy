@@ -153,6 +153,7 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 	require.NoError(t, err)
 	client.sessions["test-server"] = session
 	client.clients["test-server"] = sdkClient
+	t.Cleanup(func() { _ = client.Close() })
 
 	monitor.clientMu.Lock()
 	monitor.client = client

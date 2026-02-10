@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"sync"
@@ -115,6 +116,13 @@ func (c *Client) initializeServerLocked(ctx context.Context, serverID string) er
 
 	session, err := client.Connect(initCtx, transport, nil)
 	if err != nil {
+		// Defensive: close the transport if it implements io.Closer to avoid
+		// leaking resources (e.g., stdio child processes). The SDK closes the
+		// underlying connection on most failure paths, but this guards against
+		// edge cases and future transport types.
+		if closer, ok := transport.(io.Closer); ok {
+			_ = closer.Close()
+		}
 		return fmt.Errorf("failed to connect to %q: %w", serverID, err)
 	}
 
@@ -282,9 +290,7 @@ func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 	c.mu.Unlock()
 
 	// Clear tool cache for this server
-	c.toolCacheMu.Lock()
-	delete(c.toolCache, serverID)
-	c.toolCacheMu.Unlock()
+	c.InvalidateToolCache(serverID)
 
 	// Reinitialize with timeout (use locked variant — we already hold reinitMu)
 	reinitCtx, cancel := context.WithTimeout(ctx, ReinitTimeout)
@@ -310,11 +316,21 @@ func (c *Client) Close() error {
 	c.clients = make(map[string]*mcpsdk.Client)
 	c.failedServers = make(map[string]string)
 
+	// Lock ordering note: mu → toolCacheMu is safe here because no other
+	// code path holds toolCacheMu while acquiring mu.
 	c.toolCacheMu.Lock()
 	c.toolCache = make(map[string][]*mcpsdk.Tool)
 	c.toolCacheMu.Unlock()
 
 	return firstErr
+}
+
+// InvalidateToolCache removes the cached tool list for a server,
+// forcing the next ListTools call to re-probe the server.
+func (c *Client) InvalidateToolCache(serverID string) {
+	c.toolCacheMu.Lock()
+	delete(c.toolCache, serverID)
+	c.toolCacheMu.Unlock()
 }
 
 // HasSession checks if a server has an active session.
