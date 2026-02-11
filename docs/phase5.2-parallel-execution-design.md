@@ -65,6 +65,10 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
     })
     // ... error handling ...
 
+    // Update session progress + publish stage.status: started (both have stageID now)
+    e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
+    e.publishStageStatus(ctx, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
+
     results := make(chan indexedAgentResult, len(configs))
     var wg sync.WaitGroup
 
@@ -379,12 +383,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
             return r
         }
 
-        // Update session progress
-        e.updateSessionProgress(ctx, session.ID, dbStageIndex, "")
-
-        // Publish stage started
-        e.publishStageStatus(ctx, session.ID, "", stageCfg.Name, dbStageIndex, events.StageStatusStarted)
-
+        // session progress + stage.status: started are published inside executeStage() after Stage DB record is created
         sr := e.executeStage(ctx, executeStageInput{
             // ... fields ...
             stageIndex: dbStageIndex,
@@ -684,19 +683,21 @@ Context cancellation propagates naturally to all goroutines (whether 1 or N):
 
 ### Stage Status Events
 
-All stages emit the same `stage.status` events:
+All stages emit the same `stage.status` events. Both `started` and terminal events include the `stageID` — the `started` event is published **inside** `executeStage()` after the Stage DB record is created (not before, as in Phase 5.1):
 
 | Event | When | StageID present? |
 |-------|------|-----------------|
-| `stage.status: started` | Before `executeStage()` | No (Stage not created yet) |
+| `stage.status: started` | After Stage DB record created, before agents launch | Yes |
 | `stage.status: completed/failed/...` | After all agents complete + aggregation | Yes |
 
 If synthesis follows (multi-agent stages):
 
 | Event | When | StageID present? |
 |-------|------|-----------------|
-| `stage.status: started` (synthesis) | Before synthesis agent runs | No |
+| `stage.status: started` (synthesis) | After synthesis Stage DB record created | Yes |
 | `stage.status: completed/failed/...` (synthesis) | After synthesis completes | Yes |
+
+**Phase 5.1 fix**: The current code publishes `stage.status: started` and calls `updateSessionProgress` from the chain loop *before* `executeStage()`, so `stageID` is empty in both. Move both inside `executeStage()` after `CreateStage()` so the dashboard always has a `stageID` to link timeline events to and `current_stage_id` is set from the start.
 
 ### Session Progress
 
