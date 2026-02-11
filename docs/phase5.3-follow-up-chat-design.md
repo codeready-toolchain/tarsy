@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add follow-up chat capability so users can ask questions about completed investigations. A chat is a 1:1 extension of an `AlertSession` — after an investigation completes (or fails/is cancelled), users create a chat and send messages. Each message triggers a single-agent execution with access to the same MCP tools, producing a streamed response.
+Add follow-up chat capability so users can ask questions about completed investigations. A chat is a 1:1 extension of an `AlertSession` — after an investigation completes (or fails/is cancelled), users send messages. The first message transparently creates the chat; each message triggers a single-agent execution with access to the same MCP tools, producing a streamed response.
 
 **Current state**: Chat infrastructure exists (ent schemas, ChatService, ChatContext, prompt builder chat branching, investigation formatter, chat instructions/templates, ChatAgent config, chain ChatConfig). No execution pipeline, no API surface.
 
@@ -17,27 +17,17 @@ Add follow-up chat capability so users can ask questions about completed investi
 ### End-to-End Flow
 
 ```
-1. User checks availability:
-   GET /api/v1/sessions/:id/chat-available
-     → session terminal? chat enabled? has investigation data?
-     → Returns { available: true/false, chat_id?: "..." }
-
-2. User creates chat (once per session):
-   POST /api/v1/sessions/:id/chat
-     → Validates terminal session + chat enabled + no existing chat
-     → Creates Chat record (lightweight — no context capture)
-     → Publishes chat.created event
-     → Returns { chat_id, session_id, created_at }
-
-3. User sends message:
-   POST /api/v1/chats/:id/messages  { content: "Why is pod X crashing?" }
-     → Validates chat exists, no active execution, content valid
+1. User sends message:
+   POST /api/v1/sessions/:id/chat/messages  { content: "Why is pod X crashing?" }
+     → Validates terminal session + chat enabled + no active execution + content valid
+     → Get-or-create Chat record (first message creates it transparently)
      → Creates ChatUserMessage record
+     → Publishes chat.created event (if first message)
      → Publishes chat.user_message event
      → Submits to ChatMessageExecutor (async, returns immediately)
-     → Returns { message_id, stage_id }
+     → Returns { chat_id, message_id, stage_id }
 
-4. ChatMessageExecutor processes (goroutine):
+2. ChatMessageExecutor processes (goroutine):
      → Resolves chat agent config from chain
      → Creates Stage (chat_id, chat_user_message_id) + AgentExecution
      → Creates user_question timeline event
@@ -50,19 +40,19 @@ Add follow-up chat capability so users can ask questions about completed investi
      → Publishes stage.status: completed/failed
      → Schedules stage event cleanup (60s grace period)
 
-5. User gets history:
-   GET /api/v1/chats/:id/history
-     → Returns chat + user messages + response stages (ordered)
+3. User reviews history:
+   Existing session timeline API returns full chronological record
+     → Investigation events + user_question events + chat response stages
 
-6. User cancels active execution:
-   POST /api/v1/chats/:id/cancel
-     → Cancels context for active execution
+4. User cancels active execution:
+   POST /api/v1/sessions/:id/cancel  (existing endpoint, extended)
+     → Cancels active investigation OR active chat execution
      → Agent stops, Stage marked failed
 ```
 
 ### Lifecycle Constraints
 
-- **One chat per session**: `AlertSession` → `Chat` is 1:1 (existing schema enforces uniqueness on `session_id`).
+- **One Chat record per session**: `AlertSession` → `Chat` is 1:1 (existing schema enforces uniqueness on `session_id`). The `Chat` is a container — users can send unlimited messages within it, each producing a response.
 - **Terminal sessions only**: Chat is available only for completed/failed/cancelled sessions. Not for pending/in_progress/cancelling.
 - **One-at-a-time per chat**: Only one message can be actively executing per chat. Sending a new message while one is processing returns 409 Conflict.
 - **Chat enabled check**: Chain config `chat.enabled` must be true (default: true in most chains).
@@ -81,14 +71,14 @@ A new component in `pkg/queue/` that manages chat message execution. Each messag
 // rare and user-initiated. One-at-a-time per chat provides natural limiting.
 type ChatMessageExecutor struct {
     // Dependencies
+    cfg              *config.Config          // full config (for ResolveChatAgentConfig, MCP registry)
     client           *ent.Client
-    chainRegistry    *config.ChainRegistry
-    agentRegistry    *config.AgentRegistry
-    providerRegistry *config.LLMProviderRegistry
+    llmClient        agent.LLMClient
     mcpClientFactory *mcp.ClientFactory
     agentFactory     *agent.AgentFactory
     eventPublisher   agent.EventPublisher
     promptBuilder    agent.PromptBuilder
+    execConfig       ChatMessageExecutorConfig
 
     // Active execution tracking (for cancellation + shutdown)
     mu               sync.RWMutex
@@ -108,7 +98,7 @@ func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput
     if e.stopped { return "", ErrShuttingDown }
 
     // 2. Check one-at-a-time constraint
-    //    Query: any Stage with chat_id = input.ChatID AND status IN (pending, active)?
+    //    Query: any Stage with chat_id = input.Chat.ID AND status IN (pending, active)?
     //    If yes → return ErrChatExecutionActive
 
     // 3. Create Stage record (status: pending)
@@ -131,19 +121,23 @@ func (e *ChatMessageExecutor) execute(ctx context.Context, input ChatExecuteInpu
     defer e.wg.Done()
 
     // Create cancellable context with timeout (reuses SessionTimeout from queue config)
-    execCtx, cancel := context.WithTimeout(ctx, e.config.SessionTimeout)
+    execCtx, cancel := context.WithTimeout(ctx, e.execConfig.SessionTimeout)
     defer cancel()
 
     // Register for cancellation
-    e.registerExecution(input.ChatID, cancel)
-    defer e.unregisterExecution(input.ChatID)
+    e.registerExecution(input.Chat.ID, cancel)
+    defer e.unregisterExecution(input.Chat.ID)
 
-    // 1. Resolve chat agent config
-    agentConfig := e.resolveChatAgentConfig(input.Chat.ChainID)
+    // 1. Resolve chain + chat agent config
+    chain, _ := e.cfg.GetChain(input.Chat.ChainID)
+    agentConfig, _ := agent.ResolveChatAgentConfig(e.cfg, chain, chain.Chat)
 
-    // 2. Create AgentExecution record
+    // 2. Resolve MCP selection (shared helper, handles session override)
+    serverIDs, toolFilter, _ := resolveMCPSelection(input.Session, agentConfig, e.cfg.MCPServerRegistry)
 
-    // 3. Create user_question timeline event (before building context, so it's included)
+    // 3. Create AgentExecution record
+
+    // 4. Create user_question timeline event (before building context, so it's included)
     e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
         SessionID:   input.Session.ID,
         StageID:     &stageID,
@@ -152,46 +146,45 @@ func (e *ChatMessageExecutor) execute(ctx context.Context, input ChatExecuteInpu
         Content:     input.Message.Content,
     })
 
-    // 4. Build ChatContext (GetSessionTimeline → FormatInvestigationContext)
+    // 5. Build ChatContext (GetSessionTimeline → FormatInvestigationContext)
     chatContext := e.buildChatContext(execCtx, input)
 
-    // Update Stage status: active
-    // Publish stage.status: started
-    // Start heartbeat
+    // 6. Update Stage status: active, publish stage.status: started, start heartbeat
+    publishStageStatus(e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, events.StageStatusStarted)
     go e.runChatHeartbeat(execCtx, input.Chat.ID)
 
-    // 6. Create MCP ToolExecutor (per-execution isolation, same as investigation)
-    toolExec, mcpClient, err := e.mcpClientFactory.CreateToolExecutor(...)
-    if toolExec != nil { defer toolExec.Close() }
+    // 7. Create MCP ToolExecutor (shared helper, same as investigation)
+    toolExec, failedServers := createToolExecutor(execCtx, e.mcpClientFactory, serverIDs, toolFilter, logger)
+    defer func() { _ = toolExec.Close() }()
 
-    // 7. Build ExecutionContext (with ChatContext populated)
+    // 8. Build ExecutionContext (with ChatContext populated)
     agentExecCtx := &agent.ExecutionContext{
-        SessionID:   input.Session.ID,
-        StageID:     stageID,
-        ExecutionID: executionID,
-        AgentName:   agentConfig.AgentName,
-        AlertData:   input.Session.AlertData,
-        AlertType:   input.Session.AlertType,
-        Config:      agentConfig,
-        LLMClient:   llmClient,
-        ToolExecutor: toolExec,
+        SessionID:      input.Session.ID,
+        StageID:        stageID,
+        ExecutionID:    executionID,
+        AgentName:      agentConfig.AgentName,
+        AlertData:      input.Session.AlertData,
+        AlertType:      input.Session.AlertType,
+        Config:         agentConfig,
+        LLMClient:      e.llmClient,
+        ToolExecutor:   toolExec,
         EventPublisher: e.eventPublisher,
-        Services:    serviceBundle,
-        PromptBuilder: e.promptBuilder,
-        ChatContext: chatContext,
-        FailedServers: failedServers,
+        Services:       serviceBundle,
+        PromptBuilder:  e.promptBuilder,
+        ChatContext:    chatContext,
+        FailedServers:  failedServers,
     }
 
-    // 8. Create agent via AgentFactory → BaseAgent with appropriate Controller
+    // 9. Create agent via AgentFactory → BaseAgent with appropriate Controller
     chatAgent := e.agentFactory.CreateAgent(agentExecCtx)
 
-    // 9. Execute agent (same path as investigation — controller handles chat via ChatContext)
+    // 10. Execute agent (same path as investigation — controller handles chat via ChatContext)
     result, err := chatAgent.Execute(execCtx, agentExecCtx, "")  // no prevStageContext for chat
 
-    // 10. Update AgentExecution + Stage terminal status
-    // 11. Publish stage.status: completed/failed
+    // 11. Update AgentExecution + Stage terminal status
+    // 12. Publish stage.status: completed/failed
 
-    // 12. Stop heartbeat, schedule event cleanup
+    // 13. Stop heartbeat, schedule event cleanup
 }
 ```
 
@@ -256,65 +249,21 @@ On shutdown: mark stopped (new submissions rejected with 503), cancel all active
 
 ### New Endpoints
 
+All endpoints are session-scoped. Since chat is 1:1 with session, the session ID is all the client needs — no separate chat ID to track.
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/v1/sessions/:id/chat` | Create chat for session |
-| GET | `/api/v1/sessions/:id/chat-available` | Check chat availability |
-| GET | `/api/v1/chats/:id` | Get chat details |
-| POST | `/api/v1/chats/:id/messages` | Send message |
-| GET | `/api/v1/chats/:id/messages` | Get chat message history |
-| POST | `/api/v1/chats/:id/cancel` | Cancel active execution |
+| POST | `/api/v1/sessions/:id/chat/messages` | Send message (auto-creates chat on first message) |
 
-### POST `/api/v1/sessions/:id/chat` — Create Chat
+**That's it — one new endpoint.** Everything else reuses existing infrastructure:
 
-**Request**: No body (session ID from path, author from headers).
+- **Chat history**: Existing session timeline API returns the full chronological record including `user_question` events and chat response stages.
+- **Cancellation**: Existing `POST /api/v1/sessions/:id/cancel` extended to also cancel chat executions via `ChatMessageExecutor.CancelExecution()`.
+- **Chat availability**: No dedicated endpoint. Deferred to Phase 7.2 (Dashboard — History Views), where the session GET/list endpoints will be enriched with chat metadata (chat_id, message_count, chat_enabled), pagination, filters, etc.
 
-**Response** (201):
-```json
-{
-  "chat_id": "uuid",
-  "session_id": "uuid",
-  "created_by": "user@example.com",
-  "created_at": "2026-02-11T10:00:00Z"
-}
-```
+### POST `/api/v1/sessions/:id/chat/messages` — Send Message
 
-**Errors**:
-- 404: Session not found
-- 400: Session not in terminal state
-- 409: Chat already exists for this session
-- 400: Chat not enabled for this chain
-
-**Handler flow**:
-1. Extract author from `X-Forwarded-User` / `X-Forwarded-Email` / `"api-client"`
-2. Get session, validate terminal status
-3. Resolve chain config, validate `chat.enabled`
-4. Check for existing chat (409 if exists)
-5. `ChatService.CreateChat()` (no context capture — built lazily per message)
-6. Publish `chat.created` event
-7. Return chat response
-
-### GET `/api/v1/sessions/:id/chat-available` — Check Availability
-
-**Response** (200):
-```json
-{
-  "available": true,
-  "chat_id": "uuid-or-null",
-  "reason": "string-if-not-available"
-}
-```
-
-**Checks** (in order):
-1. Session exists
-2. If chat already exists → `available: true, chat_id: "..."`
-3. Session in terminal state (completed/failed/cancelled)
-4. Session has at least one timeline event (investigation actually ran)
-5. Chain config has `chat.enabled: true`
-
-If any check fails, `available: false` with `reason` explaining why.
-
-### POST `/api/v1/chats/:id/messages` — Send Message
+The primary chat endpoint. On the first message, creates the Chat record transparently (get-or-create pattern). Subsequent messages reuse the existing chat.
 
 **Request**:
 ```json
@@ -328,72 +277,32 @@ Content validation: 1–100,000 characters (matches old TARSy).
 **Response** (202 Accepted):
 ```json
 {
+  "chat_id": "uuid",
   "message_id": "uuid",
-  "stage_id": "uuid",
-  "chat_id": "uuid"
+  "stage_id": "uuid"
 }
 ```
 
 Returns 202 because processing is asynchronous. The `stage_id` allows the client to track the response via WebSocket events on the session channel.
 
 **Errors**:
-- 404: Chat not found
+- 404: Session not found
+- 400: Session not in terminal state / chat not enabled / empty or oversized content
 - 409: Active execution in progress (one-at-a-time)
-- 400: Empty or oversized content
 - 503: Shutting down
 
 **Handler flow**:
-1. Validate content
-2. Extract author
-3. `ChatService.AddChatMessage()` → creates ChatUserMessage
-4. Publish `chat.user_message` event
-5. `ChatMessageExecutor.Submit()` → creates Stage, launches async execution
-6. Return message_id + stage_id
-
-### GET `/api/v1/chats/:id` — Get Chat
-
-**Response** (200):
-```json
-{
-  "chat_id": "uuid",
-  "session_id": "uuid",
-  "created_by": "user@example.com",
-  "created_at": "2026-02-11T10:00:00Z"
-}
-```
-
-### GET `/api/v1/chats/:id/messages` — Get Message History
-
-**Response** (200):
-```json
-{
-  "messages": [
-    {
-      "message_id": "uuid",
-      "content": "Why is pod X crashing?",
-      "author": "user@example.com",
-      "created_at": "2026-02-11T10:05:00Z",
-      "stage_id": "uuid",
-      "stage_status": "completed"
-    }
-  ]
-}
-```
-
-Each message is enriched with its response stage info (stage_id, status). This gives the client a complete picture of the conversation without separate stage queries.
-
-### POST `/api/v1/chats/:id/cancel` — Cancel Execution
-
-**Response** (200):
-```json
-{
-  "cancelled": true
-}
-```
-
-**Errors**:
-- 404: Chat not found
-- 409: No active execution to cancel
+1. Get session, validate terminal status
+2. Resolve chain config, validate `chat.enabled`
+3. Validate content
+4. Extract author from `X-Forwarded-User` / `X-Forwarded-Email` / `"api-client"`
+5. Get-or-create Chat: `ChatService.GetOrCreateChat(sessionID, author)` → returns Chat (creates if first message, reuses if exists)
+6. Check no active execution for this chat (409 if active)
+7. `ChatService.AddChatMessage()` → creates ChatUserMessage
+8. Publish `chat.created` event (if chat was just created)
+9. Publish `chat.user_message` event
+10. `ChatMessageExecutor.Submit()` → creates Stage, launches async execution
+11. Return chat_id + message_id + stage_id
 
 ---
 
@@ -442,6 +351,7 @@ This matches old TARSy's approach and keeps the WebSocket subscription model sim
 ### Event Flow for a Chat Message
 
 ```
+[chat.created]                → Chat record created (first message only)
 [chat.user_message]           → User sent a question
 [stage.status: started]       → Chat response stage started
 [timeline_event.created]      → llm_thinking/llm_response/llm_tool_call events
@@ -485,9 +395,29 @@ Each subsequent chat message naturally sees the full history of everything befor
 
 Created by the executor at step 3 of the execute flow, BEFORE building context (step 4). This ensures the user's question appears in the timeline and is included when `GetSessionTimeline()` is called for context building. The `user_question` event type already exists in the TimelineEvent schema. The `formatTimelineEvents()` default case renders it as `**user question:**` which is appropriate.
 
-### ChatContext Simplification
+### ChatContext Cleanup
 
-With unified timeline context, `ChatContext` no longer needs a separate `ChatHistory` field:
+With unified timeline context, the existing `ChatHistory` field and `ChatExchange` struct in `pkg/agent/context.go` are no longer needed. **Delete them:**
+
+- **Delete** `ChatExchange` struct from `pkg/agent/context.go`
+- **Delete** `ChatHistory []ChatExchange` field from `ChatContext`
+- **Delete** `FormatChatHistory()` function from `pkg/agent/prompt/chat.go` and its usage in `buildChatUserMessage()`
+- **Delete** `FormatChatHistory` tests from `pkg/agent/prompt/chat_test.go`
+- **Delete** `ChatService.GetChatHistory()` from `pkg/services/chat_service.go` (replaced by timeline-based context)
+- **Delete** `ChatHistoryResponse` from `pkg/models/chat.go`
+- **Update** tests in `builder_test.go`, `builder_integration_test.go`, `chat_service_test.go` that reference `ChatHistory`/`ChatExchange`
+
+`ChatContext` becomes:
+
+```go
+// ChatContext carries chat-specific data for controllers.
+type ChatContext struct {
+    UserQuestion        string
+    InvestigationContext string
+}
+```
+
+Builder:
 
 ```go
 func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatExecuteInput) *agent.ChatContext {
@@ -531,42 +461,29 @@ Chat agent configuration follows a resolution hierarchy similar to investigation
 
 ### Config Resolution Function
 
-```go
-func (e *ChatMessageExecutor) resolveChatAgentConfig(chainID string) *agent.ResolvedAgentConfig {
-    chain := e.chainRegistry.Get(chainID)
-    chatCfg := chain.Chat  // may be nil
+Lives in `pkg/agent/config_resolver.go` alongside the existing `ResolveAgentConfig()`. Reuses the same resolution patterns — `ChatConfig` has the same fields as `StageAgentConfig`:
 
-    // Agent name
+```go
+// ResolveChatAgentConfig builds the agent configuration for a chat execution.
+// Hierarchy: defaults → agent definition → chain → chat config.
+func ResolveChatAgentConfig(
+    cfg *config.Config,
+    chain *config.ChainConfig,
+    chatCfg *config.ChatConfig, // may be nil (defaults apply)
+) (*ResolvedAgentConfig, error) {
+    // Agent name: chatCfg.Agent → "ChatAgent"
     agentName := "ChatAgent"
     if chatCfg != nil && chatCfg.Agent != "" {
         agentName = chatCfg.Agent
     }
 
-    // Look up agent config from registry
-    agentCfg := e.agentRegistry.Get(agentName)
-
-    // Iteration strategy: chat config → chain → defaults
-    strategy := resolveStrategy(chatCfg, chain, defaults)
-
-    // LLM provider: chat config → chain → defaults
-    provider := resolveProvider(chatCfg, chain, defaults)
-
-    // MCP servers: chat config → session override → chain stages
-    servers := resolveMCPServers(chatCfg, session, chain)
-
-    // Max iterations: chat config → chain → defaults
-    maxIter := resolveMaxIterations(chatCfg, chain, defaults)
-
-    return &agent.ResolvedAgentConfig{
-        AgentName:         agentName,
-        IterationStrategy: strategy,
-        LLMProvider:       providerConfig,
-        MaxIterations:     maxIter,
-        IterationTimeout:  defaults.IterationTimeout,
-        MCPServers:        servers,
-        CustomInstructions: agentCfg.CustomInstructions,
-        Backend:           agent.ResolveBackend(strategy),
-    }
+    // Resolve via same hierarchy as ResolveAgentConfig(), but with
+    // ChatConfig fields instead of StageConfig/StageAgentConfig fields.
+    // Strategy: defaults → agent def → chain → chatCfg
+    // Provider: defaults → chain → chatCfg
+    // MaxIter:  defaults → agent def → chain → chatCfg
+    // MCP:     agent def → chain → chatCfg
+    // ... (same pattern as ResolveAgentConfig)
 }
 ```
 
@@ -582,9 +499,11 @@ The session's `mcp_selection` is stored on `AlertSession.mcp_selection` and is a
 
 ---
 
-## Chat Availability Guards
+## Validation Logic
 
-### Availability Check Logic
+### Chat Eligibility Check
+
+Used by the send-message handler to validate the session before accepting a chat message:
 
 ```go
 func isChatAvailable(session *ent.AlertSession, chain *config.ChainConfig) (bool, string) {
@@ -618,9 +537,10 @@ func isTerminalStatus(status alertsession.Status) bool {
 ### Send Message Guards
 
 Before accepting a new message:
-1. Chat exists (404 if not)
-2. No active execution for this chat (409 if active — one-at-a-time)
-3. System not shutting down (503)
+1. Session exists and is terminal (404/400)
+2. Chat enabled for chain (400)
+3. No active execution for this chat (409 if active — one-at-a-time)
+4. System not shutting down (503)
 
 The one-at-a-time check queries for any Stage with `chat_id = chatID` AND `status IN (pending, active)`.
 
@@ -691,13 +611,11 @@ The `Server` struct gains:
 New routes registered in `setupRoutes()`:
 
 ```go
-// Chat endpoints
-v1.POST("/sessions/:id/chat", s.createChatHandler)
-v1.GET("/sessions/:id/chat-available", s.chatAvailableHandler)
-v1.GET("/chats/:id", s.getChatHandler)
-v1.POST("/chats/:id/messages", s.sendChatMessageHandler)
-v1.GET("/chats/:id/messages", s.getChatMessagesHandler)
-v1.POST("/chats/:id/cancel", s.cancelChatHandler)
+// Chat endpoint
+v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
+// Cancellation: existing POST /sessions/:id/cancel handler extended to also cancel chat executions
+// History: existing session timeline API covers chat events (no new endpoint needed)
+// Availability: deferred to Phase 7.2 (session GET/list enriched with chat metadata)
 ```
 
 ### Startup Wiring (`main.go` or equivalent)
@@ -705,8 +623,8 @@ v1.POST("/chats/:id/cancel", s.cancelChatHandler)
 ```go
 // Create ChatMessageExecutor (after WorkerPool, shares same dependencies)
 chatExecutor := queue.NewChatMessageExecutor(
-    dbClient, chainRegistry, agentRegistry, providerRegistry,
-    mcpClientFactory, agentFactory, eventPublisher, promptBuilder,
+    cfg, dbClient, llmClient, mcpClientFactory,
+    agentFactory, eventPublisher, promptBuilder,
     chatExecutorConfig,
 )
 
@@ -724,7 +642,7 @@ workerPool.Stop()
 Minimal changes to the existing `ChatService`:
 
 1. **BuildChatContext**: Removed or deprecated — context building moves to the executor (uses `TimelineService.GetSessionTimeline()` + `FormatInvestigationContext()` directly)
-2. **CreateChat**: No changes needed (existing implementation is sufficient)
+2. **GetOrCreateChat**: New method — get-or-create pattern for the send-message handler. Returns the existing Chat or creates one. Uses a unique constraint on `session_id` to handle race conditions (INSERT ON CONFLICT DO NOTHING + SELECT fallback)
 
 ### Agent Framework (No Changes)
 
@@ -742,18 +660,17 @@ The agent framework requires **no changes**. Controllers already check `execCtx.
 | ChatMessageExecutor | One-at-a-time enforcement, cancellation, graceful shutdown, heartbeat, event cleanup |
 | Chat context building | user_question event creation, GetSessionTimeline → FormatInvestigationContext integration |
 | Chat config resolution | Hierarchy resolution, fallbacks, MCP server resolution |
-| Chat availability | Terminal status check, chain config check, investigation data check |
+| Chat eligibility validation | Terminal status check, chain config check, investigation data check |
 
 ### Integration Tests (testcontainers)
 
 | Test | What It Validates |
 |------|-------------------|
-| Create chat for completed session | End-to-end chat creation, availability validation |
-| Send message and get response | Full execution pipeline with mock LLM |
+| First message creates chat | Send message auto-creates chat, full execution pipeline with mock LLM |
 | Chat context accumulation | 2nd message sees investigation + 1st exchange via unified timeline |
 | One-at-a-time enforcement | Second message rejected while first is processing |
 | Cancellation | Active execution cancelled, stage marked failed |
-| Chat not available for in-progress session | Availability guard rejects |
+| Chat rejected for in-progress session | Send message returns 400 for non-terminal session |
 
 ### Existing Test Preservation
 
@@ -761,12 +678,72 @@ The existing PromptBuilder chat tests, investigation formatter tests, and ChatSe
 
 ---
 
+## Code Reuse & Refactoring
+
+Several pieces of `RealSessionExecutor` and `Worker` logic are needed by `ChatMessageExecutor`. Rather than duplicating, extract shared code to appropriate locations.
+
+### Config Resolution → `pkg/agent/config_resolver.go`
+
+Add `ResolveChatAgentConfig()` alongside the existing `ResolveAgentConfig()`. Chat config resolution is a variant of the same hierarchy logic — `ChatConfig` has the same fields (`Agent`, `IterationStrategy`, `LLMProvider`, `MCPServers`, `MaxIterations`) as `StageAgentConfig`. The new function takes `*config.Config`, `*config.ChainConfig`, and `*config.ChatConfig`, constructs the resolution chain (defaults → agent definition → chain → chat config), and returns `*ResolvedAgentConfig`. This keeps all config resolution in one file and avoids duplicating the provider lookup, strategy resolution, and fallback logic.
+
+### MCP Helpers → package-level functions in `pkg/queue/executor.go`
+
+Two methods on `RealSessionExecutor` need to become package-level functions so `ChatMessageExecutor` can call them (both are in the same `pkg/queue/` package):
+
+1. **`createToolExecutor()`** → `createToolExecutor(ctx, mcpFactory, serverIDs, toolFilter, logger)`. Drop the receiver; pass `mcpFactory` as a parameter. The logic (factory exists + servers > 0 → use factory, else stub) is unchanged.
+
+2. **`resolveMCPSelection()`** → `resolveMCPSelection(session, resolvedConfig, mcpRegistry)`. Drop the receiver; pass `mcpRegistry` as a parameter. The logic (parse session's `mcp_selection` override, validate against registry, build serverIDs + toolFilter) is unchanged.
+
+Both stay in `executor.go` — they're execution helpers, not generic utilities. The only change is removing the `RealSessionExecutor` receiver and passing dependencies as parameters.
+
+### Status Mappers → already shared
+
+`mapAgentStatusToEntStatus()`, `mapAgentStatusToSessionStatus()`, and `mapTerminalStatus()` are already package-level functions in `executor.go`. Since `chat_executor.go` is in the same `pkg/queue/` package, they're already accessible. **No extraction needed.**
+
+### Stage Status Publishing → package-level function in `pkg/queue/executor.go`
+
+`publishStageStatus()` is currently a method on `RealSessionExecutor`. Extract to package-level: `publishStageStatus(eventPublisher, sessionID, stageID, stageName, stageIndex, status)`. Both executors use it.
+
+### Heartbeat & Event Cleanup → `pkg/queue/chat_executor.go` (re-implement pattern)
+
+`Worker.runHeartbeat()` and `Worker.scheduleEventCleanup()` operate on `AlertSession` and use `Worker`'s `client` field. Chat equivalents operate on `Chat` and use `ChatMessageExecutor`'s `client` field. The pattern is identical (ticker + update / AfterFunc + delete) but the target entity differs. **Re-implement the pattern** in `chat_executor.go` rather than over-abstracting a shared "heartbeat runner." Two simple functions, each < 15 lines.
+
+### Prompt Builder → `pkg/agent/prompt/chat.go` (keep, clean up)
+
+`buildChatUserMessage()` is reusable and needed — it builds the chat prompt (investigation context + current question + tools). **Keep it.** Just remove the `FormatChatHistory()` call and the `ChatHistory` block from it. `FormatChatHistory()` and `pluralS()` are deleted.
+
+### Summary
+
+| What | Where | Action |
+|------|-------|--------|
+| `ResolveChatAgentConfig()` | `pkg/agent/config_resolver.go` | **Add** new function alongside existing resolver |
+| `createToolExecutor()` | `pkg/queue/executor.go` | **Refactor** from method to package-level function |
+| `resolveMCPSelection()` | `pkg/queue/executor.go` | **Refactor** from method to package-level function |
+| `publishStageStatus()` | `pkg/queue/executor.go` | **Refactor** from method to package-level function |
+| Status mappers | `pkg/queue/executor.go` | **No change** — already package-level, already shared |
+| Heartbeat / cleanup | `pkg/queue/chat_executor.go` | **Re-implement** pattern (different target entity) |
+| `buildChatUserMessage()` | `pkg/agent/prompt/chat.go` | **Keep**, remove `FormatChatHistory` call |
+| `FormatChatHistory()` | `pkg/agent/prompt/chat.go` | **Delete** |
+
+---
+
 ## Implementation Plan
+
+### Step 0: Refactoring for Reuse
+
+1. Extract `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` from `RealSessionExecutor` methods to package-level functions in `pkg/queue/executor.go` (drop receiver, pass deps as params)
+2. Add `ResolveChatAgentConfig()` to `pkg/agent/config_resolver.go`
+3. Clean up `pkg/agent/prompt/chat.go`: remove `FormatChatHistory()` call from `buildChatUserMessage()`, delete `FormatChatHistory()` and `pluralS()`
+4. Clean up `pkg/agent/context.go`: delete `ChatExchange` struct, remove `ChatHistory` field from `ChatContext`
+5. Clean up `pkg/services/chat_service.go`: delete `GetChatHistory()`; `pkg/models/chat.go`: delete `ChatHistoryResponse`
+6. Update affected tests (`builder_test.go`, `builder_integration_test.go`, `chat_test.go`, `chat_service_test.go`)
+7. Verify existing tests pass — this step is pure refactoring, no new behavior
 
 ### Step 1: Service Changes
 
 1. Add `GetMaxStageIndex()` to StageService
 2. Add `GetActiveStageForChat()` query (for one-at-a-time check)
+3. Add `GetOrCreateChat()` to ChatService (get-or-create pattern for send-message handler)
 
 ### Step 2: ChatMessageExecutor
 
@@ -774,19 +751,21 @@ The existing PromptBuilder chat tests, investigation formatter tests, and ChatSe
 2. Implement `Submit()`, `execute()`, `CancelExecution()`, `Stop()`
 3. Implement `buildChatContext()` — calls `GetSessionTimeline()` + `FormatInvestigationContext()` (no filter — both functions already exist)
 4. Create `user_question` timeline event at start of each message execution (before agent runs)
-5. Implement `resolveChatAgentConfig()` (config hierarchy resolution)
-6. Implement one-at-a-time check
-7. Implement heartbeat (`runChatHeartbeat()`) — periodic `Chat.last_interaction_at` + `pod_id` updates
-8. Implement stage event cleanup (`cleanupStageEvents()`) — 60s grace period after terminal status
-9. Test: one-at-a-time enforcement, cancellation, shutdown, config resolution, context assembly, heartbeat, cleanup
+5. Chat config resolution calls `ResolveChatAgentConfig()` from Step 0
+6. MCP tool executor creation calls shared `createToolExecutor()` from Step 0
+7. Implement one-at-a-time check
+8. Implement heartbeat (`runChatHeartbeat()`) — periodic `Chat.last_interaction_at` + `pod_id` updates
+9. Implement stage event cleanup (`cleanupStageEvents()`) — 60s grace period after terminal status
+10. Test: one-at-a-time enforcement, cancellation, shutdown, config resolution, context assembly, heartbeat, cleanup
 
 ### Step 3: API Handlers
 
-1. Create chat handler file(s) in `pkg/api/`
-2. Implement all 6 endpoints
-3. Wire into `Server.setupRoutes()`
-4. Wire `ChatService` and `ChatMessageExecutor` into `Server`
-5. Test: request validation, error mapping, response formats
+1. Create chat handler file in `pkg/api/`
+2. Implement `POST /sessions/:id/chat/messages` (auto-creates chat on first message)
+3. Extend existing `cancelSessionHandler` to also cancel chat executions via `ChatMessageExecutor.CancelExecution()`
+4. Wire into `Server.setupRoutes()`
+5. Wire `ChatService` and `ChatMessageExecutor` into `Server`
+6. Test: request validation, error mapping, response formats, get-or-create chat, unified cancel
 
 ### Step 4: WebSocket Events
 
