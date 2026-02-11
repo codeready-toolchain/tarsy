@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 4.2 (Data Masking)
+**Last updated after**: Phase 4.3 (MCP Features)
 
 ---
 
@@ -37,7 +37,7 @@ Key design: **no stored output fields** on Stage or AgentExecution. Context is b
 pkg/
 ├── api/              # HTTP handlers, requests, responses, error mapping
 ├── agent/            # Agent interface, lifecycle, LLM client, tool executor
-│   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser
+│   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser, tool execution, summarization
 │   ├── context/      # Context formatter, investigation formatter
 │   └── prompt/       # Prompt builder, templates, instructions, components
 ├── config/           # Loader, registries, builtin config, enums, validator
@@ -128,7 +128,7 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 `id`, `stage_id`, `session_id` (denormalized), `agent_name`, `agent_index`, `iteration_strategy`, `status`, `error_message`, timestamps
 
 ### TimelineEvent
-`id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/tool_result/mcp_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content` (TEXT, grows during streaming), `metadata` (JSON), timestamps
+`id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content` (TEXT, grows during streaming), `metadata` (JSON), timestamps
 
 ### Message
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON array, assistant messages), `tool_call_id` + `tool_name` (tool result messages), `created_at`
@@ -222,6 +222,7 @@ func (b *PromptBuilder) BuildMCPSummarizationSystemPrompt(serverName, toolName, 
 func (b *PromptBuilder) BuildMCPSummarizationUserPrompt(context, server, tool, result) string
 func (b *PromptBuilder) BuildExecutiveSummarySystemPrompt() string
 func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis) string
+func (b *PromptBuilder) MCPServerRegistry() *config.MCPServerRegistry  // Per-server config lookup (used by summarization)
 ```
 
 Three-tier instruction composition: General SRE → MCP server instructions → custom agent instructions.
@@ -321,6 +322,7 @@ pkg/mcp/
 ├── router.go           # Tool name normalization, splitting, validation
 ├── recovery.go         # Error classification, retry constants
 ├── health.go           # HealthMonitor — background health checks
+├── tokens.go           # Token estimation, truncation utilities (storage + summarization)
 └── transport.go        # Transport creation from config (stdio/HTTP/SSE)
 ```
 
@@ -511,6 +513,154 @@ Replacement format: `[MASKED_X]` (not `__X__` to avoid Markdown bold rendering).
 
 ---
 
+## Tool Result Summarization (`pkg/agent/controller/summarize.go`)
+
+### Architecture Decision: Controller-Level Summarization
+
+Summarization is an LLM orchestration concern, not an MCP infrastructure concern. The `ToolExecutor` lacks LLMClient, conversation context, EventPublisher, and services — all required for summarization. Instead, summarization happens in the controller after `ToolExecutor.Execute()` returns, via a shared `maybeSummarize()` function called from both ReAct and NativeThinking controllers through the common `executeToolCall()` path (`pkg/agent/controller/tool_execution.go`).
+
+### Summarization Flow
+
+```
+Controller iteration loop:
+  1. LLM returns tool call
+     → Create llm_tool_call timeline event (status: streaming, args in metadata)
+
+  2. ToolExecutor.Execute(toolCall) → raw ToolResult (masked by Phase 4.2)
+
+  3. Complete llm_tool_call event (status: completed, content = storage-truncated raw result)
+
+  4. Check summarization:
+     a. Look up SummarizationConfig for this server (via PromptBuilder.MCPServerRegistry())
+     b. If disabled or not configured → use raw result
+     c. EstimateTokens(rawResult) — approximate (~4 chars/token)
+     d. If below threshold → use raw result
+
+  5. Summarize (threshold exceeded):
+     a. TruncateForSummarization(rawResult) — safety-net for LLM input
+     b. Build summarization prompts (system + user with conversation context)
+     c. Create mcp_tool_summary timeline event (status: streaming)
+     d. Call LLM with streaming → publish stream.chunk for each delta
+     e. Complete mcp_tool_summary event with full summary text
+     f. Record LLMInteraction (type: "summarization")
+     g. Result for conversation = wrapped summary (not raw)
+
+  6. Use result in conversation (summarized or raw)
+```
+
+### Summarization Interfaces
+
+```go
+// SummarizationResult holds the outcome of a summarization attempt.
+type SummarizationResult struct {
+    Content       string
+    WasSummarized bool
+    Usage         *agent.TokenUsage
+}
+
+func maybeSummarize(ctx, execCtx, serverID, toolName, rawContent, conversationContext, eventSeq) (*SummarizationResult, error)
+func buildConversationContext(messages []agent.ConversationMessage) string  // Excludes system messages
+```
+
+### Token Estimation & Truncation (`pkg/mcp/tokens.go`)
+
+```go
+func EstimateTokens(text string) int                // ~4 chars/token heuristic (threshold check, not billing)
+func TruncateForStorage(content string) string       // 8000 tokens — UI/DB protection for llm_tool_call + MCPInteraction
+func TruncateForSummarization(content string) string // 100,000 tokens — safety net for summarization LLM input
+```
+
+Two independent truncation concerns:
+1. **Storage truncation** — Always applied to raw results in `llm_tool_call` completion and MCPInteraction. Lower threshold. Protects dashboard.
+2. **Summarization input safety net** — Larger limit; gives the summarizer maximum data while bounding context window.
+
+No separate conversation truncation for non-summarized results. If below the summarization threshold, the result is already small enough. Summarization *is* the mechanism for controlling result size.
+
+### Summarization Failure Policy: Fail-Open
+
+If the summarization LLM call fails (timeout, error, empty response), the raw result is used. The investigation continues with a larger context window cost. Matches investigation-availability-first philosophy.
+
+### Summarization Configuration
+
+Per-server in `MCPServerConfig.Summarization`: `enabled`, `size_threshold_tokens` (default: 5000), `summary_max_token_limit` (default: 1000).
+
+---
+
+## Tool Call Lifecycle Events
+
+### Single-Event Lifecycle Pattern
+
+Tool calls use a single `llm_tool_call` timeline event with a streaming lifecycle (same pattern as `llm_response`), rather than separate events for call and result:
+
+```
+[llm_tool_call] created (status: streaming)
+  → metadata: {server_name, tool_name, arguments}
+  → Dashboard shows: "Calling server.tool..." with spinner
+
+[llm_tool_call] completed (status: completed)
+  → content: storage-truncated raw result
+  → metadata enriched: {is_error}
+  → Dashboard shows: tool result
+
+(if summarization triggered):
+  [mcp_tool_summary] created (status: streaming) → "Summarizing..."
+  [stream.chunk] ...                              → Summary LLM token deltas
+  [mcp_tool_summary] completed (status: completed) → Summary stored
+```
+
+Arguments live in metadata (not content) so they survive the content update on completion. On catchup: one event in DB, status tells the state — no multi-event correlation needed.
+
+### Timeline Event Helpers (`pkg/agent/controller/timeline.go`)
+
+```go
+func createToolCallEvent(ctx, execCtx, serverID, toolName, arguments, eventSeq) (*ent.TimelineEvent, error)
+func completeToolCallEvent(ctx, execCtx, event, content, isError)
+```
+
+`createToolResultEvent` was removed — the raw result lives on the completed `llm_tool_call` event. The `tool_result` and `mcp_tool_call` enum values were removed from the TimelineEvent schema (never had production data).
+
+### Shared Tool Execution (`pkg/agent/controller/tool_execution.go`)
+
+Both ReAct and NativeThinking controllers share tool execution logic through `executeToolCall()`, which handles: tool call event creation → `ToolExecutor.Execute()` → event completion → summarization check → MCPInteraction recording.
+
+---
+
+## Per-Alert MCP Selection Override
+
+### Override Semantics: Replace, Not Merge
+
+When an alert provides `mcp_selection`, it **replaces** the chain/agent's MCP server list entirely. The override is the authoritative, complete server set for this alert. Tool filtering within a server is additive restriction (empty list = all tools).
+
+### Data Flow
+
+```
+POST /api/v1/alerts with mcp_selection JSON
+  → AlertService.SubmitAlert() stores to AlertSession.mcp_selection
+  → Worker claims session → RealSessionExecutor.Execute()
+    → resolveMCPSelection(session, resolvedConfig)
+      → Deserialize via ParseMCPSelectionConfig()
+      → Validate all servers exist in MCPServerRegistry
+      → Build serverIDs + toolFilter
+      → Apply NativeToolsOverride if present
+    → ClientFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
+```
+
+### Key Types
+
+```go
+// pkg/models/mcp_selection.go
+func ParseMCPSelectionConfig(raw map[string]interface{}) (*MCPSelectionConfig, error)
+
+// pkg/agent/context.go — added to ResolvedAgentConfig
+NativeToolsOverride *models.NativeToolsConfig  // Per-alert native tools override (nil = use provider defaults)
+```
+
+### Validation
+
+API-level validation (immediate 400 for unknown servers) AND execution-time validation in `resolveMCPSelection()` (defense in depth against config changes between submission and execution).
+
+---
+
 ## Key Types
 
 ### ExecutionContext (`pkg/agent/context.go`)
@@ -612,6 +762,11 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Fail-closed masking (MCP)** | Masking failure on MCP tool results → full redaction notice; secrets never leak to LLM/timeline |
 | **Fail-open masking (alerts)** | Masking failure on alert payloads → continue with unmasked data; availability over secrecy for user-provided data |
 | **Code maskers before regex** | Structural maskers (K8s Secrets) run first for precision, then regex patterns sweep remaining secrets |
+| **Controller-level summarization** | Summarization is LLM orchestration, not MCP infrastructure; happens after ToolExecutor.Execute() in shared `executeToolCall()` |
+| **Fail-open summarization** | Summarization LLM failure → use raw result; investigation continues with larger context cost |
+| **Single-event tool lifecycle** | `llm_tool_call` uses streaming lifecycle (created→completed) — no separate tool_result event; args in metadata survive content update |
+| **Two-tier truncation** | Storage truncation (8K tokens, UI-safe) independent from summarization input truncation (100K tokens, LLM safety net) |
+| **Replace-not-merge override** | Per-alert MCP selection replaces chain server list entirely; override is the authoritative server set |
 
 ---
 
@@ -636,12 +791,6 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 ---
 
 ## Deferred Items Tracker
-
-### Deferred to Phase 4.3 (MCP Features)
-
-- **Tool result summarization**: LLM-based, using existing `PromptBuilder.BuildMCPSummarizationSystemPrompt`. Stub hook in `ToolExecutor.Execute()`.
-- **Per-alert MCP selection override**: `MCPSelectionConfig` from alert payload.
-- **Tool output streaming**: Extend streaming protocol with `stream.chunk` for live MCP tool output during execution.
 
 ### Deferred to Phase 5 (Chain Execution)
 
