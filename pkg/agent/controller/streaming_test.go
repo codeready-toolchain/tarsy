@@ -1,12 +1,199 @@
 package controller
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// ============================================================================
+// collectStream tests
+// ============================================================================
+
+func TestCollectStream(t *testing.T) {
+	t.Run("text chunks concatenated", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 3)
+		ch <- &agent.TextChunk{Content: "Hello "}
+		ch <- &agent.TextChunk{Content: "world"}
+		ch <- &agent.TextChunk{Content: "!"}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		assert.Equal(t, "Hello world!", resp.Text)
+	})
+
+	t.Run("thinking chunks concatenated", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 2)
+		ch <- &agent.ThinkingChunk{Content: "Let me think "}
+		ch <- &agent.ThinkingChunk{Content: "about this."}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		assert.Equal(t, "Let me think about this.", resp.ThinkingText)
+	})
+
+	t.Run("tool call chunks collected", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 2)
+		ch <- &agent.ToolCallChunk{CallID: "c1", Name: "k8s.pods", Arguments: "{}"}
+		ch <- &agent.ToolCallChunk{CallID: "c2", Name: "k8s.logs", Arguments: "{\"pod\": \"web\"}"}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		require.Len(t, resp.ToolCalls, 2)
+		assert.Equal(t, "c1", resp.ToolCalls[0].ID)
+		assert.Equal(t, "k8s.pods", resp.ToolCalls[0].Name)
+		assert.Equal(t, "c2", resp.ToolCalls[1].ID)
+	})
+
+	t.Run("usage chunk captured", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 1)
+		ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30, ThinkingTokens: 5}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		require.NotNil(t, resp.Usage)
+		assert.Equal(t, 10, resp.Usage.InputTokens)
+		assert.Equal(t, 20, resp.Usage.OutputTokens)
+		assert.Equal(t, 30, resp.Usage.TotalTokens)
+		assert.Equal(t, 5, resp.Usage.ThinkingTokens)
+	})
+
+	t.Run("code execution chunks collected", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 1)
+		ch <- &agent.CodeExecutionChunk{Code: "print('hi')", Result: "hi"}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		require.Len(t, resp.CodeExecutions, 1)
+		assert.Equal(t, "print('hi')", resp.CodeExecutions[0].Code)
+		assert.Equal(t, "hi", resp.CodeExecutions[0].Result)
+	})
+
+	t.Run("grounding chunks collected", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 2)
+		ch <- &agent.GroundingChunk{
+			WebSearchQueries: []string{"query1"},
+			Sources: []agent.GroundingSource{
+				{URI: "https://example.com", Title: "Example"},
+			},
+		}
+		ch <- &agent.GroundingChunk{
+			Sources: []agent.GroundingSource{
+				{URI: "https://docs.k8s.io", Title: "K8s Docs"},
+			},
+		}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		require.Len(t, resp.Groundings, 2)
+		assert.Equal(t, []string{"query1"}, resp.Groundings[0].WebSearchQueries)
+		assert.Equal(t, "https://example.com", resp.Groundings[0].Sources[0].URI)
+		assert.Empty(t, resp.Groundings[1].WebSearchQueries)
+		assert.Equal(t, "https://docs.k8s.io", resp.Groundings[1].Sources[0].URI)
+	})
+
+	t.Run("empty stream has no groundings", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 1)
+		ch <- &agent.TextChunk{Content: "hello"}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		assert.Nil(t, resp.Groundings)
+	})
+
+	t.Run("error chunk returns error", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 2)
+		ch <- &agent.TextChunk{Content: "partial"}
+		ch <- &agent.ErrorChunk{Message: "rate limited", Code: "429", Retryable: true}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "rate limited")
+		assert.Contains(t, err.Error(), "429")
+		assert.Contains(t, err.Error(), "retryable: true")
+	})
+
+	t.Run("empty stream returns empty response", func(t *testing.T) {
+		ch := make(chan agent.Chunk)
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Text)
+		assert.Empty(t, resp.ThinkingText)
+		assert.Empty(t, resp.ToolCalls)
+		assert.Nil(t, resp.Usage)
+	})
+
+	t.Run("mixed chunks collected correctly", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 6)
+		ch <- &agent.ThinkingChunk{Content: "Thinking..."}
+		ch <- &agent.TextChunk{Content: "I'll check pods."}
+		ch <- &agent.ToolCallChunk{CallID: "c1", Name: "k8s.pods", Arguments: "{}"}
+		ch <- &agent.UsageChunk{InputTokens: 50, OutputTokens: 100, TotalTokens: 150}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		assert.Equal(t, "Thinking...", resp.ThinkingText)
+		assert.Equal(t, "I'll check pods.", resp.Text)
+		require.Len(t, resp.ToolCalls, 1)
+		require.NotNil(t, resp.Usage)
+		assert.Equal(t, 150, resp.Usage.TotalTokens)
+	})
+}
+
+// ============================================================================
+// callLLM tests
+// ============================================================================
+
+func TestCallLLM(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Hello"},
+					&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+				}},
+			},
+		}
+
+		resp, err := callLLM(context.Background(), llm, &agent.GenerateInput{})
+		require.NoError(t, err)
+		assert.Equal(t, "Hello", resp.Text)
+		assert.Equal(t, 15, resp.Usage.TotalTokens)
+	})
+
+	t.Run("generate error", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{err: fmt.Errorf("connection refused")},
+			},
+		}
+
+		resp, err := callLLM(context.Background(), llm, &agent.GenerateInput{})
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "LLM Generate failed")
+	})
+}
+
+// ============================================================================
+// collectStreamWithCallback tests
+// ============================================================================
 
 func TestCollectStreamWithCallback_NilCallback(t *testing.T) {
 	// nil callback should behave like collectStream
