@@ -52,13 +52,9 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 		SetCreatedAt(time.Now()).
 		SetUpdatedAt(time.Now())
 
-	// Set stage_id and execution_id only when provided (session-level events omit them)
-	if req.StageID != "" {
-		create = create.SetStageID(req.StageID)
-	}
-	if req.ExecutionID != "" {
-		create = create.SetExecutionID(req.ExecutionID)
-	}
+	// Set stage_id and execution_id only when provided (session-level events pass nil)
+	create = create.SetNillableStageID(req.StageID).
+		SetNillableExecutionID(req.ExecutionID)
 
 	event, err := create.Save(ctx)
 	if err != nil {

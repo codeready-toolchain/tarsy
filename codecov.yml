@@ -1,0 +1,38 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto    # Use previous commit as baseline (no hard threshold)
+        threshold: 1%   # Allow 1% drop without failing
+    patch:
+      default:
+        target: 80%     # New code should have ≥80% coverage
+
+flags:
+  go:
+    paths:
+      - pkg/
+    carryforward: true
+  python:
+    paths:
+      - llm-service/llm/
+    carryforward: true
+  # Uncomment when TypeScript tests are added:
+  # typescript:
+  #   paths:
+  #     - dashboard/
+  #   carryforward: true
+
+ignore:
+  - ent/**          # Generated ORM code
+  - proto/**        # Generated protobuf/gRPC
+  - github.com/**   # Generated proto duplicate
+  - cmd/**          # Main entrypoint
+  - test/**         # Test utilities
+  - "**/*_test.go"  # Test files themselves
+  - deploy/**
+  - docs/**
+  - make/**

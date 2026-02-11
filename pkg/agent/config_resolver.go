@@ -50,7 +50,8 @@ func ResolveAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentConfig.Name, err)
 	}
 
-	// Resolve iteration strategy (stage-agent > agent-def > chain > defaults)
+	// Resolve iteration strategy: defaults.IterationStrategy → agentDef.IterationStrategy
+	// → chain.IterationStrategy → agentConfig.IterationStrategy (later values override earlier ones).
 	strategy := defaults.IterationStrategy
 	if agentDef.IterationStrategy != "" {
 		strategy = agentDef.IterationStrategy

@@ -144,9 +144,9 @@ func (TimelineEvent) Indexes() []ent.Index {
 	return []ent.Index{
 		// Timeline ordering
 		index.Fields("session_id", "sequence_number"),
-		// Stage timeline grouping
+		// Stage timeline grouping (stage_id is nullable; EQ predicates naturally exclude NULLs)
 		index.Fields("stage_id", "sequence_number"),
-		// Agent timeline filtering
+		// Agent timeline filtering (execution_id is nullable; EQ predicates naturally exclude NULLs)
 		index.Fields("execution_id", "sequence_number"),
 		// Chronological queries
 		index.Fields("created_at"),

@@ -310,9 +310,6 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 		SetStatus(result.Status).
 		SetCompletedAt(time.Now())
 
-	if result.Error != nil {
-		update = update.SetErrorMessage(result.Error.Error())
-	}
 	if result.FinalAnalysis != "" {
 		update = update.SetFinalAnalysis(result.FinalAnalysis)
 	}
@@ -320,12 +317,10 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 		update = update.SetExecutiveSummary(result.ExecutiveSummary)
 	}
 	if result.ExecutiveSummaryError != "" {
-		errMsg := result.Error
-		if errMsg != nil {
-			update = update.SetErrorMessage(fmt.Sprintf("%s; executive summary error: %s", errMsg.Error(), result.ExecutiveSummaryError))
-		} else {
-			update = update.SetErrorMessage(fmt.Sprintf("executive summary error: %s", result.ExecutiveSummaryError))
-		}
+		update = update.SetExecutiveSummaryError(result.ExecutiveSummaryError)
+	}
+	if result.Error != nil {
+		update = update.SetErrorMessage(result.Error.Error())
 	}
 
 	return update.Exec(ctx)

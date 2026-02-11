@@ -540,6 +540,10 @@ func (e *RealSessionExecutor) publishStageStatus(ctx context.Context, sessionID,
 	}
 }
 
+// executiveSummarySeqNum is a sentinel sequence number ensuring the executive
+// summary timeline event sorts after all stage events.
+const executiveSummarySeqNum = 999_999
+
 // generateExecutiveSummary generates an executive summary from the final analysis.
 // Uses a single LLM call (no tools, no streaming to timeline).
 // Fail-open: returns ("", error) on failure; caller decides how to handle.
@@ -614,7 +618,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	// Use a fixed sequence number — executive summary is always the last event
 	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
-		SequenceNumber: 999999, // Session-level, always at the end
+		SequenceNumber: executiveSummarySeqNum,
 		EventType:      timelineevent.EventTypeExecutiveSummary,
 		Content:        summary,
 	})

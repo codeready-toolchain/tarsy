@@ -73,8 +73,8 @@ func TestServiceIntegration(t *testing.T) {
 		// 4. Create timeline events
 		thinkingEvent, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        initialStage.ID,
-			ExecutionID:    initialExec.ID,
+			StageID:        &initialStage.ID,
+			ExecutionID:    &initialExec.ID,
 			SequenceNumber: 1,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Analyzing pod status...",

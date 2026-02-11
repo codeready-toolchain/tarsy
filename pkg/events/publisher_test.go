@@ -185,6 +185,7 @@ func TestStageStatusPayload_JSON(t *testing.T) {
 	assert.Equal(t, "investigation", decoded.StageName)
 	assert.Equal(t, 1, decoded.StageIndex)
 	assert.Equal(t, StageStatusStarted, decoded.Status)
+	assert.Equal(t, "2026-02-10T12:00:00Z", decoded.Timestamp)
 }
 
 func TestStageStatusPayload_EmptyStageID(t *testing.T) {

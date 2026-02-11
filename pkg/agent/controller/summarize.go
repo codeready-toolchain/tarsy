@@ -207,8 +207,8 @@ func callSummarizationLLMWithStreaming(
 			*eventSeq++
 			event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 				SessionID:      execCtx.SessionID,
-				StageID:        execCtx.StageID,
-				ExecutionID:    execCtx.ExecutionID,
+				StageID:        &execCtx.StageID,
+				ExecutionID:    &execCtx.ExecutionID,
 				SequenceNumber: *eventSeq,
 				EventType:      timelineevent.EventTypeMcpToolSummary,
 				Content:        "",

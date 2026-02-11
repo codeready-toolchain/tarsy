@@ -3,7 +3,10 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
@@ -68,6 +71,7 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
+	mu              sync.Mutex
 	stageStatuses   []events.StageStatusPayload
 	sessionStatuses []events.SessionStatusPayload
 }
@@ -85,13 +89,29 @@ func (p *testEventPublisher) PublishStreamChunk(_ context.Context, _ string, _ e
 }
 
 func (p *testEventPublisher) PublishSessionStatus(_ context.Context, _ string, payload events.SessionStatusPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.sessionStatuses = append(p.sessionStatuses, payload)
 	return nil
 }
 
 func (p *testEventPublisher) PublishStageStatus(_ context.Context, _ string, payload events.StageStatusPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.stageStatuses = append(p.stageStatuses, payload)
 	return nil
+}
+
+// hasStageStatus checks if a stage with the given name has the given status (thread-safe).
+func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, s := range p.stageStatuses {
+		if s.StageName == stageName && s.Status == status {
+			return true
+		}
+	}
+	return false
 }
 
 // ────────────────────────────────────────────────────────────
@@ -362,9 +382,8 @@ func TestExecutor_CancellationBetweenStages(t *testing.T) {
 	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
-	// Use a short timeout context that expires after stage 1 finishes.
-	// Stage 1 uses 1 LLM call + DB writes (~100ms). 200ms should be enough.
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Run in goroutine so we can cancel from outside
 	resultCh := make(chan *ExecutionResult, 1)
@@ -372,20 +391,21 @@ func TestExecutor_CancellationBetweenStages(t *testing.T) {
 		resultCh <- executor.Execute(ctx, session)
 	}()
 
-	// Wait briefly for stage 1 to complete, then cancel
-	// We need a signal that stage 1 has actually completed. Use publisher events.
-	// Poll for stage-1 completed event, then cancel.
-	for {
-		var found bool
-		for _, s := range publisher.stageStatuses {
-			if s.StageName == "stage-1" && s.Status == events.StageStatusCompleted {
-				found = true
-				break
+	// Wait for stage-1 to complete, then cancel before stage-2 starts.
+	timeout := time.After(5 * time.Second)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+
+	stage1Done := false
+	for !stage1Done {
+		select {
+		case <-tick.C:
+			if publisher.hasStageStatus("stage-1", events.StageStatusCompleted) {
+				cancel()
+				stage1Done = true
 			}
-		}
-		if found {
-			cancel()
-			break
+		case <-timeout:
+			t.Fatal("timed out waiting for stage-1 to complete")
 		}
 	}
 
@@ -675,21 +695,7 @@ func TestExecutor_ContextPassedBetweenStages(t *testing.T) {
 // containsChainContextMarkers checks if text contains the chain context delimiters.
 func containsChainContextMarkers(text string) bool {
 	return len(text) > 0 &&
-		(contains(text, "CHAIN_CONTEXT_START") || contains(text, "data-collection"))
-}
-
-// contains is a simple string containment check.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+		(strings.Contains(text, "CHAIN_CONTEXT_START") || strings.Contains(text, "data-collection"))
 }
 
 func TestExecutor_DeadlineBetweenStages(t *testing.T) {
@@ -731,23 +737,27 @@ func TestExecutor_DeadlineBetweenStages(t *testing.T) {
 
 	// Use a cancellable context; cancel after stage 1 completes
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	resultCh := make(chan *ExecutionResult, 1)
 	go func() {
 		resultCh <- executor.Execute(ctx, session)
 	}()
 
-	// Wait for stage-1 to complete, then cancel
-	for {
-		var found bool
-		for _, s := range publisher.stageStatuses {
-			if s.StageName == "stage-1" && s.Status == events.StageStatusCompleted {
-				found = true
-				break
+	// Wait for stage-1 to complete, then cancel before stage-2 starts.
+	timeout := time.After(5 * time.Second)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+
+	stage1Done := false
+	for !stage1Done {
+		select {
+		case <-tick.C:
+			if publisher.hasStageStatus("stage-1", events.StageStatusCompleted) {
+				cancel()
+				stage1Done = true
 			}
-		}
-		if found {
-			cancel()
-			break
+		case <-timeout:
+			t.Fatal("timed out waiting for stage-1 to complete")
 		}
 	}
 

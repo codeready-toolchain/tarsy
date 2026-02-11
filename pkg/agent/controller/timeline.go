@@ -34,8 +34,8 @@ func createTimelineEvent(
 
 	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      execCtx.SessionID,
-		StageID:        execCtx.StageID,
-		ExecutionID:    execCtx.ExecutionID,
+		StageID:        &execCtx.StageID,
+		ExecutionID:    &execCtx.ExecutionID,
 		SequenceNumber: *eventSeq,
 		EventType:      eventType,
 		Content:        content,
@@ -209,8 +209,8 @@ func createToolCallEvent(
 	// Create event with empty content (streaming lifecycle — content set on completion)
 	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      execCtx.SessionID,
-		StageID:        execCtx.StageID,
-		ExecutionID:    execCtx.ExecutionID,
+		StageID:        &execCtx.StageID,
+		ExecutionID:    &execCtx.ExecutionID,
 		SequenceNumber: *eventSeq,
 		EventType:      timelineevent.EventTypeLlmToolCall,
 		Content:        "",

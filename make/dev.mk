@@ -48,13 +48,15 @@ test: test-go test-python ## Run all tests (Go + Python)
 .PHONY: test-go
 test-go: ## Run all Go tests
 	@echo -e "$(YELLOW)Running Go tests...$(NC)"
-	@go test -v -race -coverprofile=coverage.out ./...
+	@go test -v -race -coverprofile=coverage.out -coverpkg=./pkg/... ./...
 	@echo -e "$(GREEN)✅ Go tests passed$(NC)"
 
 .PHONY: test-go-coverage
 test-go-coverage: test-go ## Run Go tests and show coverage report
 	@echo -e "$(YELLOW)Generating Go coverage report...$(NC)"
-	@go tool cover -html=coverage.out
+	@go tool cover -func=coverage.out
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo -e "$(GREEN)HTML report saved to coverage.html$(NC)"
 
 # -----------------------------------------------------------------------------
 # Python Tests
@@ -66,7 +68,7 @@ test-python: test-llm ## Run all Python tests (alias for test-llm)
 .PHONY: test-llm
 test-llm: ## Run LLM service Python tests
 	@echo -e "$(YELLOW)Running LLM service tests...$(NC)"
-	@cd llm-service && uv run pytest tests/ -v
+	@cd llm-service && uv run pytest tests/ -v --cov=llm --cov-report=term-missing --cov-report=xml:coverage.xml
 	@echo -e "$(GREEN)✅ LLM service tests passed$(NC)"
 
 .PHONY: test-llm-unit
