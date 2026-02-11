@@ -6,7 +6,7 @@ Extend `executeStage()` in `RealSessionExecutor` to support parallel multi-agent
 
 **Current state**: `executeStage()` rejects stages with >1 agent or replicas >1 with an error guard. All stages are single-agent, single-execution.
 
-**Target state**: `executeStage()` detects parallel stages and spawns goroutines. Per-agent context isolation (already achieved in Phase 4.1) enables safe concurrent execution. Results are aggregated per success policy. Synthesis agents run automatically after successful parallel stages when configured. The parallel stage guard is removed.
+**Target state**: `executeStage()` detects parallel stages and spawns goroutines. Per-agent context isolation (already achieved in Phase 4.1) enables safe concurrent execution. Results are aggregated per success policy. Synthesis always runs automatically after successful parallel stages (mandatory, no opt-out). The parallel stage guard is removed.
 
 ---
 
@@ -60,8 +60,7 @@ executeParallelStage(ctx, input):
   6. Collect agentResults, sort by index
   7. Aggregate status via success policy (in-memory)
   8. Call StageService.UpdateStageStatus() (DB consistency)
-  9. Build parallel finalAnalysis (aggregate of completed agents' analyses)
-  10. Return stageResult
+  9. Return stageResult (synthesis runs separately in the chain loop)
 ```
 
 ### Goroutine Management
@@ -107,16 +106,13 @@ func (e *RealSessionExecutor) executeParallelStage(ctx context.Context, input ex
     // Update Stage in DB (triggers aggregation from AgentExecution records)
     input.stageService.UpdateStageStatus(ctx, stg.ID)
 
-    // Build final analysis from completed agents
-    finalAnalysis := buildParallelFinalAnalysis(agentResults, input.stageConfig.Name)
-
     return stageResult{
-        stageID:       stg.ID,
-        stageName:     input.stageConfig.Name,
-        status:        stageStatus,
-        finalAnalysis: finalAnalysis,
-        err:           aggregateError(agentResults, stageStatus, input.stageConfig),
-        agentResults:  agentResults,
+        stageID:      stg.ID,
+        stageName:    input.stageConfig.Name,
+        status:       stageStatus,
+        err:          aggregateError(agentResults, stageStatus, input.stageConfig),
+        agentResults: agentResults,
+        // finalAnalysis intentionally empty — synthesis (mandatory) produces it
     }
 }
 ```
@@ -276,12 +272,12 @@ func aggregateParallelStatus(results []agentResult, policy config.SuccessPolicy)
     nonSuccess := failed + timedOut + cancelled
 
     switch policy {
-    case config.SuccessPolicyAny:
-        if completed > 0 {
+    case config.SuccessPolicyAll:
+        if nonSuccess == 0 {
             return alertsession.StatusCompleted
         }
-    default: // SuccessPolicyAll or empty (default)
-        if nonSuccess == 0 {
+    default: // SuccessPolicyAny (default when unset)
+        if completed > 0 {
             return alertsession.StatusCompleted
         }
     }
@@ -320,35 +316,7 @@ func aggregateParallelErrors(
 
 ### Final Analysis Construction
 
-For parallel stages (without synthesis), aggregate completed agents' final analyses into a single string:
-
-```go
-func buildParallelFinalAnalysis(results []agentResult, stageName string) string {
-    // Collect completed agents' analyses
-    var sb strings.Builder
-    sb.WriteString(fmt.Sprintf("## Parallel Investigation: %s\n\n", stageName))
-
-    completedCount := 0
-    for _, r := range results {
-        if mapAgentStatusToSessionStatus(r.status) != alertsession.StatusCompleted {
-            continue
-        }
-        completedCount++
-        if r.finalAnalysis != "" {
-            sb.WriteString(fmt.Sprintf("### %s\n\n", r.displayName))
-            sb.WriteString(r.finalAnalysis)
-            sb.WriteString("\n\n")
-        }
-    }
-
-    if completedCount == 0 {
-        return ""
-    }
-    return sb.String()
-}
-```
-
-When synthesis is configured, the synthesis agent's `finalAnalysis` replaces this aggregate (see Synthesis section below).
+Synthesis always runs after parallel stages (mandatory, no opt-out), so the parallel stage's `stageResult.finalAnalysis` is not used for context passing — the synthesis stage's `finalAnalysis` replaces it. The parallel `stageResult.finalAnalysis` can be left empty or set to a brief summary (e.g., "3/3 agents completed — awaiting synthesis") for logging purposes only.
 
 ---
 
@@ -371,7 +339,7 @@ func resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
 }
 ```
 
-**Note**: `SuccessPolicyAny` is the fallback default, matching old TARSy and `tarsy.yaml.example`. See Q4 in the questions doc for the discrepancy with `UpdateStageStatus()` which currently defaults to `SuccessPolicyAll`.
+**Note**: `SuccessPolicyAny` is the fallback default, matching old TARSy and `tarsy.yaml.example`. The existing `UpdateStageStatus()` currently defaults to `SuccessPolicyAll` when nil — this must be fixed to default to `SuccessPolicyAny` as part of this phase.
 
 The resolved policy is passed to both:
 1. `CreateStageRequest.SuccessPolicy` (for DB persistence)
@@ -383,12 +351,15 @@ The resolved policy is passed to both:
 
 ### Invocation Criteria
 
-Synthesis runs automatically when ALL of:
-1. The stage is parallel (multi-agent or replica)
-2. The stage has `synthesis:` configuration
-3. The parallel stage completed successfully (per success policy)
+Synthesis **always** runs after every successful parallel stage. There is no opt-out. The `synthesis:` config block is optional and only controls the agent, strategy, and provider — if omitted, defaults apply:
 
-No synthesis config → no synthesis (explicit opt-in). See Q6 in questions doc.
+| Field | Default |
+|-------|---------|
+| `agent` | `"SynthesisAgent"` |
+| `iteration_strategy` | `"synthesis"` |
+| `llm_provider` | chain's `llm_provider` → `defaults.llm_provider` |
+
+This eliminates the need for a separate "aggregate parallel final analyses" code path. Every parallel stage produces a single synthesized `finalAnalysis` via the synthesis agent.
 
 ### Synthesis as a Separate Stage
 
@@ -398,7 +369,7 @@ Synthesis creates its own `Stage` DB record, separate from the parallel stage. T
 - Dashboard shows two distinct stages (e.g., "Investigation", "Investigation - Synthesis")
 - Consistent with old TARSy's execution model (synthesis gets its own stage_execution record)
 
-See Q1 in questions doc for the alternative (synthesis as AgentExecution within parallel Stage).
+The alternative (synthesis as an AgentExecution within the parallel Stage) was rejected — it would require modifying `UpdateStageStatus()` to exclude synthesis from success policy aggregation and introduces semantic confusion between investigation and post-processing.
 
 ### Chain Loop Changes
 
@@ -437,8 +408,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
             return &ExecutionResult{Status: sr.status, Error: sr.err}
         }
 
-        // Auto-synthesis after successful parallel stage
-        if isParallelStage(stageCfg) && stageCfg.Synthesis != nil {
+        // Synthesis always runs after successful parallel stages (no opt-out)
+        if isParallelStage(stageCfg) {
             synthSr := e.executeSynthesisStage(ctx, executeStageInput{
                 // ... fields ...
                 stageIndex: dbStageIndex,
@@ -466,33 +437,64 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 }
 ```
 
-**Key design decision**: When synthesis succeeds, the synthesis `stageResult` replaces the parallel `stageResult` in `completedStages`. Subsequent stages see only the synthesis output, not the raw parallel results. This keeps the context focused — synthesis already consolidated all parallel findings. See Q3 in questions doc.
+**Key design decisions**: Synthesis always runs after parallel stages (mandatory, no opt-out). The synthesis `stageResult` replaces the parallel `stageResult` in `completedStages` — subsequent stages see only the synthesis output, not the raw parallel results. This keeps the context focused and eliminates the need for a separate parallel-aggregate code path.
 
 ### Context Building for Synthesis
 
-The synthesis agent needs to see each parallel agent's findings. A new function formats parallel results into a structured context string:
+Synthesis needs the **full investigation history** from each parallel agent — not just final analyses. The synthesis agent must evaluate evidence quality, verify reasoning chains, detect fabrications, and identify contradictions between agents. This means seeing thinking/reasoning, tool calls, tool results, and final conclusions. Passing only final analyses would reduce synthesis to a text-merging exercise.
+
+This matches old TARSy, which passed `investigation_history` (full conversation) to synthesis.
+
+#### Data source: Timeline Events (not Messages)
+
+Timeline events are the right data source because they capture **everything** the agent did, including thinking content which is not stored in the Message schema:
+
+| Timeline Event Type | Content | Why synthesis needs it |
+|--------------------|---------|-----------------------|
+| `llm_thinking` | Native thinking / internal reasoning | Evaluate reasoning quality, detect flawed logic |
+| `llm_response` | Agent's text responses | See the agent's analysis and conclusions |
+| `llm_tool_call` | Tool call + raw result | Verify evidence is real, check what data was gathered |
+| `mcp_tool_summary` | Summarized tool result | See what the agent actually worked with |
+| `final_analysis` | Agent's final conclusion | The agent's own summary |
+| `code_execution` | Code execution results | See computed results |
+| `google_search_result` | Search grounding | Verify external references |
+
+Messages lack thinking content entirely (the Message schema has no thinking field — thinking is recorded only in timeline events and LLM interactions).
+
+#### Data flow
+
+1. After parallel agents complete, the executor has each agent's `executionID`
+2. For each agent: `TimelineService.GetAgentTimeline(ctx, executionID)` — already exists, returns timeline events ordered by sequence number
+3. `FormatInvestigationForSynthesis()` formats each agent's timeline into a structured section (reusing the same event-type formatting logic as the existing `FormatInvestigationContext()`)
+4. All sections are concatenated into `prevStageContext` for the synthesis agent
+
+#### Formatting function
+
+New function in `pkg/agent/context/`:
 
 ```go
-// FormatParallelStageContext formats parallel agent results for synthesis input.
-// Each completed agent's final_analysis is included with identifying metadata.
-func FormatParallelStageContext(results []ParallelAgentResult, stageName string) string
+// FormatInvestigationForSynthesis formats parallel agents' full investigation
+// histories for the synthesis agent. Uses timeline events (which include thinking,
+// tool calls, tool results, and responses) rather than raw messages.
+// Each agent's investigation is wrapped with identifying metadata.
+func FormatInvestigationForSynthesis(agents []ParallelAgentInvestigation, stageName string) string
 ```
 
-Where `ParallelAgentResult` carries the per-agent info needed by synthesis:
-
 ```go
-type ParallelAgentResult struct {
-    AgentName     string
-    AgentIndex    int
-    Strategy      string  // e.g., "native-thinking", "react"
-    LLMProvider   string  // e.g., "gemini-2.5-pro"
-    Status        string  // "completed", "failed", etc.
-    FinalAnalysis string
-    ErrorMessage  string  // for failed agents
+type ParallelAgentInvestigation struct {
+    AgentName    string
+    AgentIndex   int
+    Strategy     string                  // e.g., "native-thinking", "react"
+    LLMProvider  string                  // e.g., "gemini-2.5-pro"
+    Status       string                  // "completed", "failed", etc.
+    Events       []*ent.TimelineEvent    // full investigation (from GetAgentTimeline)
+    ErrorMessage string                  // for failed agents
 }
 ```
 
-Output format:
+The per-event formatting reuses the same `switch` logic as `FormatInvestigationContext()` (thinking → "Internal Reasoning", response → "Agent Response", tool call → "Tool Call", etc.). This will be extracted into a shared helper to avoid duplication.
+
+#### Output format
 
 ```
 <!-- PARALLEL_RESULTS_START -->
@@ -502,34 +504,65 @@ Output format:
 #### Agent 1: KubernetesAgent (native-thinking, gemini-2.5-pro)
 **Status**: completed
 
-[agent 1 final analysis]
+**Internal Reasoning:**
+
+[thinking content — agent's chain of thought]
+
+**Agent Response:**
+
+[agent's text response]
+
+**Tool Call:** [tool name + raw result]
+
+**Tool Result Summary:**
+
+[summarized tool result]
+
+**Internal Reasoning:**
+
+[more thinking...]
+
+**Final Analysis:**
+
+[agent's final conclusion]
 
 #### Agent 2: KubernetesAgent (react, gemini-2.5-flash)
 **Status**: completed
 
-[agent 2 final analysis]
+**Agent Response:**
 
-#### Agent 3: performance-agent (native-thinking, gemini-2.5-pro)
-**Status**: completed
+Thought: I should check the pod status...
+Action: kubernetes-server.get_pods
+ActionInput: {"namespace": "production"}
 
-[agent 3 final analysis]
+**Tool Call:** [tool result]
+
+**Final Analysis:**
+
+[agent's final conclusion]
 
 <!-- PARALLEL_RESULTS_END -->
 ```
 
-For `policy: any` stages with mixed results, failed agents are included with their status and error (synthesis should know about failures):
+For `policy: any` stages with mixed results, failed agents are included with their status and error:
 
 ```
 #### Agent 2: performance-agent (react, gemini-2.5-flash)
 **Status**: failed
 **Error**: LLM call timeout
 
-(No analysis produced)
+(No investigation history available)
 ```
 
 This formatted context is passed as `prevStageContext` to the synthesis agent's `Execute()` call. The existing `SynthesisController` and `BuildSynthesisMessages()` handle it through the standard `FormatChainContext()` path.
 
-See Q2 in questions doc for the alternative of passing full conversation history.
+#### Performance considerations
+
+- DB queries are bounded: one `GetAgentTimeline()` per parallel agent (typically 2-5 agents)
+- Queries run once at synthesis time, not in a loop
+- Context window: Gemini models support 1M+ tokens, so even 3 agents × 20 iterations is well within limits
+- Timeline events are already in DB from progressive writes during execution — no new writes needed
+- Event formatting logic is shared with `FormatInvestigationContext()` (extract common helper)
 
 ### `executeSynthesisStage()`
 
@@ -551,24 +584,28 @@ func (e *RealSessionExecutor) executeSynthesisStage(
     })
     // ... error handling ...
 
-    // Build synthesis agent config from stage synthesis configuration
+    // Build synthesis agent config — synthesis: block is optional, defaults apply
     synthAgentConfig := config.StageAgentConfig{
-        Name:              input.stageConfig.Synthesis.Agent,
-        IterationStrategy: input.stageConfig.Synthesis.IterationStrategy,
-        LLMProvider:       input.stageConfig.Synthesis.LLMProvider,
+        Name:              "SynthesisAgent",
+        IterationStrategy: config.IterationStrategySynthesis,
     }
-    if synthAgentConfig.Name == "" {
-        synthAgentConfig.Name = "SynthesisAgent" // default
-    }
-    if synthAgentConfig.IterationStrategy == "" {
-        synthAgentConfig.IterationStrategy = config.IterationStrategySynthesis // default
+    if s := input.stageConfig.Synthesis; s != nil {
+        if s.Agent != "" {
+            synthAgentConfig.Name = s.Agent
+        }
+        if s.IterationStrategy != "" {
+            synthAgentConfig.IterationStrategy = s.IterationStrategy
+        }
+        if s.LLMProvider != "" {
+            synthAgentConfig.LLMProvider = s.LLMProvider
+        }
     }
 
-    // Build synthesis context from parallel results
-    synthContext := e.buildSynthesisContext(parallelResult, input)
+    // Build synthesis context: query full conversation history for each parallel agent
+    synthContext := e.buildSynthesisContext(ctx, parallelResult, input)
 
     // Execute synthesis agent (reuses executeAgent infrastructure)
-    // Override prevContext to feed parallel results to synthesis
+    // Override prevContext to feed parallel investigation histories to synthesis
     synthInput := input
     synthInput.prevContext = synthContext
 
@@ -590,7 +627,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 ### Synthesis Failure
 
-If synthesis fails (LLM error, timeout), the synthesis stage fails, which triggers fail-fast in the chain loop. The session's final status reflects the synthesis failure (e.g., `failed`, `timed_out`). See Q5 in questions doc for the alternative of falling back to the parallel aggregate.
+If synthesis fails (LLM error, timeout), the synthesis stage fails, which triggers fail-fast in the chain loop. The session's final status reflects the synthesis failure (e.g., `failed`, `timed_out`). No fail-open fallback — synthesis is a configured chain step that influences subsequent stages, not a convenience feature. Parallel agents' work is preserved in DB for debugging.
 
 ---
 
@@ -677,13 +714,7 @@ Each parallel agent's timeline events (thinking, responses, tool calls) are scop
 
 ## Stage Context for Next Stage
 
-After a parallel stage (with or without synthesis), the next stage receives context via `BuildStageContext()`:
-
-**With synthesis**: The synthesis `stageResult.finalAnalysis` is what goes into `completedStages`. The next stage sees only the synthesized analysis.
-
-**Without synthesis**: The parallel aggregate `finalAnalysis` (all completed agents' analyses formatted together) goes into `completedStages`.
-
-Both paths produce a single `stageResult` with a `finalAnalysis` string, so `BuildStageContext()` requires no changes — it already handles a list of `StageResult{StageName, FinalAnalysis}`.
+Synthesis always runs after parallel stages, so the next stage always receives the synthesis `stageResult.finalAnalysis` via `BuildStageContext()`. No changes needed to `BuildStageContext()` — it already handles a list of `StageResult{StageName, FinalAnalysis}`, and synthesis produces exactly that.
 
 ---
 
@@ -693,11 +724,11 @@ Both paths produce a single `stageResult` with a `finalAnalysis` string, so `Bui
 
 | File | Change |
 |------|--------|
-| `pkg/queue/executor.go` | **Major**: Remove parallel guard. Add `executeParallelStage()`, `executeSynthesisStage()`, `buildParallelConfigs()`, `aggregateParallelStatus()`, `buildParallelFinalAnalysis()`. Refactor chain loop for `dbStageIndex` and synthesis. Add `displayName` param to `executeAgent()`. Rename current `executeStage()` body to `executeSequentialStage()`. |
-| `pkg/agent/context/stage_context.go` | **Add**: `FormatParallelStageContext()` function and `ParallelAgentResult` type |
+| `pkg/queue/executor.go` | **Major**: Remove parallel guard. Add `executeParallelStage()`, `executeSynthesisStage()`, `buildParallelConfigs()`, `aggregateParallelStatus()`. Refactor chain loop for `dbStageIndex` and mandatory synthesis. Add `displayName` param to `executeAgent()`. Rename current `executeStage()` body to `executeSequentialStage()`. |
+| `pkg/agent/context/stage_context.go` | **Add**: `FormatInvestigationForSynthesis()` function and `ParallelAgentInvestigation` type. Extract shared event formatting helper from `FormatInvestigationContext()` to avoid duplication. |
 | `pkg/config/types.go` | **Verify**: `SynthesisConfig`, `StageAgentConfig`, `SuccessPolicy` already exist. May need `Defaults.SuccessPolicy` wiring. |
 | `pkg/queue/types.go` | **Minor**: No changes expected (stageResult is internal to executor.go) |
-| `pkg/services/stage_service.go` | **Verify**: `UpdateStageStatus()` and `CreateStage()` already handle parallel_type/success_policy. Fix default policy if needed per Q4. |
+| `pkg/services/stage_service.go` | **Fix**: `UpdateStageStatus()` default policy from `all` → `any`. Verify `CreateStage()` handles parallel_type/success_policy correctly. |
 
 ### Files That Need No Changes
 
@@ -722,7 +753,8 @@ Both paths produce a single `stageResult` with a `finalAnalysis` string, so `Bui
 | **Replica: mixed results (policy=any)** | Stage succeeds if any replica completes |
 | **Synthesis after parallel** | Synthesis runs, creates own Stage, receives formatted parallel context |
 | **Synthesis failure** | Synthesis fails → stage chain fails (fail-fast) |
-| **No synthesis configured** | Parallel completes, aggregate final_analysis passes to next stage |
+| **Synthesis with defaults** | No `synthesis:` config block → defaults apply (SynthesisAgent, synthesis strategy) |
+| **Synthesis with overrides** | Custom agent/strategy/provider from `synthesis:` block respected |
 | **Parallel + cancellation** | Session cancel propagates to all goroutines, all terminate cleanly |
 | **Parallel + timeout** | Session timeout propagates, timed_out status aggregated |
 | **Context isolation** | Each agent's messages/timeline scoped to own execution_id |
@@ -743,9 +775,9 @@ Integration tests should use `testcontainers-go` with PostgreSQL (matching exist
 |--------|-----------|-----------|--------|
 | Concurrency | `asyncio.gather()` | Goroutines + WaitGroup | Go idiomatic |
 | Context isolation | Deep copy of `ChainContext` | Per-execution MCP client + ExecutionContext (already isolated) | Go architecture doesn't need deep copies |
-| Synthesis context | Full `investigation_history` (conversation) | `final_analysis` with metadata | Simpler, avoids DB queries. See Q2. |
-| Context to next stage | Both parallel + synthesis results | Only synthesis result (or parallel aggregate) | Avoids duplication. See Q3. |
-| Synthesis invocation | Always automatic after parallel success | Only when `synthesis:` configured | Explicit > implicit. See Q6. |
+| Synthesis context | Full `investigation_history` (conversation) | Full timeline events from DB (includes thinking) | Same approach — synthesis needs full evidence including reasoning to evaluate quality |
+| Context to next stage | Both parallel + synthesis results | Only synthesis result | Synthesis consolidates parallel findings — passing both would be redundant and waste context window |
+| Synthesis invocation | Always automatic after parallel success | Always automatic (same) | Matches old TARSy — synthesis is mandatory for parallel stages |
 | Pause/resume | Supported (SessionPaused exception) | Not implemented (deferred) | New TARSy doesn't have pause/resume |
 | Parent/child stages | Parent + child StageExecution records | Stage + AgentExecution records | New TARSy's data model is already cleaner |
 | Cancellation tracking | CancellationTracker + is_user_cancel | Go context cancellation (hierarchical) | Simpler, built into language |
