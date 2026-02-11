@@ -37,6 +37,11 @@ func (s *Server) cancelSessionHandler(c *echo.Context) error {
 		s.workerPool.CancelSession(sessionID)
 	}
 
+	// Also try to cancel any active chat execution for this session
+	if s.chatExecutor != nil {
+		s.chatExecutor.CancelBySessionID(c.Request().Context(), sessionID)
+	}
+
 	return c.JSON(http.StatusOK, &CancelResponse{
 		SessionID: sessionID,
 		Message:   "Session cancellation requested",

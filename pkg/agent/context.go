@@ -110,17 +110,12 @@ type EventPublisher interface {
 	PublishStreamChunk(ctx context.Context, sessionID string, payload events.StreamChunkPayload) error
 	PublishSessionStatus(ctx context.Context, sessionID string, payload events.SessionStatusPayload) error
 	PublishStageStatus(ctx context.Context, sessionID string, payload events.StageStatusPayload) error
-}
-
-// ChatExchange groups a user question with its complete conversation.
-type ChatExchange struct {
-	UserQuestion string
-	Messages     []ConversationMessage
+	PublishChatCreated(ctx context.Context, sessionID string, payload events.ChatCreatedPayload) error
+	PublishChatUserMessage(ctx context.Context, sessionID string, payload events.ChatUserMessagePayload) error
 }
 
 // ChatContext carries chat-specific data for controllers.
 type ChatContext struct {
 	UserQuestion         string
 	InvestigationContext string
-	ChatHistory          []ChatExchange
 }

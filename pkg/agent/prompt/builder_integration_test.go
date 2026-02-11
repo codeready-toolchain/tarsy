@@ -224,21 +224,6 @@ func newChatExecCtx() *agent.ExecutionContext {
 	return ctx
 }
 
-func newChatExecCtxWithHistory() *agent.ExecutionContext {
-	ctx := newChatExecCtx()
-	ctx.ChatContext.ChatHistory = []agent.ChatExchange{
-		{
-			UserQuestion: "What was the root cause?",
-			Messages: []agent.ConversationMessage{
-				{Role: agent.RoleAssistant, Content: "The root cause was a database connection timeout to db.example.com:5432."},
-				{Role: agent.RoleUser, Content: "Tool Result: kubernetes-server.kubectl_get:\n{\"result\": \"Service database is running\"}"},
-				{Role: agent.RoleAssistant, Content: "The database service is running. The issue is with connectivity."},
-			},
-		},
-	}
-	return ctx
-}
-
 func integrationTools() []agent.ToolDefinition {
 	return []agent.ToolDefinition{
 		{
@@ -332,17 +317,6 @@ func TestIntegration_ReActChat(t *testing.T) {
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "react_chat", serializeMessages(messages))
-}
-
-func TestIntegration_ReActChatWithHistory(t *testing.T) {
-	builder := newIntegrationBuilder()
-	execCtx := newChatExecCtxWithHistory()
-	tools := integrationTools()
-
-	messages := builder.BuildReActMessages(execCtx, "", tools)
-
-	require.Len(t, messages, 2)
-	assertGolden(t, "react_chat_with_history", serializeMessages(messages))
 }
 
 func TestIntegration_NativeThinkingChat(t *testing.T) {

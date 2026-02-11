@@ -167,7 +167,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		})
 
 		// Publish stage terminal status
-		e.publishStageStatus(ctx, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
+		publishStageStatus(e.eventPublisher, ctx, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -198,7 +198,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			}, sr)
 
 			// Publish synthesis stage terminal status
-			e.publishStageStatus(ctx, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
+			publishStageStatus(e.eventPublisher, ctx, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -300,7 +300,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	e.publishStageStatus(ctx, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(e.eventPublisher, ctx, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
 
 	// 4. Launch goroutines (one per execution config — even if just one)
 	results := make(chan indexedAgentResult, len(configs))
@@ -394,7 +394,7 @@ func (e *RealSessionExecutor) executeAgent(
 	}
 
 	// Resolve MCP servers and tool filter
-	serverIDs, toolFilter, err := e.resolveMCPSelection(input.session, resolvedConfig)
+	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
 	if err != nil {
 		logger.Error("Failed to resolve MCP selection", "error", err)
 		return agentResult{
@@ -405,7 +405,7 @@ func (e *RealSessionExecutor) executeAgent(
 	}
 
 	// Create MCP tool executor
-	toolExecutor, failedServers := e.createToolExecutor(ctx, serverIDs, toolFilter, logger)
+	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	// Build execution context
@@ -516,7 +516,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	e.publishStageStatus(ctx, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(e.eventPublisher, ctx, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
 
 	// Build synthesis agent config — synthesis: block is optional, defaults apply
 	synthAgentConfig := config.StageAgentConfig{
@@ -629,14 +629,16 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 // ────────────────────────────────────────────────────────────
 
 // createToolExecutor creates an MCP tool executor or falls back to a stub.
-func (e *RealSessionExecutor) createToolExecutor(
+// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
+func createToolExecutor(
 	ctx context.Context,
+	mcpFactory *mcp.ClientFactory,
 	serverIDs []string,
 	toolFilter map[string][]string,
 	logger *slog.Logger,
 ) (agent.ToolExecutor, map[string]string) {
-	if e.mcpFactory != nil && len(serverIDs) > 0 {
-		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
+	if mcpFactory != nil && len(serverIDs) > 0 {
+		mcpExecutor, mcpClient, mcpErr := mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
 			return agent.NewStubToolExecutor(nil), nil
@@ -713,11 +715,12 @@ func (e *RealSessionExecutor) updateSessionProgress(ctx context.Context, session
 }
 
 // publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
-func (e *RealSessionExecutor) publishStageStatus(ctx context.Context, sessionID, stageID, stageName string, stageIndex int, status string) {
-	if e.eventPublisher == nil {
+// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
+func publishStageStatus(eventPublisher agent.EventPublisher, ctx context.Context, sessionID, stageID, stageName string, stageIndex int, status string) {
+	if eventPublisher == nil {
 		return
 	}
-	if err := e.eventPublisher.PublishStageStatus(ctx, sessionID, events.StageStatusPayload{
+	if err := eventPublisher.PublishStageStatus(ctx, sessionID, events.StageStatusPayload{
 		Type:       events.EventTypeStageStatus,
 		SessionID:  sessionID,
 		StageID:    stageID,
@@ -844,10 +847,12 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 // override. This coupling keeps MCP selection logic in one place rather than
 // splitting it across the executor flow.
 //
+// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
 // Returns (serverIDs, toolFilter, error).
-func (e *RealSessionExecutor) resolveMCPSelection(
+func resolveMCPSelection(
 	session *ent.AlertSession,
 	resolvedConfig *agent.ResolvedAgentConfig,
+	mcpRegistry *config.MCPServerRegistry,
 ) ([]string, map[string][]string, error) {
 	// No override — use chain config (existing behavior)
 	if len(session.McpSelection) == 0 {
@@ -870,7 +875,7 @@ func (e *RealSessionExecutor) resolveMCPSelection(
 
 	for _, sel := range override.Servers {
 		// Validate server exists in registry
-		if !e.cfg.MCPServerRegistry.Has(sel.Name) {
+		if mcpRegistry != nil && !mcpRegistry.Has(sel.Name) {
 			return nil, nil, fmt.Errorf("MCP server %q from override not found in configuration", sel.Name)
 		}
 		serverIDs = append(serverIDs, sel.Name)

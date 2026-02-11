@@ -17,6 +17,14 @@ var (
 
 	// ErrAtCapacity indicates the global concurrent session limit has been reached.
 	ErrAtCapacity = errors.New("at capacity")
+
+	// ErrChatExecutionActive indicates a chat already has an active execution.
+	// Mapped to HTTP 409 Conflict by the API handler.
+	ErrChatExecutionActive = errors.New("chat execution already active")
+
+	// ErrShuttingDown indicates the executor is shutting down and not accepting new work.
+	// Mapped to HTTP 503 Service Unavailable by the API handler.
+	ErrShuttingDown = errors.New("executor is shutting down")
 )
 
 // SessionExecutor is the interface for session processing.

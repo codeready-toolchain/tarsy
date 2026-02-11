@@ -106,6 +106,14 @@ func (p *testEventPublisher) PublishStageStatus(_ context.Context, _ string, pay
 	return nil
 }
 
+func (p *testEventPublisher) PublishChatCreated(_ context.Context, _ string, _ events.ChatCreatedPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishChatUserMessage(_ context.Context, _ string, _ events.ChatUserMessagePayload) error {
+	return nil
+}
+
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 	p.mu.Lock()

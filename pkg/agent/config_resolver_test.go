@@ -219,3 +219,137 @@ func TestResolveAgentConfig(t *testing.T) {
 		})
 	})
 }
+
+func TestResolveChatAgentConfig(t *testing.T) {
+	maxIter25 := 25
+	defaults := &config.Defaults{
+		LLMProvider:       "google-default",
+		MaxIterations:     &maxIter25,
+		IterationStrategy: config.IterationStrategyReact,
+	}
+
+	googleProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	openaiProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeOpenAI,
+		Model:     "gpt-5",
+		APIKeyEnv: "OPENAI_API_KEY",
+	}
+
+	chatAgentDef := &config.AgentConfig{
+		MCPServers:         []string{"kubernetes-server"},
+		CustomInstructions: "You are a chat agent",
+	}
+
+	cfg := &config.Config{
+		Defaults: defaults,
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"ChatAgent":       chatAgentDef,
+			"KubernetesAgent": {MCPServers: []string{"k8s-mcp"}},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": googleProvider,
+			"openai-default": openaiProvider,
+		}),
+	}
+
+	t.Run("defaults to ChatAgent when chatCfg is nil", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "ChatAgent", resolved.AgentName)
+		assert.Equal(t, googleProvider, resolved.LLMProvider)
+		assert.Equal(t, 25, resolved.MaxIterations)
+		assert.Equal(t, "You are a chat agent", resolved.CustomInstructions)
+	})
+
+	t.Run("chatCfg agent overrides default", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+		chatCfg := &config.ChatConfig{
+			Agent: "KubernetesAgent",
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
+		require.NoError(t, err)
+		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
+	})
+
+	t.Run("chatCfg overrides chain for strategy and provider", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			IterationStrategy: config.IterationStrategyReact,
+			LLMProvider:       "google-default",
+			MaxIterations:     intPtr(10),
+		}
+		chatCfg := &config.ChatConfig{
+			IterationStrategy: config.IterationStrategyNativeThinking,
+			LLMProvider:       "openai-default",
+			MaxIterations:     intPtr(3),
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
+		require.NoError(t, err)
+		assert.Equal(t, config.IterationStrategyNativeThinking, resolved.IterationStrategy)
+		assert.Equal(t, openaiProvider, resolved.LLMProvider)
+		assert.Equal(t, 3, resolved.MaxIterations)
+		assert.Equal(t, BackendGoogleNative, resolved.Backend)
+	})
+
+	t.Run("chatCfg MCP servers override chain aggregate", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{MCPServers: []string{"stage-server"}}}},
+			},
+		}
+		chatCfg := &config.ChatConfig{
+			MCPServers: []string{"chat-specific-server"},
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"chat-specific-server"}, resolved.MCPServers)
+	})
+
+	t.Run("aggregates MCP servers from chain stages when no chatCfg MCP", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{
+					MCPServers: []string{"stage-mcp-1"},
+					Agents: []config.StageAgentConfig{
+						{MCPServers: []string{"agent-mcp-1", "agent-mcp-2"}},
+					},
+				},
+				{
+					Agents: []config.StageAgentConfig{
+						{MCPServers: []string{"agent-mcp-2", "agent-mcp-3"}},
+					},
+				},
+			},
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
+		require.NoError(t, err)
+		// Should have unique union
+		assert.Equal(t, []string{"stage-mcp-1", "agent-mcp-1", "agent-mcp-2", "agent-mcp-3"}, resolved.MCPServers)
+	})
+
+	t.Run("errors on nil chain", func(t *testing.T) {
+		_, err := ResolveChatAgentConfig(cfg, nil, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "chain configuration cannot be nil")
+	})
+
+	t.Run("errors on unknown agent", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+		chatCfg := &config.ChatConfig{
+			Agent: "NonexistentAgent",
+		}
+
+		_, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+}

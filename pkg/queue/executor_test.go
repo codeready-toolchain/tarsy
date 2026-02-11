@@ -20,10 +20,6 @@ func TestResolveMCPSelection(t *testing.T) {
 		"argocd-server":     {},
 		"prometheus-server": {},
 	})
-	cfg := &config.Config{
-		MCPServerRegistry: registry,
-	}
-	executor := &RealSessionExecutor{cfg: cfg}
 
 	t.Run("no override returns chain config", func(t *testing.T) {
 		session := &ent.AlertSession{
@@ -33,7 +29,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"kubernetes-server", "argocd-server"},
 		}
 
-		serverIDs, toolFilter, err := executor.resolveMCPSelection(session, resolved)
+		serverIDs, toolFilter, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"kubernetes-server", "argocd-server"}, serverIDs)
 		assert.Nil(t, toolFilter)
@@ -47,7 +43,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"kubernetes-server"},
 		}
 
-		serverIDs, toolFilter, err := executor.resolveMCPSelection(session, resolved)
+		serverIDs, toolFilter, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"kubernetes-server"}, serverIDs)
 		assert.Nil(t, toolFilter)
@@ -65,7 +61,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"kubernetes-server", "argocd-server"},
 		}
 
-		serverIDs, toolFilter, err := executor.resolveMCPSelection(session, resolved)
+		serverIDs, toolFilter, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"prometheus-server"}, serverIDs)
 		assert.Nil(t, toolFilter) // No tool filter specified
@@ -89,7 +85,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"prometheus-server"},
 		}
 
-		serverIDs, toolFilter, err := executor.resolveMCPSelection(session, resolved)
+		serverIDs, toolFilter, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"kubernetes-server", "argocd-server"}, serverIDs)
 		require.NotNil(t, toolFilter)
@@ -110,7 +106,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"kubernetes-server"},
 		}
 
-		_, _, err := executor.resolveMCPSelection(session, resolved)
+		_, _, err := resolveMCPSelection(session, resolved, registry)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "nonexistent-server")
 		assert.Contains(t, err.Error(), "not found")
@@ -131,7 +127,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"argocd-server"},
 		}
 
-		_, _, err := executor.resolveMCPSelection(session, resolved)
+		_, _, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
 		require.NotNil(t, resolved.NativeToolsOverride)
 		require.NotNil(t, resolved.NativeToolsOverride.GoogleSearch)
@@ -148,7 +144,7 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"kubernetes-server"},
 		}
 
-		_, _, err := executor.resolveMCPSelection(session, resolved)
+		_, _, err := resolveMCPSelection(session, resolved, registry)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least one server")
 	})

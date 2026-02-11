@@ -214,7 +214,6 @@ func TestBuildReActMessages_ChatMode(t *testing.T) {
 	execCtx.ChatContext = &agent.ChatContext{
 		UserQuestion:         "What was the root cause?",
 		InvestigationContext: "Previous investigation found OOM.",
-		ChatHistory:          nil,
 	}
 
 	messages := builder.BuildReActMessages(execCtx, "", nil)

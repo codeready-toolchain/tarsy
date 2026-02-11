@@ -244,6 +244,28 @@ func (s *TimelineService) GetStageTimeline(ctx context.Context, stageID string) 
 	return events, nil
 }
 
+// GetMaxSequenceNumber returns the maximum sequence number for a session's timeline events.
+// Returns 0 if no events exist for the session.
+func (s *TimelineService) GetMaxSequenceNumber(ctx context.Context, sessionID string) (int, error) {
+	if sessionID == "" {
+		return 0, NewValidationError("sessionID", "required")
+	}
+
+	// Query the single event with the highest sequence number
+	event, err := s.client.TimelineEvent.Query().
+		Where(timelineevent.SessionIDEQ(sessionID)).
+		Order(ent.Desc(timelineevent.FieldSequenceNumber)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to get max sequence number: %w", err)
+	}
+
+	return event.SequenceNumber, nil
+}
+
 // GetAgentTimeline retrieves all events for an agent execution
 func (s *TimelineService) GetAgentTimeline(ctx context.Context, executionID string) ([]*ent.TimelineEvent, error) {
 	if executionID == "" {
