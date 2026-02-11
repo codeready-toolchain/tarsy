@@ -32,6 +32,8 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 5.1: Chain Orchestration + Session Completion** -- Sequential multi-stage chain loop in `RealSessionExecutor` with `executeStage()`/`executeAgent()` extraction, per-agent-execution MCP lifecycle (create + teardown per agent, not per session), in-memory inter-stage context passing via `BuildStageContext()`, `stage.status` event type (single event for all lifecycle transitions), session progress tracking (`current_stage_index`/`current_stage_id`), final analysis extraction (reverse search from last completed stage), fail-open executive summary generation (direct LLM call, configurable provider via `chain.executive_summary_provider`), session-level timeline events (optional `stage_id`/`execution_id` on TimelineEvent schema). Fixed backend derivation: `Backend` field on `ResolvedAgentConfig` resolved from iteration strategy via `ResolveBackend()`, passed through `GenerateInput` to gRPC — replacing implicit derivation from provider type.
 
+**Phase 5.2: Parallel Execution** -- Unified `executeStage()` with goroutine + WaitGroup + channel machinery for all stages (N=1 agents handled identically to N=many — no separate code paths). Multi-agent and replica execution via `buildConfigs()`/`buildMultiAgentConfigs()`/`buildReplicaConfigs()`. In-memory result aggregation (`aggregateStatus()`/`aggregateError()`) with success policy enforcement (all/any, defaulting to `any`). Automatic synthesis after stages with >1 agent — synthesis creates its own Stage DB record, receives full investigation history via timeline events (through `FormatInvestigationForSynthesis()` with shared `formatTimelineEvents()` helper and tool call/summary deduplication), replaces investigation result for downstream context. Chain loop tracks `dbStageIndex` separately from config index to accommodate inserted synthesis stages. `displayName` parameter on `executeAgent()` supports replica naming (`{BaseName}-1`, etc.). Stage status events moved inside `executeStage()` (after Stage creation, so `stageID` is always present). Fixed `UpdateStageStatus()` default policy from `all` → `any`.
+
 Full design docs for completed phases are in `docs/archive/`.
 
 ---
@@ -39,14 +41,6 @@ Full design docs for completed phases are in `docs/archive/`.
 ### Phase 5: Chain Execution & Chat
 
 **Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports.
-
-**Parallel Execution (Phase 5.2)**
-- [ ] Parallel stage executor (goroutine-per-agent with per-agent context isolation)
-- [ ] Result aggregation from parallel agents
-- [ ] Success policy enforcement (all/any)
-- [ ] Synthesis agent invocation (automatic after successful parallel stages)
-- [ ] Replica execution (same agent N times with identical config)
-- [ ] Remove Phase 5.1 parallel-stage guard (replace error with actual implementation)
 
 **Follow-up Chat (Phase 5.3)**
 
@@ -154,6 +148,7 @@ Chat infrastructure already exists: ent schemas (Chat, ChatUserMessage), ChatSer
 **Containerization (Phase 12.1)**
 - [ ] Multi-stage Docker builds
 - [ ] Container orchestration (podman-compose)
+- [ ] Build & push images
 - [ ] Service health checks
 - [ ] Volume management
 
@@ -163,13 +158,6 @@ Chat infrastructure already exists: ent schemas (Chat, ChatUserMessage), ChatSer
 - [ ] ConfigMaps & secrets
 - [ ] Routes/ingress
 - [ ] ImageStreams
-
-**CI/CD & Testing Infra (Phase 12.3)**
-- [ ] GitHub Actions workflows
-- [ ] Test automation (Go + Python)
-- [ ] Build & push images
-- [ ] Deployment automation
-- [ ] E2E test suite
 
 **Note on testing**: Each phase includes its own test suite (unit + integration). There is no separate testing phase.
 
