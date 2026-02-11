@@ -47,11 +47,11 @@ func TestReActController_ToolCallLifecycleEvents(t *testing.T) {
 	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, qErr)
 
-	// Find the llm_tool_call event
-	found := false
+	// Find the llm_tool_call events — expect exactly one
+	var toolCallEvents int
 	for _, ev := range events {
 		if ev.EventType == timelineevent.EventTypeLlmToolCall {
-			found = true
+			toolCallEvents++
 
 			// Verify completed status (lifecycle: streaming -> completed)
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status,
@@ -63,11 +63,9 @@ func TestReActController_ToolCallLifecycleEvents(t *testing.T) {
 
 			// Verify content is the tool result
 			assert.Contains(t, ev.Content, "pod-1 Running")
-
-			break
 		}
 	}
-	assert.True(t, found, "should have at least one llm_tool_call event")
+	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
 // TestReActController_ToolCallErrorLifecycle verifies that tool errors
@@ -157,18 +155,17 @@ func TestNativeThinkingController_ToolCallLifecycleEvents(t *testing.T) {
 	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, qErr)
 
-	found := false
+	var toolCallEvents int
 	for _, ev := range events {
 		if ev.EventType == timelineevent.EventTypeLlmToolCall {
-			found = true
+			toolCallEvents++
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status)
 			assert.Contains(t, ev.Metadata, "tool_name")
 			assert.Contains(t, ev.Metadata, "is_error")
 			assert.Contains(t, ev.Content, "pod-1 Running")
-			break
 		}
 	}
-	assert.True(t, found, "should have an llm_tool_call event")
+	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
 // TestReActController_SummarizationIntegration verifies that the summarization
@@ -453,6 +450,7 @@ func TestNativeThinkingController_SummarizationFailOpen(t *testing.T) {
 	// Despite summarization failure, the controller completes with the final answer
 	assert.Contains(t, result.FinalAnalysis, "Pods are running correctly")
 	assert.Equal(t, 1, toolCallCount, "tool should have been called once")
+	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
 // TestNativeThinkingController_StorageTruncation verifies that very large

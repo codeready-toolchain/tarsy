@@ -154,7 +154,10 @@ func markStreamingEventsFailed(
 			return
 		}
 		// Update DB status to failed with error message as content
-		failContent := fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+		failContent := "Streaming failed"
+		if streamErr != nil {
+			failContent = fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+		}
 		updateErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent)
 		if updateErr != nil {
 			slog.Warn("Failed to mark streaming event as failed",
@@ -174,7 +177,7 @@ func markStreamingEventsFailed(
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
 			}
 		} else {
-			slog.Error("EventPublisher is nil, skipping streaming event failure publish",
+			slog.Warn("EventPublisher is nil, skipping streaming event failure publish",
 				"event_id", eventID, "session_id", execCtx.SessionID)
 		}
 	}
