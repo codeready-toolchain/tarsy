@@ -12189,7 +12189,7 @@ func (m *TimelineEventMutation) StageID() (r string, exists bool) {
 // OldStageID returns the old "stage_id" field's value of the TimelineEvent entity.
 // If the TimelineEvent object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TimelineEventMutation) OldStageID(ctx context.Context) (v string, err error) {
+func (m *TimelineEventMutation) OldStageID(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldStageID is only allowed on UpdateOne operations")
 	}
@@ -12203,9 +12203,22 @@ func (m *TimelineEventMutation) OldStageID(ctx context.Context) (v string, err e
 	return oldValue.StageID, nil
 }
 
+// ClearStageID clears the value of the "stage_id" field.
+func (m *TimelineEventMutation) ClearStageID() {
+	m.stage = nil
+	m.clearedFields[timelineevent.FieldStageID] = struct{}{}
+}
+
+// StageIDCleared returns if the "stage_id" field was cleared in this mutation.
+func (m *TimelineEventMutation) StageIDCleared() bool {
+	_, ok := m.clearedFields[timelineevent.FieldStageID]
+	return ok
+}
+
 // ResetStageID resets all changes to the "stage_id" field.
 func (m *TimelineEventMutation) ResetStageID() {
 	m.stage = nil
+	delete(m.clearedFields, timelineevent.FieldStageID)
 }
 
 // SetExecutionID sets the "execution_id" field.
@@ -12225,7 +12238,7 @@ func (m *TimelineEventMutation) ExecutionID() (r string, exists bool) {
 // OldExecutionID returns the old "execution_id" field's value of the TimelineEvent entity.
 // If the TimelineEvent object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TimelineEventMutation) OldExecutionID(ctx context.Context) (v string, err error) {
+func (m *TimelineEventMutation) OldExecutionID(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldExecutionID is only allowed on UpdateOne operations")
 	}
@@ -12239,9 +12252,22 @@ func (m *TimelineEventMutation) OldExecutionID(ctx context.Context) (v string, e
 	return oldValue.ExecutionID, nil
 }
 
+// ClearExecutionID clears the value of the "execution_id" field.
+func (m *TimelineEventMutation) ClearExecutionID() {
+	m.agent_execution = nil
+	m.clearedFields[timelineevent.FieldExecutionID] = struct{}{}
+}
+
+// ExecutionIDCleared returns if the "execution_id" field was cleared in this mutation.
+func (m *TimelineEventMutation) ExecutionIDCleared() bool {
+	_, ok := m.clearedFields[timelineevent.FieldExecutionID]
+	return ok
+}
+
 // ResetExecutionID resets all changes to the "execution_id" field.
 func (m *TimelineEventMutation) ResetExecutionID() {
 	m.agent_execution = nil
+	delete(m.clearedFields, timelineevent.FieldExecutionID)
 }
 
 // SetSequenceNumber sets the "sequence_number" field.
@@ -12662,7 +12688,7 @@ func (m *TimelineEventMutation) ClearStage() {
 
 // StageCleared reports if the "stage" edge to the Stage entity was cleared.
 func (m *TimelineEventMutation) StageCleared() bool {
-	return m.clearedstage
+	return m.StageIDCleared() || m.clearedstage
 }
 
 // StageIDs returns the "stage" edge IDs in the mutation.
@@ -12694,7 +12720,7 @@ func (m *TimelineEventMutation) ClearAgentExecution() {
 
 // AgentExecutionCleared reports if the "agent_execution" edge to the AgentExecution entity was cleared.
 func (m *TimelineEventMutation) AgentExecutionCleared() bool {
-	return m.clearedagent_execution
+	return m.ExecutionIDCleared() || m.clearedagent_execution
 }
 
 // AgentExecutionID returns the "agent_execution" edge ID in the mutation.
@@ -13049,6 +13075,12 @@ func (m *TimelineEventMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *TimelineEventMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(timelineevent.FieldStageID) {
+		fields = append(fields, timelineevent.FieldStageID)
+	}
+	if m.FieldCleared(timelineevent.FieldExecutionID) {
+		fields = append(fields, timelineevent.FieldExecutionID)
+	}
 	if m.FieldCleared(timelineevent.FieldMetadata) {
 		fields = append(fields, timelineevent.FieldMetadata)
 	}
@@ -13072,6 +13104,12 @@ func (m *TimelineEventMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *TimelineEventMutation) ClearField(name string) error {
 	switch name {
+	case timelineevent.FieldStageID:
+		m.ClearStageID()
+		return nil
+	case timelineevent.FieldExecutionID:
+		m.ClearExecutionID()
+		return nil
 	case timelineevent.FieldMetadata:
 		m.ClearMetadata()
 		return nil

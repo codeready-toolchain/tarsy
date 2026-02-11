@@ -230,6 +230,16 @@ func StageIDHasSuffix(v string) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldHasSuffix(FieldStageID, v))
 }
 
+// StageIDIsNil applies the IsNil predicate on the "stage_id" field.
+func StageIDIsNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldIsNull(FieldStageID))
+}
+
+// StageIDNotNil applies the NotNil predicate on the "stage_id" field.
+func StageIDNotNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldNotNull(FieldStageID))
+}
+
 // StageIDEqualFold applies the EqualFold predicate on the "stage_id" field.
 func StageIDEqualFold(v string) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldEqualFold(FieldStageID, v))
@@ -293,6 +303,16 @@ func ExecutionIDHasPrefix(v string) predicate.TimelineEvent {
 // ExecutionIDHasSuffix applies the HasSuffix predicate on the "execution_id" field.
 func ExecutionIDHasSuffix(v string) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldHasSuffix(FieldExecutionID, v))
+}
+
+// ExecutionIDIsNil applies the IsNil predicate on the "execution_id" field.
+func ExecutionIDIsNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldIsNull(FieldExecutionID))
+}
+
+// ExecutionIDNotNil applies the NotNil predicate on the "execution_id" field.
+func ExecutionIDNotNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldNotNull(FieldExecutionID))
 }
 
 // ExecutionIDEqualFold applies the EqualFold predicate on the "execution_id" field.

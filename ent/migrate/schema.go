@@ -481,11 +481,11 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"streaming", "completed", "failed", "cancelled", "timed_out"}, Default: "streaming"},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
-		{Name: "execution_id", Type: field.TypeString},
+		{Name: "execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "llm_interaction_id", Type: field.TypeString, Nullable: true},
 		{Name: "mcp_interaction_id", Type: field.TypeString, Nullable: true},
-		{Name: "stage_id", Type: field.TypeString},
+		{Name: "stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// TimelineEventsTable holds the schema information for the "timeline_events" table.
 	TimelineEventsTable = &schema.Table{

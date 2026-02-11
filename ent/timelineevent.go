@@ -25,10 +25,10 @@ type TimelineEvent struct {
 	ID string `json:"id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
-	// Stage grouping
-	StageID string `json:"stage_id,omitempty"`
-	// Which agent
-	ExecutionID string `json:"execution_id,omitempty"`
+	// Stage grouping — nil for session-level events (e.g. executive_summary)
+	StageID *string `json:"stage_id,omitempty"`
+	// Which agent — nil for session-level events (e.g. executive_summary)
+	ExecutionID *string `json:"execution_id,omitempty"`
 	// Order in timeline
 	SequenceNumber int `json:"sequence_number,omitempty"`
 	// Creation timestamp
@@ -169,13 +169,15 @@ func (_m *TimelineEvent) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field stage_id", values[i])
 			} else if value.Valid {
-				_m.StageID = value.String
+				_m.StageID = new(string)
+				*_m.StageID = value.String
 			}
 		case timelineevent.FieldExecutionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field execution_id", values[i])
 			} else if value.Valid {
-				_m.ExecutionID = value.String
+				_m.ExecutionID = new(string)
+				*_m.ExecutionID = value.String
 			}
 		case timelineevent.FieldSequenceNumber:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -299,11 +301,15 @@ func (_m *TimelineEvent) String() string {
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
 	builder.WriteString(", ")
-	builder.WriteString("stage_id=")
-	builder.WriteString(_m.StageID)
+	if v := _m.StageID; v != nil {
+		builder.WriteString("stage_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
-	builder.WriteString("execution_id=")
-	builder.WriteString(_m.ExecutionID)
+	if v := _m.ExecutionID; v != nil {
+		builder.WriteString("execution_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("sequence_number=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SequenceNumber))

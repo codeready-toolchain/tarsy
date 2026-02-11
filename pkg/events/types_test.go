@@ -42,9 +42,7 @@ func TestEventTypeConstants(t *testing.T) {
 		EventTypeTimelineCreated,
 		EventTypeTimelineCompleted,
 		EventTypeSessionStatus,
-		EventTypeSessionCompleted,
-		EventTypeStageStarted,
-		EventTypeStageCompleted,
+		EventTypeStageStatus,
 		EventTypeStreamChunk,
 	}
 

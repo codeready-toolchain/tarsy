@@ -15,6 +15,19 @@ const DefaultMaxIterations = 20
 // iteration from consuming the entire session budget.
 const DefaultIterationTimeout = 120 * time.Second
 
+// ResolveBackend maps an iteration strategy to its Python backend.
+// Native thinking strategies use the Google SDK directly; everything
+// else goes through LangChain.
+func ResolveBackend(strategy config.IterationStrategy) string {
+	switch strategy {
+	case config.IterationStrategyNativeThinking,
+		config.IterationStrategySynthesisNativeThinking:
+		return BackendGoogleNative
+	default:
+		return BackendLangChain
+	}
+}
+
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
 func ResolveAgentConfig(
@@ -37,10 +50,14 @@ func ResolveAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentConfig.Name, err)
 	}
 
-	// Resolve iteration strategy (stage-agent > agent-def > defaults)
+	// Resolve iteration strategy: defaults.IterationStrategy → agentDef.IterationStrategy
+	// → chain.IterationStrategy → agentConfig.IterationStrategy (later values override earlier ones).
 	strategy := defaults.IterationStrategy
 	if agentDef.IterationStrategy != "" {
 		strategy = agentDef.IterationStrategy
+	}
+	if chain.IterationStrategy != "" {
+		strategy = chain.IterationStrategy
 	}
 	if agentConfig.IterationStrategy != "" {
 		strategy = agentConfig.IterationStrategy
@@ -100,5 +117,6 @@ func ResolveAgentConfig(
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
+		Backend:            ResolveBackend(strategy),
 	}, nil
 }

@@ -125,3 +125,7 @@ func (m *mockEventPublisher) PublishSessionStatus(_ context.Context, _ string, p
 	m.lastSessionStatus = &payload
 	return nil
 }
+
+func (m *mockEventPublisher) PublishStageStatus(_ context.Context, _ string, _ events.StageStatusPayload) error {
+	return nil
+}

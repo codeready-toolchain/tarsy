@@ -9,12 +9,19 @@ const (
 	EventTypeTimelineCompleted = "timeline_event.completed"
 
 	// Session lifecycle
-	EventTypeSessionStatus    = "session.status"
-	EventTypeSessionCompleted = "session.completed"
+	EventTypeSessionStatus = "session.status"
 
-	// Stage lifecycle
-	EventTypeStageStarted   = "stage.started"
-	EventTypeStageCompleted = "stage.completed"
+	// Stage lifecycle — single event type for all stage status transitions
+	EventTypeStageStatus = "stage.status"
+)
+
+// Stage lifecycle status values (used in StageStatusPayload.Status).
+const (
+	StageStatusStarted   = "started"
+	StageStatusCompleted = "completed"
+	StageStatusFailed    = "failed"
+	StageStatusTimedOut  = "timed_out"
+	StageStatusCancelled = "cancelled"
 )
 
 // Transient event types (NOTIFY only, no DB persistence).

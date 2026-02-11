@@ -37,9 +37,25 @@ func (_c *TimelineEventCreate) SetStageID(v string) *TimelineEventCreate {
 	return _c
 }
 
+// SetNillableStageID sets the "stage_id" field if the given value is not nil.
+func (_c *TimelineEventCreate) SetNillableStageID(v *string) *TimelineEventCreate {
+	if v != nil {
+		_c.SetStageID(*v)
+	}
+	return _c
+}
+
 // SetExecutionID sets the "execution_id" field.
 func (_c *TimelineEventCreate) SetExecutionID(v string) *TimelineEventCreate {
 	_c.mutation.SetExecutionID(v)
+	return _c
+}
+
+// SetNillableExecutionID sets the "execution_id" field if the given value is not nil.
+func (_c *TimelineEventCreate) SetNillableExecutionID(v *string) *TimelineEventCreate {
+	if v != nil {
+		_c.SetExecutionID(*v)
+	}
 	return _c
 }
 
@@ -159,6 +175,14 @@ func (_c *TimelineEventCreate) SetAgentExecutionID(id string) *TimelineEventCrea
 	return _c
 }
 
+// SetNillableAgentExecutionID sets the "agent_execution" edge to the AgentExecution entity by ID if the given value is not nil.
+func (_c *TimelineEventCreate) SetNillableAgentExecutionID(id *string) *TimelineEventCreate {
+	if id != nil {
+		_c = _c.SetAgentExecutionID(*id)
+	}
+	return _c
+}
+
 // SetAgentExecution sets the "agent_execution" edge to the AgentExecution entity.
 func (_c *TimelineEventCreate) SetAgentExecution(v *AgentExecution) *TimelineEventCreate {
 	return _c.SetAgentExecutionID(v.ID)
@@ -228,12 +252,6 @@ func (_c *TimelineEventCreate) check() error {
 	if _, ok := _c.mutation.SessionID(); !ok {
 		return &ValidationError{Name: "session_id", err: errors.New(`ent: missing required field "TimelineEvent.session_id"`)}
 	}
-	if _, ok := _c.mutation.StageID(); !ok {
-		return &ValidationError{Name: "stage_id", err: errors.New(`ent: missing required field "TimelineEvent.stage_id"`)}
-	}
-	if _, ok := _c.mutation.ExecutionID(); !ok {
-		return &ValidationError{Name: "execution_id", err: errors.New(`ent: missing required field "TimelineEvent.execution_id"`)}
-	}
 	if _, ok := _c.mutation.SequenceNumber(); !ok {
 		return &ValidationError{Name: "sequence_number", err: errors.New(`ent: missing required field "TimelineEvent.sequence_number"`)}
 	}
@@ -264,12 +282,6 @@ func (_c *TimelineEventCreate) check() error {
 	}
 	if len(_c.mutation.SessionIDs()) == 0 {
 		return &ValidationError{Name: "session", err: errors.New(`ent: missing required edge "TimelineEvent.session"`)}
-	}
-	if len(_c.mutation.StageIDs()) == 0 {
-		return &ValidationError{Name: "stage", err: errors.New(`ent: missing required edge "TimelineEvent.stage"`)}
-	}
-	if len(_c.mutation.AgentExecutionIDs()) == 0 {
-		return &ValidationError{Name: "agent_execution", err: errors.New(`ent: missing required edge "TimelineEvent.agent_execution"`)}
 	}
 	return nil
 }
@@ -365,7 +377,7 @@ func (_c *TimelineEventCreate) createSpec() (*TimelineEvent, *sqlgraph.CreateSpe
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.StageID = nodes[0]
+		_node.StageID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.AgentExecutionIDs(); len(nodes) > 0 {
@@ -382,7 +394,7 @@ func (_c *TimelineEventCreate) createSpec() (*TimelineEvent, *sqlgraph.CreateSpe
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.ExecutionID = nodes[0]
+		_node.ExecutionID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.LlmInteractionIDs(); len(nodes) > 0 {

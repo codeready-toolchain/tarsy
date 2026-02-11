@@ -74,6 +74,7 @@ func (c *ReActController) Run(
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       nil, // ReAct uses text-based tool calling
+			Backend:     execCtx.Config.Backend,
 		}, &eventSeq)
 
 		if err != nil {
@@ -226,6 +227,7 @@ func (c *ReActController) forceConclusion(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil,
+		Backend:     execCtx.Config.Backend,
 	}, eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)

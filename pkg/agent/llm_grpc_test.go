@@ -56,19 +56,50 @@ func TestToProtoLLMConfig(t *testing.T) {
 	assert.Equal(t, "gemini-2.5-pro", proto.Model)
 	assert.Equal(t, "GOOGLE_API_KEY", proto.ApiKeyEnv)
 	assert.Equal(t, int32(950000), proto.MaxToolResultTokens)
-	assert.Equal(t, "google-native", proto.Backend)
 	assert.True(t, proto.NativeTools["google_search"])
+	// Backend is set by toProtoRequest from input.Backend
+	assert.Empty(t, proto.Backend)
 }
 
-func TestToProtoLLMConfig_LangChainBackend(t *testing.T) {
-	cfg := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeOpenAI,
-		Model:               "gpt-5",
-		MaxToolResultTokens: 250000,
-	}
+func TestToProtoRequest_BackendPassthrough(t *testing.T) {
+	t.Run("backend from input overrides empty LLMConfig backend", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID: "sess-1",
+			Config: &config.LLMProviderConfig{
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "gemini-2.5-pro",
+			},
+			Backend: BackendGoogleNative,
+		}
+		req := toProtoRequest(input)
+		assert.Equal(t, BackendGoogleNative, req.LlmConfig.Backend)
+	})
 
-	proto := toProtoLLMConfig(cfg)
-	assert.Equal(t, "langchain", proto.Backend)
+	t.Run("langchain backend", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID: "sess-1",
+			Config: &config.LLMProviderConfig{
+				Type:  config.LLMProviderTypeOpenAI,
+				Model: "gpt-5",
+			},
+			Backend: BackendLangChain,
+		}
+		req := toProtoRequest(input)
+		assert.Equal(t, BackendLangChain, req.LlmConfig.Backend)
+	})
+
+	t.Run("empty backend does not override", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID: "sess-1",
+			Config: &config.LLMProviderConfig{
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "gemini-2.5-pro",
+			},
+		}
+		req := toProtoRequest(input)
+		// toProtoLLMConfig no longer sets backend, and input.Backend is empty
+		assert.Empty(t, req.LlmConfig.Backend)
+	})
 }
 
 func TestFromProtoResponse(t *testing.T) {

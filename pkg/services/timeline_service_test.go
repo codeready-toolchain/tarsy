@@ -48,8 +48,8 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	t.Run("creates event with streaming status", func(t *testing.T) {
 		req := models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 1,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Analyzing...",
@@ -67,8 +67,8 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	t.Run("creates event with empty content for streaming", func(t *testing.T) {
 		req := models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 2,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "", // Empty content is now allowed for streaming
@@ -83,8 +83,8 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	t.Run("validates required fields", func(t *testing.T) {
 		validReq := models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 3,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "test",
@@ -97,19 +97,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
 
-		// Missing StageID
-		req = validReq
-		req.StageID = ""
-		_, err = timelineService.CreateTimelineEvent(ctx, req)
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-
-		// Missing ExecutionID
-		req = validReq
-		req.ExecutionID = ""
-		_, err = timelineService.CreateTimelineEvent(ctx, req)
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
+		// StageID and ExecutionID are optional (session-level events omit them)
 
 		// Invalid SequenceNumber (zero)
 		req = validReq
@@ -131,6 +119,22 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		_, err = timelineService.CreateTimelineEvent(ctx, req)
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
+	})
+
+	t.Run("creates session-level event without StageID or ExecutionID", func(t *testing.T) {
+		req := models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			SequenceNumber: 100,
+			EventType:      timelineevent.EventTypeExecutiveSummary,
+			Content:        "Executive summary content",
+		}
+
+		event, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.NoError(t, err)
+		assert.Equal(t, req.Content, event.Content)
+		assert.Equal(t, timelineevent.StatusStreaming, event.Status)
+		assert.Nil(t, event.StageID, "session-level event should have nil stage_id")
+		assert.Nil(t, event.ExecutionID, "session-level event should have nil execution_id")
 	})
 }
 
@@ -169,8 +173,8 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 
 	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
-		StageID:        stg.ID,
-		ExecutionID:    exec.ID,
+		StageID:        &stg.ID,
+		ExecutionID:    &exec.ID,
 		SequenceNumber: 1,
 		EventType:      timelineevent.EventTypeLlmThinking,
 		Content:        "Starting...",
@@ -241,8 +245,8 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
-		StageID:        stg.ID,
-		ExecutionID:    exec.ID,
+		StageID:        &stg.ID,
+		ExecutionID:    &exec.ID,
 		SequenceNumber: 1,
 		EventType:      timelineevent.EventTypeLlmThinking,
 		Content:        "Streaming...",
@@ -263,8 +267,8 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		// Create another event
 		event2, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 2,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Streaming...",
@@ -359,8 +363,8 @@ func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
 	t.Run("merges metadata with existing", func(t *testing.T) {
 		event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 10,
 			EventType:      timelineevent.EventTypeLlmToolCall,
 			Content:        "",
@@ -392,8 +396,8 @@ func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
 	t.Run("new metadata overrides existing keys", func(t *testing.T) {
 		event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: 11,
 			EventType:      timelineevent.EventTypeLlmToolCall,
 			Content:        "",
@@ -463,8 +467,8 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 
 	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
-		StageID:        stg.ID,
-		ExecutionID:    exec.ID,
+		StageID:        &stg.ID,
+		ExecutionID:    &exec.ID,
 		SequenceNumber: 1,
 		EventType:      timelineevent.EventTypeLlmThinking,
 		Content:        "",
@@ -538,8 +542,8 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		_, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			StageID:        stg.ID,
-			ExecutionID:    exec.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
 			SequenceNumber: i,
 			EventType:      timelineevent.EventTypeLlmThinking,
 			Content:        "Event",

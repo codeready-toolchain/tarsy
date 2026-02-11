@@ -60,6 +60,12 @@ type ServiceBundle struct {
 	Stage       *services.StageService
 }
 
+// Backend constants — resolved from iteration strategy via ResolveBackend().
+const (
+	BackendGoogleNative = "google-native"
+	BackendLangChain    = "langchain"
+)
+
 // ResolvedAgentConfig is the fully-resolved configuration for an agent execution.
 // All hierarchy levels (defaults → chain → stage → agent) have been applied.
 type ResolvedAgentConfig struct {
@@ -70,6 +76,7 @@ type ResolvedAgentConfig struct {
 	IterationTimeout   time.Duration // Per-iteration timeout (default: 120s)
 	MCPServers         []string
 	CustomInstructions string
+	Backend            string // "google-native" or "langchain" — resolved from iteration strategy
 
 	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
 	// Set by the session executor when the alert provides an MCP selection with native_tools.
@@ -102,6 +109,7 @@ type EventPublisher interface {
 	PublishTimelineCompleted(ctx context.Context, sessionID string, payload events.TimelineCompletedPayload) error
 	PublishStreamChunk(ctx context.Context, sessionID string, payload events.StreamChunkPayload) error
 	PublishSessionStatus(ctx context.Context, sessionID string, payload events.SessionStatusPayload) error
+	PublishStageStatus(ctx context.Context, sessionID string, payload events.StageStatusPayload) error
 }
 
 // ChatExchange groups a user question with its complete conversation.

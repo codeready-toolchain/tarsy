@@ -36,10 +36,11 @@ type SessionExecutor interface {
 // All intermediate state (TimelineEvents, Interactions, Stages) was already
 // written to DB by the executor during processing.
 type ExecutionResult struct {
-	Status           alertsession.Status // completed, failed, timed_out, cancelled
-	FinalAnalysis    string              // Final analysis text (if completed)
-	ExecutiveSummary string              // Executive summary (if completed)
-	Error            error               // Error details (if failed/timed_out)
+	Status                alertsession.Status // completed, failed, timed_out, cancelled
+	FinalAnalysis         string              // Final analysis text (if completed)
+	ExecutiveSummary      string              // Executive summary (if completed)
+	ExecutiveSummaryError string              // Non-empty if summary generation failed (fail-open)
+	Error                 error               // Error details (if failed/timed_out)
 }
 
 // PoolHealth contains health information for the entire worker pool.

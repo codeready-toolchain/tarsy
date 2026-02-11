@@ -310,14 +310,17 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 		SetStatus(result.Status).
 		SetCompletedAt(time.Now())
 
-	if result.Error != nil {
-		update = update.SetErrorMessage(result.Error.Error())
-	}
 	if result.FinalAnalysis != "" {
 		update = update.SetFinalAnalysis(result.FinalAnalysis)
 	}
 	if result.ExecutiveSummary != "" {
 		update = update.SetExecutiveSummary(result.ExecutiveSummary)
+	}
+	if result.ExecutiveSummaryError != "" {
+		update = update.SetExecutiveSummaryError(result.ExecutiveSummaryError)
+	}
+	if result.Error != nil {
+		update = update.SetErrorMessage(result.Error.Error())
 	}
 
 	return update.Exec(ctx)

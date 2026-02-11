@@ -10,6 +10,15 @@ import (
 
 func intPtr(i int) *int { return &i }
 
+func TestResolveBackend(t *testing.T) {
+	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategyReact))
+	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategyNativeThinking))
+	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategySynthesis))
+	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategySynthesisNativeThinking))
+	// Unknown strategy defaults to langchain
+	assert.Equal(t, BackendLangChain, ResolveBackend("unknown"))
+}
+
 func TestResolveAgentConfig(t *testing.T) {
 	// Setup: build a Config with registries
 	maxIter25 := 25
@@ -64,6 +73,8 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, 25, resolved.MaxIterations)
 		assert.Equal(t, []string{"kubernetes-server"}, resolved.MCPServers)
 		assert.Equal(t, "You are a K8s agent", resolved.CustomInstructions)
+		// Backend resolved from iteration strategy
+		assert.Equal(t, BackendGoogleNative, resolved.Backend)
 	})
 
 	t.Run("stage-agent overrides chain and agent def", func(t *testing.T) {
@@ -92,6 +103,22 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, openaiProvider, resolved.LLMProvider)
 		assert.Equal(t, 5, resolved.MaxIterations)
 		assert.Equal(t, []string{"custom-server"}, resolved.MCPServers)
+		assert.Equal(t, BackendLangChain, resolved.Backend)
+	})
+
+	t.Run("chain-level strategy overrides agent-def", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			IterationStrategy: config.IterationStrategyReact,
+		}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+
+		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+		require.NoError(t, err)
+
+		// Chain-level react overrides agent-def's native-thinking
+		assert.Equal(t, config.IterationStrategyReact, resolved.IterationStrategy)
+		assert.Equal(t, BackendLangChain, resolved.Backend)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {

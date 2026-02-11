@@ -229,12 +229,6 @@ func (_u *TimelineEventUpdate) check() error {
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TimelineEvent.session"`)
 	}
-	if _u.mutation.StageCleared() && len(_u.mutation.StageIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TimelineEvent.stage"`)
-	}
-	if _u.mutation.AgentExecutionCleared() && len(_u.mutation.AgentExecutionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TimelineEvent.agent_execution"`)
-	}
 	return nil
 }
 
@@ -563,12 +557,6 @@ func (_u *TimelineEventUpdateOne) check() error {
 	}
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TimelineEvent.session"`)
-	}
-	if _u.mutation.StageCleared() && len(_u.mutation.StageIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TimelineEvent.stage"`)
-	}
-	if _u.mutation.AgentExecutionCleared() && len(_u.mutation.AgentExecutionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TimelineEvent.agent_execution"`)
 	}
 	return nil
 }

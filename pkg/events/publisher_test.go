@@ -161,3 +161,47 @@ func TestNewEventPublisher(t *testing.T) {
 	assert.NotNil(t, publisher)
 	assert.Nil(t, publisher.db)
 }
+
+func TestStageStatusPayload_JSON(t *testing.T) {
+	payload := StageStatusPayload{
+		Type:       EventTypeStageStatus,
+		SessionID:  "sess-123",
+		StageID:    "stage-456",
+		StageName:  "investigation",
+		StageIndex: 1,
+		Status:     StageStatusStarted,
+		Timestamp:  "2026-02-10T12:00:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded StageStatusPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeStageStatus, decoded.Type)
+	assert.Equal(t, "sess-123", decoded.SessionID)
+	assert.Equal(t, "stage-456", decoded.StageID)
+	assert.Equal(t, "investigation", decoded.StageName)
+	assert.Equal(t, 1, decoded.StageIndex)
+	assert.Equal(t, StageStatusStarted, decoded.Status)
+	assert.Equal(t, "2026-02-10T12:00:00Z", decoded.Timestamp)
+}
+
+func TestStageStatusPayload_EmptyStageID(t *testing.T) {
+	// StageID can be empty on "started" events (stage not yet created in DB)
+	payload := StageStatusPayload{
+		Type:       EventTypeStageStatus,
+		SessionID:  "sess-123",
+		StageName:  "investigation",
+		StageIndex: 1,
+		Status:     StageStatusStarted,
+		Timestamp:  "2026-02-10T12:00:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	// StageID should be omitted from JSON due to omitempty
+	assert.NotContains(t, string(data), "stage_id")
+}

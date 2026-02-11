@@ -130,6 +130,7 @@ func callSummarizationLLM(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools for summarization
+		Backend:     execCtx.Config.Backend,
 	}
 
 	// Use dedicated summarization streaming (creates mcp_tool_summary events, not llm_response)
@@ -206,8 +207,8 @@ func callSummarizationLLMWithStreaming(
 			*eventSeq++
 			event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 				SessionID:      execCtx.SessionID,
-				StageID:        execCtx.StageID,
-				ExecutionID:    execCtx.ExecutionID,
+				StageID:        &execCtx.StageID,
+				ExecutionID:    &execCtx.ExecutionID,
 				SequenceNumber: *eventSeq,
 				EventType:      timelineevent.EventTypeMcpToolSummary,
 				Content:        "",

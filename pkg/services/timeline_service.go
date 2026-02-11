@@ -27,12 +27,8 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 	if req.SessionID == "" {
 		return nil, NewValidationError("SessionID", "required")
 	}
-	if req.StageID == "" {
-		return nil, NewValidationError("StageID", "required")
-	}
-	if req.ExecutionID == "" {
-		return nil, NewValidationError("ExecutionID", "required")
-	}
+	// StageID and ExecutionID are optional — session-level events (e.g. executive_summary)
+	// don't belong to a specific stage or agent execution.
 	if req.SequenceNumber <= 0 {
 		return nil, NewValidationError("SequenceNumber", "must be positive")
 	}
@@ -45,19 +41,22 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 	defer cancel()
 
 	eventID := uuid.New().String()
-	event, err := s.client.TimelineEvent.Create().
+	create := s.client.TimelineEvent.Create().
 		SetID(eventID).
 		SetSessionID(req.SessionID).
-		SetStageID(req.StageID).
-		SetExecutionID(req.ExecutionID).
 		SetSequenceNumber(req.SequenceNumber).
 		SetEventType(req.EventType).
 		SetStatus(timelineevent.StatusStreaming).
 		SetContent(req.Content).
 		SetMetadata(req.Metadata).
 		SetCreatedAt(time.Now()).
-		SetUpdatedAt(time.Now()).
-		Save(ctx)
+		SetUpdatedAt(time.Now())
+
+	// Set stage_id and execution_id only when provided (session-level events pass nil)
+	create = create.SetNillableStageID(req.StageID).
+		SetNillableExecutionID(req.ExecutionID)
+
+	event, err := create.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create timeline event: %w", err)
 	}
