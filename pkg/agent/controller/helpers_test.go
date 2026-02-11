@@ -231,6 +231,29 @@ func TestAccumulateUsage(t *testing.T) {
 }
 
 // ============================================================================
+// accumulateTokenUsage tests
+// ============================================================================
+
+func TestAccumulateTokenUsage(t *testing.T) {
+	t.Run("adds usage to total", func(t *testing.T) {
+		total := &agent.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
+		usage := &agent.TokenUsage{InputTokens: 20, OutputTokens: 30, TotalTokens: 50, ThinkingTokens: 8}
+
+		accumulateTokenUsage(total, usage)
+		assert.Equal(t, 30, total.InputTokens)
+		assert.Equal(t, 35, total.OutputTokens)
+		assert.Equal(t, 65, total.TotalTokens)
+		assert.Equal(t, 8, total.ThinkingTokens)
+	})
+
+	t.Run("nil usage is no-op", func(t *testing.T) {
+		total := &agent.TokenUsage{InputTokens: 42}
+		accumulateTokenUsage(total, nil)
+		assert.Equal(t, 42, total.InputTokens)
+	})
+}
+
+// ============================================================================
 // isTimeoutError tests
 // ============================================================================
 

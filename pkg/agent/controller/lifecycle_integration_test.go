@@ -281,6 +281,7 @@ func TestReActController_SummarizationFailOpen(t *testing.T) {
 	// Despite summarization failure, the controller should complete with the final answer
 	assert.Contains(t, result.FinalAnalysis, "Pods are fine")
 	assert.Equal(t, 1, callCount, "tool should have been called once")
+	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
 // TestReActController_StorageTruncation verifies that very large tool
@@ -320,8 +321,10 @@ func TestReActController_StorageTruncation(t *testing.T) {
 	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, qErr)
 
+	found := false
 	for _, ev := range events {
 		if ev.EventType == timelineevent.EventTypeLlmToolCall {
+			found = true
 			assert.Less(t, len(ev.Content), len(massiveResult),
 				"stored content should be smaller than original")
 			assert.Contains(t, ev.Content, "[TRUNCATED:",
@@ -329,6 +332,7 @@ func TestReActController_StorageTruncation(t *testing.T) {
 			break
 		}
 	}
+	assert.True(t, found, "expected llm_tool_call event not found")
 }
 
 // TestNativeThinkingController_SummarizationIntegration verifies that
@@ -489,8 +493,10 @@ func TestNativeThinkingController_StorageTruncation(t *testing.T) {
 	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, qErr)
 
+	found := false
 	for _, ev := range events {
 		if ev.EventType == timelineevent.EventTypeLlmToolCall {
+			found = true
 			assert.Less(t, len(ev.Content), len(massiveResult),
 				"stored content should be smaller than original")
 			assert.Contains(t, ev.Content, "[TRUNCATED:",
@@ -498,4 +504,5 @@ func TestNativeThinkingController_StorageTruncation(t *testing.T) {
 			break
 		}
 	}
+	assert.True(t, found, "expected llm_tool_call event not found")
 }

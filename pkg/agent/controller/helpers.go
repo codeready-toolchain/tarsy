@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -56,17 +57,27 @@ func callLLM(
 
 // accumulateUsage adds token counts from an LLM response to the running total.
 func accumulateUsage(total *agent.TokenUsage, resp *LLMResponse) {
-	if resp != nil && resp.Usage != nil {
-		total.InputTokens += resp.Usage.InputTokens
-		total.OutputTokens += resp.Usage.OutputTokens
-		total.TotalTokens += resp.Usage.TotalTokens
-		total.ThinkingTokens += resp.Usage.ThinkingTokens
+	if resp != nil {
+		accumulateTokenUsage(total, resp.Usage)
 	}
 }
 
-// recordLLMInteraction creates an LLMInteraction debug record in the database.
-// This is best-effort observability — callers intentionally ignore the returned error
-// because a failure to record an interaction should never abort the investigation loop.
+// accumulateTokenUsage adds token counts from a TokenUsage to the running total.
+// Accepts *agent.TokenUsage directly, avoiding the need to wrap usage in a
+// throwaway LLMResponse (e.g., when accumulating summarization usage).
+func accumulateTokenUsage(total *agent.TokenUsage, usage *agent.TokenUsage) {
+	if usage == nil {
+		return
+	}
+	total.InputTokens += usage.InputTokens
+	total.OutputTokens += usage.OutputTokens
+	total.TotalTokens += usage.TotalTokens
+	total.ThinkingTokens += usage.ThinkingTokens
+}
+
+// recordLLMInteraction creates an LLMInteraction record in the database.
+// Logs slog.Error on failure but does not abort the investigation loop —
+// the in-memory state is authoritative during execution.
 func recordLLMInteraction(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -76,7 +87,7 @@ func recordLLMInteraction(
 	resp *LLMResponse,
 	lastMessageID *string,
 	startTime time.Time,
-) error {
+) {
 	durationMs := int(time.Since(startTime).Milliseconds())
 
 	var thinkingPtr *string
@@ -118,7 +129,7 @@ func recordLLMInteraction(
 		llmResponseMeta["groundings_count"] = len(resp.Groundings)
 	}
 
-	_, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       execCtx.SessionID,
 		StageID:         execCtx.StageID,
 		ExecutionID:     execCtx.ExecutionID,
@@ -132,21 +143,20 @@ func recordLLMInteraction(
 		OutputTokens:    outputTokens,
 		TotalTokens:     totalTokens,
 		DurationMs:      &durationMs,
-	})
-	return err
+	}); err != nil {
+		slog.Error("Failed to record LLM interaction",
+			"session_id", execCtx.SessionID, "type", interactionType, "error", err)
+	}
 }
 
 // createTimelineEvent creates a new timeline event with content and publishes
 // it for real-time delivery via WebSocket.
 //
-// Best-effort: callers intentionally ignore both return values because timeline
-// events are non-critical observability data — a failure to record one should
-// never abort the investigation loop. The same applies to createToolCallEvent
-// and completeToolCallEvent below.
+// Logs slog.Error on DB failure but does not abort the investigation loop —
+// the in-memory state is authoritative during execution.
 //
-// Note: *eventSeq is incremented before the DB call. If the call fails (and
-// the caller ignores the error), the next event will have a gap in its sequence
-// number. This is acceptable for best-effort observability data.
+// Note: *eventSeq is incremented before the DB call. If the call fails,
+// the next event will have a gap in its sequence number.
 func createTimelineEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -154,10 +164,9 @@ func createTimelineEvent(
 	content string,
 	metadata map[string]interface{},
 	eventSeq *int,
-) (*ent.TimelineEvent, error) {
+) {
 	*eventSeq++
 
-	// 1. Create TimelineEvent in DB (existing behavior)
 	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
@@ -168,13 +177,12 @@ func createTimelineEvent(
 		Metadata:       metadata,
 	})
 	if err != nil {
-		return nil, err
+		slog.Error("Failed to create timeline event",
+			"session_id", execCtx.SessionID, "event_type", eventType, "error", err)
+		return
 	}
 
-	// 2. Publish to WebSocket clients (non-blocking — don't fail execution on publish error)
 	publishTimelineCreated(ctx, execCtx, event, eventType, content, metadata, *eventSeq)
-
-	return event, nil
 }
 
 // publishTimelineCreated publishes a timeline_event.created message to WebSocket clients.
@@ -205,7 +213,7 @@ func publishTimelineCreated(
 	})
 	if publishErr != nil {
 		slog.Warn("Failed to publish timeline event",
-			"event_id", event.ID, "error", publishErr)
+			"event_id", event.ID, "session_id", execCtx.SessionID, "error", publishErr)
 	}
 }
 
@@ -347,7 +355,7 @@ func callLLMWithStreaming(
 					Metadata:       map[string]interface{}{"source": "native"},
 				})
 				if createErr != nil {
-					slog.Warn("Failed to create streaming thinking event", "error", createErr)
+					slog.Warn("Failed to create streaming thinking event", "session_id", execCtx.SessionID, "error", createErr)
 					thinkingCreateFailed = true
 					return
 				}
@@ -396,7 +404,7 @@ func callLLMWithStreaming(
 					Metadata:       nil,
 				})
 				if createErr != nil {
-					slog.Warn("Failed to create streaming text event", "error", createErr)
+					slog.Warn("Failed to create streaming text event", "session_id", execCtx.SessionID, "error", createErr)
 					textCreateFailed = true
 					return
 				}
@@ -472,15 +480,20 @@ func finalizeStreamingEvent(
 			slog.Warn("Failed to complete streaming "+label+" event",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", complErr)
 		}
-		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-			Type:      events.EventTypeTimelineCompleted,
-			EventID:   eventID,
-			Content:   content,
-			Status:    string(timelineevent.StatusCompleted),
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		}); pubErr != nil {
-			slog.Warn("Failed to publish "+label+" completed",
-				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		if execCtx.EventPublisher != nil {
+			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+				Type:      events.EventTypeTimelineCompleted,
+				EventID:   eventID,
+				Content:   content,
+				Status:    string(timelineevent.StatusCompleted),
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish "+label+" completed",
+					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+		} else {
+			slog.Error("EventPublisher is nil, skipping "+label+" completion publish",
+				"event_id", eventID, "session_id", execCtx.SessionID)
 		}
 		return
 	}
@@ -494,15 +507,20 @@ func finalizeStreamingEvent(
 		slog.Warn("Failed to fail empty streaming "+label+" event",
 			"event_id", eventID, "session_id", execCtx.SessionID, "error", failErr)
 	}
-	if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-		Type:      events.EventTypeTimelineCompleted,
-		EventID:   eventID,
-		Content:   failContent,
-		Status:    string(timelineevent.StatusFailed),
-		Timestamp: time.Now().Format(time.RFC3339Nano),
-	}); pubErr != nil {
-		slog.Warn("Failed to publish "+label+" failure",
-			"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+	if execCtx.EventPublisher != nil {
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			Type:      events.EventTypeTimelineCompleted,
+			EventID:   eventID,
+			Content:   failContent,
+			Status:    string(timelineevent.StatusFailed),
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish "+label+" failure",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	} else {
+		slog.Error("EventPublisher is nil, skipping "+label+" failure publish",
+			"event_id", eventID, "session_id", execCtx.SessionID)
 	}
 }
 
@@ -528,15 +546,20 @@ func markStreamingEventsFailed(
 			return
 		}
 		// Notify WebSocket clients
-		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-			Type:      events.EventTypeTimelineCompleted,
-			EventID:   eventID,
-			Status:    string(timelineevent.StatusFailed),
-			Content:   failContent,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		}); pubErr != nil {
-			slog.Warn("Failed to publish streaming event failure",
-				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		if execCtx.EventPublisher != nil {
+			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+				Type:      events.EventTypeTimelineCompleted,
+				EventID:   eventID,
+				Status:    string(timelineevent.StatusFailed),
+				Content:   failContent,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish streaming event failure",
+					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+		} else {
+			slog.Error("EventPublisher is nil, skipping streaming event failure publish",
+				"event_id", eventID, "session_id", execCtx.SessionID)
 		}
 	}
 
@@ -604,6 +627,11 @@ func createToolCallEvent(
 // completeToolCallEvent completes an llm_tool_call timeline event with the tool result.
 // Called after ToolExecutor.Execute() returns. The content is the storage-truncated
 // raw result. Metadata is enriched with is_error via read-modify-write merge.
+//
+// The completed event's WebSocket payload only includes {"is_error": bool} in
+// metadata. Full tool context (server_name, tool_name, arguments) was included
+// in the original timeline_event.created message and is persisted in the DB via
+// the metadata merge. Clients correlate completed ↔ created events by event_id.
 func completeToolCallEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -718,6 +746,8 @@ func storeAssistantMessageWithToolCalls(
 }
 
 // storeToolResultMessage persists a tool result message to DB.
+// Logs slog.Error on failure but does not abort the investigation loop —
+// the in-memory messages slice is authoritative during execution.
 func storeToolResultMessage(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -725,9 +755,9 @@ func storeToolResultMessage(
 	toolName string,
 	content string,
 	msgSeq *int,
-) error {
+) {
 	*msgSeq++
-	_, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
+	if _, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
@@ -736,27 +766,33 @@ func storeToolResultMessage(
 		Content:        content,
 		ToolCallID:     callID,
 		ToolName:       toolName,
-	})
-	return err
+	}); err != nil {
+		slog.Error("Failed to store tool result message",
+			"session_id", execCtx.SessionID, "tool", toolName, "error", err)
+	}
 }
 
 // storeObservationMessage persists a ReAct observation as a user message.
+// Logs slog.Error on failure but does not abort the investigation loop —
+// the in-memory messages slice is authoritative during execution.
 func storeObservationMessage(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	observation string,
 	msgSeq *int,
-) error {
+) {
 	*msgSeq++
-	_, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
+	if _, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
 		SequenceNumber: *msgSeq,
 		Role:           message.RoleUser,
 		Content:        observation,
-	})
-	return err
+	}); err != nil {
+		slog.Error("Failed to store observation message",
+			"session_id", execCtx.SessionID, "error", err)
+	}
 }
 
 // isTimeoutError checks if an error is timeout-related.
@@ -796,6 +832,78 @@ func failedResult(state *agent.IterationState, totalUsage agent.TokenUsage) *age
 			state.ConsecutiveTimeoutFailures, state.CurrentIteration, state.MaxIterations, state.LastErrorMessage),
 		TokensUsed: totalUsage,
 	}
+}
+
+// toolCallResult holds the outcome of executeToolCall for the caller to
+// integrate into its conversation format (ReAct observation vs NativeThinking
+// tool message).
+type toolCallResult struct {
+	// Content is the tool result content to feed back to the LLM.
+	// May be summarized if summarization was triggered.
+	Content string
+	// IsError is true if the tool execution itself failed.
+	IsError bool
+	// Usage is non-nil when summarization produced token usage to accumulate.
+	Usage *agent.TokenUsage
+}
+
+// executeToolCall runs a single tool call through the full lifecycle:
+//  1. Normalize and split tool name for events/summarization
+//  2. Create streaming llm_tool_call event (dashboard spinner)
+//  3. Execute the tool via ToolExecutor
+//  4. Complete the tool call event with storage-truncated result
+//  5. Optionally summarize large non-error results
+//
+// Returns the result content (possibly summarized) and whether the call failed.
+// Callers are responsible for appending the result to their conversation and
+// recording state changes (RecordFailure, message storage, etc.).
+func executeToolCall(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	call agent.ToolCall,
+	messages []agent.ConversationMessage,
+	eventSeq *int,
+) toolCallResult {
+	// Step 1: Normalize and split tool name
+	normalizedName := mcp.NormalizeToolName(call.Name)
+	serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+	if splitErr != nil {
+		serverID = ""
+		toolName = call.Name
+	}
+
+	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner)
+	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, eventSeq)
+	if createErr != nil {
+		slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
+	}
+
+	// Step 3: Execute the tool
+	result, toolErr := execCtx.ToolExecutor.Execute(ctx, call)
+	if toolErr != nil {
+		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
+		return toolCallResult{Content: errContent, IsError: true}
+	}
+
+	// Step 4: Complete tool call event with storage-truncated result
+	storageTruncated := mcp.TruncateForStorage(result.Content)
+	completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
+
+	// Step 5: Summarize if applicable (non-error results only)
+	content := result.Content
+	var usage *agent.TokenUsage
+	if !result.IsError {
+		convContext := buildConversationContext(messages)
+		sumResult, sumErr := maybeSummarize(ctx, execCtx, serverID, toolName,
+			result.Content, convContext, eventSeq)
+		if sumErr == nil && sumResult.WasSummarized {
+			content = sumResult.Content
+			usage = sumResult.Usage
+		}
+	}
+
+	return toolCallResult{Content: content, IsError: result.IsError, Usage: usage}
 }
 
 // tokenUsageFromResp extracts token usage from an LLM response.

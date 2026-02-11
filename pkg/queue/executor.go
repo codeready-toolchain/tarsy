@@ -208,7 +208,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 8. Update AgentExecution status based on result.
+	// 9. Update AgentExecution status based on result.
 	// If DB updates fail, override the result to Failed so the session
 	// isn't marked as completed while internal records are inconsistent.
 	entStatus := mapAgentStatusToEntStatus(agentResult.Status)
@@ -249,8 +249,13 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 // resolveMCPSelection determines the MCP servers and tool filter for this session.
 // If the session has an MCP override (mcp_selection JSON), it replaces the chain
-// config entirely (replace semantics, not merge). Also applies NativeToolsOverride
-// to the resolved config if present.
+// config entirely (replace semantics, not merge).
+//
+// Side effect: when the override includes NativeTools, this method mutates
+// resolvedConfig.NativeToolsOverride so the downstream LLM call picks up the
+// override. This coupling keeps MCP selection logic in one place rather than
+// splitting it across the executor flow.
+//
 // Returns (serverIDs, toolFilter, error).
 func (e *RealSessionExecutor) resolveMCPSelection(
 	session *ent.AlertSession,

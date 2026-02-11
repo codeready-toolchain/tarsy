@@ -147,12 +147,7 @@ func callSummarizationLLM(
 	recordLLMInteraction(ctx, execCtx, 0, "summarization", len(messages),
 		streamed.LLMResponse, nil, startTime)
 
-	var usage *agent.TokenUsage
-	if streamed.Usage != nil {
-		usage = streamed.Usage
-	}
-
-	return summary, usage, nil
+	return summary, streamed.Usage, nil
 }
 
 // callSummarizationLLMWithStreaming is analogous to callLLMWithStreaming but
@@ -219,7 +214,7 @@ func callSummarizationLLMWithStreaming(
 				Metadata:       metadata,
 			})
 			if createErr != nil {
-				slog.Warn("Failed to create streaming summary event", "error", createErr)
+				slog.Warn("Failed to create streaming summary event", "session_id", execCtx.SessionID, "error", createErr)
 				eventCreateFailed = true
 				return
 			}
@@ -297,7 +292,11 @@ func buildConversationContext(messages []agent.ConversationMessage) string {
 		if msg.Role == agent.RoleSystem {
 			continue // Skip system prompt (too long, not needed for context)
 		}
-		sb.WriteString(fmt.Sprintf("[%s]: %s\n\n", msg.Role, msg.Content))
+		sb.WriteByte('[')
+		sb.WriteString(string(msg.Role))
+		sb.WriteString("]: ")
+		sb.WriteString(msg.Content)
+		sb.WriteString("\n\n")
 	}
 	return sb.String()
 }

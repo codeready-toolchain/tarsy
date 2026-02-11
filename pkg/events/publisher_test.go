@@ -27,6 +27,8 @@ func TestTruncateIfNeeded(t *testing.T) {
 		for i := range longContent {
 			longContent[i] = 'a'
 		}
+		// Type doesn't affect truncation (size-based), using TimelineCreatedPayload
+		// for its Content field to exercise the oversized-content path.
 		payload, _ := json.Marshal(TimelineCreatedPayload{
 			Type:      EventTypeStreamChunk,
 			EventID:   "evt-123",

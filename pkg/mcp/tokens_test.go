@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -73,21 +74,21 @@ func TestTruncateAtLineBoundary(t *testing.T) {
 			content:  "line1\nline2\nline3\nline4",
 			maxChars: 15,
 			marker:   "test marker",
-			expected: "line1\nline2\n\n[TRUNCATED: test marker — Original size: 0KB, limit: 0KB]",
+			expected: "line1\nline2\n\n[TRUNCATED: test marker — Original size: 23B, limit: 15B]",
 		},
 		{
 			name:     "hard cuts without newlines",
 			content:  "abcdefghijklmnopqrstuvwxyz",
 			maxChars: 10,
 			marker:   "hard cut",
-			expected: "abcdefghij\n\n[TRUNCATED: hard cut — Original size: 0KB, limit: 0KB]",
+			expected: "abcdefghij\n\n[TRUNCATED: hard cut — Original size: 26B, limit: 10B]",
 		},
 		{
 			name:     "cuts back to last complete line",
 			content:  "line1\nline2\nline3\nline4\nline5",
 			maxChars: 14, // lands in the middle of "line3"
 			marker:   "test",
-			expected: "line1\nline2\n\n[TRUNCATED: test — Original size: 0KB, limit: 0KB]",
+			expected: "line1\nline2\n\n[TRUNCATED: test — Original size: 29B, limit: 14B]",
 		},
 		{
 			name: "preserves complete lines in indented JSON",
@@ -101,14 +102,64 @@ func TestTruncateAtLineBoundary(t *testing.T) {
 			maxChars: 40, // lands in the middle of "nested" line
 			marker:   "JSON content",
 			expected: "{\n  \"name\": \"test\",\n  \"value\": 123," +
-				"\n\n[TRUNCATED: JSON content — Original size: 0KB, limit: 0KB]",
+				"\n\n[TRUNCATED: JSON content — Original size: 73B, limit: 40B]",
+		},
+		{
+			name:     "does not split multi-byte UTF-8 rune (emoji)",
+			content:  "hello 🌍 world! more text here",
+			maxChars: 8, // lands inside the 4-byte 🌍 emoji (bytes 6-9)
+			marker:   "utf8",
+			// Should back up to byte 6 (before the emoji), not split it
+		},
+		{
+			name:     "does not split multi-byte UTF-8 rune (CJK)",
+			content:  "ab世界cd", // 'ab' (2) + '世' (3) + '界' (3) + 'cd' (2) = 10 bytes
+			maxChars: 4,        // lands inside '世' (bytes 2-4)
+			marker:   "cjk",
+		},
+		{
+			name:     "does not split multi-byte UTF-8 with newlines",
+			content:  "line1\nこんにちは\nline3",
+			maxChars: 10, // lands inside the CJK chars after newline
+			marker:   "utf8 newline",
+			expected: "line1\n\n[TRUNCATED: utf8 newline — Original size: 27B, limit: 10B]",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := truncateAtLineBoundary(tt.content, tt.maxChars, tt.marker)
-			assert.Equal(t, tt.expected, got)
+			if tt.expected != "" {
+				assert.Equal(t, tt.expected, got)
+			}
+			// All truncated output must be valid UTF-8
+			assert.True(t, utf8.ValidString(got),
+				"truncated output should be valid UTF-8")
+			if len(tt.content) > tt.maxChars && tt.maxChars > 0 {
+				assert.Contains(t, got, "[TRUNCATED:",
+					"oversized content should have truncation marker")
+			}
+		})
+	}
+}
+
+func TestFormatSize(t *testing.T) {
+	tests := []struct {
+		bytes    int
+		expected string
+	}{
+		{0, "0B"},
+		{1, "1B"},
+		{1023, "1023B"},
+		{1024, "1KB"},
+		{1025, "1KB"}, // integer division truncates
+		{2048, "2KB"},
+		{32000, "31KB"},
+		{1048576, "1024KB"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, formatSize(tt.bytes))
 		})
 	}
 }
@@ -123,7 +174,7 @@ func TestTruncateForStorage(t *testing.T) {
 		large := strings.Repeat("x", maxChars+1000)
 		want := strings.Repeat("x", maxChars) +
 			fmt.Sprintf("\n\n[TRUNCATED: Output exceeded storage display limit — Original size: %dKB, limit: %dKB]",
-				len(large)/1024, maxChars/1024)
+				len(large)/1024, maxChars/1024) // both values > 1024, so formatSize returns KB
 		assert.Equal(t, want, TruncateForStorage(large))
 	})
 }
