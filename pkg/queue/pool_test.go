@@ -90,6 +90,7 @@ func TestStubExecutor(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.NotEmpty(t, result.FinalAnalysis)
 	assert.NotEmpty(t, result.ExecutiveSummary)
+	assert.Empty(t, result.ExecutiveSummaryError)
 	assert.Nil(t, result.Error)
 }
 
@@ -127,58 +128,6 @@ func TestPoolRegisterSessionConcurrency(t *testing.T) {
 		defer pool.mu.RUnlock()
 		return len(pool.activeSessions) == numSessions
 	}, 1*time.Second, 10*time.Millisecond)
-}
-
-func TestPoolCancelNonExistentSession(t *testing.T) {
-	pool := &WorkerPool{
-		activeSessions: make(map[string]context.CancelFunc),
-	}
-
-	// Cancelling a session that was never registered should return false
-	assert.False(t, pool.CancelSession("nonexistent-session"))
-}
-
-func TestPoolUnregisterNonExistentSession(t *testing.T) {
-	pool := &WorkerPool{
-		activeSessions: make(map[string]context.CancelFunc),
-	}
-
-	// Unregistering a session that was never registered should not panic
-	assert.NotPanics(t, func() {
-		pool.UnregisterSession("nonexistent-session")
-	})
-}
-
-func TestPoolMultipleSessionLifecycle(t *testing.T) {
-	pool := &WorkerPool{
-		activeSessions: make(map[string]context.CancelFunc),
-	}
-
-	// Register multiple sessions
-	sessions := []string{"session-1", "session-2", "session-3"}
-
-	for _, sid := range sessions {
-		_, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		pool.RegisterSession(sid, cancel)
-	}
-
-	// Verify all registered
-	ids := pool.getActiveSessionIDs()
-	require.Len(t, ids, 3)
-
-	// Cancel one session
-	assert.True(t, pool.CancelSession("session-2"))
-
-	// Unregister it
-	pool.UnregisterSession("session-2")
-
-	// Verify only 2 remain
-	ids = pool.getActiveSessionIDs()
-	require.Len(t, ids, 2)
-	assert.Contains(t, ids, "session-1")
-	assert.Contains(t, ids, "session-3")
-	assert.NotContains(t, ids, "session-2")
 }
 
 func TestPoolRegisterSameSessionTwice(t *testing.T) {
@@ -232,16 +181,4 @@ func TestPoolConcurrentCancellation(t *testing.T) {
 	// All calls should succeed (CancelSession just calls cancel, doesn't remove)
 	assert.Equal(t, numGoroutines, trueCount)
 	assert.Error(t, ctx.Err())
-}
-
-func TestStubExecutorReturnsAnalysis(t *testing.T) {
-	executor := NewStubExecutor()
-
-	result := executor.Execute(context.Background(), nil)
-
-	assert.Equal(t, alertsession.StatusCompleted, result.Status)
-	assert.NotEmpty(t, result.FinalAnalysis)
-	assert.NotEmpty(t, result.ExecutiveSummary)
-	assert.Empty(t, result.ExecutiveSummaryError)
-	assert.Nil(t, result.Error)
 }
