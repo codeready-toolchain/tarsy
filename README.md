@@ -1,5 +1,10 @@
 # TARSy
 
+[![CI](https://github.com/codeready-toolchain/tarsy/actions/workflows/ci.yml/badge.svg)](https://github.com/codeready-toolchain/tarsy/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/codeready-toolchain/tarsy/graph/badge.svg)](https://codecov.io/gh/codeready-toolchain/tarsy)
+[![Go Coverage](https://codecov.io/gh/codeready-toolchain/tarsy/graph/badge.svg?flag=go)](https://codecov.io/gh/codeready-toolchain/tarsy?flags[0]=go)
+[![Python Coverage](https://codecov.io/gh/codeready-toolchain/tarsy/graph/badge.svg?flag=python)](https://codecov.io/gh/codeready-toolchain/tarsy?flags[0]=python)
+
 New TARSy implementation with Go orchestrator + Python LLM service architecture.
 
 ## Current Status
