@@ -26,8 +26,8 @@ func FormatInvestigationContext(events []*ent.TimelineEvent) string {
 	return sb.String()
 }
 
-// ParallelAgentInvestigation holds one agent's investigation data for synthesis formatting.
-type ParallelAgentInvestigation struct {
+// AgentInvestigation holds one agent's investigation data for synthesis formatting.
+type AgentInvestigation struct {
 	AgentName    string
 	AgentIndex   int
 	Strategy     string               // e.g., "native-thinking", "react"
@@ -41,7 +41,7 @@ type ParallelAgentInvestigation struct {
 // histories for the synthesis agent. Uses timeline events (which include thinking,
 // tool calls, tool results, and responses) rather than raw messages.
 // Each agent's investigation is wrapped with identifying metadata.
-func FormatInvestigationForSynthesis(agents []ParallelAgentInvestigation, stageName string) string {
+func FormatInvestigationForSynthesis(agents []AgentInvestigation, stageName string) string {
 	// Count successes
 	succeeded := 0
 	for _, a := range agents {

@@ -200,7 +200,7 @@ func TestFormatInvestigationContext(t *testing.T) {
 
 func TestFormatInvestigationForSynthesis(t *testing.T) {
 	t.Run("two agents both completed", func(t *testing.T) {
-		agents := []ParallelAgentInvestigation{
+		agents := []AgentInvestigation{
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
@@ -237,7 +237,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 	})
 
 	t.Run("one failed with error", func(t *testing.T) {
-		agents := []ParallelAgentInvestigation{
+		agents := []AgentInvestigation{
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
@@ -268,7 +268,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 	})
 
 	t.Run("failed agent without error message", func(t *testing.T) {
-		agents := []ParallelAgentInvestigation{
+		agents := []AgentInvestigation{
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
@@ -288,7 +288,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 	})
 
 	t.Run("completed agent with no events omits placeholder", func(t *testing.T) {
-		agents := []ParallelAgentInvestigation{
+		agents := []AgentInvestigation{
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
@@ -306,7 +306,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 	})
 
 	t.Run("events are formatted through shared formatter", func(t *testing.T) {
-		agents := []ParallelAgentInvestigation{
+		agents := []AgentInvestigation{
 			{
 				AgentName:   "Agent",
 				AgentIndex:  1,

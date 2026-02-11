@@ -568,7 +568,7 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 ) string {
 	configs := buildConfigs(input.stageConfig)
 
-	investigations := make([]agentctx.ParallelAgentInvestigation, len(parallelResult.agentResults))
+	investigations := make([]agentctx.AgentInvestigation, len(parallelResult.agentResults))
 	for i, ar := range parallelResult.agentResults {
 		// Resolve display name and strategy from configs
 		displayName := ""
@@ -593,7 +593,7 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 			providerName = input.stageConfig.Agents[i].LLMProvider
 		}
 
-		investigation := agentctx.ParallelAgentInvestigation{
+		investigation := agentctx.AgentInvestigation{
 			AgentName:   displayName,
 			AgentIndex:  i + 1, // 1-based
 			Strategy:    strategy,
