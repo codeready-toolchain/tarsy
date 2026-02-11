@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -107,17 +106,15 @@ func recordLLMInteraction(
 	}
 }
 
-// isTimeoutError checks if an error is timeout-related.
-// Used for consecutive timeout tracking.
+// isTimeoutError checks if an error is a context deadline timeout.
+// Used for consecutive timeout tracking. Only matches errors that wrap
+// context.DeadlineExceeded — string-based matching is intentionally avoided
+// because callers now propagate the original error with its full chain.
 func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "timeout") || strings.Contains(errStr, "timed out")
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 // generateCallID creates a unique ID for a tool call.

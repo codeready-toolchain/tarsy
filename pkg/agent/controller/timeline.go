@@ -108,7 +108,7 @@ func finalizeStreamingEvent(
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
 			}
 		} else {
-			slog.Error("EventPublisher is nil, skipping "+label+" completion publish",
+			slog.Warn("EventPublisher is nil, skipping "+label+" completion publish",
 				"event_id", eventID, "session_id", execCtx.SessionID)
 		}
 		return
@@ -135,7 +135,7 @@ func finalizeStreamingEvent(
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
 		}
 	} else {
-		slog.Error("EventPublisher is nil, skipping "+label+" failure publish",
+		slog.Warn("EventPublisher is nil, skipping "+label+" failure publish",
 			"event_id", eventID, "session_id", execCtx.SessionID)
 	}
 }

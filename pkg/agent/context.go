@@ -35,7 +35,7 @@ type ExecutionContext struct {
 
 	// Dependencies (injected by executor)
 	LLMClient      LLMClient
-	ToolExecutor   ToolExecutor   // Phase 3.2: stub, Phase 4: MCP client
+	ToolExecutor   ToolExecutor
 	EventPublisher EventPublisher // Real-time event delivery to WebSocket clients
 	Services       *ServiceBundle
 

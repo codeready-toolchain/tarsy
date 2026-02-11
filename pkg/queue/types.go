@@ -19,7 +19,7 @@ var (
 	ErrAtCapacity = errors.New("at capacity")
 )
 
-// SessionExecutor is the interface for session processing (implemented in Phase 3).
+// SessionExecutor is the interface for session processing.
 //
 // The executor owns the ENTIRE session lifecycle internally:
 //   - Executes all stages sequentially (from chain config)

@@ -1101,8 +1101,8 @@ func TestGetFormatCorrectionReminder(t *testing.T) {
 }
 
 func TestFormatToolErrorObservation(t *testing.T) {
-	t.Run("with error", func(t *testing.T) {
-		obs := FormatToolErrorObservation(fmt.Errorf("connection timeout"))
+	t.Run("with error message", func(t *testing.T) {
+		obs := FormatToolErrorObservation("connection timeout")
 		if !strings.Contains(obs, "Observation:") {
 			t.Errorf("Should start with Observation:")
 		}
@@ -1111,8 +1111,8 @@ func TestFormatToolErrorObservation(t *testing.T) {
 		}
 	})
 
-	t.Run("nil error", func(t *testing.T) {
-		obs := FormatToolErrorObservation(nil)
+	t.Run("empty message", func(t *testing.T) {
+		obs := FormatToolErrorObservation("")
 		if !strings.Contains(obs, "unknown error") {
 			t.Errorf("Should contain fallback message, got: %s", obs)
 		}

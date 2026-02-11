@@ -109,10 +109,11 @@ func TestReActController_ToolCallErrorLifecycle(t *testing.T) {
 		if ev.EventType == timelineevent.EventTypeLlmToolCall {
 			found = true
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status)
-			// is_error should be true for failed tools
-			if isErr, ok := ev.Metadata["is_error"]; ok {
-				assert.Equal(t, true, isErr)
-			}
+			// is_error must be present and true for failed tools
+			require.Contains(t, ev.Metadata, "is_error",
+				"is_error key must exist in tool call event metadata")
+			assert.Equal(t, true, ev.Metadata["is_error"],
+				"is_error should be true for a failed tool call")
 			break
 		}
 	}

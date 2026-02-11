@@ -598,7 +598,7 @@ func (m *mockToolExecutorFunc) Close() error { return nil }
 // newTestExecCtx creates a test ExecutionContext backed by a real test database.
 // Defaults: MaxIterations=20, IterationTimeout=120s.
 // Tests that need different limits should override execCtx.Config.MaxIterations.
-// Note: ChatContext is left zero-valued — controllers don't rely on it in Phase 3.2.
+// Note: ChatContext is left zero-valued — controllers don't rely on it.
 func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecutor) *agent.ExecutionContext {
 	t.Helper()
 

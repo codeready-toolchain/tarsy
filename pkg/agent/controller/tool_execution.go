@@ -18,6 +18,11 @@ type toolCallResult struct {
 	Content string
 	// IsError is true if the tool execution itself failed.
 	IsError bool
+	// Err is the original error from tool execution (non-nil only when
+	// ToolExecutor.Execute returned an error). Callers that need to inspect
+	// the error type (e.g. context.DeadlineExceeded) should use this field
+	// instead of parsing Content.
+	Err error
 	// Usage is non-nil when summarization produced token usage to accumulate.
 	Usage *agent.TokenUsage
 }
@@ -58,7 +63,7 @@ func executeToolCall(
 	if toolErr != nil {
 		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
-		return toolCallResult{Content: errContent, IsError: true}
+		return toolCallResult{Content: errContent, IsError: true, Err: toolErr}
 	}
 
 	// Step 4: Complete tool call event with storage-truncated result

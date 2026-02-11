@@ -153,8 +153,8 @@ func (c *ReActController) Run(
 				tcResult := executeToolCall(iterCtx, execCtx, toolCall, messages, &eventSeq)
 
 				if tcResult.IsError {
-					state.RecordFailure(tcResult.Content, isTimeoutError(fmt.Errorf("%s", tcResult.Content)))
-					observation := FormatToolErrorObservation(fmt.Errorf("%s", tcResult.Content))
+					state.RecordFailure(tcResult.Content, isTimeoutError(tcResult.Err))
+					observation := FormatToolErrorObservation(tcResult.Content)
 					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				} else {

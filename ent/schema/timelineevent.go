@@ -61,7 +61,7 @@ func (TimelineEvent) Fields() []ent.Field {
 		//                        LLM requests a tool call (metadata: server_name, tool_name, arguments).
 		//                        Completed with the storage-truncated raw result in content and
 		//                        is_error in metadata after ToolExecutor.Execute() returns.
-		//   mcp_tool_summary   — MCP tool result summary (Phase 4.3). Created with status "streaming"
+		//   mcp_tool_summary   — MCP tool result summary. Created with status "streaming"
 		//                        when summarization starts. Completed with the LLM-generated summary.
 		//                        Metadata: server_name, tool_name, original_tokens, summarization_model.
 		//   error              — Error during iteration (LLM failure, tool failure, etc.).

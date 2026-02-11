@@ -92,19 +92,19 @@ func TestIsTimeoutError(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "timeout in message",
+			name: "timeout in message only (no wrapped sentinel)",
 			err:  errors.New("request timeout after 30s"),
-			want: true,
+			want: false,
 		},
 		{
-			name: "timed out in message",
+			name: "timed out in message only (no wrapped sentinel)",
 			err:  errors.New("connection timed out"),
-			want: true,
+			want: false,
 		},
 		{
-			name: "TIMEOUT uppercase in message",
+			name: "TIMEOUT uppercase in message only (no wrapped sentinel)",
 			err:  errors.New("TIMEOUT occurred"),
-			want: true,
+			want: false,
 		},
 		{
 			name: "regular error",

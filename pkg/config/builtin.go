@@ -18,8 +18,8 @@ type BuiltinConfig struct {
 	DefaultAlertType string
 }
 
-// BuiltinAgentConfig holds built-in agent metadata (configuration only)
-// Agent instantiation/factory pattern is handled in Phase 3: Agent Framework
+// BuiltinAgentConfig holds built-in agent metadata (configuration only).
+// Agent instantiation/factory pattern is in pkg/agent/factory.go.
 type BuiltinAgentConfig struct {
 	Description        string
 	IterationStrategy  IterationStrategy

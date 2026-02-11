@@ -45,7 +45,7 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 }
 
 // Execute runs the session through the agent chain.
-// Phase 3.1: single stage, single agent only.
+// Currently supports single stage, single agent only (chain execution in Phase 5).
 func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSession) *ExecutionResult {
 	logger := slog.With(
 		"session_id", session.ID,
@@ -72,7 +72,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// Phase 3.1: execute first stage only
+	// Execute first stage only (multi-stage chain execution in Phase 5)
 	stageConfig := chain.Stages[0]
 	if len(stageConfig.Agents) == 0 {
 		return &ExecutionResult{
@@ -168,7 +168,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		AgentIndex:     1,
 		AlertData:      session.AlertData,
 		AlertType:      session.AlertType,
-		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 6 adds real runbook fetching
+		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 8 adds real runbook fetching
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		ToolExecutor:   toolExecutor,
@@ -225,7 +225,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 9. Aggregate stage status
+	// 10. Aggregate stage status
 	if err := stageService.UpdateStageStatus(ctx, stg.ID); err != nil {
 		logger.Error("Failed to update stage status", "error", err)
 		return &ExecutionResult{
@@ -235,7 +235,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 10. Map agent result -> queue result
+	// 11. Map agent result -> queue result
 	logger.Info("Session executor: execution completed",
 		"status", agentResult.Status,
 		"tokens_total", agentResult.TokensUsed.TotalTokens)

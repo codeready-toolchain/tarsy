@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-// AgentConfig defines agent configuration (metadata only - instantiation is Phase 3)
+// AgentConfig defines agent configuration (metadata only — see agent.AgentFactory for instantiation).
 type AgentConfig struct {
 	// MCP servers this agent uses
 	MCPServers []string `yaml:"mcp_servers" validate:"required,min=1"`

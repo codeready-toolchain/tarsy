@@ -131,7 +131,7 @@ func (c *NativeThinkingController) Run(
 				tcResult := executeToolCall(iterCtx, execCtx, tc, messages, &eventSeq)
 
 				if tcResult.IsError {
-					state.RecordFailure(tcResult.Content, isTimeoutError(fmt.Errorf("%s", tcResult.Content)))
+					state.RecordFailure(tcResult.Content, isTimeoutError(tcResult.Err))
 				}
 				accumulateTokenUsage(&totalUsage, tcResult.Usage)
 

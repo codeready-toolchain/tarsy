@@ -47,7 +47,7 @@ func (Message) Fields() []ent.Field {
 		field.Text("content").
 			Comment("Message text"),
 
-		// Tool-related fields for native function calling (Phase 3.1)
+		// Tool-related fields for native function calling
 		field.JSON("tool_calls", []MessageToolCall{}).
 			Optional().
 			Comment("For assistant messages: tool calls requested by LLM"),

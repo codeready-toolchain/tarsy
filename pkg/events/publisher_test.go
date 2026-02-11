@@ -77,9 +77,13 @@ func TestTruncateIfNeeded(t *testing.T) {
 
 	t.Run("boundary: payload just under limit is not truncated", func(t *testing.T) {
 		// Build a payload whose JSON is just under 7900 bytes.
-		// Marshal an empty struct first to measure the overhead.
+		// Marshal an empty struct first to measure the overhead of the struct's
+		// fixed fields (keys, quotes, separators). The 20-byte safety margin
+		// accounts for JSON encoding variability: if new fields with non-zero
+		// defaults are added to TimelineCreatedPayload, the base overhead grows
+		// and the margin prevents the test from flipping unexpectedly.
 		base, _ := json.Marshal(TimelineCreatedPayload{Type: "t"})
-		contentSize := 7900 - len(base) - 20 // 20 bytes safety margin
+		contentSize := 7900 - len(base) - 20
 		content := make([]byte, contentSize)
 		for i := range content {
 			content[i] = 'b'
