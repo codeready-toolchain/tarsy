@@ -6,9 +6,9 @@ Add follow-up chat capability so users can ask questions about completed investi
 
 **Current state**: Chat infrastructure exists (ent schemas, ChatService, ChatContext, prompt builder chat branching, investigation formatter, chat instructions/templates, ChatAgent config, chain ChatConfig). No execution pipeline, no API surface.
 
-**Target state**: Full end-to-end chat: API handlers → queue-based execution → streaming response via existing WebSocket. Chat messages are routed through a dedicated chat executor with concurrency control to limit concurrent LLM usage.
+**Target state**: Full end-to-end chat: API handlers → async execution → streaming response via existing WebSocket. Each chat message spawns a goroutine that runs the agent framework — no pool, no queue, no concurrency limits. Chats are user-initiated and rare; complexity is not warranted.
 
-**Design principle**: Chat is a prompt concern, not a controller concern. The same controllers (ReAct, NativeThinking) handle both investigation and chat — the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers.
+**Design principle**: Chat is a prompt concern, not a controller concern. The same controllers (ReAct, NativeThinking) handle both investigation and chat — the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers. Same iteration limits, same `forceConclusion()` at `MaxIterations`, same per-iteration timeout.
 
 ---
 
@@ -25,8 +25,7 @@ Add follow-up chat capability so users can ask questions about completed investi
 2. User creates chat (once per session):
    POST /api/v1/sessions/:id/chat
      → Validates terminal session + chat enabled + no existing chat
-     → Captures investigation context from timeline events
-     → Creates Chat record (with investigation_context)
+     → Creates Chat record (lightweight — no context capture)
      → Publishes chat.created event
      → Returns { chat_id, session_id, created_at }
 
@@ -38,17 +37,18 @@ Add follow-up chat capability so users can ask questions about completed investi
      → Submits to ChatMessageExecutor (async, returns immediately)
      → Returns { message_id, stage_id }
 
-4. ChatMessageExecutor processes (async):
-     → Acquires concurrency slot
-     → Builds ChatContext (investigation + chat history + question)
+4. ChatMessageExecutor processes (goroutine):
      → Resolves chat agent config from chain
      → Creates Stage (chat_id, chat_user_message_id) + AgentExecution
+     → Creates user_question timeline event
+     → Builds ChatContext (GetSessionTimeline → FormatInvestigationContext)
      → Publishes stage.status: started
+     → Starts heartbeat (Chat.last_interaction_at)
      → Runs agent.Execute() (same controllers as investigation)
      → Agent streams response via existing WebSocket events
      → Updates Stage/AgentExecution terminal status
      → Publishes stage.status: completed/failed
-     → Releases concurrency slot
+     → Schedules stage event cleanup (60s grace period)
 
 5. User gets history:
    GET /api/v1/chats/:id/history
@@ -73,11 +73,12 @@ Add follow-up chat capability so users can ask questions about completed investi
 
 ### ChatMessageExecutor
 
-A new component in `pkg/queue/` that manages chat message execution with concurrency control. Separate from the session `WorkerPool` but follows similar patterns.
+A new component in `pkg/queue/` that manages chat message execution. Each message spawns a goroutine — no pool, no semaphore, no queue. Chats are user-initiated, rare, and short-lived; concurrency control is not warranted. One-at-a-time per chat (enforced) naturally limits load.
 
 ```go
-// ChatMessageExecutor processes chat messages through the agent framework
-// with bounded concurrency to limit LLM usage.
+// ChatMessageExecutor processes chat messages through the agent framework.
+// Each message runs in its own goroutine. No concurrency pool — chats are
+// rare and user-initiated. One-at-a-time per chat provides natural limiting.
 type ChatMessageExecutor struct {
     // Dependencies
     client           *ent.Client
@@ -89,33 +90,34 @@ type ChatMessageExecutor struct {
     eventPublisher   agent.EventPublisher
     promptBuilder    agent.PromptBuilder
 
-    // Concurrency control
-    sem              chan struct{}   // bounded semaphore (max concurrent chat executions)
-
-    // Active execution tracking (for cancellation)
+    // Active execution tracking (for cancellation + shutdown)
     mu               sync.RWMutex
     activeExecs      map[string]context.CancelFunc  // chatID → cancel
+    wg               sync.WaitGroup                 // tracks active goroutines for shutdown
+    stopped          bool                           // reject new submissions after Stop()
 }
 ```
 
-**Why separate from WorkerPool**: Session workers use `FOR UPDATE SKIP LOCKED` polling on the `AlertSession` table. Chat execution is triggered by API calls, not by polling. Mixing the two would either require a second polling query in the worker loop (added latency for alert processing) or a fundamentally different triggering mechanism. A separate executor is cleaner and allows independent concurrency tuning.
+**Why no concurrency pool**: Old TARSy processed chats via `asyncio.create_task()` with no limits and worked fine. Chats are user-initiated (one at a time per chat, per user), making thundering herd impossible. The one-at-a-time enforcement means at most N concurrent chat executions where N = number of active chats — in practice, very few. If this ever becomes a concern, a semaphore is a one-line addition.
 
 ### Submit Flow
 
 ```go
 func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput) (stageID string, err error) {
-    // 1. Check one-at-a-time constraint
+    // 1. Reject if stopped (graceful shutdown)
+    if e.stopped { return "", ErrShuttingDown }
+
+    // 2. Check one-at-a-time constraint
     //    Query: any Stage with chat_id = input.ChatID AND status IN (pending, active)?
     //    If yes → return ErrChatExecutionActive
 
-    // 2. Create Stage record (status: pending)
+    // 3. Create Stage record (status: pending)
     //    stage_name: "Chat Response"
     //    chat_id, chat_user_message_id set
     //    stage_index: max(session stages) + 1
 
-    // 3. Return stageID to caller (for immediate API response)
-
-    // 4. Launch goroutine (respects semaphore)
+    // 4. Launch goroutine
+    e.wg.Add(1)
     go e.execute(ctx, input, stageID)
 
     return stageID, nil
@@ -126,34 +128,43 @@ func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput
 
 ```go
 func (e *ChatMessageExecutor) execute(ctx context.Context, input ChatExecuteInput, stageID string) {
-    // Acquire concurrency slot (blocks if at capacity)
-    e.sem <- struct{}{}
-    defer func() { <-e.sem }()
+    defer e.wg.Done()
 
-    // Create cancellable context
-    execCtx, cancel := context.WithTimeout(ctx, e.config.ChatTimeout)
+    // Create cancellable context with timeout (reuses SessionTimeout from queue config)
+    execCtx, cancel := context.WithTimeout(ctx, e.config.SessionTimeout)
     defer cancel()
 
     // Register for cancellation
     e.registerExecution(input.ChatID, cancel)
     defer e.unregisterExecution(input.ChatID)
 
-    // Update Stage status: active
-    // Publish stage.status: started
-
-    // 1. Build ChatContext
-    chatContext := e.buildChatContext(execCtx, input)
-
-    // 2. Resolve chat agent config
+    // 1. Resolve chat agent config
     agentConfig := e.resolveChatAgentConfig(input.Chat.ChainID)
 
-    // 3. Create AgentExecution record
+    // 2. Create AgentExecution record
 
-    // 4. Create MCP ToolExecutor (per-execution isolation, same as investigation)
+    // 3. Create user_question timeline event (before building context, so it's included)
+    e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
+        SessionID:   input.Session.ID,
+        StageID:     &stageID,
+        ExecutionID: &executionID,
+        EventType:   timelineevent.EventTypeUserQuestion,
+        Content:     input.Message.Content,
+    })
+
+    // 4. Build ChatContext (GetSessionTimeline → FormatInvestigationContext)
+    chatContext := e.buildChatContext(execCtx, input)
+
+    // Update Stage status: active
+    // Publish stage.status: started
+    // Start heartbeat
+    go e.runChatHeartbeat(execCtx, input.Chat.ID)
+
+    // 6. Create MCP ToolExecutor (per-execution isolation, same as investigation)
     toolExec, mcpClient, err := e.mcpClientFactory.CreateToolExecutor(...)
     if toolExec != nil { defer toolExec.Close() }
 
-    // 5. Build ExecutionContext (with ChatContext populated)
+    // 7. Build ExecutionContext (with ChatContext populated)
     agentExecCtx := &agent.ExecutionContext{
         SessionID:   input.Session.ID,
         StageID:     stageID,
@@ -171,25 +182,38 @@ func (e *ChatMessageExecutor) execute(ctx context.Context, input ChatExecuteInpu
         FailedServers: failedServers,
     }
 
-    // 6. Create agent via AgentFactory → BaseAgent with appropriate Controller
+    // 8. Create agent via AgentFactory → BaseAgent with appropriate Controller
     chatAgent := e.agentFactory.CreateAgent(agentExecCtx)
 
-    // 7. Execute agent (same path as investigation — controller handles chat via ChatContext)
+    // 9. Execute agent (same path as investigation — controller handles chat via ChatContext)
     result, err := chatAgent.Execute(execCtx, agentExecCtx, "")  // no prevStageContext for chat
 
-    // 8. Update AgentExecution + Stage terminal status
+    // 10. Update AgentExecution + Stage terminal status
+    // 11. Publish stage.status: completed/failed
 
-    // 9. Update Chat.last_interaction_at (heartbeat equivalent)
+    // 12. Stop heartbeat, schedule event cleanup
 }
 ```
 
-### Concurrency Control
+### Heartbeat
 
-- `MaxConcurrentChats` config value (default: 3, configurable in `queue` config section)
-- Bounded channel (`sem`) acts as semaphore
-- When at capacity: goroutine blocks on `e.sem <- struct{}{}` until a slot opens
-- The Stage is created BEFORE acquiring the semaphore (so the API returns immediately with a stage ID)
-- Stage status transitions: `pending` (created) → `active` (semaphore acquired) → terminal
+During execution, a heartbeat goroutine periodically updates `Chat.last_interaction_at` and sets `Chat.pod_id`. Same pattern as session heartbeat in the Worker. This enables orphan detection: if the pod crashes mid-execution, stale active stages can be identified and cleaned up (preventing the one-at-a-time check from permanently blocking).
+
+```go
+// Started inside execute(), cancelled on completion
+go e.runChatHeartbeat(execCtx, input.Chat.ID)
+```
+
+### Stage Event Cleanup
+
+After each chat response stage reaches terminal status, transient Event records (used for WebSocket delivery) are cleaned up after a 60s grace period. Same pattern as `Worker.scheduleEventCleanup()`:
+
+```go
+// At end of execute(), after stage reaches terminal status
+time.AfterFunc(60*time.Second, func() {
+    e.cleanupStageEvents(context.Background(), stageID)
+})
+```
 
 ### Cancellation
 
@@ -209,12 +233,22 @@ Mirrors `WorkerPool.CancelSession()`. The agent framework already handles contex
 
 ### Graceful Shutdown
 
-On shutdown:
-1. Stop accepting new submissions (reject with 503)
-2. Cancel all active executions (cancel contexts)
-3. Wait for goroutines to finish (with timeout)
+```go
+func (e *ChatMessageExecutor) Stop() {
+    e.mu.Lock()
+    e.stopped = true
+    // Cancel all active executions
+    for _, cancel := range e.activeExecs {
+        cancel()
+    }
+    e.mu.Unlock()
 
-Uses the same pattern as `WorkerPool.Stop()`.
+    // Wait for goroutines to finish
+    e.wg.Wait()
+}
+```
+
+On shutdown: mark stopped (new submissions rejected with 503), cancel all active contexts, wait for goroutines to drain. Simple — no pool to tear down.
 
 ---
 
@@ -256,10 +290,9 @@ Uses the same pattern as `WorkerPool.Stop()`.
 2. Get session, validate terminal status
 3. Resolve chain config, validate `chat.enabled`
 4. Check for existing chat (409 if exists)
-5. Capture investigation context (timeline events → `FormatInvestigationContext()`)
-6. `ChatService.CreateChat()` with investigation context
-7. Publish `chat.created` event
-8. Return chat response
+5. `ChatService.CreateChat()` (no context capture — built lazily per message)
+6. Publish `chat.created` event
+7. Return chat response
 
 ### GET `/api/v1/sessions/:id/chat-available` — Check Availability
 
@@ -423,60 +456,61 @@ The client distinguishes chat stages from investigation stages via the `stage.ch
 
 ## Context Building
 
-### Investigation Context
+### Unified Timeline Context
 
-Captured **once at chat creation time** and stored on the `Chat` record. This provides:
-- **Consistency**: All messages in a chat see the same investigation context
-- **Performance**: No re-querying timeline events for each message
-- **Correctness**: Investigation data is immutable after session completes
+All context — original investigation AND previous chat exchanges — comes from a single source: the session's timeline events. No separate "chat history" builder.
 
-**Capture flow**:
-1. Query session's timeline events (excluding chat stages, executive summary)
-2. Filter out `llm_thinking` events (too verbose, internal reasoning — matches old TARSy's `include_thinking=False`)
-3. Format via `FormatInvestigationContext()` (shared with synthesis formatting)
-4. Store formatted text in `Chat.investigation_context` field
+**Key enabler**: Each chat message creates a `user_question` timeline event before the agent runs. This means `GetSessionTimeline()` returns a complete chronological record:
 
-**Event type filtering for context**:
-- **Include**: `llm_response`, `final_analysis`, `llm_tool_call` (with summary dedup via `formatTimelineEvents()`), `code_execution`, `google_search_result`, `url_context_result`, `error`
-- **Exclude**: `llm_thinking` (verbose internal reasoning), `executive_summary` (session-level, not investigation detail), `mcp_tool_summary` (deduplicated into tool calls by formatter)
+```
+[Investigation stage 1 events: tool calls, responses, final analysis]
+[Investigation stage 2 events: ...]
+[user_question: "Why is pod X crashing?"]        ← chat message 1
+[Chat response stage events: tool calls, response, final analysis]
+[user_question: "Can you check memory limits?"]   ← chat message 2
+[Chat response stage events: ...]                 ← current message runs here
+```
 
-### Chat History
+Each subsequent chat message naturally sees the full history of everything before it — the original investigation AND all prior chat exchanges with their full tool work. No stripping down to final analyses, no separate correlation logic.
 
-Built **per-message** from previous chat exchanges in the same chat.
+**Build flow** (inside `ChatMessageExecutor.buildChatContext()`):
+1. `TimelineService.GetSessionTimeline(sessionID)` — single indexed query, already exists
+2. `FormatInvestigationContext(events)` — already exists, handles all event types
 
-**Build flow**:
-1. Query ChatUserMessages for the chat (ordered by created_at)
-2. For each message (except the current one), find its response Stage
-3. Query the Stage's timeline events (final_analysis event → response content)
-4. Build `[]ChatExchange` with `UserQuestion` + `Messages`
-5. Pass to `ChatContext.ChatHistory`
+**No filtering**. All event types pass through — including `llm_thinking`. This matches the synthesis context builder (which already includes thinking via the shared `formatTimelineEvents()`). Thinking content is valuable: it shows the agent's reasoning, which helps the chat agent understand *why* decisions were made, not just *what* happened. The same unfiltered context is reusable for future needs like investigation quality evaluation.
 
-The prompt builder's existing `FormatChatHistory()` formats these exchanges into the prompt.
+`formatTimelineEvents()` already handles every event type gracefully, including tool call / summary deduplication. No filter function needed — two existing functions, zero new code.
 
-**What goes into chat history**:
-- User question text
-- Assistant's final analysis (the actual answer)
-- NOT intermediate tool calls or thinking (keeps history concise)
+### user_question Timeline Event
 
-### ChatContext Assembly
+Created by the executor at step 3 of the execute flow, BEFORE building context (step 4). This ensures the user's question appears in the timeline and is included when `GetSessionTimeline()` is called for context building. The `user_question` event type already exists in the TimelineEvent schema. The `formatTimelineEvents()` default case renders it as `**user question:**` which is appropriate.
+
+### ChatContext Simplification
+
+With unified timeline context, `ChatContext` no longer needs a separate `ChatHistory` field:
 
 ```go
 func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatExecuteInput) *agent.ChatContext {
+    events, err := e.timelineService.GetSessionTimeline(ctx, input.Session.ID)
+    if err != nil {
+        // Fail-open: empty context (agent still has tools)
+        return &agent.ChatContext{UserQuestion: input.Message.Content}
+    }
+
     return &agent.ChatContext{
-        UserQuestion:         input.Message.Content,
-        InvestigationContext: input.Chat.InvestigationContext, // pre-captured
-        ChatHistory:          e.buildChatHistory(ctx, input.Chat.ID, input.Message.ID),
+        UserQuestion:        input.Message.Content,
+        InvestigationContext: agentctx.FormatInvestigationContext(events),
     }
 }
 ```
 
 ### Context Size Considerations
 
-Investigation context can be large (multi-stage investigations with many tool calls). The existing `FormatInvestigationContext()` includes tool call results (or summaries), which can be substantial. For very large investigations:
+Context grows with each chat exchange (thinking + tool calls + responses accumulate). For long conversations:
 
 - Tool call/summary deduplication already helps (existing formatter feature)
-- Thinking exclusion reduces size significantly
-- Future: could add a max context size with truncation (not in scope for this phase)
+- The growth is bounded by one-at-a-time enforcement (user must wait for each response)
+- Future: could add truncation of older exchanges if context window becomes a concern (not in scope for this phase)
 
 ---
 
@@ -594,18 +628,9 @@ The one-at-a-time check queries for any Stage with `chat_id = chatID` AND `statu
 
 ## Schema Changes
 
-### Chat: Add `investigation_context` Field
+### No Schema Changes for Chat
 
-Add a `Text` field to store the pre-captured investigation context:
-
-```go
-field.Text("investigation_context").
-    Optional().
-    Nillable().
-    Comment("Pre-captured investigation context from timeline events"),
-```
-
-This replaces old TARSy's `conversation_history` field. The content is the output of `FormatInvestigationContext()` — formatted timeline events from the completed investigation.
+Investigation context is built lazily per message from existing timeline events. No new fields on Chat. The existing Chat schema has everything needed: `session_id` (to query timeline events), `chain_id` (for config resolution), `pod_id` + `last_interaction_at` (for orphan detection).
 
 ### No Status Field on ChatUserMessage
 
@@ -641,9 +666,7 @@ type ChatExecuteInput struct {
 
 ```go
 type ChatMessageExecutorConfig struct {
-    MaxConcurrentChats int           // Default: 3
-    ChatTimeout        time.Duration // Default: 10 minutes
-    ShutdownTimeout    time.Duration // Default: 30 seconds
+    SessionTimeout time.Duration // Reused from QueueConfig (default: 15 minutes)
 }
 ```
 
@@ -698,11 +721,10 @@ workerPool.Stop()
 
 ### ChatService Enhancements
 
-The existing `ChatService` needs enhancements:
+Minimal changes to the existing `ChatService`:
 
-1. **CreateChat**: Accept and store `investigation_context`
-2. **BuildChatContext**: Replaced by executor-level context building (the method can remain for backward compat but the executor calls `buildChatContext` directly using the stored investigation context)
-3. **GetNextStageIndex**: New method to query max stage index for a session
+1. **BuildChatContext**: Removed or deprecated — context building moves to the executor (uses `TimelineService.GetSessionTimeline()` + `FormatInvestigationContext()` directly)
+2. **CreateChat**: No changes needed (existing implementation is sufficient)
 
 ### Agent Framework (No Changes)
 
@@ -717,8 +739,8 @@ The agent framework requires **no changes**. Controllers already check `execCtx.
 | Component | Test Focus |
 |-----------|------------|
 | Chat API handlers | Request validation, error responses, author extraction |
-| ChatMessageExecutor | Concurrency limiting, one-at-a-time enforcement, cancellation, shutdown |
-| Chat context building | Investigation context capture, event filtering, chat history assembly |
+| ChatMessageExecutor | One-at-a-time enforcement, cancellation, graceful shutdown, heartbeat, event cleanup |
+| Chat context building | user_question event creation, GetSessionTimeline → FormatInvestigationContext integration |
 | Chat config resolution | Hierarchy resolution, fallbacks, MCP server resolution |
 | Chat availability | Terminal status check, chain config check, investigation data check |
 
@@ -726,12 +748,11 @@ The agent framework requires **no changes**. Controllers already check `execCtx.
 
 | Test | What It Validates |
 |------|-------------------|
-| Create chat for completed session | End-to-end chat creation with investigation context capture |
+| Create chat for completed session | End-to-end chat creation, availability validation |
 | Send message and get response | Full execution pipeline with mock LLM |
-| Chat history accumulation | Multiple messages, each sees previous exchanges |
+| Chat context accumulation | 2nd message sees investigation + 1st exchange via unified timeline |
 | One-at-a-time enforcement | Second message rejected while first is processing |
 | Cancellation | Active execution cancelled, stage marked failed |
-| Concurrency limit | Messages beyond limit queue up |
 | Chat not available for in-progress session | Availability guard rejects |
 
 ### Existing Test Preservation
@@ -742,43 +763,24 @@ The existing PromptBuilder chat tests, investigation formatter tests, and ChatSe
 
 ## Implementation Plan
 
-### Step 1: Schema & Service Changes
+### Step 1: Service Changes
 
-1. Add `investigation_context` field to Chat ent schema
-2. Run `go generate ./ent` to regenerate
-3. Create migration for the new field
-4. Enhance `ChatService.CreateChat()` to accept investigation context
-5. Add `GetMaxStageIndex()` to StageService
-6. Add `GetActiveStageForChat()` query (for one-at-a-time check)
+1. Add `GetMaxStageIndex()` to StageService
+2. Add `GetActiveStageForChat()` query (for one-at-a-time check)
 
-### Step 2: Investigation Context Capture
-
-1. Create `CaptureInvestigationContext()` function in `pkg/agent/context/`
-   - Queries session timeline events (excluding chat stages)
-   - Filters out `llm_thinking` events
-   - Calls `FormatInvestigationContext()`
-2. Add event type filtering helper
-3. Test context capture with various investigation shapes (single-stage, multi-stage, multi-agent with synthesis)
-
-### Step 3: Chat History Builder
-
-1. Create `BuildChatHistory()` function in `pkg/agent/context/` or `pkg/services/`
-   - Queries ChatUserMessages for the chat
-   - For each, finds response Stage and extracts final_analysis
-   - Returns `[]agent.ChatExchange`
-2. Test with 0, 1, multiple previous exchanges
-
-### Step 4: ChatMessageExecutor
+### Step 2: ChatMessageExecutor
 
 1. Create `ChatMessageExecutor` in `pkg/queue/chat_executor.go`
 2. Implement `Submit()`, `execute()`, `CancelExecution()`, `Stop()`
-3. Implement `buildChatContext()` (combines investigation context + chat history)
-4. Implement `resolveChatAgentConfig()` (config hierarchy resolution)
-5. Implement concurrency control (semaphore channel)
+3. Implement `buildChatContext()` — calls `GetSessionTimeline()` + `FormatInvestigationContext()` (no filter — both functions already exist)
+4. Create `user_question` timeline event at start of each message execution (before agent runs)
+5. Implement `resolveChatAgentConfig()` (config hierarchy resolution)
 6. Implement one-at-a-time check
-7. Test: concurrency limiting, cancellation, config resolution, context assembly
+7. Implement heartbeat (`runChatHeartbeat()`) — periodic `Chat.last_interaction_at` + `pod_id` updates
+8. Implement stage event cleanup (`cleanupStageEvents()`) — 60s grace period after terminal status
+9. Test: one-at-a-time enforcement, cancellation, shutdown, config resolution, context assembly, heartbeat, cleanup
 
-### Step 5: API Handlers
+### Step 3: API Handlers
 
 1. Create chat handler file(s) in `pkg/api/`
 2. Implement all 6 endpoints
@@ -786,7 +788,7 @@ The existing PromptBuilder chat tests, investigation formatter tests, and ChatSe
 4. Wire `ChatService` and `ChatMessageExecutor` into `Server`
 5. Test: request validation, error mapping, response formats
 
-### Step 6: WebSocket Events
+### Step 4: WebSocket Events
 
 1. Add `ChatCreatedPayload` and `ChatUserMessagePayload` to `pkg/events/payloads.go`
 2. Add `EventTypeChatCreated` and `EventTypeChatUserMessage` constants
@@ -794,14 +796,14 @@ The existing PromptBuilder chat tests, investigation formatter tests, and ChatSe
 4. Update `agent.EventPublisher` interface
 5. Test: event publishing and payload format
 
-### Step 7: Startup Wiring & Integration
+### Step 5: Startup Wiring & Integration
 
 1. Wire `ChatMessageExecutor` creation in startup
 2. Wire `ChatService` and `ChatMessageExecutor` into Server
 3. Add shutdown ordering (chat executor stops before worker pool)
 4. Integration tests: full end-to-end chat flow with testcontainers
 
-### Step 8: Configuration
+### Step 6: Configuration
 
-1. Add `MaxConcurrentChats` and `ChatTimeout` to queue config
-2. Update config examples in `deploy/config/`
+1. No new config — `ChatMessageExecutor` reuses `SessionTimeout` from existing queue config
+2. Update config examples in `deploy/config/` if needed (document that timeout applies to chat too)
