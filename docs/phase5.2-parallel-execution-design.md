@@ -88,7 +88,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
     agentResults := collectAndSort(results)
 
     // Aggregate status (for single-agent: trivially correct — 1 completed → completed)
-    stageStatus := aggregateStatus(agentResults, resolvedSuccessPolicy(input))
+    stageStatus := aggregateStatus(agentResults, e.resolvedSuccessPolicy(input))
 
     // Update Stage in DB (triggers aggregation from AgentExecution records)
     input.stageService.UpdateStageStatus(ctx, stg.ID)
@@ -319,21 +319,37 @@ For **multi-agent stages**: `stageResult.finalAnalysis` is left empty — synthe
 Add resolution to the executor with proper defaulting:
 
 ```go
-func resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
+func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
     // Stage-level override
     if input.stageConfig.SuccessPolicy != "" {
         return input.stageConfig.SuccessPolicy
     }
     // System default
-    if input.cfg.Defaults.SuccessPolicy != "" {
-        return input.cfg.Defaults.SuccessPolicy
+    if e.cfg.Defaults.SuccessPolicy != "" {
+        return e.cfg.Defaults.SuccessPolicy
     }
     // Fallback default
     return config.SuccessPolicyAny
 }
 ```
 
-**Note**: `SuccessPolicyAny` is the fallback default, matching old TARSy and `tarsy.yaml.example`. The existing `UpdateStageStatus()` currently defaults to `SuccessPolicyAll` when nil — this must be fixed to default to `SuccessPolicyAny` as part of this phase.
+**Note**: `SuccessPolicyAny` is the fallback default, matching old TARSy and `tarsy.yaml.example`. The existing `UpdateStageStatus()` currently defaults to `SuccessPolicyAll` when nil — this must be fixed to default to `SuccessPolicyAny` as part of this phase. Specifically, replace the nil-or-All check with a resolved local variable:
+
+```go
+// In UpdateStageStatus — resolve nil to default policy
+policy := stage.SuccessPolicyAny
+if stg.SuccessPolicy != nil {
+    policy = *stg.SuccessPolicy
+}
+
+if policy == stage.SuccessPolicyAll {
+    // All agents must succeed
+    ...
+} else {
+    // At least one agent must succeed (default)
+    ...
+}
+```
 
 The resolved policy is passed to both:
 1. `CreateStageRequest.SuccessPolicy` (for DB persistence)
@@ -579,6 +595,10 @@ func (e *RealSessionExecutor) executeSynthesisStage(
     })
     // ... error handling ...
 
+    // Update session progress + publish stage.status: started (same pattern as executeStage)
+    e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
+    e.publishStageStatus(ctx, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+
     // Build synthesis agent config — synthesis: block is optional, defaults apply
     synthAgentConfig := config.StageAgentConfig{
         Name:              "SynthesisAgent",
@@ -611,7 +631,6 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
     return stageResult{
         stageID:       stg.ID,
-        executionID:   ar.executionID,
         stageName:     synthStageName,
         status:        mapAgentStatusToSessionStatus(ar.status),
         finalAnalysis: ar.finalAnalysis,

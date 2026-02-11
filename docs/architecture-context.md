@@ -241,7 +241,9 @@ type StageResult struct {
 func BuildStageContext(stages []StageResult) string
 ```
 
-Formats completed stage results into a context string for the next stage's agent prompt. Wraps each stage's `final_analysis` with `<!-- CHAIN_CONTEXT_START/END -->` markers. Context flows in-memory through the chain loop (no DB query needed — `stageResult.finalAnalysis` comes from `agent.ExecutionResult.FinalAnalysis`).
+Formats completed stage results into a context string for the next stage's agent prompt. Wraps each stage's `final_analysis` with `<!-- CHAIN_CONTEXT_START/END -->` markers. Context flows in-memory through the chain loop (no DB query needed — the internal `stageResult.finalAnalysis` in the executor comes from `agent.ExecutionResult.FinalAnalysis` and is mapped to the public `StageResult` for `BuildStageContext()`).
+
+**Note**: `StageResult` (exported, 2 fields: `StageName`, `FinalAnalysis`) is the public API for context building. The internal `stageResult` (unexported, in `pkg/queue/executor.go`) carries additional executor metadata (`stageID`, `status`, `err`, `agentResults`) that isn't exposed through the public API.
 
 ### PromptBuilder (`pkg/agent/prompt/builder.go`)
 
