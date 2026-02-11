@@ -69,8 +69,8 @@ func publishTimelineCreated(
 		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
-		EventType:      string(eventType),
-		Status:         string(timelineevent.StatusCompleted),
+		EventType:      eventType,
+		Status:         timelineevent.StatusCompleted,
 		Content:        content,
 		Metadata:       metadata,
 		SequenceNumber: seqNum,
@@ -101,7 +101,7 @@ func finalizeStreamingEvent(
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   eventID,
 				Content:   content,
-				Status:    string(timelineevent.StatusCompleted),
+				Status:    timelineevent.StatusCompleted,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
 				slog.Warn("Failed to publish "+label+" completed",
@@ -128,7 +128,7 @@ func finalizeStreamingEvent(
 			Type:      events.EventTypeTimelineCompleted,
 			EventID:   eventID,
 			Content:   failContent,
-			Status:    string(timelineevent.StatusFailed),
+			Status:    timelineevent.StatusFailed,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish "+label+" failure",
@@ -169,7 +169,7 @@ func markStreamingEventsFailed(
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   eventID,
-				Status:    string(timelineevent.StatusFailed),
+				Status:    timelineevent.StatusFailed,
 				Content:   failContent,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
@@ -228,8 +228,8 @@ func createToolCallEvent(
 			SessionID:      execCtx.SessionID,
 			StageID:        execCtx.StageID,
 			ExecutionID:    execCtx.ExecutionID,
-			EventType:      string(timelineevent.EventTypeLlmToolCall),
-			Status:         string(timelineevent.StatusStreaming),
+			EventType:      timelineevent.EventTypeLlmToolCall,
+			Status:         timelineevent.StatusStreaming,
 			Content:        "",
 			Metadata:       metadata,
 			SequenceNumber: *eventSeq,
@@ -277,7 +277,7 @@ func completeToolCallEvent(
 			Type:      events.EventTypeTimelineCompleted,
 			EventID:   event.ID,
 			Content:   content,
-			Status:    string(timelineevent.StatusCompleted),
+			Status:    timelineevent.StatusCompleted,
 			Metadata:  completionMeta,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {

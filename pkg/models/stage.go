@@ -1,6 +1,9 @@
 package models
 
-import "github.com/codeready-toolchain/tarsy/ent"
+import (
+	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
+)
 
 // CreateStageRequest contains fields for creating a new stage
 type CreateStageRequest struct {
@@ -16,11 +19,11 @@ type CreateStageRequest struct {
 
 // CreateAgentExecutionRequest contains fields for creating a new agent execution
 type CreateAgentExecutionRequest struct {
-	StageID           string `json:"stage_id"`
-	SessionID         string `json:"session_id"`
-	AgentName         string `json:"agent_name"`
-	AgentIndex        int    `json:"agent_index"`
-	IterationStrategy string `json:"iteration_strategy"`
+	StageID           string                   `json:"stage_id"`
+	SessionID         string                   `json:"session_id"`
+	AgentName         string                   `json:"agent_name"`
+	AgentIndex        int                      `json:"agent_index"`
+	IterationStrategy config.IterationStrategy `json:"iteration_strategy"`
 }
 
 // StageResponse wraps a Stage with optional loaded edges

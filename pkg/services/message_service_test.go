@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -252,7 +253,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent2",
 			AgentIndex:        2,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 

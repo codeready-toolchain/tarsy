@@ -90,7 +90,7 @@ func (w *Worker) Health() WorkerHealth {
 	defer w.mu.RUnlock()
 	return WorkerHealth{
 		ID:                w.id,
-		Status:            string(w.status),
+		Status:            w.status,
 		CurrentSessionID:  w.currentSessionID,
 		SessionsProcessed: w.sessionsProcessed,
 		LastActivity:      w.lastActivity,
@@ -157,7 +157,7 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	log.Info("Session claimed")
 
 	// Publish session status "in_progress" to both session and global channels
-	w.publishSessionStatus(ctx, session.ID, "in_progress")
+	w.publishSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
 
 	w.setStatus(WorkerStatusWorking, session.ID)
 	defer w.setStatus(WorkerStatusIdle, "")
@@ -225,7 +225,7 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	}
 
 	// 10a. Publish terminal session status event
-	w.publishSessionStatus(context.Background(), session.ID, string(result.Status))
+	w.publishSessionStatus(context.Background(), session.ID, result.Status)
 
 	// 11. Cleanup transient events after grace period (60s) to allow clients
 	// to receive final events before they are deleted.
@@ -328,7 +328,7 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 
 // publishSessionStatus publishes a session status event to both the session-specific
 // and global channels for real-time WebSocket delivery. Non-blocking: errors are logged.
-func (w *Worker) publishSessionStatus(ctx context.Context, sessionID, status string) {
+func (w *Worker) publishSessionStatus(ctx context.Context, sessionID string, status alertsession.Status) {
 	if w.eventPublisher == nil {
 		return
 	}

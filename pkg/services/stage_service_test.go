@@ -8,6 +8,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -144,7 +145,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "KubernetesAgent",
 			AgentIndex:        1,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		}
 
 		exec, err := stageService.CreateAgentExecution(ctx, req)
@@ -223,7 +224,7 @@ func TestStageService_UpdateAgentExecutionStatus(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	}
 	exec, err := stageService.CreateAgentExecution(ctx, execReq)
 	require.NoError(t, err)
@@ -290,7 +291,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: "react",
+				IterationStrategy: config.IterationStrategyReact,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -345,7 +346,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: "react",
+				IterationStrategy: config.IterationStrategyReact,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -406,7 +407,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: "react",
+				IterationStrategy: config.IterationStrategyReact,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -433,6 +434,69 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
 		require.NoError(t, err)
 		assert.Equal(t, stage.StatusCompleted, updated.Status)
+	})
+
+	t.Run("nil policy defaults to any (one success → completed)", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		stageService := NewStageService(client.Client)
+		sessionService := setupTestSessionService(t, client.Client)
+		ctx := context.Background()
+
+		session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+
+		// Create stage with nil SuccessPolicy (no pointer)
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Nil Policy Stage",
+			StageIndex:         1,
+			ExpectedAgentCount: 2,
+			// SuccessPolicy intentionally nil
+		})
+		require.NoError(t, err)
+
+		// Create 2 agent executions
+		exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "Agent1",
+			AgentIndex:        1,
+			IterationStrategy: config.IterationStrategyReact,
+		})
+		require.NoError(t, err)
+
+		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "Agent2",
+			AgentIndex:        2,
+			IterationStrategy: config.IterationStrategyReact,
+		})
+		require.NoError(t, err)
+
+		// Complete 1, fail 1
+		err = stageService.UpdateAgentExecutionStatus(ctx, exec1.ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentExecutionStatus(ctx, exec1.ID, agentexecution.StatusCompleted, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentExecutionStatus(ctx, exec2.ID, agentexecution.StatusActive, "")
+		require.NoError(t, err)
+		err = stageService.UpdateAgentExecutionStatus(ctx, exec2.ID, agentexecution.StatusFailed, "error")
+		require.NoError(t, err)
+
+		// nil policy should default to "any" → one success means stage completes
+		err = stageService.UpdateStageStatus(ctx, stg.ID)
+		require.NoError(t, err)
+
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusCompleted, updated.Status,
+			"nil policy should default to 'any': one success = stage completed")
 	})
 
 	t.Run("stage remains active while agents are pending/active", func(t *testing.T) {
@@ -462,7 +526,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent1",
 			AgentIndex:        1,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 
@@ -471,7 +535,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent2",
 			AgentIndex:        2,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 
@@ -599,7 +663,7 @@ func TestStageService_GetAgentExecutions(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         fmt.Sprintf("TestAgent%d", i),
 			AgentIndex:        i,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 		execIDs = append(execIDs, exec.ID)

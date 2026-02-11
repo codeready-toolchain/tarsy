@@ -392,11 +392,11 @@ func TestReActController_NativeToolDataIgnored(t *testing.T) {
 	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, err)
 	for _, ev := range events {
-		require.NotEqual(t, string(timelineevent.EventTypeCodeExecution), ev.EventType,
+		require.NotEqual(t, timelineevent.EventTypeCodeExecution, ev.EventType,
 			"ReAct should not create code_execution events")
-		require.NotEqual(t, string(timelineevent.EventTypeGoogleSearchResult), ev.EventType,
+		require.NotEqual(t, timelineevent.EventTypeGoogleSearchResult, ev.EventType,
 			"ReAct should not create google_search_result events")
-		require.NotEqual(t, string(timelineevent.EventTypeURLContextResult), ev.EventType,
+		require.NotEqual(t, timelineevent.EventTypeURLContextResult, ev.EventType,
 			"ReAct should not create url_context_result events")
 	}
 }

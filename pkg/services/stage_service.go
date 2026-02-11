@@ -109,7 +109,7 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 		SetAgentName(req.AgentName).
 		SetAgentIndex(req.AgentIndex).
 		SetStatus(agentexecution.StatusPending).
-		SetIterationStrategy(req.IterationStrategy).
+		SetIterationStrategy(string(req.IterationStrategy)).
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent execution: %w", err)
@@ -236,11 +236,17 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 		}
 	}
 
-	// Determine final status based on success policy
+	// Determine final status based on success policy.
+	// Resolve nil to "any" (default policy — matches old TARSy behavior).
+	policy := stage.SuccessPolicyAny
+	if stg.SuccessPolicy != nil {
+		policy = *stg.SuccessPolicy
+	}
+
 	var finalStatus stage.Status
 	var errorMessage string
 
-	if stg.SuccessPolicy == nil || *stg.SuccessPolicy == stage.SuccessPolicyAll {
+	if policy == stage.SuccessPolicyAll {
 		// All agents must succeed
 		if allCompleted {
 			finalStatus = stage.StatusCompleted
@@ -254,8 +260,8 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 			finalStatus = stage.StatusFailed
 			errorMessage = "one or more agents failed"
 		}
-	} else if *stg.SuccessPolicy == stage.SuccessPolicyAny {
-		// At least one agent must succeed
+	} else {
+		// At least one agent must succeed (default: policy=any)
 		if anyCompleted {
 			finalStatus = stage.StatusCompleted
 		} else if allTimedOut {

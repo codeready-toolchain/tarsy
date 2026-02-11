@@ -7,6 +7,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -44,7 +45,7 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -109,7 +110,7 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -182,7 +183,7 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -254,7 +255,7 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -338,7 +339,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -419,7 +420,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent2",
 			AgentIndex:        2,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 
@@ -461,7 +462,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent3",
 			AgentIndex:        3,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 
@@ -518,7 +519,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent4",
 			AgentIndex:        4,
-			IterationStrategy: "react",
+			IterationStrategy: config.IterationStrategyReact,
 		})
 		require.NoError(t, err)
 

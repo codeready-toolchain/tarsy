@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -173,7 +174,7 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 		Type:      EventTypeTimelineCompleted,
 		EventID:   "evt-1",
 		Content:   "second event",
-		Status:    "completed",
+		Status:    timelineevent.StatusCompleted,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
@@ -287,7 +288,7 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 		EventID:   eventID,
 		SessionID: env.sessionID,
 		EventType: "llm_response",
-		Status:    "streaming",
+		Status:    timelineevent.StatusStreaming,
 		Content:   "",
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
@@ -328,7 +329,7 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 		Type:      EventTypeTimelineCompleted,
 		EventID:   eventID,
 		Content:   expectedFull,
-		Status:    "completed",
+		Status:    timelineevent.StatusCompleted,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)

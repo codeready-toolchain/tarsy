@@ -1,30 +1,35 @@
 package events
 
+import (
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+)
+
 // TimelineCreatedPayload is the payload for timeline_event.created events.
 // Published when a new timeline event is created (streaming or completed).
 type TimelineCreatedPayload struct {
-	Type           string         `json:"type"`                   // always EventTypeTimelineCreated
-	EventID        string         `json:"event_id"`               // timeline event UUID
-	SessionID      string         `json:"session_id"`             // owning session
-	StageID        string         `json:"stage_id,omitempty"`     // owning stage (empty for session-level events)
-	ExecutionID    string         `json:"execution_id,omitempty"` // owning agent execution (empty for session-level events)
-	EventType      string         `json:"event_type"`             // e.g. "llm_thinking", "llm_tool_call"
-	Status         string         `json:"status"`                 // "streaming" or "completed"
-	Content        string         `json:"content"`                // event content (may be empty for streaming)
-	Metadata       map[string]any `json:"metadata,omitempty"`
-	SequenceNumber int            `json:"sequence_number"` // order in timeline
-	Timestamp      string         `json:"timestamp"`       // RFC3339Nano
+	Type           string                  `json:"type"`                   // always EventTypeTimelineCreated
+	EventID        string                  `json:"event_id"`               // timeline event UUID
+	SessionID      string                  `json:"session_id"`             // owning session
+	StageID        string                  `json:"stage_id,omitempty"`     // owning stage (empty for session-level events)
+	ExecutionID    string                  `json:"execution_id,omitempty"` // owning agent execution (empty for session-level events)
+	EventType      timelineevent.EventType `json:"event_type"`             // llm_thinking, llm_response, llm_tool_call, mcp_tool_summary, etc.
+	Status         timelineevent.Status    `json:"status"`                 // streaming, completed, failed, cancelled, timed_out
+	Content        string                  `json:"content"`                // event content (may be empty for streaming)
+	Metadata       map[string]any          `json:"metadata,omitempty"`
+	SequenceNumber int                     `json:"sequence_number"` // order in timeline
+	Timestamp      string                  `json:"timestamp"`       // RFC3339Nano
 }
 
 // TimelineCompletedPayload is the payload for timeline_event.completed events.
 // Published when a streaming timeline event transitions to a terminal status.
 type TimelineCompletedPayload struct {
-	Type      string         `json:"type"`     // always EventTypeTimelineCompleted
-	EventID   string         `json:"event_id"` // timeline event UUID
-	Content   string         `json:"content"`  // final content
-	Status    string         `json:"status"`   // "completed" or "failed"
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	Timestamp string         `json:"timestamp"` // RFC3339Nano
+	Type      string               `json:"type"`     // always EventTypeTimelineCompleted
+	EventID   string               `json:"event_id"` // timeline event UUID
+	Content   string               `json:"content"`  // final content
+	Status    timelineevent.Status `json:"status"`   // completed, failed, cancelled, timed_out
+	Metadata  map[string]any       `json:"metadata,omitempty"`
+	Timestamp string               `json:"timestamp"` // RFC3339Nano
 }
 
 // StreamChunkPayload is the payload for stream.chunk transient events.
@@ -39,10 +44,10 @@ type StreamChunkPayload struct {
 // SessionStatusPayload is the payload for session.status events.
 // Published when a session transitions between lifecycle states.
 type SessionStatusPayload struct {
-	Type      string `json:"type"`       // always EventTypeSessionStatus
-	SessionID string `json:"session_id"` // session UUID
-	Status    string `json:"status"`     // new status (e.g. "in_progress", "completed")
-	Timestamp string `json:"timestamp"`  // RFC3339Nano
+	Type      string              `json:"type"`       // always EventTypeSessionStatus
+	SessionID string              `json:"session_id"` // session UUID
+	Status    alertsession.Status `json:"status"`     // pending, in_progress, cancelling, completed, failed, cancelled, timed_out
+	Timestamp string              `json:"timestamp"`  // RFC3339Nano
 }
 
 // StageStatusPayload is the payload for stage.status events.

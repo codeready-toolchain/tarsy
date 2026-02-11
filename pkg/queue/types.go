@@ -61,9 +61,9 @@ type PoolHealth struct {
 
 // WorkerHealth contains health information for a single worker.
 type WorkerHealth struct {
-	ID                string    `json:"id"`
-	Status            string    `json:"status"` // "idle" or "working"
-	CurrentSessionID  string    `json:"current_session_id,omitempty"`
-	SessionsProcessed int       `json:"sessions_processed"`
-	LastActivity      time.Time `json:"last_activity"`
+	ID                string       `json:"id"`
+	Status            WorkerStatus `json:"status"` // idle or working
+	CurrentSessionID  string       `json:"current_session_id,omitempty"`
+	SessionsProcessed int          `json:"sessions_processed"`
+	LastActivity      time.Time    `json:"last_activity"`
 }

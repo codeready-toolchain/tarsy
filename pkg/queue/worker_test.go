@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/stretchr/testify/assert"
@@ -54,20 +55,20 @@ func TestWorkerHealth(t *testing.T) {
 
 	h := w.Health()
 	assert.Equal(t, "worker-1", h.ID)
-	assert.Equal(t, "idle", h.Status)
+	assert.Equal(t, WorkerStatusIdle, h.Status)
 	assert.Equal(t, "", h.CurrentSessionID)
 	assert.Equal(t, 0, h.SessionsProcessed)
 
 	// Simulate working state
 	w.setStatus(WorkerStatusWorking, "session-abc")
 	h = w.Health()
-	assert.Equal(t, "working", h.Status)
+	assert.Equal(t, WorkerStatusWorking, h.Status)
 	assert.Equal(t, "session-abc", h.CurrentSessionID)
 
 	// Back to idle
 	w.setStatus(WorkerStatusIdle, "")
 	h = w.Health()
-	assert.Equal(t, "idle", h.Status)
+	assert.Equal(t, WorkerStatusIdle, h.Status)
 	assert.Equal(t, "", h.CurrentSessionID)
 }
 
@@ -77,10 +78,10 @@ func TestWorker_PublishSessionStatusNilPublisher(t *testing.T) {
 
 	// Should not panic with nil eventPublisher
 	assert.NotPanics(t, func() {
-		w.publishSessionStatus(t.Context(), "session-123", "in_progress")
+		w.publishSessionStatus(t.Context(), "session-123", alertsession.StatusInProgress)
 	})
 	assert.NotPanics(t, func() {
-		w.publishSessionStatus(t.Context(), "session-456", "completed")
+		w.publishSessionStatus(t.Context(), "session-456", alertsession.StatusCompleted)
 	})
 }
 
@@ -89,7 +90,7 @@ func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 	pub := &mockEventPublisher{}
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, pub)
 
-	w.publishSessionStatus(t.Context(), "session-abc", "in_progress")
+	w.publishSessionStatus(t.Context(), "session-abc", alertsession.StatusInProgress)
 
 	// PublishSessionStatus encapsulates both persistent + transient publish
 	assert.Equal(t, 1, pub.sessionStatusCount, "should call PublishSessionStatus once")
@@ -98,7 +99,7 @@ func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 	require.NotNil(t, pub.lastSessionStatus)
 	assert.Equal(t, "session.status", pub.lastSessionStatus.Type)
 	assert.Equal(t, "session-abc", pub.lastSessionStatus.SessionID)
-	assert.Equal(t, "in_progress", pub.lastSessionStatus.Status)
+	assert.Equal(t, alertsession.StatusInProgress, pub.lastSessionStatus.Status)
 	assert.NotEmpty(t, pub.lastSessionStatus.Timestamp)
 }
 
