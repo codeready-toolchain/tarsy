@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 5.1 (Chain Orchestration)
+**Last updated after**: Phase 5.2 (Parallel Execution)
 
 ---
 
@@ -70,29 +70,41 @@ The end-to-end happy path from alert submission to completion:
 3. **SessionExecutor.Execute()** (`pkg/queue/executor.go`):
    - Resolves chain config from `ChainRegistry`
    - Initializes shared services (StageService, MessageService, TimelineService, InteractionService)
-   - **Chain loop**: iterates over `chain.Stages` sequentially
+   - **Chain loop**: iterates over `chain.Stages` sequentially, tracking `dbStageIndex` (which may differ from config index when synthesis stages are inserted)
      - Checks context cancellation before starting each stage
-     - Updates session progress (`current_stage_index`, `current_stage_id`)
-     - Publishes `stage.status` (started)
-     - Calls `executeStage()` → `executeAgent()`:
-       - Creates `Stage` DB record (via `StageService.CreateStage`)
-       - Creates `AgentExecution` DB record (via `StageService.CreateAgentExecution`)
-       - Resolves agent config via hierarchy: `ResolveAgentConfig(cfg, chain, stage, agent)` → `ResolvedAgentConfig`
-       - Creates per-agent-execution MCP ToolExecutor (or stub) with `defer Close()`
-       - Builds `ExecutionContext` with all dependencies
-       - Creates agent via `AgentFactory.CreateAgent()` → `BaseAgent` with appropriate `Controller`
-       - Calls `agent.Execute(ctx, execCtx, prevStageContext)`
-       - Updates `AgentExecution` status, aggregates `Stage` status
-     - Publishes `stage.status` (terminal status)
+     - Calls `executeStage()` which handles all stages uniformly (1 or N agents):
+       - Builds execution configs via `buildConfigs()` (1 entry for single-agent, N for multi-agent/replica)
+       - Creates `Stage` DB record (via `StageService.CreateStage`) with `ParallelType`, `SuccessPolicy`, `ExpectedAgentCount`
+       - Updates session progress + publishes `stage.status: started` (inside `executeStage`, after Stage creation — so `stageID` is always available)
+       - Launches goroutines (one per config) with `sync.WaitGroup` + buffered channel
+       - Each goroutine calls `executeAgent()`:
+         - Creates `AgentExecution` DB record (via `StageService.CreateAgentExecution`)
+         - Resolves agent config via hierarchy: `ResolveAgentConfig(cfg, chain, stage, agent)` → `ResolvedAgentConfig`
+         - Creates per-agent-execution MCP ToolExecutor (or stub) with `defer Close()`
+         - Builds `ExecutionContext` with all dependencies
+         - Creates agent via `AgentFactory.CreateAgent()` → `BaseAgent` with appropriate `Controller`
+         - Calls `agent.Execute(ctx, execCtx, prevStageContext)`
+         - Updates `AgentExecution` status
+       - Waits for ALL goroutines (even on failures — success policy determines outcome)
+       - Collects results, sorts by launch index, aggregates status via `aggregateStatus()`
+       - Calls `StageService.UpdateStageStatus()` for DB consistency
+     - Publishes `stage.status` (terminal status) from chain loop
+     - Increments `dbStageIndex`
      - On failure: returns immediately (fail-fast, no subsequent stages)
-     - On success: builds `prevStageContext` for next stage via `BuildStageContext()`
+     - **Synthesis** (automatic when `len(agentResults) > 1`):
+       - `executeSynthesisStage()` creates a **separate Stage DB record** (name: `"{StageName} - Synthesis"`)
+       - Builds synthesis context from parallel agents' full timeline events via `buildSynthesisContext()`
+       - Runs synthesis agent as single-agent execution
+       - Synthesis result replaces investigation result in `completedStages` for downstream context
+       - Increments `dbStageIndex` again
+     - Builds `prevStageContext` for next stage via `BuildStageContext()`
    - **Post-chain**: extracts `finalAnalysis` from last completed stage (reverse search)
    - **Executive summary**: direct LLM call (fail-open), creates session-level `executive_summary` timeline event
 4. **BaseAgent.Execute()** → delegates to `Controller.Run()`
 5. **Controller.Run()** executes the iteration loop (see below)
 6. **Worker** updates `AlertSession` with final status, `final_analysis`, `executive_summary`, `completed_at`
 
-**Note**: Phase 5.1 executes single-agent stages only. Phase 5.2 extends `executeStage()` to handle any number of agents per stage using the same goroutine + WaitGroup machinery. A single-agent stage is not a special case — it's a stage with N=1 agents. No separate code paths for single vs multi-agent execution.
+**Design principle**: One `executeStage()` handles all stages uniformly. A single-agent stage is not a special case — it's a stage with N=1 agents. The same goroutine + WaitGroup + channel pattern handles N=1 identically to N=3. No separate code paths for single vs multi-agent execution.
 
 ## Iteration Loop Flows
 
@@ -222,8 +234,15 @@ type SessionExecutor interface {
 Bridges the queue worker to the agent framework. Implementation: `RealSessionExecutor` in `pkg/queue/executor.go`.
 
 Key internal methods on `RealSessionExecutor`:
-- `executeStage()` — creates Stage DB record, runs agent(s) within it using unified goroutine machinery (same code path for 1 or N agents)
-- `executeAgent()` — per-agent-execution lifecycle: DB record → config resolution → MCP creation → agent execution → status update
+- `executeStage()` — creates Stage DB record, launches goroutines (one per execution config), collects results via WaitGroup + buffered channel, aggregates status via success policy. Same code path for 1 or N agents
+- `executeAgent(ctx, input, stg, agentConfig, agentIndex, displayName)` — per-agent-execution lifecycle: DB record → config resolution → MCP creation → agent execution → status update. `displayName` overrides `agentConfig.Name` for DB/logs (differs for replicas)
+- `executeSynthesisStage()` — creates separate synthesis Stage DB record, builds context from parallel agents' timeline events, runs synthesis agent. Called from chain loop when `len(agentResults) > 1`
+- `buildConfigs()` / `buildMultiAgentConfigs()` / `buildReplicaConfigs()` — build execution configs from stage config. Replicas name agents `{BaseName}-1`, `{BaseName}-2`, etc.
+- `buildSynthesisContext()` — queries `TimelineService.GetAgentTimeline()` per agent, builds `[]AgentInvestigation`, calls `FormatInvestigationForSynthesis()`
+- `aggregateStatus()` — in-memory status aggregation matching `StageService.UpdateStageStatus()` logic. `SuccessPolicyAny`: completed if any agent completed. `SuccessPolicyAll`: completed only if all agents completed
+- `aggregateError()` — builds detailed error for failed stages. Single-agent: returns agent's error. Multi-agent: lists each non-successful agent with status and error
+- `resolvedSuccessPolicy()` — hierarchy: `stageConfig.SuccessPolicy` → `cfg.Defaults.SuccessPolicy` → `SuccessPolicyAny`
+- `collectAndSort()` — drains indexed channel, sorts by launch index
 - `buildStageContext()` — converts `[]stageResult` to `BuildStageContext()` input
 - `generateExecutiveSummary()` — LLM call for session summary (fail-open)
 - `createToolExecutor()` — MCP-backed executor or stub fallback
@@ -244,6 +263,26 @@ func BuildStageContext(stages []StageResult) string
 Formats completed stage results into a context string for the next stage's agent prompt. Wraps each stage's `final_analysis` with `<!-- CHAIN_CONTEXT_START/END -->` markers. Context flows in-memory through the chain loop (no DB query needed — the internal `stageResult.finalAnalysis` in the executor comes from `agent.ExecutionResult.FinalAnalysis` and is mapped to the public `StageResult` for `BuildStageContext()`).
 
 **Note**: `StageResult` (exported, 2 fields: `StageName`, `FinalAnalysis`) is the public API for context building. The internal `stageResult` (unexported, in `pkg/queue/executor.go`) carries additional executor metadata (`stageID`, `status`, `err`, `agentResults`) that isn't exposed through the public API.
+
+### Investigation Formatter (`pkg/agent/context/investigation_formatter.go`)
+
+```go
+type AgentInvestigation struct {
+    AgentName    string
+    AgentIndex   int
+    Strategy     string                  // e.g., "native-thinking", "react"
+    LLMProvider  string                  // e.g., "gemini-2.5-pro"
+    Status       alertsession.Status     // completed, failed, etc.
+    Events       []*ent.TimelineEvent    // full investigation from GetAgentTimeline
+    ErrorMessage string                  // for failed agents
+}
+
+func FormatInvestigationForSynthesis(agents []AgentInvestigation, stageName string) string
+```
+
+Formats multi-agent full investigation histories for the synthesis agent. Uses timeline events (which include thinking, tool calls, tool results, and responses) rather than raw messages. Each agent's investigation is wrapped with identifying metadata (name, strategy, provider, status).
+
+**Shared formatting**: `formatTimelineEvents()` is a shared helper used by both `FormatInvestigationContext()` (single-agent context for follow-up chat) and `FormatInvestigationForSynthesis()` (multi-agent context for synthesis). Handles tool call / summary deduplication: when an `llm_tool_call` is immediately followed by an `mcp_tool_summary`, the helper emits the tool name + arguments from the call but substitutes the summary content for the raw result, skipping the summary event. `formatToolCallHeader()` extracts server name, tool name, and arguments from event metadata.
 
 ### PromptBuilder (`pkg/agent/prompt/builder.go`)
 
@@ -704,9 +743,14 @@ API-level validation (immediate 400 for unknown servers) AND execution-time vali
 
 ### Chain Loop (`pkg/queue/executor.go`)
 
-The `RealSessionExecutor.Execute()` method iterates over `chain.Stages` sequentially. Each stage runs a single agent (Phase 5.1). On stage failure, the chain stops immediately (fail-fast). Stage context accumulates in-memory via `[]stageResult` and is formatted into `prevStageContext` for each subsequent stage.
+The `RealSessionExecutor.Execute()` method iterates over `chain.Stages` sequentially using a `dbStageIndex` counter. Each config stage produces at least one DB stage, plus an optional synthesis stage when >1 agent ran. On stage failure, the chain stops immediately (fail-fast). Stage context accumulates in-memory via `[]stageResult` and is formatted into `prevStageContext` for each subsequent stage.
 
-Internal types: `stageResult` (stageID, executionID, stageName, status, finalAnalysis, error), `agentResult`, `executeStageInput`, `generateSummaryInput`.
+Internal types:
+- `stageResult` — `stageID`, `stageName`, `status`, `finalAnalysis`, `err`, `agentResults []agentResult`
+- `agentResult` — `executionID`, `status`, `finalAnalysis`, `err`
+- `executionConfig` — `agentConfig` (config.StageAgentConfig), `displayName` (for DB/logs)
+- `indexedAgentResult` — `index`, `result` (pairs result with launch order for sorting)
+- `executeStageInput`, `generateSummaryInput`
 
 ### Backend Derivation
 
@@ -751,7 +795,7 @@ type ExecutionResult struct {
 type StageStatusPayload struct {
     Type       string `json:"type"`        // always "stage.status"
     SessionID  string `json:"session_id"`
-    StageID    string `json:"stage_id"`    // may be empty on "started"
+    StageID    string `json:"stage_id"`    // always present (started event published after Stage DB record creation)
     StageName  string `json:"stage_name"`
     StageIndex int    `json:"stage_index"` // 1-based
     Status     string `json:"status"`      // started, completed, failed, timed_out, cancelled
@@ -888,6 +932,15 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **In-memory context passing** | Stage context flows through chain loop via `stageResult.finalAnalysis` (from `ExecutionResult.FinalAnalysis`); no additional DB query needed |
 | **Non-blocking progress tracking** | `current_stage_index`/`current_stage_id` updated best-effort; failure is logged but doesn't stop execution |
 | **Unified stage execution** | All stages use the same goroutine + WaitGroup + channel machinery regardless of agent count. A single-agent stage is N=1, not a special case. No separate sequential/parallel code paths |
+| **WaitGroup over errgroup** | `sync.WaitGroup` + buffered channel chosen over `errgroup` because all agents must complete regardless of individual failures — success policy determines the overall outcome. `errgroup` cancels on first error, which is wrong for `policy: any` |
+| **Automatic synthesis** | Synthesis runs automatically after every successful stage with >1 agent execution. No opt-out for multi-agent stages. Single-agent stages skip synthesis entirely. Synthesis creates its own Stage DB record (separate from investigation) |
+| **Synthesis replaces investigation** | For multi-agent stages, synthesis result replaces the investigation result in `completedStages`. Subsequent stages see only the synthesized output, not raw per-agent results. Avoids redundancy and context window waste |
+| **Synthesis failure is fatal** | If synthesis fails, the chain stops (fail-fast). No fail-open fallback — synthesis is a configured chain step that influences subsequent stages. Parallel agents' work is preserved in DB for debugging |
+| **Timeline events for synthesis context** | Synthesis receives full investigation history via timeline events (not messages) — includes thinking content, tool calls, tool results, and final analyses. Messages lack thinking content entirely (no thinking field in Message schema) |
+| **Tool call/summary dedup in formatting** | Shared `formatTimelineEvents()` deduplicates: when `llm_tool_call` is followed by `mcp_tool_summary`, shows tool header + summary content instead of raw result. Prevents bloated synthesis context |
+| **Success policy defaulting** | `resolvedSuccessPolicy()`: stage config → `defaults.success_policy` → `SuccessPolicyAny` (fallback). `UpdateStageStatus()` also defaults nil to `SuccessPolicyAny`. Matches old TARSy behavior |
+| **dbStageIndex tracking** | Chain loop tracks `dbStageIndex` separately from config stage index. Incremented for both investigation and synthesis stages. Ensures correct stage ordering when synthesis stages are inserted |
+| **Replica naming convention** | Replicas named `{BaseName}-1`, `{BaseName}-2`, etc. Config resolution uses base agent name for registry lookup; display name only for DB records and logging |
 
 ---
 
@@ -912,11 +965,6 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 ---
 
 ## Deferred Items Tracker
-
-### Deferred to Phase 5.2 (Parallel Execution)
-
-- **Parallel stage execution**: goroutine-per-agent, result aggregation, success policy (all/any), synthesis agent invocation, replica execution
-- **Stage status aggregation for mixed failures**: when parallel agents have different outcomes
 
 ### Deferred to Phase 6/7
 
