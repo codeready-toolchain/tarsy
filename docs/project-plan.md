@@ -28,73 +28,71 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 4.2: Data Masking** -- MaskingService singleton with 15 built-in regex patterns, pattern groups, custom regex from YAML config, and KubernetesSecretMasker (code-based, structural YAML/JSON parsing to mask Secrets but not ConfigMaps). Two integration points: MCP tool results (fail-closed) and alert payloads (fail-open). Replacement format `[MASKED_X]`. Alert masking configurable under `defaults.alert_masking`.
 
+**Phase 4.3: MCP Features** -- Per-alert MCP selection override (replace-not-merge semantics, API + executor validation), LLM-based tool result summarization at controller level (shared `executeToolCall()` path, fail-open, token estimation heuristic, two-tier truncation: 8K storage / 100K summarization), and tool call streaming lifecycle (single `llm_tool_call` event with created→completed states, `mcp_tool_summary` events for summarization streaming). Removed `tool_result` and `mcp_tool_call` event types. Added `"summarization"` LLMInteraction type.
+
 Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 4: MCP Integration (continued)
-
-**Data Masking (Phase 4.2)** -- COMPLETED
-- [x] Masking service (Go)
-- [x] Regex-based maskers (15 patterns defined in builtin.go)
-- [x] Custom data masking (regex) in configuration
-- [x] MCP tool result masking integration
-- [x] Alert payload sanitization
-- [x] Distinguish K8s Secrets vs ConfigMaps
-
-**MCP Features (Phase 4.3)**
-- [ ] Custom MCP configuration per alert (mcp_selection override)
-- [ ] Tool result summarization (LLM-based, configurable threshold)
-- [ ] Tool output streaming -- extend streaming protocol with `stream.chunk` for live MCP tool output during execution.
+### Phase 5: Chain Execution & Chat
 
 **Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports.
 
----
+**Chain Orchestration + Session Completion (Phase 5.1)**
+- [ ] Chain orchestrator loop in SessionExecutor (sequential multi-stage execution, fail-fast on stage failure)
+- [ ] Single-agent sequential stage execution (refactor current single-stage code into reusable helper)
+- [ ] Per-agent-execution MCP client lifecycle (create + teardown per agent execution; Phase 5.2 parallel agents work without refactoring)
+- [ ] Lazy context building between stages (BuildStageContext — query final_analysis timeline events from DB)
+- [ ] Stage lifecycle events (single stage.status event type — payloads, publisher, EventPublisher interface)
+- [ ] Session progress tracking (update current_stage_index, current_stage_id on AlertSession)
+- [ ] Final analysis extraction from last completed stage
+- [ ] Executive summary generation (LLM call, fail-open, timeline event on last stage)
+- [ ] Error handling and cancellation propagation through chain loop
 
-### Phase 5: Chain Execution
+Note: Max iteration enforcement (force conclusion, no pause/resume) was already implemented in Phase 3 controllers.
 
-**Chain Orchestration (Go)**
-- [ ] Chain orchestrator -- uses existing ChainRegistry from Phase 2 config
-- [ ] Multi-stage sequential execution
-- [ ] Stage execution manager (create Stage + AgentExecution records)
-- [ ] Lazy context building (Agent.BuildStageContext)
-- [ ] Data flow between stages (previous stage context -> next stage prompt)
-
-**Parallel Execution (Go)**
-- [ ] Parallel stage executor (goroutine-per-agent)
+**Parallel Execution (Phase 5.2)**
+- [ ] Parallel stage executor (goroutine-per-agent with per-agent context isolation)
 - [ ] Result aggregation from parallel agents
 - [ ] Success policy enforcement (all/any)
-- [ ] Synthesis agent invocation (automatic after parallel stages)
-- [ ] Replica execution (same agent N times)
+- [ ] Synthesis agent invocation (automatic after successful parallel stages)
+- [ ] Replica execution (same agent N times with identical config)
+- [ ] Remove Phase 5.1 parallel-stage guard (replace error with actual implementation)
 
-**Session Completion**
-- [ ] Max iteration enforcement (force conclusion, no pause/resume)
-- [ ] Executive summary generation (LLM call)
-- [ ] Final analysis formatting and storage
+**Follow-up Chat (Phase 5.3)**
+
+Chat infrastructure already exists: ent schemas (Chat, ChatUserMessage), ChatService, ExecutionContext.ChatContext, prompt builder chat branching, chat instructions/templates, investigation formatter, ChatAgent config, Chain ChatConfig. Remaining work is the execution pipeline and API surface.
+
+- [ ] Chat API handlers (create chat, send message, get history, check availability, cancel execution)
+- [ ] Chat message executor (queue-based — chat messages routed through worker pool to limit concurrent LLM usage)
+- [ ] Chat WebSocket events (chat.created, chat.user_message, reuse existing stage/timeline events for streaming)
+- [ ] Chat-investigation context wiring (populate ChatContext from ChatService.BuildChatContext + chat history)
+- [ ] Chat availability guard (terminal sessions only: completed/failed/cancelled)
 
 ---
 
 ### Phase 6: End-to-End Testing
 
-**E2E tests**
+**E2E Tests (Phase 6.1)**
 - [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for external services (MCP, LLMs, GitHub)
 
 ---
 
 ### Phase 7: Dashboard
 
-**Real-time Features**
+**Real-time Features (Phase 7.1)**
 - [ ] Live LLM streaming UI
 - [ ] Stage timeline visualization
 - [ ] Native thinking indicators
+- [ ] Progress status events — transient `session.progress_update` notifications (notify-only, no DB persistence) with ProgressPhase enum: investigating (default), gathering_info (before MCP tool call), distilling (tool result summarization), concluding (forced conclusion at iteration limit), synthesizing (synthesis agent), finalizing (executive summary generation). Retrofit publishing calls into Phase 3 controllers, Phase 4 tool executor/summarization, Phase 5.1 chain orchestrator, Phase 5.2 parallel executor.
 
-**History Views**
+**History Views (Phase 7.2)**
 - [ ] Session list with filters
 - [ ] Detailed session view
 - [ ] Conversation replay
 - [ ] Chat interface
 
-**System Views**
+**System Views (Phase 7.3)**
 - [ ] MCP server status
 - [ ] System warnings display
 - [ ] Queue metrics dashboard
@@ -103,18 +101,18 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 8: Integrations
 
-**Runbook System (Go)**
+**Runbook System (Phase 8.1)**
 - [ ] GitHub integration
 - [ ] Runbook fetching & caching
 - [ ] Per-chain runbook configuration
 
-**Multi-LLM Support (Python)**
+**Multi-LLM Support (Phase 8.2)**
 - [ ] Real LangChainProvider (replace stub)
 - [ ] OpenAI, Anthropic, xAI client implementations
 - [ ] Google Search grounding support
 - [ ] VertexAI support
 
-**Slack Notifications (Go)**
+**Slack Notifications (Phase 8.3)**
 - [ ] Slack client
 - [ ] Notification templates
 - [ ] Message threading/fingerprinting
@@ -124,7 +122,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 9: Security
 
-**Authentication & Authorization**
+**Authentication & Authorization (Phase 9.1)**
 - [ ] OAuth2-proxy integration
 - [ ] Token validation
 - [ ] GitHub OAuth flow
@@ -133,36 +131,29 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 10: History & Chat
+### Phase 10: History
 
-**History System (Go)**
+**History System (Phase 10.1)**
 - [ ] History repository
 - [ ] Timeline reconstruction
 - [ ] Conversation retrieval
 - [ ] Session querying & filtering
 
-**Follow-up Chat (Go + Python LLM)**
-- [ ] Chat service (Go orchestration)
-- [ ] Chat agent with investigation context
-- [ ] Context preservation (lazy context building)
-- [ ] Multi-user support
-- [ ] Chat-investigation timeline merging
-
 ---
 
 ### Phase 11: Monitoring & Operations
 
-**System Health**
+**System Health (Phase 11.1)**
 - [ ] Health check endpoint enhancements
 - [ ] Queue metrics
 
-**Observability**
+**Observability (Phase 11.2)**
 - [ ] Structured logging
 - [ ] Metrics collection (Prometheus)
 - [ ] Error tracking
 - [ ] Performance monitoring
 
-**History Cleanup**
+**History Cleanup (Phase 11.3)**
 - [ ] Retention policies
 - [ ] Cleanup service
 - [ ] Cascade deletes
@@ -171,20 +162,20 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 12: Deployment, DevOps & CI/CD
 
-**Containerization**
+**Containerization (Phase 12.1)**
 - [ ] Multi-stage Docker builds
 - [ ] Container orchestration (podman-compose)
 - [ ] Service health checks
 - [ ] Volume management
 
-**Kubernetes/OpenShift**
+**Kubernetes/OpenShift (Phase 12.2)**
 - [ ] Kustomize manifests
 - [ ] Service deployments
 - [ ] ConfigMaps & secrets
 - [ ] Routes/ingress
 - [ ] ImageStreams
 
-**CI/CD & Testing Infra**
+**CI/CD & Testing Infra (Phase 12.3)**
 - [ ] GitHub Actions workflows
 - [ ] Test automation (Go + Python)
 - [ ] Build & push images
