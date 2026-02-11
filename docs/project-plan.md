@@ -30,6 +30,8 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 4.3: MCP Features** -- Per-alert MCP selection override (replace-not-merge semantics, API + executor validation), LLM-based tool result summarization at controller level (shared `executeToolCall()` path, fail-open, token estimation heuristic, two-tier truncation: 8K storage / 100K summarization), and tool call streaming lifecycle (single `llm_tool_call` event with created→completed states, `mcp_tool_summary` events for summarization streaming). Removed `tool_result` and `mcp_tool_call` event types. Added `"summarization"` LLMInteraction type.
 
+**Phase 5.1: Chain Orchestration + Session Completion** -- Sequential multi-stage chain loop in `RealSessionExecutor` with `executeStage()`/`executeAgent()` extraction, per-agent-execution MCP lifecycle (create + teardown per agent, not per session), in-memory inter-stage context passing via `BuildStageContext()`, `stage.status` event type (single event for all lifecycle transitions), session progress tracking (`current_stage_index`/`current_stage_id`), final analysis extraction (reverse search from last completed stage), fail-open executive summary generation (direct LLM call, configurable provider via `chain.executive_summary_provider`), session-level timeline events (optional `stage_id`/`execution_id` on TimelineEvent schema). Fixed backend derivation: `Backend` field on `ResolvedAgentConfig` resolved from iteration strategy via `ResolveBackend()`, passed through `GenerateInput` to gRPC — replacing implicit derivation from provider type.
+
 Full design docs for completed phases are in `docs/archive/`.
 
 ---
@@ -37,19 +39,6 @@ Full design docs for completed phases are in `docs/archive/`.
 ### Phase 5: Chain Execution & Chat
 
 **Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports.
-
-**Chain Orchestration + Session Completion (Phase 5.1)**
-- [ ] Chain orchestrator loop in SessionExecutor (sequential multi-stage execution, fail-fast on stage failure)
-- [ ] Single-agent sequential stage execution (refactor current single-stage code into reusable helper)
-- [ ] Per-agent-execution MCP client lifecycle (create + teardown per agent execution; Phase 5.2 parallel agents work without refactoring)
-- [ ] Lazy context building between stages (BuildStageContext — query final_analysis timeline events from DB)
-- [ ] Stage lifecycle events (single stage.status event type — payloads, publisher, EventPublisher interface)
-- [ ] Session progress tracking (update current_stage_index, current_stage_id on AlertSession)
-- [ ] Final analysis extraction from last completed stage
-- [ ] Executive summary generation (LLM call, fail-open, timeline event on last stage)
-- [ ] Error handling and cancellation propagation through chain loop
-
-Note: Max iteration enforcement (force conclusion, no pause/resume) was already implemented in Phase 3 controllers.
 
 **Parallel Execution (Phase 5.2)**
 - [ ] Parallel stage executor (goroutine-per-agent with per-agent context isolation)
