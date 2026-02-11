@@ -2,83 +2,66 @@
 
 ## Overview
 
-Extend `executeStage()` in `RealSessionExecutor` to support parallel multi-agent and replica execution, with goroutine-per-agent concurrency, result aggregation, success policy enforcement, and automatic synthesis agent invocation.
+Extend `executeStage()` in `RealSessionExecutor` to support multi-agent and replica execution, with goroutine-per-agent concurrency, result aggregation, success policy enforcement, and automatic synthesis agent invocation.
 
 **Current state**: `executeStage()` rejects stages with >1 agent or replicas >1 with an error guard. All stages are single-agent, single-execution.
 
-**Target state**: `executeStage()` detects parallel stages and spawns goroutines. Per-agent context isolation (already achieved in Phase 4.1) enables safe concurrent execution. Results are aggregated per success policy. Synthesis always runs automatically after successful parallel stages (mandatory, no opt-out). The parallel stage guard is removed.
+**Target state**: `executeStage()` uses the same execution machinery for all stages regardless of agent count. A single-agent stage is not a special case — it's a stage that happens to have one agent. The goroutine + WaitGroup + channel pattern handles N=1 identically to N=3. Synthesis runs automatically after stages with >1 agent. The parallel guard is removed.
+
+**Design principle**: No separate code paths for single-agent vs multi-agent stages. One `executeStage()`, one flow.
 
 ---
 
-## Detection Logic
+## Forms of Parallelism
 
-A stage is "parallel" when it requires more than one concurrent agent execution:
-
-```go
-func isParallelStage(cfg config.StageConfig) bool {
-    return len(cfg.Agents) > 1 || cfg.Replicas > 1
-}
-```
-
-Two forms of parallelism:
+Two forms of multi-agent execution, both using the same goroutine machinery:
 
 | Form | Trigger | Description |
 |------|---------|-------------|
 | **Multi-agent** | `len(agents) > 1` | Different agents investigate in parallel (potentially different strategies, providers, MCP servers) |
 | **Replica** | `replicas > 1` | Same agent config runs N times for redundancy/diversity |
 
-Both forms share the same goroutine execution machinery. They differ only in how execution configs are built.
+A single-agent stage (`len(agents) == 1`, `replicas <= 1`) uses the same machinery — it's just the N=1 case. No detection function needed.
 
 ---
 
 ## Execution Architecture
 
-### Routing in `executeStage()`
+### Unified `executeStage()`
 
-`executeStage()` becomes a thin router that delegates to the appropriate method:
-
-```go
-func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeStageInput) stageResult {
-    if isParallelStage(input.stageConfig) {
-        return e.executeParallelStage(ctx, input)
-    }
-    return e.executeSequentialStage(ctx, input)
-}
-```
-
-`executeSequentialStage()` contains the current Phase 5.1 `executeStage()` body (renamed, no behavioral changes).
-
-### Parallel Execution Flow
+There is no routing. `executeStage()` is one method that handles all stages uniformly:
 
 ```
-executeParallelStage(ctx, input):
-  1. Build execution configs (multi-agent or replica)
+executeStage(ctx, input):
+  1. Build execution configs (1 for single-agent, N for multi-agent/replica)
   2. Create Stage DB record (with parallel_type, success_policy, expected_agent_count)
-  3. Launch goroutines (one per execution config)
+  3. Launch goroutines (one per execution config — even if just one)
   4. Each goroutine: executeAgent(ctx, input, stage, agentConfig, index, displayName) → agentResult
   5. Wait for ALL goroutines to complete (WaitGroup)
   6. Collect agentResults, sort by index
   7. Aggregate status via success policy (in-memory)
   8. Call StageService.UpdateStageStatus() (DB consistency)
-  9. Return stageResult (synthesis runs separately in the chain loop)
+  9. Return stageResult (synthesis runs separately in the chain loop, only when >1 agent)
 ```
+
+For a single-agent stage, this is: 1 config → 1 goroutine → 1 channel write → 1 collect → trivial aggregation. Same code, no branching.
 
 ### Goroutine Management
 
 Use `sync.WaitGroup` + buffered channel to collect results:
 
 ```go
-func (e *RealSessionExecutor) executeParallelStage(ctx context.Context, input executeStageInput) stageResult {
-    configs := e.buildParallelConfigs(input.stageConfig)
+func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeStageInput) stageResult {
+    configs := e.buildConfigs(input.stageConfig)
 
-    // Create Stage DB record with parallel metadata
+    // Create Stage DB record
     stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
         SessionID:          input.session.ID,
         StageName:          input.stageConfig.Name,
         StageIndex:         input.stageIndex + 1, // 1-based in DB
         ExpectedAgentCount: len(configs),
-        ParallelType:       parallelTypePtr(input.stageConfig),
-        SuccessPolicy:      successPolicyPtr(input.stageConfig),
+        ParallelType:       parallelTypePtr(input.stageConfig),  // nil for single-agent
+        SuccessPolicy:      successPolicyPtr(input.stageConfig), // nil for single-agent
     })
     // ... error handling ...
 
@@ -100,30 +83,37 @@ func (e *RealSessionExecutor) executeParallelStage(ctx context.Context, input ex
     // Collect and sort by original index
     agentResults := collectAndSort(results)
 
-    // Aggregate status
-    stageStatus := aggregateParallelStatus(agentResults, resolvedSuccessPolicy(input))
+    // Aggregate status (for single-agent: trivially correct — 1 completed → completed)
+    stageStatus := aggregateStatus(agentResults, resolvedSuccessPolicy(input))
 
     // Update Stage in DB (triggers aggregation from AgentExecution records)
     input.stageService.UpdateStageStatus(ctx, stg.ID)
 
+    // For single-agent stages, finalAnalysis comes directly from the agent.
+    // For multi-agent stages, synthesis produces it (chain loop handles this).
+    finalAnalysis := ""
+    if len(agentResults) == 1 {
+        finalAnalysis = agentResults[0].finalAnalysis
+    }
+
     return stageResult{
-        stageID:      stg.ID,
-        stageName:    input.stageConfig.Name,
-        status:       stageStatus,
-        err:          aggregateError(agentResults, stageStatus, input.stageConfig),
-        agentResults: agentResults,
-        // finalAnalysis intentionally empty — synthesis (mandatory) produces it
+        stageID:       stg.ID,
+        stageName:     input.stageConfig.Name,
+        status:        stageStatus,
+        finalAnalysis: finalAnalysis,
+        err:           aggregateError(agentResults, stageStatus, input.stageConfig),
+        agentResults:  agentResults,
     }
 }
 ```
 
-**Why `WaitGroup` + channel, not `errgroup`?** We need ALL agents to complete regardless of individual failures — success policy determines the overall outcome. `errgroup` cancels remaining goroutines on first error, which is wrong for `policy: any` where some failures are expected.
+**Why `WaitGroup` + channel, not `errgroup`?** We need ALL agents to complete regardless of individual failures — success policy determines the overall outcome. `errgroup` cancels remaining goroutines on first error, which is wrong for `policy: any` where some failures are expected. For single-agent stages, this distinction is irrelevant — but the same code handles both.
 
 ### Internal Types
 
 ```go
-// parallelConfig wraps agent config with display name for parallel execution.
-type parallelConfig struct {
+// executionConfig wraps agent config with display name for stage execution.
+type executionConfig struct {
     agentConfig config.StageAgentConfig
     displayName string // for DB record and logs (differs from config name for replicas)
 }
@@ -135,17 +125,16 @@ type indexedAgentResult struct {
 }
 ```
 
-Extend `stageResult` with optional agent results for parallel stages:
+Extend `stageResult` with agent results (always populated):
 
 ```go
 type stageResult struct {
     stageID       string
-    executionID   string           // meaningful for sequential stages only
     stageName     string
     status        alertsession.Status
     finalAnalysis string
     err           error
-    agentResults  []agentResult    // populated for parallel stages (nil for sequential)
+    agentResults  []agentResult    // always populated (1 entry for single-agent, N for multi-agent)
 }
 ```
 
@@ -153,7 +142,7 @@ type stageResult struct {
 
 ## Context Isolation
 
-Parallel goroutines are safe because `executeAgent()` already provides complete isolation per Phase 4.1/5.1 design:
+Concurrent goroutines are safe because `executeAgent()` already provides complete isolation per Phase 4.1/5.1 design:
 
 | Concern | Isolation mechanism |
 |---------|-------------------|
@@ -176,10 +165,10 @@ The one addition: the shared `ctx` carries session cancellation — this is inte
 Each agent in `stage.Agents` becomes its own execution:
 
 ```go
-func (e *RealSessionExecutor) buildMultiAgentConfigs(stageCfg config.StageConfig) []parallelConfig {
-    configs := make([]parallelConfig, len(stageCfg.Agents))
+func (e *RealSessionExecutor) buildMultiAgentConfigs(stageCfg config.StageConfig) []executionConfig {
+    configs := make([]executionConfig, len(stageCfg.Agents))
     for i, agentCfg := range stageCfg.Agents {
-        configs[i] = parallelConfig{
+        configs[i] = executionConfig{
             agentConfig: agentCfg,
             displayName: agentCfg.Name,
         }
@@ -193,12 +182,12 @@ func (e *RealSessionExecutor) buildMultiAgentConfigs(stageCfg config.StageConfig
 The first agent config is replicated N times:
 
 ```go
-func (e *RealSessionExecutor) buildReplicaConfigs(stageCfg config.StageConfig) []parallelConfig {
+func (e *RealSessionExecutor) buildReplicaConfigs(stageCfg config.StageConfig) []executionConfig {
     baseAgent := stageCfg.Agents[0]
     replicas := stageCfg.Replicas
-    configs := make([]parallelConfig, replicas)
+    configs := make([]executionConfig, replicas)
     for i := 0; i < replicas; i++ {
-        configs[i] = parallelConfig{
+        configs[i] = executionConfig{
             agentConfig: baseAgent,                                            // base config — Name used for config lookup
             displayName: fmt.Sprintf("%s-%d", baseAgent.Name, i+1),           // display name for DB/logs
         }
@@ -214,13 +203,15 @@ func (e *RealSessionExecutor) buildReplicaConfigs(stageCfg config.StageConfig) [
 ### Combined Builder
 
 ```go
-func (e *RealSessionExecutor) buildParallelConfigs(stageCfg config.StageConfig) []parallelConfig {
+func (e *RealSessionExecutor) buildConfigs(stageCfg config.StageConfig) []executionConfig {
     if stageCfg.Replicas > 1 {
         return e.buildReplicaConfigs(stageCfg)
     }
     return e.buildMultiAgentConfigs(stageCfg)
 }
 ```
+
+For a single-agent stage: returns `[]executionConfig` with 1 entry. Same path, no branching.
 
 ---
 
@@ -242,7 +233,7 @@ func (e *RealSessionExecutor) executeAgent(
 - `displayName` is used for: `CreateAgentExecution.AgentName`, `ExecCtx.AgentName`, logger fields
 - `agentConfig.Name` is used for: `ResolveAgentConfig()` (config registry lookup), `AgentFactory.CreateAgent()`
 
-For sequential stages (backward-compatible): `executeAgent(ctx, input, stg, agentConfig, 0, agentConfig.Name)` — display name equals config name.
+For non-replica stages, `displayName == agentConfig.Name` (set by `buildMultiAgentConfigs()`). For replicas, `displayName` is `{BaseName}-{index}` (set by `buildReplicaConfigs()`).
 
 ---
 
@@ -250,10 +241,10 @@ For sequential stages (backward-compatible): `executeAgent(ctx, input, stg, agen
 
 ### Status Aggregation
 
-In-memory aggregation matching `StageService.UpdateStageStatus()` logic but run before the DB call for the executor to know the stage outcome:
+In-memory aggregation matching `StageService.UpdateStageStatus()` logic but run before the DB call for the executor to know the stage outcome. Works identically for 1 or N agents:
 
 ```go
-func aggregateParallelStatus(results []agentResult, policy config.SuccessPolicy) alertsession.Status {
+func aggregateStatus(results []agentResult, policy config.SuccessPolicy) alertsession.Status {
     var completed, failed, timedOut, cancelled int
 
     for _, r := range results {
@@ -297,15 +288,12 @@ Matches old TARSy behavior: CANCELLED and TIMED_OUT are treated as non-successes
 
 ### Error Message Aggregation
 
-For failed parallel stages, build a detailed error message listing each non-successful agent:
+For failed stages, build a detailed error message. For single-agent stages this is just the agent's error. For multi-agent stages, list each non-successful agent:
 
 ```go
-func aggregateParallelErrors(
-    results []agentResult,
-    parallelType string,
-    policy config.SuccessPolicy,
-) string {
-    // Example output:
+func aggregateError(results []agentResult, stageStatus alertsession.Status, stageCfg config.StageConfig) error {
+    // Single agent: return agent's error directly
+    // Multi-agent example output:
     // "Multi_agent stage failed: 2/3 executions failed (policy: all)
     //
     // Failed agents:
@@ -316,7 +304,9 @@ func aggregateParallelErrors(
 
 ### Final Analysis Construction
 
-Synthesis always runs after parallel stages (mandatory, no opt-out), so the parallel stage's `stageResult.finalAnalysis` is not used for context passing — the synthesis stage's `finalAnalysis` replaces it. The parallel `stageResult.finalAnalysis` can be left empty or set to a brief summary (e.g., "3/3 agents completed — awaiting synthesis") for logging purposes only.
+For **single-agent stages**: `stageResult.finalAnalysis` is set from the agent's result and used directly for context passing to the next stage.
+
+For **multi-agent stages**: `stageResult.finalAnalysis` is left empty — synthesis runs after the stage (in the chain loop) and produces the `finalAnalysis` that flows to the next stage.
 
 ---
 
@@ -343,7 +333,7 @@ func resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
 
 The resolved policy is passed to both:
 1. `CreateStageRequest.SuccessPolicy` (for DB persistence)
-2. `aggregateParallelStatus()` (for in-memory executor logic)
+2. `aggregateStatus()` (for in-memory executor logic)
 
 ---
 
@@ -351,7 +341,9 @@ The resolved policy is passed to both:
 
 ### Invocation Criteria
 
-Synthesis **always** runs after every successful parallel stage. There is no opt-out. The `synthesis:` config block is optional and only controls the agent, strategy, and provider — if omitted, defaults apply:
+Synthesis runs after every successful stage with **more than one agent execution** (`len(agentResults) > 1`). There is no opt-out for multi-agent stages. Single-agent stages skip synthesis entirely — there's nothing to synthesize.
+
+The `synthesis:` config block is optional and only controls the agent, strategy, and provider — if omitted, defaults apply:
 
 | Field | Default |
 |-------|---------|
@@ -359,17 +351,17 @@ Synthesis **always** runs after every successful parallel stage. There is no opt
 | `iteration_strategy` | `"synthesis"` |
 | `llm_provider` | chain's `llm_provider` → `defaults.llm_provider` |
 
-This eliminates the need for a separate "aggregate parallel final analyses" code path. Every parallel stage produces a single synthesized `finalAnalysis` via the synthesis agent.
+This eliminates the need for a separate "aggregate parallel final analyses" code path. Every multi-agent stage produces a single synthesized `finalAnalysis` via the synthesis agent.
 
 ### Synthesis as a Separate Stage
 
-Synthesis creates its own `Stage` DB record, separate from the parallel stage. This is the cleanest approach because:
+Synthesis creates its own `Stage` DB record, separate from the investigation stage. This is the cleanest approach because:
 - No changes to `StageService.UpdateStageStatus()` aggregation logic
-- Clear separation: parallel Stage status reflects only parallel agents; synthesis Stage status reflects synthesis
+- Clear separation: investigation Stage status reflects only investigation agents; synthesis Stage status reflects synthesis
 - Dashboard shows two distinct stages (e.g., "Investigation", "Investigation - Synthesis")
 - Consistent with old TARSy's execution model (synthesis gets its own stage_execution record)
 
-The alternative (synthesis as an AgentExecution within the parallel Stage) was rejected — it would require modifying `UpdateStageStatus()` to exclude synthesis from success policy aggregation and introduces semantic confusion between investigation and post-processing.
+The alternative (synthesis as an AgentExecution within the investigation Stage) was rejected — it would require modifying `UpdateStageStatus()` to exclude synthesis from success policy aggregation and introduces semantic confusion between investigation and post-processing.
 
 ### Chain Loop Changes
 
@@ -408,8 +400,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
             return &ExecutionResult{Status: sr.status, Error: sr.err}
         }
 
-        // Synthesis always runs after successful parallel stages (no opt-out)
-        if isParallelStage(stageCfg) {
+        // Synthesis runs after stages with >1 agent (mandatory, no opt-out)
+        if len(sr.agentResults) > 1 {
             synthSr := e.executeSynthesisStage(ctx, executeStageInput{
                 // ... fields ...
                 stageIndex: dbStageIndex,
@@ -424,7 +416,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
                 return &ExecutionResult{Status: synthSr.status, Error: synthSr.err}
             }
 
-            // Synthesis result replaces parallel result for context passing
+            // Synthesis result replaces investigation result for context passing
             completedStages = append(completedStages, synthSr)
         } else {
             completedStages = append(completedStages, sr)
@@ -437,11 +429,11 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 }
 ```
 
-**Key design decisions**: Synthesis always runs after parallel stages (mandatory, no opt-out). The synthesis `stageResult` replaces the parallel `stageResult` in `completedStages` — subsequent stages see only the synthesis output, not the raw parallel results. This keeps the context focused and eliminates the need for a separate parallel-aggregate code path.
+**Key design decisions**: `executeStage()` is the same for all stages — no branching based on agent count. The only conditional in the chain loop is synthesis invocation (`len(sr.agentResults) > 1`), which is about post-processing, not about how stages execute. The synthesis `stageResult` replaces the investigation `stageResult` in `completedStages` — subsequent stages see only the synthesis output, not the raw per-agent results.
 
 ### Context Building for Synthesis
 
-Synthesis needs the **full investigation history** from each parallel agent — not just final analyses. The synthesis agent must evaluate evidence quality, verify reasoning chains, detect fabrications, and identify contradictions between agents. This means seeing thinking/reasoning, tool calls, tool results, and final conclusions. Passing only final analyses would reduce synthesis to a text-merging exercise.
+Synthesis needs the **full investigation history** from each agent — not just final analyses. The synthesis agent must evaluate evidence quality, verify reasoning chains, detect fabrications, and identify contradictions between agents. This means seeing thinking/reasoning, tool calls, tool results, and final conclusions. Passing only final analyses would reduce synthesis to a text-merging exercise.
 
 This matches old TARSy, which passed `investigation_history` (full conversation) to synthesis.
 
@@ -463,7 +455,7 @@ Messages lack thinking content entirely (the Message schema has no thinking fiel
 
 #### Data flow
 
-1. After parallel agents complete, the executor has each agent's `executionID`
+1. After agents complete, the executor has each agent's `executionID` (from `agentResults`)
 2. For each agent: `TimelineService.GetAgentTimeline(ctx, executionID)` — already exists, returns timeline events ordered by sequence number
 3. `FormatInvestigationForSynthesis()` formats each agent's timeline into a structured section (reusing the same event-type formatting logic as the existing `FormatInvestigationContext()`)
 4. All sections are concatenated into `prevStageContext` for the synthesis agent
@@ -473,7 +465,7 @@ Messages lack thinking content entirely (the Message schema has no thinking fiel
 New function in `pkg/agent/context/`:
 
 ```go
-// FormatInvestigationForSynthesis formats parallel agents' full investigation
+// FormatInvestigationForSynthesis formats multi-agent full investigation
 // histories for the synthesis agent. Uses timeline events (which include thinking,
 // tool calls, tool results, and responses) rather than raw messages.
 // Each agent's investigation is wrapped with identifying metadata.
@@ -558,7 +550,7 @@ This formatted context is passed as `prevStageContext` to the synthesis agent's 
 
 #### Performance considerations
 
-- DB queries are bounded: one `GetAgentTimeline()` per parallel agent (typically 2-5 agents)
+- DB queries are bounded: one `GetAgentTimeline()` per agent (typically 2-5 agents for multi-agent stages)
 - Queries run once at synthesis time, not in a loop
 - Context window: Gemini models support 1M+ tokens, so even 3 agents × 20 iterations is well within limits
 - Timeline events are already in DB from progressive writes during execution — no new writes needed
@@ -580,7 +572,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
         StageName:          synthStageName,
         StageIndex:         input.stageIndex + 1, // 1-based in DB
         ExpectedAgentCount: 1,
-        // No parallel_type, no success_policy (sequential single-agent)
+        // No parallel_type, no success_policy (single-agent synthesis)
     })
     // ... error handling ...
 
@@ -653,7 +645,7 @@ stages:
 - Each replica gets its own `AgentExecution` record with display name `KubernetesAgent-1`, `KubernetesAgent-2`, etc.
 - Config resolution uses the base agent name (`KubernetesAgent`) for registry lookup
 - Each replica gets its own independent MCP client (no shared sessions)
-- Replicas run concurrently with the same parallel goroutine machinery as multi-agent stages
+- Replicas run concurrently with the same goroutine machinery as all stages
 
 ### Difference from Multi-Agent
 
@@ -669,7 +661,7 @@ stages:
 
 ## Cancellation Handling
 
-Context cancellation propagates naturally to all parallel goroutines:
+Context cancellation propagates naturally to all goroutines (whether 1 or N):
 
 1. Session cancellation/timeout sets `ctx.Done()` on the parent context
 2. All goroutines share this context through `executeAgent(ctx, ...)`
@@ -677,7 +669,7 @@ Context cancellation propagates naturally to all parallel goroutines:
 4. `BaseAgent.Execute()` maps context errors to appropriate status (`ExecutionStatusCancelled` / `ExecutionStatusTimedOut`)
 5. Goroutines complete normally with cancelled/timed_out results
 6. `WaitGroup` unblocks when all goroutines finish
-7. `aggregateParallelStatus()` produces the stage's terminal status
+7. `aggregateStatus()` produces the stage's terminal status
 8. Chain loop's `mapCancellation()` checks between stages
 
 **No special cancellation handling needed** — Go's hierarchical context cancellation and the existing error mapping handle everything. This is one of the advantages of goroutines + context over the more complex cancellation tracking in old TARSy (which used a `CancellationTracker` + `asyncio.CancelledError` + per-agent checking).
@@ -688,14 +680,14 @@ Context cancellation propagates naturally to all parallel goroutines:
 
 ### Stage Status Events
 
-Parallel stages emit the same `stage.status` events as sequential stages:
+All stages emit the same `stage.status` events:
 
 | Event | When | StageID present? |
 |-------|------|-----------------|
-| `stage.status: started` | Before goroutines launch | No (Stage not created yet) |
-| `stage.status: completed/failed/...` | After all goroutines complete + aggregation | Yes |
+| `stage.status: started` | Before `executeStage()` | No (Stage not created yet) |
+| `stage.status: completed/failed/...` | After all agents complete + aggregation | Yes |
 
-If synthesis follows:
+If synthesis follows (multi-agent stages):
 
 | Event | When | StageID present? |
 |-------|------|-----------------|
@@ -708,13 +700,17 @@ If synthesis follows:
 
 ### Per-Agent Timeline Events
 
-Each parallel agent's timeline events (thinking, responses, tool calls) are scoped to their `AgentExecution` via the `execution_id` field. The dashboard can display them grouped by agent within the parallel stage. No changes needed — the existing event system handles this through `execution_id` partitioning.
+Each agent's timeline events (thinking, responses, tool calls) are scoped to their `AgentExecution` via the `execution_id` field. For multi-agent stages, the dashboard can display them grouped by agent. No changes needed — the existing event system handles this through `execution_id` partitioning.
 
 ---
 
 ## Stage Context for Next Stage
 
-Synthesis always runs after parallel stages, so the next stage always receives the synthesis `stageResult.finalAnalysis` via `BuildStageContext()`. No changes needed to `BuildStageContext()` — it already handles a list of `StageResult{StageName, FinalAnalysis}`, and synthesis produces exactly that.
+For **single-agent stages**: the agent's `finalAnalysis` flows directly to the next stage via `BuildStageContext()`.
+
+For **multi-agent stages**: synthesis runs and its `finalAnalysis` replaces the investigation results in `completedStages`. The next stage receives only the synthesized output.
+
+No changes needed to `BuildStageContext()` — it already handles a list of `StageResult{StageName, FinalAnalysis}`, and both paths produce exactly that.
 
 ---
 
@@ -724,7 +720,7 @@ Synthesis always runs after parallel stages, so the next stage always receives t
 
 | File | Change |
 |------|--------|
-| `pkg/queue/executor.go` | **Major**: Remove parallel guard. Add `executeParallelStage()`, `executeSynthesisStage()`, `buildParallelConfigs()`, `aggregateParallelStatus()`. Refactor chain loop for `dbStageIndex` and mandatory synthesis. Add `displayName` param to `executeAgent()`. Rename current `executeStage()` body to `executeSequentialStage()`. |
+| `pkg/queue/executor.go` | **Major**: Remove parallel guard. Rewrite `executeStage()` with unified goroutine machinery (no separate sequential/parallel paths). Add `executeSynthesisStage()`, `buildConfigs()`, `aggregateStatus()`. Refactor chain loop for `dbStageIndex` and synthesis-when-multi-agent. Add `displayName` param to `executeAgent()`. |
 | `pkg/agent/context/stage_context.go` | **Add**: `FormatInvestigationForSynthesis()` function and `ParallelAgentInvestigation` type. Extract shared event formatting helper from `FormatInvestigationContext()` to avoid duplication. |
 | `pkg/config/types.go` | **Verify**: `SynthesisConfig`, `StageAgentConfig`, `SuccessPolicy` already exist. May need `Defaults.SuccessPolicy` wiring. |
 | `pkg/queue/types.go` | **Minor**: No changes expected (stageResult is internal to executor.go) |
@@ -746,22 +742,24 @@ Synthesis always runs after parallel stages, so the next stage always receives t
 
 | Test | What it validates |
 |------|------------------|
-| **Parallel multi-agent: all succeed** | 3 agents complete, stage completes, each has own execution record |
-| **Parallel multi-agent: one fails (policy=all)** | Stage fails, all agents still run to completion |
-| **Parallel multi-agent: one fails (policy=any)** | Stage succeeds, failed agent recorded |
+| **Single-agent stage** | 1 agent completes via same goroutine machinery, no synthesis invoked |
+| **Multi-agent: all succeed** | 3 agents complete, stage completes, each has own execution record |
+| **Multi-agent: one fails (policy=all)** | Stage fails, all agents still run to completion |
+| **Multi-agent: one fails (policy=any)** | Stage succeeds, failed agent recorded |
 | **Replica: all succeed** | N replicas run, naming convention correct, config resolution uses base name |
 | **Replica: mixed results (policy=any)** | Stage succeeds if any replica completes |
-| **Synthesis after parallel** | Synthesis runs, creates own Stage, receives formatted parallel context |
+| **Synthesis after multi-agent** | Synthesis runs, creates own Stage, receives formatted investigation context |
+| **Synthesis skipped for single-agent** | Single-agent stage → no synthesis, finalAnalysis used directly |
 | **Synthesis failure** | Synthesis fails → stage chain fails (fail-fast) |
 | **Synthesis with defaults** | No `synthesis:` config block → defaults apply (SynthesisAgent, synthesis strategy) |
 | **Synthesis with overrides** | Custom agent/strategy/provider from `synthesis:` block respected |
-| **Parallel + cancellation** | Session cancel propagates to all goroutines, all terminate cleanly |
-| **Parallel + timeout** | Session timeout propagates, timed_out status aggregated |
+| **Cancellation** | Session cancel propagates to all goroutines (1 or N), all terminate cleanly |
+| **Timeout** | Session timeout propagates, timed_out status aggregated |
 | **Context isolation** | Each agent's messages/timeline scoped to own execution_id |
-| **Parallel stage events** | stage.status published for start and terminal state |
+| **Stage events** | stage.status published for start and terminal state (same for all stages) |
 | **Synthesis stage events** | Separate stage.status events for synthesis |
-| **Chain: parallel → sequential** | Sequential stage receives synthesis/aggregate context |
-| **Chain: sequential → parallel** | Parallel stage receives previous sequential stage context |
+| **Chain: multi-agent → single-agent** | Single-agent stage receives synthesis context |
+| **Chain: single-agent → multi-agent** | Multi-agent stage receives previous stage context |
 | **Success policy default** | Empty policy resolves to configured default |
 | **Status aggregation edge cases** | Mixed failures (some timed_out, some failed), all cancelled, etc. |
 
@@ -773,11 +771,12 @@ Integration tests should use `testcontainers-go` with PostgreSQL (matching exist
 
 | Aspect | Old TARSy | New TARSy | Reason |
 |--------|-----------|-----------|--------|
+| Stage execution model | Separate `_execute_single_stage` / `ParallelStageExecutor` | Unified `executeStage()` for all stages (N=1 or N=many) | No special cases — single-agent is just N=1 |
 | Concurrency | `asyncio.gather()` | Goroutines + WaitGroup | Go idiomatic |
 | Context isolation | Deep copy of `ChainContext` | Per-execution MCP client + ExecutionContext (already isolated) | Go architecture doesn't need deep copies |
 | Synthesis context | Full `investigation_history` (conversation) | Full timeline events from DB (includes thinking) | Same approach — synthesis needs full evidence including reasoning to evaluate quality |
-| Context to next stage | Both parallel + synthesis results | Only synthesis result | Synthesis consolidates parallel findings — passing both would be redundant and waste context window |
-| Synthesis invocation | Always automatic after parallel success | Always automatic (same) | Matches old TARSy — synthesis is mandatory for parallel stages |
+| Context to next stage | Both parallel + synthesis results | Only synthesis result | Synthesis consolidates findings — passing both would be redundant and waste context window |
+| Synthesis invocation | Always automatic after parallel success | Automatic when >1 agent; skipped for single-agent | Single-agent has nothing to synthesize |
 | Pause/resume | Supported (SessionPaused exception) | Not implemented (deferred) | New TARSy doesn't have pause/resume |
 | Parent/child stages | Parent + child StageExecution records | Stage + AgentExecution records | New TARSy's data model is already cleaner |
 | Cancellation tracking | CancellationTracker + is_user_cancel | Go context cancellation (hierarchical) | Simpler, built into language |

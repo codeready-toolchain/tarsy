@@ -92,7 +92,7 @@ The end-to-end happy path from alert submission to completion:
 5. **Controller.Run()** executes the iteration loop (see below)
 6. **Worker** updates `AlertSession` with final status, `final_analysis`, `executive_summary`, `completed_at`
 
-**Note**: Phase 5.1 executes single-agent stages only. Phase 5.2 extends `executeStage()` to spawn goroutines for parallel multi-agent stages.
+**Note**: Phase 5.1 executes single-agent stages only. Phase 5.2 extends `executeStage()` to handle any number of agents per stage using the same goroutine + WaitGroup machinery. A single-agent stage is not a special case — it's a stage with N=1 agents. No separate code paths for single vs multi-agent execution.
 
 ## Iteration Loop Flows
 
@@ -222,7 +222,7 @@ type SessionExecutor interface {
 Bridges the queue worker to the agent framework. Implementation: `RealSessionExecutor` in `pkg/queue/executor.go`.
 
 Key internal methods on `RealSessionExecutor`:
-- `executeStage()` — creates Stage DB record, runs agent(s) within it (Phase 5.1: single agent; Phase 5.2: parallel goroutines)
+- `executeStage()` — creates Stage DB record, runs agent(s) within it using unified goroutine machinery (same code path for 1 or N agents)
 - `executeAgent()` — per-agent-execution lifecycle: DB record → config resolution → MCP creation → agent execution → status update
 - `buildStageContext()` — converts `[]stageResult` to `BuildStageContext()` input
 - `generateExecutiveSummary()` — LLM call for session summary (fail-open)
@@ -885,6 +885,7 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Session-level timeline events** | `executive_summary` events have null `stage_id`/`execution_id` (schema fields made optional in Phase 5.1) |
 | **In-memory context passing** | Stage context flows through chain loop via `stageResult.finalAnalysis` (from `ExecutionResult.FinalAnalysis`); no additional DB query needed |
 | **Non-blocking progress tracking** | `current_stage_index`/`current_stage_id` updated best-effort; failure is logged but doesn't stop execution |
+| **Unified stage execution** | All stages use the same goroutine + WaitGroup + channel machinery regardless of agent count. A single-agent stage is N=1, not a special case. No separate sequential/parallel code paths |
 
 ---
 
