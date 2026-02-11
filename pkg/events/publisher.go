@@ -58,6 +58,16 @@ func (p *EventPublisher) PublishStreamChunk(ctx context.Context, sessionID strin
 	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
 }
 
+// PublishStageStatus persists and broadcasts a stage.status event.
+// Used for stage lifecycle transitions (started, completed, failed, etc.).
+func (p *EventPublisher) PublishStageStatus(ctx context.Context, sessionID string, payload StageStatusPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal StageStatusPayload: %w", err)
+	}
+	return p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON)
+}
+
 // PublishSessionStatus persists a session status event to the session channel
 // and broadcasts a transient copy to the global sessions channel.
 // Both publishes are best-effort: if the persistent one fails, the transient

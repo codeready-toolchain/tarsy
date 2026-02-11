@@ -319,6 +319,14 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 	if result.ExecutiveSummary != "" {
 		update = update.SetExecutiveSummary(result.ExecutiveSummary)
 	}
+	if result.ExecutiveSummaryError != "" {
+		errMsg := result.Error
+		if errMsg != nil {
+			update = update.SetErrorMessage(fmt.Sprintf("%s; executive summary error: %s", errMsg.Error(), result.ExecutiveSummaryError))
+		} else {
+			update = update.SetErrorMessage(fmt.Sprintf("executive summary error: %s", result.ExecutiveSummaryError))
+		}
+	}
 
 	return update.Exec(ctx)
 }

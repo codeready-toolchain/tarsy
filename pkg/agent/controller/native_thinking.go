@@ -75,6 +75,7 @@ func (c *NativeThinkingController) Run(
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       tools, // Tools bound for native calling
+			Backend:     execCtx.Config.Backend,
 		}, &eventSeq)
 
 		if err != nil {
@@ -202,6 +203,7 @@ func (c *NativeThinkingController) forceConclusion(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools — force conclusion
+		Backend:     execCtx.Config.Backend,
 	}, eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)

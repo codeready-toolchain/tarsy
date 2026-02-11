@@ -130,6 +130,7 @@ func callSummarizationLLM(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools for summarization
+		Backend:     execCtx.Config.Backend,
 	}
 
 	// Use dedicated summarization streaming (creates mcp_tool_summary events, not llm_response)

@@ -92,6 +92,10 @@ func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 	if input.Config != nil {
 		req.LlmConfig = toProtoLLMConfig(input.Config)
 	}
+	// Backend is set by the caller based on iteration strategy, not derived from provider type
+	if req.LlmConfig != nil && input.Backend != "" {
+		req.LlmConfig.Backend = input.Backend
+	}
 	return req
 }
 
@@ -147,13 +151,7 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 			pc.NativeTools[string(tool)] = enabled
 		}
 	}
-	// Determine backend
-	switch cfg.Type {
-	case config.LLMProviderTypeGoogle:
-		pc.Backend = "google-native"
-	default:
-		pc.Backend = "langchain"
-	}
+	// Backend is set by toProtoRequest() from input.Backend (resolved from iteration strategy).
 	return pc
 }
 

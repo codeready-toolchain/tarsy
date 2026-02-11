@@ -25,11 +25,15 @@ func (TimelineEvent) Fields() []ent.Field {
 		field.String("session_id").
 			Immutable(),
 		field.String("stage_id").
+			Optional().
+			Nillable().
 			Immutable().
-			Comment("Stage grouping"),
+			Comment("Stage grouping — nil for session-level events (e.g. executive_summary)"),
 		field.String("execution_id").
+			Optional().
+			Nillable().
 			Immutable().
-			Comment("Which agent"),
+			Comment("Which agent — nil for session-level events (e.g. executive_summary)"),
 
 		// Timeline Ordering
 		field.Int("sequence_number").
@@ -118,13 +122,11 @@ func (TimelineEvent) Edges() []ent.Edge {
 			Ref("timeline_events").
 			Field("stage_id").
 			Unique().
-			Required().
 			Immutable(),
 		edge.From("agent_execution", AgentExecution.Type).
 			Ref("timeline_events").
 			Field("execution_id").
 			Unique().
-			Required().
 			Immutable(),
 		edge.From("llm_interaction", LLMInteraction.Type).
 			Ref("timeline_events").

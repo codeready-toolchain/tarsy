@@ -97,19 +97,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, IsValidationError(err))
 
-		// Missing StageID
-		req = validReq
-		req.StageID = ""
-		_, err = timelineService.CreateTimelineEvent(ctx, req)
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-
-		// Missing ExecutionID
-		req = validReq
-		req.ExecutionID = ""
-		_, err = timelineService.CreateTimelineEvent(ctx, req)
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
+		// StageID and ExecutionID are optional (session-level events omit them)
 
 		// Invalid SequenceNumber (zero)
 		req = validReq

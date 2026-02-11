@@ -1,9 +1,12 @@
 package queue
 
 import (
+	"context"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -148,5 +151,132 @@ func TestResolveMCPSelection(t *testing.T) {
 		_, _, err := executor.resolveMCPSelection(session, resolved)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least one server")
+	})
+}
+
+func TestExtractFinalAnalysis(t *testing.T) {
+	tests := []struct {
+		name   string
+		stages []stageResult
+		want   string
+	}{
+		{
+			name:   "empty stages returns empty",
+			stages: nil,
+			want:   "",
+		},
+		{
+			name: "single stage with analysis",
+			stages: []stageResult{
+				{finalAnalysis: "Root cause: OOM"},
+			},
+			want: "Root cause: OOM",
+		},
+		{
+			name: "returns last stage analysis (reverse search)",
+			stages: []stageResult{
+				{finalAnalysis: "Stage 1 findings"},
+				{finalAnalysis: "Stage 2 diagnosis"},
+			},
+			want: "Stage 2 diagnosis",
+		},
+		{
+			name: "skips empty analysis, returns earlier stage",
+			stages: []stageResult{
+				{finalAnalysis: "Only this one has analysis"},
+				{finalAnalysis: ""},
+			},
+			want: "Only this one has analysis",
+		},
+		{
+			name: "all empty analysis returns empty",
+			stages: []stageResult{
+				{finalAnalysis: ""},
+				{finalAnalysis: ""},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractFinalAnalysis(tt.stages)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMapAgentStatusToSessionStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  agent.ExecutionStatus
+		expect alertsession.Status
+	}{
+		{"completed", agent.ExecutionStatusCompleted, alertsession.StatusCompleted},
+		{"failed", agent.ExecutionStatusFailed, alertsession.StatusFailed},
+		{"timed_out", agent.ExecutionStatusTimedOut, alertsession.StatusTimedOut},
+		{"cancelled", agent.ExecutionStatusCancelled, alertsession.StatusCancelled},
+		{"pending defaults to failed", agent.ExecutionStatusPending, alertsession.StatusFailed},
+		{"active defaults to failed", agent.ExecutionStatusActive, alertsession.StatusFailed},
+		{"unknown defaults to failed", agent.ExecutionStatus("unknown"), alertsession.StatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, mapAgentStatusToSessionStatus(tt.input))
+		})
+	}
+}
+
+func TestMapAgentStatusToEntStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  agent.ExecutionStatus
+		expect agentexecution.Status
+	}{
+		{"completed", agent.ExecutionStatusCompleted, agentexecution.StatusCompleted},
+		{"failed", agent.ExecutionStatusFailed, agentexecution.StatusFailed},
+		{"timed_out", agent.ExecutionStatusTimedOut, agentexecution.StatusTimedOut},
+		{"cancelled", agent.ExecutionStatusCancelled, agentexecution.StatusCancelled},
+		{"pending defaults to failed", agent.ExecutionStatusPending, agentexecution.StatusFailed},
+		{"active defaults to failed", agent.ExecutionStatusActive, agentexecution.StatusFailed},
+		{"unknown defaults to failed", agent.ExecutionStatus("unknown"), agentexecution.StatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, mapAgentStatusToEntStatus(tt.input))
+		})
+	}
+}
+
+func TestMapCancellation(t *testing.T) {
+	executor := &RealSessionExecutor{}
+
+	t.Run("active context returns nil", func(t *testing.T) {
+		result := executor.mapCancellation(context.Background())
+		assert.Nil(t, result)
+	})
+
+	t.Run("cancelled context returns cancelled status", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		result := executor.mapCancellation(ctx)
+		require.NotNil(t, result)
+		assert.Equal(t, alertsession.StatusCancelled, result.Status)
+		assert.ErrorIs(t, result.Error, context.Canceled)
+	})
+
+	t.Run("deadline exceeded returns timed_out status", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 0)
+		defer cancel()
+		// Wait for deadline to be exceeded
+		<-ctx.Done()
+
+		result := executor.mapCancellation(ctx)
+		require.NotNil(t, result)
+		assert.Equal(t, alertsession.StatusTimedOut, result.Status)
+		assert.Contains(t, result.Error.Error(), "timed out")
 	})
 }

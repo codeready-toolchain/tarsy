@@ -47,6 +47,7 @@ func (c *SynthesisController) Run(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // Synthesis never uses tools
+		Backend:     execCtx.Config.Backend,
 	}, &eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
