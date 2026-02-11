@@ -161,7 +161,7 @@ func (p *WorkerPool) Health() *PoolHealth {
 	for i, worker := range p.workers {
 		stats := worker.Health()
 		workerStats[i] = stats
-		if stats.Status == string(WorkerStatusWorking) {
+		if stats.Status == WorkerStatusWorking {
 			activeWorkers++
 		}
 	}

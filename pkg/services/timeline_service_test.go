@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -167,7 +168,7 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -239,7 +240,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -356,7 +357,7 @@ func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -461,7 +462,7 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 
@@ -534,7 +535,7 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: config.IterationStrategyReact,
 	})
 	require.NoError(t, err)
 

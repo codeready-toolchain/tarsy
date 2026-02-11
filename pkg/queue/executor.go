@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -56,11 +58,11 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 // stageResult captures the outcome of a single stage execution.
 type stageResult struct {
 	stageID       string
-	executionID   string
 	stageName     string
 	status        alertsession.Status // mapped from agent status
 	finalAnalysis string
 	err           error
+	agentResults  []agentResult // always populated (1 entry for single-agent, N for multi-agent)
 }
 
 // agentResult captures the outcome of a single agent execution within a stage.
@@ -69,6 +71,18 @@ type agentResult struct {
 	status        agent.ExecutionStatus
 	finalAnalysis string
 	err           error
+}
+
+// executionConfig wraps agent config with display name for stage execution.
+type executionConfig struct {
+	agentConfig config.StageAgentConfig
+	displayName string // for DB record and logs (differs from config name for replicas)
+}
+
+// indexedAgentResult pairs an agentResult with its original launch index.
+type indexedAgentResult struct {
+	index  int
+	result agentResult
 }
 
 // executeStageInput groups all parameters for executeStage to keep the call signature clean.
@@ -126,26 +140,25 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	interactionService := services.NewInteractionService(e.dbClient, messageService)
 
 	// 3. Sequential chain loop
+	// dbStageIndex tracks the actual DB stage index, which may differ from the
+	// config stage index when synthesis stages are inserted.
 	var completedStages []stageResult
 	prevContext := ""
+	dbStageIndex := 0
 
-	for i, stageCfg := range chain.Stages {
+	for _, stageCfg := range chain.Stages {
 		// Check for cancellation between stages
 		if r := e.mapCancellation(ctx); r != nil {
 			return r
 		}
 
-		// Update session progress (before stage starts)
-		e.updateSessionProgress(ctx, session.ID, i, "")
-
-		// Publish stage started event
-		e.publishStageStatus(ctx, session.ID, "", stageCfg.Name, i, events.StageStatusStarted)
-
+		// session progress + stage.status: started are published inside executeStage()
+		// after Stage DB record is created (so stageID is always present)
 		sr := e.executeStage(ctx, executeStageInput{
 			session:            session,
 			chain:              chain,
 			stageConfig:        stageCfg,
-			stageIndex:         i,
+			stageIndex:         dbStageIndex,
 			prevContext:        prevContext,
 			stageService:       stageService,
 			messageService:     messageService,
@@ -153,22 +166,9 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			interactionService: interactionService,
 		})
 
-		// Update session progress (after stage created, with stageID)
-		e.updateSessionProgress(ctx, session.ID, i, sr.stageID)
-
 		// Publish stage terminal status
-		terminalStatus := events.StageStatusCompleted
-		switch sr.status {
-		case alertsession.StatusFailed:
-			terminalStatus = events.StageStatusFailed
-		case alertsession.StatusTimedOut:
-			terminalStatus = events.StageStatusTimedOut
-		case alertsession.StatusCancelled:
-			terminalStatus = events.StageStatusCancelled
-		}
-		e.publishStageStatus(ctx, session.ID, sr.stageID, sr.stageName, i, terminalStatus)
-
-		completedStages = append(completedStages, sr)
+		e.publishStageStatus(ctx, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
+		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
 		if sr.status != alertsession.StatusCompleted {
@@ -181,6 +181,42 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 				Status: sr.status,
 				Error:  sr.err,
 			}
+		}
+
+		// Synthesis runs after stages with >1 agent (mandatory, no opt-out)
+		if len(sr.agentResults) > 1 {
+			synthSr := e.executeSynthesisStage(ctx, executeStageInput{
+				session:            session,
+				chain:              chain,
+				stageConfig:        stageCfg,
+				stageIndex:         dbStageIndex,
+				prevContext:        prevContext,
+				stageService:       stageService,
+				messageService:     messageService,
+				timelineService:    timelineService,
+				interactionService: interactionService,
+			}, sr)
+
+			// Publish synthesis stage terminal status
+			e.publishStageStatus(ctx, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
+			dbStageIndex++
+
+			if synthSr.status != alertsession.StatusCompleted {
+				logger.Warn("Synthesis failed, stopping chain",
+					"stage_name", synthSr.stageName,
+					"stage_status", synthSr.status,
+					"error", synthSr.err,
+				)
+				return &ExecutionResult{
+					Status: synthSr.status,
+					Error:  synthSr.err,
+				}
+			}
+
+			// Synthesis result replaces investigation result for context passing
+			completedStages = append(completedStages, synthSr)
+		} else {
+			completedStages = append(completedStages, sr)
 		}
 
 		// Build context for next stage
@@ -219,11 +255,12 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 }
 
 // ────────────────────────────────────────────────────────────
-// executeStage — single stage execution
+// executeStage — unified stage execution (1 or N agents)
 // ────────────────────────────────────────────────────────────
 
-// executeStage creates the Stage DB record, executes the first agent, and
-// updates stage status. Returns a stageResult capturing the outcome.
+// executeStage creates the Stage DB record, launches goroutines for all agents,
+// collects results, and aggregates status via success policy.
+// A single-agent stage is not a special case — it's just N=1.
 func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeStageInput) stageResult {
 	logger := slog.With(
 		"session_id", input.session.ID,
@@ -231,7 +268,6 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		"stage_index", input.stageIndex,
 	)
 
-	// Guard: parallel execution not yet supported (Phase 5.2)
 	if len(input.stageConfig.Agents) == 0 {
 		return stageResult{
 			stageName: input.stageConfig.Name,
@@ -239,29 +275,19 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 			err:       fmt.Errorf("stage %q has no agents", input.stageConfig.Name),
 		}
 	}
-	if len(input.stageConfig.Agents) > 1 {
-		return stageResult{
-			stageName: input.stageConfig.Name,
-			status:    alertsession.StatusFailed,
-			err:       fmt.Errorf("stage %q has %d agents — parallel agent execution not yet supported", input.stageConfig.Name, len(input.stageConfig.Agents)),
-		}
-	}
-	if input.stageConfig.Replicas > 1 {
-		return stageResult{
-			stageName: input.stageConfig.Name,
-			status:    alertsession.StatusFailed,
-			err:       fmt.Errorf("stage %q has %d replicas — parallel agent execution not yet supported", input.stageConfig.Name, input.stageConfig.Replicas),
-		}
-	}
 
-	agentConfig := input.stageConfig.Agents[0]
+	// 1. Build execution configs (1 for single-agent, N for multi-agent/replica)
+	configs := buildConfigs(input.stageConfig)
+	policy := e.resolvedSuccessPolicy(input)
 
-	// Create Stage DB record
+	// 2. Create Stage DB record
 	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          input.session.ID,
 		StageName:          input.stageConfig.Name,
 		StageIndex:         input.stageIndex + 1, // 1-based in DB
-		ExpectedAgentCount: 1,
+		ExpectedAgentCount: len(configs),
+		ParallelType:       parallelTypePtr(input.stageConfig),
+		SuccessPolicy:      successPolicyPtr(input.stageConfig, policy),
 	})
 	if err != nil {
 		logger.Error("Failed to create stage", "error", err)
@@ -272,29 +298,52 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		}
 	}
 
-	// Execute agent
-	ar := e.executeAgent(ctx, input, stg, agentConfig, 0)
+	// 3. Update session progress + publish stage.status: started (stageID now available)
+	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
+	e.publishStageStatus(ctx, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
 
-	// Update stage status (aggregates from agent executions)
+	// 4. Launch goroutines (one per execution config — even if just one)
+	results := make(chan indexedAgentResult, len(configs))
+	var wg sync.WaitGroup
+
+	for i, cfg := range configs {
+		wg.Add(1)
+		go func(idx int, agentCfg config.StageAgentConfig, displayName string) {
+			defer wg.Done()
+			ar := e.executeAgent(ctx, input, stg, agentCfg, idx, displayName)
+			results <- indexedAgentResult{index: idx, result: ar}
+		}(i, cfg.agentConfig, cfg.displayName)
+	}
+
+	// 5. Wait for ALL goroutines to complete
+	wg.Wait()
+	close(results)
+
+	// 6. Collect and sort by original index
+	agentResults := collectAndSort(results)
+
+	// 7. Aggregate status via success policy
+	stageStatus := aggregateStatus(agentResults, policy)
+
+	// 8. Update Stage in DB (triggers aggregation from AgentExecution records)
 	if updateErr := input.stageService.UpdateStageStatus(ctx, stg.ID); updateErr != nil {
 		logger.Error("Failed to update stage status", "error", updateErr)
-		return stageResult{
-			stageID:       stg.ID,
-			executionID:   ar.executionID,
-			stageName:     input.stageConfig.Name,
-			status:        alertsession.StatusFailed,
-			finalAnalysis: ar.finalAnalysis,
-			err:           fmt.Errorf("agent completed but stage status update failed: %w", updateErr),
-		}
+	}
+
+	// For single-agent stages, finalAnalysis comes directly from the agent.
+	// For multi-agent stages, synthesis produces it (chain loop handles this).
+	finalAnalysis := ""
+	if len(agentResults) == 1 {
+		finalAnalysis = agentResults[0].finalAnalysis
 	}
 
 	return stageResult{
 		stageID:       stg.ID,
-		executionID:   ar.executionID,
 		stageName:     input.stageConfig.Name,
-		status:        mapAgentStatusToSessionStatus(ar.status),
-		finalAnalysis: ar.finalAnalysis,
-		err:           ar.err,
+		status:        stageStatus,
+		finalAnalysis: finalAnalysis,
+		err:           aggregateError(agentResults, stageStatus, input.stageConfig),
+		agentResults:  agentResults,
 	}
 }
 
@@ -308,11 +357,12 @@ func (e *RealSessionExecutor) executeAgent(
 	stg *ent.Stage,
 	agentConfig config.StageAgentConfig,
 	agentIndex int,
+	displayName string, // overrides agentConfig.Name for DB record/logs; config name still used for registry lookup
 ) agentResult {
 	logger := slog.With(
 		"session_id", input.session.ID,
 		"stage_id", stg.ID,
-		"agent_name", agentConfig.Name,
+		"agent_name", displayName,
 		"agent_index", agentIndex,
 	)
 
@@ -320,9 +370,9 @@ func (e *RealSessionExecutor) executeAgent(
 	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         input.session.ID,
-		AgentName:         agentConfig.Name,
+		AgentName:         displayName,
 		AgentIndex:        agentIndex + 1, // 1-based in DB
-		IterationStrategy: string(agentConfig.IterationStrategy),
+		IterationStrategy: agentConfig.IterationStrategy,
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -363,7 +413,7 @@ func (e *RealSessionExecutor) executeAgent(
 		SessionID:      input.session.ID,
 		StageID:        stg.ID,
 		ExecutionID:    exec.ID,
-		AgentName:      agentConfig.Name,
+		AgentName:      displayName,
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
@@ -427,6 +477,151 @@ func (e *RealSessionExecutor) executeAgent(
 		finalAnalysis: result.FinalAnalysis,
 		err:           result.Error,
 	}
+}
+
+// ────────────────────────────────────────────────────────────
+// Synthesis stage execution
+// ────────────────────────────────────────────────────────────
+
+// executeSynthesisStage runs a synthesis agent after a multi-agent stage.
+// Creates its own Stage DB record, separate from the investigation stage.
+func (e *RealSessionExecutor) executeSynthesisStage(
+	ctx context.Context,
+	input executeStageInput,
+	parallelResult stageResult,
+) stageResult {
+	synthStageName := parallelResult.stageName + " - Synthesis"
+	logger := slog.With(
+		"session_id", input.session.ID,
+		"stage_name", synthStageName,
+		"stage_index", input.stageIndex,
+	)
+
+	// Create synthesis Stage DB record
+	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          input.session.ID,
+		StageName:          synthStageName,
+		StageIndex:         input.stageIndex + 1, // 1-based in DB
+		ExpectedAgentCount: 1,
+		// No parallel_type, no success_policy (single-agent synthesis)
+	})
+	if err != nil {
+		logger.Error("Failed to create synthesis stage", "error", err)
+		return stageResult{
+			stageName: synthStageName,
+			status:    alertsession.StatusFailed,
+			err:       fmt.Errorf("failed to create synthesis stage: %w", err),
+		}
+	}
+
+	// Update session progress + publish stage.status: started
+	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
+	e.publishStageStatus(ctx, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+
+	// Build synthesis agent config — synthesis: block is optional, defaults apply
+	synthAgentConfig := config.StageAgentConfig{
+		Name:              "SynthesisAgent",
+		IterationStrategy: config.IterationStrategySynthesis,
+	}
+	if s := input.stageConfig.Synthesis; s != nil {
+		if s.Agent != "" {
+			synthAgentConfig.Name = s.Agent
+		}
+		if s.IterationStrategy != "" {
+			synthAgentConfig.IterationStrategy = s.IterationStrategy
+		}
+		if s.LLMProvider != "" {
+			synthAgentConfig.LLMProvider = s.LLMProvider
+		}
+	}
+
+	// Build synthesis context: query full conversation history for each parallel agent
+	synthContext := e.buildSynthesisContext(ctx, parallelResult, input)
+
+	// Execute synthesis agent — override prevContext to feed parallel investigation histories
+	synthInput := input
+	synthInput.prevContext = synthContext
+
+	ar := e.executeAgent(ctx, synthInput, stg, synthAgentConfig, 0, synthAgentConfig.Name)
+
+	// Update synthesis stage status
+	if updateErr := input.stageService.UpdateStageStatus(ctx, stg.ID); updateErr != nil {
+		logger.Error("Failed to update synthesis stage status", "error", updateErr)
+	}
+
+	return stageResult{
+		stageID:       stg.ID,
+		stageName:     synthStageName,
+		status:        mapAgentStatusToSessionStatus(ar.status),
+		finalAnalysis: ar.finalAnalysis,
+		err:           ar.err,
+		agentResults:  []agentResult{ar},
+	}
+}
+
+// buildSynthesisContext queries the full timeline for each parallel agent
+// and formats it for the synthesis agent.
+func (e *RealSessionExecutor) buildSynthesisContext(
+	ctx context.Context,
+	parallelResult stageResult,
+	input executeStageInput,
+) string {
+	configs := buildConfigs(input.stageConfig)
+
+	investigations := make([]agentctx.ParallelAgentInvestigation, len(parallelResult.agentResults))
+	for i, ar := range parallelResult.agentResults {
+		// Resolve display name and strategy from configs
+		displayName := ""
+		strategy := ""
+		if i < len(configs) {
+			displayName = configs[i].displayName
+			strategy = string(configs[i].agentConfig.IterationStrategy)
+		}
+		if displayName == "" && i < len(input.stageConfig.Agents) {
+			displayName = input.stageConfig.Agents[i].Name
+		}
+		if strategy == "" {
+			strategy = string(e.cfg.Defaults.IterationStrategy)
+		}
+
+		// Resolve LLM provider name for display
+		providerName := e.cfg.Defaults.LLMProvider
+		if input.chain.LLMProvider != "" {
+			providerName = input.chain.LLMProvider
+		}
+		if i < len(input.stageConfig.Agents) && input.stageConfig.Agents[i].LLMProvider != "" {
+			providerName = input.stageConfig.Agents[i].LLMProvider
+		}
+
+		investigation := agentctx.ParallelAgentInvestigation{
+			AgentName:   displayName,
+			AgentIndex:  i + 1, // 1-based
+			Strategy:    strategy,
+			LLMProvider: providerName,
+			Status:      mapAgentStatusToSessionStatus(ar.status),
+		}
+
+		if ar.err != nil {
+			investigation.ErrorMessage = ar.err.Error()
+		}
+
+		// Query full timeline for this agent execution
+		if ar.executionID != "" {
+			timeline, err := input.timelineService.GetAgentTimeline(ctx, ar.executionID)
+			if err != nil {
+				slog.Warn("Failed to get agent timeline for synthesis",
+					"execution_id", ar.executionID,
+					"error", err,
+				)
+			} else {
+				investigation.Events = timeline
+			}
+		}
+
+		investigations[i] = investigation
+	}
+
+	return agentctx.FormatInvestigationForSynthesis(investigations, input.stageConfig.Name)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -697,6 +892,208 @@ func (e *RealSessionExecutor) resolveMCPSelection(
 	}
 
 	return serverIDs, toolFilter, nil
+}
+
+// ────────────────────────────────────────────────────────────
+// Config builders
+// ────────────────────────────────────────────────────────────
+
+// buildConfigs creates execution configs for a stage. For single-agent stages,
+// returns a single config. Same path, no branching.
+func buildConfigs(stageCfg config.StageConfig) []executionConfig {
+	if stageCfg.Replicas > 1 {
+		return buildReplicaConfigs(stageCfg)
+	}
+	return buildMultiAgentConfigs(stageCfg)
+}
+
+// buildMultiAgentConfigs creates one executionConfig per agent in the stage.
+// For single-agent stages, returns []executionConfig with 1 entry.
+func buildMultiAgentConfigs(stageCfg config.StageConfig) []executionConfig {
+	configs := make([]executionConfig, len(stageCfg.Agents))
+	for i, agentCfg := range stageCfg.Agents {
+		configs[i] = executionConfig{
+			agentConfig: agentCfg,
+			displayName: agentCfg.Name,
+		}
+	}
+	return configs
+}
+
+// buildReplicaConfigs replicates the first agent config N times.
+// Display names: {BaseName}-1, {BaseName}-2, etc.
+func buildReplicaConfigs(stageCfg config.StageConfig) []executionConfig {
+	baseAgent := stageCfg.Agents[0]
+	configs := make([]executionConfig, stageCfg.Replicas)
+	for i := 0; i < stageCfg.Replicas; i++ {
+		configs[i] = executionConfig{
+			agentConfig: baseAgent,
+			displayName: fmt.Sprintf("%s-%d", baseAgent.Name, i+1),
+		}
+	}
+	return configs
+}
+
+// ────────────────────────────────────────────────────────────
+// Policy resolution
+// ────────────────────────────────────────────────────────────
+
+// resolvedSuccessPolicy resolves the success policy for a stage:
+// stage config > system default > fallback SuccessPolicyAny.
+func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
+	if input.stageConfig.SuccessPolicy != "" {
+		return input.stageConfig.SuccessPolicy
+	}
+	if e.cfg.Defaults.SuccessPolicy != "" {
+		return e.cfg.Defaults.SuccessPolicy
+	}
+	return config.SuccessPolicyAny
+}
+
+// parallelTypePtr returns the parallel_type for DB storage, or nil for single-agent stages.
+func parallelTypePtr(stageCfg config.StageConfig) *string {
+	if stageCfg.Replicas > 1 {
+		s := "replica"
+		return &s
+	}
+	if len(stageCfg.Agents) > 1 {
+		s := "multi_agent"
+		return &s
+	}
+	return nil
+}
+
+// successPolicyPtr returns the resolved success policy as *string for DB storage,
+// or nil for single-agent stages (policy is irrelevant when there's only one agent).
+func successPolicyPtr(stageCfg config.StageConfig, resolved config.SuccessPolicy) *string {
+	if len(stageCfg.Agents) <= 1 && stageCfg.Replicas <= 1 {
+		return nil
+	}
+	s := string(resolved)
+	return &s
+}
+
+// ────────────────────────────────────────────────────────────
+// Result aggregation
+// ────────────────────────────────────────────────────────────
+
+// collectAndSort drains the indexedAgentResult channel and returns results
+// sorted by their original launch index.
+func collectAndSort(ch <-chan indexedAgentResult) []agentResult {
+	var indexed []indexedAgentResult
+	for iar := range ch {
+		indexed = append(indexed, iar)
+	}
+	sort.Slice(indexed, func(i, j int) bool {
+		return indexed[i].index < indexed[j].index
+	})
+	results := make([]agentResult, len(indexed))
+	for i, iar := range indexed {
+		results[i] = iar.result
+	}
+	return results
+}
+
+// aggregateStatus determines the overall stage status from agent results and
+// the resolved success policy. Works identically for 1 or N agents.
+func aggregateStatus(results []agentResult, policy config.SuccessPolicy) alertsession.Status {
+	var completed, failed, timedOut, cancelled int
+
+	for _, r := range results {
+		switch mapAgentStatusToSessionStatus(r.status) {
+		case alertsession.StatusCompleted:
+			completed++
+		case alertsession.StatusTimedOut:
+			timedOut++
+		case alertsession.StatusCancelled:
+			cancelled++
+		default:
+			failed++
+		}
+	}
+
+	nonSuccess := failed + timedOut + cancelled
+
+	switch policy {
+	case config.SuccessPolicyAll:
+		if nonSuccess == 0 {
+			return alertsession.StatusCompleted
+		}
+	default: // SuccessPolicyAny (default when unset)
+		if completed > 0 {
+			return alertsession.StatusCompleted
+		}
+	}
+
+	// Stage failed — use most specific terminal status when uniform
+	if nonSuccess == timedOut {
+		return alertsession.StatusTimedOut
+	}
+	if nonSuccess == cancelled {
+		return alertsession.StatusCancelled
+	}
+	return alertsession.StatusFailed
+}
+
+// aggregateError builds a descriptive error for failed stages.
+// Single-agent: returns the agent's error directly.
+// Multi-agent: lists each non-successful agent with details.
+func aggregateError(results []agentResult, stageStatus alertsession.Status, stageCfg config.StageConfig) error {
+	if stageStatus == alertsession.StatusCompleted {
+		return nil
+	}
+
+	// Single agent — passthrough
+	if len(results) == 1 {
+		return results[0].err
+	}
+
+	// Multi-agent — build descriptive error
+	var nonSuccess int
+	for _, r := range results {
+		if mapAgentStatusToSessionStatus(r.status) != alertsession.StatusCompleted {
+			nonSuccess++
+		}
+	}
+
+	policy := "any"
+	if stageCfg.SuccessPolicy != "" {
+		policy = string(stageCfg.SuccessPolicy)
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "multi-agent stage failed: %d/%d executions failed (policy: %s)", nonSuccess, len(results), policy)
+
+	sb.WriteString("\n\nFailed agents:")
+	for i, r := range results {
+		sessionStatus := mapAgentStatusToSessionStatus(r.status)
+		if sessionStatus == alertsession.StatusCompleted {
+			continue
+		}
+		errMsg := "unknown error"
+		if r.err != nil {
+			errMsg = r.err.Error()
+		}
+		fmt.Fprintf(&sb, "\n  - agent %d (%s): %s", i+1, sessionStatus, errMsg)
+	}
+
+	return fmt.Errorf("%s", sb.String())
+}
+
+// mapTerminalStatus extracts a terminal status string for event publishing.
+func mapTerminalStatus(sr stageResult) string {
+	switch sr.status {
+	case alertsession.StatusCompleted:
+		return events.StageStatusCompleted
+	case alertsession.StatusFailed:
+		return events.StageStatusFailed
+	case alertsession.StatusTimedOut:
+		return events.StageStatusTimedOut
+	case alertsession.StatusCancelled:
+		return events.StageStatusCancelled
+	default:
+		return events.StageStatusFailed
+	}
 }
 
 // ────────────────────────────────────────────────────────────

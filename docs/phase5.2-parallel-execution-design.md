@@ -298,7 +298,7 @@ For failed stages, build a detailed error message. For single-agent stages this 
 func aggregateError(results []agentResult, stageStatus alertsession.Status, stageCfg config.StageConfig) error {
     // Single agent: return agent's error directly
     // Multi-agent example output:
-    // "Multi_agent stage failed: 2/3 executions failed (policy: all)
+    // "Multi-agent stage failed: 2/3 executions failed (policy: all)
     //
     // Failed agents:
     //   - KubernetesAgent (failed): LLM timeout
