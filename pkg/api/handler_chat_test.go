@@ -1,10 +1,15 @@
 package api
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/queue"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -89,6 +94,54 @@ func TestIsChatAvailable(t *testing.T) {
 				assert.NotEmpty(t, result, "expected chat to be unavailable")
 				assert.Contains(t, result, tt.wantContains)
 			}
+		})
+	}
+}
+
+func TestMapChatExecutorError(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantCode   int
+		wantSubstr string
+	}{
+		{
+			name:       "ErrChatExecutionActive maps to 409",
+			err:        queue.ErrChatExecutionActive,
+			wantCode:   http.StatusConflict,
+			wantSubstr: "already being generated",
+		},
+		{
+			name:       "wrapped ErrChatExecutionActive maps to 409",
+			err:        fmt.Errorf("submit failed: %w", queue.ErrChatExecutionActive),
+			wantCode:   http.StatusConflict,
+			wantSubstr: "already being generated",
+		},
+		{
+			name:       "ErrShuttingDown maps to 503",
+			err:        queue.ErrShuttingDown,
+			wantCode:   http.StatusServiceUnavailable,
+			wantSubstr: "shutting down",
+		},
+		{
+			name:       "ValidationError maps to 400",
+			err:        services.NewValidationError("content", "required"),
+			wantCode:   http.StatusBadRequest,
+			wantSubstr: "content",
+		},
+		{
+			name:       "unknown error maps to 500",
+			err:        errors.New("unexpected failure"),
+			wantCode:   http.StatusInternalServerError,
+			wantSubstr: "failed to process",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			httpErr := mapChatExecutorError(tt.err)
+			assert.Equal(t, tt.wantCode, httpErr.Code)
+			assert.Contains(t, fmt.Sprintf("%v", httpErr.Message), tt.wantSubstr)
 		})
 	}
 }

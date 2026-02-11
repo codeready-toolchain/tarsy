@@ -8,7 +8,9 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -227,6 +229,31 @@ func TestChatMessageExecutor_Heartbeat(t *testing.T) {
 	updated, err := client.Chat.Get(ctx, chat.ID)
 	require.NoError(t, err)
 	require.NotNil(t, updated.LastInteractionAt)
+}
+
+// ────────────────────────────────────────────────────────────
+// mapChatAgentStatus tests
+// ────────────────────────────────────────────────────────────
+
+func TestMapChatAgentStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		status agent.ExecutionStatus
+		want   string
+	}{
+		{"completed", agent.ExecutionStatusCompleted, events.StageStatusCompleted},
+		{"failed", agent.ExecutionStatusFailed, events.StageStatusFailed},
+		{"timed_out", agent.ExecutionStatusTimedOut, events.StageStatusTimedOut},
+		{"cancelled", agent.ExecutionStatusCancelled, events.StageStatusCancelled},
+		{"unknown defaults to failed", agent.ExecutionStatus("unknown"), events.StageStatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapChatAgentStatus(tt.status)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // ────────────────────────────────────────────────────────────
