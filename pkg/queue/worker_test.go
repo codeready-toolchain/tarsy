@@ -130,3 +130,27 @@ func (m *mockEventPublisher) PublishSessionStatus(_ context.Context, _ string, p
 func (m *mockEventPublisher) PublishStageStatus(_ context.Context, _ string, _ events.StageStatusPayload) error {
 	return nil
 }
+
+func TestWorkerStopIdempotent(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	// First stop should succeed
+	assert.NotPanics(t, func() { w.Stop() })
+
+	// Second stop should also succeed (no panic)
+	assert.NotPanics(t, func() { w.Stop() })
+}
+
+func TestWorkerPollIntervalWithNegativeJitter(t *testing.T) {
+	cfg := testQueueConfig()
+	cfg.PollInterval = 1 * time.Second
+	cfg.PollIntervalJitter = -100 * time.Millisecond
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+
+	// Negative jitter should be treated as zero
+	for i := 0; i < 10; i++ {
+		d := w.pollInterval()
+		assert.Equal(t, 1*time.Second, d)
+	}
+}
