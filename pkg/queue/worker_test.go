@@ -130,3 +130,117 @@ func (m *mockEventPublisher) PublishSessionStatus(_ context.Context, _ string, p
 func (m *mockEventPublisher) PublishStageStatus(_ context.Context, _ string, _ events.StageStatusPayload) error {
 	return nil
 }
+
+func TestWorkerPollIntervalJitterRange(t *testing.T) {
+	cfg := testQueueConfig()
+	cfg.PollInterval = 1 * time.Second
+	cfg.PollIntervalJitter = 200 * time.Millisecond
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+
+	// Poll interval should be within [800ms, 1200ms]
+	for i := 0; i < 50; i++ {
+		d := w.pollInterval()
+		assert.GreaterOrEqual(t, d, 800*time.Millisecond, "poll interval below minimum")
+		assert.LessOrEqual(t, d, 1200*time.Millisecond, "poll interval above maximum")
+	}
+}
+
+func TestWorkerSetStatus(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	// Initially idle
+	h := w.Health()
+	assert.Equal(t, WorkerStatusIdle, h.Status)
+	assert.Empty(t, h.CurrentSessionID)
+	assert.Equal(t, 0, h.SessionsProcessed)
+
+	// Transition to working
+	w.setStatus(WorkerStatusWorking, "session-123")
+	h = w.Health()
+	assert.Equal(t, WorkerStatusWorking, h.Status)
+	assert.Equal(t, "session-123", h.CurrentSessionID)
+	assert.NotZero(t, h.LastActivity)
+
+	// Back to idle
+	w.setStatus(WorkerStatusIdle, "")
+	h = w.Health()
+	assert.Equal(t, WorkerStatusIdle, h.Status)
+	assert.Empty(t, h.CurrentSessionID)
+}
+
+func TestWorkerHealthLastActivity(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	beforeActivity := time.Now()
+	time.Sleep(10 * time.Millisecond)
+
+	w.setStatus(WorkerStatusWorking, "session-1")
+
+	h := w.Health()
+	assert.True(t, h.LastActivity.After(beforeActivity))
+}
+
+func TestWorkerStopIdempotent(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	// First stop should succeed
+	assert.NotPanics(t, func() { w.Stop() })
+
+	// Second stop should also succeed (no panic)
+	assert.NotPanics(t, func() { w.Stop() })
+}
+
+func TestWorkerPollIntervalWithNegativeJitter(t *testing.T) {
+	cfg := testQueueConfig()
+	cfg.PollInterval = 1 * time.Second
+	cfg.PollIntervalJitter = -100 * time.Millisecond // Negative jitter
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+
+	// Negative jitter should be treated as zero
+	for i := 0; i < 10; i++ {
+		d := w.pollInterval()
+		assert.Equal(t, 1*time.Second, d)
+	}
+}
+
+func TestWorker_PublishSessionStatusMultipleStatuses(t *testing.T) {
+	cfg := testQueueConfig()
+	pub := &mockEventPublisher{}
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, pub)
+
+	statuses := []alertsession.Status{
+		alertsession.StatusPending,
+		alertsession.StatusInProgress,
+		alertsession.StatusCompleted,
+		alertsession.StatusFailed,
+		alertsession.StatusCancelled,
+		alertsession.StatusTimedOut,
+	}
+
+	for _, status := range statuses {
+		w.publishSessionStatus(t.Context(), "session-test", status)
+	}
+
+	assert.Equal(t, len(statuses), pub.sessionStatusCount)
+	assert.Equal(t, alertsession.StatusTimedOut, pub.lastSessionStatus.Status)
+}
+
+func TestWorkerSessionsProcessedCounter(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+
+	// Initially zero
+	h := w.Health()
+	assert.Equal(t, 0, h.SessionsProcessed)
+
+	// Simulate processing sessions
+	w.mu.Lock()
+	w.sessionsProcessed = 5
+	w.mu.Unlock()
+
+	h = w.Health()
+	assert.Equal(t, 5, h.SessionsProcessed)
+}
