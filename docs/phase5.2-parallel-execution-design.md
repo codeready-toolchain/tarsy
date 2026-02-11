@@ -445,11 +445,13 @@ Timeline events are the right data source because they capture **everything** th
 |--------------------|---------|-----------------------|
 | `llm_thinking` | Native thinking / internal reasoning | Evaluate reasoning quality, detect flawed logic |
 | `llm_response` | Agent's text responses | See the agent's analysis and conclusions |
-| `llm_tool_call` | Tool call + raw result | Verify evidence is real, check what data was gathered |
+| `llm_tool_call` | Tool name, arguments, raw result | Verify evidence is real, check what data was gathered |
 | `mcp_tool_summary` | Summarized tool result | See what the agent actually worked with |
 | `final_analysis` | Agent's final conclusion | The agent's own summary |
 | `code_execution` | Code execution results | See computed results |
 | `google_search_result` | Search grounding | Verify external references |
+
+**Tool call / summary deduplication**: When an `mcp_tool_summary` event follows an `llm_tool_call` for the same tool invocation, the formatter shows the tool name and arguments from `llm_tool_call` but uses the **summary content** instead of the raw result. The raw result (which can be very large) is excluded from the synthesis context. If no summary exists, the raw result from `llm_tool_call` is used as-is.
 
 Messages lack thinking content entirely (the Message schema has no thinking field — thinking is recorded only in timeline events and LLM interactions).
 
@@ -484,7 +486,7 @@ type ParallelAgentInvestigation struct {
 }
 ```
 
-The per-event formatting reuses the same `switch` logic as `FormatInvestigationContext()` (thinking → "Internal Reasoning", response → "Agent Response", tool call → "Tool Call", etc.). This will be extracted into a shared helper to avoid duplication.
+The per-event formatting reuses the same `switch` logic as `FormatInvestigationContext()` (thinking → "Internal Reasoning", response → "Agent Response", tool call → "Tool Call", etc.). This will be extracted into a shared helper to avoid duplication. The helper handles tool call / summary deduplication: when iterating events, if the next event after an `llm_tool_call` is an `mcp_tool_summary`, the helper emits the tool name + arguments from the call but substitutes the summary content for the raw result, skipping the summary event in the next iteration.
 
 #### Output format
 
@@ -504,11 +506,10 @@ The per-event formatting reuses the same `switch` logic as `FormatInvestigationC
 
 [agent's text response]
 
-**Tool Call:** [tool name + raw result]
+**Tool Call:** kubernetes-server.get_pods({"namespace": "production"})
+**Result (summarized):**
 
-**Tool Result Summary:**
-
-[summarized tool result]
+[summarized tool result — from mcp_tool_summary event]
 
 **Internal Reasoning:**
 
@@ -527,7 +528,10 @@ Thought: I should check the pod status...
 Action: kubernetes-server.get_pods
 ActionInput: {"namespace": "production"}
 
-**Tool Call:** [tool result]
+**Tool Call:** kubernetes-server.get_pods({"namespace": "production"})
+**Result:**
+
+[raw tool result — no summary existed for this call]
 
 **Final Analysis:**
 
