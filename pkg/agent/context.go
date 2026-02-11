@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
@@ -33,7 +35,7 @@ type ExecutionContext struct {
 
 	// Dependencies (injected by executor)
 	LLMClient      LLMClient
-	ToolExecutor   ToolExecutor   // Phase 3.2: stub, Phase 4: MCP client
+	ToolExecutor   ToolExecutor
 	EventPublisher EventPublisher // Real-time event delivery to WebSocket clients
 	Services       *ServiceBundle
 
@@ -68,7 +70,10 @@ type ResolvedAgentConfig struct {
 	IterationTimeout   time.Duration // Per-iteration timeout (default: 120s)
 	MCPServers         []string
 	CustomInstructions string
-	// MCPSelection *models.MCPSelectionConfig  // Phase 4
+
+	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
+	// Set by the session executor when the alert provides an MCP selection with native_tools.
+	NativeToolsOverride *models.NativeToolsConfig
 }
 
 // PromptBuilder builds all prompt text for agent controllers.
@@ -83,15 +88,20 @@ type PromptBuilder interface {
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string
 	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
+	MCPServerRegistry() *config.MCPServerRegistry
 }
 
 // EventPublisher publishes events for WebSocket delivery.
 // Implemented by events.EventPublisher; defined as interface here to
 // avoid a circular import between pkg/agent and pkg/events and to
 // enable testing with mocks.
+//
+// Each method accepts a specific typed payload struct — no untyped maps or any.
 type EventPublisher interface {
-	Publish(ctx context.Context, sessionID, channel string, payload map[string]interface{}) error
-	PublishTransient(ctx context.Context, channel string, payload map[string]interface{}) error
+	PublishTimelineCreated(ctx context.Context, sessionID string, payload events.TimelineCreatedPayload) error
+	PublishTimelineCompleted(ctx context.Context, sessionID string, payload events.TimelineCompletedPayload) error
+	PublishStreamChunk(ctx context.Context, sessionID string, payload events.StreamChunkPayload) error
+	PublishSessionStatus(ctx context.Context, sessionID string, payload events.SessionStatusPayload) error
 }
 
 // ChatExchange groups a user question with its complete conversation.

@@ -45,7 +45,7 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 }
 
 // Execute runs the session through the agent chain.
-// Phase 3.1: single stage, single agent only.
+// Currently supports single stage, single agent only (chain execution in Phase 5).
 func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSession) *ExecutionResult {
 	logger := slog.With(
 		"session_id", session.ID,
@@ -72,7 +72,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// Phase 3.1: execute first stage only
+	// Execute first stage only (multi-stage chain execution in Phase 5)
 	stageConfig := chain.Stages[0]
 	if len(stageConfig.Agents) == 0 {
 		return &ExecutionResult{
@@ -129,11 +129,21 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 6. Create MCP tool executor (or fall back to stub)
+	// 6. Resolve MCP servers and tool filter (per-alert override or chain config)
+	serverIDs, toolFilter, err := e.resolveMCPSelection(session, resolvedConfig)
+	if err != nil {
+		logger.Error("Failed to resolve MCP selection", "error", err)
+		return &ExecutionResult{
+			Status: alertsession.StatusFailed,
+			Error:  fmt.Errorf("invalid MCP selection: %w", err),
+		}
+	}
+
+	// 7. Create MCP tool executor (or fall back to stub)
 	var toolExecutor agent.ToolExecutor
 	var failedServers map[string]string
-	if e.mcpFactory != nil && len(resolvedConfig.MCPServers) > 0 {
-		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, resolvedConfig.MCPServers, nil)
+	if e.mcpFactory != nil && len(serverIDs) > 0 {
+		mcpExecutor, mcpClient, mcpErr := e.mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
 			toolExecutor = agent.NewStubToolExecutor(nil)
@@ -149,7 +159,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		toolExecutor = agent.NewStubToolExecutor(nil)
 	}
 
-	// 7. Build execution context
+	// 8. Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      session.ID,
 		StageID:        stg.ID,
@@ -158,7 +168,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		AgentIndex:     1,
 		AlertData:      session.AlertData,
 		AlertType:      session.AlertType,
-		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 6 adds real runbook fetching
+		RunbookContent: config.GetBuiltinConfig().DefaultRunbook, // Phase 8 adds real runbook fetching
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		ToolExecutor:   toolExecutor,
@@ -198,7 +208,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 8. Update AgentExecution status based on result.
+	// 9. Update AgentExecution status based on result.
 	// If DB updates fail, override the result to Failed so the session
 	// isn't marked as completed while internal records are inconsistent.
 	entStatus := mapAgentStatusToEntStatus(agentResult.Status)
@@ -215,7 +225,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 9. Aggregate stage status
+	// 10. Aggregate stage status
 	if err := stageService.UpdateStageStatus(ctx, stg.ID); err != nil {
 		logger.Error("Failed to update stage status", "error", err)
 		return &ExecutionResult{
@@ -225,7 +235,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 10. Map agent result -> queue result
+	// 11. Map agent result -> queue result
 	logger.Info("Session executor: execution completed",
 		"status", agentResult.Status,
 		"tokens_total", agentResult.TokensUsed.TotalTokens)
@@ -235,6 +245,65 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		FinalAnalysis: agentResult.FinalAnalysis,
 		Error:         agentResult.Error,
 	}
+}
+
+// resolveMCPSelection determines the MCP servers and tool filter for this session.
+// If the session has an MCP override (mcp_selection JSON), it replaces the chain
+// config entirely (replace semantics, not merge).
+//
+// Side effect: when the override includes NativeTools, this method mutates
+// resolvedConfig.NativeToolsOverride so the downstream LLM call picks up the
+// override. This coupling keeps MCP selection logic in one place rather than
+// splitting it across the executor flow.
+//
+// Returns (serverIDs, toolFilter, error).
+func (e *RealSessionExecutor) resolveMCPSelection(
+	session *ent.AlertSession,
+	resolvedConfig *agent.ResolvedAgentConfig,
+) ([]string, map[string][]string, error) {
+	// No override — use chain config (existing behavior)
+	if len(session.McpSelection) == 0 {
+		return resolvedConfig.MCPServers, nil, nil
+	}
+
+	// Deserialize override
+	override, err := models.ParseMCPSelectionConfig(session.McpSelection)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse MCP selection: %w", err)
+	}
+	if override == nil {
+		// ParseMCPSelectionConfig returns nil for empty maps
+		return resolvedConfig.MCPServers, nil, nil
+	}
+
+	// Build serverIDs and toolFilter from override
+	serverIDs := make([]string, 0, len(override.Servers))
+	toolFilter := make(map[string][]string)
+
+	for _, sel := range override.Servers {
+		// Validate server exists in registry
+		if !e.cfg.MCPServerRegistry.Has(sel.Name) {
+			return nil, nil, fmt.Errorf("MCP server %q from override not found in configuration", sel.Name)
+		}
+		serverIDs = append(serverIDs, sel.Name)
+
+		// Only add to toolFilter if specific tools are requested
+		if len(sel.Tools) > 0 {
+			toolFilter[sel.Name] = sel.Tools
+		}
+	}
+
+	// Return nil toolFilter if no server has tool restrictions
+	if len(toolFilter) == 0 {
+		toolFilter = nil
+	}
+
+	// Apply native tools override to the resolved config
+	if override.NativeTools != nil {
+		resolvedConfig.NativeToolsOverride = override.NativeTools
+	}
+
+	return serverIDs, toolFilter, nil
 }
 
 // mapAgentStatusToEntStatus converts agent.ExecutionStatus to ent agentexecution.Status.

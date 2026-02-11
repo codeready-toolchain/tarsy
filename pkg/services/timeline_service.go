@@ -127,6 +127,62 @@ func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID str
 	return nil
 }
 
+// CompleteTimelineEventWithMetadata marks an event as completed with metadata merge.
+// Merges the provided metadata into the existing metadata JSON (read-modify-write).
+// llmInteractionID and mcpInteractionID are optional debug links (pass nil if not applicable).
+func (s *TimelineService) CompleteTimelineEventWithMetadata(ctx context.Context, eventID string, content string, metadata map[string]interface{}, llmInteractionID *string, mcpInteractionID *string) error {
+	if eventID == "" {
+		return NewValidationError("eventID", "required")
+	}
+	if content == "" {
+		return NewValidationError("content", "required")
+	}
+
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Read existing event to get current metadata for merging
+	existing, err := s.client.TimelineEvent.Get(writeCtx, eventID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to read timeline event for metadata merge: %w", err)
+	}
+
+	// Merge metadata: start with existing, overlay new
+	merged := make(map[string]interface{})
+	for k, v := range existing.Metadata {
+		merged[k] = v
+	}
+	for k, v := range metadata {
+		merged[k] = v
+	}
+
+	update := s.client.TimelineEvent.UpdateOneID(eventID).
+		SetContent(content).
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(merged).
+		SetUpdatedAt(time.Now())
+
+	if llmInteractionID != nil {
+		update = update.SetLlmInteractionID(*llmInteractionID)
+	}
+	if mcpInteractionID != nil {
+		update = update.SetMcpInteractionID(*mcpInteractionID)
+	}
+
+	err = update.Exec(writeCtx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to complete timeline event with metadata: %w", err)
+	}
+
+	return nil
+}
+
 // FailTimelineEvent marks an event as failed with an error message.
 // Used to clean up streaming events that were interrupted by an error.
 func (s *TimelineService) FailTimelineEvent(ctx context.Context, eventID string, content string) error {

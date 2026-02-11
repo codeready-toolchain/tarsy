@@ -128,35 +128,20 @@ func (c *NativeThinkingController) Run(
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
-				createToolCallEvent(ctx, execCtx, tc.Name, tc.Arguments, &eventSeq)
+				tcResult := executeToolCall(iterCtx, execCtx, tc, messages, &eventSeq)
 
-				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, tc)
-				if toolErr != nil {
-					// Tool execution failed
-					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
-					errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
-					createToolResultEvent(ctx, execCtx, errContent, true, &eventSeq)
-
-					// Append error as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       agent.RoleTool,
-						Content:    errContent,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
-					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, errContent, &msgSeq)
-				} else {
-					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
-
-					// Append result as tool result message
-					messages = append(messages, agent.ConversationMessage{
-						Role:       agent.RoleTool,
-						Content:    result.Content,
-						ToolCallID: tc.ID,
-						ToolName:   tc.Name,
-					})
-					storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, result.Content, &msgSeq)
+				if tcResult.IsError {
+					state.RecordFailure(tcResult.Content, isTimeoutError(tcResult.Err))
 				}
+				accumulateTokenUsage(&totalUsage, tcResult.Usage)
+
+				messages = append(messages, agent.ConversationMessage{
+					Role:       agent.RoleTool,
+					Content:    tcResult.Content,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+				})
+				storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, tcResult.Content, &msgSeq)
 			}
 		} else {
 			// No tool calls — this is the final answer
@@ -229,12 +214,17 @@ func (c *NativeThinkingController) forceConclusion(
 	resp := streamed.LLMResponse
 
 	accumulateUsage(totalUsage, resp)
-	assistantMsg, _ := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
-	var msgID *string
-	if assistantMsg != nil {
-		msgID = &assistantMsg.ID
+	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
+	if storeErr != nil {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError,
+			fmt.Sprintf("failed to store forced conclusion message: %v", storeErr), nil, eventSeq)
+		return &agent.ExecutionResult{
+			Status:     agent.ExecutionStatusFailed,
+			Error:      fmt.Errorf("failed to store forced conclusion message: %w", storeErr),
+			TokensUsed: *totalUsage,
+		}, nil
 	}
-	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, msgID, startTime)
+	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, &assistantMsg.ID, startTime)
 
 	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{

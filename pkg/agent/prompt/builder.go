@@ -28,6 +28,12 @@ func NewPromptBuilder(mcpRegistry *config.MCPServerRegistry) *PromptBuilder {
 	}
 }
 
+// MCPServerRegistry returns the MCP server registry for per-server config lookup.
+// Used by the summarization logic to check SummarizationConfig per server.
+func (b *PromptBuilder) MCPServerRegistry() *config.MCPServerRegistry {
+	return b.mcpRegistry
+}
+
 const taskFocus = "Focus on investigation and providing recommendations for human operators to execute."
 const chatTaskFocus = "Focus on answering follow-up questions about a completed investigation for human operators to execute."
 

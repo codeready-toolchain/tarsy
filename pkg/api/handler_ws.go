@@ -13,8 +13,8 @@ func (s *Server) wsHandler(c *echo.Context) error {
 
 	// Upgrade HTTP to WebSocket
 	conn, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
-		// Phase 3.4: Accept all origins. Origin validation is deferred to Phase 7 (Security).
-		// Phase 7 should replace InsecureSkipVerify with OriginPatterns-based allowlist
+		// Accept all origins. Origin validation is deferred to Phase 9 (Security).
+		// Phase 9 should replace InsecureSkipVerify with OriginPatterns-based allowlist
 		// read from server config, rejecting connections by default if the list is empty.
 		InsecureSkipVerify: true,
 	})

@@ -145,24 +145,26 @@ func (c *ReActController) Run(
 				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 				storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 			} else {
-				// Execute tool
-				createToolCallEvent(ctx, execCtx, parsed.Action, parsed.ActionInput, &eventSeq)
-
-				result, toolErr := execCtx.ToolExecutor.Execute(iterCtx, agent.ToolCall{
+				toolCall := agent.ToolCall{
 					ID:        generateCallID(),
 					Name:      parsed.Action,
 					Arguments: parsed.ActionInput,
-				})
+				}
+				tcResult := executeToolCall(iterCtx, execCtx, toolCall, messages, &eventSeq)
 
-				if toolErr != nil {
-					state.RecordFailure(toolErr.Error(), isTimeoutError(toolErr))
-					observation := FormatToolErrorObservation(toolErr)
-					createToolResultEvent(ctx, execCtx, observation, true, &eventSeq)
+				if tcResult.IsError {
+					state.RecordFailure(tcResult.Content, isTimeoutError(tcResult.Err))
+					observation := FormatToolErrorObservation(tcResult.Content)
 					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				} else {
-					observation := FormatObservation(result)
-					createToolResultEvent(ctx, execCtx, result.Content, result.IsError, &eventSeq)
+					accumulateTokenUsage(&totalUsage, tcResult.Usage)
+					observation := FormatObservation(&agent.ToolResult{
+						CallID:  toolCall.ID,
+						Name:    toolCall.Name,
+						Content: tcResult.Content,
+						IsError: tcResult.IsError,
+					})
 					messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: observation})
 					storeObservationMessage(ctx, execCtx, observation, &msgSeq)
 				}

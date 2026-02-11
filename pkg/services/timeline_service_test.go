@@ -323,6 +323,111 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	})
 }
 
+func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	timelineService := NewTimelineService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	stageService := NewStageService(client.Client)
+	ctx := context.Background()
+
+	// Setup
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           stg.ID,
+		SessionID:         session.ID,
+		AgentName:         "TestAgent",
+		AgentIndex:        1,
+		IterationStrategy: "react",
+	})
+	require.NoError(t, err)
+
+	t.Run("merges metadata with existing", func(t *testing.T) {
+		event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 10,
+			EventType:      timelineevent.EventTypeLlmToolCall,
+			Content:        "",
+			Metadata: map[string]interface{}{
+				"server_name": "kubernetes-server",
+				"tool_name":   "get_pods",
+				"arguments":   `{"namespace": "default"}`,
+			},
+		})
+		require.NoError(t, err)
+
+		// Complete with additional metadata
+		err = timelineService.CompleteTimelineEventWithMetadata(ctx, event.ID,
+			"pod list output here",
+			map[string]interface{}{"is_error": false},
+			nil, nil)
+		require.NoError(t, err)
+
+		// Verify merged metadata
+		updated, err := client.TimelineEvent.Get(ctx, event.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "pod list output here", updated.Content)
+		assert.Equal(t, timelineevent.StatusCompleted, updated.Status)
+		assert.Equal(t, "kubernetes-server", updated.Metadata["server_name"])
+		assert.Equal(t, "get_pods", updated.Metadata["tool_name"])
+		assert.Equal(t, false, updated.Metadata["is_error"])
+	})
+
+	t.Run("new metadata overrides existing keys", func(t *testing.T) {
+		event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        stg.ID,
+			ExecutionID:    exec.ID,
+			SequenceNumber: 11,
+			EventType:      timelineevent.EventTypeLlmToolCall,
+			Content:        "",
+			Metadata: map[string]interface{}{
+				"key1": "original",
+				"key2": "keep",
+			},
+		})
+		require.NoError(t, err)
+
+		err = timelineService.CompleteTimelineEventWithMetadata(ctx, event.ID,
+			"result",
+			map[string]interface{}{"key1": "overridden", "key3": "new"},
+			nil, nil)
+		require.NoError(t, err)
+
+		updated, err := client.TimelineEvent.Get(ctx, event.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "overridden", updated.Metadata["key1"])
+		assert.Equal(t, "keep", updated.Metadata["key2"])
+		assert.Equal(t, "new", updated.Metadata["key3"])
+	})
+
+	t.Run("validates required fields", func(t *testing.T) {
+		err := timelineService.CompleteTimelineEventWithMetadata(ctx, "", "content", nil, nil, nil)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+
+		err = timelineService.CompleteTimelineEventWithMetadata(ctx, "some-id", "", nil, nil, nil)
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
 func TestTimelineService_FailTimelineEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)

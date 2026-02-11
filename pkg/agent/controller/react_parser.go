@@ -552,11 +552,12 @@ func FormatObservation(result *agent.ToolResult) string {
 }
 
 // FormatToolErrorObservation formats a tool execution error as an observation.
-func FormatToolErrorObservation(err error) string {
-	if err == nil {
+// errMsg is the human-readable error content (e.g. from toolCallResult.Content).
+func FormatToolErrorObservation(errMsg string) string {
+	if errMsg == "" {
 		return "Observation: Error - Tool execution failed: unknown error"
 	}
-	return fmt.Sprintf("Observation: Error - Tool execution failed: %s", err.Error())
+	return fmt.Sprintf("Observation: Error - Tool execution failed: %s", errMsg)
 }
 
 // FormatUnknownToolError formats an error when the LLM requests an unknown tool.

@@ -6,7 +6,6 @@ import (
 )
 
 // ToolExecutor abstracts tool/MCP execution for iteration controllers.
-// Phase 3.2: stub implementation. Phase 4: real MCP client.
 type ToolExecutor interface {
 	// Execute runs a single tool call and returns the result.
 	// The result is always a string (tool output or error message).
@@ -30,7 +29,7 @@ type ToolResult struct {
 }
 
 // StubToolExecutor returns canned responses for testing.
-// Will be replaced by MCP client in Phase 4.
+// The real MCP-backed implementation is in pkg/mcp/executor.go.
 type StubToolExecutor struct {
 	tools []ToolDefinition
 }

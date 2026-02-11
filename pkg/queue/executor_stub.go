@@ -9,9 +9,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 )
 
-// StubExecutor is a placeholder SessionExecutor for Phase 2.3.
-// It immediately returns "completed" without any agent execution.
-// Will be replaced by the real executor in Phase 3.
+// StubExecutor is a test/placeholder SessionExecutor that returns "completed" immediately.
+// The real implementation is RealSessionExecutor in executor.go.
 type StubExecutor struct{}
 
 // NewStubExecutor creates a new stub executor.
@@ -19,8 +18,7 @@ func NewStubExecutor() *StubExecutor {
 	return &StubExecutor{}
 }
 
-// Execute returns a completed result immediately.
-// Phase 3 will replace this with real agent execution.
+// Execute returns a completed result immediately (no-op).
 func (e *StubExecutor) Execute(ctx context.Context, session *ent.AlertSession) *ExecutionResult {
 	sessionID := ""
 	chainID := ""
@@ -46,7 +44,7 @@ func (e *StubExecutor) Execute(ctx context.Context, session *ent.AlertSession) *
 
 	return &ExecutionResult{
 		Status:           alertsession.StatusCompleted,
-		FinalAnalysis:    "Stub executor: no agent execution performed (Phase 2.3)",
+		FinalAnalysis:    "Stub executor: no agent execution performed",
 		ExecutiveSummary: "Stub execution completed successfully",
 	}
 }

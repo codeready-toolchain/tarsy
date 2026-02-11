@@ -255,7 +255,7 @@ var (
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
@@ -477,7 +477,7 @@ var (
 		{Name: "sequence_number", Type: field.TypeInt},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "tool_result", "mcp_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result"}},
+		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"streaming", "completed", "failed", "cancelled", "timed_out"}, Default: "streaming"},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},

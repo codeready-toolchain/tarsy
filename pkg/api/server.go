@@ -84,7 +84,7 @@ func (s *Server) setupRoutes() {
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 
 	// WebSocket endpoint for real-time event streaming.
-	// Auth deferred to Phase 8 (Security) — currently open to any client,
+	// Auth deferred to Phase 9 (Security) — currently open to any client,
 	// consistent with the InsecureSkipVerify origin policy in handler_ws.go.
 	s.echo.GET("/ws", s.wsHandler)
 }

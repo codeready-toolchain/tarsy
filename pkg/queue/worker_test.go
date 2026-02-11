@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testQueueConfig() *config.QueueConfig {
@@ -89,44 +91,37 @@ func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 
 	w.publishSessionStatus(t.Context(), "session-abc", "in_progress")
 
-	// Should have published to both session and global channels
-	assert.Equal(t, 1, pub.publishCount, "should call Publish for session channel")
-	assert.Equal(t, 1, pub.transientCount, "should call PublishTransient for global channel")
-	assert.Equal(t, "session:session-abc", pub.lastChannel)
+	// PublishSessionStatus encapsulates both persistent + transient publish
+	assert.Equal(t, 1, pub.sessionStatusCount, "should call PublishSessionStatus once")
 
-	// Verify session-channel payload contents
-	assert.Equal(t, "session.status", pub.lastPayload["type"])
-	assert.Equal(t, "session-abc", pub.lastPayload["session_id"])
-	assert.Equal(t, "in_progress", pub.lastPayload["status"])
-	assert.NotEmpty(t, pub.lastPayload["timestamp"])
-
-	// Verify global-channel (transient) routing and payload
-	assert.Equal(t, "sessions", pub.lastTransientChan)
-	assert.Equal(t, "session.status", pub.lastTransientPayload["type"])
-	assert.Equal(t, "session-abc", pub.lastTransientPayload["session_id"])
-	assert.Equal(t, "in_progress", pub.lastTransientPayload["status"])
+	// Verify payload contents
+	require.NotNil(t, pub.lastSessionStatus)
+	assert.Equal(t, "session.status", pub.lastSessionStatus.Type)
+	assert.Equal(t, "session-abc", pub.lastSessionStatus.SessionID)
+	assert.Equal(t, "in_progress", pub.lastSessionStatus.Status)
+	assert.NotEmpty(t, pub.lastSessionStatus.Timestamp)
 }
 
 // mockEventPublisher implements agent.EventPublisher for unit tests.
 type mockEventPublisher struct {
-	publishCount         int
-	transientCount       int
-	lastChannel          string
-	lastPayload          map[string]interface{}
-	lastTransientChan    string
-	lastTransientPayload map[string]interface{}
+	sessionStatusCount int
+	lastSessionStatus  *events.SessionStatusPayload
 }
 
-func (m *mockEventPublisher) Publish(_ context.Context, _ string, channel string, payload map[string]interface{}) error {
-	m.publishCount++
-	m.lastChannel = channel
-	m.lastPayload = payload
+func (m *mockEventPublisher) PublishTimelineCreated(_ context.Context, _ string, _ events.TimelineCreatedPayload) error {
 	return nil
 }
 
-func (m *mockEventPublisher) PublishTransient(_ context.Context, channel string, payload map[string]interface{}) error {
-	m.transientCount++
-	m.lastTransientChan = channel
-	m.lastTransientPayload = payload
+func (m *mockEventPublisher) PublishTimelineCompleted(_ context.Context, _ string, _ events.TimelineCompletedPayload) error {
+	return nil
+}
+
+func (m *mockEventPublisher) PublishStreamChunk(_ context.Context, _ string, _ events.StreamChunkPayload) error {
+	return nil
+}
+
+func (m *mockEventPublisher) PublishSessionStatus(_ context.Context, _ string, payload events.SessionStatusPayload) error {
+	m.sessionStatusCount++
+	m.lastSessionStatus = &payload
 	return nil
 }
