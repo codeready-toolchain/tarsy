@@ -127,7 +127,7 @@ jobs:
         run: uv sync --extra test
 
       - name: Run Python tests
-        run: make test-python
+        run: make test-llm-coverage
 
       - name: Upload Python coverage to Codecov
         uses: codecov/codecov-action@v5

@@ -593,7 +593,12 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		Backend:   backend,
 	}
 
-	ch, err := e.llmClient.Generate(ctx, input)
+	// Derive a cancellable context so the producer goroutine in Generate
+	// is always cleaned up when we return (e.g. on ErrorChunk early exit).
+	llmCtx, llmCancel := context.WithCancel(ctx)
+	defer llmCancel()
+
+	ch, err := e.llmClient.Generate(llmCtx, input)
 	if err != nil {
 		return "", fmt.Errorf("executive summary LLM call failed: %w", err)
 	}

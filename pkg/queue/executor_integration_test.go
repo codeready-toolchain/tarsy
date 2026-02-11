@@ -343,81 +343,103 @@ func TestExecutor_FailFast(t *testing.T) {
 }
 
 func TestExecutor_CancellationBetweenStages(t *testing.T) {
-	entClient, _ := util.SetupTestDatabase(t)
-
-	chain := &config.ChainConfig{
-		AlertTypes: []string{"test-alert"},
-		Stages: []config.StageConfig{
-			{
-				Name: "stage-1",
-				Agents: []config.StageAgentConfig{
-					{Name: "TestAgent"},
-				},
-			},
-			{
-				Name: "stage-2",
-				Agents: []config.StageAgentConfig{
-					{Name: "TestAgent"},
-				},
-			},
+	// Table-driven: both variants cancel between stages; they differ only in
+	// the fallback mock error returned if stage-2's LLM call races past the
+	// cancel check.
+	tests := []struct {
+		name          string
+		stage2MockErr error
+	}{
+		{
+			name:          "context canceled",
+			stage2MockErr: context.Canceled,
+		},
+		{
+			name:          "deadline exceeded",
+			stage2MockErr: context.DeadlineExceeded,
 		},
 	}
 
-	// Stage 1 completes. Provide enough responses for stage 1 to fully complete,
-	// then return context.Canceled for stage 2's LLM call.
-	llm := &mockLLMClient{
-		responses: []mockLLMResponse{
-			// Stage 1 agent final answer
-			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Stage 1 complete."},
-			}},
-			// Stage 2 would try to call LLM, but context should already be cancelled.
-			// In case it does get called (race), provide an error response.
-			{err: context.Canceled},
-		},
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entClient, _ := util.SetupTestDatabase(t)
 
-	cfg := testConfig("test-chain", chain)
-	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
-	session := createExecutorTestSession(t, entClient, "test-chain")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Run in goroutine so we can cancel from outside
-	resultCh := make(chan *ExecutionResult, 1)
-	go func() {
-		resultCh <- executor.Execute(ctx, session)
-	}()
-
-	// Wait for stage-1 to complete, then cancel before stage-2 starts.
-	timeout := time.After(5 * time.Second)
-	tick := time.NewTicker(5 * time.Millisecond)
-	defer tick.Stop()
-
-	stage1Done := false
-	for !stage1Done {
-		select {
-		case <-tick.C:
-			if publisher.hasStageStatus("stage-1", events.StageStatusCompleted) {
-				cancel()
-				stage1Done = true
+			chain := &config.ChainConfig{
+				AlertTypes: []string{"test-alert"},
+				Stages: []config.StageConfig{
+					{
+						Name: "stage-1",
+						Agents: []config.StageAgentConfig{
+							{Name: "TestAgent"},
+						},
+					},
+					{
+						Name: "stage-2",
+						Agents: []config.StageAgentConfig{
+							{Name: "TestAgent"},
+						},
+					},
+				},
 			}
-		case <-timeout:
-			t.Fatal("timed out waiting for stage-1 to complete")
-		}
+
+			llm := &mockLLMClient{
+				responses: []mockLLMResponse{
+					// Stage 1 agent final answer
+					{chunks: []agent.Chunk{
+						&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Stage 1 complete."},
+					}},
+					// Stage 2 fallback if the cancel isn't detected before the LLM call
+					{err: tc.stage2MockErr},
+				},
+			}
+
+			cfg := testConfig("test-chain", chain)
+			publisher := &testEventPublisher{}
+			executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+			session := createExecutorTestSession(t, entClient, "test-chain")
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			resultCh := make(chan *ExecutionResult, 1)
+			go func() {
+				resultCh <- executor.Execute(ctx, session)
+			}()
+
+			// Wait for stage-1 to complete, then cancel before stage-2 starts.
+			timeout := time.After(5 * time.Second)
+			tick := time.NewTicker(5 * time.Millisecond)
+			defer tick.Stop()
+
+			stage1Done := false
+			for !stage1Done {
+				select {
+				case <-tick.C:
+					if publisher.hasStageStatus("stage-1", events.StageStatusCompleted) {
+						cancel()
+						stage1Done = true
+					}
+				case <-timeout:
+					t.Fatal("timed out waiting for stage-1 to complete")
+				}
+			}
+
+			result := <-resultCh
+
+			require.NotNil(t, result)
+			// The result should be cancelled or failed depending on the race
+			// between cancel detection and stage-2 start.
+			assert.Contains(t, []alertsession.Status{
+				alertsession.StatusCancelled,
+				alertsession.StatusFailed,
+			}, result.Status)
+
+			// Stage-2 should either not exist or have failed
+			stages, err := entClient.Stage.Query().All(context.Background())
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, len(stages), 1)
+		})
 	}
-
-	result := <-resultCh
-
-	require.NotNil(t, result)
-	// The result should be cancelled (caught by mapCancellation between stages)
-	// or failed if stage 2 started before the cancel was detected
-	assert.Contains(t, []alertsession.Status{
-		alertsession.StatusCancelled,
-		alertsession.StatusFailed,
-	}, result.Status)
 }
 
 func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
@@ -543,6 +565,7 @@ func TestExecutor_ParallelAgentsRejected(t *testing.T) {
 
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
 	assert.Contains(t, result.Error.Error(), "parallel agent execution not yet supported")
 }
 
@@ -605,6 +628,7 @@ func TestExecutor_ReplicasRejected(t *testing.T) {
 
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
 	assert.Contains(t, result.Error.Error(), "parallel agent execution not yet supported")
 	assert.Contains(t, result.Error.Error(), "3 replicas")
 }
@@ -626,6 +650,7 @@ func TestExecutor_EmptyChainStages(t *testing.T) {
 
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
 	assert.Contains(t, result.Error.Error(), "no stages")
 }
 
@@ -682,7 +707,7 @@ func TestExecutor_ContextPassedBetweenStages(t *testing.T) {
 	stage2Input := llm.capturedInputs[1]
 	var foundContext bool
 	for _, msg := range stage2Input.Messages {
-		if containsChainContextMarkers(msg.Content) {
+		if containsChainContextMarkers(msg.Content, "data-collection") {
 			foundContext = true
 			// Verify stage 1's analysis is embedded in the context
 			assert.Contains(t, msg.Content, "Pod-1 has OOM errors.")
@@ -692,88 +717,18 @@ func TestExecutor_ContextPassedBetweenStages(t *testing.T) {
 	assert.True(t, foundContext, "stage 2 LLM call should contain chain context from stage 1")
 }
 
-// containsChainContextMarkers checks if text contains the chain context delimiters.
-func containsChainContextMarkers(text string) bool {
-	return len(text) > 0 &&
-		(strings.Contains(text, "CHAIN_CONTEXT_START") || strings.Contains(text, "data-collection"))
-}
-
-func TestExecutor_DeadlineBetweenStages(t *testing.T) {
-	entClient, _ := util.SetupTestDatabase(t)
-
-	chain := &config.ChainConfig{
-		AlertTypes: []string{"test-alert"},
-		Stages: []config.StageConfig{
-			{
-				Name: "stage-1",
-				Agents: []config.StageAgentConfig{
-					{Name: "TestAgent"},
-				},
-			},
-			{
-				Name: "stage-2",
-				Agents: []config.StageAgentConfig{
-					{Name: "TestAgent"},
-				},
-			},
-		},
+// containsChainContextMarkers checks if text contains the formal chain context
+// delimiter or any of the given stage names (indicating chain context is present).
+func containsChainContextMarkers(text string, stageNames ...string) bool {
+	if strings.Contains(text, "CHAIN_CONTEXT_START") {
+		return true
 	}
-
-	// Stage 1 completes but stage 2 never starts because deadline is exceeded.
-	llm := &mockLLMClient{
-		responses: []mockLLMResponse{
-			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Stage 1 result."},
-			}},
-			// Stage 2 would try to use this but context should be expired
-			{err: context.DeadlineExceeded},
-		},
-	}
-
-	cfg := testConfig("test-chain", chain)
-	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
-	session := createExecutorTestSession(t, entClient, "test-chain")
-
-	// Use a cancellable context; cancel after stage 1 completes
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	resultCh := make(chan *ExecutionResult, 1)
-	go func() {
-		resultCh <- executor.Execute(ctx, session)
-	}()
-
-	// Wait for stage-1 to complete, then cancel before stage-2 starts.
-	timeout := time.After(5 * time.Second)
-	tick := time.NewTicker(5 * time.Millisecond)
-	defer tick.Stop()
-
-	stage1Done := false
-	for !stage1Done {
-		select {
-		case <-tick.C:
-			if publisher.hasStageStatus("stage-1", events.StageStatusCompleted) {
-				cancel()
-				stage1Done = true
-			}
-		case <-timeout:
-			t.Fatal("timed out waiting for stage-1 to complete")
+	for _, name := range stageNames {
+		if strings.Contains(text, name) {
+			return true
 		}
 	}
-
-	result := <-resultCh
-	require.NotNil(t, result)
-	// Should be cancelled or failed (depends on race between cancel detection and stage-2 start)
-	assert.Contains(t, []alertsession.Status{
-		alertsession.StatusCancelled,
-		alertsession.StatusFailed,
-	}, result.Status)
-
-	// Stage-2 should either not exist or have failed
-	stages, err := entClient.Stage.Query().All(context.Background())
-	require.NoError(t, err)
-	// At least stage-1 exists
-	assert.GreaterOrEqual(t, len(stages), 1)
+	return false
 }
 
 func TestExecutor_StageEventsHaveCorrectIndex(t *testing.T) {

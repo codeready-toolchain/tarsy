@@ -68,7 +68,7 @@ test-python: test-llm ## Run all Python tests (alias for test-llm)
 .PHONY: test-llm
 test-llm: ## Run LLM service Python tests
 	@echo -e "$(YELLOW)Running LLM service tests...$(NC)"
-	@cd llm-service && uv run pytest tests/ -v --cov=llm --cov-report=term-missing --cov-report=xml:coverage.xml
+	@cd llm-service && uv run pytest tests/ -v
 	@echo -e "$(GREEN)✅ LLM service tests passed$(NC)"
 
 .PHONY: test-llm-unit
