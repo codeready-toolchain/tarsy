@@ -1376,9 +1376,9 @@ func TestExecutor_SuccessPolicyDefaulting(t *testing.T) {
 			executor := &RealSessionExecutor{
 				cfg: &config.Config{
 					Defaults: &config.Defaults{
-						SuccessPolicy:    tc.defaultPolicy,
-						MaxIterations:    &maxIter,
-						LLMProvider:      "test",
+						SuccessPolicy:     tc.defaultPolicy,
+						MaxIterations:     &maxIter,
+						LLMProvider:       "test",
 						IterationStrategy: config.IterationStrategyReact,
 					},
 				},
@@ -1622,13 +1622,13 @@ func TestParallelTypePtr(t *testing.T) {
 			expected: nil,
 		},
 		{
-			name: "multi-agent",
-			cfg:  config.StageConfig{Agents: []config.StageAgentConfig{{Name: "A"}, {Name: "B"}}},
+			name:     "multi-agent",
+			cfg:      config.StageConfig{Agents: []config.StageAgentConfig{{Name: "A"}, {Name: "B"}}},
 			expected: func() *string { s := "multi_agent"; return &s }(),
 		},
 		{
-			name: "replicas",
-			cfg:  config.StageConfig{Replicas: 3, Agents: []config.StageAgentConfig{{Name: "A"}}},
+			name:     "replicas",
+			cfg:      config.StageConfig{Replicas: 3, Agents: []config.StageAgentConfig{{Name: "A"}}},
 			expected: func() *string { s := "replica"; return &s }(),
 		},
 		{

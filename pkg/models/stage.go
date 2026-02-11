@@ -19,10 +19,10 @@ type CreateStageRequest struct {
 
 // CreateAgentExecutionRequest contains fields for creating a new agent execution
 type CreateAgentExecutionRequest struct {
-	StageID           string                `json:"stage_id"`
-	SessionID         string                `json:"session_id"`
-	AgentName         string                `json:"agent_name"`
-	AgentIndex        int                   `json:"agent_index"`
+	StageID           string                   `json:"stage_id"`
+	SessionID         string                   `json:"session_id"`
+	AgentName         string                   `json:"agent_name"`
+	AgentIndex        int                      `json:"agent_index"`
 	IterationStrategy config.IterationStrategy `json:"iteration_strategy"`
 }
 

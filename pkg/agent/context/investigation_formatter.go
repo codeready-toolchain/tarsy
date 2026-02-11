@@ -32,7 +32,7 @@ type ParallelAgentInvestigation struct {
 	AgentIndex   int
 	Strategy     string               // e.g., "native-thinking", "react"
 	LLMProvider  string               // e.g., "gemini-2.5-pro"
-	Status       alertsession.Status   // terminal status (completed, failed, etc.)
+	Status       alertsession.Status  // terminal status (completed, failed, etc.)
 	Events       []*ent.TimelineEvent // full investigation (from GetAgentTimeline)
 	ErrorMessage string               // for failed agents
 }
