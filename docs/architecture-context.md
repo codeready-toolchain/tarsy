@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 4.3 (MCP Features)
+**Last updated after**: Phase 5.1 (Chain Orchestration)
 
 ---
 
@@ -38,7 +38,7 @@ pkg/
 ├── api/              # HTTP handlers, requests, responses, error mapping
 ├── agent/            # Agent interface, lifecycle, LLM client, tool executor
 │   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser, tool execution, summarization
-│   ├── context/      # Context formatter, investigation formatter
+│   ├── context/      # Context formatter, investigation formatter, stage context builder
 │   └── prompt/       # Prompt builder, templates, instructions, components
 ├── config/           # Loader, registries, builtin config, enums, validator
 ├── database/         # Client, migrations
@@ -68,19 +68,31 @@ The end-to-end happy path from alert submission to completion:
 1. **API handler** receives `POST /api/v1/alerts` → validates → `AlertService.SubmitAlert()` → creates `AlertSession` (status=`pending`) with `chain_id` resolved from alert type
 2. **Worker pool** polls for pending sessions → `SessionService.ClaimNextPendingSession()` uses `FOR UPDATE SKIP LOCKED` → sets status=`in_progress`, assigns `pod_id`
 3. **SessionExecutor.Execute()** (`pkg/queue/executor.go`):
-   - Resolves chain config from `ChainRegistry` → gets first `StageConfig` → gets first `StageAgentConfig`
-   - Creates `Stage` DB record (via `StageService.CreateStage`)
-   - Creates `AgentExecution` DB record (via `StageService.CreateAgentExecution`)
-   - Resolves agent config via hierarchy: `ResolveAgentConfig(cfg, chain, stage, agent)` → `ResolvedAgentConfig`
-   - Builds `ExecutionContext` with all dependencies (LLMClient, ToolExecutor, services, publisher, prompt builder)
-   - Creates agent via `AgentFactory.CreateAgent()` → `BaseAgent` with appropriate `Controller`
-   - Calls `agent.Execute(ctx, execCtx, prevStageContext="")`
+   - Resolves chain config from `ChainRegistry`
+   - Initializes shared services (StageService, MessageService, TimelineService, InteractionService)
+   - **Chain loop**: iterates over `chain.Stages` sequentially
+     - Checks context cancellation before starting each stage
+     - Updates session progress (`current_stage_index`, `current_stage_id`)
+     - Publishes `stage.status` (started)
+     - Calls `executeStage()` → `executeAgent()`:
+       - Creates `Stage` DB record (via `StageService.CreateStage`)
+       - Creates `AgentExecution` DB record (via `StageService.CreateAgentExecution`)
+       - Resolves agent config via hierarchy: `ResolveAgentConfig(cfg, chain, stage, agent)` → `ResolvedAgentConfig`
+       - Creates per-agent-execution MCP ToolExecutor (or stub) with `defer Close()`
+       - Builds `ExecutionContext` with all dependencies
+       - Creates agent via `AgentFactory.CreateAgent()` → `BaseAgent` with appropriate `Controller`
+       - Calls `agent.Execute(ctx, execCtx, prevStageContext)`
+       - Updates `AgentExecution` status, aggregates `Stage` status
+     - Publishes `stage.status` (terminal status)
+     - On failure: returns immediately (fail-fast, no subsequent stages)
+     - On success: builds `prevStageContext` for next stage via `BuildStageContext()`
+   - **Post-chain**: extracts `finalAnalysis` from last completed stage (reverse search)
+   - **Executive summary**: direct LLM call (fail-open), creates session-level `executive_summary` timeline event
 4. **BaseAgent.Execute()** → delegates to `Controller.Run()`
 5. **Controller.Run()** executes the iteration loop (see below)
-6. **Back in executor**: updates `AgentExecution` status, aggregates `Stage` status, returns `ExecutionResult`
-7. **Worker** updates `AlertSession` with final status, `final_analysis`, `completed_at`
+6. **Worker** updates `AlertSession` with final status, `final_analysis`, `executive_summary`, `completed_at`
 
-**Note**: Phase 3 only executes the first stage of the first agent. Phase 5 will extend the executor to loop through all stages and handle parallel agents.
+**Note**: Phase 5.1 executes single-agent stages only. Phase 5.2 extends `executeStage()` to handle any number of agents per stage using the same goroutine + WaitGroup machinery. A single-agent stage is not a special case — it's a stage with N=1 agents. No separate code paths for single vs multi-agent execution.
 
 ## Iteration Loop Flows
 
@@ -128,7 +140,7 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 `id`, `stage_id`, `session_id` (denormalized), `agent_name`, `agent_index`, `iteration_strategy`, `status`, `error_message`, timestamps
 
 ### TimelineEvent
-`id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content` (TEXT, grows during streaming), `metadata` (JSON), timestamps
+`id`, `session_id`, `stage_id` (**optional** — null for session-level events like `executive_summary`), `execution_id` (**optional** — null for session-level events), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content` (TEXT, grows during streaming), `metadata` (JSON), timestamps
 
 ### Message
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON array, assistant messages), `tool_call_id` + `tool_name` (tool result messages), `created_at`
@@ -209,6 +221,30 @@ type SessionExecutor interface {
 
 Bridges the queue worker to the agent framework. Implementation: `RealSessionExecutor` in `pkg/queue/executor.go`.
 
+Key internal methods on `RealSessionExecutor`:
+- `executeStage()` — creates Stage DB record, runs agent(s) within it using unified goroutine machinery (same code path for 1 or N agents)
+- `executeAgent()` — per-agent-execution lifecycle: DB record → config resolution → MCP creation → agent execution → status update
+- `buildStageContext()` — converts `[]stageResult` to `BuildStageContext()` input
+- `generateExecutiveSummary()` — LLM call for session summary (fail-open)
+- `createToolExecutor()` — MCP-backed executor or stub fallback
+- `updateSessionProgress()` — non-blocking DB update for dashboard visibility
+- `mapCancellation()` — maps context errors to session status (timed_out/cancelled)
+
+### Stage Context Builder (`pkg/agent/context/stage_context.go`)
+
+```go
+type StageResult struct {
+    StageName     string
+    FinalAnalysis string
+}
+
+func BuildStageContext(stages []StageResult) string
+```
+
+Formats completed stage results into a context string for the next stage's agent prompt. Wraps each stage's `final_analysis` with `<!-- CHAIN_CONTEXT_START/END -->` markers. Context flows in-memory through the chain loop (no DB query needed — the internal `stageResult.finalAnalysis` in the executor comes from `agent.ExecutionResult.FinalAnalysis` and is mapped to the public `StageResult` for `BuildStageContext()`).
+
+**Note**: `StageResult` (exported, 2 fields: `StageName`, `FinalAnalysis`) is the public API for context building. The internal `stageResult` (unexported, in `pkg/queue/executor.go`) carries additional executor metadata (`stageID`, `status`, `err`, `agentResults`) that isn't exposed through the public API.
+
 ### PromptBuilder (`pkg/agent/prompt/builder.go`)
 
 ```go
@@ -232,7 +268,10 @@ Three-tier instruction composition: General SRE → MCP server instructions → 
 ```go
 func (p *EventPublisher) Publish(ctx, sessionID, channel, payload) error        // Persistent (DB + NOTIFY)
 func (p *EventPublisher) PublishTransient(ctx, channel, payload) error           // Transient (NOTIFY only)
+func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload StageStatusPayload) error  // Stage lifecycle
 ```
+
+The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`.
 
 ### ConnectionManager (`pkg/events/manager.go`)
 
@@ -396,15 +435,15 @@ Maps `config.TransportConfig` to MCP SDK transports:
 
 **Runtime (HealthMonitor)**: Background checks every 15s detect degradation. Unhealthy servers surface as `SystemWarning`s in the health endpoint/dashboard. On recovery, warnings are cleared automatically.
 
-### Per-Session Isolation
+### Per-Agent-Execution Isolation
 
-Every alert session gets its own `Client` instance with independent MCP SDK sessions. No shared state between sessions. Go's `http.Client` handles HTTP connection pooling internally, so per-session overhead for HTTP/SSE is just the MCP `Initialize` handshake. Stdio transports spawn a subprocess per session.
+Every agent execution gets its own `Client` instance with independent MCP SDK sessions (created via `createToolExecutor()`, torn down via `defer Close()`). No shared state between agents or stages. Go's `http.Client` handles HTTP connection pooling internally, so per-execution overhead for HTTP/SSE is just the MCP `Initialize` handshake. Stdio transports spawn a subprocess per execution. This per-agent-execution lifecycle means Phase 5.2 parallel agents work without refactoring.
 
 ### Integration Points
 
-- **Session executor** (`pkg/queue/executor.go`): calls `ClientFactory.CreateToolExecutor()` instead of `StubToolExecutor`. Falls back to stub if MCP initialization fails (non-fatal for tool-less agents).
+- **Session executor** (`pkg/queue/executor.go`): `executeAgent()` calls `createToolExecutor()` per agent execution (creates MCP-backed executor or falls back to stub). `defer Close()` ensures cleanup.
 - **NativeThinking controller**: replaces `.` → `__` in tool names for Gemini function calling compatibility. Executor reverses transparently.
-- **Prompt builder**: `appendUnavailableServerWarnings()` warns the LLM about servers that failed per-session initialization.
+- **Prompt builder**: `appendUnavailableServerWarnings()` warns the LLM about servers that failed per-execution initialization.
 - **Health endpoint**: includes `SystemWarningsService.GetWarnings()` in response (informational, does not cause 503).
 
 ---
@@ -661,6 +700,67 @@ API-level validation (immediate 400 for unknown servers) AND execution-time vali
 
 ---
 
+## Chain Orchestration & Session Completion
+
+### Chain Loop (`pkg/queue/executor.go`)
+
+The `RealSessionExecutor.Execute()` method iterates over `chain.Stages` sequentially. Each stage runs a single agent (Phase 5.1). On stage failure, the chain stops immediately (fail-fast). Stage context accumulates in-memory via `[]stageResult` and is formatted into `prevStageContext` for each subsequent stage.
+
+Internal types: `stageResult` (stageID, executionID, stageName, status, finalAnalysis, error), `agentResult`, `executeStageInput`, `generateSummaryInput`.
+
+### Backend Derivation
+
+Backend (Python provider routing) is resolved from iteration strategy, not from LLM provider type:
+
+| Strategy | Backend | Reason |
+|----------|---------|--------|
+| `react` | `"langchain"` | Text-based tool calling, any provider via LangChain |
+| `native-thinking` | `"google-native"` | Requires Google SDK for native thinking/tool calling |
+| `synthesis` | `"langchain"` | Multi-provider synthesis |
+| `synthesis-native-thinking` | `"google-native"` | Gemini thinking for synthesis |
+
+Non-agent LLM calls inherit backend from context: summarization uses agent's `execCtx.Config.Backend`; executive summary resolves its own from chain/system default strategy.
+
+### Executive Summary Generation
+
+After all stages complete, a direct LLM call generates a short executive summary:
+
+1. **Provider hierarchy**: `chain.executive_summary_provider` → `chain.llm_provider` → `defaults.llm_provider`
+2. **Backend hierarchy**: `chain.iteration_strategy` → `defaults.iteration_strategy` → `ResolveBackend()`
+3. Uses `PromptBuilder.BuildExecutiveSummarySystemPrompt()` + `BuildExecutiveSummaryUserPrompt(finalAnalysis)`
+4. Single non-streaming LLM call (no tools)
+5. Creates session-level `executive_summary` timeline event (no `stage_id`/`execution_id`)
+
+**Failure policy**: Fail-open. If generation fails, the session still completes successfully. Error stored in `AlertSession.executive_summary_error`.
+
+### ExecutionResult (`pkg/queue/types.go`)
+
+```go
+type ExecutionResult struct {
+    Status                alertsession.Status
+    FinalAnalysis         string
+    ExecutiveSummary      string
+    ExecutiveSummaryError string  // Records why summary generation failed
+    Error                 error
+}
+```
+
+### Stage Status Event (`pkg/events/payloads.go`)
+
+```go
+type StageStatusPayload struct {
+    Type       string `json:"type"`        // always "stage.status"
+    SessionID  string `json:"session_id"`
+    StageID    string `json:"stage_id"`    // may be empty on "started"
+    StageName  string `json:"stage_name"`
+    StageIndex int    `json:"stage_index"` // 1-based
+    Status     string `json:"status"`      // started, completed, failed, timed_out, cancelled
+    Timestamp  string `json:"timestamp"`
+}
+```
+
+---
+
 ## Key Types
 
 ### ExecutionContext (`pkg/agent/context.go`)
@@ -669,11 +769,17 @@ Carries all runtime state for an agent execution: `SessionID`, `StageID`, `Execu
 
 ### ResolvedAgentConfig (`pkg/agent/context.go`)
 
-Runtime configuration after hierarchy resolution (defaults → agent → chain → stage → stage-agent): `AgentName`, `IterationStrategy`, `LLMProvider`, `MaxIterations`, `IterationTimeout`, `MCPServers`, `CustomInstructions`.
+Runtime configuration after hierarchy resolution (defaults → agent → chain → stage → stage-agent): `AgentName`, `IterationStrategy`, `LLMProvider`, `MaxIterations`, `IterationTimeout`, `MCPServers`, `CustomInstructions`, `Backend`.
+
+`Backend` (`"google-native"` or `"langchain"`) is resolved from iteration strategy via `ResolveBackend()` in `pkg/agent/config_resolver.go`. Constants: `BackendGoogleNative`, `BackendLangChain`. This replaces the old approach of deriving backend from provider type.
 
 ### ServiceBundle (`pkg/agent/context.go`)
 
 Service dependencies injected into controllers: `Timeline` (TimelineService), `Message` (MessageService), `Interaction` (InteractionService), `Stage` (StageService).
+
+### GenerateInput (`pkg/agent/llm_client.go`)
+
+LLM call input: `SessionID`, `ExecutionID`, `Messages`, `Config` (LLMProviderConfig), `Tools`, `Backend`. The `Backend` field is set by callers from `execCtx.Config.Backend` (agent execution) or resolved separately (executive summary). All controllers and summarization pass backend through to gRPC.
 
 ### LLMResponse (`pkg/agent/controller/helpers.go`)
 
@@ -699,7 +805,7 @@ Shared iteration tracking: `CurrentIteration`, `MaxIterations`, `LastInteraction
 | Registry | Lookup | Key Types |
 |----------|--------|-----------|
 | `AgentRegistry` | `Get(name)` | `AgentConfig`: MCPServers, CustomInstructions, IterationStrategy, MaxIterations |
-| `ChainRegistry` | `Get(chainID)`, `GetByAlertType(alertType)` | `ChainConfig`: AlertTypes, Stages[], Chat, LLMProvider, MaxIterations |
+| `ChainRegistry` | `Get(chainID)`, `GetByAlertType(alertType)` | `ChainConfig`: AlertTypes, Stages[], Chat, LLMProvider, MaxIterations, IterationStrategy, ExecutiveSummaryProvider |
 | `MCPServerRegistry` | `Get(id)` | `MCPServerConfig`: Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `Get(name)` | `LLMProviderConfig`: Type, Model, APIKeyEnv, MaxToolResultTokens, NativeTools |
 
@@ -721,9 +827,17 @@ Client connects, subscribes to channels (`session:{id}`, `sessions`), receives e
 
 **Client actions**: `subscribe`, `unsubscribe`, `catchup` (with `last_event_id`), `ping`
 
-**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `session.completed`, `stage.started`, `stage.completed`
+**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`
 
 **Transient events** (NOTIFY only, no DB): `stream.chunk` (LLM token deltas)
+
+### Event Type Conventions
+
+- **Single `.status` type** when the payload shape is the same across all states: `session.status`, `stage.status` (with `status` field: started/completed/failed/timed_out/cancelled)
+- **Separate types** when payloads carry fundamentally different data: `timeline_event.created` (full context) vs `timeline_event.completed` (event_id + final content only)
+- **Standalone type** for transient high-frequency events: `stream.chunk`
+
+Stage events are published from the **executor** (chain loop), not from controllers. Controllers are unaware of stage boundaries.
 
 ### Cross-Pod Delivery
 
@@ -755,7 +869,7 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Queue = sessions table** | `FOR UPDATE SKIP LOCKED` claim pattern; `pod_id` ownership; orphan detection (all pods, no leader) |
 | **Soft deletes** | `deleted_at` on AlertSession; 90-day retention; hard delete can be added later |
 | **Native tools suppression** | When MCP tools are present, native tools (code execution, search) are disabled in Python |
-| **Per-session MCP isolation** | Each alert session gets its own MCP Client with independent SDK sessions; no shared state |
+| **Per-agent-execution MCP isolation** | Each agent execution gets its own MCP Client with independent SDK sessions; no shared state between stages or parallel agents |
 | **Tool errors as content** | MCP tool errors → `ToolResult{IsError: true}` (LLM-observable). Go errors → `error` return (infrastructure only) |
 | **Eager startup validation** | All configured MCP servers must initialize at startup (readiness probe fails otherwise); runtime degradation detected by HealthMonitor |
 | **Multi-format input parsing** | ActionInput cascade: JSON → YAML → key-value → raw string; parsing in executor, not parser |
@@ -767,6 +881,13 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Single-event tool lifecycle** | `llm_tool_call` uses streaming lifecycle (created→completed) — no separate tool_result event; args in metadata survive content update |
 | **Two-tier truncation** | Storage truncation (8K tokens, UI-safe) independent from summarization input truncation (100K tokens, LLM safety net) |
 | **Replace-not-merge override** | Per-alert MCP selection replaces chain server list entirely; override is the authoritative server set |
+| **Backend from strategy** | `Backend` field resolved from iteration strategy via `ResolveBackend()` — not derived from LLM provider type. All callers pass it through `GenerateInput.Backend` |
+| **Fail-fast chain execution** | Stage failure stops the chain immediately; no subsequent stages execute. Session gets the failed stage's status |
+| **Fail-open executive summary** | Executive summary LLM failure → session still completes successfully; error stored in `executive_summary_error` field |
+| **Session-level timeline events** | `executive_summary` events have null `stage_id`/`execution_id` (schema fields made optional in Phase 5.1) |
+| **In-memory context passing** | Stage context flows through chain loop via `stageResult.finalAnalysis` (from `ExecutionResult.FinalAnalysis`); no additional DB query needed |
+| **Non-blocking progress tracking** | `current_stage_index`/`current_stage_id` updated best-effort; failure is logged but doesn't stop execution |
+| **Unified stage execution** | All stages use the same goroutine + WaitGroup + channel machinery regardless of agent count. A single-agent stage is N=1, not a special case. No separate sequential/parallel code paths |
 
 ---
 
@@ -792,9 +913,10 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 
 ## Deferred Items Tracker
 
-### Deferred to Phase 5 (Chain Execution)
+### Deferred to Phase 5.2 (Parallel Execution)
 
-- **Executive summary generation**: Prompt templates exist (Phase 3.3) but call sites come with session completion logic.
+- **Parallel stage execution**: goroutine-per-agent, result aggregation, success policy (all/any), synthesis agent invocation, replica execution
+- **Stage status aggregation for mixed failures**: when parallel agents have different outcomes
 
 ### Deferred to Phase 6/7
 
@@ -809,7 +931,6 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 - Prometheus metrics
 - Hard delete support (schema ready, not implemented)
 - WebSocket origin validation (currently `InsecureSkipVerify: true`)
-- Stage status aggregation for mixed failures in parallel agents
 
 ---
 
