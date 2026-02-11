@@ -167,7 +167,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		})
 
 		// Publish stage terminal status
-		publishStageStatus(e.eventPublisher, ctx, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
+		publishStageStatus(ctx, e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -198,7 +198,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			}, sr)
 
 			// Publish synthesis stage terminal status
-			publishStageStatus(e.eventPublisher, ctx, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
+			publishStageStatus(ctx, e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -300,7 +300,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(e.eventPublisher, ctx, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
 
 	// 4. Launch goroutines (one per execution config — even if just one)
 	results := make(chan indexedAgentResult, len(configs))
@@ -516,7 +516,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(e.eventPublisher, ctx, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
 
 	// Build synthesis agent config — synthesis: block is optional, defaults apply
 	synthAgentConfig := config.StageAgentConfig{
@@ -716,7 +716,7 @@ func (e *RealSessionExecutor) updateSessionProgress(ctx context.Context, session
 
 // publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-func publishStageStatus(eventPublisher agent.EventPublisher, ctx context.Context, sessionID, stageID, stageName string, stageIndex int, status string) {
+func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, status string) {
 	if eventPublisher == nil {
 		return
 	}

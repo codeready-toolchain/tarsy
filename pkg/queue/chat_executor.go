@@ -240,7 +240,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	if updateErr := e.stageService.UpdateAgentExecutionStatus(execCtx, exec.ID, agentexecution.StatusActive, ""); updateErr != nil {
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
-	publishStageStatus(e.eventPublisher, execCtx, input.Session.ID, stageID, "Chat Response", stageIndex, events.StageStatusStarted)
+	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, events.StageStatusStarted)
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(execCtx)
 	defer cancelHeartbeat()
@@ -323,7 +323,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	}
 
 	// 14. Publish stage.status: completed/failed/cancelled/timed_out
-	publishStageStatus(e.eventPublisher, context.Background(), input.Session.ID, stageID, "Chat Response", stageIndex, terminalStatus)
+	publishStageStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, terminalStatus)
 
 	// 15. Stop heartbeat
 	cancelHeartbeat()
@@ -481,8 +481,8 @@ func (e *ChatMessageExecutor) unregisterExecution(chatID string) {
 
 // finishStage publishes terminal stage status and updates the Stage DB record.
 // Used for early-exit error paths.
-func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, status, errMsg string) {
-	publishStageStatus(e.eventPublisher, context.Background(), sessionID, stageID, stageName, stageIndex, status)
+func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, status, _ string) {
+	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, stageName, stageIndex, status)
 	if updateErr := e.stageService.UpdateStageStatus(context.Background(), stageID); updateErr != nil {
 		slog.Warn("Failed to update stage status on early exit",
 			"stage_id", stageID,
