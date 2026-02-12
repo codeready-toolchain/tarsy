@@ -249,13 +249,63 @@ func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.Exp
 	}
 
 	expectedIdx := 0
-	for _, evt := range filtered {
-		if expectedIdx >= len(expected) {
-			break
+	actualIdx := 0
+	for expectedIdx < len(expected) && actualIdx < len(filtered) {
+		exp := expected[expectedIdx]
+
+		// If this expected event is part of an unordered group, collect all
+		// group members and match them as a set against upcoming actual events.
+		if exp.Group != 0 {
+			groupID := exp.Group
+			var groupExpected []testdata.ExpectedEvent
+			for expectedIdx < len(expected) && expected[expectedIdx].Group == groupID {
+				groupExpected = append(groupExpected, expected[expectedIdx])
+				expectedIdx++
+			}
+			// Try to match all group members against actual events (any order).
+			matched := make([]bool, len(groupExpected))
+			for actualIdx < len(filtered) {
+				allMatched := true
+				for i := range matched {
+					if !matched[i] {
+						allMatched = false
+						break
+					}
+				}
+				if allMatched {
+					break
+				}
+				foundAny := false
+				for i, ge := range groupExpected {
+					if !matched[i] && matchesExpected(filtered[actualIdx], ge) {
+						matched[i] = true
+						foundAny = true
+						break
+					}
+				}
+				if foundAny {
+					actualIdx++
+				} else {
+					// Current actual event doesn't match any unmatched group member.
+					// Keep scanning — there may be extra events (stream.chunk, duplicates).
+					actualIdx++
+				}
+			}
+			// Check all group members were matched.
+			for i, m := range matched {
+				if !m {
+					assert.Failf(t, "unordered group member not found",
+						"group %d: missing %s", groupID, formatExpected(groupExpected[i]))
+				}
+			}
+			continue
 		}
-		if matchesExpected(evt, expected[expectedIdx]) {
+
+		// Sequential matching (Group == 0).
+		if matchesExpected(filtered[actualIdx], exp) {
 			expectedIdx++
 		}
+		actualIdx++
 	}
 
 	if !assert.Equal(t, len(expected), expectedIdx,
@@ -312,6 +362,14 @@ func matchesExpected(actual WSEvent, expected testdata.ExpectedEvent) bool {
 			return false
 		}
 	}
+	if len(expected.Metadata) > 0 {
+		meta, _ := actual.Parsed["metadata"].(map[string]interface{})
+		for k, v := range expected.Metadata {
+			if av, _ := meta[k].(string); av != v {
+				return false
+			}
+		}
+	}
 	return true
 }
 
@@ -333,6 +391,9 @@ func formatExpected(e testdata.ExpectedEvent) string {
 			c = c[:57] + "..."
 		}
 		s += fmt.Sprintf(" content=%q", c)
+	}
+	for k, v := range e.Metadata {
+		s += fmt.Sprintf(" meta.%s=%q", k, v)
 	}
 	return s
 }
