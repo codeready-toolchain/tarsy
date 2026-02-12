@@ -183,6 +183,8 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 			"type":    "subscription.confirmed",
 			"channel": msg.Channel,
 		})
+		// Auto catch-up: deliver all prior events so late subscribers don't miss anything.
+		m.handleCatchup(ctx, c, msg.Channel, 0)
 
 	case "unsubscribe":
 		if msg.Channel == "" {
@@ -206,6 +208,9 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 }
 
 // subscribe registers a connection for a channel and starts LISTEN if first subscriber.
+// LISTEN is synchronous so it completes before subscribe returns — this guarantees
+// that the subsequent auto-catchup runs with LISTEN already active, closing the gap
+// where events published between catchup and LISTEN would be lost.
 func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 	m.channelMu.Lock()
 	needsListen := false
@@ -214,33 +219,26 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 		needsListen = true
 	}
 	m.channels[channel][c.ID] = true
+	initialCount := len(m.channels[channel])
+	m.channelMu.Unlock()
 
 	if needsListen {
-		// First subscriber on this channel — start LISTEN
 		m.listenerMu.RLock()
 		l := m.listener
 		m.listenerMu.RUnlock()
 		if l != nil {
-			// Capture subscriber count after c.ID is added. The goroutine
-			// can only acquire channelMu after we release it below, so
-			// initialCount correctly reflects the post-add state.
-			initialCount := len(m.channels[channel])
-			go func() {
-				if err := l.Subscribe(context.Background(), channel); err != nil {
-					slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
-					// Only remove the channel entry if no new subscribers were
-					// added since we started. This avoids wiping subscribers
-					// that joined while the LISTEN call was in flight.
-					m.channelMu.Lock()
-					if len(m.channels[channel]) == initialCount {
-						delete(m.channels, channel)
-					}
-					m.channelMu.Unlock()
+			if err := l.Subscribe(context.Background(), channel); err != nil {
+				slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
+				// Only remove the channel entry if no new subscribers were
+				// added since we started.
+				m.channelMu.Lock()
+				if len(m.channels[channel]) == initialCount {
+					delete(m.channels, channel)
 				}
-			}()
+				m.channelMu.Unlock()
+			}
 		}
 	}
-	m.channelMu.Unlock()
 
 	c.subscriptions[channel] = true
 }

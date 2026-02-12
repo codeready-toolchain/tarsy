@@ -2,11 +2,14 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
@@ -59,12 +62,17 @@ func executeToolCall(
 	}
 
 	// Step 3: Execute the tool
+	startTime := time.Now()
 	result, toolErr := execCtx.ToolExecutor.Execute(ctx, call)
 	if toolErr != nil {
 		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
+		recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, nil, startTime, toolErr)
 		return toolCallResult{Content: errContent, IsError: true, Err: toolErr}
 	}
+
+	// Record successful MCP interaction
+	recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, result, startTime, nil)
 
 	// Step 4: Complete tool call event with storage-truncated result
 	storageTruncated := mcp.TruncateForStorage(result.Content)
@@ -84,4 +92,60 @@ func executeToolCall(
 	}
 
 	return toolCallResult{Content: content, IsError: result.IsError, Usage: usage}
+}
+
+// recordMCPInteraction creates an MCPInteraction record in the database.
+// Logs on failure but does not abort — mirrors recordLLMInteraction pattern.
+func recordMCPInteraction(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	serverID string,
+	toolName string,
+	arguments string,
+	result *agent.ToolResult,
+	startTime time.Time,
+	toolErr error,
+) {
+	durationMs := int(time.Since(startTime).Milliseconds())
+
+	// Parse arguments from JSON string into map for structured storage.
+	var toolArgs map[string]any
+	if arguments != "" {
+		if err := json.Unmarshal([]byte(arguments), &toolArgs); err != nil {
+			// Fall back to storing as raw string.
+			toolArgs = map[string]any{"raw": arguments}
+		}
+	}
+
+	var toolResult map[string]any
+	if result != nil {
+		toolResult = map[string]any{
+			"content":  mcp.TruncateForStorage(result.Content),
+			"is_error": result.IsError,
+		}
+	}
+
+	var errMsg *string
+	if toolErr != nil {
+		s := toolErr.Error()
+		errMsg = &s
+	}
+
+	req := models.CreateMCPInteractionRequest{
+		SessionID:       execCtx.SessionID,
+		StageID:         execCtx.StageID,
+		ExecutionID:     execCtx.ExecutionID,
+		InteractionType: "tool_call",
+		ServerName:      serverID,
+		ToolName:        &toolName,
+		ToolArguments:   toolArgs,
+		ToolResult:      toolResult,
+		DurationMs:      &durationMs,
+		ErrorMessage:    errMsg,
+	}
+
+	if _, err := execCtx.Services.Interaction.CreateMCPInteraction(ctx, req); err != nil {
+		slog.Error("Failed to record MCP interaction",
+			"session_id", execCtx.SessionID, "server", serverID, "tool", toolName, "error", err)
+	}
 }

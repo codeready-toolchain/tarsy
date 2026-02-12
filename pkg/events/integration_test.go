@@ -375,7 +375,7 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	msg := readJSONTimeout(t, conn, 5*time.Second) // connection.established
 	require.Equal(t, "connection.established", msg["type"])
 
-	// Subscribe
+	// Subscribe — auto-catchup delivers all 3 prior events immediately
 	subMsg, _ := json.Marshal(ClientMessage{Action: "subscribe", Channel: env.channel})
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -383,32 +383,23 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	msg = readJSONTimeout(t, conn, 5*time.Second) // subscription.confirmed
 	require.Equal(t, "subscription.confirmed", msg["type"])
 
-	// Request catchup from event 0 (all events)
-	lastEventID := 0
-	catchupMsg, _ := json.Marshal(ClientMessage{
-		Action:      "catchup",
-		Channel:     env.channel,
-		LastEventID: &lastEventID,
-	})
-	require.NoError(t, conn.Write(writeCtx, websocket.MessageText, catchupMsg))
-
-	// Read all 3 catchup events in order
+	// Read all 3 auto-catchup events in order
 	for i := 1; i <= 3; i++ {
 		msg = readJSONTimeout(t, conn, 5*time.Second)
 		assert.Equal(t, EventTypeTimelineCreated, msg["type"])
 		assert.Equal(t, float64(i), msg["sequence_number"])
 	}
 
-	// Now test catchup from the first event's ID — should return only events 2 and 3
+	// Explicit catchup from the first event's ID — should return only events 2 and 3
 	catchupFrom := firstEventID
-	catchupMsg2, _ := json.Marshal(ClientMessage{
+	catchupMsg, _ := json.Marshal(ClientMessage{
 		Action:      "catchup",
 		Channel:     env.channel,
 		LastEventID: &catchupFrom,
 	})
 	writeCtx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
-	require.NoError(t, conn.Write(writeCtx2, websocket.MessageText, catchupMsg2))
+	require.NoError(t, conn.Write(writeCtx2, websocket.MessageText, catchupMsg))
 
 	for i := 2; i <= 3; i++ {
 		msg = readJSONTimeout(t, conn, 5*time.Second)

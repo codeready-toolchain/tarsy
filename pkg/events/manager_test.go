@@ -170,7 +170,8 @@ func TestConnectionManager_PingPong(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupOverflow(t *testing.T) {
-	// Create querier that returns more events than catchup limit
+	// Auto catch-up on subscribe with more events than the limit sends
+	// catchupLimit events then a catchup.overflow message.
 	manyEvents := make([]CatchupEvent, catchupLimit+5)
 	for i := range manyEvents {
 		manyEvents[i] = CatchupEvent{
@@ -197,19 +198,11 @@ func TestConnectionManager_CatchupOverflow(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	// Subscribe
+	// Subscribe — auto catch-up fires immediately
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:overflow-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:overflow-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:overflow-test", LastEventID: &lastEventID})
-
-	// Read catchup events (up to limit) and then overflow message
+	// Read auto-catchup events (up to limit) then overflow message
 	var overflowReceived bool
 	for i := 0; i < catchupLimit+5; i++ {
 		msg := readJSON(t, conn)
@@ -333,7 +326,8 @@ func TestConnectionManager_Unsubscribe(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupNormal(t *testing.T) {
-	// Normal catchup: events under the limit are delivered in order
+	// Auto catch-up on subscribe: prior events are delivered in order
+	// immediately after subscription.confirmed.
 	events := []CatchupEvent{
 		{ID: 10, Payload: map[string]interface{}{"type": "timeline_event.created", "seq": float64(1)}},
 		{ID: 11, Payload: map[string]interface{}{"type": "stream.chunk", "seq": float64(2)}},
@@ -353,19 +347,11 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	// Subscribe
+	// Subscribe — auto catch-up fires immediately after confirmation
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:catchup-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:catchup-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup from event 0 — should receive all 3 events, no overflow
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
-
-	// Read all 3 catchup events — each should have db_event_id injected
+	// Read all 3 auto-catchup events — each should have db_event_id injected
 	for i := 0; i < 3; i++ {
 		msg := readJSON(t, conn)
 		assert.Equal(t, float64(i+1), msg["seq"])
@@ -380,8 +366,8 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupError(t *testing.T) {
-	// Catchup error should be logged but not crash the connection.
-	// Verify the connection remains usable after a catchup query failure.
+	// Catchup error (including auto-catchup on subscribe) should be logged
+	// but not crash the connection. Connection remains usable.
 	manager := NewConnectionManager(&mockCatchupQuerier{err: fmt.Errorf("database unreachable")}, 5*time.Second)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
@@ -395,19 +381,9 @@ func TestConnectionManager_CatchupError(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
+	// Subscribe — auto catch-up fires and fails silently (DB error)
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:err-test"})
 	readJSON(t, conn) // subscription.confirmed
-
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:err-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup — error should be silently handled
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:err-test", LastEventID: &lastEventID})
-
-	// Give server time to process catchup and log error
-	time.Sleep(100 * time.Millisecond)
 
 	// Connection should still be alive — ping/pong works
 	writeJSON(t, conn, ClientMessage{Action: "ping"})

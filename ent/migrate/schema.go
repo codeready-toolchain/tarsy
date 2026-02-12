@@ -255,7 +255,7 @@ var (
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
