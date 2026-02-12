@@ -823,6 +823,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		SessionID:      session.ID,
 		SequenceNumber: executiveSummarySeqNum,
 		EventType:      timelineevent.EventTypeExecutiveSummary,
+		Status:         timelineevent.StatusCompleted,
 		Content:        summary,
 	})
 	if err != nil {

@@ -38,6 +38,7 @@ func createTimelineEvent(
 		ExecutionID:    &execCtx.ExecutionID,
 		SequenceNumber: *eventSeq,
 		EventType:      eventType,
+		Status:         timelineevent.StatusCompleted,
 		Content:        content,
 		Metadata:       metadata,
 	})

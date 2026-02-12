@@ -21,7 +21,7 @@
     "content": "I should check the pod logs to understand the OOM pattern.",
     "event_type": "llm_thinking",
     "sequence": 2,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "content": "[{\"name\":\"worker-1\",\"status\":\"Ready\",\"cpu\":\"4\",\"memory\":\"16Gi\"}]",
@@ -57,7 +57,7 @@
     "content": "Let me check the Prometheus alert history for memory-related alerts.",
     "event_type": "llm_thinking",
     "sequence": 5,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "content": "Let me check the memory metrics for pod-1.",
@@ -105,7 +105,7 @@
     "content": "The logs and alerts confirm repeated OOM kills due to memory pressure.",
     "event_type": "llm_thinking",
     "sequence": 9,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
@@ -117,18 +117,18 @@
     "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
     "event_type": "final_analysis",
     "sequence": 10,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "final_analysis",
     "sequence": 11,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
     "event_type": "executive_summary",
     "sequence": 999999,
-    "status": "streaming"
+    "status": "completed"
   }
 ]
