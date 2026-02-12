@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a comprehensive e2e test suite that exercises the full TARSy pipeline — from HTTP API request through chain execution to WebSocket event delivery — with minimal mocking. Only external services (LLM, MCP servers) are mocked. Real PostgreSQL, real event streaming (NOTIFY/LISTEN), real WebSocket connections.
+Build a comprehensive e2e test suite that exercises the full TARSy pipeline — from HTTP API request through chain execution to WebSocket event delivery — with minimal mocking. LLM calls are mocked via `ScriptedLLMClient`; MCP servers are replaced with in-memory SDK servers (the real `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised). Real PostgreSQL, real event streaming (NOTIFY/LISTEN), real WebSocket connections.
 
 Tests verify both **live WebSocket updates** (event sequence, content) and **API responses** (session details, timeline) using golden files for readable, maintainable assertions.
 
@@ -131,6 +131,7 @@ ChatExecutor.Stop()          // drain active chat goroutines
 WorkerPool.Stop()            // drain active sessions
 HTTP server Shutdown(5s)     // stop accepting connections
 NotifyListener.Stop()        // close LISTEN connection
+MCP clients Close()          // close in-memory MCP SDK sessions
 DB schema DROP CASCADE       // cleanup (handled by SetupTestDatabase)
 ```
 
@@ -403,8 +404,6 @@ test/e2e/
 │   │   │   ├── llm_interactions.golden    # LLM interaction DB records
 │   │   │   └── mcp_interactions.golden    # MCP interaction DB records (incl. summarization)
 │   │   ├── concurrent_sessions/
-│   │   │   └── ...
-│   │   ├── react_flow/
 │   │   │   └── ...
 │   │   └── ...                     # Other scenario directories
 │   └── alert_payloads/             # Sample alert data
@@ -701,7 +700,7 @@ Submit more alerts than `MaxConcurrentSessions` allows. Verifies the queue respe
 1. Submit 4 alerts → 4 pending sessions
 2. Wait until exactly 2 sessions are `in_progress` (the cap)
 3. Verify the other 2 sessions remain `pending` in DB
-4. Verify `GET /api/v1/health` reports `active_sessions: 2`, `max_concurrent: 2`, `queue_depth: 2`
+4. Verify `GET /health` worker pool section reports `active_sessions: 2`, `max_concurrent: 2`, `queue_depth: 2`
 5. Release the first 2 sessions (feed their LLM responses)
 6. Wait until the remaining 2 sessions are picked up and complete
 7. All 4 sessions reach `completed` status
@@ -732,7 +731,7 @@ Chain: "forced-conclusion-test"
 - Forced conclusion prompt is appended (captured via `ScriptedLLMClient.CapturedInputs()`)
 - Final LLM call has `Tools: nil` (no tools offered)
 - Agent still completes successfully with the forced conclusion as final analysis
-- LLM interaction DB record for last call has `call_type: "forced_conclusion"`
+- LLM interaction DB record for last call has `interaction_type: "final_analysis"` (the forced-conclusion prompt is visible in `CapturedInputs()` — the system prompt includes the forced-conclusion instruction and `Tools` is nil)
 - Timeline events show the full sequence: tool calls → forced conclusion → final_analysis
 
 ### Scenario 15: Session Timeout (`TestE2E_SessionTimeout`)
@@ -751,7 +750,7 @@ Investigation session hits `SessionTimeout` deadline while an agent is still exe
 
 ### Scenario 16: Chat Timeout (`TestE2E_ChatTimeout`)
 
-Chat execution hits the chat `SessionTimeout` deadline while the chat LLM is still executing.
+Chat execution hits the `ChatTimeout` deadline while the chat LLM is still executing.
 
 **Setup**: Complete a normal investigation first, then submit a chat message. The chat executor is configured with a short timeout (`WithChatTimeout(2 * time.Second)`). The chat LLM entry uses `BlockUntilCancelled: true`.
 
@@ -821,7 +820,7 @@ func FilterEventsForGolden(events []WSEvent) []map[string]interface{} {
                 filtered = append(filtered, map[string]interface{}{"type": "stream.chunk"})
                 lastWasChunk = true
             }
-        case "connection.established", "subscription.confirmed", "pong":
+        case "connection.established", "subscription.confirmed", "pong", "catchup.overflow":
             continue
         default:
             filtered = append(filtered, ProjectForGolden(e))
@@ -1068,10 +1067,10 @@ Most tests follow this pattern:
 2. **`test/e2e/mcp_helpers.go`** — `SetupInMemoryMCP` + common `ToolHandler` builders (reusing `mcpsdk.InMemoryTransport` pattern from `pkg/mcp/executor_test.go`)
 3. **`pkg/mcp/export_test.go`** — Test-only helpers to expose `Client` internals for in-memory wiring
 4. **`test/e2e/harness.go`** — `TestApp` with full wiring (real `mcp.ClientFactory` backed by in-memory servers)
-4. **`test/e2e/ws_client.go`** — `WSClient` for WebSocket testing
-5. **`test/e2e/golden.go`** — Golden file comparison helpers
-6. **`test/e2e/normalize.go`** — Content normalization
-7. **`test/e2e/helpers.go`** — HTTP client helpers, DB query helpers, wait utilities, `ProjectForGolden`
+5. **`test/e2e/ws_client.go`** — `WSClient` for WebSocket testing
+6. **`test/e2e/golden.go`** — Golden file comparison helpers
+7. **`test/e2e/normalize.go`** — Content normalization
+8. **`test/e2e/helpers.go`** — HTTP client helpers, DB query helpers, wait utilities, `ProjectForGolden`
 
 ### Phase 6.2: Core Scenarios
 
