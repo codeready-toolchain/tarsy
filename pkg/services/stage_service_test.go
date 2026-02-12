@@ -707,3 +707,120 @@ func TestStageService_GetAgentExecutions(t *testing.T) {
 		assert.Empty(t, executions)
 	})
 }
+
+func TestStageService_GetMaxStageIndex(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	t.Run("returns 0 for session with only the initial stage", func(t *testing.T) {
+		maxIndex, err := stageService.GetMaxStageIndex(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, maxIndex)
+	})
+
+	t.Run("returns highest stage index", func(t *testing.T) {
+		_, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Stage 1",
+			StageIndex:         1,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		_, err = stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Stage 2",
+			StageIndex:         3, // intentional gap
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		maxIndex, err := stageService.GetMaxStageIndex(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 3, maxIndex)
+	})
+
+	t.Run("validates session_id required", func(t *testing.T) {
+		_, err := stageService.GetMaxStageIndex(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
+func TestStageService_GetActiveStageForChat(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	chatService := NewChatService(client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	chatObj, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+		SessionID: session.ID,
+		CreatedBy: "test@example.com",
+	})
+	require.NoError(t, err)
+
+	t.Run("returns nil when no stages exist", func(t *testing.T) {
+		active, err := stageService.GetActiveStageForChat(ctx, chatObj.ID)
+		require.NoError(t, err)
+		assert.Nil(t, active)
+	})
+
+	// Hoisted so the "returns nil when stage is completed" subtest can reference it.
+	var chatStgID string
+
+	t.Run("returns active stage", func(t *testing.T) {
+		chatID := chatObj.ID
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Chat Response",
+			StageIndex:         1,
+			ExpectedAgentCount: 1,
+			ChatID:             &chatID,
+		})
+		require.NoError(t, err)
+		chatStgID = stg.ID
+
+		active, err := stageService.GetActiveStageForChat(ctx, chatObj.ID)
+		require.NoError(t, err)
+		require.NotNil(t, active)
+		assert.Equal(t, stg.ID, active.ID)
+	})
+
+	t.Run("returns nil when stage is completed", func(t *testing.T) {
+		require.NotEmpty(t, chatStgID, "expected chatStgID from previous subtest")
+		// Complete the specific stage from the previous test
+		err := client.Stage.UpdateOneID(chatStgID).
+			SetStatus(stage.StatusCompleted).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		active, err := stageService.GetActiveStageForChat(ctx, chatObj.ID)
+		require.NoError(t, err)
+		assert.Nil(t, active)
+	})
+
+	t.Run("validates chat_id required", func(t *testing.T) {
+		_, err := stageService.GetActiveStageForChat(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}

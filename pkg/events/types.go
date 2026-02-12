@@ -24,6 +24,12 @@ const (
 	StageStatusCancelled = "cancelled"
 )
 
+// Chat event types (stored in DB + NOTIFY).
+const (
+	EventTypeChatCreated     = "chat.created"
+	EventTypeChatUserMessage = "chat.user_message"
+)
+
 // Transient event types (NOTIFY only, no DB persistence).
 const (
 	// LLM streaming chunks — high-frequency, ephemeral.

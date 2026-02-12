@@ -98,58 +98,90 @@ func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChat
 	return msg, nil
 }
 
-// GetChatHistory retrieves all messages and response stages for a chat
-func (s *ChatService) GetChatHistory(ctx context.Context, chatID string) (*models.ChatHistoryResponse, error) {
-	if chatID == "" {
-		return nil, NewValidationError("chatID", "required")
-	}
-
-	chatObj, err := s.client.Chat.Query().
-		Where(chat.IDEQ(chatID)).
-		WithUserMessages().
-		WithStages().
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	return &models.ChatHistoryResponse{
-		Chat:         chatObj,
-		UserMessages: chatObj.Edges.UserMessages,
-		Stages:       chatObj.Edges.Stages,
-	}, nil
+// DeleteChatMessage removes a chat user message by ID.
+// Used to clean up orphaned messages when async submission is rejected.
+func (s *ChatService) DeleteChatMessage(httpCtx context.Context, messageID string) error {
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+	defer cancel()
+	return s.client.ChatUserMessage.DeleteOneID(messageID).Exec(ctx)
 }
 
-// BuildChatContext builds context from parent session artifacts
-func (s *ChatService) BuildChatContext(ctx context.Context, chatID string) (string, error) {
-	if chatID == "" {
-		return "", NewValidationError("chatID", "required")
+// GetOrCreateChat returns the existing chat for a session, or creates one if
+// it doesn't exist yet. Returns (chat, created, error) where created indicates
+// whether a new chat was created.
+func (s *ChatService) GetOrCreateChat(httpCtx context.Context, sessionID, author string) (*ent.Chat, bool, error) {
+	if sessionID == "" {
+		return nil, false, NewValidationError("session_id", "required")
+	}
+	if author == "" {
+		return nil, false, NewValidationError("author", "required")
 	}
 
-	// Get chat with parent session
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+	defer cancel()
+
+	// Try to find existing chat
+	existing, err := s.client.Chat.Query().
+		Where(chat.SessionIDEQ(sessionID)).
+		Only(ctx)
+	if err == nil {
+		return existing, false, nil
+	}
+	if !ent.IsNotFound(err) {
+		return nil, false, fmt.Errorf("failed to query chat: %w", err)
+	}
+
+	// No chat exists — create one
+	session, err := s.client.AlertSession.Get(ctx, sessionID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, false, ErrNotFound
+		}
+		return nil, false, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	chatID := uuid.New().String()
+	chatObj, err := s.client.Chat.Create().
+		SetID(chatID).
+		SetSessionID(sessionID).
+		SetCreatedAt(time.Now()).
+		SetCreatedBy(author).
+		SetChainID(session.ChainID).
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			// Race: another request created the chat first — fetch it
+			existing, queryErr := s.client.Chat.Query().
+				Where(chat.SessionIDEQ(sessionID)).
+				Only(ctx)
+			if queryErr != nil {
+				return nil, false, fmt.Errorf("failed to query chat after constraint error: %w", queryErr)
+			}
+			return existing, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to create chat: %w", err)
+	}
+
+	return chatObj, true, nil
+}
+
+// GetChatBySessionID returns the chat for a session, or nil if none exists.
+func (s *ChatService) GetChatBySessionID(httpCtx context.Context, sessionID string) (*ent.Chat, error) {
+	if sessionID == "" {
+		return nil, NewValidationError("session_id", "required")
+	}
+
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+	defer cancel()
+
 	chatObj, err := s.client.Chat.Query().
-		Where(chat.IDEQ(chatID)).
-		WithSession(func(q *ent.AlertSessionQuery) {
-			q.WithStages().WithTimelineEvents()
-		}).
+		Where(chat.SessionIDEQ(sessionID)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return "", ErrNotFound
+			return nil, nil // no chat — not an error
 		}
-		return "", fmt.Errorf("failed to get chat: %w", err)
+		return nil, fmt.Errorf("failed to get chat by session: %w", err)
 	}
-
-	// Build context from parent session's artifacts
-	// This is a simplified implementation - in production, this would be more sophisticated
-	chatContext := fmt.Sprintf("Original Alert: %s\n\n", chatObj.Edges.Session.AlertData)
-
-	if chatObj.Edges.Session.FinalAnalysis != nil {
-		chatContext += fmt.Sprintf("Investigation Summary: %s\n\n", *chatObj.Edges.Session.FinalAnalysis)
-	}
-
-	return chatContext, nil
+	return chatObj, nil
 }

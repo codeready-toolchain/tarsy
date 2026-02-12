@@ -592,3 +592,66 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 		assert.True(t, IsValidationError(err))
 	})
 }
+
+func TestTimelineService_GetMaxSequenceNumber(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	timelineService := NewTimelineService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	stageService := NewStageService(client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           stg.ID,
+		SessionID:         session.ID,
+		AgentName:         "TestAgent",
+		AgentIndex:        1,
+		IterationStrategy: config.IterationStrategyReact,
+	})
+	require.NoError(t, err)
+
+	t.Run("returns 0 for session with no events", func(t *testing.T) {
+		maxSeq, err := timelineService.GetMaxSequenceNumber(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, maxSeq)
+	})
+
+	t.Run("returns highest sequence number", func(t *testing.T) {
+		for _, seq := range []int{1, 5, 3} {
+			_, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+				SessionID:      session.ID,
+				StageID:        &stg.ID,
+				ExecutionID:    &exec.ID,
+				SequenceNumber: seq,
+				EventType:      timelineevent.EventTypeLlmThinking,
+				Content:        "event",
+			})
+			require.NoError(t, err)
+		}
+
+		maxSeq, err := timelineService.GetMaxSequenceNumber(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 5, maxSeq)
+	})
+
+	t.Run("validates empty sessionID", func(t *testing.T) {
+		_, err := timelineService.GetMaxSequenceNumber(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}

@@ -66,7 +66,7 @@ func TestChatService_CreateChat(t *testing.T) {
 
 		_, err := chatService.CreateChat(ctx, req)
 		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
+		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
 
@@ -154,11 +154,64 @@ func TestChatService_AddChatMessage(t *testing.T) {
 
 		_, err := chatService.AddChatMessage(ctx, req)
 		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
+		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
 
-func TestChatService_GetChatHistory(t *testing.T) {
+func TestChatService_GetOrCreateChat(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	chatService := NewChatService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test alert",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	t.Run("creates chat on first call", func(t *testing.T) {
+		chat, created, err := chatService.GetOrCreateChat(ctx, session.ID, "user@example.com")
+		require.NoError(t, err)
+		assert.True(t, created)
+		assert.Equal(t, session.ID, chat.SessionID)
+		assert.Equal(t, session.ChainID, chat.ChainID)
+	})
+
+	t.Run("returns existing chat on second call", func(t *testing.T) {
+		chat1, created1, err := chatService.GetOrCreateChat(ctx, session.ID, "user@example.com")
+		require.NoError(t, err)
+		assert.False(t, created1) // already exists from previous subtest
+
+		// Should be the same chat
+		chat2, created2, err := chatService.GetOrCreateChat(ctx, session.ID, "other@example.com")
+		require.NoError(t, err)
+		assert.False(t, created2)
+		assert.Equal(t, chat1.ID, chat2.ID)
+	})
+
+	t.Run("returns ErrNotFound for missing session", func(t *testing.T) {
+		_, _, err := chatService.GetOrCreateChat(ctx, "nonexistent", "user@example.com")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("validates session_id required", func(t *testing.T) {
+		_, _, err := chatService.GetOrCreateChat(ctx, "", "user@example.com")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
+	t.Run("validates author required", func(t *testing.T) {
+		_, _, err := chatService.GetOrCreateChat(ctx, session.ID, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
+func TestChatService_GetChatBySessionID(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	chatService := NewChatService(client.Client)
 	sessionService := setupTestSessionService(t, client.Client)
@@ -172,89 +225,22 @@ func TestChatService_GetChatHistory(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
-		SessionID: session.ID,
-		CreatedBy: "test@example.com",
-	})
-	require.NoError(t, err)
-
-	// Add messages
-	_, err = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
-		ChatID:  chat.ID,
-		Content: "Question 1",
-		Author:  "test@example.com",
-	})
-	require.NoError(t, err)
-
-	_, err = chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
-		ChatID:  chat.ID,
-		Content: "Question 2",
-		Author:  "test@example.com",
-	})
-	require.NoError(t, err)
-
-	t.Run("retrieves chat history", func(t *testing.T) {
-		history, err := chatService.GetChatHistory(ctx, chat.ID)
+	t.Run("returns nil for session without chat", func(t *testing.T) {
+		chat, err := chatService.GetChatBySessionID(ctx, session.ID)
 		require.NoError(t, err)
-		assert.Equal(t, chat.ID, history.Chat.ID)
-		assert.Len(t, history.UserMessages, 2)
+		assert.Nil(t, chat)
 	})
 
-	t.Run("returns ErrNotFound for missing chat", func(t *testing.T) {
-		_, err := chatService.GetChatHistory(ctx, "nonexistent")
-		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
-	})
-
-	t.Run("validates empty chatID", func(t *testing.T) {
-		_, err := chatService.GetChatHistory(ctx, "")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-	})
-}
-
-func TestChatService_BuildChatContext(t *testing.T) {
-	client := testdb.NewTestClient(t)
-	chatService := NewChatService(client.Client)
-	sessionService := setupTestSessionService(t, client.Client)
-	ctx := context.Background()
-
-	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
-		SessionID: uuid.New().String(),
-		AlertData: "Pod crashed in production",
-		AgentType: "kubernetes",
-		ChainID:   "k8s-analysis",
-	})
-	require.NoError(t, err)
-
-	// Add final analysis to session
-	err = client.AlertSession.UpdateOneID(session.ID).
-		SetFinalAnalysis("Root cause: OOM killed the pod").
-		Exec(ctx)
-	require.NoError(t, err)
-
-	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
-		SessionID: session.ID,
-		CreatedBy: "test@example.com",
-	})
-	require.NoError(t, err)
-
-	t.Run("builds context from parent session", func(t *testing.T) {
-		chatContext, err := chatService.BuildChatContext(ctx, chat.ID)
+	t.Run("returns chat after creation", func(t *testing.T) {
+		_, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+			SessionID: session.ID,
+			CreatedBy: "user@example.com",
+		})
 		require.NoError(t, err)
-		assert.Contains(t, chatContext, "Pod crashed in production")
-		assert.Contains(t, chatContext, "Root cause: OOM killed the pod")
-	})
 
-	t.Run("returns ErrNotFound for missing chat", func(t *testing.T) {
-		_, err := chatService.BuildChatContext(ctx, "nonexistent")
-		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
-	})
-
-	t.Run("validates empty chatID", func(t *testing.T) {
-		_, err := chatService.BuildChatContext(ctx, "")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
+		chat, err := chatService.GetChatBySessionID(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, chat)
+		assert.Equal(t, session.ID, chat.SessionID)
 	})
 }

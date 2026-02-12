@@ -29,15 +29,3 @@ type CreateChatStageRequest struct {
 type ChatResponse struct {
 	*ent.Chat
 }
-
-// ChatHistoryResponse contains chat history with messages and stages
-type ChatHistoryResponse struct {
-	Chat         *ent.Chat              `json:"chat"`
-	UserMessages []*ent.ChatUserMessage `json:"user_messages"`
-	Stages       []*ent.Stage           `json:"stages"`
-}
-
-// ChatContextResponse contains built context for chat
-type ChatContextResponse struct {
-	Context string `json:"context"`
-}

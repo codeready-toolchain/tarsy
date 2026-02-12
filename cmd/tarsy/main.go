@@ -189,12 +189,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 6a. Create chat message executor (for follow-up chat processing)
+	chatService := services.NewChatService(dbClient.Client)
+	chatExecutor := queue.NewChatMessageExecutor(
+		cfg, dbClient.Client, llmClient, mcpFactory, eventPublisher,
+		queue.ChatMessageExecutorConfig{
+			SessionTimeout:    cfg.Queue.SessionTimeout,
+			HeartbeatInterval: cfg.Queue.HeartbeatInterval,
+		},
+	)
+	slog.Info("Chat message executor initialized")
+
 	// 7. Create HTTP server
 	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool, connManager)
 	if healthMonitor != nil {
 		httpServer.SetHealthMonitor(healthMonitor)
 	}
 	httpServer.SetWarningsService(warningsService)
+	httpServer.SetChatService(chatService)
+	httpServer.SetChatExecutor(chatExecutor)
+	httpServer.SetEventPublisher(eventPublisher)
 
 	// 8. Start HTTP server (non-blocking)
 	errCh := make(chan error, 1)
@@ -226,7 +240,21 @@ func main() {
 	workerShutdownCtx, workerCancel := context.WithTimeout(ctx, cfg.Queue.GracefulShutdownTimeout)
 	defer workerCancel()
 
-	// Stop worker pool first (wait for active sessions to complete)
+	// Stop chat executor first (chat executions are lighter, shorter)
+	chatDone := make(chan struct{})
+	go func() {
+		chatExecutor.Stop()
+		close(chatDone)
+	}()
+
+	select {
+	case <-chatDone:
+		slog.Info("Chat executor stopped gracefully")
+	case <-workerShutdownCtx.Done():
+		slog.Warn("Chat executor shutdown timeout exceeded")
+	}
+
+	// Stop worker pool (wait for active sessions to complete)
 	done := make(chan struct{})
 	go func() {
 		workerPool.Stop()

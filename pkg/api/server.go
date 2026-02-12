@@ -9,6 +9,7 @@ import (
 	echo "github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -29,6 +30,9 @@ type Server struct {
 	connManager    *events.ConnectionManager
 	healthMonitor  *mcp.HealthMonitor              // nil if MCP disabled
 	warningService *services.SystemWarningsService // nil if MCP disabled
+	chatService    *services.ChatService           // nil until set
+	chatExecutor   *queue.ChatMessageExecutor      // nil until set
+	eventPublisher agent.EventPublisher            // nil if streaming disabled
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -66,6 +70,21 @@ func (s *Server) SetWarningsService(svc *services.SystemWarningsService) {
 	s.warningService = svc
 }
 
+// SetChatService sets the chat service for follow-up chat endpoints.
+func (s *Server) SetChatService(svc *services.ChatService) {
+	s.chatService = svc
+}
+
+// SetChatExecutor sets the chat message executor for follow-up chat processing.
+func (s *Server) SetChatExecutor(executor *queue.ChatMessageExecutor) {
+	s.chatExecutor = executor
+}
+
+// SetEventPublisher sets the event publisher for real-time event delivery.
+func (s *Server) SetEventPublisher(pub agent.EventPublisher) {
+	s.eventPublisher = pub
+}
+
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
 	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
@@ -82,6 +101,7 @@ func (s *Server) setupRoutes() {
 	v1.POST("/alerts", s.submitAlertHandler)
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
+	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 
 	// WebSocket endpoint for real-time event streaming.
 	// Auth deferred to Phase 9 (Security) — currently open to any client,

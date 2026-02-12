@@ -355,3 +355,48 @@ func (s *StageService) GetAgentExecutionByID(ctx context.Context, executionID st
 
 	return execution, nil
 }
+
+// GetMaxStageIndex returns the highest stage_index for a session.
+// Returns 0 if the session has no stages.
+func (s *StageService) GetMaxStageIndex(ctx context.Context, sessionID string) (int, error) {
+	if sessionID == "" {
+		return 0, NewValidationError("session_id", "required")
+	}
+
+	// Query stages ordered by index descending, take first
+	stg, err := s.client.Stage.Query().
+		Where(stage.SessionIDEQ(sessionID)).
+		Order(ent.Desc(stage.FieldStageIndex)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to get max stage index: %w", err)
+	}
+
+	return stg.StageIndex, nil
+}
+
+// GetActiveStageForChat returns any pending or active stage for the given chat.
+// Returns nil (not an error) if no active stage exists.
+func (s *StageService) GetActiveStageForChat(ctx context.Context, chatID string) (*ent.Stage, error) {
+	if chatID == "" {
+		return nil, NewValidationError("chat_id", "required")
+	}
+
+	stg, err := s.client.Stage.Query().
+		Where(
+			stage.ChatIDEQ(chatID),
+			stage.StatusIn(stage.StatusPending, stage.StatusActive),
+		).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, nil // no active stage — not an error
+		}
+		return nil, fmt.Errorf("failed to query active chat stage: %w", err)
+	}
+
+	return stg, nil
+}

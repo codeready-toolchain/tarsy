@@ -120,3 +120,126 @@ func ResolveAgentConfig(
 		Backend:            ResolveBackend(strategy),
 	}, nil
 }
+
+// ResolveChatAgentConfig builds the agent configuration for a chat execution.
+// Hierarchy: defaults → agent definition → chain → chat config.
+// Similar to ResolveAgentConfig but without stage-level overrides.
+// NOTE: The iteration strategy, LLM provider, and max iterations resolution
+// blocks parallel ResolveAgentConfig. If a third resolver variant is needed,
+// consider extracting common resolution helpers to reduce duplication.
+func ResolveChatAgentConfig(
+	cfg *config.Config,
+	chain *config.ChainConfig,
+	chatCfg *config.ChatConfig,
+) (*ResolvedAgentConfig, error) {
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
+	defaults := cfg.Defaults
+
+	// Agent name: chatCfg.Agent → "ChatAgent"
+	agentName := "ChatAgent"
+	if chatCfg != nil && chatCfg.Agent != "" {
+		agentName = chatCfg.Agent
+	}
+
+	// Get agent definition (built-in or user-defined)
+	agentDef, err := cfg.GetAgent(agentName)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found: %w", agentName, err)
+	}
+
+	// Resolve iteration strategy: defaults → agentDef → chain → chatCfg
+	strategy := defaults.IterationStrategy
+	if agentDef.IterationStrategy != "" {
+		strategy = agentDef.IterationStrategy
+	}
+	if chain.IterationStrategy != "" {
+		strategy = chain.IterationStrategy
+	}
+	if chatCfg != nil && chatCfg.IterationStrategy != "" {
+		strategy = chatCfg.IterationStrategy
+	}
+
+	// Resolve LLM provider: defaults → chain → chatCfg
+	providerName := defaults.LLMProvider
+	if chain.LLMProvider != "" {
+		providerName = chain.LLMProvider
+	}
+	if chatCfg != nil && chatCfg.LLMProvider != "" {
+		providerName = chatCfg.LLMProvider
+	}
+	provider, err := cfg.GetLLMProvider(providerName)
+	if err != nil {
+		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
+	}
+
+	// Resolve max iterations: defaults → agentDef → chain → chatCfg
+	maxIter := DefaultMaxIterations
+	if defaults.MaxIterations != nil {
+		maxIter = *defaults.MaxIterations
+	}
+	if agentDef.MaxIterations != nil {
+		maxIter = *agentDef.MaxIterations
+	}
+	if chain.MaxIterations != nil {
+		maxIter = *chain.MaxIterations
+	}
+	if chatCfg != nil && chatCfg.MaxIterations != nil {
+		maxIter = *chatCfg.MaxIterations
+	}
+
+	// Resolve MCP servers for chat (lowest-to-highest precedence):
+	// agentDef → chain (or aggregated chain stages) → chatCfg
+	var mcpServers []string
+	if len(agentDef.MCPServers) > 0 {
+		mcpServers = agentDef.MCPServers
+	}
+	// Aggregate from chain stages (union of all stage MCP servers)
+	if len(chain.MCPServers) > 0 {
+		mcpServers = chain.MCPServers
+	} else {
+		stageServers := aggregateChainMCPServers(chain)
+		if len(stageServers) > 0 {
+			mcpServers = stageServers
+		}
+	}
+	if chatCfg != nil && len(chatCfg.MCPServers) > 0 {
+		mcpServers = chatCfg.MCPServers
+	}
+
+	return &ResolvedAgentConfig{
+		AgentName:          agentName,
+		IterationStrategy:  strategy,
+		LLMProvider:        provider,
+		MaxIterations:      maxIter,
+		IterationTimeout:   DefaultIterationTimeout,
+		MCPServers:         mcpServers,
+		CustomInstructions: agentDef.CustomInstructions,
+		Backend:            ResolveBackend(strategy),
+	}, nil
+}
+
+// aggregateChainMCPServers collects the union of all MCP servers from chain stages.
+func aggregateChainMCPServers(chain *config.ChainConfig) []string {
+	seen := make(map[string]struct{})
+	var servers []string
+	for _, stage := range chain.Stages {
+		for _, s := range stage.MCPServers {
+			if _, ok := seen[s]; !ok {
+				seen[s] = struct{}{}
+				servers = append(servers, s)
+			}
+		}
+		for _, ag := range stage.Agents {
+			for _, s := range ag.MCPServers {
+				if _, ok := seen[s]; !ok {
+					seen[s] = struct{}{}
+					servers = append(servers, s)
+				}
+			}
+		}
+	}
+	return servers
+}

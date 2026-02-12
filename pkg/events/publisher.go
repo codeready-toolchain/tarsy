@@ -98,6 +98,26 @@ func (p *EventPublisher) PublishSessionStatus(ctx context.Context, sessionID str
 	return firstErr
 }
 
+// PublishChatCreated persists and broadcasts a chat.created event.
+// Used when a new chat is created for a session (first message).
+func (p *EventPublisher) PublishChatCreated(ctx context.Context, sessionID string, payload ChatCreatedPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ChatCreatedPayload: %w", err)
+	}
+	return p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON)
+}
+
+// PublishChatUserMessage persists and broadcasts a chat.user_message event.
+// Used when a user sends a follow-up chat message.
+func (p *EventPublisher) PublishChatUserMessage(ctx context.Context, sessionID string, payload ChatUserMessagePayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ChatUserMessagePayload: %w", err)
+	}
+	return p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON)
+}
+
 // --- Internal core methods ---
 
 // persistAndNotify persists a pre-marshaled event to the database and broadcasts
