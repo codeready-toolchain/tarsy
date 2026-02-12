@@ -703,8 +703,9 @@ func TestE2E_FullFlow(t *testing.T) {
 	})
 	llm.AddSequential(LLMScriptEntry{Text: "Collected metrics showing OOM on app-1."})
 
-	// Stage 2: Two parallel agents (routed by custom instructions).
-	// Both use agent name "Investigator" but have different LLM providers/strategies.
+	// Stage 2: Three parallel agents (routed by agent name / custom instructions).
+	// Two Investigators (same agent, different config) + one ResourceAnalyzer (different agent).
+	// Investigator 1 (google-test, native-thinking): uses [test-mcp].
 	llm.AddRouted("Investigator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ToolCallChunk{CallID: "inv-1", Name: "test-mcp__get_metrics", Arguments: `{"pod":"app-1"}`},
@@ -712,16 +713,25 @@ func TestE2E_FullFlow(t *testing.T) {
 		},
 	})
 	llm.AddRouted("Investigator", LLMScriptEntry{Text: "Agent 1 analysis: memory steadily increasing."})
+	// Investigator 2 (openai-test, react): uses [test-mcp, kubernetes-server].
 	llm.AddRouted("Investigator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.ToolCallChunk{CallID: "inv-2", Name: "test-mcp__get_events", Arguments: `{"namespace":"default"}`},
+			&agent.ToolCallChunk{CallID: "inv-2", Name: "kubernetes-server__get_events", Arguments: `{"namespace":"default"}`},
 			&agent.UsageChunk{InputTokens: 80, OutputTokens: 15, TotalTokens: 95},
 		},
 	})
 	llm.AddRouted("Investigator", LLMScriptEntry{Text: "Agent 2 analysis: OOMKill events found."})
+	// ResourceAnalyzer (google-test, native-thinking): uses [kubernetes-server].
+	llm.AddRouted("ResourceAnalyzer", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "ra-1", Name: "kubernetes-server__get_resource_usage", Arguments: `{"pod":"app-1"}`},
+			&agent.UsageChunk{InputTokens: 70, OutputTokens: 15, TotalTokens: 85},
+		},
+	})
+	llm.AddRouted("ResourceAnalyzer", LLMScriptEntry{Text: "Agent 3 analysis: pod memory limit 512Mi, usage peaked at 510Mi."})
 
-	// Synthesis after parallel stage.
-	llm.AddSequential(LLMScriptEntry{Text: "Synthesized: Both agents agree — memory leak in app-1."})
+	// Synthesis after parallel stage (3 agents' results).
+	llm.AddSequential(LLMScriptEntry{Text: "Synthesized: All agents agree — memory leak in app-1 hitting 512Mi limit."})
 
 	// Stage 3: Diagnostician — final diagnosis (no tools).
 	llm.AddSequential(LLMScriptEntry{Text: "Root cause: unbounded cache in app-1 leads to OOM."})
@@ -748,8 +758,11 @@ func TestE2E_FullFlow(t *testing.T) {
 			"test-mcp": {
 				"get_pod_logs":   StaticToolHandler(`{"logs":"OOM killed at 14:32 UTC"}`),
 				"get_metrics":    StaticToolHandler(`{"memory_mb":[100,200,450,900,1024]}`),
-				"get_events":     StaticToolHandler(`[{"type":"OOMKill","count":3}]`),
 				"get_pod_status": StaticToolHandler(`{"status":"CrashLoopBackOff","restarts":5}`),
+			},
+			"kubernetes-server": {
+				"get_events":         StaticToolHandler(`[{"type":"OOMKill","count":3}]`),
+				"get_resource_usage": StaticToolHandler(`{"pod":"app-1","memory_limit":"512Mi","memory_usage":"510Mi"}`),
 			},
 		}),
 	)
@@ -772,9 +785,9 @@ func TestE2E_FullFlow(t *testing.T) {
 	stages := app.QueryStages(t, sessionID)
 	assert.GreaterOrEqual(t, len(stages), 3, "should have at least 3 stages")
 
-	// Verify executions.
+	// Verify executions (3 parallel agents + synthesis + stage1 + stage3 = at least 5).
 	execs := app.QueryExecutions(t, sessionID)
-	assert.GreaterOrEqual(t, len(execs), 4, "should have at least 4 executions")
+	assert.GreaterOrEqual(t, len(execs), 5, "should have at least 5 executions")
 
 	// Verify MCP interactions recorded (may be zero with in-memory transport retries).
 	mcpInteractions := app.QueryMCPInteractions(t, sessionID)
@@ -818,8 +831,8 @@ func TestE2E_FullFlow(t *testing.T) {
 	finalSession := app.GetSession(t, sessionID)
 	assert.Equal(t, "completed", finalSession["status"])
 
-	// Verify total LLM calls (at least 10: stage1=2, stage2=4, synth=1, stage3=1, exec_summary=1, chat=3).
-	assert.GreaterOrEqual(t, llm.CallCount(), 10, "should have at least 10 LLM calls")
+	// Verify total LLM calls (at least 12: stage1=2, stage2=6, synth=1, stage3=1, exec_summary=1, chat=3).
+	assert.GreaterOrEqual(t, llm.CallCount(), 12, "should have at least 12 LLM calls")
 }
 
 // ────────────────────────────────────────────────────────────

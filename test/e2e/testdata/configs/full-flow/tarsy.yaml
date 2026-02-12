@@ -23,6 +23,11 @@ agents:
     max_iterations: 3
     mcp_servers: [test-mcp]
     custom_instructions: "You are Investigator, analyzing incidents in depth."
+  ResourceAnalyzer:
+    iteration_strategy: "native-thinking"
+    max_iterations: 3
+    mcp_servers: [kubernetes-server]
+    custom_instructions: "You are ResourceAnalyzer, checking resource usage and limits."
   Diagnostician:
     iteration_strategy: "native-thinking"
     max_iterations: 3
@@ -45,6 +50,8 @@ agent_chains:
           - name: Investigator
             llm_provider: openai-test
             iteration_strategy: "react"
+            mcp_servers: [test-mcp, kubernetes-server]
+          - name: ResourceAnalyzer
       - name: final-diagnosis
         agents:
           - name: Diagnostician
