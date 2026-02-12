@@ -15,6 +15,9 @@ mcp_servers:
     transport:
       type: stdio
       command: mock
+    summarization:
+      enabled: true
+      size_threshold_tokens: 100
   # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
   kubernetes-server:
     transport:
@@ -26,6 +29,12 @@ agents:
     iteration_strategy: "native-thinking"
     max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
+    custom_instructions: "You are DataCollector, gathering system metrics and pod status."
+  Remediator:
+    iteration_strategy: "react"
+    max_iterations: 5
+    mcp_servers: [test-mcp, prometheus-mcp]
+    custom_instructions: "You are Remediator, analyzing logs and recommending fixes."
 
 agent_chains:
   test-chain:
@@ -34,3 +43,6 @@ agent_chains:
       - name: investigation
         agents:
           - name: DataCollector
+      - name: remediation
+        agents:
+          - name: Remediator

@@ -6,13 +6,31 @@
     "status": "completed"
   },
   {
+    "content": "Thought: I should check the pod logs to understand the OOM pattern.\nAction: test-mcp.get_pod_logs\nAction Input: {\"pod\":\"pod-1\",\"namespace\":\"default\"}",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
     "content": "I'll look up the nodes and pods.",
     "event_type": "llm_response",
     "sequence": 2,
     "status": "completed"
   },
   {
+    "content": "I should check the pod logs to understand the OOM pattern.",
+    "event_type": "llm_thinking",
+    "sequence": 2,
+    "status": "streaming"
+  },
+  {
     "content": "[{\"name\":\"worker-1\",\"status\":\"Ready\",\"cpu\":\"4\",\"memory\":\"16Gi\"}]",
+    "event_type": "llm_tool_call",
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "content": "{\"pod\":\"pod-1\",\"logs\":\"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit\"}",
     "event_type": "llm_tool_call",
     "sequence": 3,
     "status": "completed"
@@ -24,14 +42,32 @@
     "status": "completed"
   },
   {
+    "content": "Thought: Let me check the Prometheus alert history for memory-related alerts.\nAction: prometheus-mcp.query_alerts\nAction Input: {\"query\":\"ALERTS{alertname=\\\"OOMKilled\\\",pod=\\\"pod-1\\\"}\"}",
+    "event_type": "llm_response",
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
     "content": "Pod pod-1 is OOMKilled with 5 restarts.",
     "event_type": "mcp_tool_summary",
     "sequence": 5,
     "status": "completed"
   },
   {
+    "content": "Let me check the Prometheus alert history for memory-related alerts.",
+    "event_type": "llm_thinking",
+    "sequence": 5,
+    "status": "streaming"
+  },
+  {
     "content": "Let me check the memory metrics for pod-1.",
     "event_type": "llm_thinking",
+    "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "content": "[{\"alertname\":\"OOMKilled\",\"pod\":\"pod-1\",\"namespace\":\"default\",\"severity\":\"critical\",\"state\":\"firing\",\"startsAt\":\"{TIMESTAMP}\",\"summary\":\"Container killed due to OOM\",\"description\":\"Pod pod-1 exceeded memory limit of 512Mi\"},{\"alertname\":\"OOMKilled\",\"pod\":\"pod-1\",\"namespace\":\"default\",\"severity\":\"critical\",\"state\":\"resolved\",\"startsAt\":\"{TIMESTAMP}\",\"endsAt\":\"{TIMESTAMP}\",\"summary\":\"Container killed due to OOM\",\"description\":\"Pod pod-1 exceeded memory limit of 512Mi\"},{\"alertname\":\"OOMKilled\",\"pod\":\"pod-1\",\"namespace\":\"default\",\"severity\":\"critical\",\"state\":\"resolved\",\"startsAt\":\"{TIMESTAMP}\",\"endsAt\":\"{TIMESTAMP}\",\"summary\":\"Container killed due to OOM\",\"description\":\"Pod pod-1 exceeded memory limit of 512Mi\"}]",
+    "event_type": "llm_tool_call",
     "sequence": 6,
     "status": "completed"
   },
@@ -42,8 +78,20 @@
     "status": "completed"
   },
   {
+    "content": "OOMKilled alert fired 3 times in the last hour for pod-1.",
+    "event_type": "mcp_tool_summary",
+    "sequence": 7,
+    "status": "completed"
+  },
+  {
     "content": "[{\"metric\":\"container_memory_usage_bytes\",\"pod\":\"pod-1\",\"value\":\"524288000\",\"timestamp\":\"{TIMESTAMP}\"}]",
     "event_type": "llm_tool_call",
+    "sequence": 8,
+    "status": "completed"
+  },
+  {
+    "content": "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.\nFinal Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
+    "event_type": "llm_response",
     "sequence": 8,
     "status": "completed"
   },
@@ -54,10 +102,22 @@
     "status": "completed"
   },
   {
+    "content": "The logs and alerts confirm repeated OOM kills due to memory pressure.",
+    "event_type": "llm_thinking",
+    "sequence": 9,
+    "status": "streaming"
+  },
+  {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "llm_response",
     "sequence": 10,
     "status": "completed"
+  },
+  {
+    "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
+    "event_type": "final_analysis",
+    "sequence": 10,
+    "status": "streaming"
   },
   {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
@@ -66,7 +126,7 @@
     "status": "streaming"
   },
   {
-    "content": "Pod-1 OOM killed due to memory leak.",
+    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
     "event_type": "executive_summary",
     "sequence": 999999,
     "status": "streaming"

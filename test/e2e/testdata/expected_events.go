@@ -21,20 +21,20 @@ type ExpectedEvent struct {
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
 // Grows incrementally into the full pipeline test.
-// Currently: single NativeThinking agent, two MCP servers (test-mcp,
-// prometheus-mcp), three tool calls across two iterations, summarization,
-// final answer, and executive summary.
+// Two stages: investigation (NativeThinking) → remediation (ReAct).
+// Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
+// and executive summary.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (DataCollector, native-thinking) ──
 	{Type: "stage.status", StageName: "investigation", Status: "started"},
 
 	// Iteration 1: thinking + intermediate response + two tool calls from test-mcp.
-	// Created events are sequential (streaming callback order is deterministic).
 	{Type: "timeline_event.created", EventType: "llm_thinking"},
 	{Type: "timeline_event.created", EventType: "llm_response"},
-	// Completed events for thinking/response can arrive in either order (catchup/NOTIFY race).
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the cluster nodes and pod status.", Group: 1},
 	{Type: "timeline_event.completed", EventType: "llm_response", Content: "I'll look up the nodes and pods.", Group: 1},
 
@@ -54,20 +54,18 @@ var PipelineExpectedEvents = []ExpectedEvent{
 		"arguments":   `{"namespace":"default"}`,
 	}},
 	{Type: "timeline_event.completed", EventType: "llm_tool_call"}, // content is large tool output, verified via golden file
-	// Tool result summarization (triggered by size_threshold_tokens=100 in config).
 	{Type: "timeline_event.created", EventType: "mcp_tool_summary", Metadata: map[string]string{
 		"server_name": "test-mcp",
 		"tool_name":   "get_pods",
 	}},
 	{Type: "timeline_event.completed", EventType: "mcp_tool_summary", Content: "Pod pod-1 is OOMKilled with 5 restarts."},
 
-	// Iteration 2: thinking + tool call from prometheus-mcp (second MCP server).
+	// Iteration 2: thinking + tool call from prometheus-mcp.
 	{Type: "timeline_event.created", EventType: "llm_thinking"},
 	{Type: "timeline_event.created", EventType: "llm_response"},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the memory metrics for pod-1.", Group: 3},
 	{Type: "timeline_event.completed", EventType: "llm_response", Content: "Querying Prometheus for memory usage.", Group: 3},
 
-	// Tool call 3: prometheus-mcp/query_metrics — small result, no summarization.
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
 		"server_name": "prometheus-mcp",
 		"tool_name":   "query_metrics",
@@ -84,5 +82,59 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis"},
 
 	{Type: "stage.status", StageName: "investigation", Status: "completed"},
+
+	// ── Stage 2: remediation (Remediator, react) ──
+	// ReAct uses text-based tool calling: the full ReAct text (Thought + Action) streams
+	// as llm_response. After parsing, a separate llm_thinking event is created (non-streaming).
+	// Mirrors stage 1: tool call (no summary) → tool call (with summary) → final answer.
+	{Type: "stage.status", StageName: "remediation", Status: "started"},
+
+	// Iteration 1: test-mcp/get_pod_logs — small result, no summarization.
+	{Type: "timeline_event.created", EventType: "llm_response"},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Thought: I should check the pod logs to understand the OOM pattern.\n" +
+			"Action: test-mcp.get_pod_logs\n" +
+			`Action Input: {"pod":"pod-1","namespace":"default"}`},
+	{Type: "timeline_event.created", EventType: "llm_thinking",
+		Content: "I should check the pod logs to understand the OOM pattern."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_pod_logs",
+		"arguments":   `{"pod":"pod-1","namespace":"default"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call",
+		Content: `{"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}`},
+
+	// Iteration 2: prometheus-mcp/query_alerts — large result, triggers summarization.
+	{Type: "timeline_event.created", EventType: "llm_response"},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Thought: Let me check the Prometheus alert history for memory-related alerts.\n" +
+			"Action: prometheus-mcp.query_alerts\n" +
+			`Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`},
+	{Type: "timeline_event.created", EventType: "llm_thinking",
+		Content: "Let me check the Prometheus alert history for memory-related alerts."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
+		"server_name": "prometheus-mcp",
+		"tool_name":   "query_alerts",
+		"arguments":   `{"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"}, // content is large alert output, verified via golden file
+	{Type: "timeline_event.created", EventType: "mcp_tool_summary", Metadata: map[string]string{
+		"server_name": "prometheus-mcp",
+		"tool_name":   "query_alerts",
+	}},
+	{Type: "timeline_event.completed", EventType: "mcp_tool_summary",
+		Content: "OOMKilled alert fired 3 times in the last hour for pod-1."},
+
+	// Iteration 3: final answer.
+	{Type: "timeline_event.created", EventType: "llm_response"},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.\n" +
+			"Final Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
+	{Type: "timeline_event.created", EventType: "llm_thinking",
+		Content: "The logs and alerts confirm repeated OOM kills due to memory pressure."},
+	{Type: "timeline_event.created", EventType: "final_analysis"},
+
+	{Type: "stage.status", StageName: "remediation", Status: "completed"},
 	{Type: "session.status", Status: "completed"},
 }

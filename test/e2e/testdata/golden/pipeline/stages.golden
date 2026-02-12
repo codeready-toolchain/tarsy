@@ -3,5 +3,10 @@
     "stage_index": 1,
     "stage_name": "investigation",
     "status": "completed"
+  },
+  {
+    "stage_index": 2,
+    "stage_name": "remediation",
+    "status": "completed"
   }
 ]
