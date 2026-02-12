@@ -46,10 +46,22 @@ test: test-go test-python ## Run all tests (Go + Python)
 # -----------------------------------------------------------------------------
 
 .PHONY: test-go
-test-go: ## Run all Go tests
+test-go: ## Run all Go tests (unit + e2e)
 	@echo -e "$(YELLOW)Running Go tests...$(NC)"
 	@go test -v -race -coverprofile=coverage.out -coverpkg=./pkg/... ./...
 	@echo -e "$(GREEN)✅ Go tests passed$(NC)"
+
+.PHONY: test-unit
+test-unit: ## Run Go unit/integration tests only (excludes e2e)
+	@echo -e "$(YELLOW)Running Go unit tests...$(NC)"
+	@go test -v -race ./pkg/...
+	@echo -e "$(GREEN)✅ Go unit tests passed$(NC)"
+
+.PHONY: test-e2e
+test-e2e: ## Run Go e2e tests only (requires Docker for PostgreSQL)
+	@echo -e "$(YELLOW)Running Go e2e tests...$(NC)"
+	@go test -v -race -timeout 300s ./test/e2e/...
+	@echo -e "$(GREEN)✅ Go e2e tests passed$(NC)"
 
 .PHONY: test-go-coverage
 test-go-coverage: test-go ## Run Go tests and show coverage report

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"time"
 
@@ -116,6 +117,13 @@ func (s *Server) Start(addr string) error {
 		Handler: s.echo,
 	}
 	return s.httpServer.ListenAndServe()
+}
+
+// StartWithListener starts the HTTP server on a pre-created listener.
+// Used by test infrastructure to serve on a random OS-assigned port.
+func (s *Server) StartWithListener(ln net.Listener) error {
+	s.httpServer = &http.Server{Handler: s.echo}
+	return s.httpServer.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the HTTP server.

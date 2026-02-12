@@ -1,0 +1,19 @@
+{
+  "agent_type": "test-alert",
+  "alert_data": "Pod OOMKilled",
+  "alert_type": "test-alert",
+  "author": "api-client",
+  "chain_id": "test-chain",
+  "completed_at": "{TIMESTAMP}",
+  "created_at": "{TIMESTAMP}",
+  "current_stage_id": "{STAGE_ID_1}",
+  "current_stage_index": 1,
+  "edges": {},
+  "executive_summary": "Pod-1 OOM killed due to memory leak.",
+  "final_analysis": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+  "id": "{SESSION_ID}",
+  "last_interaction_at": "{TIMESTAMP}",
+  "pod_id": "e2e-test-TestE2E_SingleStage",
+  "started_at": "{TIMESTAMP}",
+  "status": "completed"
+}

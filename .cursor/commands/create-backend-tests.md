@@ -5,8 +5,10 @@
 ### From Project Root
 
 **All tests:**
-- `make test` - Run all tests (Go + Python + Dashboard)
-- `make test-go` - Run all Go tests only
+- `make test` - Run all tests (Go + Python)
+- `make test-go` - Run all Go tests (unit + e2e)
+- `make test-unit` - Run Go unit/integration tests only
+- `make test-e2e` - Run Go e2e tests only (requires Docker)
 - `make test-go-coverage` - Run Go tests and open HTML coverage report
 
 ### Direct Go Commands
@@ -42,6 +44,7 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 
 - **Unit tests**: `*_test.go` - Fast, mocked, no external dependencies
 - **Integration tests**: `*_integration_test.go` - Real database, slower, comprehensive
+- **E2E tests**: `test/e2e/` - Full in-process TARSy with real DB, mocked LLM/MCP
 
 ## Project Conventions
 
@@ -59,6 +62,7 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 - **Service integration tests**: `pkg/services/integration_test.go`
 - **Database integration tests**: `pkg/queue/integration_test.go`
 - **Concurrent behavior tests**: `pkg/queue/integration_test.go`
+- **E2E tests**: `test/e2e/scenarios_test.go` — full pipeline with `TestApp` harness, `ScriptedLLMClient`, in-memory MCP
 
 ## Approach
 
