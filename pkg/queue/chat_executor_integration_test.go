@@ -353,14 +353,8 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 		Chat: &config.ChatConfig{Enabled: true},
 	}
 
-	// LLM that takes 2 seconds to respond (simulates slow execution)
+	// LLM that blocks until channel is fed (simulates slow execution)
 	slowCh := make(chan agent.Chunk)
-	llm := &mockLLMClient{
-		responses: []mockLLMResponse{
-			{chunks: nil}, // Will be overridden by the slow channel logic
-		},
-	}
-	// Override the LLM to use a slow channel
 	slowLLM := &slowMockLLMClient{responseCh: slowCh}
 
 	cfg := chatTestConfig(chainID, chain)
@@ -424,8 +418,8 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for the stage to be created and active
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the execution to be registered (poll instead of fixed sleep)
+	waitForActiveExecution(t, chatExecutor, chatObj.ID)
 
 	// Submit second message should fail: one-at-a-time
 	_, err = chatExecutor.Submit(ctx, ChatExecuteInput{
@@ -452,8 +446,6 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 	if err != nil {
 		assert.NotErrorIs(t, err, ErrChatExecutionActive)
 	}
-
-	_ = llm // silence unused warning
 }
 
 func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
@@ -531,8 +523,8 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for execution to start
-	time.Sleep(200 * time.Millisecond)
+	// Wait for execution to be registered (poll instead of fixed sleep)
+	waitForActiveExecution(t, chatExecutor, chatObj.ID)
 
 	// Cancel the execution
 	cancelled := chatExecutor.CancelExecution(chatObj.ID)
@@ -562,11 +554,12 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 	assert.NotEqual(t, stage.StatusPending, chatStage.Status)
 
 	// Verify terminal stage event was published
+	require.NotEmpty(t, publisher.stageStatuses, "expected at least one stage status event")
 	lastStatus := publisher.stageStatuses[len(publisher.stageStatuses)-1]
 	assert.Contains(t, []string{events.StageStatusCancelled, events.StageStatusFailed}, lastStatus.Status)
 }
 
-func TestChatExecutor_ChatRejectedForInProgressSession(t *testing.T) {
+func TestChatExecutor_AcceptsInProgressSession(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 	ctx := context.Background()
 
@@ -720,7 +713,8 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(200 * time.Millisecond)
+	// Wait for execution to be registered (poll instead of fixed sleep)
+	waitForActiveExecution(t, chatExecutor, chatObj.ID)
 
 	// Cancel by session ID (as the cancel session handler would)
 	cancelled := chatExecutor.CancelBySessionID(ctx, session.ID)
@@ -772,3 +766,15 @@ func (m *slowMockLLMClient) Generate(ctx context.Context, _ *agent.GenerateInput
 }
 
 func (m *slowMockLLMClient) Close() error { return nil }
+
+// waitForActiveExecution polls until the chat executor registers an active
+// execution for the given chat ID (resilient under CI load vs fixed sleep).
+func waitForActiveExecution(t *testing.T, executor *ChatMessageExecutor, chatID string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		executor.mu.RLock()
+		defer executor.mu.RUnlock()
+		_, ok := executor.activeExecs[chatID]
+		return ok
+	}, 5*time.Second, 20*time.Millisecond, "execution was not registered for chat %s", chatID)
+}

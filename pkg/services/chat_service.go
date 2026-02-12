@@ -98,6 +98,14 @@ func (s *ChatService) AddChatMessage(httpCtx context.Context, req models.AddChat
 	return msg, nil
 }
 
+// DeleteChatMessage removes a chat user message by ID.
+// Used to clean up orphaned messages when async submission is rejected.
+func (s *ChatService) DeleteChatMessage(httpCtx context.Context, messageID string) error {
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+	defer cancel()
+	return s.client.ChatUserMessage.DeleteOneID(messageID).Exec(ctx)
+}
+
 // GetOrCreateChat returns the existing chat for a session, or creates one if
 // it doesn't exist yet. Returns (chat, created, error) where created indicates
 // whether a new chat was created.
@@ -141,6 +149,16 @@ func (s *ChatService) GetOrCreateChat(httpCtx context.Context, sessionID, author
 		SetChainID(session.ChainID).
 		Save(ctx)
 	if err != nil {
+		if ent.IsConstraintError(err) {
+			// Race: another request created the chat first — fetch it
+			existing, queryErr := s.client.Chat.Query().
+				Where(chat.SessionIDEQ(sessionID)).
+				Only(ctx)
+			if queryErr != nil {
+				return nil, false, fmt.Errorf("failed to query chat after constraint error: %w", queryErr)
+			}
+			return existing, false, nil
+		}
 		return nil, false, fmt.Errorf("failed to create chat: %w", err)
 	}
 
@@ -148,10 +166,13 @@ func (s *ChatService) GetOrCreateChat(httpCtx context.Context, sessionID, author
 }
 
 // GetChatBySessionID returns the chat for a session, or nil if none exists.
-func (s *ChatService) GetChatBySessionID(ctx context.Context, sessionID string) (*ent.Chat, error) {
+func (s *ChatService) GetChatBySessionID(httpCtx context.Context, sessionID string) (*ent.Chat, error) {
 	if sessionID == "" {
 		return nil, NewValidationError("session_id", "required")
 	}
+
+	ctx, cancel := context.WithTimeout(httpCtx, 5*time.Second)
+	defer cancel()
 
 	chatObj, err := s.client.Chat.Query().
 		Where(chat.SessionIDEQ(sessionID)).

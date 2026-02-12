@@ -124,6 +124,9 @@ func ResolveAgentConfig(
 // ResolveChatAgentConfig builds the agent configuration for a chat execution.
 // Hierarchy: defaults → agent definition → chain → chat config.
 // Similar to ResolveAgentConfig but without stage-level overrides.
+// NOTE: The iteration strategy, LLM provider, and max iterations resolution
+// blocks parallel ResolveAgentConfig. If a third resolver variant is needed,
+// consider extracting common resolution helpers to reduce duplication.
 func ResolveChatAgentConfig(
 	cfg *config.Config,
 	chain *config.ChainConfig,
@@ -187,8 +190,8 @@ func ResolveChatAgentConfig(
 		maxIter = *chatCfg.MaxIterations
 	}
 
-	// Resolve MCP servers for chat:
-	// chatCfg.MCPServers → aggregate from chain stages → agentDef → []
+	// Resolve MCP servers for chat (lowest-to-highest precedence):
+	// agentDef → chain (or aggregated chain stages) → chatCfg
 	var mcpServers []string
 	if len(agentDef.MCPServers) > 0 {
 		mcpServers = agentDef.MCPServers

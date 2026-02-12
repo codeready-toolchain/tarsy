@@ -722,7 +722,7 @@ func TestStageService_GetMaxStageIndex(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	t.Run("returns 0 for session with no stages", func(t *testing.T) {
+	t.Run("returns 0 for session with only the initial stage", func(t *testing.T) {
 		maxIndex, err := stageService.GetMaxStageIndex(ctx, session.ID)
 		require.NoError(t, err)
 		assert.Equal(t, 0, maxIndex)
@@ -784,6 +784,9 @@ func TestStageService_GetActiveStageForChat(t *testing.T) {
 		assert.Nil(t, active)
 	})
 
+	// Hoisted so the "returns nil when stage is completed" subtest can reference it.
+	var chatStgID string
+
 	t.Run("returns active stage", func(t *testing.T) {
 		chatID := chatObj.ID
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
@@ -794,6 +797,7 @@ func TestStageService_GetActiveStageForChat(t *testing.T) {
 			ChatID:             &chatID,
 		})
 		require.NoError(t, err)
+		chatStgID = stg.ID
 
 		active, err := stageService.GetActiveStageForChat(ctx, chatObj.ID)
 		require.NoError(t, err)
@@ -802,9 +806,9 @@ func TestStageService_GetActiveStageForChat(t *testing.T) {
 	})
 
 	t.Run("returns nil when stage is completed", func(t *testing.T) {
-		// Complete the stage from the previous test
-		err := client.Stage.Update().
-			Where(stage.SessionIDEQ(session.ID)).
+		require.NotEmpty(t, chatStgID, "expected chatStgID from previous subtest")
+		// Complete the specific stage from the previous test
+		err := client.Stage.UpdateOneID(chatStgID).
 			SetStatus(stage.StatusCompleted).
 			Exec(ctx)
 		require.NoError(t, err)

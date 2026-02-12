@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -34,6 +35,11 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 	sessionID := c.Param("id")
 	if sessionID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
+	}
+
+	// 1b. Verify chat dependencies are initialized
+	if s.chatService == nil || s.chatExecutor == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "chat service is not available")
 	}
 
 	// 2. Get session, validate terminal status
@@ -101,6 +107,13 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 		Session: session,
 	})
 	if err != nil {
+		// Clean up orphaned message on rejection errors
+		if errors.Is(err, queue.ErrChatExecutionActive) || errors.Is(err, queue.ErrShuttingDown) {
+			if delErr := s.chatService.DeleteChatMessage(c.Request().Context(), msg.ID); delErr != nil {
+				slog.Warn("Failed to clean up rejected chat message",
+					"message_id", msg.ID, "error", delErr)
+			}
+		}
 		return mapChatExecutorError(err)
 	}
 

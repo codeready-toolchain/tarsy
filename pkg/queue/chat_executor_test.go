@@ -218,17 +218,18 @@ func TestChatMessageExecutor_Heartbeat(t *testing.T) {
 	}
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
 
 	go executor.runChatHeartbeat(heartbeatCtx, chat.ID)
 
-	// Wait for at least one heartbeat
-	time.Sleep(250 * time.Millisecond)
-	cancelHeartbeat()
-
-	// Verify last_interaction_at was updated
-	updated, err := client.Chat.Get(ctx, chat.ID)
-	require.NoError(t, err)
-	require.NotNil(t, updated.LastInteractionAt)
+	// Poll for heartbeat update instead of fixed sleep (resilient under CI load)
+	require.Eventually(t, func() bool {
+		updated, err := client.Chat.Get(ctx, chat.ID)
+		if err != nil {
+			return false
+		}
+		return updated.LastInteractionAt != nil
+	}, 2*time.Second, 50*time.Millisecond, "heartbeat did not update last_interaction_at")
 }
 
 // ────────────────────────────────────────────────────────────

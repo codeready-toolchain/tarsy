@@ -66,7 +66,7 @@ func TestChatService_CreateChat(t *testing.T) {
 
 		_, err := chatService.CreateChat(ctx, req)
 		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
+		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
 
@@ -154,7 +154,7 @@ func TestChatService_AddChatMessage(t *testing.T) {
 
 		_, err := chatService.AddChatMessage(ctx, req)
 		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
+		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
 
@@ -195,7 +195,7 @@ func TestChatService_GetOrCreateChat(t *testing.T) {
 	t.Run("returns ErrNotFound for missing session", func(t *testing.T) {
 		_, _, err := chatService.GetOrCreateChat(ctx, "nonexistent", "user@example.com")
 		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
+		assert.ErrorIs(t, err, ErrNotFound)
 	})
 
 	t.Run("validates session_id required", func(t *testing.T) {

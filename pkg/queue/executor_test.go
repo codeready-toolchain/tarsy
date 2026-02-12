@@ -127,8 +127,11 @@ func TestResolveMCPSelection(t *testing.T) {
 			MCPServers: []string{"argocd-server"},
 		}
 
-		_, _, err := resolveMCPSelection(session, resolved, registry)
+		// We only care about the side-effect on resolved.NativeToolsOverride;
+		// also verify the returned serverIDs are from the override.
+		serverIDs, _, err := resolveMCPSelection(session, resolved, registry)
 		require.NoError(t, err)
+		assert.Equal(t, []string{"kubernetes-server"}, serverIDs)
 		require.NotNil(t, resolved.NativeToolsOverride)
 		require.NotNil(t, resolved.NativeToolsOverride.GoogleSearch)
 		assert.False(t, *resolved.NativeToolsOverride.GoogleSearch)

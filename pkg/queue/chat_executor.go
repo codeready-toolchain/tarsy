@@ -81,6 +81,7 @@ func NewChatMessageExecutor(
 	execConfig ChatMessageExecutorConfig,
 ) *ChatMessageExecutor {
 	controllerFactory := controller.NewFactory()
+	msgService := services.NewMessageService(dbClient)
 	return &ChatMessageExecutor{
 		cfg:                cfg,
 		dbClient:           dbClient,
@@ -93,8 +94,8 @@ func NewChatMessageExecutor(
 		timelineService:    services.NewTimelineService(dbClient),
 		stageService:       services.NewStageService(dbClient),
 		chatService:        services.NewChatService(dbClient),
-		messageService:     services.NewMessageService(dbClient),
-		interactionService: services.NewInteractionService(dbClient, services.NewMessageService(dbClient)),
+		messageService:     msgService,
+		interactionService: services.NewInteractionService(dbClient, msgService),
 		activeExecs:        make(map[string]context.CancelFunc),
 	}
 }
@@ -106,7 +107,7 @@ func NewChatMessageExecutor(
 // Submit validates the one-at-a-time constraint, creates a Stage record,
 // and launches asynchronous execution. Returns the stage ID for the response.
 func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput) (string, error) {
-	// 1. Reject if stopped (graceful shutdown)
+	// 1. Fast-fail if already stopped (avoids unnecessary DB work)
 	e.mu.RLock()
 	if e.stopped {
 		e.mu.RUnlock()
@@ -145,9 +146,20 @@ func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput
 		return "", fmt.Errorf("failed to create chat stage: %w", err)
 	}
 
-	// 5. Launch goroutine
+	// 5. Atomically check stopped + register goroutine to prevent race with Stop().
+	// This second check is necessary because Stop() could have been called between
+	// the fast-fail check and here; holding RLock through wg.Add(1) ensures Stop
+	// cannot complete wg.Wait() before this goroutine is tracked.
+	e.mu.RLock()
+	if e.stopped {
+		e.mu.RUnlock()
+		return "", ErrShuttingDown
+	}
 	e.wg.Add(1)
-	go e.execute(ctx, input, stg.ID, stageIndex)
+	e.mu.RUnlock()
+
+	// 6. Launch goroutine with detached context (not tied to HTTP request lifecycle)
+	go e.execute(context.Background(), input, stg.ID, stageIndex)
 
 	return stg.ID, nil
 }
@@ -481,17 +493,21 @@ func (e *ChatMessageExecutor) unregisterExecution(chatID string) {
 
 // finishStage publishes terminal stage status and updates the Stage DB record.
 // Used for early-exit error paths.
-func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, status, _ string) {
+func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, status, errMsg string) {
 	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, stageName, stageIndex, status)
 	if updateErr := e.stageService.UpdateStageStatus(context.Background(), stageID); updateErr != nil {
 		slog.Warn("Failed to update stage status on early exit",
 			"stage_id", stageID,
 			"error", updateErr,
+			"original_error", errMsg,
 		)
 	}
 }
 
 // mapChatAgentStatus maps agent execution status to event status string.
+// NOTE: This parallels mapTerminalStatus in executor.go which maps
+// alertsession.Status → event status. If the mapping logic changes,
+// both functions should be updated to stay consistent.
 func mapChatAgentStatus(status agent.ExecutionStatus) string {
 	switch status {
 	case agent.ExecutionStatusCompleted:

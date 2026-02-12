@@ -241,8 +241,18 @@ func main() {
 	defer workerCancel()
 
 	// Stop chat executor first (chat executions are lighter, shorter)
-	chatExecutor.Stop()
-	slog.Info("Chat executor stopped")
+	chatDone := make(chan struct{})
+	go func() {
+		chatExecutor.Stop()
+		close(chatDone)
+	}()
+
+	select {
+	case <-chatDone:
+		slog.Info("Chat executor stopped gracefully")
+	case <-workerShutdownCtx.Done():
+		slog.Warn("Chat executor shutdown timeout exceeded")
+	}
 
 	// Stop worker pool (wait for active sessions to complete)
 	done := make(chan struct{})
