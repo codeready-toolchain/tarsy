@@ -104,7 +104,9 @@ func WithConfig(cfg *config.Config) TestAppOption                               
 func WithLLMClient(client *ScriptedLLMClient) TestAppOption                                // Pre-scripted LLM (dual dispatch)
 func WithMCPServers(servers map[string]map[string]mcpsdk.ToolHandler) TestAppOption         // In-memory MCP SDK servers
 func WithWorkerCount(n int) TestAppOption                                                  // Default: 1
-func WithSessionTimeout(d time.Duration) TestAppOption                                     // Default: 30s
+func WithMaxConcurrentSessions(n int) TestAppOption                                        // Default: same as WorkerCount
+func WithSessionTimeout(d time.Duration) TestAppOption                                     // Default: 30s (investigation)
+func WithChatTimeout(d time.Duration) TestAppOption                                        // Default: 30s (chat execution)
 ```
 
 ### Startup Sequence
@@ -146,6 +148,9 @@ type LLMScriptEntry struct {
     Chunks  []agent.Chunk   // Pre-built chunks to return (supports TextChunk, ToolCallChunk, etc.)
     Text    string          // Shorthand: auto-wrapped as TextChunk
     Error   error           // Return error from Generate()
+
+    // Test control
+    BlockUntilCancelled bool  // Block Generate() until ctx is cancelled (for timeout/cancel tests)
 }
 
 type ScriptedLLMClient struct {
@@ -411,7 +416,8 @@ test/e2e/
 ├── golden.go                       # Golden file helpers
 ├── normalize.go                    # Content normalization
 ├── helpers.go                      # Shared test utilities, ProjectForGolden
-└── scenarios_test.go               # Test cases (or split into multiple files)
+├── scenarios_test.go               # Test cases (or split into multiple files)
+└── README.md                       # Brief how-to: run, update golden, add scenarios
 ```
 
 ### Golden File Format
@@ -434,7 +440,7 @@ For WebSocket event sequences, a **line-delimited JSON** format (one event per l
 {"type":"stage.status","stage_name":"data-collection","stage_index":1,"status":"started"}
 {"type":"timeline_event.created","event_type":"llm_response","status":"streaming"}
 {"type":"stream.chunk"}
-{"type":"timeline_event.completed","event_type":"llm_response","status":"completed"}
+{"type":"timeline_event.completed","event_type":"llm_response","status":"completed","content":"Collected metrics showing OOM."}
 {"type":"timeline_event.created","event_type":"final_analysis","status":"completed"}
 {"type":"stage.status","stage_name":"data-collection","stage_index":1,"status":"completed"}
 {"type":"stage.status","stage_name":"diagnosis","stage_index":2,"status":"started"}
@@ -498,31 +504,42 @@ func AssertGoldenEvents(t *testing.T, goldenPath string, events []WSEvent, norma
 
 ### Scenario 1: Full Investigation Flow (`TestE2E_FullFlow`)
 
-**The flagship test.** Multi-stage chain with parallel agents, NativeThinking with MCP tool calls, synthesis, executive summary, and follow-up chat. Exercises the broadest possible surface area.
+**The flagship test.** Multi-stage chain with parallel agents using **different LLM providers and iteration strategies**, MCP tool calls (including tool summarization), synthesis, executive summary, and follow-up chat. Exercises the broadest possible surface area.
 
 **Chain config:**
 ```
 Chain: "kubernetes-oom"
-  Stage 1: "data-collection" (1 agent, native-thinking + MCP tools)
-  Stage 2: "parallel-investigation" (2 agents, policy: any, native-thinking + MCP tools)
+  LLM providers: "google-test" (Gemini), "openai-test" (OpenAI)
+  Stage 1: "data-collection" (1 agent, native-thinking, google-test, MCP tools)
+  Stage 2: "parallel-investigation" (2 agents, policy: any)
+    Agent 1: native-thinking, google-test, MCP tools  → tool result is LARGE → triggers summarization
+    Agent 2: react, openai-test, MCP tools
     → auto-synthesis
-  Stage 3: "final-diagnosis" (1 agent, native-thinking)
+  Stage 3: "final-diagnosis" (1 agent, native-thinking, google-test)
   → executive summary
-  → chat follow-up (2 messages)
+  → chat follow-up (2 messages, native-thinking, google-test, MCP tools)
 ```
 
-**LLM script (10+ calls, includes tool call rounds):**
+**LLM script (12+ calls, includes tool call rounds + summarization):**
 1. Stage 1 agent: `ToolCallChunk("get_pod_logs", ...)` → tool result → `TextChunk: Collected metrics showing OOM.`
-2. Stage 2 agent 1 (routed): `ToolCallChunk("get_metrics", ...)` → tool result → `TextChunk: Agent 1 analysis.`
-3. Stage 2 agent 2 (routed): `ToolCallChunk("get_events", ...)` → tool result → `TextChunk: Agent 2 analysis.`
+2. Stage 2 agent 1 (routed, native-thinking): `ToolCallChunk("get_metrics", ...)` → large tool result → **summarization call** → `TextChunk: Agent 1 analysis.`
+3. Stage 2 agent 2 (routed, react): `Text: "Thought: ... Action: get_events ..."` → tool result → `Text: "Thought: ... Final Answer: Agent 2 analysis."`
 4. Synthesis: `Synthesized: Both agents agree on memory leak.`
 5. Stage 3 agent: `TextChunk: Root cause is memory leak in app.`
 6. Executive summary: `Pod experienced OOM due to memory leak.`
 7. Chat message 1 response: `ToolCallChunk("get_pod_status", ...)` → tool result → `TextChunk: The OOM was caused by...`
 8. Chat message 2 response: `TextChunk: You can restart with...`
 
+**What this exercises beyond basic scenarios:**
+- Per-agent `LLMProvider` override in `StageAgentConfig` (resolved via config hierarchy)
+- `GenerateInput.Config` carries different `LLMProviderConfig` per agent
+- `GenerateInput.Backend` differs: `google-native` vs `langchain`
+- NativeThinking tool calls (`ToolCallChunk`) vs ReAct text-parsed tool calls in the same stage
+- Tool summarization flow (large result → summarization LLM call → summarized content stored)
+- LLM interaction DB records capture correct provider/model per call
+
 **Test flow:**
-1. Create `TestApp` with the above config + LLM script + in-memory MCP servers with scripted tool handlers
+1. Create `TestApp` with the above config (2 LLM providers) + LLM script + in-memory MCP servers (one handler returns large result for summarization)
 2. Connect WebSocket, subscribe to `sessions` channel
 3. POST `/api/v1/alerts` with kubernetes OOM alert → get `session_id`
 4. Subscribe WebSocket to `session:{session_id}`
@@ -563,14 +580,19 @@ First stage agent fails (LLM error). Second stage should never start.
 - Stage events: started → failed (for stage 1 only)
 - No stage 2 events
 
-### Scenario 4: Cancellation (`TestE2E_Cancellation`)
+### Scenario 4: Investigation Cancellation (`TestE2E_Cancellation`)
 
-Submit alert, wait for first stage to start, then POST cancel.
+Submit alert, wait for first stage to start (LLM blocks on a slow entry), then POST `/api/v1/sessions/:id/cancel`.
+
+**LLM script**: First entry uses `BlockUntilCancelled: true` — the `ScriptedLLMClient` blocks the `Generate()` call until the context is cancelled, simulating a long-running LLM call.
 
 **Verifies:**
-- Session status transitions through cancelling → cancelled
+- WS events: `session.status: in_progress` → `stage.status: started` → `stage.status: cancelled` → `session.status: cancelled`
 - Agent execution stops (context cancelled)
-- Stage gets terminal status
+- Stage record in DB has terminal status `cancelled`
+- Any in-flight streaming timeline events are marked `cancelled` (not left as `streaming`)
+- Session record: `status = cancelled`, `error_message` set
+- No second stage is created (fail-fast after cancellation)
 
 ### Scenario 5: Parallel Agents — Policy Any (`TestE2E_ParallelPolicyAny`)
 
@@ -620,30 +642,41 @@ Two sequential chat messages. Second message's LLM call should receive context f
 
 ### Scenario 10: Chat Cancellation (`TestE2E_ChatCancellation`)
 
-Submit chat message, then cancel the session. Chat execution should be cancelled.
+Complete an investigation, then submit a chat message. While chat LLM is blocked (`BlockUntilCancelled: true`), POST cancel on the session.
 
 **Verifies:**
-- Chat stage gets cancelled/failed status
-- Subsequent chat messages can be submitted after cancellation
+- Chat stage WS event: `stage.status: cancelled`
+- Chat stage record in DB has status `cancelled`
+- Any in-flight streaming timeline events from the chat are marked `cancelled`
+- Session remains `completed` (cancellation only affects the active chat, not the already-completed investigation)
+- Subsequent chat messages can still be submitted after the cancelled one
 
 ### Scenario 11: Comprehensive Observability (`TestE2E_ComprehensiveObservability`)
 
-**The deep verification test.** A stage with two parallel agents (NativeThinking + MCP tool calls, including tool summarization) followed by a chat. This test asserts on all 4 data layers:
+**The deep verification test.** Focuses on verifying the full prompt/message construction for both iteration strategies, plus all 4 data layers. Uses two parallel agents with **different strategies and LLM providers** (same pattern as the flagship test) to ensure both NativeThinking and ReAct prompt paths are fully captured and compared.
 
 **Chain config:**
 ```
 Chain: "observability-test"
-  Stage 1: "investigation" (2 parallel agents, native-thinking + MCP tools)
+  LLM providers: "google-test" (Gemini), "openai-test" (OpenAI)
+  Stage 1: "investigation" (2 parallel agents)
+    Agent 1: native-thinking, google-test, MCP tools  → large tool result → summarization
+    Agent 2: react, openai-test, MCP tools
     → auto-synthesis
   → executive summary
-  → chat follow-up (1 message with tool call)
+  → chat follow-up (1 message with tool call, native-thinking)
 ```
 
 **Asserts (beyond standard WS events + API golden files):**
-1. **LLM conversation messages** — Full golden file comparison of all messages (system, user, assistant) passed to `Generate()` for each call, captured via `ScriptedLLMClient.CapturedInputs()`. Verifies prompt construction, context accumulation, tool results in conversation.
-2. **LLM interaction DB records** — Queries `llm_interaction` table: verifies model, token counts, timing, request/response content for each LLM call.
+1. **LLM conversation messages** — Full golden file comparison of all messages (system, user, assistant) passed to `Generate()` for each call, captured via `ScriptedLLMClient.CapturedInputs()`. This is the primary value of this test:
+   - **NativeThinking agent**: system prompt, user prompt with alert data, assistant tool-call response, user tool-result message, summarization prompt/response, assistant final answer
+   - **ReAct agent**: system prompt with ReAct instructions + tool descriptions, user prompt, assistant "Thought/Action" text, user "Observation" injection, assistant "Thought/Final Answer" text
+   - **Synthesis**: system prompt, user prompt with both agent results
+   - **Executive summary**: system/user prompt with final analysis
+   - **Chat**: system prompt with investigation context, user question, tool-call round, final answer
+2. **LLM interaction DB records** — Queries `llm_interaction` table: verifies model (google-test vs openai-test), token counts, timing, request/response content for each LLM call. Confirms correct provider is used per agent.
 3. **MCP interaction DB records** — Queries `mcp_interaction` table: verifies tool name, arguments, result, timing, associated execution for each tool call.
-4. **Tool summarization** — At least one agent's tool result is large enough to trigger summarization. Verifies the summarization LLM call is made, and the summarized content is stored alongside the original in the MCP interaction record.
+4. **Tool summarization** — Agent 1's tool result is large enough to trigger summarization. Verifies the summarization LLM call is made, and the summarized content is stored alongside the original in the MCP interaction record.
 
 This test uses golden files for LLM conversations (normalized) in addition to the standard WS event and API golden files.
 
@@ -658,15 +691,76 @@ Submit multiple alerts concurrently within a single test. Uses `WithWorkerCount(
 - Worker pool handles concurrent claim + execute correctly
 - WebSocket events for each session delivered to correct subscribers
 
-### Scenario 13: ReAct Strategy (`TestE2E_ReActFlow`)
+### Scenario 13: Queue Capacity Limit (`TestE2E_QueueCapacity`)
 
-Single stage with ReAct iteration strategy: tool call via text parsing → observation → final answer.
+Submit more alerts than `MaxConcurrentSessions` allows. Verifies the queue respects the concurrency cap and processes the overflow only after earlier sessions complete.
+
+**Setup**: `WithWorkerCount(3)`, `WithMaxConcurrentSessions(2)`. Submit 4 alerts. LLM entries use `BlockUntilCancelled: true` for the first batch so we can control when they finish.
+
+**Test flow:**
+1. Submit 4 alerts → 4 pending sessions
+2. Wait until exactly 2 sessions are `in_progress` (the cap)
+3. Verify the other 2 sessions remain `pending` in DB
+4. Verify `GET /api/v1/health` reports `active_sessions: 2`, `max_concurrent: 2`, `queue_depth: 2`
+5. Release the first 2 sessions (feed their LLM responses)
+6. Wait until the remaining 2 sessions are picked up and complete
+7. All 4 sessions reach `completed` status
 
 **Verifies:**
-- ReAct text-based tool call parsing works end-to-end
-- Tool result is injected as observation
-- Final answer extracted correctly
-- Contrasts with NativeThinking flow used in most other tests
+- Workers skip claiming when `activeCount >= MaxConcurrentSessions`
+- Pending sessions are not lost — they are picked up once capacity frees
+- Health endpoint accurately reports queue state
+- No session starvation under load
+
+### Scenario 14: Forced Conclusion (`TestE2E_ForcedConclusion`)
+
+Agent hits `MaxIterations` without producing a final answer — forced to conclude with one extra LLM call (no tools).
+
+**Chain config:**
+```
+Chain: "forced-conclusion-test"
+  Stage 1: "investigation" (1 agent, native-thinking, MaxIterations=2, MCP tools)
+```
+
+**LLM script (3 calls):**
+1. Iteration 1: `ToolCallChunk("get_pods", ...)` → tool result
+2. Iteration 2: `ToolCallChunk("get_logs", ...)` → tool result (hits MaxIterations)
+3. Forced conclusion (no tools): `TextChunk: Based on 2 iterations of investigation, the system is healthy.`
+
+**Verifies:**
+- Agent executes exactly `MaxIterations` tool-call rounds
+- Forced conclusion prompt is appended (captured via `ScriptedLLMClient.CapturedInputs()`)
+- Final LLM call has `Tools: nil` (no tools offered)
+- Agent still completes successfully with the forced conclusion as final analysis
+- LLM interaction DB record for last call has `call_type: "forced_conclusion"`
+- Timeline events show the full sequence: tool calls → forced conclusion → final_analysis
+
+### Scenario 15: Session Timeout (`TestE2E_SessionTimeout`)
+
+Investigation session hits `SessionTimeout` deadline while an agent is still executing.
+
+**Setup**: Use `WithSessionTimeout(2 * time.Second)`. The LLM script has a `BlockUntilCancelled: true` entry that simulates a stuck LLM call exceeding the session timeout.
+
+**Verifies:**
+- WS events: `session.status: in_progress` → `stage.status: started` → `stage.status: timed_out` → `session.status: timed_out`
+- Session record in DB: `status = timed_out`, `error_message` contains "timed out"
+- Any in-flight streaming timeline events are marked `timed_out` (not left as `streaming`)
+- Stage record in DB: terminal status `timed_out`
+- No subsequent stages are started
+- Differs from cancellation: `timed_out` status (not `cancelled`), triggered by deadline (not API call)
+
+### Scenario 16: Chat Timeout (`TestE2E_ChatTimeout`)
+
+Chat execution hits the chat `SessionTimeout` deadline while the chat LLM is still executing.
+
+**Setup**: Complete a normal investigation first, then submit a chat message. The chat executor is configured with a short timeout (`WithChatTimeout(2 * time.Second)`). The chat LLM entry uses `BlockUntilCancelled: true`.
+
+**Verifies:**
+- Chat stage WS event: `stage.status: timed_out`
+- Chat stage record in DB: status `timed_out`
+- Any in-flight streaming timeline events from the chat are marked `timed_out`
+- Session investigation state is not affected (already completed)
+- Subsequent chat messages can still be submitted after the timed-out one
 
 ---
 
@@ -695,9 +789,13 @@ func ProjectForGolden(event WSEvent) map[string]interface{} {
         projected["stage_name"] = event.Parsed["stage_name"]
         projected["stage_index"] = event.Parsed["stage_index"]
         projected["status"] = event.Parsed["status"]
-    case "timeline_event.created", "timeline_event.completed":
+    case "timeline_event.created":
         projected["event_type"] = event.Parsed["event_type"]
         projected["status"] = event.Parsed["status"]
+    case "timeline_event.completed":
+        projected["event_type"] = event.Parsed["event_type"]
+        projected["status"] = event.Parsed["status"]
+        projected["content"] = event.Parsed["content"]
     case "chat.created":
         projected["chat_id"] = event.Parsed["chat_id"]
     case "chat.user_message":
@@ -810,7 +908,7 @@ func FullFlowConfig() *config.Config {
     maxIter := 2  // allow 1 tool-call round + final answer
     return &config.Config{
         Defaults: &config.Defaults{
-            LLMProvider:       "test-provider",
+            LLMProvider:       "google-test",
             IterationStrategy: config.IterationStrategyNativeThinking,
             MaxIterations:     &maxIter,
         },
@@ -821,7 +919,7 @@ func FullFlowConfig() *config.Config {
                 MCPServers:        []string{"test-mcp"},
             },
             "Investigator":    {
-                IterationStrategy: config.IterationStrategyNativeThinking,
+                // Base config — strategy/provider overridden per stage-agent below
                 MaxIterations:     &maxIter,
                 MCPServers:        []string{"test-mcp"},
             },
@@ -837,21 +935,29 @@ func FullFlowConfig() *config.Config {
             },
         }),
         LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
-            "test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+            "google-test":  {Type: config.LLMProviderTypeGoogle, Model: "gemini-2.5-pro"},
+            "openai-test":  {Type: config.LLMProviderTypeOpenAI, Model: "gpt-5"},
         }),
         ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
             "kubernetes-oom": {
                 AlertTypes: []string{"kubernetes-oom"},
                 Stages: []config.StageConfig{
-                    {Name: "data-collection", Agents: []config.StageAgentConfig{{Name: "DataCollector"}}},
-                    {Name: "parallel-investigation", Agents: []config.StageAgentConfig{{Name: "Investigator"}, {Name: "Investigator"}}, SuccessPolicy: config.SuccessPolicyAny},
-                    {Name: "final-diagnosis", Agents: []config.StageAgentConfig{{Name: "Diagnostician"}}},
+                    {Name: "data-collection", Agents: []config.StageAgentConfig{
+                        {Name: "DataCollector"},  // inherits google-test + native-thinking from defaults
+                    }},
+                    {Name: "parallel-investigation", Agents: []config.StageAgentConfig{
+                        {Name: "Investigator", LLMProvider: "google-test", IterationStrategy: config.IterationStrategyNativeThinking},
+                        {Name: "Investigator", LLMProvider: "openai-test", IterationStrategy: config.IterationStrategyReact},
+                    }, SuccessPolicy: config.SuccessPolicyAny},
+                    {Name: "final-diagnosis", Agents: []config.StageAgentConfig{
+                        {Name: "Diagnostician"},  // inherits google-test + native-thinking
+                    }},
                 },
                 Chat: &config.ChatConfig{Enabled: true},
             },
         }),
         MCPServerRegistry: config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
-            "test-mcp": {Type: "stdio", Command: "mock"},  // transport overridden by InMemoryTransport
+            "test-mcp": {Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "mock"}},  // overridden by InMemoryTransport
         }),
     }
 }
@@ -895,13 +1001,29 @@ No shared state between tests. Tests can run in parallel (different schemas, dif
 
 ### CI Integration
 
-- Uses `CI_DATABASE_URL` environment variable (external PostgreSQL service in CI)
-- Or `testcontainers-go` locally (automatic PostgreSQL container startup)
+CI already supports PostgreSQL via the `test-go` job in `.github/workflows/ci.yml`:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    env:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    ports:
+      - 5432:5432
+```
+
+The job sets `CI_DATABASE_URL=postgresql://test:test@localhost:5432/test?sslmode=disable` and runs `make test-go`, which already includes both `./pkg/...` and `./test/e2e/...`. No CI changes needed — e2e tests plug into the existing pipeline automatically.
+
+- **CI**: `CI_DATABASE_URL` → PostgreSQL service container (no testcontainers overhead)
+- **Local**: `testcontainers-go` auto-starts PostgreSQL if `CI_DATABASE_URL` is not set
 - Separated by package path (`./test/e2e/` vs `./pkg/...`), no build tags needed
 - Makefile targets:
   - `make test-unit` — runs `./pkg/...` (unit + integration tests)
   - `make test-e2e` — runs `./test/e2e/...` (e2e tests)
-  - `make test-go` — runs both
+  - `make test-go` — runs both (used in CI)
   - `make test-coverage` — runs both with coverage report
   - `make test` — runs all tests (Go + Python + dashboard, future-proof)
 - Timeout: 120s per test, 300s total
@@ -968,7 +1090,10 @@ Most tests follow this pattern:
 10. **`TestE2E_ChatCancellation`** — Chat execution cancellation
 11. **`TestE2E_ComprehensiveObservability`** — Full 4-layer assertion (WS events, API, LLM conversations, LLM/MCP interaction DB records, tool summarization)
 12. **`TestE2E_ConcurrentSessions`** — Multiple sessions processed in parallel (`WorkerCount > 1`)
-13. **`TestE2E_ReActFlow`** — ReAct strategy with text-based tool call parsing
+13. **`TestE2E_QueueCapacity`** — Queue respects `MaxConcurrentSessions` cap, processes overflow after completion
+14. **`TestE2E_ForcedConclusion`** — Agent hits MaxIterations, forced conclusion without tools
+15. **`TestE2E_SessionTimeout`** — Investigation hits SessionTimeout, session marked timed_out
+16. **`TestE2E_ChatTimeout`** — Chat execution hits timeout, chat stage marked timed_out
 
 ### Phase 6.4: Polish & CI
 
@@ -976,7 +1101,8 @@ Most tests follow this pattern:
 - Race detector testing
 - CI pipeline integration
 - Golden file review and cleanup
-- Documentation update
+- **`test/e2e/README.md`** — Brief step-by-step guide: how to run e2e tests, how to update golden files, how to add a new scenario, key conventions
+- **Update `.cursor/commands/create-backend-tests.md`** — Add e2e test section: when to write e2e vs integration tests, e2e test patterns (TestApp, ScriptedLLMClient, in-memory MCP, golden files), reference to `test/e2e/README.md`
 
 ---
 
