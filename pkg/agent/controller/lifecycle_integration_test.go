@@ -282,6 +282,97 @@ func TestReActController_SummarizationFailOpen(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
+// TestReActController_NonStreamingEventStatus verifies that events created via
+// createTimelineEvent (non-streaming: llm_thinking, final_analysis) are stored
+// with StatusCompleted in the DB, not StatusStreaming.
+// Note: llm_response is only created in the streaming path (requires EventPublisher),
+// so it is not present in these unit tests which use no EventPublisher.
+func TestReActController_NonStreamingEventStatus(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Pods need checking.\nFinal Answer: All pods are healthy."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, qErr)
+
+	// Build a map of event_type -> list of statuses for verification
+	statusByType := make(map[timelineevent.EventType][]timelineevent.Status)
+	for _, ev := range events {
+		statusByType[ev.EventType] = append(statusByType[ev.EventType], ev.Status)
+	}
+
+	// llm_thinking is non-streaming (created via createTimelineEvent → should be completed)
+	for _, s := range statusByType[timelineevent.EventTypeLlmThinking] {
+		assert.Equal(t, timelineevent.StatusCompleted, s,
+			"non-streaming llm_thinking should be completed")
+	}
+
+	// final_analysis is non-streaming (created via createTimelineEvent → should be completed)
+	for _, s := range statusByType[timelineevent.EventTypeFinalAnalysis] {
+		assert.Equal(t, timelineevent.StatusCompleted, s,
+			"non-streaming final_analysis should be completed")
+	}
+
+	// Sanity: we should have at least one of each
+	assert.NotEmpty(t, statusByType[timelineevent.EventTypeLlmThinking], "expected llm_thinking events")
+	assert.NotEmpty(t, statusByType[timelineevent.EventTypeFinalAnalysis], "expected final_analysis events")
+}
+
+// TestNativeThinkingController_NonStreamingEventStatus verifies the same fix
+// for native-thinking: llm_thinking and final_analysis (both non-streaming
+// when EventPublisher is nil) should be StatusCompleted.
+func TestNativeThinkingController_NonStreamingEventStatus(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			// Final answer (no tool calls)
+			{chunks: []agent.Chunk{
+				&agent.ThinkingChunk{Content: "Everything looks fine."},
+				&agent.TextChunk{Content: "All systems operational."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{
+		tools: []agent.ToolDefinition{{Name: "k8s__get_pods", Description: "Get pods"}},
+	}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewNativeThinkingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, qErr)
+
+	for _, ev := range events {
+		assert.Equal(t, timelineevent.StatusCompleted, ev.Status,
+			"event %s (type=%s) should be completed, got %s", ev.ID, ev.EventType, ev.Status)
+	}
+
+	// Sanity: we should have thinking and final_analysis
+	// Note: llm_response is not created here — without EventPublisher the streaming
+	// path doesn't create it, and the non-streaming fallback only runs with tool calls.
+	typeSet := make(map[timelineevent.EventType]bool)
+	for _, ev := range events {
+		typeSet[ev.EventType] = true
+	}
+	assert.True(t, typeSet[timelineevent.EventTypeLlmThinking], "expected llm_thinking")
+	assert.True(t, typeSet[timelineevent.EventTypeFinalAnalysis], "expected final_analysis")
+}
+
 // TestReActController_StorageTruncation verifies that very large tool
 // results are truncated for storage in the timeline event.
 func TestReActController_StorageTruncation(t *testing.T) {
