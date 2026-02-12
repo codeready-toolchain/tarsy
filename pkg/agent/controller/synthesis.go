@@ -9,9 +9,12 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
-// SynthesisController implements a tool-less, single LLM call for synthesis.
+// SynthesisController implements a single LLM call for synthesis (no MCP tools).
 // Used for both "synthesis" (LangChain) and "synthesis-native-thinking" (Gemini)
 // strategies. The difference is the backend provider, configured in LLMProviderConfig.
+// Note: while no MCP tools are bound, native Gemini tools (Google Search, URL Context)
+// may still be available when using synthesis-native-thinking, since the Gemini API
+// only suppresses native tools when MCP tools are present.
 type SynthesisController struct{}
 
 // NewSynthesisController creates a new synthesis controller.
@@ -46,7 +49,7 @@ func (c *SynthesisController) Run(
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
-		Tools:       nil, // Synthesis never uses tools
+		Tools:       nil, // No MCP tools; native tools (Google Search) may still activate
 		Backend:     execCtx.Config.Backend,
 	}, &eventSeq)
 	if err != nil {
