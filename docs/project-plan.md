@@ -34,23 +34,9 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 5.2: Parallel Execution** -- Unified `executeStage()` with goroutine + WaitGroup + channel machinery for all stages (N=1 agents handled identically to N=many — no separate code paths). Multi-agent and replica execution via `buildConfigs()`/`buildMultiAgentConfigs()`/`buildReplicaConfigs()`. In-memory result aggregation (`aggregateStatus()`/`aggregateError()`) with success policy enforcement (all/any, defaulting to `any`). Automatic synthesis after stages with >1 agent — synthesis creates its own Stage DB record, receives full investigation history via timeline events (through `FormatInvestigationForSynthesis()` with shared `formatTimelineEvents()` helper and tool call/summary deduplication), replaces investigation result for downstream context. Chain loop tracks `dbStageIndex` separately from config index to accommodate inserted synthesis stages. `displayName` parameter on `executeAgent()` supports replica naming (`{BaseName}-1`, etc.). Stage status events moved inside `executeStage()` (after Stage creation, so `stageID` is always present). Fixed `UpdateStageStatus()` default policy from `all` → `any`.
 
+**Phase 5.3: Follow-up Chat** -- Full end-to-end chat: `POST /sessions/:id/chat/messages` → `ChatMessageExecutor` async execution → streaming response via existing WebSocket. Chat is a prompt concern — same controllers (ReAct, NativeThinking) handle chat via `ChatContext` on `ExecutionContext`, no separate chat controllers. `ChatMessageExecutor` (`pkg/queue/chat_executor.go`) spawns one goroutine per message (no pool — chats are rare, one-at-a-time per chat enforced). Context built from unified timeline (`GetSessionTimeline` + `FormatInvestigationContext`) — deleted `ChatExchange`/`ChatHistory`/`FormatChatHistory`/`GetChatHistory` in favor of timeline-based context. `ResolveChatAgentConfig()` added to `pkg/agent/config_resolver.go` with `aggregateChainMCPServers()` fallback. Refactored `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` from `RealSessionExecutor` methods to shared package-level functions. New events: `chat.created`, `chat.user_message`. Cancel handler extended via `CancelBySessionID()`. Chat executor shuts down before worker pool.
+
 Full design docs for completed phases are in `docs/archive/`.
-
----
-
-### Phase 5: Chain Execution & Chat
-
-**Note on MCP servers**: TARSy does not embed MCP servers. It connects to external MCP servers (e.g., `npx -y kubernetes-mcp-server@0.0.54`) via stdio subprocess, HTTP, or SSE transports.
-
-**Follow-up Chat (Phase 5.3)**
-
-Chat infrastructure already exists: ent schemas (Chat, ChatUserMessage), ChatService, ExecutionContext.ChatContext, prompt builder chat branching, chat instructions/templates, investigation formatter, ChatAgent config, Chain ChatConfig. Remaining work is the execution pipeline and API surface.
-
-- [ ] Chat API handlers (create chat, send message, get history, check availability, cancel execution)
-- [ ] Chat message executor (queue-based — chat messages routed through worker pool to limit concurrent LLM usage)
-- [ ] Chat WebSocket events (chat.created, chat.user_message, reuse existing stage/timeline events for streaming)
-- [ ] Chat-investigation context wiring (populate ChatContext from ChatService.BuildChatContext + chat history)
-- [ ] Chat availability guard (terminal sessions only: completed/failed/cancelled)
 
 ---
 

@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 5.2 (Parallel Execution)
+**Last updated after**: Phase 5.3 (Follow-up Chat)
 
 ---
 
@@ -46,7 +46,7 @@ pkg/
 ├── masking/          # Data masking service (regex patterns, code maskers, K8s Secret masker)
 ├── mcp/              # MCP client infrastructure (client, executor, transport, health)
 ├── models/           # MCP selection, shared types
-├── queue/            # Worker, WorkerPool, orphan detection, session executor
+├── queue/            # Worker, WorkerPool, orphan detection, session executor, chat executor
 └── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
 ├── schema/           # Ent schema definitions
@@ -106,6 +106,47 @@ The end-to-end happy path from alert submission to completion:
 
 **Design principle**: One `executeStage()` handles all stages uniformly. A single-agent stage is not a special case — it's a stage with N=1 agents. The same goroutine + WaitGroup + channel pattern handles N=1 identically to N=3. No separate code paths for single vs multi-agent execution.
 
+## Chat Execution Flow
+
+Follow-up chat allows users to ask questions about completed investigations. Chat is a 1:1 extension of an `AlertSession` — after an investigation reaches a terminal state, users send messages that each trigger a single-agent execution with access to the same MCP tools.
+
+**Design principle**: Chat is a prompt concern, not a controller concern. The same controllers (ReAct, NativeThinking) handle both investigation and chat — the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers. Same iteration limits, same `forceConclusion()` at `MaxIterations`, same per-iteration timeout.
+
+### End-to-End Chat Flow
+
+1. **API handler** receives `POST /api/v1/sessions/:id/chat/messages` → validates terminal session + chat enabled + no active execution + content valid
+2. **Get-or-create Chat**: `ChatService.GetOrCreateChat(sessionID, author)` → returns existing Chat or creates one (first message creates transparently)
+3. **Publish events**: `chat.created` (if first message) + creates `ChatUserMessage` record
+4. **Submit to ChatMessageExecutor** (async, returns 202 immediately with `{chat_id, message_id, stage_id}`)
+5. **ChatMessageExecutor.execute()** (goroutine):
+   - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
+   - Resolves MCP selection via shared `resolveMCPSelection()` helper
+   - Creates `Stage` (with `chat_id`, `chat_user_message_id`) + `AgentExecution` records
+   - Creates `user_question` timeline event (before building context, so it's included in timeline)
+   - Builds `ChatContext` via `GetSessionTimeline()` → `FormatInvestigationContext()` (unified timeline context)
+   - Publishes `stage.status: started`, starts heartbeat (`Chat.last_interaction_at`)
+   - Creates MCP ToolExecutor via shared `createToolExecutor()` helper
+   - Runs `agent.Execute()` (same controllers as investigation)
+   - Agent streams response via existing WebSocket events
+   - Updates `Stage`/`AgentExecution` terminal status, publishes `stage.status: completed/failed`
+   - Schedules stage event cleanup (60s grace period)
+6. **Publish** `chat.user_message` event (in handler, after Submit returns)
+7. **Cancel**: Existing `POST /api/v1/sessions/:id/cancel` extended to also cancel chat executions via `ChatMessageExecutor.CancelBySessionID()`
+
+### Lifecycle Constraints
+
+- **One Chat per session**: `AlertSession` → `Chat` is 1:1 (schema enforces uniqueness on `session_id`)
+- **Terminal sessions only**: Chat available for completed/failed/timed_out sessions. Not for pending/in_progress/cancelling/cancelled
+- **One-at-a-time per chat**: Only one message can be actively executing per chat. New message while processing → 409 Conflict
+- **Chat enabled check**: `chain.Chat.Enabled` must be true; if `chain.Chat` is nil, chat is treated as disabled
+- **Message cleanup on rejection**: If Submit rejects (active execution or shutting down), the created `ChatUserMessage` is deleted to avoid orphans
+
+### Context Building
+
+All context — original investigation AND previous chat exchanges — comes from the session's timeline events. No separate "chat history" builder. Each chat message creates a `user_question` timeline event before the agent runs, so `GetSessionTimeline()` returns a complete chronological record. No filtering — all event types pass through (including `llm_thinking`). Two existing functions (`GetSessionTimeline` + `FormatInvestigationContext`), zero new formatting code.
+
+---
+
 ## Iteration Loop Flows
 
 ### ReAct Controller (`pkg/agent/controller/react.go`)
@@ -146,7 +187,7 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 `id`, `alert_data` (TEXT), `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection` (JSON override), `author`, `runbook_url`, `deleted_at` (soft delete), timestamps (`created_at`, `started_at`, `completed_at`, `last_interaction_at`)
 
 ### Stage
-`id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type` (multi_agent/replica, nullable), `success_policy` (all/any, nullable), `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type` (multi_agent/replica, nullable), `success_policy` (all/any, nullable), `chat_id` (nullable — set for chat response stages), `chat_user_message_id` (nullable), `status`, `error_message`, timestamps
 
 ### AgentExecution
 `id`, `stage_id`, `session_id` (denormalized), `agent_name`, `agent_index`, `iteration_strategy`, `status`, `error_message`, timestamps
@@ -166,7 +207,8 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 | GET | `/health` | Health check |
 | POST | `/api/v1/alerts` | Submit alert → creates pending session |
 | GET | `/api/v1/sessions/:id` | Get session status and details |
-| POST | `/api/v1/sessions/:id/cancel` | Cancel a running session |
+| POST | `/api/v1/sessions/:id/cancel` | Cancel running session or active chat execution |
+| POST | `/api/v1/sessions/:id/chat/messages` | Send chat message (auto-creates chat on first message, 202 Accepted) |
 | GET | `/ws` | WebSocket connection for real-time streaming |
 
 ---
@@ -233,6 +275,29 @@ type SessionExecutor interface {
 
 Bridges the queue worker to the agent framework. Implementation: `RealSessionExecutor` in `pkg/queue/executor.go`.
 
+### ChatMessageExecutor (`pkg/queue/chat_executor.go`)
+
+```go
+type ChatMessageExecutor struct {
+    cfg, dbClient, llmClient, mcpFactory, agentFactory, eventPublisher, promptBuilder, execConfig
+    // Services: timelineService, stageService, chatService, messageService, interactionService
+    // Active execution tracking: mu (sync.RWMutex), activeExecs (map[string]context.CancelFunc), wg, stopped
+}
+
+func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput) (stageID string, err error)
+func (e *ChatMessageExecutor) CancelExecution(chatID string) bool
+func (e *ChatMessageExecutor) CancelBySessionID(ctx context.Context, sessionID string) bool
+func (e *ChatMessageExecutor) Stop()
+```
+
+Each message spawns a goroutine — no pool, no semaphore, no queue. One-at-a-time per chat (enforced via `StageService.GetActiveStageForChat()`) naturally limits load. `CancelBySessionID` looks up the chat for a session and cancels any active execution — used by the cancel handler to provide unified cancellation.
+
+Key internal methods: `execute()` (goroutine body — full lifecycle from config resolution to agent execution to cleanup), `buildChatContext()` (calls `GetSessionTimeline` + `FormatInvestigationContext`), `runChatHeartbeat()` (periodic `Chat.last_interaction_at` updates), `scheduleStageEventCleanup()` / `cleanupStageEvents()` (60s grace period after terminal status).
+
+Config types:
+- `ChatExecuteInput` — `Chat *ent.Chat`, `Message *ent.ChatUserMessage`, `Session *ent.AlertSession`
+- `ChatMessageExecutorConfig` — `SessionTimeout` (default: 15m), `HeartbeatInterval` (default: 30s)
+
 Key internal methods on `RealSessionExecutor`:
 - `executeStage()` — creates Stage DB record, launches goroutines (one per execution config), collects results via WaitGroup + buffered channel, aggregates status via success policy. Same code path for 1 or N agents
 - `executeAgent(ctx, input, stg, agentConfig, agentIndex, displayName)` — per-agent-execution lifecycle: DB record → config resolution → MCP creation → agent execution → status update. `displayName` overrides `agentConfig.Name` for DB/logs (differs for replicas)
@@ -245,9 +310,13 @@ Key internal methods on `RealSessionExecutor`:
 - `collectAndSort()` — drains indexed channel, sorts by launch index
 - `buildStageContext()` — converts `[]stageResult` to `BuildStageContext()` input
 - `generateExecutiveSummary()` — LLM call for session summary (fail-open)
-- `createToolExecutor()` — MCP-backed executor or stub fallback
 - `updateSessionProgress()` — non-blocking DB update for dashboard visibility
 - `mapCancellation()` — maps context errors to session status (timed_out/cancelled)
+
+Shared package-level helpers in `pkg/queue/executor.go` (used by both `RealSessionExecutor` and `ChatMessageExecutor`):
+- `createToolExecutor(ctx, mcpFactory, serverIDs, toolFilter, logger)` — MCP-backed executor or stub fallback
+- `resolveMCPSelection(session, resolvedConfig, mcpRegistry)` — MCP server/tool filter resolution from session override or config
+- `publishStageStatus(eventPublisher, sessionID, stageID, stageName, stageIndex, status)` — stage lifecycle event publishing
 
 ### Stage Context Builder (`pkg/agent/context/stage_context.go`)
 
@@ -310,7 +379,7 @@ func (p *EventPublisher) PublishTransient(ctx, channel, payload) error          
 func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload StageStatusPayload) error  // Stage lifecycle
 ```
 
-The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`.
+The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
 
 ### ConnectionManager (`pkg/events/manager.go`)
 
@@ -811,11 +880,37 @@ type StageStatusPayload struct {
 
 Carries all runtime state for an agent execution: `SessionID`, `StageID`, `ExecutionID`, `AgentName`, `AlertData`, `AlertType`, `RunbookContent`, `Config` (ResolvedAgentConfig), `LLMClient`, `ToolExecutor`, `Services` (ServiceBundle), `PromptBuilder`, `EventPublisher`, `ChatContext`.
 
+### ChatContext (`pkg/agent/context.go`)
+
+```go
+type ChatContext struct {
+    UserQuestion        string
+    InvestigationContext string
+}
+```
+
+Carries chat-specific data for controllers. `InvestigationContext` is the formatted output of `FormatInvestigationContext()` containing the full investigation + prior chat exchanges. When `ChatContext` is non-nil on `ExecutionContext`, controllers use chat-specific prompting.
+
 ### ResolvedAgentConfig (`pkg/agent/context.go`)
 
 Runtime configuration after hierarchy resolution (defaults → agent → chain → stage → stage-agent): `AgentName`, `IterationStrategy`, `LLMProvider`, `MaxIterations`, `IterationTimeout`, `MCPServers`, `CustomInstructions`, `Backend`.
 
 `Backend` (`"google-native"` or `"langchain"`) is resolved from iteration strategy via `ResolveBackend()` in `pkg/agent/config_resolver.go`. Constants: `BackendGoogleNative`, `BackendLangChain`. This replaces the old approach of deriving backend from provider type.
+
+### Chat Agent Config Resolution (`pkg/agent/config_resolver.go`)
+
+`ResolveChatAgentConfig(cfg, chain, chatCfg)` resolves agent configuration for chat execution using the chain's `ChatConfig`. Same hierarchy patterns as `ResolveAgentConfig()`:
+
+| Field | Resolution Order | Fallback |
+|-------|-----------------|----------|
+| **Agent** | `chatCfg.Agent` | `"ChatAgent"` (built-in) |
+| **IterationStrategy** | defaults → agentDef → chain → chatCfg | `defaults.iteration_strategy` |
+| **LLMProvider** | defaults → chain → chatCfg | `defaults.llm_provider` |
+| **MaxIterations** | defaults → agentDef → chain → chatCfg | `defaults.max_iterations` |
+| **MCPServers** | agentDef → chain (or `aggregateChainMCPServers()`) → chatCfg | `[]` |
+| **Backend** | Derived from resolved `IterationStrategy` via `ResolveBackend()` | — |
+
+MCP servers for chat follow a specific priority: session's `mcp_selection` override (from original alert) → chain chat config → union of all MCP servers from chain stages (via `aggregateChainMCPServers()`).
 
 ### ServiceBundle (`pkg/agent/context.go`)
 
@@ -871,9 +966,11 @@ Client connects, subscribes to channels (`session:{id}`, `sessions`), receives e
 
 **Client actions**: `subscribe`, `unsubscribe`, `catchup` (with `last_event_id`), `ping`
 
-**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`
+**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `chat.created`, `chat.user_message`
 
 **Transient events** (NOTIFY only, no DB): `stream.chunk` (LLM token deltas)
+
+All chat events are published to `session:{session_id}` — the same channel as investigation events. No separate chat channel.
 
 ### Event Type Conventions
 
@@ -941,6 +1038,12 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Success policy defaulting** | `resolvedSuccessPolicy()`: stage config → `defaults.success_policy` → `SuccessPolicyAny` (fallback). `UpdateStageStatus()` also defaults nil to `SuccessPolicyAny`. Matches old TARSy behavior |
 | **dbStageIndex tracking** | Chain loop tracks `dbStageIndex` separately from config stage index. Incremented for both investigation and synthesis stages. Ensures correct stage ordering when synthesis stages are inserted |
 | **Replica naming convention** | Replicas named `{BaseName}-1`, `{BaseName}-2`, etc. Config resolution uses base agent name for registry lookup; display name only for DB records and logging |
+| **Chat is a prompt concern** | Same controllers handle investigation and chat — `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers, same iteration limits, same `forceConclusion()` |
+| **Unified timeline context for chat** | Chat context built from `GetSessionTimeline()` + `FormatInvestigationContext()` — no separate chat history builder. Each chat message creates `user_question` timeline event before agent runs; subsequent messages see full history |
+| **No concurrency pool for chat** | Each chat message spawns a goroutine directly — no pool, no semaphore. One-at-a-time per chat (enforced) naturally limits load. If needed, a semaphore is a one-line addition |
+| **Shared executor helpers** | `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` refactored from `RealSessionExecutor` methods to package-level functions in `pkg/queue/executor.go` — shared by both investigation and chat executors |
+| **Chat message cleanup on rejection** | If `Submit` rejects (active execution or shutting down), handler deletes the created `ChatUserMessage` to prevent orphaned records |
+| **Chat shutdown ordering** | Chat executor stops before worker pool. Marks `stopped` (rejects new submissions with 503), cancels all active contexts, waits for goroutines to drain |
 
 ---
 
