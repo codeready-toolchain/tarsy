@@ -19,10 +19,10 @@ import (
 // Three stages + synthesis:
 //   1. investigation (DataCollector, NativeThinking)
 //   2. remediation   (Remediator, ReAct)
-//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking)
+//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (automatic)
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
-// parallel agents, synthesis, and executive summary.
+// parallel agents, synthesis, forced conclusion, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
@@ -98,7 +98,8 @@ func TestE2E_Pipeline(t *testing.T) {
 			"Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
 	})
 
-	// MetricsValidator (native-thinking): 2 iterations.
+	// MetricsValidator (native-thinking): max_iterations=1 → forced conclusion.
+	// Iteration 1: tool call consumes the single allowed iteration.
 	llm.AddRouted("MetricsValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "Let me verify the SLO metrics for pod-1."},
@@ -107,6 +108,7 @@ func TestE2E_Pipeline(t *testing.T) {
 			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 		},
 	})
+	// Forced conclusion: called WITHOUT tools after max_iterations exhausted.
 	llm.AddRouted("MetricsValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "SLO is being violated."},
@@ -208,7 +210,7 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Verify LLM call count:
 	// Stage 1: iteration 1 + summarization + iteration 2 + iteration 3 = 4
 	// Stage 2: iteration 1 + iteration 2 + summarization + iteration 3 = 4
-	// Stage 3: ConfigValidator (2) + MetricsValidator (2) = 4
+	// Stage 3: ConfigValidator (2) + MetricsValidator (1 iteration + 1 forced conclusion) = 4
 	// Synthesis: 1
 	// Executive summary: 1
 	// Total: 14

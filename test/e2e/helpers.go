@@ -222,6 +222,9 @@ func ProjectTimelineForGolden(te *ent.TimelineEvent) map[string]interface{} {
 	if te.Content != "" {
 		m["content"] = te.Content
 	}
+	if len(te.Metadata) > 0 {
+		m["metadata"] = te.Metadata
+	}
 	return m
 }
 
@@ -333,11 +336,21 @@ func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.Exp
 					break
 				}
 				foundAny := false
-				for i, ge := range groupExpected {
-					if !matched[i] && matchesExpected(filtered[actualIdx], ge) {
-						matched[i] = true
-						foundAny = true
-						break
+				// Two-pass matching: try expected events WITH metadata first,
+				// then those without. This prevents a less-specific expected
+				// event from greedily matching an actual event that should
+				// satisfy a more-specific (metadata-requiring) expected event.
+				for pass := 0; pass < 2 && !foundAny; pass++ {
+					for i, ge := range groupExpected {
+						hasMetadata := len(ge.Metadata) > 0
+						if (pass == 0) != hasMetadata {
+							continue // pass 0 = metadata-requiring only, pass 1 = rest
+						}
+						if !matched[i] && matchesExpected(filtered[actualIdx], ge) {
+							matched[i] = true
+							foundAny = true
+							break
+						}
 					}
 				}
 				if foundAny {
@@ -422,7 +435,13 @@ func matchesExpected(actual WSEvent, expected testdata.ExpectedEvent) bool {
 	if len(expected.Metadata) > 0 {
 		meta, _ := actual.Parsed["metadata"].(map[string]interface{})
 		for k, v := range expected.Metadata {
-			if av, _ := meta[k].(string); av != v {
+			av, ok := meta[k]
+			if !ok {
+				return false
+			}
+			// Compare as strings to handle bool/numeric metadata values
+			// (e.g. forced_conclusion: true → "true", iterations_used: 1 → "1").
+			if fmt.Sprintf("%v", av) != v {
 				return false
 			}
 		}

@@ -353,6 +353,60 @@ func TestCollectStreamWithCallback_CodeExecutionChunks(t *testing.T) {
 	assert.Equal(t, "hello", resp.CodeExecutions[1].Result)
 }
 
+// ============================================================================
+// mergeMetadata tests
+// ============================================================================
+
+func TestMergeMetadata(t *testing.T) {
+	t.Run("nil extra returns base", func(t *testing.T) {
+		base := map[string]interface{}{"source": "native"}
+		result := mergeMetadata(base, nil)
+		assert.Equal(t, base, result)
+	})
+
+	t.Run("nil base returns extra", func(t *testing.T) {
+		extra := map[string]interface{}{"forced_conclusion": true}
+		result := mergeMetadata(nil, extra)
+		assert.Equal(t, extra, result)
+	})
+
+	t.Run("both nil returns nil", func(t *testing.T) {
+		result := mergeMetadata(nil, nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("merges base and extra", func(t *testing.T) {
+		base := map[string]interface{}{"source": "native"}
+		extra := map[string]interface{}{
+			"forced_conclusion": true,
+			"iterations_used":   1,
+			"max_iterations":    1,
+		}
+		result := mergeMetadata(base, extra)
+		assert.Equal(t, map[string]interface{}{
+			"source":            "native",
+			"forced_conclusion": true,
+			"iterations_used":   1,
+			"max_iterations":    1,
+		}, result)
+	})
+
+	t.Run("extra overrides base on conflict", func(t *testing.T) {
+		base := map[string]interface{}{"key": "old"}
+		extra := map[string]interface{}{"key": "new"}
+		result := mergeMetadata(base, extra)
+		assert.Equal(t, "new", result["key"])
+	})
+
+	t.Run("does not mutate base", func(t *testing.T) {
+		base := map[string]interface{}{"source": "native"}
+		extra := map[string]interface{}{"forced_conclusion": true}
+		_ = mergeMetadata(base, extra)
+		assert.Len(t, base, 1, "base should not be mutated")
+		assert.Equal(t, "native", base["source"])
+	})
+}
+
 func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// Comprehensive test: all chunk types in one stream
 	var callbacks []string

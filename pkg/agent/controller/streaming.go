@@ -137,12 +137,17 @@ type StreamedResponse struct {
 //
 // Controllers should check StreamedResponse.ThinkingEventCreated and
 // TextEventCreated to avoid creating duplicate timeline events.
+//
+// extraMetadata (optional): if provided, the first map is merged into the
+// metadata of llm_thinking and llm_response streaming events at creation time.
+// Used by forceConclusion to tag events with forced_conclusion metadata.
 func callLLMWithStreaming(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	llmClient agent.LLMClient,
 	input *agent.GenerateInput,
 	eventSeq *int,
+	extraMetadata ...map[string]interface{},
 ) (*StreamedResponse, error) {
 	llmCtx, llmCancel := context.WithCancel(ctx)
 	defer llmCancel()
@@ -159,6 +164,12 @@ func callLLMWithStreaming(
 			return nil, err
 		}
 		return &StreamedResponse{LLMResponse: resp}, nil
+	}
+
+	// Resolve optional extra metadata for streaming events.
+	var extra map[string]interface{}
+	if len(extraMetadata) > 0 {
+		extra = extraMetadata[0]
 	}
 
 	// Track streaming timeline events
@@ -178,6 +189,7 @@ func callLLMWithStreaming(
 			if thinkingEventID == "" {
 				// First thinking chunk — create streaming TimelineEvent
 				*eventSeq++
+				thinkingMeta := mergeMetadata(map[string]interface{}{"source": "native"}, extra)
 				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 					SessionID:      execCtx.SessionID,
 					StageID:        &execCtx.StageID,
@@ -185,7 +197,7 @@ func callLLMWithStreaming(
 					SequenceNumber: *eventSeq,
 					EventType:      timelineevent.EventTypeLlmThinking,
 					Content:        "",
-					Metadata:       map[string]interface{}{"source": "native"},
+					Metadata:       thinkingMeta,
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming thinking event", "session_id", execCtx.SessionID, "error", createErr)
@@ -202,6 +214,7 @@ func callLLMWithStreaming(
 					EventType:      timelineevent.EventTypeLlmThinking,
 					Status:         timelineevent.StatusStreaming,
 					Content:        "",
+					Metadata:       thinkingMeta,
 					SequenceNumber: *eventSeq,
 					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
@@ -234,7 +247,7 @@ func callLLMWithStreaming(
 					SequenceNumber: *eventSeq,
 					EventType:      timelineevent.EventTypeLlmResponse,
 					Content:        "",
-					Metadata:       nil,
+					Metadata:       extra, // nil when not forced conclusion
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming text event", "session_id", execCtx.SessionID, "error", createErr)
@@ -251,6 +264,7 @@ func callLLMWithStreaming(
 					EventType:      timelineevent.EventTypeLlmResponse,
 					Status:         timelineevent.StatusStreaming,
 					Content:        "",
+					Metadata:       extra, // nil when not forced conclusion
 					SequenceNumber: *eventSeq,
 					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
@@ -297,4 +311,23 @@ func callLLMWithStreaming(
 		ThinkingEventCreated: thinkingEventID != "",
 		TextEventCreated:     textEventID != "",
 	}, nil
+}
+
+// mergeMetadata combines base metadata with extra metadata.
+// Returns base unchanged if extra is nil; returns extra if base is nil.
+func mergeMetadata(base, extra map[string]interface{}) map[string]interface{} {
+	if extra == nil {
+		return base
+	}
+	if base == nil {
+		return extra
+	}
+	merged := make(map[string]interface{}, len(base)+len(extra))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range extra {
+		merged[k] = v
+	}
+	return merged
 }

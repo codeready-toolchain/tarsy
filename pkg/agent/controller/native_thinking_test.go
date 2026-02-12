@@ -122,6 +122,21 @@ func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Contains(t, result.FinalAnalysis, "system is healthy")
+
+	// Verify forced conclusion metadata on final_analysis timeline event
+	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, qErr)
+	found := false
+	for _, ev := range events {
+		if ev.EventType == "final_analysis" {
+			found = true
+			require.Equal(t, true, ev.Metadata["forced_conclusion"], "final_analysis should have forced_conclusion=true")
+			require.EqualValues(t, 3, ev.Metadata["iterations_used"], "should report 3 iterations used")
+			require.EqualValues(t, 3, ev.Metadata["max_iterations"], "should report max_iterations=3")
+			break
+		}
+	}
+	require.True(t, found, "expected final_analysis timeline event")
 }
 
 func TestNativeThinkingController_ThinkingContent(t *testing.T) {

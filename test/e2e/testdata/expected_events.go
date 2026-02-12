@@ -27,10 +27,10 @@ type ExpectedEvent struct {
 // Three stages + synthesis:
 //   1. investigation (DataCollector, NativeThinking)
 //   2. remediation   (Remediator, ReAct)
-//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking)
+//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (automatic)
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
-// parallel agents, synthesis, and executive summary.
+// parallel agents, synthesis, forced conclusion, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
@@ -177,7 +177,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 10,
 		Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
 
-	// --- MetricsValidator (native-thinking): iteration 1 — tool call ---
+	// --- MetricsValidator (native-thinking, forced conclusion): iteration 1 — tool call ---
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
@@ -191,15 +191,24 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	}},
 	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 10,
 		Content: `[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]`},
-	// --- MetricsValidator (native-thinking): iteration 2 — final answer ---
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
+	// --- MetricsValidator (native-thinking): forced conclusion (max_iterations=1 exhausted) ---
+	// All events from the forced conclusion path carry forced_conclusion metadata.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10, Metadata: map[string]string{
+		"forced_conclusion": "true",
+	}},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10, Metadata: map[string]string{
+		"forced_conclusion": "true",
+	}},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
 		Content: "SLO is being violated."},
 	{Type: "timeline_event.completed", EventType: "llm_response", Group: 10,
 		Content: "Metrics confirm SLO violation for pod-1 availability."},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 10,
-		Content: "Metrics confirm SLO violation for pod-1 availability."},
+		Content: "Metrics confirm SLO violation for pod-1 availability.", Metadata: map[string]string{
+			"forced_conclusion": "true",
+			"iterations_used":   "1",
+			"max_iterations":    "1",
+		}},
 
 	{Type: "stage.status", StageName: "validation", Status: "completed"},
 

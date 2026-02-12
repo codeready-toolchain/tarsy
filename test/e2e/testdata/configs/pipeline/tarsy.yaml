@@ -42,7 +42,7 @@ agents:
     custom_instructions: "You are ConfigValidator, verifying resource configurations."
   MetricsValidator:
     iteration_strategy: "native-thinking"
-    max_iterations: 3
+    max_iterations: 1  # Triggers forced conclusion after 1 iteration (tool call)
     mcp_servers: [prometheus-mcp]
     custom_instructions: "You are MetricsValidator, checking SLO compliance."
 
