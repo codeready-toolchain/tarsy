@@ -2,6 +2,10 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,38 +282,87 @@ func TestE2E_Pipeline(t *testing.T) {
 	// ── Debug golden assertions ─────────────────────────────────
 	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_list.golden"), debugList, normalizer)
 
-	// Level 2: LLM interaction detail — pick the first iteration of DataCollector.
-	// Navigate: stages[0].executions[0].llm_interactions[0]
-	firstStage, _ := debugStages[0].(map[string]interface{})
-	firstStageExecs, _ := firstStage["executions"].([]interface{})
-	require.NotEmpty(t, firstStageExecs, "first stage should have executions")
-	firstExec, _ := firstStageExecs[0].(map[string]interface{})
-	firstLLMInteractions, _ := firstExec["llm_interactions"].([]interface{})
-	require.NotEmpty(t, firstLLMInteractions, "DataCollector should have LLM interactions")
-	firstLLMID := firstLLMInteractions[0].(map[string]interface{})["id"].(string)
+	// ── Level 2: Verify ALL interaction details in chronological order ──
+	//
+	// Collect all LLM and MCP interactions from every execution into a
+	// unified slice, sort by created_at, and verify each one against its
+	// own human-readable golden file.
 
-	llmDetail := app.GetLLMInteractionDetail(t, sessionID, firstLLMID)
-	require.NotEmpty(t, llmDetail["conversation"], "LLM detail should include conversation")
-	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_llm_detail.golden"), llmDetail, normalizer)
+	type interactionEntry struct {
+		Kind      string // "llm" or "mcp"
+		ID        string
+		AgentName string
+		CreatedAt string
+		Label     string // interaction_type or tool_name
+	}
 
-	// Level 2: MCP interaction detail — pick the first MCP interaction.
-	var firstMCPID string
+	// Collect interactions per-execution in chronological order.
+	// Within a single execution, LLM and MCP interactions are merged
+	// by created_at (deterministic because one agent runs sequentially).
+	// Across executions we use the debug list's structural order
+	// (stage_index → agent_index), which is deterministic even for
+	// parallel agents where absolute timestamps vary between runs.
+	var allInteractions []interactionEntry
 	for _, rawStage := range debugStages {
 		stg, _ := rawStage.(map[string]interface{})
 		for _, rawExec := range stg["executions"].([]interface{}) {
 			exec, _ := rawExec.(map[string]interface{})
-			mcpList, _ := exec["mcp_interactions"].([]interface{})
-			if len(mcpList) > 0 {
-				firstMCPID = mcpList[0].(map[string]interface{})["id"].(string)
-				break
+			agentName, _ := exec["agent_name"].(string)
+
+			// Collect all interactions for this execution.
+			var execInteractions []interactionEntry
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind:      "llm",
+					ID:        li["id"].(string),
+					AgentName: agentName,
+					CreatedAt: li["created_at"].(string),
+					Label:     li["interaction_type"].(string),
+				})
 			}
-		}
-		if firstMCPID != "" {
-			break
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				label := mi["interaction_type"].(string)
+				if tn, ok := mi["tool_name"].(string); ok && tn != "" {
+					label = tn
+				}
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind:      "mcp",
+					ID:        mi["id"].(string),
+					AgentName: agentName,
+					CreatedAt: mi["created_at"].(string),
+					Label:     label,
+				})
+			}
+			// Sort within execution by created_at (deterministic for single agent).
+			sort.Slice(execInteractions, func(i, j int) bool {
+				return execInteractions[i].CreatedAt < execInteractions[j].CreatedAt
+			})
+			allInteractions = append(allInteractions, execInteractions...)
 		}
 	}
-	require.NotEmpty(t, firstMCPID, "should have at least one MCP interaction")
-	mcpDetail := app.GetMCPInteractionDetail(t, sessionID, firstMCPID)
-	require.NotEmpty(t, mcpDetail["server_name"], "MCP detail should have server_name")
-	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_mcp_detail.golden"), mcpDetail, normalizer)
+
+	// Track per-agent iteration counters for readable filenames.
+	iterationCounters := make(map[string]int) // "AgentName_type" → count
+
+	for idx, entry := range allInteractions {
+		// Build a counter key to disambiguate multiple iterations of the same type.
+		counterKey := entry.AgentName + "_" + entry.Label
+		iterationCounters[counterKey]++
+		count := iterationCounters[counterKey]
+
+		// Build filename: 01_DataCollector_llm_iteration_1.golden
+		label := strings.ReplaceAll(entry.Label, " ", "_")
+		filename := fmt.Sprintf("%02d_%s_%s_%s_%d.golden", idx+1, entry.AgentName, entry.Kind, label, count)
+		goldenPath := GoldenPath("pipeline", filepath.Join("debug_interactions", filename))
+
+		if entry.Kind == "llm" {
+			detail := app.GetLLMInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenLLMInteraction(t, goldenPath, detail, normalizer)
+		} else {
+			detail := app.GetMCPInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenMCPInteraction(t, goldenPath, detail, normalizer)
+		}
+	}
 }
