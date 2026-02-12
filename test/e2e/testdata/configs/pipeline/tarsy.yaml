@@ -11,6 +11,10 @@ mcp_servers:
     summarization:
       enabled: true
       size_threshold_tokens: 100
+  prometheus-mcp:
+    transport:
+      type: stdio
+      command: mock
   # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
   kubernetes-server:
     transport:
@@ -20,8 +24,8 @@ mcp_servers:
 agents:
   DataCollector:
     iteration_strategy: "native-thinking"
-    max_iterations: 3
-    mcp_servers: [test-mcp]
+    max_iterations: 5
+    mcp_servers: [test-mcp, prometheus-mcp]
 
 agent_chains:
   test-chain:

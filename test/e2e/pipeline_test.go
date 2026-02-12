@@ -16,14 +16,14 @@ import (
 
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
-// Currently: single NativeThinking agent, two tool calls (one with summary,
-// one without), final answer, and executive summary.
+// Currently: single NativeThinking agent, two MCP servers (test-mcp,
+// prometheus-mcp), three tool calls across two iterations, summarization,
+// final answer, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
-	// LLM script: thinking + two tool calls → tool results → thinking + final answer.
 	llm := NewScriptedLLMClient()
-	// Iteration 1: thinking + text + two tool calls in one response.
+	// Iteration 1: thinking + text + two tool calls from test-mcp.
 	// get_nodes returns a small result (no summarization).
 	// get_pods returns a large result (triggers summarization).
 	llm.AddSequential(LLMScriptEntry{
@@ -38,7 +38,16 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Tool result summarization for get_pods (triggered by size_threshold_tokens=100 in config).
 	// get_nodes result is ~15 tokens — no summarization call for it.
 	llm.AddSequential(LLMScriptEntry{Text: "Pod pod-1 is OOMKilled with 5 restarts."})
-	// Iteration 2: thinking + final answer (no tools).
+	// Iteration 2: thinking + tool call from prometheus-mcp.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me check the memory metrics for pod-1."},
+			&agent.TextChunk{Content: "Querying Prometheus for memory usage."},
+			&agent.ToolCallChunk{CallID: "call-3", Name: "prometheus-mcp__query_metrics", Arguments: `{"query":"container_memory_usage_bytes{pod=\"pod-1\"}"}`},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 30, TotalTokens: 230},
+		},
+	})
+	// Iteration 3: thinking + final answer (no tools).
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "The pod is clearly OOMKilled."},
@@ -49,14 +58,14 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Executive summary.
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak."})
 
-	// Small tool result — stays under summarization threshold (~15 tokens).
+	// Tool results.
 	nodesResult := `[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]`
-	// Large tool result — triggers summarization (>100 tokens ≈ 400 chars).
 	podsResult := `[` +
 		`{"name":"pod-1","namespace":"default","status":"OOMKilled","restarts":5,"cpu":"250m","memory":"512Mi","node":"worker-1","image":"app:v1.2.3","started":"2026-01-15T10:00:00Z","lastRestart":"2026-01-15T14:30:00Z"},` +
 		`{"name":"pod-2","namespace":"default","status":"Running","restarts":0,"cpu":"100m","memory":"256Mi","node":"worker-2","image":"app:v1.2.3","started":"2026-01-10T08:00:00Z","lastRestart":""},` +
 		`{"name":"pod-3","namespace":"default","status":"CrashLoopBackOff","restarts":12,"cpu":"500m","memory":"1Gi","node":"worker-1","image":"app:v1.2.3","started":"2026-01-14T12:00:00Z","lastRestart":"2026-01-15T15:00:00Z"}` +
 		`]`
+	metricsResult := `[{"metric":"container_memory_usage_bytes","pod":"pod-1","value":"524288000","timestamp":"2026-01-15T14:29:00Z"}]`
 
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "pipeline")),
@@ -65,6 +74,9 @@ func TestE2E_Pipeline(t *testing.T) {
 			"test-mcp": {
 				"get_nodes": StaticToolHandler(nodesResult),
 				"get_pods":  StaticToolHandler(podsResult),
+			},
+			"prometheus-mcp": {
+				"query_metrics": StaticToolHandler(metricsResult),
 			},
 		}),
 	)
@@ -106,8 +118,8 @@ func TestE2E_Pipeline(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 
-	// Verify LLM call count: 1 tool call + 1 summarization + 1 final answer + 1 executive summary = 4.
-	assert.Equal(t, 4, llm.CallCount())
+	// Verify LLM call count: iteration 1 + summarization + iteration 2 + iteration 3 + executive summary = 5.
+	assert.Equal(t, 5, llm.CallCount())
 
 	// Build normalizer with all known IDs for golden comparison.
 	normalizer := NewNormalizer(sessionID)

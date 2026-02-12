@@ -21,15 +21,16 @@ type ExpectedEvent struct {
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
 // Grows incrementally into the full pipeline test.
-// Currently: single NativeThinking agent, two tool calls (one with summary,
-// one without), final answer, and executive summary.
+// Currently: single NativeThinking agent, two MCP servers (test-mcp,
+// prometheus-mcp), three tool calls across two iterations, summarization,
+// final answer, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 	{Type: "stage.status", StageName: "investigation", Status: "started"},
 
-	// Iteration 1: thinking + intermediate response + two tool calls.
+	// Iteration 1: thinking + intermediate response + two tool calls from test-mcp.
 	// Created events are sequential (streaming callback order is deterministic).
 	{Type: "timeline_event.created", EventType: "llm_thinking"},
 	{Type: "timeline_event.created", EventType: "llm_response"},
@@ -37,7 +38,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the cluster nodes and pod status.", Group: 1},
 	{Type: "timeline_event.completed", EventType: "llm_response", Content: "I'll look up the nodes and pods.", Group: 1},
 
-	// Tool call 1: get_nodes — small result, no summarization.
+	// Tool call 1: test-mcp/get_nodes — small result, no summarization.
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
 		"server_name": "test-mcp",
 		"tool_name":   "get_nodes",
@@ -46,7 +47,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "llm_tool_call",
 		Content: `[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]`},
 
-	// Tool call 2: get_pods — large result, triggers summarization.
+	// Tool call 2: test-mcp/get_pods — large result, triggers summarization.
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
 		"server_name": "test-mcp",
 		"tool_name":   "get_pods",
@@ -60,12 +61,26 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	}},
 	{Type: "timeline_event.completed", EventType: "mcp_tool_summary", Content: "Pod pod-1 is OOMKilled with 5 restarts."},
 
-	// Iteration 2: thinking + final answer.
+	// Iteration 2: thinking + tool call from prometheus-mcp (second MCP server).
 	{Type: "timeline_event.created", EventType: "llm_thinking"},
 	{Type: "timeline_event.created", EventType: "llm_response"},
-	// Completed events — same race applies.
-	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "The pod is clearly OOMKilled.", Group: 2},
-	{Type: "timeline_event.completed", EventType: "llm_response", Content: "Investigation complete: pod-1 is OOMKilled with 5 restarts.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the memory metrics for pod-1.", Group: 3},
+	{Type: "timeline_event.completed", EventType: "llm_response", Content: "Querying Prometheus for memory usage.", Group: 3},
+
+	// Tool call 3: prometheus-mcp/query_metrics — small result, no summarization.
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
+		"server_name": "prometheus-mcp",
+		"tool_name":   "query_metrics",
+		"arguments":   `{"query":"container_memory_usage_bytes{pod=\"pod-1\"}"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call",
+		Content: `[{"metric":"container_memory_usage_bytes","pod":"pod-1","value":"524288000","timestamp":"2026-01-15T14:29:00Z"}]`},
+
+	// Iteration 3: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking"},
+	{Type: "timeline_event.created", EventType: "llm_response"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "The pod is clearly OOMKilled.", Group: 4},
+	{Type: "timeline_event.completed", EventType: "llm_response", Content: "Investigation complete: pod-1 is OOMKilled with 5 restarts.", Group: 4},
 	{Type: "timeline_event.created", EventType: "final_analysis"},
 
 	{Type: "stage.status", StageName: "investigation", Status: "completed"},

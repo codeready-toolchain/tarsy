@@ -30,21 +30,39 @@
     "status": "completed"
   },
   {
-    "content": "The pod is clearly OOMKilled.",
+    "content": "Let me check the memory metrics for pod-1.",
     "event_type": "llm_thinking",
     "sequence": 6,
     "status": "completed"
   },
   {
-    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "content": "Querying Prometheus for memory usage.",
     "event_type": "llm_response",
     "sequence": 7,
     "status": "completed"
   },
   {
+    "content": "[{\"metric\":\"container_memory_usage_bytes\",\"pod\":\"pod-1\",\"value\":\"524288000\",\"timestamp\":\"{TIMESTAMP}\"}]",
+    "event_type": "llm_tool_call",
+    "sequence": 8,
+    "status": "completed"
+  },
+  {
+    "content": "The pod is clearly OOMKilled.",
+    "event_type": "llm_thinking",
+    "sequence": 9,
+    "status": "completed"
+  },
+  {
+    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "llm_response",
+    "sequence": 10,
+    "status": "completed"
+  },
+  {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "final_analysis",
-    "sequence": 8,
+    "sequence": 11,
     "status": "streaming"
   },
   {
