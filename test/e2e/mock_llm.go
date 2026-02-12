@@ -100,15 +100,6 @@ func (c *ScriptedLLMClient) Generate(ctx context.Context, input *agent.GenerateI
 // Close implements agent.LLMClient.
 func (c *ScriptedLLMClient) Close() error { return nil }
 
-// CapturedInputs returns all GenerateInput received, in order.
-func (c *ScriptedLLMClient) CapturedInputs() []*agent.GenerateInput {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	result := make([]*agent.GenerateInput, len(c.capturedInputs))
-	copy(result, c.capturedInputs)
-	return result
-}
-
 // CallCount returns the total number of Generate() calls made.
 func (c *ScriptedLLMClient) CallCount() int {
 	c.mu.Lock()

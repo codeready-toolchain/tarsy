@@ -17,8 +17,6 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
-	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
-	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
@@ -38,42 +36,10 @@ func (app *TestApp) SubmitAlert(t *testing.T, alertType, data string) map[string
 	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
 }
 
-// SubmitAlertWithMCP posts an alert with MCP selection override.
-func (app *TestApp) SubmitAlertWithMCP(t *testing.T, alertType, data string, mcpSelection map[string]interface{}) map[string]interface{} {
-	t.Helper()
-	body := map[string]interface{}{
-		"alert_type":    alertType,
-		"data":          data,
-		"mcp_selection": mcpSelection,
-	}
-	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
-}
-
 // GetSession retrieves a session by ID.
 func (app *TestApp) GetSession(t *testing.T, sessionID string) map[string]interface{} {
 	t.Helper()
 	return app.getJSON(t, fmt.Sprintf("/api/v1/sessions/%s", sessionID), http.StatusOK)
-}
-
-// CancelSession cancels a session.
-func (app *TestApp) CancelSession(t *testing.T, sessionID string) map[string]interface{} {
-	t.Helper()
-	return app.postJSON(t, fmt.Sprintf("/api/v1/sessions/%s/cancel", sessionID), nil, http.StatusOK)
-}
-
-// SendChatMessage sends a chat message.
-func (app *TestApp) SendChatMessage(t *testing.T, sessionID, content string) map[string]interface{} {
-	t.Helper()
-	body := map[string]interface{}{
-		"content": content,
-	}
-	return app.postJSON(t, fmt.Sprintf("/api/v1/sessions/%s/chat/messages", sessionID), body, http.StatusAccepted)
-}
-
-// GetHealth retrieves the health endpoint response.
-func (app *TestApp) GetHealth(t *testing.T) map[string]interface{} {
-	t.Helper()
-	return app.getJSON(t, "/health", http.StatusOK)
 }
 
 func (app *TestApp) postJSON(t *testing.T, path string, body interface{}, expectedStatus int) map[string]interface{} {
@@ -193,28 +159,6 @@ func (app *TestApp) QueryExecutions(t *testing.T, sessionID string) []*ent.Agent
 		All(context.Background())
 	require.NoError(t, err)
 	return execs
-}
-
-// QueryLLMInteractions returns all LLM interaction records for a session.
-func (app *TestApp) QueryLLMInteractions(t *testing.T, sessionID string) []*ent.LLMInteraction {
-	t.Helper()
-	interactions, err := app.EntClient.LLMInteraction.Query().
-		Where(llminteraction.SessionID(sessionID)).
-		Order(ent.Asc(llminteraction.FieldCreatedAt)).
-		All(context.Background())
-	require.NoError(t, err)
-	return interactions
-}
-
-// QueryMCPInteractions returns all MCP interaction records for a session.
-func (app *TestApp) QueryMCPInteractions(t *testing.T, sessionID string) []*ent.MCPInteraction {
-	t.Helper()
-	interactions, err := app.EntClient.MCPInteraction.Query().
-		Where(mcpinteraction.SessionID(sessionID)).
-		Order(ent.Asc(mcpinteraction.FieldCreatedAt)).
-		All(context.Background())
-	require.NoError(t, err)
-	return interactions
 }
 
 // ────────────────────────────────────────────────────────────
@@ -519,52 +463,3 @@ func formatExpected(e testdata.ExpectedEvent) string {
 	return s
 }
 
-// ────────────────────────────────────────────────────────────
-// WebSocket Event Projection and Filtering
-// ────────────────────────────────────────────────────────────
-
-// ProjectForGolden extracts only the key fields from a WS event for golden comparison.
-func ProjectForGolden(event WSEvent) map[string]interface{} {
-	projected := map[string]interface{}{"type": event.Type}
-	switch event.Type {
-	case "session.status":
-		projected["status"] = event.Parsed["status"]
-	case "stage.status":
-		projected["stage_name"] = event.Parsed["stage_name"]
-		projected["stage_index"] = event.Parsed["stage_index"]
-		projected["status"] = event.Parsed["status"]
-	case "timeline_event.created":
-		projected["event_type"] = event.Parsed["event_type"]
-		projected["status"] = event.Parsed["status"]
-	case "timeline_event.completed":
-		projected["status"] = event.Parsed["status"]
-		if et, ok := event.Parsed["event_type"]; ok && et != nil {
-			projected["event_type"] = et
-		}
-		if content, ok := event.Parsed["content"]; ok {
-			projected["content"] = content
-		}
-	case "chat.created":
-		projected["chat_id"] = event.Parsed["chat_id"]
-	case "chat.user_message":
-		projected["content"] = event.Parsed["content"]
-	}
-	return projected
-}
-
-// FilterEventsForGolden filters and projects WS events for golden comparison.
-// stream.chunk events are excluded entirely because their presence is
-// timing-sensitive (depends on how fast events are delivered vs consumed).
-func FilterEventsForGolden(events []WSEvent) []map[string]interface{} {
-	var filtered []map[string]interface{}
-	for _, e := range events {
-		switch e.Type {
-		case "stream.chunk",
-			"connection.established", "subscription.confirmed", "pong", "catchup.overflow":
-			continue
-		default:
-			filtered = append(filtered, ProjectForGolden(e))
-		}
-	}
-	return filtered
-}

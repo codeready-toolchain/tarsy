@@ -53,29 +53,6 @@ func AssertGoldenJSON(t *testing.T, goldenPath string, actual interface{}, norma
 	AssertGolden(t, goldenPath, data)
 }
 
-// AssertGoldenEvents normalizes and compares a WebSocket event sequence.
-// Events are first filtered and projected via FilterEventsForGolden,
-// then serialized as line-delimited JSON.
-func AssertGoldenEvents(t *testing.T, goldenPath string, events []WSEvent, normalizer *Normalizer) {
-	t.Helper()
-
-	filtered := FilterEventsForGolden(events)
-
-	var lines []byte
-	for _, evt := range filtered {
-		data, err := json.Marshal(evt)
-		require.NoError(t, err)
-		lines = append(lines, data...)
-		lines = append(lines, '\n')
-	}
-
-	if normalizer != nil {
-		lines = normalizer.NormalizeBytes(lines)
-	}
-
-	AssertGolden(t, goldenPath, lines)
-}
-
 // goldenDir returns the path to the testdata/golden directory for a scenario.
 func goldenDir(scenario string) string {
 	return filepath.Join("testdata", "golden", scenario)

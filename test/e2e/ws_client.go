@@ -60,82 +60,12 @@ func (c *WSClient) Subscribe(channel string) error {
 	return c.conn.Write(c.ctx, websocket.MessageText, data)
 }
 
-// WaitForEvent waits until an event matching the predicate is received, or timeout.
-func (c *WSClient) WaitForEvent(predicate func(WSEvent) bool, timeout time.Duration) (*WSEvent, error) {
-	deadline := time.After(timeout)
-	tick := time.NewTicker(25 * time.Millisecond)
-	defer tick.Stop()
-
-	for {
-		select {
-		case <-deadline:
-			return nil, fmt.Errorf("timeout waiting for event (collected %d events)", len(c.Events()))
-		case <-tick.C:
-			c.mu.Lock()
-			for i := range c.events {
-				if predicate(c.events[i]) {
-					evt := c.events[i]
-					c.mu.Unlock()
-					return &evt, nil
-				}
-			}
-			c.mu.Unlock()
-		}
-	}
-}
-
-// WaitForEventType waits for an event with the given type.
-func (c *WSClient) WaitForEventType(eventType string, timeout time.Duration) (*WSEvent, error) {
-	return c.WaitForEvent(func(e WSEvent) bool {
-		return e.Type == eventType
-	}, timeout)
-}
-
-// WaitForSessionStatus waits for a session.status event with the given status.
-func (c *WSClient) WaitForSessionStatus(status string, timeout time.Duration) (*WSEvent, error) {
-	return c.WaitForEvent(func(e WSEvent) bool {
-		return e.Type == "session.status" && e.Parsed["status"] == status
-	}, timeout)
-}
-
-// CollectUntil collects events until predicate returns true or timeout.
-func (c *WSClient) CollectUntil(predicate func(events []WSEvent) bool, timeout time.Duration) ([]WSEvent, error) {
-	deadline := time.After(timeout)
-	tick := time.NewTicker(25 * time.Millisecond)
-	defer tick.Stop()
-
-	for {
-		select {
-		case <-deadline:
-			return c.Events(), fmt.Errorf("timeout waiting for condition (collected %d events)", len(c.Events()))
-		case <-tick.C:
-			evts := c.Events()
-			if predicate(evts) {
-				return evts, nil
-			}
-		}
-	}
-}
-
 // Events returns a snapshot of all collected events.
 func (c *WSClient) Events() []WSEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	result := make([]WSEvent, len(c.events))
 	copy(result, c.events)
-	return result
-}
-
-// EventsByType returns events filtered by type.
-func (c *WSClient) EventsByType(eventType string) []WSEvent {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var result []WSEvent
-	for _, e := range c.events {
-		if e.Type == eventType {
-			result = append(result, e)
-		}
-	}
 	return result
 }
 
