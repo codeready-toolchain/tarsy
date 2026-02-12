@@ -31,9 +31,11 @@ type Server struct {
 	connManager    *events.ConnectionManager
 	healthMonitor  *mcp.HealthMonitor              // nil if MCP disabled
 	warningService *services.SystemWarningsService // nil if MCP disabled
-	chatService    *services.ChatService           // nil until set
-	chatExecutor   *queue.ChatMessageExecutor      // nil until set
-	eventPublisher agent.EventPublisher            // nil if streaming disabled
+	chatService        *services.ChatService           // nil until set
+	chatExecutor       *queue.ChatMessageExecutor      // nil until set
+	eventPublisher     agent.EventPublisher            // nil if streaming disabled
+	interactionService *services.InteractionService    // nil until set (debug endpoints)
+	stageService       *services.StageService          // nil until set (debug endpoints)
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -86,6 +88,16 @@ func (s *Server) SetEventPublisher(pub agent.EventPublisher) {
 	s.eventPublisher = pub
 }
 
+// SetInteractionService sets the interaction service for debug endpoints.
+func (s *Server) SetInteractionService(svc *services.InteractionService) {
+	s.interactionService = svc
+}
+
+// SetStageService sets the stage service for debug endpoints.
+func (s *Server) SetStageService(svc *services.StageService) {
+	s.stageService = svc
+}
+
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
 	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
@@ -103,6 +115,11 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
+
+	// Debug/observability endpoints (two-level loading).
+	v1.GET("/sessions/:id/debug", s.getDebugListHandler)
+	v1.GET("/sessions/:id/debug/llm/:interaction_id", s.getLLMInteractionHandler)
+	v1.GET("/sessions/:id/debug/mcp/:interaction_id", s.getMCPInteractionHandler)
 
 	// WebSocket endpoint for real-time event streaming.
 	// Auth deferred to Phase 9 (Security) — currently open to any client,

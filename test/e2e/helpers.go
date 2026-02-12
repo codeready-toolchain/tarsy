@@ -112,6 +112,28 @@ func (app *TestApp) getJSON(t *testing.T, path string, expectedStatus int) map[s
 }
 
 // ────────────────────────────────────────────────────────────
+// Debug API Helpers
+// ────────────────────────────────────────────────────────────
+
+// GetDebugList calls GET /api/v1/sessions/:id/debug.
+func (app *TestApp) GetDebugList(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug", http.StatusOK)
+}
+
+// GetLLMInteractionDetail calls GET /api/v1/sessions/:id/debug/llm/:interaction_id.
+func (app *TestApp) GetLLMInteractionDetail(t *testing.T, sessionID, interactionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug/llm/"+interactionID, http.StatusOK)
+}
+
+// GetMCPInteractionDetail calls GET /api/v1/sessions/:id/debug/mcp/:interaction_id.
+func (app *TestApp) GetMCPInteractionDetail(t *testing.T, sessionID, interactionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug/mcp/"+interactionID, http.StatusOK)
+}
+
+// ────────────────────────────────────────────────────────────
 // Polling Helpers
 // ────────────────────────────────────────────────────────────
 

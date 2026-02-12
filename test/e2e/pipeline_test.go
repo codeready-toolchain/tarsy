@@ -216,13 +216,37 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Total: 14
 	assert.Equal(t, 14, llm.CallCount())
 
-	// Build normalizer with all known IDs for golden comparison.
+	// ── Debug API (fetch first — used to register IDs in deterministic order) ──
+	//
+	// The debug list endpoint returns executions in stage_index + agent_index
+	// order, which is deterministic even for parallel agents. We use this order
+	// to register execution and interaction IDs BEFORE running golden assertions,
+	// so placeholder numbering is stable across runs regardless of parallel
+	// agent start times.
+	debugList := app.GetDebugList(t, sessionID)
+	debugStages, ok := debugList["stages"].([]interface{})
+	require.True(t, ok, "stages should be an array")
+	require.NotEmpty(t, debugStages, "should have stage groups")
+
+	// Build normalizer with IDs registered in deterministic order.
+	// The debug list is ordered by stage_index → agent_index, so placeholder
+	// numbering is stable regardless of parallel agent start times.
 	normalizer := NewNormalizer(sessionID)
-	for _, s := range stages {
-		normalizer.RegisterStageID(s.ID)
-	}
-	for _, e := range execs {
-		normalizer.RegisterExecutionID(e.ID)
+	for _, rawStage := range debugStages {
+		stg, _ := rawStage.(map[string]interface{})
+		normalizer.RegisterStageID(stg["stage_id"].(string))
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec, _ := rawExec.(map[string]interface{})
+			normalizer.RegisterExecutionID(exec["execution_id"].(string))
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				normalizer.RegisterInteractionID(li["id"].(string))
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				normalizer.RegisterInteractionID(mi["id"].(string))
+			}
+		}
 	}
 
 	// Golden file assertions.
@@ -250,4 +274,42 @@ func TestE2E_Pipeline(t *testing.T) {
 	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
 	SortTimelineProjection(projectedTimeline)
 	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), projectedTimeline, normalizer)
+
+	// ── Debug golden assertions ─────────────────────────────────
+	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_list.golden"), debugList, normalizer)
+
+	// Level 2: LLM interaction detail — pick the first iteration of DataCollector.
+	// Navigate: stages[0].executions[0].llm_interactions[0]
+	firstStage, _ := debugStages[0].(map[string]interface{})
+	firstStageExecs, _ := firstStage["executions"].([]interface{})
+	require.NotEmpty(t, firstStageExecs, "first stage should have executions")
+	firstExec, _ := firstStageExecs[0].(map[string]interface{})
+	firstLLMInteractions, _ := firstExec["llm_interactions"].([]interface{})
+	require.NotEmpty(t, firstLLMInteractions, "DataCollector should have LLM interactions")
+	firstLLMID := firstLLMInteractions[0].(map[string]interface{})["id"].(string)
+
+	llmDetail := app.GetLLMInteractionDetail(t, sessionID, firstLLMID)
+	require.NotEmpty(t, llmDetail["conversation"], "LLM detail should include conversation")
+	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_llm_detail.golden"), llmDetail, normalizer)
+
+	// Level 2: MCP interaction detail — pick the first MCP interaction.
+	var firstMCPID string
+	for _, rawStage := range debugStages {
+		stg, _ := rawStage.(map[string]interface{})
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec, _ := rawExec.(map[string]interface{})
+			mcpList, _ := exec["mcp_interactions"].([]interface{})
+			if len(mcpList) > 0 {
+				firstMCPID = mcpList[0].(map[string]interface{})["id"].(string)
+				break
+			}
+		}
+		if firstMCPID != "" {
+			break
+		}
+	}
+	require.NotEmpty(t, firstMCPID, "should have at least one MCP interaction")
+	mcpDetail := app.GetMCPInteractionDetail(t, sessionID, firstMCPID)
+	require.NotEmpty(t, mcpDetail["server_name"], "MCP detail should have server_name")
+	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_mcp_detail.golden"), mcpDetail, normalizer)
 }
