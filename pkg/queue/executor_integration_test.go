@@ -1163,6 +1163,116 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 	assert.Equal(t, "synthesis", synthExec.IterationStrategy)
 }
 
+func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
+	// When the iteration strategy is set in the agent registry (not at
+	// stage level), the AgentExecution DB record must store the resolved
+	// strategy — not the empty stage-level value or the system default.
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "NativeAgent"},  // no strategy override at stage level
+					{Name: "ReactAgent"},   // no strategy override at stage level
+				},
+			},
+		},
+	}
+
+	// LLM: agent1 answer, agent2 answer, synthesis
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Native result."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: React result."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesis done."},
+			}},
+		},
+	}
+
+	// Agent registry defines strategies; stage config does NOT override them.
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:       "test-provider",
+			IterationStrategy: config.IterationStrategyReact, // system default
+			MaxIterations:     &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"NativeAgent": {
+				IterationStrategy: config.IterationStrategyNativeThinking,
+				MaxIterations:     &maxIter,
+			},
+			"ReactAgent": {
+				IterationStrategy: config.IterationStrategyReact,
+				MaxIterations:     &maxIter,
+			},
+			"SynthesisAgent": {
+				IterationStrategy: config.IterationStrategySynthesis,
+				MaxIterations:     &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		}),
+		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+
+	// Verify execution records store the resolved strategy from agent registry
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 3) // NativeAgent, ReactAgent, SynthesisAgent
+
+	execByName := make(map[string]*ent.AgentExecution)
+	for _, e := range execs {
+		execByName[e.AgentName] = e
+	}
+
+	require.Contains(t, execByName, "NativeAgent")
+	assert.Equal(t, "native-thinking", execByName["NativeAgent"].IterationStrategy,
+		"NativeAgent should have resolved strategy from agent registry, not default")
+
+	require.Contains(t, execByName, "ReactAgent")
+	assert.Equal(t, "react", execByName["ReactAgent"].IterationStrategy,
+		"ReactAgent should have resolved strategy from agent registry")
+
+	require.Contains(t, execByName, "SynthesisAgent")
+	assert.Equal(t, "synthesis", execByName["SynthesisAgent"].IterationStrategy)
+
+	// Verify the synthesis LLM call received correct strategy labels.
+	// The 3rd LLM call is synthesis — its input messages should contain
+	// the correct agent strategy labels.
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
+	synthInput := llm.capturedInputs[2]
+	synthUserMsg := ""
+	for _, msg := range synthInput.Messages {
+		if msg.Role == agent.RoleUser {
+			synthUserMsg = msg.Content
+		}
+	}
+	assert.Contains(t, synthUserMsg, "NativeAgent (native-thinking, test-provider)",
+		"synthesis prompt should show resolved strategy for NativeAgent")
+	assert.Contains(t, synthUserMsg, "ReactAgent (react, test-provider)",
+		"synthesis prompt should show resolved strategy for ReactAgent")
+}
+
 func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 

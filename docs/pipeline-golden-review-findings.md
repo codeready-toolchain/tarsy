@@ -1,0 +1,207 @@
+# Pipeline Golden Files Review — Findings
+
+Systematic review of all golden files in `test/e2e/testdata/golden/pipeline/` and
+cross-referencing with test setup, config, production code, and expected events.
+
+**Date:** 2026-02-12
+**Branch:** phase6-impl
+
+---
+
+## 1. ~~PRODUCTION BUG: AgentExecution stores wrong iteration strategy + synthesis prompt mislabels it~~ FIXED
+
+**Severity:** Low-Medium | **Status:** Fixed
+**Files:** `pkg/queue/executor.go` (lines 370-386, 569-584)
+
+### Problem
+
+Two related issues stemming from the same root cause:
+
+**1a. DB record has wrong strategy.** The `AgentExecution.IterationStrategy`
+field is populated from the raw `StageAgentConfig` before `ResolveAgentConfig`
+is called. When the strategy is inherited from the agent registry (not overridden
+at stage level), the stored value is empty/wrong.
+
+```go
+// executor.go:370-376 — execution created BEFORE resolution
+exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+    // ...
+    IterationStrategy: agentConfig.IterationStrategy,  // ← raw stage config (empty!)
+})
+
+// executor.go:386 — resolved AFTER creation
+resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
+```
+
+**1b. Synthesis prompt shows wrong strategy.** `buildSynthesisContext` also reads
+from the raw stage config and falls back to defaults, skipping the agent registry:
+
+```go
+// executor.go:576-584
+strategy = string(configs[i].agentConfig.IterationStrategy) // empty — not set in stage YAML
+if strategy == "" {
+    strategy = string(e.cfg.Defaults.IterationStrategy)     // falls back to "native-thinking"
+}
+```
+
+Visible in golden file `20_SynthesisAgent_llm_synthesis_1.golden`:
+```
+#### Agent 1: ConfigValidator (native-thinking, test-provider)
+```
+But ConfigValidator actually ran as `react` (confirmed by its conversation golden
+files showing ReAct format prompts).
+
+### Root Cause
+
+The execution record is created before config resolution, so it captures the raw
+stage-level value. The synthesis context builder also reads raw stage config
+instead of using the stored (or resolved) value.
+
+Note: in typical production configs, strategy is set at the stage/chain level
+(not the global agent registry), so this bug only triggers when the strategy is
+inherited from the agent definition. Still incorrect when it does trigger.
+
+### Impact
+
+- `AgentExecution.IterationStrategy` in the DB is wrong for agents inheriting
+  strategy from the agent registry
+- The synthesizer LLM receives incorrect strategy metadata for those agents
+- Any dashboard showing per-execution strategy from DB would display it wrong
+
+### Fix
+
+1. Move `CreateAgentExecution` after `ResolveAgentConfig`, or update the
+   execution record after resolution, so the DB stores the correctly resolved
+   `resolvedConfig.IterationStrategy`.
+2. `buildSynthesisContext` reads from the `AgentExecution` DB record (which now
+   has the correct value) instead of recalculating from raw stage config.
+
+This way the strategy is resolved once (correctly), stored once, and read from
+DB everywhere — no recalculation needed.
+
+---
+
+## 2. OBSERVABILITY GAP: Summarization conversations not stored in DB
+
+**Severity:** Medium
+**Files:** `pkg/agent/controller/summarize.go` (lines 112-152)
+
+### Problem
+
+Golden files `04_DataCollector_llm_summarization_1.golden` and
+`12_Remediator_llm_summarization_1.golden` both show `messages_count: 2` in
+metadata but have **no conversation section** — the detail API returns an empty
+conversation.
+
+### Root Cause
+
+`callSummarizationLLM` records the `LLMInteraction` (with `messages_count: 2`)
+but never calls `storeMessages()` to persist the actual `Message` records:
+
+```go
+// summarize.go:147-149
+recordLLMInteraction(ctx, execCtx, 0, "summarization", len(messages),
+    streamed.LLMResponse, nil, startTime)
+// ← no storeMessages() call
+```
+
+Compare with the synthesis controller which explicitly calls `storeMessages()`
+before the LLM call, or the native-thinking/react controllers which store
+messages incrementally.
+
+### Impact
+
+The dashboard debug tab will show "2 messages were sent" for summarization
+interactions, but clicking for detail shows an empty conversation. Users cannot
+inspect what prompt was used for summarization or verify its correctness.
+
+### Fix
+
+Add a `storeMessages()` call in `callSummarizationLLM` before the LLM call,
+similar to what the synthesis controller does. Need to consider the `msgSeq`
+threading — summarization runs mid-iteration, so a separate sequence or
+interaction-scoped sequence may be needed.
+
+---
+
+## 3. OBSERVABILITY GAP: Executive summary LLM call not tracked as interaction
+
+**Severity:** Medium
+**Files:** `pkg/queue/executor.go` (lines 748-841)
+
+### Problem
+
+The test asserts 14 LLM calls total, but `debug_list.golden` only contains 13
+LLM interactions. The missing one is the executive summary.
+
+### Root Cause
+
+`generateExecutiveSummary` calls `e.llmClient.Generate()` directly without
+recording an `LLMInteraction` or storing `Message` records. It only creates a
+`TimelineEvent` (type `executive_summary`).
+
+### Impact
+
+- Dashboard debug tab won't show the executive summary's LLM call
+- Token usage for executive summary generation isn't tracked
+- The prompt used for executive summary can't be inspected through the debug API
+- The executive summary is the session-level "TL;DR" — being unable to debug its
+  generation is a real gap
+
+### Fix
+
+Record an `LLMInteraction` (type `"executive_summary"`) and store the
+conversation messages. This requires either:
+- Creating a lightweight execution context for the executive summary call, or
+- Recording the interaction directly via `interactionService` (the executor
+  already has access to it)
+
+The interaction would have no `stage_id`/`execution_id` (session-level), so the
+debug list API grouping logic would need a small update to surface it (e.g., a
+top-level `session_interactions` section or a virtual "executive summary" stage).
+
+---
+
+## 4. MINOR: Empty tool arguments omitted from MCP detail
+
+**Severity:** Very Low
+**Files:** `test/e2e/golden.go` (AssertGoldenMCPInteraction), `pkg/api/handler_debug.go`
+
+### Problem
+
+`02_DataCollector_mcp_get_nodes_1.golden` has no `=== TOOL_ARGUMENTS ===` section
+because the arguments were `{}` (empty object, stored as nil). Other MCP
+interactions with real arguments (e.g., `03_DataCollector_mcp_get_pods_1.golden`)
+properly show their arguments.
+
+### Impact
+
+Cosmetic. In the dashboard, a user might wonder whether arguments were passed at
+all vs. seeing an explicit empty `{}`.
+
+### Fix (optional)
+
+Render `=== TOOL_ARGUMENTS ===` with `{}` when arguments are nil/empty, so it's
+explicit that the tool was called with no arguments. Alternatively, leave as-is —
+this is a display preference.
+
+---
+
+## Verified — No Issues Found
+
+These areas were checked and found correct:
+
+- **Token counts** — match between script entries, debug_list, and interaction details
+- **Conversation accumulation** — messages grow correctly (2 → 5 → 7 for DataCollector across 3 iterations)
+- **Summarization in conversations** — summarized tool results appear with `[NOTE: ...]` prefix and summary text
+- **Stage context chaining** — investigation → remediation → validation all carry forward correctly
+- **MCP server scoping** — ConfigValidator sees only test-mcp tools (4), MetricsValidator only prometheus-mcp, Remediator sees all 7
+- **ReAct vs Native-Thinking prompts** — ReAct lists tools in user prompt; native-thinking doesn't
+- **Forced conclusion** — iteration limit message well-structured, metadata present on all relevant events
+- **Synthesis parallel results** — both agents included with tool calls and responses
+- **Deterministic ordering** — structural ordering (stage → agent index → chronological within agent)
+- **Normalization** — timestamps, UUIDs, durations properly replaced with stable placeholders
+- **Timeline golden** — all agents, all events, correct metadata including forced_conclusion markers
+- **Session golden** — correct final_analysis, executive_summary, status, stage references
+- **Stages golden** — 4 stages in correct order, all completed
+- **Map iteration determinism** — confirmed in prior audit that all production paths sort correctly

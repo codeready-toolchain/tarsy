@@ -67,10 +67,12 @@ type stageResult struct {
 
 // agentResult captures the outcome of a single agent execution within a stage.
 type agentResult struct {
-	executionID   string
-	status        agent.ExecutionStatus
-	finalAnalysis string
-	err           error
+	executionID       string
+	status            agent.ExecutionStatus
+	finalAnalysis     string
+	err               error
+	iterationStrategy string // resolved strategy (for synthesis context)
+	llmProviderName   string // resolved provider name (for synthesis context)
 }
 
 // executionConfig wraps agent config with display name for stage execution.
@@ -366,13 +368,24 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Create AgentExecution DB record
+	// Resolve agent config from hierarchy (before creating execution record
+	// so the DB record captures the correctly resolved iteration strategy).
+	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
+	if err != nil {
+		logger.Error("Failed to resolve agent config", "error", err)
+		return agentResult{
+			status: agent.ExecutionStatusFailed,
+			err:    fmt.Errorf("failed to resolve agent config: %w", err),
+		}
+	}
+
+	// Create AgentExecution DB record with resolved strategy
 	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:           stg.ID,
 		SessionID:         input.session.ID,
 		AgentName:         displayName,
 		AgentIndex:        agentIndex + 1, // 1-based in DB
-		IterationStrategy: agentConfig.IterationStrategy,
+		IterationStrategy: resolvedConfig.IterationStrategy,
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -382,25 +395,29 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 	}
 
-	// Resolve agent config from hierarchy
-	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
-	if err != nil {
-		logger.Error("Failed to resolve agent config", "error", err)
-		return agentResult{
-			executionID: exec.ID,
-			status:      agent.ExecutionStatusFailed,
-			err:         fmt.Errorf("failed to resolve agent config: %w", err),
-		}
+	// Resolve LLM provider name for observability (synthesis context display).
+	// Hierarchy: defaults → chain → stage-agent.
+	providerName := e.cfg.Defaults.LLMProvider
+	if input.chain.LLMProvider != "" {
+		providerName = input.chain.LLMProvider
 	}
+	if agentConfig.LLMProvider != "" {
+		providerName = agentConfig.LLMProvider
+	}
+
+	// Metadata carried on all agentResult returns below (for synthesis context).
+	resolvedStrategy := string(resolvedConfig.IterationStrategy)
 
 	// Resolve MCP servers and tool filter
 	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
 	if err != nil {
 		logger.Error("Failed to resolve MCP selection", "error", err)
 		return agentResult{
-			executionID: exec.ID,
-			status:      agent.ExecutionStatusFailed,
-			err:         fmt.Errorf("invalid MCP selection: %w", err),
+			executionID:       exec.ID,
+			status:            agent.ExecutionStatusFailed,
+			err:               fmt.Errorf("invalid MCP selection: %w", err),
+			iterationStrategy: resolvedStrategy,
+			llmProviderName:   providerName,
 		}
 	}
 
@@ -436,9 +453,11 @@ func (e *RealSessionExecutor) executeAgent(
 	if err != nil {
 		logger.Error("Failed to create agent", "error", err)
 		return agentResult{
-			executionID: exec.ID,
-			status:      agent.ExecutionStatusFailed,
-			err:         fmt.Errorf("failed to create agent: %w", err),
+			executionID:       exec.ID,
+			status:            agent.ExecutionStatusFailed,
+			err:               fmt.Errorf("failed to create agent: %w", err),
+			iterationStrategy: resolvedStrategy,
+			llmProviderName:   providerName,
 		}
 	}
 
@@ -449,9 +468,11 @@ func (e *RealSessionExecutor) executeAgent(
 			logger.Error("Failed to update agent execution status after error", "error", updateErr)
 		}
 		return agentResult{
-			executionID: exec.ID,
-			status:      agent.ExecutionStatusFailed,
-			err:         err,
+			executionID:       exec.ID,
+			status:            agent.ExecutionStatusFailed,
+			err:               err,
+			iterationStrategy: resolvedStrategy,
+			llmProviderName:   providerName,
 		}
 	}
 
@@ -464,18 +485,22 @@ func (e *RealSessionExecutor) executeAgent(
 	if updateErr := input.stageService.UpdateAgentExecutionStatus(ctx, exec.ID, entStatus, errMsg); updateErr != nil {
 		logger.Error("Failed to update agent execution status", "error", updateErr)
 		return agentResult{
-			executionID:   exec.ID,
-			status:        agent.ExecutionStatusFailed,
-			finalAnalysis: result.FinalAnalysis,
-			err:           fmt.Errorf("agent completed but status update failed: %w", updateErr),
+			executionID:       exec.ID,
+			status:            agent.ExecutionStatusFailed,
+			finalAnalysis:     result.FinalAnalysis,
+			err:               fmt.Errorf("agent completed but status update failed: %w", updateErr),
+			iterationStrategy: resolvedStrategy,
+			llmProviderName:   providerName,
 		}
 	}
 
 	return agentResult{
-		executionID:   exec.ID,
-		status:        result.Status,
-		finalAnalysis: result.FinalAnalysis,
-		err:           result.Error,
+		executionID:       exec.ID,
+		status:            result.Status,
+		finalAnalysis:     result.FinalAnalysis,
+		err:               result.Error,
+		iterationStrategy: resolvedStrategy,
+		llmProviderName:   providerName,
 	}
 }
 
@@ -570,34 +595,20 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 
 	investigations := make([]agentctx.AgentInvestigation, len(parallelResult.agentResults))
 	for i, ar := range parallelResult.agentResults {
-		// Resolve display name and strategy from configs
+		// Use display name from configs (handles replica naming)
 		displayName := ""
-		strategy := ""
 		if i < len(configs) {
 			displayName = configs[i].displayName
-			strategy = string(configs[i].agentConfig.IterationStrategy)
 		}
 		if displayName == "" && i < len(input.stageConfig.Agents) {
 			displayName = input.stageConfig.Agents[i].Name
-		}
-		if strategy == "" {
-			strategy = string(e.cfg.Defaults.IterationStrategy)
-		}
-
-		// Resolve LLM provider name for display
-		providerName := e.cfg.Defaults.LLMProvider
-		if input.chain.LLMProvider != "" {
-			providerName = input.chain.LLMProvider
-		}
-		if i < len(input.stageConfig.Agents) && input.stageConfig.Agents[i].LLMProvider != "" {
-			providerName = input.stageConfig.Agents[i].LLMProvider
 		}
 
 		investigation := agentctx.AgentInvestigation{
 			AgentName:   displayName,
 			AgentIndex:  i + 1, // 1-based
-			Strategy:    strategy,
-			LLMProvider: providerName,
+			Strategy:    ar.iterationStrategy, // resolved at execution time
+			LLMProvider: ar.llmProviderName,   // resolved at execution time
 			Status:      mapAgentStatusToSessionStatus(ar.status),
 		}
 
