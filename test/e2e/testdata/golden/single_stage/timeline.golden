@@ -1,0 +1,44 @@
+[
+  {
+    "content": "Let me check the pod status.",
+    "event_type": "llm_thinking",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "content": "I'll look up the pods.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "content": "[{\"name\":\"pod-1\",\"status\":\"OOMKilled\",\"restarts\":5}]",
+    "event_type": "llm_tool_call",
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "content": "The pod is clearly OOMKilled.",
+    "event_type": "llm_thinking",
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "llm_response",
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "final_analysis",
+    "sequence": 6,
+    "status": "streaming"
+  },
+  {
+    "content": "Pod-1 OOM killed due to memory leak.",
+    "event_type": "executive_summary",
+    "sequence": 999999,
+    "status": "streaming"
+  }
+]

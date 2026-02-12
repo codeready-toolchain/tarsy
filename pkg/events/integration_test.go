@@ -173,6 +173,7 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
 		Type:      EventTypeTimelineCompleted,
 		EventID:   "evt-1",
+		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   "second event",
 		Status:    timelineevent.StatusCompleted,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -192,6 +193,7 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 
 	assert.Equal(t, EventTypeTimelineCompleted, events[1].Payload["type"])
 	assert.Equal(t, "second event", events[1].Payload["content"])
+	assert.Equal(t, "llm_response", events[1].Payload["event_type"], "completed event should persist event_type")
 
 	// IDs should be incrementing
 	assert.Greater(t, events[1].ID, events[0].ID)
@@ -328,6 +330,7 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
 		Type:      EventTypeTimelineCompleted,
 		EventID:   eventID,
+		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   expectedFull,
 		Status:    timelineevent.StatusCompleted,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -338,6 +341,7 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	assert.Equal(t, EventTypeTimelineCompleted, msg["type"])
 	assert.Equal(t, expectedFull, msg["content"])
 	assert.Equal(t, "completed", msg["status"])
+	assert.Equal(t, "llm_response", msg["event_type"], "completed WS message must include event_type")
 
 	// Only the 2 persistent events should be in DB (created + completed)
 	// The 5 stream.chunk deltas are transient — not persisted
@@ -346,6 +350,7 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	assert.Len(t, events, 2, "only persistent events should be in DB")
 	assert.Equal(t, EventTypeTimelineCreated, events[0].Payload["type"])
 	assert.Equal(t, EventTypeTimelineCompleted, events[1].Payload["type"])
+	assert.Equal(t, "llm_response", events[1].Payload["event_type"], "completed DB record must include event_type")
 }
 
 func TestIntegration_CatchupFromRealDB(t *testing.T) {

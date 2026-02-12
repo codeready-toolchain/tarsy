@@ -262,6 +262,7 @@ func callSummarizationLLMWithStreaming(
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   summaryEventID,
+				EventType: timelineevent.EventTypeMcpToolSummary,
 				Content:   failContent,
 				Status:    timelineevent.StatusFailed,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -275,7 +276,7 @@ func callSummarizationLLMWithStreaming(
 
 	// Finalize summary event
 	if summaryEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, summaryEventID, resp.Text, "summary")
+		finalizeStreamingEvent(ctx, execCtx, summaryEventID, timelineevent.EventTypeMcpToolSummary, resp.Text, "summary")
 	}
 
 	return &StreamedResponse{

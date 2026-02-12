@@ -285,11 +285,11 @@ func callLLMWithStreaming(
 	// status indefinitely. The empty-delta guard above prevents event creation
 	// for purely empty chunks, but we handle the edge case defensively here.
 	if thinkingEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, thinkingEventID, resp.ThinkingText, "thinking")
+		finalizeStreamingEvent(ctx, execCtx, thinkingEventID, timelineevent.EventTypeLlmThinking, resp.ThinkingText, "thinking")
 	}
 
 	if textEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, textEventID, resp.Text, "text")
+		finalizeStreamingEvent(ctx, execCtx, textEventID, timelineevent.EventTypeLlmResponse, resp.Text, "text")
 	}
 
 	return &StreamedResponse{

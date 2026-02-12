@@ -12,6 +12,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
 
@@ -20,15 +21,25 @@ import (
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_SingleStage(t *testing.T) {
-	// LLM script: tool call → tool result → final answer.
+	// LLM script: thinking + tool call → tool result → thinking + final answer.
 	llm := NewScriptedLLMClient()
+	// Iteration 1: thinking + text alongside tool call.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me check the pod status."},
+			&agent.TextChunk{Content: "I'll look up the pods."},
 			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
 			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
 		},
 	})
-	llm.AddSequential(LLMScriptEntry{Text: "Investigation complete: pod-1 is OOMKilled with 5 restarts."})
+	// Iteration 2: thinking + final answer (no tools).
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "The pod is clearly OOMKilled."},
+			&agent.TextChunk{Content: "Investigation complete: pod-1 is OOMKilled with 5 restarts."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 50, TotalTokens: 200},
+		},
+	})
 	// Executive summary.
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak."})
 
@@ -59,6 +70,9 @@ func TestE2E_SingleStage(t *testing.T) {
 	// Wait for session completion via DB polling (most reliable).
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
+	// Allow trailing WS events to arrive after session.status:completed.
+	time.Sleep(200 * time.Millisecond)
+
 	// Verify session via API.
 	session := app.GetSession(t, sessionID)
 	assert.Equal(t, "completed", session["status"])
@@ -79,7 +93,7 @@ func TestE2E_SingleStage(t *testing.T) {
 	// Verify LLM call count: 1 tool call + 1 final answer + 1 executive summary = 3.
 	assert.Equal(t, 3, llm.CallCount())
 
-	// Golden file assertions (session API response is deterministic).
+	// Build normalizer with all known IDs for golden comparison.
 	normalizer := NewNormalizer(sessionID)
 	for _, s := range stages {
 		normalizer.RegisterStageID(s.ID)
@@ -87,7 +101,27 @@ func TestE2E_SingleStage(t *testing.T) {
 	for _, e := range execs {
 		normalizer.RegisterExecutionID(e.ID)
 	}
+
+	// Golden file assertions.
 	AssertGoldenJSON(t, GoldenPath("single_stage", "session.golden"), session, normalizer)
+
+	// WS event structural assertions (not golden — event ordering is non-deterministic
+	// due to catchup/NOTIFY race, so we verify expected events in relative order).
+	AssertEventsInOrder(t, ws.Events(), testdata.SingleStageExpectedEvents)
+
+	// Stages golden.
+	projectedStages := make([]map[string]interface{}, len(stages))
+	for i, s := range stages {
+		projectedStages[i] = ProjectStageForGolden(s)
+	}
+	AssertGoldenJSON(t, GoldenPath("single_stage", "stages.golden"), projectedStages, normalizer)
+
+	// Timeline golden.
+	projectedTimeline := make([]map[string]interface{}, len(timeline))
+	for i, te := range timeline {
+		projectedTimeline[i] = ProjectTimelineForGolden(te)
+	}
+	AssertGoldenJSON(t, GoldenPath("single_stage", "timeline.golden"), projectedTimeline, normalizer)
 }
 
 // ────────────────────────────────────────────────────────────

@@ -24,12 +24,13 @@ type TimelineCreatedPayload struct {
 // TimelineCompletedPayload is the payload for timeline_event.completed events.
 // Published when a streaming timeline event transitions to a terminal status.
 type TimelineCompletedPayload struct {
-	Type      string               `json:"type"`     // always EventTypeTimelineCompleted
-	EventID   string               `json:"event_id"` // timeline event UUID
-	Content   string               `json:"content"`  // final content
-	Status    timelineevent.Status `json:"status"`   // completed, failed, cancelled, timed_out
-	Metadata  map[string]any       `json:"metadata,omitempty"`
-	Timestamp string               `json:"timestamp"` // RFC3339Nano
+	Type      string                  `json:"type"`       // always EventTypeTimelineCompleted
+	EventID   string                  `json:"event_id"`   // timeline event UUID
+	EventType timelineevent.EventType `json:"event_type"` // llm_thinking, llm_response, llm_tool_call, etc.
+	Content   string                  `json:"content"`    // final content
+	Status    timelineevent.Status    `json:"status"`     // completed, failed, cancelled, timed_out
+	Metadata  map[string]any          `json:"metadata,omitempty"`
+	Timestamp string                  `json:"timestamp"` // RFC3339Nano
 }
 
 // StreamChunkPayload is the payload for stream.chunk transient events.

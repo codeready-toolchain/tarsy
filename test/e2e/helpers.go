@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -18,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 )
 
 // ────────────────────────────────────────────────────────────
@@ -192,6 +195,149 @@ func (app *TestApp) QueryMCPInteractions(t *testing.T, sessionID string) []*ent.
 }
 
 // ────────────────────────────────────────────────────────────
+// DB Record Projection for Golden Comparison
+// ────────────────────────────────────────────────────────────
+
+// ProjectStageForGolden extracts key fields from a stage record for golden comparison.
+func ProjectStageForGolden(s *ent.Stage) map[string]interface{} {
+	m := map[string]interface{}{
+		"stage_name":  s.StageName,
+		"stage_index": s.StageIndex,
+		"status":      string(s.Status),
+	}
+	if s.ErrorMessage != nil {
+		m["error_message"] = *s.ErrorMessage
+	}
+	return m
+}
+
+// ProjectTimelineForGolden extracts key fields from a timeline event for golden comparison.
+func ProjectTimelineForGolden(te *ent.TimelineEvent) map[string]interface{} {
+	m := map[string]interface{}{
+		"event_type": string(te.EventType),
+		"status":     string(te.Status),
+		"sequence":   te.SequenceNumber,
+	}
+	if te.Content != "" {
+		m["content"] = te.Content
+	}
+	return m
+}
+
+// ────────────────────────────────────────────────────────────
+// WebSocket Structural Assertions
+// ────────────────────────────────────────────────────────────
+
+// AssertEventsInOrder verifies that each expected event appears in the actual
+// WS events in the correct relative order. Extra and duplicate actual events
+// are tolerated — only the expected sequence must be found in order.
+//
+// Infra events (connection.established, subscription.confirmed, pong,
+// catchup.overflow) are filtered out before matching.
+func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.ExpectedEvent) {
+	t.Helper()
+
+	// Filter out infra events.
+	var filtered []WSEvent
+	for _, e := range actual {
+		switch e.Type {
+		case "connection.established", "subscription.confirmed", "pong", "catchup.overflow":
+			continue
+		default:
+			filtered = append(filtered, e)
+		}
+	}
+
+	expectedIdx := 0
+	for _, evt := range filtered {
+		if expectedIdx >= len(expected) {
+			break
+		}
+		if matchesExpected(evt, expected[expectedIdx]) {
+			expectedIdx++
+		}
+	}
+
+	if !assert.Equal(t, len(expected), expectedIdx,
+		"not all expected WS events found in order (matched %d/%d)", expectedIdx, len(expected)) {
+		// Build a readable summary of what was expected vs what we got.
+		var sb strings.Builder
+		sb.WriteString("Expected events (unmatched from index ")
+		sb.WriteString(fmt.Sprintf("%d):\n", expectedIdx))
+		for i := expectedIdx; i < len(expected); i++ {
+			sb.WriteString(fmt.Sprintf("  [%d] %s", i, formatExpected(expected[i])))
+			sb.WriteString("\n")
+		}
+		sb.WriteString("Actual events received:\n")
+		for i, e := range filtered {
+			sb.WriteString(fmt.Sprintf("  [%d] type=%s", i, e.Type))
+			if s, ok := e.Parsed["status"]; ok {
+				sb.WriteString(fmt.Sprintf(" status=%v", s))
+			}
+			if sn, ok := e.Parsed["stage_name"]; ok {
+				sb.WriteString(fmt.Sprintf(" stage_name=%v", sn))
+			}
+			if et, ok := e.Parsed["event_type"]; ok {
+				sb.WriteString(fmt.Sprintf(" event_type=%v", et))
+			}
+			sb.WriteString("\n")
+		}
+		t.Log(sb.String())
+	}
+}
+
+// matchesExpected checks if a WS event matches an expected event spec.
+// Only non-empty fields in the expected spec are checked.
+func matchesExpected(actual WSEvent, expected testdata.ExpectedEvent) bool {
+	if actual.Type != expected.Type {
+		return false
+	}
+	if expected.Status != "" {
+		if s, _ := actual.Parsed["status"].(string); s != expected.Status {
+			return false
+		}
+	}
+	if expected.StageName != "" {
+		if sn, _ := actual.Parsed["stage_name"].(string); sn != expected.StageName {
+			return false
+		}
+	}
+	if expected.EventType != "" {
+		if et, _ := actual.Parsed["event_type"].(string); et != expected.EventType {
+			return false
+		}
+	}
+	if expected.Content != "" {
+		if c, _ := actual.Parsed["content"].(string); c != expected.Content {
+			return false
+		}
+	}
+	return true
+}
+
+// formatExpected returns a readable string for an expected event.
+func formatExpected(e testdata.ExpectedEvent) string {
+	s := "type=" + e.Type
+	if e.Status != "" {
+		s += " status=" + e.Status
+	}
+	if e.StageName != "" {
+		s += " stage_name=" + e.StageName
+	}
+	if e.EventType != "" {
+		s += " event_type=" + e.EventType
+	}
+	if e.Content != "" {
+		c := e.Content
+		if len(c) > 60 {
+			c = c[:57] + "..."
+		}
+		s += fmt.Sprintf(" content=%q", c)
+	}
+	return s
+}
+
+// ────────────────────────────────────────────────────────────
 // WebSocket Event Projection and Filtering
 // ────────────────────────────────────────────────────────────
 
@@ -209,8 +355,10 @@ func ProjectForGolden(event WSEvent) map[string]interface{} {
 		projected["event_type"] = event.Parsed["event_type"]
 		projected["status"] = event.Parsed["status"]
 	case "timeline_event.completed":
-		projected["event_type"] = event.Parsed["event_type"]
 		projected["status"] = event.Parsed["status"]
+		if et, ok := event.Parsed["event_type"]; ok && et != nil {
+			projected["event_type"] = et
+		}
 		if content, ok := event.Parsed["content"]; ok {
 			projected["content"] = content
 		}
