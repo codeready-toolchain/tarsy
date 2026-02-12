@@ -322,6 +322,88 @@ func TestToLLMDetailResponse_WithConversation(t *testing.T) {
 	assert.Equal(t, "Let me check pods.", *resp.ThinkingContent)
 }
 
+func TestToLLMDetailResponse_InlineConversationFallback(t *testing.T) {
+	li := &ent.LLMInteraction{
+		ID:              "int-sum",
+		InteractionType: llminteraction.InteractionTypeSummarization,
+		ModelName:       "test-model",
+		LlmRequest: map[string]any{
+			"messages_count": 2,
+			"iteration":      0,
+			"conversation": []any{
+				map[string]any{"role": "system", "content": "You are a summarizer."},
+				map[string]any{"role": "user", "content": "Summarize this data."},
+				map[string]any{"role": "assistant", "content": "Here is the summary."},
+			},
+		},
+		LlmResponse: map[string]any{"text_length": 20, "tool_calls_count": 0},
+		CreatedAt:   time.Now(),
+	}
+
+	// No Message records — should fall back to inline conversation.
+	resp := toLLMDetailResponse(li, nil)
+	require.Len(t, resp.Conversation, 3)
+	assert.Equal(t, "system", resp.Conversation[0].Role)
+	assert.Equal(t, "You are a summarizer.", resp.Conversation[0].Content)
+	assert.Equal(t, "user", resp.Conversation[1].Role)
+	assert.Equal(t, "Summarize this data.", resp.Conversation[1].Content)
+	assert.Equal(t, "assistant", resp.Conversation[2].Role)
+	assert.Equal(t, "Here is the summary.", resp.Conversation[2].Content)
+}
+
+func TestToLLMDetailResponse_MessageRecordsTakePrecedence(t *testing.T) {
+	li := &ent.LLMInteraction{
+		ID:              "int-iter",
+		InteractionType: llminteraction.InteractionTypeIteration,
+		ModelName:       "test-model",
+		LlmRequest: map[string]any{
+			"messages_count": 2,
+			"conversation": []any{
+				map[string]any{"role": "system", "content": "inline system"},
+			},
+		},
+		LlmResponse: map[string]any{},
+		CreatedAt:   time.Now(),
+	}
+
+	messages := []*ent.Message{
+		{ID: "msg-1", Role: message.RoleSystem, Content: "DB system prompt"},
+	}
+
+	// Message records exist — inline conversation should be ignored.
+	resp := toLLMDetailResponse(li, messages)
+	require.Len(t, resp.Conversation, 1)
+	assert.Equal(t, "DB system prompt", resp.Conversation[0].Content)
+}
+
+// ============================================================================
+// extractInlineConversation tests
+// ============================================================================
+
+func TestExtractInlineConversation_NoConversationKey(t *testing.T) {
+	result := extractInlineConversation(map[string]any{"messages_count": 2})
+	assert.Nil(t, result)
+}
+
+func TestExtractInlineConversation_InvalidType(t *testing.T) {
+	result := extractInlineConversation(map[string]any{"conversation": "not-an-array"})
+	assert.Nil(t, result)
+}
+
+func TestExtractInlineConversation_SkipsMalformedEntries(t *testing.T) {
+	result := extractInlineConversation(map[string]any{
+		"conversation": []any{
+			map[string]any{"role": "system", "content": "valid"},
+			"not-a-map",
+			map[string]any{"content": "no-role"}, // empty role → skipped
+			map[string]any{"role": "user", "content": "also valid"},
+		},
+	})
+	require.Len(t, result, 2)
+	assert.Equal(t, "system", result[0].Role)
+	assert.Equal(t, "user", result[1].Role)
+}
+
 // ============================================================================
 // toMCPDetailResponse tests
 // ============================================================================

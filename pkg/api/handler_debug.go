@@ -206,6 +206,7 @@ func toMCPListItem(mi *ent.MCPInteraction) models.MCPInteractionListItem {
 }
 
 func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *models.LLMInteractionDetailResponse {
+	// Build conversation from Message records (normal iteration/synthesis path).
 	conversation := make([]models.ConversationMessage, 0, len(messages))
 	for _, msg := range messages {
 		cm := models.ConversationMessage{
@@ -224,6 +225,12 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 		conversation = append(conversation, cm)
 	}
 
+	// Fallback: extract inline conversation from llm_request for self-contained
+	// interactions (e.g. summarization) that don't use the Message table.
+	if len(conversation) == 0 {
+		conversation = extractInlineConversation(li.LlmRequest)
+	}
+
 	return &models.LLMInteractionDetailResponse{
 		ID:               li.ID,
 		InteractionType:  string(li.InteractionType),
@@ -240,6 +247,37 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 		CreatedAt:        li.CreatedAt.Format(time.RFC3339Nano),
 		Conversation:     conversation,
 	}
+}
+
+// extractInlineConversation reads conversation messages stored inline in the
+// llm_request JSON. Used for self-contained interactions (like summarization)
+// whose conversations aren't stored in the Message table.
+func extractInlineConversation(llmRequest map[string]any) []models.ConversationMessage {
+	rawConv, ok := llmRequest["conversation"]
+	if !ok {
+		return nil
+	}
+	convSlice, ok := rawConv.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]models.ConversationMessage, 0, len(convSlice))
+	for _, item := range convSlice {
+		msgMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := msgMap["role"].(string)
+		content, _ := msgMap["content"].(string)
+		if role == "" {
+			continue
+		}
+		result = append(result, models.ConversationMessage{
+			Role:    role,
+			Content: content,
+		})
+	}
+	return result
 }
 
 func toMCPDetailResponse(mi *ent.MCPInteraction) *models.MCPInteractionDetailResponse {

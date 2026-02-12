@@ -200,6 +200,62 @@ func TestMaybeSummarize(t *testing.T) {
 		assert.Equal(t, want, result.Content)
 	})
 
+	t.Run("stores inline conversation in LLM interaction", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summary result"}}},
+			},
+		}
+
+		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+			"test-server": {
+				Summarization: &config.SummarizationConfig{
+					Enabled:              true,
+					SizeThresholdTokens:  100,
+					SummaryMaxTokenLimit: 500,
+				},
+			},
+		})
+		pb := prompt.NewPromptBuilder(registry)
+
+		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
+		execCtx.PromptBuilder = pb
+
+		largeContent := strings.Repeat("pod-info ", 100)
+		eventSeq := 0
+		result, err := maybeSummarize(ctx, execCtx, "test-server", "get_pods",
+			largeContent, "[user]: check pods", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+
+		// Verify the LLM interaction was stored with inline conversation.
+		interactions, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 1)
+		assert.Equal(t, "summarization", string(interactions[0].InteractionType))
+
+		// Check inline conversation exists in llm_request.
+		llmReq := interactions[0].LlmRequest
+		convRaw, ok := llmReq["conversation"]
+		require.True(t, ok, "llm_request should contain 'conversation' key")
+		convSlice, ok := convRaw.([]any)
+		require.True(t, ok)
+		require.Len(t, convSlice, 3, "conversation should have system + user + assistant")
+
+		// Verify roles.
+		msg0 := convSlice[0].(map[string]any)
+		assert.Equal(t, "system", msg0["role"])
+		assert.NotEmpty(t, msg0["content"])
+
+		msg1 := convSlice[1].(map[string]any)
+		assert.Equal(t, "user", msg1["role"])
+		assert.NotEmpty(t, msg1["content"])
+
+		msg2 := convSlice[2].(map[string]any)
+		assert.Equal(t, "assistant", msg2["role"])
+		assert.Equal(t, "Summary result", msg2["content"])
+	})
+
 	t.Run("fail-open on LLM error", func(t *testing.T) {
 		mockLLM := &mockLLMClient{
 			responses: []mockLLMResponse{

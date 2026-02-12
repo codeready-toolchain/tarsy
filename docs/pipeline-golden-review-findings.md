@@ -81,46 +81,42 @@ DB everywhere — no recalculation needed.
 
 ---
 
-## 2. OBSERVABILITY GAP: Summarization conversations not stored in DB
+## 2. ~~OBSERVABILITY GAP: Summarization conversations not stored in DB~~ — FIXED
 
 **Severity:** Medium
-**Files:** `pkg/agent/controller/summarize.go` (lines 112-152)
+**Files:** `pkg/agent/controller/summarize.go`, `pkg/api/handler_debug.go`
 
 ### Problem
 
-Golden files `04_DataCollector_llm_summarization_1.golden` and
-`12_Remediator_llm_summarization_1.golden` both show `messages_count: 2` in
-metadata but have **no conversation section** — the detail API returns an empty
-conversation.
+Summarization `LLMInteraction` records were created with `messages_count: 2`
+but no conversation data — the debug detail API returned an empty conversation.
+Dashboard users could not inspect summarization prompts.
 
 ### Root Cause
 
-`callSummarizationLLM` records the `LLMInteraction` (with `messages_count: 2`)
-but never calls `storeMessages()` to persist the actual `Message` records:
+`callSummarizationLLM` recorded the interaction via `recordLLMInteraction` but
+never stored the conversation messages. Summarization conversations are
+self-contained (system + user + assistant) and run mid-iteration, so they
+cannot share the iteration's `Message` table sequence without corrupting
+`ReconstructConversation` for both iteration and summarization interactions.
 
-```go
-// summarize.go:147-149
-recordLLMInteraction(ctx, execCtx, 0, "summarization", len(messages),
-    streamed.LLMResponse, nil, startTime)
-// ← no storeMessages() call
-```
+### Fix Applied
 
-Compare with the synthesis controller which explicitly calls `storeMessages()`
-before the LLM call, or the native-thinking/react controllers which store
-messages incrementally.
+Stored the conversation **inline in `llm_request.conversation`** on the
+`LLMInteraction` record. No schema change needed — `llm_request` is already
+`map[string]any`. The handler extracts inline conversations as a fallback
+when no `Message` records are linked.
 
-### Impact
-
-The dashboard debug tab will show "2 messages were sent" for summarization
-interactions, but clicking for detail shows an empty conversation. Users cannot
-inspect what prompt was used for summarization or verify its correctness.
-
-### Fix
-
-Add a `storeMessages()` call in `callSummarizationLLM` before the LLM call,
-similar to what the synthesis controller does. Need to consider the `msgSeq`
-threading — summarization runs mid-iteration, so a separate sequence or
-interaction-scoped sequence may be needed.
+**Changes:**
+- `summarize.go`: Replaced `recordLLMInteraction` with `recordSummarizationInteraction`
+  that embeds all 3 messages (system, user, assistant) in `llm_request.conversation`.
+- `handler_debug.go`: Added `extractInlineConversation` fallback in
+  `toLLMDetailResponse` — if `Message` records are empty, extracts from
+  `llm_request["conversation"]`.
+- Unit tests: `handler_debug_test.go` (inline conversation extraction, precedence),
+  `summarize_test.go` (verifies inline conversation stored in DB).
+- E2e golden files updated: both summarization golden files now show full
+  human-readable conversation (system prompt, user context, assistant response).
 
 ---
 
