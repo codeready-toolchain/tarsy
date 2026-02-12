@@ -16,21 +16,28 @@ import (
 
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
-// Currently: single NativeThinking agent, thinking + tool call + final answer + executive summary.
+// Currently: single NativeThinking agent, two tool calls (one with summary,
+// one without), final answer, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
-	// LLM script: thinking + tool call → tool result → thinking + final answer.
+	// LLM script: thinking + two tool calls → tool results → thinking + final answer.
 	llm := NewScriptedLLMClient()
-	// Iteration 1: thinking + text alongside tool call.
+	// Iteration 1: thinking + text + two tool calls in one response.
+	// get_nodes returns a small result (no summarization).
+	// get_pods returns a large result (triggers summarization).
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.ThinkingChunk{Content: "Let me check the pod status."},
-			&agent.TextChunk{Content: "I'll look up the pods."},
-			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
-			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+			&agent.ThinkingChunk{Content: "Let me check the cluster nodes and pod status."},
+			&agent.TextChunk{Content: "I'll look up the nodes and pods."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_nodes", Arguments: `{}`},
+			&agent.ToolCallChunk{CallID: "call-2", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
 		},
 	})
+	// Tool result summarization for get_pods (triggered by size_threshold_tokens=100 in config).
+	// get_nodes result is ~15 tokens — no summarization call for it.
+	llm.AddSequential(LLMScriptEntry{Text: "Pod pod-1 is OOMKilled with 5 restarts."})
 	// Iteration 2: thinking + final answer (no tools).
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
@@ -42,12 +49,22 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Executive summary.
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak."})
 
+	// Small tool result — stays under summarization threshold (~15 tokens).
+	nodesResult := `[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]`
+	// Large tool result — triggers summarization (>100 tokens ≈ 400 chars).
+	podsResult := `[` +
+		`{"name":"pod-1","namespace":"default","status":"OOMKilled","restarts":5,"cpu":"250m","memory":"512Mi","node":"worker-1","image":"app:v1.2.3","started":"2026-01-15T10:00:00Z","lastRestart":"2026-01-15T14:30:00Z"},` +
+		`{"name":"pod-2","namespace":"default","status":"Running","restarts":0,"cpu":"100m","memory":"256Mi","node":"worker-2","image":"app:v1.2.3","started":"2026-01-10T08:00:00Z","lastRestart":""},` +
+		`{"name":"pod-3","namespace":"default","status":"CrashLoopBackOff","restarts":12,"cpu":"500m","memory":"1Gi","node":"worker-1","image":"app:v1.2.3","started":"2026-01-14T12:00:00Z","lastRestart":"2026-01-15T15:00:00Z"}` +
+		`]`
+
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
-				"get_pods": StaticToolHandler(`[{"name":"pod-1","status":"OOMKilled","restarts":5}]`),
+				"get_nodes": StaticToolHandler(nodesResult),
+				"get_pods":  StaticToolHandler(podsResult),
 			},
 		}),
 	)
@@ -89,8 +106,8 @@ func TestE2E_Pipeline(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 
-	// Verify LLM call count: 1 tool call + 1 final answer + 1 executive summary = 3.
-	assert.Equal(t, 3, llm.CallCount())
+	// Verify LLM call count: 1 tool call + 1 summarization + 1 final answer + 1 executive summary = 4.
+	assert.Equal(t, 4, llm.CallCount())
 
 	// Build normalizer with all known IDs for golden comparison.
 	normalizer := NewNormalizer(sessionID)

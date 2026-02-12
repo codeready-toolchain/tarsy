@@ -8,6 +8,9 @@ mcp_servers:
     transport:
       type: stdio
       command: mock
+    summarization:
+      enabled: true
+      size_threshold_tokens: 100
   # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
   kubernetes-server:
     transport:

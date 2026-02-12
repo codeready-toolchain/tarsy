@@ -21,26 +21,44 @@ type ExpectedEvent struct {
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
 // Grows incrementally into the full pipeline test.
-// Currently: single NativeThinking agent, thinking + tool call + final answer + executive summary.
+// Currently: single NativeThinking agent, two tool calls (one with summary,
+// one without), final answer, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 	{Type: "stage.status", StageName: "investigation", Status: "started"},
 
-	// Iteration 1: thinking + intermediate response + tool call.
+	// Iteration 1: thinking + intermediate response + two tool calls.
 	// Created events are sequential (streaming callback order is deterministic).
 	{Type: "timeline_event.created", EventType: "llm_thinking"},
 	{Type: "timeline_event.created", EventType: "llm_response"},
 	// Completed events for thinking/response can arrive in either order (catchup/NOTIFY race).
-	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the pod status.", Group: 1},
-	{Type: "timeline_event.completed", EventType: "llm_response", Content: "I'll look up the pods.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Content: "Let me check the cluster nodes and pod status.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response", Content: "I'll look up the nodes and pods.", Group: 1},
+
+	// Tool call 1: get_nodes — small result, no summarization.
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_nodes",
+		"arguments":   `{}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call",
+		Content: `[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]`},
+
+	// Tool call 2: get_pods — large result, triggers summarization.
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Metadata: map[string]string{
 		"server_name": "test-mcp",
 		"tool_name":   "get_pods",
 		"arguments":   `{"namespace":"default"}`,
 	}},
-	{Type: "timeline_event.completed", EventType: "llm_tool_call", Content: `[{"name":"pod-1","status":"OOMKilled","restarts":5}]`},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"}, // content is large tool output, verified via golden file
+	// Tool result summarization (triggered by size_threshold_tokens=100 in config).
+	{Type: "timeline_event.created", EventType: "mcp_tool_summary", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_pods",
+	}},
+	{Type: "timeline_event.completed", EventType: "mcp_tool_summary", Content: "Pod pod-1 is OOMKilled with 5 restarts."},
 
 	// Iteration 2: thinking + final answer.
 	{Type: "timeline_event.created", EventType: "llm_thinking"},

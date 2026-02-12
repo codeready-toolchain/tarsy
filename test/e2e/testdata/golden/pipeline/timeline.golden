@@ -1,38 +1,50 @@
 [
   {
-    "content": "Let me check the pod status.",
+    "content": "Let me check the cluster nodes and pod status.",
     "event_type": "llm_thinking",
     "sequence": 1,
     "status": "completed"
   },
   {
-    "content": "I'll look up the pods.",
+    "content": "I'll look up the nodes and pods.",
     "event_type": "llm_response",
     "sequence": 2,
     "status": "completed"
   },
   {
-    "content": "[{\"name\":\"pod-1\",\"status\":\"OOMKilled\",\"restarts\":5}]",
+    "content": "[{\"name\":\"worker-1\",\"status\":\"Ready\",\"cpu\":\"4\",\"memory\":\"16Gi\"}]",
     "event_type": "llm_tool_call",
     "sequence": 3,
     "status": "completed"
   },
   {
+    "content": "[{\"name\":\"pod-1\",\"namespace\":\"default\",\"status\":\"OOMKilled\",\"restarts\":5,\"cpu\":\"250m\",\"memory\":\"512Mi\",\"node\":\"worker-1\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"{TIMESTAMP}\"},{\"name\":\"pod-2\",\"namespace\":\"default\",\"status\":\"Running\",\"restarts\":0,\"cpu\":\"100m\",\"memory\":\"256Mi\",\"node\":\"worker-2\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"\"},{\"name\":\"pod-3\",\"namespace\":\"default\",\"status\":\"CrashLoopBackOff\",\"restarts\":12,\"cpu\":\"500m\",\"memory\":\"1Gi\",\"node\":\"worker-1\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"{TIMESTAMP}\"}]",
+    "event_type": "llm_tool_call",
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "content": "Pod pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "mcp_tool_summary",
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
     "content": "The pod is clearly OOMKilled.",
     "event_type": "llm_thinking",
-    "sequence": 4,
+    "sequence": 6,
     "status": "completed"
   },
   {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "llm_response",
-    "sequence": 5,
+    "sequence": 7,
     "status": "completed"
   },
   {
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "final_analysis",
-    "sequence": 6,
+    "sequence": 8,
     "status": "streaming"
   },
   {
