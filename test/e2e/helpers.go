@@ -319,16 +319,39 @@ func SortTimelineProjection(projected []map[string]interface{}) {
 func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.ExpectedEvent) {
 	t.Helper()
 
-	// Filter out infra events.
+	// Deduplicate and sort persistent events by db_event_id to eliminate
+	// the NOTIFY/catchup race. When the WS client subscribes during session
+	// processing, it may receive some events via NOTIFY (real-time) and the
+	// same events again via catchup (replay). Without dedup+sort, NOTIFY
+	// events can appear before their natural DB order, causing the
+	// forward-only matching algorithm to consume them during earlier
+	// sequential matches and miss them for later group matches.
+	//
+	// Strategy: collect only persistent events (those with db_event_id),
+	// deduplicate, and sort by db_event_id. Transient events (stream.chunk)
+	// are excluded since no expected events match them.
+	seen := make(map[float64]bool)
 	var filtered []WSEvent
 	for _, e := range actual {
 		switch e.Type {
 		case "connection.established", "subscription.confirmed", "pong", "catchup.overflow":
 			continue
-		default:
-			filtered = append(filtered, e)
 		}
+		dbID, hasID := e.Parsed["db_event_id"].(float64)
+		if !hasID {
+			continue // Skip transient events (stream.chunk) — not in expected list
+		}
+		if seen[dbID] {
+			continue // Skip duplicate (same event from NOTIFY + catchup)
+		}
+		seen[dbID] = true
+		filtered = append(filtered, e)
 	}
+	sort.Slice(filtered, func(i, j int) bool {
+		idI, _ := filtered[i].Parsed["db_event_id"].(float64)
+		idJ, _ := filtered[j].Parsed["db_event_id"].(float64)
+		return idI < idJ
+	})
 
 	expectedIdx := 0
 	actualIdx := 0
