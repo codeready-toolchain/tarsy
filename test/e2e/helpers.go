@@ -222,22 +222,18 @@ func ProjectForGolden(event WSEvent) map[string]interface{} {
 	return projected
 }
 
-// FilterEventsForGolden filters, collapses, and projects WS events for golden comparison.
+// FilterEventsForGolden filters and projects WS events for golden comparison.
+// stream.chunk events are excluded entirely because their presence is
+// timing-sensitive (depends on how fast events are delivered vs consumed).
 func FilterEventsForGolden(events []WSEvent) []map[string]interface{} {
 	var filtered []map[string]interface{}
-	lastWasChunk := false
 	for _, e := range events {
 		switch e.Type {
-		case "stream.chunk":
-			if !lastWasChunk {
-				filtered = append(filtered, map[string]interface{}{"type": "stream.chunk"})
-				lastWasChunk = true
-			}
-		case "connection.established", "subscription.confirmed", "pong", "catchup.overflow":
+		case "stream.chunk",
+			"connection.established", "subscription.confirmed", "pong", "catchup.overflow":
 			continue
 		default:
 			filtered = append(filtered, ProjectForGolden(e))
-			lastWasChunk = false
 		}
 	}
 	return filtered

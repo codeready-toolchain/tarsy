@@ -1,0 +1,19 @@
+{
+  "agent_type": "test-alert",
+  "alert_data": "Forced conclusion test",
+  "alert_type": "test-alert",
+  "author": "api-client",
+  "chain_id": "test-chain",
+  "completed_at": "{TIMESTAMP}",
+  "created_at": "{TIMESTAMP}",
+  "current_stage_id": "{STAGE_ID_1}",
+  "current_stage_index": 1,
+  "edges": {},
+  "executive_summary": "System healthy after forced conclusion.",
+  "final_analysis": "Based on 2 iterations, the system is healthy.",
+  "id": "{SESSION_ID}",
+  "last_interaction_at": "{TIMESTAMP}",
+  "pod_id": "e2e-test-TestE2E_ForcedConclusion",
+  "started_at": "{TIMESTAMP}",
+  "status": "completed"
+}

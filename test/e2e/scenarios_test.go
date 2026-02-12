@@ -228,6 +228,8 @@ func TestE2E_ParallelPolicyAny(t *testing.T) {
 	stages := app.QueryStages(t, sessionID)
 	assert.GreaterOrEqual(t, len(stages), 2)
 
+	// Note: WS golden skipped for parallel tests — event ordering from
+	// concurrent agents is non-deterministic.
 }
 
 // ────────────────────────────────────────────────────────────
@@ -264,6 +266,8 @@ func TestE2E_ParallelPolicyAll(t *testing.T) {
 	session := app.GetSession(t, sessionID)
 	assert.Equal(t, "failed", session["status"])
 
+	// Note: WS golden skipped for parallel tests — event ordering from
+	// concurrent agents is non-deterministic.
 }
 
 // ────────────────────────────────────────────────────────────
@@ -313,6 +317,8 @@ func TestE2E_Replicas(t *testing.T) {
 	// 3 replicas + 1 synthesis = at least 4 executions.
 	assert.GreaterOrEqual(t, len(execs), 3)
 
+	// Note: WS golden skipped for replica tests — event ordering from
+	// concurrent replicas is non-deterministic.
 }
 
 // ────────────────────────────────────────────────────────────
@@ -350,6 +356,17 @@ func TestE2E_ExecutiveSummaryFailOpen(t *testing.T) {
 	// Executive summary should be empty but error should be recorded.
 	assert.Empty(t, session["executive_summary"])
 	assert.NotEmpty(t, session["executive_summary_error"])
+
+	// Golden file: session API response (verifies empty summary + error).
+	stages := app.QueryStages(t, sessionID)
+	normalizer := NewNormalizer(sessionID)
+	for _, s := range stages {
+		normalizer.RegisterStageID(s.ID)
+	}
+	for _, e := range app.QueryExecutions(t, sessionID) {
+		normalizer.RegisterExecutionID(e.ID)
+	}
+	AssertGoldenJSON(t, GoldenPath("exec_summary_fail_open", "session.golden"), session, normalizer)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -597,6 +614,17 @@ func TestE2E_ForcedConclusion(t *testing.T) {
 	inputs := llm.CapturedInputs()
 	forcedInput := inputs[2]
 	assert.Nil(t, forcedInput.Tools, "forced conclusion should have no tools")
+
+	// Golden file: session API response.
+	stages := app.QueryStages(t, sessionID)
+	normalizer := NewNormalizer(sessionID)
+	for _, s := range stages {
+		normalizer.RegisterStageID(s.ID)
+	}
+	for _, e := range app.QueryExecutions(t, sessionID) {
+		normalizer.RegisterExecutionID(e.ID)
+	}
+	AssertGoldenJSON(t, GoldenPath("forced_conclusion", "session.golden"), session, normalizer)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -713,14 +741,14 @@ func TestE2E_FullFlow(t *testing.T) {
 		},
 	})
 	llm.AddRouted("Investigator", LLMScriptEntry{Text: "Agent 1 analysis: memory steadily increasing."})
-	// Investigator 2 (openai-test, react): uses [test-mcp, kubernetes-server].
-	llm.AddRouted("Investigator", LLMScriptEntry{
-		Chunks: []agent.Chunk{
-			&agent.ToolCallChunk{CallID: "inv-2", Name: "kubernetes-server__get_events", Arguments: `{"namespace":"default"}`},
-			&agent.UsageChunk{InputTokens: 80, OutputTokens: 15, TotalTokens: 95},
-		},
+	// InvestigatorAlt (openai-test, react): uses [test-mcp, kubernetes-server].
+	// React strategy uses text-based tool calling (Action/Action Input with dot notation), not ToolCallChunk.
+	llm.AddRouted("InvestigatorAlt", LLMScriptEntry{
+		Text: "Thought: I should check Kubernetes events for OOMKill.\nAction: kubernetes-server.get_events\nAction Input: {\"namespace\":\"default\"}",
 	})
-	llm.AddRouted("Investigator", LLMScriptEntry{Text: "Agent 2 analysis: OOMKill events found."})
+	llm.AddRouted("InvestigatorAlt", LLMScriptEntry{
+		Text: "Thought: I found the events.\nFinal Answer: Agent 2 analysis: OOMKill events found.",
+	})
 	// ResourceAnalyzer (google-test, native-thinking): uses [kubernetes-server].
 	llm.AddRouted("ResourceAnalyzer", LLMScriptEntry{
 		Chunks: []agent.Chunk{
@@ -789,9 +817,10 @@ func TestE2E_FullFlow(t *testing.T) {
 	execs := app.QueryExecutions(t, sessionID)
 	assert.GreaterOrEqual(t, len(execs), 5, "should have at least 5 executions")
 
-	// Verify MCP interactions recorded (may be zero with in-memory transport retries).
+	// Verify MCP interactions recorded.
+	// DataCollector=1, Investigator=1, InvestigatorAlt=1, ResourceAnalyzer=1 = 4 from investigation.
 	mcpInteractions := app.QueryMCPInteractions(t, sessionID)
-	t.Logf("MCP interactions recorded: %d", len(mcpInteractions))
+	assert.GreaterOrEqual(t, len(mcpInteractions), 4, "should have at least 4 MCP interactions from investigation")
 
 	// Verify LLM interactions recorded.
 	llmInteractions := app.QueryLLMInteractions(t, sessionID)
@@ -833,6 +862,21 @@ func TestE2E_FullFlow(t *testing.T) {
 
 	// Verify total LLM calls (at least 12: stage1=2, stage2=6, synth=1, stage3=1, exec_summary=1, chat=3).
 	assert.GreaterOrEqual(t, llm.CallCount(), 12, "should have at least 12 LLM calls")
+
+	// Golden file: session API response after full flow + chat.
+	normalizer := NewNormalizer(sessionID)
+	allStages := app.QueryStages(t, sessionID)
+	for _, s := range allStages {
+		normalizer.RegisterStageID(s.ID)
+	}
+	allExecs := app.QueryExecutions(t, sessionID)
+	for _, e := range allExecs {
+		normalizer.RegisterExecutionID(e.ID)
+	}
+	if chatID, ok := chatResp["chat_id"].(string); ok {
+		normalizer.RegisterChatID(chatID)
+	}
+	AssertGoldenJSON(t, GoldenPath("full_flow", "session.golden"), finalSession, normalizer)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -889,9 +933,14 @@ func TestE2E_ComprehensiveObservability(t *testing.T) {
 	assert.True(t, eventTypes["tool_call"] || eventTypes["llm_response"],
 		"timeline should contain tool_call or llm_response events")
 
-	// ── Layer 3: LLM interactions ──
+	// ── Layer 3: LLM interactions (field-level checks) ──
 	llmInteractions := app.QueryLLMInteractions(t, sessionID)
-	assert.GreaterOrEqual(t, len(llmInteractions), 2, "should have at least 2 LLM interactions")
+	require.GreaterOrEqual(t, len(llmInteractions), 2, "should have at least 2 LLM interactions")
+	// First interaction: iteration (tool call round).
+	assert.Equal(t, "iteration", string(llmInteractions[0].InteractionType))
+	// Second interaction: iteration (final answer round).
+	assert.Equal(t, "iteration", string(llmInteractions[1].InteractionType))
+	// All interactions should have model name populated.
 	for _, li := range llmInteractions {
 		assert.NotEmpty(t, li.ModelName, "LLM interaction should have model name")
 		if li.InputTokens != nil {
@@ -899,11 +948,16 @@ func TestE2E_ComprehensiveObservability(t *testing.T) {
 		}
 	}
 
-	// ── Layer 4: MCP interactions ──
-	// Note: MCP interaction recording is not yet wired into the agent execution flow.
-	// This assertion verifies the query infrastructure works; actual recording is TBD.
+	// ── Layer 4: MCP interactions (field-level checks) ──
 	mcpInteractions := app.QueryMCPInteractions(t, sessionID)
-	t.Logf("MCP interactions recorded: %d (recording not yet wired in agent flow)", len(mcpInteractions))
+	require.Len(t, mcpInteractions, 1, "should have exactly 1 MCP interaction (get_pods)")
+	assert.Equal(t, "test-mcp", mcpInteractions[0].ServerName)
+	assert.NotNil(t, mcpInteractions[0].ToolName)
+	if mcpInteractions[0].ToolName != nil {
+		assert.Equal(t, "get_pods", *mcpInteractions[0].ToolName)
+	}
+	assert.NotNil(t, mcpInteractions[0].DurationMs)
+	assert.Nil(t, mcpInteractions[0].ErrorMessage)
 
 	// ── LLM conversation verification via CapturedInputs ──
 	inputs := llm.CapturedInputs()
@@ -930,6 +984,119 @@ func TestE2E_ComprehensiveObservability(t *testing.T) {
 		normalizer.RegisterExecutionID(e.ID)
 	}
 	AssertGoldenJSON(t, GoldenPath("observability", "session.golden"), session, normalizer)
+}
+
+// ────────────────────────────────────────────────────────────
+// Scenario 11b: Comprehensive Observability — Parallel Agents
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_ComprehensiveObservabilityParallel(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// NativeAgent (google-test, native-thinking): tool call via ToolCallChunk, then final answer.
+	llm.AddRouted("NativeAgent", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "native-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+		},
+	})
+	llm.AddRouted("NativeAgent", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "NativeAgent: pod-1 is OOMKilled with 5 restarts."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 50, TotalTokens: 200},
+		},
+	})
+
+	// ReactAgent (openai-test, react): tool call via text Action/Action Input, then Final Answer.
+	llm.AddRouted("ReactAgent", LLMScriptEntry{
+		Text: "Thought: I should check Kubernetes events.\nAction: kubernetes-server.get_events\nAction Input: {\"namespace\":\"default\"}",
+	})
+	llm.AddRouted("ReactAgent", LLMScriptEntry{
+		Text: "Thought: Found OOMKill events.\nFinal Answer: ReactAgent: OOMKill events confirmed in default namespace.",
+	})
+
+	// Synthesis after parallel stage (sequential — combines both agents' results).
+	llm.AddSequential(LLMScriptEntry{Text: "Synthesis: Both agents confirm OOM due to memory leak."})
+	// Executive summary (sequential — runs after synthesis).
+	llm.AddSequential(LLMScriptEntry{Text: "Both agents confirm OOM due to memory leak."})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "observability-parallel")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_pods": StaticToolHandler(`[{"name":"pod-1","status":"OOMKilled","restarts":5}]`),
+			},
+			"kubernetes-server": {
+				"get_events": StaticToolHandler(`[{"type":"Warning","reason":"OOMKilling","object":"pod/pod-1"}]`),
+			},
+		}),
+	)
+
+	resp := app.SubmitAlert(t, "test-alert", "Parallel observability test")
+	sessionID := resp["session_id"].(string)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Layer 1: API response ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.NotEmpty(t, session["final_analysis"])
+	assert.NotEmpty(t, session["executive_summary"])
+
+	// ── Layer 2: Timeline events ──
+	timeline := app.QueryTimeline(t, sessionID)
+	assert.NotEmpty(t, timeline, "should have timeline events")
+	eventTypes := make(map[string]bool)
+	for _, te := range timeline {
+		eventTypes[string(te.EventType)] = true
+	}
+	assert.True(t, eventTypes["tool_call"] || eventTypes["llm_response"],
+		"timeline should contain tool_call or llm_response events")
+
+	// ── Layer 3: LLM interactions — verify both agents and their models ──
+	llmInteractions := app.QueryLLMInteractions(t, sessionID)
+	// NativeAgent: 2 iterations (tool call + final answer).
+	// ReactAgent: 2 iterations (tool call + final answer).
+	// + 1 executive summary = at least 5.
+	require.GreaterOrEqual(t, len(llmInteractions), 4, "should have at least 4 LLM interactions from parallel agents")
+
+	// Collect model names used across interactions.
+	modelNames := make(map[string]bool)
+	for _, li := range llmInteractions {
+		assert.NotEmpty(t, li.ModelName, "LLM interaction should have model name")
+		modelNames[li.ModelName] = true
+	}
+	// Both providers should be represented: gemini-test (NativeAgent) and gpt-test (ReactAgent).
+	assert.True(t, modelNames["gemini-test"], "should have interactions from google-test provider (gemini-test)")
+	assert.True(t, modelNames["gpt-test"], "should have interactions from openai-test provider (gpt-test)")
+
+	// ── Layer 4: MCP interactions — verify both servers ──
+	mcpInteractions := app.QueryMCPInteractions(t, sessionID)
+	require.GreaterOrEqual(t, len(mcpInteractions), 2, "should have at least 2 MCP interactions (one per agent)")
+
+	// Collect server names and tool names.
+	serverToolPairs := make(map[string]string) // server -> tool
+	for _, mi := range mcpInteractions {
+		assert.NotNil(t, mi.ToolName)
+		assert.NotNil(t, mi.DurationMs)
+		assert.Nil(t, mi.ErrorMessage)
+		if mi.ToolName != nil {
+			serverToolPairs[mi.ServerName] = *mi.ToolName
+		}
+	}
+	// NativeAgent called test-mcp.get_pods, ReactAgent called kubernetes-server.get_events.
+	assert.Equal(t, "get_pods", serverToolPairs["test-mcp"], "NativeAgent should call test-mcp.get_pods")
+	assert.Equal(t, "get_events", serverToolPairs["kubernetes-server"], "ReactAgent should call kubernetes-server.get_events")
+
+	// ── Layer 5: Execution records — verify different agent names ──
+	execs := app.QueryExecutions(t, sessionID)
+	agentNames := make(map[string]bool)
+	for _, e := range execs {
+		agentNames[e.AgentName] = true
+	}
+	assert.True(t, agentNames["NativeAgent"], "should have NativeAgent execution")
+	assert.True(t, agentNames["ReactAgent"], "should have ReactAgent execution")
 }
 
 // ────────────────────────────────────────────────────────────
