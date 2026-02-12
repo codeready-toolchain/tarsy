@@ -349,6 +349,12 @@ func TestToLLMDetailResponse_InlineConversationFallback(t *testing.T) {
 	assert.Equal(t, "Summarize this data.", resp.Conversation[1].Content)
 	assert.Equal(t, "assistant", resp.Conversation[2].Role)
 	assert.Equal(t, "Here is the summary.", resp.Conversation[2].Content)
+
+	// Inline conversation should be stripped from llm_request in the response.
+	_, hasConv := resp.LLMRequest["conversation"]
+	assert.False(t, hasConv, "conversation should be stripped from llm_request")
+	assert.Equal(t, 2, resp.LLMRequest["messages_count"], "other llm_request fields preserved")
+	assert.Equal(t, 0, resp.LLMRequest["iteration"], "other llm_request fields preserved")
 }
 
 func TestToLLMDetailResponse_MessageRecordsTakePrecedence(t *testing.T) {

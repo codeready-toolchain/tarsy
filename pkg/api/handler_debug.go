@@ -227,8 +227,19 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 
 	// Fallback: extract inline conversation from llm_request for self-contained
 	// interactions (e.g. summarization) that don't use the Message table.
+	llmRequest := li.LlmRequest
 	if len(conversation) == 0 {
-		conversation = extractInlineConversation(li.LlmRequest)
+		conversation = extractInlineConversation(llmRequest)
+		if len(conversation) > 0 {
+			// Strip the inline conversation from the metadata — it's
+			// surfaced as the top-level Conversation field.
+			llmRequest = make(map[string]any, len(li.LlmRequest))
+			for k, v := range li.LlmRequest {
+				if k != "conversation" {
+					llmRequest[k] = v
+				}
+			}
+		}
 	}
 
 	return &models.LLMInteractionDetailResponse{
@@ -241,7 +252,7 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 		TotalTokens:      li.TotalTokens,
 		DurationMs:       li.DurationMs,
 		ErrorMessage:     li.ErrorMessage,
-		LLMRequest:       li.LlmRequest,
+		LLMRequest:       llmRequest,
 		LLMResponse:      li.LlmResponse,
 		ResponseMetadata: li.ResponseMetadata,
 		CreatedAt:        li.CreatedAt.Format(time.RFC3339Nano),
