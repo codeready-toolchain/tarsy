@@ -253,6 +253,13 @@ func TestE2E_Pipeline(t *testing.T) {
 		}
 	}
 
+	// Register session-level interactions (e.g. executive summary).
+	debugSessionInteractions, _ := debugList["session_interactions"].([]interface{})
+	for _, rawLI := range debugSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		normalizer.RegisterInteractionID(li["id"].(string))
+	}
+
 	// Golden file assertions.
 	AssertGoldenJSON(t, GoldenPath("pipeline", "session.golden"), session, normalizer)
 
@@ -341,6 +348,18 @@ func TestE2E_Pipeline(t *testing.T) {
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}
+	}
+
+	// Append session-level interactions (e.g. executive summary) after stages.
+	for _, rawLI := range debugSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		allInteractions = append(allInteractions, interactionEntry{
+			Kind:      "llm",
+			ID:        li["id"].(string),
+			AgentName: "Session",
+			CreatedAt: li["created_at"].(string),
+			Label:     li["interaction_type"].(string),
+		})
 	}
 
 	// Track per-agent iteration counters for readable filenames.

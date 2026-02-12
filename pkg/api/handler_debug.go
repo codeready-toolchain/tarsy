@@ -112,10 +112,18 @@ func buildDebugListResponse(
 	llmInteractions []*ent.LLMInteraction,
 	mcpInteractions []*ent.MCPInteraction,
 ) *models.DebugListResponse {
-	// Index LLM interactions by execution_id.
+	// Separate session-level interactions (nil execution_id) from stage-level.
 	llmByExec := make(map[string][]*ent.LLMInteraction)
+	var sessionLLM []models.LLMInteractionListItem
 	for _, li := range llmInteractions {
-		llmByExec[li.ExecutionID] = append(llmByExec[li.ExecutionID], li)
+		if li.ExecutionID == nil {
+			sessionLLM = append(sessionLLM, toLLMListItem(li))
+		} else {
+			llmByExec[*li.ExecutionID] = append(llmByExec[*li.ExecutionID], li)
+		}
+	}
+	if sessionLLM == nil {
+		sessionLLM = []models.LLMInteractionListItem{}
 	}
 
 	// Index MCP interactions by execution_id.
@@ -172,7 +180,10 @@ func buildDebugListResponse(
 		stageGroups = []models.DebugStageGroup{}
 	}
 
-	return &models.DebugListResponse{Stages: stageGroups}
+	return &models.DebugListResponse{
+		Stages:              stageGroups,
+		SessionInteractions: sessionLLM,
+	}
 }
 
 // ────────────────────────────────────────────────────────────

@@ -329,8 +329,8 @@ func recordSummarizationInteraction(
 
 	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       execCtx.SessionID,
-		StageID:         execCtx.StageID,
-		ExecutionID:     execCtx.ExecutionID,
+		StageID:         &execCtx.StageID,
+		ExecutionID:     &execCtx.ExecutionID,
 		InteractionType: "summarization",
 		ModelName:       execCtx.Config.LLMProvider.Model,
 		LLMRequest: map[string]any{

@@ -266,10 +266,10 @@ var (
 		{Name: "total_tokens", Type: field.TypeInt, Nullable: true},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
-		{Name: "execution_id", Type: field.TypeString},
+		{Name: "execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "last_message_id", Type: field.TypeString, Nullable: true},
-		{Name: "stage_id", Type: field.TypeString},
+		{Name: "stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// LlmInteractionsTable holds the schema information for the "llm_interactions" table.
 	LlmInteractionsTable = &schema.Table{
@@ -312,6 +312,11 @@ var (
 				Name:    "llminteraction_stage_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{LlmInteractionsColumns[16], LlmInteractionsColumns[1]},
+			},
+			{
+				Name:    "llminteraction_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{LlmInteractionsColumns[14], LlmInteractionsColumns[1]},
 			},
 		},
 	}

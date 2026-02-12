@@ -120,41 +120,47 @@ when no `Message` records are linked.
 
 ---
 
-## 3. OBSERVABILITY GAP: Executive summary LLM call not tracked as interaction
+## 3. ~~OBSERVABILITY GAP: Executive summary LLM call not tracked as interaction~~ — FIXED
 
 **Severity:** Medium
-**Files:** `pkg/queue/executor.go` (lines 748-841)
+**Files:** `ent/schema/llminteraction.go`, `pkg/queue/executor.go`, `pkg/services/interaction_service.go`, `pkg/api/handler_debug.go`, `pkg/models/interaction.go`
 
 ### Problem
 
-The test asserts 14 LLM calls total, but `debug_list.golden` only contains 13
-LLM interactions. The missing one is the executive summary.
+The test asserted 14 LLM calls total, but `debug_list.golden` only contained 13
+LLM interactions. The missing one was the executive summary.
 
 ### Root Cause
 
-`generateExecutiveSummary` calls `e.llmClient.Generate()` directly without
-recording an `LLMInteraction` or storing `Message` records. It only creates a
-`TimelineEvent` (type `executive_summary`).
+`generateExecutiveSummary` called `e.llmClient.Generate()` directly without
+recording an `LLMInteraction` or storing `Message` records.
 
-### Impact
+### Fix Applied
 
-- Dashboard debug tab won't show the executive summary's LLM call
-- Token usage for executive summary generation isn't tracked
-- The prompt used for executive summary can't be inspected through the debug API
-- The executive summary is the session-level "TL;DR" — being unable to debug its
-  generation is a real gap
+**Schema change:** Made `stage_id` and `execution_id` optional (`Nillable`) on the
+`LLMInteraction` entity, since the executive summary is a session-level interaction
+that doesn't belong to any stage or execution. Updated the corresponding edges to
+no longer be `Required()`.
 
-### Fix
+**Interaction recording:** `generateExecutiveSummary` now records an `LLMInteraction`
+(type `"executive_summary"`) with inline conversation (system + user + assistant
+messages stored in `llm_request.conversation`), consistent with how summarization
+interactions are handled.
 
-Record an `LLMInteraction` (type `"executive_summary"`) and store the
-conversation messages. This requires either:
-- Creating a lightweight execution context for the executive summary call, or
-- Recording the interaction directly via `interactionService` (the executor
-  already has access to it)
+**Debug API:** `DebugListResponse` gained a new `session_interactions` field that
+surfaces session-level interactions separately from the stage hierarchy. The
+`buildDebugListResponse` function routes interactions with nil `execution_id` to
+this new section.
 
-The interaction would have no `stage_id`/`execution_id` (session-level), so the
-debug list API grouping logic would need a small update to surface it (e.g., a
-top-level `session_interactions` section or a virtual "executive summary" stage).
+**Test coverage:**
+- Unit test: `TestBuildDebugListResponse_SessionLevelInteractions` — verifies
+  grouping of nil-execution interactions into `session_interactions`
+- Unit test: `TestInteractionService_CreateLLMInteraction_SessionLevel` — verifies
+  DB persistence with nil stage_id/execution_id
+- Integration test: `TestExecutor_ExecutiveSummaryGenerated` — extended to verify
+  the LLM interaction is created with correct fields and inline conversation
+- E2e: New golden file `21_Session_llm_executive_summary_1.golden` verifies the
+  full prompt and response. `debug_list.golden` now shows the session_interactions section.
 
 ---
 

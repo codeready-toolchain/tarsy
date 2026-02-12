@@ -24,10 +24,10 @@ type LLMInteraction struct {
 	ID string `json:"id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
-	// StageID holds the value of the "stage_id" field.
-	StageID string `json:"stage_id,omitempty"`
-	// Which agent
-	ExecutionID string `json:"execution_id,omitempty"`
+	// Nil for session-level interactions (e.g. executive summary)
+	StageID *string `json:"stage_id,omitempty"`
+	// Which agent; nil for session-level interactions
+	ExecutionID *string `json:"execution_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// InteractionType holds the value of the "interaction_type" field.
@@ -174,13 +174,15 @@ func (_m *LLMInteraction) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field stage_id", values[i])
 			} else if value.Valid {
-				_m.StageID = value.String
+				_m.StageID = new(string)
+				*_m.StageID = value.String
 			}
 		case llminteraction.FieldExecutionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field execution_id", values[i])
 			} else if value.Valid {
-				_m.ExecutionID = value.String
+				_m.ExecutionID = new(string)
+				*_m.ExecutionID = value.String
 			}
 		case llminteraction.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -337,11 +339,15 @@ func (_m *LLMInteraction) String() string {
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
 	builder.WriteString(", ")
-	builder.WriteString("stage_id=")
-	builder.WriteString(_m.StageID)
+	if v := _m.StageID; v != nil {
+		builder.WriteString("stage_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
-	builder.WriteString("execution_id=")
-	builder.WriteString(_m.ExecutionID)
+	if v := _m.ExecutionID; v != nil {
+		builder.WriteString("execution_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

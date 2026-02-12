@@ -37,9 +37,25 @@ func (_c *LLMInteractionCreate) SetStageID(v string) *LLMInteractionCreate {
 	return _c
 }
 
+// SetNillableStageID sets the "stage_id" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableStageID(v *string) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetStageID(*v)
+	}
+	return _c
+}
+
 // SetExecutionID sets the "execution_id" field.
 func (_c *LLMInteractionCreate) SetExecutionID(v string) *LLMInteractionCreate {
 	_c.mutation.SetExecutionID(v)
+	return _c
+}
+
+// SetNillableExecutionID sets the "execution_id" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableExecutionID(v *string) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetExecutionID(*v)
+	}
 	return _c
 }
 
@@ -207,6 +223,14 @@ func (_c *LLMInteractionCreate) SetAgentExecutionID(id string) *LLMInteractionCr
 	return _c
 }
 
+// SetNillableAgentExecutionID sets the "agent_execution" edge to the AgentExecution entity by ID if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableAgentExecutionID(id *string) *LLMInteractionCreate {
+	if id != nil {
+		_c = _c.SetAgentExecutionID(*id)
+	}
+	return _c
+}
+
 // SetAgentExecution sets the "agent_execution" edge to the AgentExecution entity.
 func (_c *LLMInteractionCreate) SetAgentExecution(v *AgentExecution) *LLMInteractionCreate {
 	return _c.SetAgentExecutionID(v.ID)
@@ -278,12 +302,6 @@ func (_c *LLMInteractionCreate) check() error {
 	if _, ok := _c.mutation.SessionID(); !ok {
 		return &ValidationError{Name: "session_id", err: errors.New(`ent: missing required field "LLMInteraction.session_id"`)}
 	}
-	if _, ok := _c.mutation.StageID(); !ok {
-		return &ValidationError{Name: "stage_id", err: errors.New(`ent: missing required field "LLMInteraction.stage_id"`)}
-	}
-	if _, ok := _c.mutation.ExecutionID(); !ok {
-		return &ValidationError{Name: "execution_id", err: errors.New(`ent: missing required field "LLMInteraction.execution_id"`)}
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "LLMInteraction.created_at"`)}
 	}
@@ -306,12 +324,6 @@ func (_c *LLMInteractionCreate) check() error {
 	}
 	if len(_c.mutation.SessionIDs()) == 0 {
 		return &ValidationError{Name: "session", err: errors.New(`ent: missing required edge "LLMInteraction.session"`)}
-	}
-	if len(_c.mutation.StageIDs()) == 0 {
-		return &ValidationError{Name: "stage", err: errors.New(`ent: missing required edge "LLMInteraction.stage"`)}
-	}
-	if len(_c.mutation.AgentExecutionIDs()) == 0 {
-		return &ValidationError{Name: "agent_execution", err: errors.New(`ent: missing required edge "LLMInteraction.agent_execution"`)}
 	}
 	return nil
 }
@@ -427,7 +439,7 @@ func (_c *LLMInteractionCreate) createSpec() (*LLMInteraction, *sqlgraph.CreateS
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.StageID = nodes[0]
+		_node.StageID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.AgentExecutionIDs(); len(nodes) > 0 {
@@ -444,7 +456,7 @@ func (_c *LLMInteractionCreate) createSpec() (*LLMInteraction, *sqlgraph.CreateS
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.ExecutionID = nodes[0]
+		_node.ExecutionID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.LastMessageIDs(); len(nodes) > 0 {

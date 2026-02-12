@@ -6155,7 +6155,7 @@ func (m *LLMInteractionMutation) StageID() (r string, exists bool) {
 // OldStageID returns the old "stage_id" field's value of the LLMInteraction entity.
 // If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *LLMInteractionMutation) OldStageID(ctx context.Context) (v string, err error) {
+func (m *LLMInteractionMutation) OldStageID(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldStageID is only allowed on UpdateOne operations")
 	}
@@ -6169,9 +6169,22 @@ func (m *LLMInteractionMutation) OldStageID(ctx context.Context) (v string, err 
 	return oldValue.StageID, nil
 }
 
+// ClearStageID clears the value of the "stage_id" field.
+func (m *LLMInteractionMutation) ClearStageID() {
+	m.stage = nil
+	m.clearedFields[llminteraction.FieldStageID] = struct{}{}
+}
+
+// StageIDCleared returns if the "stage_id" field was cleared in this mutation.
+func (m *LLMInteractionMutation) StageIDCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldStageID]
+	return ok
+}
+
 // ResetStageID resets all changes to the "stage_id" field.
 func (m *LLMInteractionMutation) ResetStageID() {
 	m.stage = nil
+	delete(m.clearedFields, llminteraction.FieldStageID)
 }
 
 // SetExecutionID sets the "execution_id" field.
@@ -6191,7 +6204,7 @@ func (m *LLMInteractionMutation) ExecutionID() (r string, exists bool) {
 // OldExecutionID returns the old "execution_id" field's value of the LLMInteraction entity.
 // If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *LLMInteractionMutation) OldExecutionID(ctx context.Context) (v string, err error) {
+func (m *LLMInteractionMutation) OldExecutionID(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldExecutionID is only allowed on UpdateOne operations")
 	}
@@ -6205,9 +6218,22 @@ func (m *LLMInteractionMutation) OldExecutionID(ctx context.Context) (v string, 
 	return oldValue.ExecutionID, nil
 }
 
+// ClearExecutionID clears the value of the "execution_id" field.
+func (m *LLMInteractionMutation) ClearExecutionID() {
+	m.agent_execution = nil
+	m.clearedFields[llminteraction.FieldExecutionID] = struct{}{}
+}
+
+// ExecutionIDCleared returns if the "execution_id" field was cleared in this mutation.
+func (m *LLMInteractionMutation) ExecutionIDCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldExecutionID]
+	return ok
+}
+
 // ResetExecutionID resets all changes to the "execution_id" field.
 func (m *LLMInteractionMutation) ResetExecutionID() {
 	m.agent_execution = nil
+	delete(m.clearedFields, llminteraction.FieldExecutionID)
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -6901,7 +6927,7 @@ func (m *LLMInteractionMutation) ClearStage() {
 
 // StageCleared reports if the "stage" edge to the Stage entity was cleared.
 func (m *LLMInteractionMutation) StageCleared() bool {
-	return m.clearedstage
+	return m.StageIDCleared() || m.clearedstage
 }
 
 // StageIDs returns the "stage" edge IDs in the mutation.
@@ -6933,7 +6959,7 @@ func (m *LLMInteractionMutation) ClearAgentExecution() {
 
 // AgentExecutionCleared reports if the "agent_execution" edge to the AgentExecution entity was cleared.
 func (m *LLMInteractionMutation) AgentExecutionCleared() bool {
-	return m.clearedagent_execution
+	return m.ExecutionIDCleared() || m.clearedagent_execution
 }
 
 // AgentExecutionID returns the "agent_execution" edge ID in the mutation.
@@ -7407,6 +7433,12 @@ func (m *LLMInteractionMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *LLMInteractionMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(llminteraction.FieldStageID) {
+		fields = append(fields, llminteraction.FieldStageID)
+	}
+	if m.FieldCleared(llminteraction.FieldExecutionID) {
+		fields = append(fields, llminteraction.FieldExecutionID)
+	}
 	if m.FieldCleared(llminteraction.FieldLastMessageID) {
 		fields = append(fields, llminteraction.FieldLastMessageID)
 	}
@@ -7445,6 +7477,12 @@ func (m *LLMInteractionMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *LLMInteractionMutation) ClearField(name string) error {
 	switch name {
+	case llminteraction.FieldStageID:
+		m.ClearStageID()
+		return nil
+	case llminteraction.FieldExecutionID:
+		m.ClearExecutionID()
+		return nil
 	case llminteraction.FieldLastMessageID:
 		m.ClearLastMessageID()
 		return nil

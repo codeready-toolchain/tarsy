@@ -77,10 +77,11 @@ func TestBuildDebugListResponse_GroupingAndSorting(t *testing.T) {
 	}
 
 	inputTokens := 100
+	exec1, exec2, exec3 := "exec-1", "exec-2", "exec-3"
 	llmInteractions := []*ent.LLMInteraction{
-		{ID: "llm-1", ExecutionID: "exec-1", InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", InputTokens: &inputTokens, CreatedAt: now},
-		{ID: "llm-2", ExecutionID: "exec-2", InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
-		{ID: "llm-3", ExecutionID: "exec-3", InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+		{ID: "llm-1", ExecutionID: &exec1, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", InputTokens: &inputTokens, CreatedAt: now},
+		{ID: "llm-2", ExecutionID: &exec2, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+		{ID: "llm-3", ExecutionID: &exec3, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
 	}
 
 	toolName := "get_pods"
@@ -124,6 +125,41 @@ func TestBuildDebugListResponse_GroupingAndSorting(t *testing.T) {
 	assert.Empty(t, resp.Stages[1].Executions[1].MCPInteractions)
 }
 
+func TestBuildDebugListResponse_SessionLevelInteractions(t *testing.T) {
+	now := time.Now()
+	exec1 := "exec-1"
+
+	stages := []*ent.Stage{
+		{
+			ID: "stg-1", StageName: "investigation",
+			Edges: ent.StageEdges{
+				AgentExecutions: []*ent.AgentExecution{
+					{ID: "exec-1", AgentName: "Agent1", AgentIndex: 1},
+				},
+			},
+		},
+	}
+
+	// One stage-level interaction and one session-level (nil execution_id).
+	llmInteractions := []*ent.LLMInteraction{
+		{ID: "llm-stage", ExecutionID: &exec1, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+		{ID: "llm-exec-summary", ExecutionID: nil, InteractionType: llminteraction.InteractionTypeExecutiveSummary, ModelName: "m", CreatedAt: now},
+	}
+
+	resp := buildDebugListResponse(stages, llmInteractions, nil)
+
+	// Stage-level interaction goes into stages.
+	require.Len(t, resp.Stages, 1)
+	require.Len(t, resp.Stages[0].Executions, 1)
+	require.Len(t, resp.Stages[0].Executions[0].LLMInteractions, 1)
+	assert.Equal(t, "llm-stage", resp.Stages[0].Executions[0].LLMInteractions[0].ID)
+
+	// Session-level interaction goes into session_interactions.
+	require.Len(t, resp.SessionInteractions, 1)
+	assert.Equal(t, "llm-exec-summary", resp.SessionInteractions[0].ID)
+	assert.Equal(t, string(llminteraction.InteractionTypeExecutiveSummary), resp.SessionInteractions[0].InteractionType)
+}
+
 func TestBuildDebugListResponse_StageWithNoExecutions(t *testing.T) {
 	stages := []*ent.Stage{
 		{
@@ -136,7 +172,9 @@ func TestBuildDebugListResponse_StageWithNoExecutions(t *testing.T) {
 	resp := buildDebugListResponse(stages, nil, nil)
 	require.Len(t, resp.Stages, 1)
 	assert.Empty(t, resp.Stages[0].Executions)
-	assert.NotNil(t, resp.Stages[0].Executions) // Not nil — clean JSON.
+	assert.NotNil(t, resp.Stages[0].Executions)         // Not nil — clean JSON.
+	assert.Empty(t, resp.SessionInteractions)            // No session-level interactions.
+	assert.NotNil(t, resp.SessionInteractions)           // Not nil — clean JSON.
 }
 
 // ============================================================================

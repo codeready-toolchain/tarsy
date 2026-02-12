@@ -88,8 +88,8 @@ func TestServiceIntegration(t *testing.T) {
 		// 6. Create LLM interaction with last_message_id
 		llmInteraction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         initialStage.ID,
-			ExecutionID:     initialExec.ID,
+			StageID:         &initialStage.ID,
+			ExecutionID:     &initialExec.ID,
 			InteractionType: "iteration",
 			ModelName:       "gemini-2.0-flash",
 			LastMessageID:   &msg2.ID,

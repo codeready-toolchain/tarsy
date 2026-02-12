@@ -88,8 +88,8 @@ func recordLLMInteraction(
 
 	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       execCtx.SessionID,
-		StageID:         execCtx.StageID,
-		ExecutionID:     execCtx.ExecutionID,
+		StageID:         &execCtx.StageID,
+		ExecutionID:     &execCtx.ExecutionID,
 		InteractionType: interactionType,
 		ModelName:       execCtx.Config.LLMProvider.Model,
 		LastMessageID:   lastMessageID,

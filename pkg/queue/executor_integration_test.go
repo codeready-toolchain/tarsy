@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -514,6 +515,30 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	assert.Contains(t, summaryEvent.Content, "Executive summary: Pod-1 OOM killed.")
 	assert.Nil(t, summaryEvent.StageID, "executive_summary should have nil stage_id")
 	assert.Nil(t, summaryEvent.ExecutionID, "executive_summary should have nil execution_id")
+
+	// Verify executive_summary LLM interaction (session-level, nil stage/execution).
+	llmInteractions, err := entClient.LLMInteraction.Query().All(context.Background())
+	require.NoError(t, err)
+
+	var execSummaryInteraction *ent.LLMInteraction
+	for _, li := range llmInteractions {
+		if li.InteractionType == llminteraction.InteractionTypeExecutiveSummary {
+			execSummaryInteraction = li
+			break
+		}
+	}
+	require.NotNil(t, execSummaryInteraction, "should have executive_summary LLM interaction")
+	assert.Nil(t, execSummaryInteraction.StageID, "executive_summary interaction should have nil stage_id")
+	assert.Nil(t, execSummaryInteraction.ExecutionID, "executive_summary interaction should have nil execution_id")
+	assert.Equal(t, session.ID, execSummaryInteraction.SessionID)
+	assert.NotNil(t, execSummaryInteraction.DurationMs, "should record duration")
+
+	// Verify inline conversation is stored in llm_request.
+	convRaw, ok := execSummaryInteraction.LlmRequest["conversation"]
+	assert.True(t, ok, "llm_request should contain conversation")
+	conv, ok := convRaw.([]any)
+	assert.True(t, ok, "conversation should be a slice")
+	assert.Len(t, conv, 3, "should have system + user + assistant messages")
 }
 
 func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {

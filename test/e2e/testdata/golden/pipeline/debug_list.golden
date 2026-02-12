@@ -1,4 +1,13 @@
 {
+  "session_interactions": [
+    {
+      "created_at": "{TIMESTAMP}",
+      "duration_ms": {DURATION_MS},
+      "id": "{INTERACTION_ID_21}",
+      "interaction_type": "executive_summary",
+      "model_name": "test-model"
+    }
+  ],
   "stages": [
     {
       "executions": [

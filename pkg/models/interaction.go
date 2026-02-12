@@ -3,9 +3,9 @@ package models
 // CreateLLMInteractionRequest contains fields for creating an LLM interaction
 type CreateLLMInteractionRequest struct {
 	SessionID        string         `json:"session_id"`
-	StageID          string         `json:"stage_id"`
-	ExecutionID      string         `json:"execution_id"`
-	InteractionType  string         `json:"interaction_type"` // "iteration", "final_analysis", "executive_summary", "chat_response"
+	StageID          *string        `json:"stage_id,omitempty"`     // nil for session-level interactions
+	ExecutionID      *string        `json:"execution_id,omitempty"` // nil for session-level interactions
+	InteractionType  string         `json:"interaction_type"`       // "iteration", "final_analysis", "executive_summary", "chat_response"
 	ModelName        string         `json:"model_name"`
 	LastMessageID    *string        `json:"last_message_id,omitempty"`
 	LLMRequest       map[string]any `json:"llm_request"`
@@ -40,7 +40,8 @@ type CreateMCPInteractionRequest struct {
 
 // DebugListResponse is the top-level response for GET /debug.
 type DebugListResponse struct {
-	Stages []DebugStageGroup `json:"stages"`
+	Stages              []DebugStageGroup      `json:"stages"`
+	SessionInteractions []LLMInteractionListItem `json:"session_interactions"` // Session-level LLM calls (e.g. executive summary)
 }
 
 // DebugStageGroup contains executions for one pipeline stage.

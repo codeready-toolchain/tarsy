@@ -299,8 +299,8 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 		llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LLMRequest:      map[string]any{},

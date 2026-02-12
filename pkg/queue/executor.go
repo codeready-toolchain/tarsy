@@ -232,7 +232,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	var execSummary string
 	var execSummaryErr string
 	if finalAnalysis != "" {
-		summary, summaryErr := e.generateExecutiveSummary(ctx, session, chain, finalAnalysis, timelineService)
+		summary, summaryErr := e.generateExecutiveSummary(ctx, session, chain, finalAnalysis, timelineService, interactionService)
 		if summaryErr != nil {
 			logger.Warn("Executive summary generation failed (fail-open)",
 				"error", summaryErr)
@@ -762,8 +762,10 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	chain *config.ChainConfig,
 	finalAnalysis string,
 	timelineService *services.TimelineService,
+	interactionService *services.InteractionService,
 ) (string, error) {
 	logger := slog.With("session_id", session.ID)
+	startTime := time.Now()
 
 	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
 	providerName := e.cfg.Defaults.LLMProvider
@@ -826,6 +828,32 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	summary := sb.String()
 	if summary == "" {
 		return "", fmt.Errorf("executive summary LLM returned empty response")
+	}
+
+	durationMs := int(time.Since(startTime).Milliseconds())
+
+	// Record session-level LLM interaction with inline conversation for observability.
+	conversation := []map[string]string{
+		{"role": string(agent.RoleSystem), "content": systemPrompt},
+		{"role": string(agent.RoleUser), "content": userPrompt},
+		{"role": string(agent.RoleAssistant), "content": summary},
+	}
+	if _, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		SessionID:       session.ID,
+		InteractionType: "executive_summary",
+		ModelName:       provider.Model,
+		LLMRequest: map[string]any{
+			"messages_count": len(messages),
+			"conversation":   conversation,
+		},
+		LLMResponse: map[string]any{
+			"text_length":      len(summary),
+			"tool_calls_count": 0,
+		},
+		DurationMs: &durationMs,
+	}); err != nil {
+		logger.Warn("Failed to record executive summary LLM interaction",
+			"error", err)
 	}
 
 	// Create session-level timeline event (no stage_id, no execution_id).
