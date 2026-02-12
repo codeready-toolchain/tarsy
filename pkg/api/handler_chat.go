@@ -81,13 +81,16 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 
 	// 7. Publish chat.created event if chat was just created
 	if created && s.eventPublisher != nil {
-		_ = s.eventPublisher.PublishChatCreated(c.Request().Context(), sessionID, events.ChatCreatedPayload{
+		if pubErr := s.eventPublisher.PublishChatCreated(c.Request().Context(), sessionID, events.ChatCreatedPayload{
 			Type:      events.EventTypeChatCreated,
 			SessionID: sessionID,
 			ChatID:    chatObj.ID,
 			CreatedBy: author,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
-		})
+		}); pubErr != nil {
+			slog.Warn("Failed to publish chat.created event",
+				"session_id", sessionID, "error", pubErr)
+		}
 	}
 
 	// 8. Add chat message
@@ -119,7 +122,7 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 
 	// 10. Publish chat.user_message event
 	if s.eventPublisher != nil {
-		_ = s.eventPublisher.PublishChatUserMessage(c.Request().Context(), sessionID, events.ChatUserMessagePayload{
+		if pubErr := s.eventPublisher.PublishChatUserMessage(c.Request().Context(), sessionID, events.ChatUserMessagePayload{
 			Type:      events.EventTypeChatUserMessage,
 			SessionID: sessionID,
 			ChatID:    chatObj.ID,
@@ -128,7 +131,10 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 			Author:    author,
 			StageID:   stageID,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
-		})
+		}); pubErr != nil {
+			slog.Warn("Failed to publish chat.user_message event",
+				"session_id", sessionID, "error", pubErr)
+		}
 	}
 
 	// 11. Return 202 Accepted

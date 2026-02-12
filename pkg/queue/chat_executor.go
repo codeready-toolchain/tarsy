@@ -340,8 +340,8 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	// 15. Stop heartbeat
 	cancelHeartbeat()
 
-	// 16. Schedule event cleanup
-	e.scheduleStageEventCleanup(stageID)
+	// 16. Schedule event cleanup (cutoff = now, so events from subsequent stages are preserved)
+	e.scheduleStageEventCleanup(stageID, time.Now())
 
 	logger.Info("Chat executor: execution complete", "status", terminalStatus)
 }
@@ -445,13 +445,11 @@ func (e *ChatMessageExecutor) runChatHeartbeat(ctx context.Context, chatID strin
 
 // scheduleStageEventCleanup schedules deletion of transient Event records
 // after a 60-second grace period (same pattern as Worker).
-func (e *ChatMessageExecutor) scheduleStageEventCleanup(stageID string) {
+// cutoff is the timestamp at which this stage finished; only events created
+// at or before this time are deleted, preserving events from subsequent stages.
+func (e *ChatMessageExecutor) scheduleStageEventCleanup(stageID string, cutoff time.Time) {
 	time.AfterFunc(60*time.Second, func() {
-		// Stage events share the session channel — clean up by session_id
-		// For now, we use stage ID as a marker. The events table stores session_id,
-		// so we delete all events for the session. But since multiple stages may
-		// share the channel, this is acceptable (events are transient delivery records).
-		if err := e.cleanupStageEvents(context.Background(), stageID); err != nil {
+		if err := e.cleanupStageEvents(context.Background(), stageID, cutoff); err != nil {
 			slog.Warn("Failed to cleanup stage events after grace period",
 				"stage_id", stageID,
 				"error", err,
@@ -460,15 +458,19 @@ func (e *ChatMessageExecutor) scheduleStageEventCleanup(stageID string) {
 	})
 }
 
-// cleanupStageEvents removes transient Event records for a given session's channel.
-func (e *ChatMessageExecutor) cleanupStageEvents(ctx context.Context, stageID string) error {
-	// Look up the stage to get the session ID, then clean up session events
+// cleanupStageEvents removes transient Event records for a given stage's session,
+// restricted to events created at or before the cutoff time so that events from
+// a subsequent stage started within the grace period are preserved.
+func (e *ChatMessageExecutor) cleanupStageEvents(ctx context.Context, stageID string, cutoff time.Time) error {
 	stg, err := e.stageService.GetStageByID(ctx, stageID, false)
 	if err != nil {
 		return fmt.Errorf("failed to get stage for cleanup: %w", err)
 	}
 	_, err = e.dbClient.Event.Delete().
-		Where(event.SessionIDEQ(stg.SessionID)).
+		Where(
+			event.SessionIDEQ(stg.SessionID),
+			event.CreatedAtLTE(cutoff),
+		).
 		Exec(ctx)
 	return err
 }

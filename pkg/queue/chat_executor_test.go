@@ -273,6 +273,7 @@ func stubConfig() *config.Config {
 		ChainRegistry:       config.NewChainRegistry(nil),
 		AgentRegistry:       config.NewAgentRegistry(nil),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(nil),
+		MCPServerRegistry:   config.NewMCPServerRegistry(nil),
 	}
 }
 
