@@ -13,7 +13,7 @@
   "final_analysis": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
   "id": "{SESSION_ID}",
   "last_interaction_at": "{TIMESTAMP}",
-  "pod_id": "e2e-test-TestE2E_SingleStage",
+  "pod_id": "e2e-test-TestE2E_Pipeline",
   "started_at": "{TIMESTAMP}",
   "status": "completed"
 }

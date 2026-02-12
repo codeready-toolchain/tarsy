@@ -19,11 +19,12 @@ type ExpectedEvent struct {
 }
 
 // ────────────────────────────────────────────────────────────
-// Scenario: SingleStage
-// Single NativeThinking agent: thinking + tool call + thinking + final answer + executive summary.
+// Scenario: Pipeline
+// Grows incrementally into the full pipeline test.
+// Currently: single NativeThinking agent, thinking + tool call + final answer + executive summary.
 // ────────────────────────────────────────────────────────────
 
-var SingleStageExpectedEvents = []ExpectedEvent{
+var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 	{Type: "stage.status", StageName: "investigation", Status: "started"},
 

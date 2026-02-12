@@ -20,7 +20,7 @@ import (
 // Scenario 1: Simple Single-Stage with MCP
 // ────────────────────────────────────────────────────────────
 
-func TestE2E_SingleStage(t *testing.T) {
+func TestE2E_Pipeline(t *testing.T) {
 	// LLM script: thinking + tool call → tool result → thinking + final answer.
 	llm := NewScriptedLLMClient()
 	// Iteration 1: thinking + text alongside tool call.
@@ -44,7 +44,7 @@ func TestE2E_SingleStage(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
@@ -103,25 +103,25 @@ func TestE2E_SingleStage(t *testing.T) {
 	}
 
 	// Golden file assertions.
-	AssertGoldenJSON(t, GoldenPath("single_stage", "session.golden"), session, normalizer)
+	AssertGoldenJSON(t, GoldenPath("pipeline", "session.golden"), session, normalizer)
 
 	// WS event structural assertions (not golden — event ordering is non-deterministic
 	// due to catchup/NOTIFY race, so we verify expected events in relative order).
-	AssertEventsInOrder(t, ws.Events(), testdata.SingleStageExpectedEvents)
+	AssertEventsInOrder(t, ws.Events(), testdata.PipelineExpectedEvents)
 
 	// Stages golden.
 	projectedStages := make([]map[string]interface{}, len(stages))
 	for i, s := range stages {
 		projectedStages[i] = ProjectStageForGolden(s)
 	}
-	AssertGoldenJSON(t, GoldenPath("single_stage", "stages.golden"), projectedStages, normalizer)
+	AssertGoldenJSON(t, GoldenPath("pipeline", "stages.golden"), projectedStages, normalizer)
 
 	// Timeline golden.
 	projectedTimeline := make([]map[string]interface{}, len(timeline))
 	for i, te := range timeline {
 		projectedTimeline[i] = ProjectTimelineForGolden(te)
 	}
-	AssertGoldenJSON(t, GoldenPath("single_stage", "timeline.golden"), projectedTimeline, normalizer)
+	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), projectedTimeline, normalizer)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ func TestE2E_Cancellation(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -367,7 +367,7 @@ func TestE2E_ExecutiveSummaryFailOpen(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Error: fmt.Errorf("exec summary LLM error")})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -558,7 +558,7 @@ func TestE2E_ConcurrentSessions(t *testing.T) {
 	}
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithWorkerCount(3),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
@@ -670,7 +670,7 @@ func TestE2E_SessionTimeout(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithSessionTimeout(3*time.Second),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
@@ -937,7 +937,7 @@ func TestE2E_ComprehensiveObservability(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "OOM due to memory leak."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
@@ -1149,7 +1149,7 @@ func TestE2E_QueueCapacity(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Summary 4."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.Load(t, "single-stage")),
+		WithConfig(configs.Load(t, "pipeline")),
 		WithLLMClient(llm),
 		WithWorkerCount(3),
 		WithMaxConcurrentSessions(2),

@@ -26,7 +26,7 @@ func configsDir() string {
 // The name corresponds to a subdirectory under testdata/configs/ containing
 // tarsy.yaml and llm-providers.yaml.
 //
-// Available configs: single-stage, full-flow, two-stage-fail-fast,
+// Available configs: pipeline, full-flow, two-stage-fail-fast,
 // parallel-any, parallel-all, replica, chat, forced-conclusion.
 func Load(t *testing.T, name string) *config.Config {
 	t.Helper()
