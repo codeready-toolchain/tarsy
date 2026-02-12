@@ -313,7 +313,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		assert.Equal(t, []string{"chat-specific-server"}, resolved.MCPServers)
 	})
 
-	t.Run("aggregates MCP servers from chain stages when no chatCfg MCP", func(t *testing.T) {
+	t.Run("aggregates MCP servers from inline stage-agent overrides", func(t *testing.T) {
 		chain := &config.ChainConfig{
 			Stages: []config.StageConfig{
 				{
@@ -334,6 +334,67 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		require.NoError(t, err)
 		// Should have unique union
 		assert.Equal(t, []string{"stage-mcp-1", "agent-mcp-1", "agent-mcp-2", "agent-mcp-3"}, resolved.MCPServers)
+	})
+
+	t.Run("aggregates MCP servers from agent definitions in registry", func(t *testing.T) {
+		// When agents are referenced by name (no inline MCP override), the
+		// aggregation should look up their definitions to collect MCP servers.
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{
+					Agents: []config.StageAgentConfig{
+						{Name: "KubernetesAgent"}, // has "k8s-mcp" in registry
+					},
+				},
+			},
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"k8s-mcp"}, resolved.MCPServers)
+	})
+
+	t.Run("aggregates MCP servers from both inline and agent definitions", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{
+					MCPServers: []string{"stage-level"},
+					Agents: []config.StageAgentConfig{
+						{Name: "KubernetesAgent"}, // "k8s-mcp" from registry
+						{MCPServers: []string{"inline-mcp"}},
+					},
+				},
+			},
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"stage-level", "k8s-mcp", "inline-mcp"}, resolved.MCPServers)
+	})
+
+	t.Run("chat agent with no MCP servers inherits from chain aggregation", func(t *testing.T) {
+		// Mirrors real-world scenario: ChatAgent has no MCPServers in its
+		// definition, gets them from the chain's investigation agents.
+		chatlessCfg := &config.Config{
+			Defaults: defaults,
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"ChatAgent":    {},                                          // no MCP servers
+				"DataCollector": {MCPServers: []string{"monitoring-tools"}}, // investigation agent
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleProvider,
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "DataCollector"}}},
+			},
+		}
+
+		resolved, err := ResolveChatAgentConfig(chatlessCfg, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "ChatAgent", resolved.AgentName)
+		assert.Equal(t, []string{"monitoring-tools"}, resolved.MCPServers)
 	})
 
 	t.Run("errors on nil chain", func(t *testing.T) {

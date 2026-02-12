@@ -1,0 +1,29 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+  max_iterations: 3
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  DataCollector:
+    iteration_strategy: "native-thinking"
+    max_iterations: 3
+    mcp_servers: [test-mcp]
+
+agent_chains:
+  test-chain:
+    alert_types: [test-alert]
+    stages:
+      - name: investigation
+        agents:
+          - name: DataCollector

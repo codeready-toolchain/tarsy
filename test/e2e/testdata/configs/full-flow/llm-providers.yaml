@@ -1,0 +1,9 @@
+llm_providers:
+  google-test:
+    type: google
+    model: gemini-test
+    max_tool_result_tokens: 10000
+  openai-test:
+    type: openai
+    model: gpt-test
+    max_tool_result_tokens: 10000

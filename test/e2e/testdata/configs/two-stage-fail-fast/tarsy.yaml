@@ -1,0 +1,31 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+  max_iterations: 3
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    iteration_strategy: "native-thinking"
+    max_iterations: 3
+    mcp_servers: [test-mcp]
+
+agent_chains:
+  test-chain:
+    alert_types: [test-alert]
+    stages:
+      - name: stage-1
+        agents:
+          - name: Investigator
+      - name: stage-2
+        agents:
+          - name: Investigator

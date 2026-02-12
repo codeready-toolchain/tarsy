@@ -12,7 +12,6 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
-	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
 
@@ -34,7 +33,7 @@ func TestE2E_SingleStage(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
@@ -101,7 +100,7 @@ func TestE2E_FailFast(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Error: fmt.Errorf("LLM service unavailable")})
 
 	app := NewTestApp(t,
-		WithConfig(configs.TwoStageFailFastConfig()),
+		WithConfig(configs.Load(t, "two-stage-fail-fast")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -141,7 +140,7 @@ func TestE2E_Cancellation(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -204,7 +203,7 @@ func TestE2E_ParallelPolicyAny(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Memory leak identified by Agent1."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ParallelConfig(config.SuccessPolicyAny)),
+		WithConfig(configs.Load(t, "parallel-any")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler(`[{"name":"pod-1"}]`)},
@@ -243,7 +242,7 @@ func TestE2E_ParallelPolicyAll(t *testing.T) {
 	llm.AddRouted("Agent2", LLMScriptEntry{Error: fmt.Errorf("Agent2 LLM error")})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ParallelConfig(config.SuccessPolicyAll)),
+		WithConfig(configs.Load(t, "parallel-all")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -289,7 +288,7 @@ func TestE2E_Replicas(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Summary: replicas agree."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ReplicaConfig(3)),
+		WithConfig(configs.Load(t, "replica")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler(`[{"name":"pod-1"}]`)},
@@ -328,7 +327,7 @@ func TestE2E_ExecutiveSummaryFailOpen(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Error: fmt.Errorf("exec summary LLM error")})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -375,7 +374,7 @@ func TestE2E_ChatContextAccumulation(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Chat response 2: You can restart with..."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ChatConfig()),
+		WithConfig(configs.Load(t, "chat")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler(`[{"name":"pod-1"}]`)},
@@ -451,7 +450,7 @@ func TestE2E_ChatCancellation(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ChatConfig()),
+		WithConfig(configs.Load(t, "chat")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler("ok")},
@@ -508,7 +507,7 @@ func TestE2E_ConcurrentSessions(t *testing.T) {
 	}
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithWorkerCount(3),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
@@ -569,7 +568,7 @@ func TestE2E_ForcedConclusion(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "System healthy after forced conclusion."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ForcedConclusionConfig()),
+		WithConfig(configs.Load(t, "forced-conclusion")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {"get_pods": StaticToolHandler(`[{"name":"pod-1","status":"Running"}]`)},
@@ -609,7 +608,7 @@ func TestE2E_SessionTimeout(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithSessionTimeout(3*time.Second),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
@@ -653,7 +652,7 @@ func TestE2E_ChatTimeout(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
-		WithConfig(configs.ChatConfig()),
+		WithConfig(configs.Load(t, "chat")),
 		WithLLMClient(llm),
 		WithChatTimeout(2*time.Second),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
@@ -743,7 +742,7 @@ func TestE2E_FullFlow(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "You can restart with: kubectl rollout restart deployment/app-1"})
 
 	app := NewTestApp(t,
-		WithConfig(configs.FullFlowConfig()),
+		WithConfig(configs.Load(t, "full-flow")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
@@ -847,7 +846,7 @@ func TestE2E_ComprehensiveObservability(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "OOM due to memory leak."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
@@ -936,7 +935,7 @@ func TestE2E_QueueCapacity(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{Text: "Summary 4."})
 
 	app := NewTestApp(t,
-		WithConfig(configs.SingleStageConfig()),
+		WithConfig(configs.Load(t, "single-stage")),
 		WithLLMClient(llm),
 		WithWorkerCount(3),
 		WithMaxConcurrentSessions(2),

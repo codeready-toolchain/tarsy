@@ -115,11 +115,8 @@ func (v *Validator) validateDefaults() error {
 
 func (v *Validator) validateAgents() error {
 	for name, agent := range v.cfg.AgentRegistry.GetAll() {
-		// Validate MCP servers exist
-		if len(agent.MCPServers) == 0 {
-			return NewValidationError("agent", name, "mcp_servers", fmt.Errorf("at least one MCP server required"))
-		}
-
+		// MCP servers are optional — an agent may operate without tools.
+		// When specified, validate that each referenced server exists.
 		for _, serverID := range agent.MCPServers {
 			if !v.cfg.MCPServerRegistry.Has(serverID) {
 				return NewValidationError("agent", name, "mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))

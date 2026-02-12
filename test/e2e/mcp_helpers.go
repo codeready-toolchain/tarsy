@@ -15,53 +15,28 @@ import (
 // emptySchema is a minimal valid JSON Schema for test tools.
 var emptySchema = json.RawMessage(`{"type":"object"}`)
 
+// serverSpec holds the blueprint for an in-memory MCP server so that fresh
+// transports can be created for each CreateClient call.
+type serverSpec struct {
+	serverID string
+	tools    map[string]mcpsdk.ToolHandler
+}
+
 // SetupInMemoryMCP creates in-memory MCP servers with scripted tool handlers
 // and returns a real *mcp.ClientFactory backed by those servers.
 //
-// Each call to ClientFactory.CreateClient/CreateToolExecutor will return a
-// Client with pre-injected sessions pointing at the in-memory servers.
+// Each call to ClientFactory.CreateClient creates fresh in-memory transports
+// and sessions, so consecutive MCP clients (e.g. investigation → chat) get
+// independent, non-shared connections.
 //
 // servers maps serverID → (toolName → handler).
 func SetupInMemoryMCP(t *testing.T, servers map[string]map[string]mcpsdk.ToolHandler) *mcp.ClientFactory {
 	t.Helper()
 
-	type sessionInfo struct {
-		sdkClient *mcpsdk.Client
-		session   *mcpsdk.ClientSession
-	}
-
-	// Boot all in-memory MCP servers and connect SDK clients.
-	infos := make(map[string]*sessionInfo, len(servers))
+	// Capture server blueprints.
+	specs := make([]serverSpec, 0, len(servers))
 	for serverID, tools := range servers {
-		server := mcpsdk.NewServer(&mcpsdk.Implementation{
-			Name: serverID, Version: "test",
-		}, nil)
-
-		for toolName, handler := range tools {
-			server.AddTool(&mcpsdk.Tool{
-				Name:        toolName,
-				Description: "test tool: " + toolName,
-				InputSchema: emptySchema,
-			}, handler)
-		}
-
-		clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-
-		go func() {
-			_ = server.Run(ctx, serverTransport)
-		}()
-
-		sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{
-			Name: "tarsy-e2e", Version: "test",
-		}, nil)
-
-		session, err := sdkClient.Connect(context.Background(), clientTransport, nil)
-		require.NoError(t, err)
-
-		infos[serverID] = &sessionInfo{sdkClient: sdkClient, session: session}
+		specs = append(specs, serverSpec{serverID: serverID, tools: tools})
 	}
 
 	// Build a registry with stub configs so tool filtering resolves correctly.
@@ -76,10 +51,32 @@ func SetupInMemoryMCP(t *testing.T, servers map[string]map[string]mcpsdk.ToolHan
 	}
 	registry := config.NewMCPServerRegistry(mcpConfigs)
 
-	// Create a ClientFactory that injects the pre-connected sessions.
+	// Create a ClientFactory that spins up fresh in-memory transports per call.
 	return mcp.NewTestClientFactory(registry, func(c *mcp.Client) {
-		for serverID, info := range infos {
-			c.InjectSession(serverID, info.sdkClient, info.session)
+		for _, spec := range specs {
+			server := mcpsdk.NewServer(&mcpsdk.Implementation{
+				Name: spec.serverID, Version: "test",
+			}, nil)
+			for toolName, handler := range spec.tools {
+				server.AddTool(&mcpsdk.Tool{
+					Name:        toolName,
+					Description: "test tool: " + toolName,
+					InputSchema: emptySchema,
+				}, handler)
+			}
+
+			clientTransport, serverTransport := mcpsdk.NewInMemoryTransports()
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			go func() { _ = server.Run(ctx, serverTransport) }()
+
+			sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{
+				Name: "tarsy-e2e", Version: "test",
+			}, nil)
+			session, err := sdkClient.Connect(context.Background(), clientTransport, nil)
+			require.NoError(t, err)
+
+			c.InjectSession(spec.serverID, sdkClient, session)
 		}
 	})
 }
