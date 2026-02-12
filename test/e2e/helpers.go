@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -222,6 +223,62 @@ func ProjectTimelineForGolden(te *ent.TimelineEvent) map[string]interface{} {
 		m["content"] = te.Content
 	}
 	return m
+}
+
+// BuildAgentNameIndex creates a map from execution_id → agent_name for
+// annotating timeline projections with the agent that produced each event.
+func BuildAgentNameIndex(execs []*ent.AgentExecution) map[string]string {
+	idx := make(map[string]string, len(execs))
+	for _, e := range execs {
+		idx[e.ID] = e.AgentName
+	}
+	return idx
+}
+
+// AnnotateTimelineWithAgent adds "agent" field to projected timeline maps
+// by looking up execution_id → agent_name. Session-level events (nil execution_id)
+// are left without an agent field.
+func AnnotateTimelineWithAgent(projected []map[string]interface{}, timeline []*ent.TimelineEvent, agentIndex map[string]string) {
+	for i, te := range timeline {
+		if te.ExecutionID != nil {
+			if name, ok := agentIndex[*te.ExecutionID]; ok {
+				projected[i]["agent"] = name
+			}
+		}
+	}
+}
+
+// SortTimelineProjection sorts projected timeline maps deterministically.
+// Primary sort: agent name (groups events by agent). Then sequence, event_type, content.
+// Session-level events (no agent) sort last.
+func SortTimelineProjection(projected []map[string]interface{}) {
+	sort.SliceStable(projected, func(i, j int) bool {
+		agI, _ := projected[i]["agent"].(string)
+		agJ, _ := projected[j]["agent"].(string)
+		if agI != agJ {
+			// Empty agent (session-level) sorts last.
+			if agI == "" {
+				return false
+			}
+			if agJ == "" {
+				return true
+			}
+			return agI < agJ
+		}
+		seqI, _ := projected[i]["sequence"].(int)
+		seqJ, _ := projected[j]["sequence"].(int)
+		if seqI != seqJ {
+			return seqI < seqJ
+		}
+		etI, _ := projected[i]["event_type"].(string)
+		etJ, _ := projected[j]["event_type"].(string)
+		if etI != etJ {
+			return etI < etJ
+		}
+		cI, _ := projected[i]["content"].(string)
+		cJ, _ := projected[j]["content"].(string)
+		return cI < cJ
+	})
 }
 
 // ────────────────────────────────────────────────────────────

@@ -35,6 +35,16 @@ agents:
     max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
     custom_instructions: "You are Remediator, analyzing logs and recommending fixes."
+  ConfigValidator:
+    iteration_strategy: "react"
+    max_iterations: 3
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are ConfigValidator, verifying resource configurations."
+  MetricsValidator:
+    iteration_strategy: "native-thinking"
+    max_iterations: 3
+    mcp_servers: [prometheus-mcp]
+    custom_instructions: "You are MetricsValidator, checking SLO compliance."
 
 agent_chains:
   test-chain:
@@ -46,3 +56,8 @@ agent_chains:
       - name: remediation
         agents:
           - name: Remediator
+      - name: validation
+        success_policy: all
+        agents:
+          - name: ConfigValidator
+          - name: MetricsValidator

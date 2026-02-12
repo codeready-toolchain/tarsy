@@ -817,8 +817,13 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		return "", fmt.Errorf("executive summary LLM returned empty response")
 	}
 
-	// Create session-level timeline event (no stage_id, no execution_id)
-	// Use a fixed sequence number — executive summary is always the last event
+	// Create session-level timeline event (no stage_id, no execution_id).
+	// Use a fixed sequence number — executive summary is always the last event.
+	//
+	// NOTE: This event is persisted to the DB only — it is NOT published to
+	// WebSocket clients via EventPublisher. Clients discover the executive
+	// summary through the session API response (executive_summary field) or
+	// by querying the timeline after the session completes.
 	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
 		SequenceNumber: executiveSummarySeqNum,

@@ -16,9 +16,13 @@ import (
 
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
-// Two stages: investigation (NativeThinking) → remediation (ReAct).
+// Three stages + synthesis:
+//   1. investigation (DataCollector, NativeThinking)
+//   2. remediation   (Remediator, ReAct)
+//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking)
+//      → validation - Synthesis (automatic)
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
-// and executive summary.
+// parallel agents, synthesis, and executive summary.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
@@ -80,6 +84,42 @@ func TestE2E_Pipeline(t *testing.T) {
 			"Final Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
 	})
 
+	// ── Stage 3: validation (parallel: ConfigValidator react + MetricsValidator native-thinking) ──
+	// Parallel agents use routed dispatch — LLM calls are matched by agent name.
+
+	// ConfigValidator (react): 2 iterations.
+	llm.AddRouted("ConfigValidator", LLMScriptEntry{
+		Text: "Thought: I should verify the pod memory limits are properly configured.\n" +
+			"Action: test-mcp.get_resource_config\n" +
+			`Action Input: {"pod":"pod-1","namespace":"default"}`,
+	})
+	llm.AddRouted("ConfigValidator", LLMScriptEntry{
+		Text: "Thought: The memory limit of 512Mi matches the alert threshold.\n" +
+			"Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
+	})
+
+	// MetricsValidator (native-thinking): 2 iterations.
+	llm.AddRouted("MetricsValidator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me verify the SLO metrics for pod-1."},
+			&agent.TextChunk{Content: "Checking SLO compliance."},
+			&agent.ToolCallChunk{CallID: "call-v1", Name: "prometheus-mcp__query_slo", Arguments: `{"pod":"pod-1"}`},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+		},
+	})
+	llm.AddRouted("MetricsValidator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "SLO is being violated."},
+			&agent.TextChunk{Content: "Metrics confirm SLO violation for pod-1 availability."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// ── Synthesis (automatic after parallel stage with >1 agent) ──
+	llm.AddSequential(LLMScriptEntry{
+		Text: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+	})
+
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit."})
 
@@ -92,6 +132,8 @@ func TestE2E_Pipeline(t *testing.T) {
 		`]`
 	metricsResult := `[{"metric":"container_memory_usage_bytes","pod":"pod-1","value":"524288000","timestamp":"2026-01-15T14:29:00Z"}]`
 	podLogsResult := `{"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}`
+	resourceConfigResult := `{"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}`
+	sloResult := `[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]`
 	// Large alert result — triggers summarization (>100 tokens ≈ 400 chars).
 	alertsResult := `[` +
 		`{"alertname":"OOMKilled","pod":"pod-1","namespace":"default","severity":"critical","state":"firing","startsAt":"2026-01-15T14:30:00Z","summary":"Container killed due to OOM","description":"Pod pod-1 exceeded memory limit of 512Mi"},` +
@@ -104,13 +146,15 @@ func TestE2E_Pipeline(t *testing.T) {
 		WithLLMClient(llm),
 		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
 			"test-mcp": {
-				"get_nodes":    StaticToolHandler(nodesResult),
-				"get_pods":     StaticToolHandler(podsResult),
-				"get_pod_logs": StaticToolHandler(podLogsResult),
+				"get_nodes":           StaticToolHandler(nodesResult),
+				"get_pods":            StaticToolHandler(podsResult),
+				"get_pod_logs":        StaticToolHandler(podLogsResult),
+				"get_resource_config": StaticToolHandler(resourceConfigResult),
 			},
 			"prometheus-mcp": {
 				"query_metrics": StaticToolHandler(metricsResult),
 				"query_alerts":  StaticToolHandler(alertsResult),
+				"query_slo":     StaticToolHandler(sloResult),
 			},
 		}),
 	)
@@ -142,14 +186,21 @@ func TestE2E_Pipeline(t *testing.T) {
 
 	// Verify DB state.
 	stages := app.QueryStages(t, sessionID)
-	assert.Len(t, stages, 2)
+	assert.Len(t, stages, 4)
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, "remediation", stages[1].StageName)
+	assert.Equal(t, "validation", stages[2].StageName)
+	assert.Equal(t, "validation - Synthesis", stages[3].StageName)
 
 	execs := app.QueryExecutions(t, sessionID)
-	assert.Len(t, execs, 2)
+	assert.Len(t, execs, 5)
 	assert.Equal(t, "DataCollector", execs[0].AgentName)
 	assert.Equal(t, "Remediator", execs[1].AgentName)
+	// Parallel agents — order may vary, so check by name set.
+	parallelNames := map[string]bool{execs[2].AgentName: true, execs[3].AgentName: true}
+	assert.True(t, parallelNames["ConfigValidator"], "expected ConfigValidator execution")
+	assert.True(t, parallelNames["MetricsValidator"], "expected MetricsValidator execution")
+	assert.Equal(t, "SynthesisAgent", execs[4].AgentName)
 
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
@@ -157,9 +208,11 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Verify LLM call count:
 	// Stage 1: iteration 1 + summarization + iteration 2 + iteration 3 = 4
 	// Stage 2: iteration 1 + iteration 2 + summarization + iteration 3 = 4
+	// Stage 3: ConfigValidator (2) + MetricsValidator (2) = 4
+	// Synthesis: 1
 	// Executive summary: 1
-	// Total: 9
-	assert.Equal(t, 9, llm.CallCount())
+	// Total: 14
+	assert.Equal(t, 14, llm.CallCount())
 
 	// Build normalizer with all known IDs for golden comparison.
 	normalizer := NewNormalizer(sessionID)
@@ -184,10 +237,15 @@ func TestE2E_Pipeline(t *testing.T) {
 	}
 	AssertGoldenJSON(t, GoldenPath("pipeline", "stages.golden"), projectedStages, normalizer)
 
-	// Timeline golden.
+	// Timeline golden — sort deterministically by agent name since parallel agents
+	// produce events at overlapping sequence numbers in non-deterministic order.
+	// Agent names are stable strings (unlike execution UUIDs), so sort order is deterministic.
+	agentIndex := BuildAgentNameIndex(execs)
 	projectedTimeline := make([]map[string]interface{}, len(timeline))
 	for i, te := range timeline {
 		projectedTimeline[i] = ProjectTimelineForGolden(te)
 	}
+	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
+	SortTimelineProjection(projectedTimeline)
 	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), projectedTimeline, normalizer)
 }
