@@ -76,7 +76,7 @@ func NewSharedTestDB(t *testing.T) *SharedTestDB {
 			t.Logf("SharedTestDB: warning: could not connect to drop schema %s: %v", schemaName, err)
 			return
 		}
-		defer cleanDB.Close()
+		defer func() { _ = cleanDB.Close() }()
 		_, err = cleanDB.ExecContext(context.Background(), fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", schemaName))
 		if err != nil {
 			t.Logf("SharedTestDB: warning: failed to drop schema %s: %v", schemaName, err)
