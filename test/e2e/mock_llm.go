@@ -25,8 +25,8 @@ type LLMScriptEntry struct {
 // parallel stages where call order is non-deterministic.
 type ScriptedLLMClient struct {
 	mu             sync.Mutex
-	sequential     []LLMScriptEntry            // consumed in order for non-routed calls
-	seqIndex       int                         //nolint:unused // used in Generate
+	sequential     []LLMScriptEntry // consumed in order for non-routed calls
+	seqIndex       int
 	routes         map[string][]LLMScriptEntry // agentName → per-agent script
 	routeIndex     map[string]int              // agentName → current index
 	capturedInputs []*agent.GenerateInput
