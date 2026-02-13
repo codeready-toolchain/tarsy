@@ -17,6 +17,11 @@ import (
 // do a full REST reload.
 const catchupLimit = 200
 
+// listenTimeout bounds how long a LISTEN command may block when subscribing to
+// a new PG channel. Without this, a stalled connection would block the
+// subscribing goroutine (and thus the client's read loop) indefinitely.
+const listenTimeout = 10 * time.Second
+
 // CatchupEvent holds the data returned by the catchup query.
 type CatchupEvent struct {
 	ID      int
@@ -243,7 +248,9 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 		l := m.listener
 		m.listenerMu.RUnlock()
 		if l != nil {
-			if err := l.Subscribe(context.Background(), channel); err != nil {
+			listenCtx, listenCancel := context.WithTimeout(context.Background(), listenTimeout)
+			defer listenCancel()
+			if err := l.Subscribe(listenCtx, channel); err != nil {
 				slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
 				m.cleanupFailedChannel(c, channel)
 				return fmt.Errorf("LISTEN on channel %s: %w", channel, err)
