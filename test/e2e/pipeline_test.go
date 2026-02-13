@@ -124,11 +124,20 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Validation Synthesis (synthesis-native-thinking — includes thinking) ──
+	// ── Validation Synthesis (synthesis-native-thinking — includes thinking + Google Search grounding) ──
+	// The test-provider has native_tools.google_search enabled, and synthesis-native-thinking
+	// uses the google-native backend with no MCP tools, so native tools (Google Search) activate.
+	// The mock returns a GroundingChunk simulating a Google Search result.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "Combining ConfigValidator and MetricsValidator results."},
 			&agent.TextChunk{Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
+			&agent.GroundingChunk{
+				WebSearchQueries: []string{"kubernetes pod OOM memory limit best practices"},
+				Sources: []agent.GroundingSource{
+					{URI: "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/", Title: "Resource Management for Pods and Containers"},
+				},
+			},
 			&agent.UsageChunk{InputTokens: 120, OutputTokens: 40, TotalTokens: 160},
 		},
 	})

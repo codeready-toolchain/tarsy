@@ -408,9 +408,28 @@
   },
   {
     "agent": "SynthesisAgent",
+    "content": "Google Search: 'kubernetes pod OOM memory limit best practices' → Sources: Resource Management for Pods and Containers (https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)",
+    "event_type": "google_search_result",
+    "metadata": {
+      "queries": [
+        "kubernetes pod OOM memory limit best practices"
+      ],
+      "source": "gemini",
+      "sources": [
+        {
+          "title": "Resource Management for Pods and Containers",
+          "uri": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+        }
+      ]
+    },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "SynthesisAgent",
     "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
     "event_type": "final_analysis",
-    "sequence": 3,
+    "sequence": 4,
     "status": "completed"
   },
   {

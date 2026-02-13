@@ -215,7 +215,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "validation", Status: "completed"},
 
-	// ── Validation Synthesis (synthesis-native-thinking — includes thinking) ──
+	// ── Validation Synthesis (synthesis-native-thinking — includes thinking + Google Search) ──
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "started"},
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
@@ -223,6 +223,9 @@ var PipelineExpectedEvents = []ExpectedEvent{
 		Content: "Combining ConfigValidator and MetricsValidator results.", Group: 11},
 	{Type: "timeline_event.completed", EventType: "llm_response",
 		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.", Group: 11},
+	// Google Search grounding — fire-and-forget event created after stream ends.
+	{Type: "timeline_event.created", EventType: "google_search_result", Status: "completed",
+		Content: "Google Search: 'kubernetes pod OOM memory limit best practices' → Sources: Resource Management for Pods and Containers (https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)"},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "completed"},
