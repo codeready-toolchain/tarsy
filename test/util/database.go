@@ -43,7 +43,7 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 	connStr := getOrCreateSharedDatabase(t)
 
 	// Generate unique schema name for this test
-	schemaName := generateSchemaName(t)
+	schemaName := GenerateSchemaName(t)
 
 	// Connect to the base database to create the schema
 	db, err := stdsql.Open("pgx", connStr)
@@ -59,7 +59,7 @@ func SetupTestDatabase(t *testing.T) (*ent.Client, *stdsql.DB) {
 	_ = db.Close()
 
 	// Reconnect with search_path set in connection string for all pooled connections
-	connStrWithSchema := addSearchPathToConnString(connStr, schemaName)
+	connStrWithSchema := AddSearchPathToConnString(connStr, schemaName)
 	db, err = stdsql.Open("pgx", connStrWithSchema)
 	require.NoError(t, err)
 
@@ -146,9 +146,9 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 	return sharedConnStr
 }
 
-// generateSchemaName creates a unique, PostgreSQL-safe schema name for the test.
+// GenerateSchemaName creates a unique, PostgreSQL-safe schema name for the test.
 // Format: test_<sanitized_test_name>_<random_hex>
-func generateSchemaName(t *testing.T) string {
+func GenerateSchemaName(t *testing.T) string {
 	// Get test name and sanitize it (lowercase, replace invalid chars with _)
 	testName := strings.ToLower(t.Name())
 	testName = strings.Map(func(r rune) rune {
@@ -175,9 +175,9 @@ func generateSchemaName(t *testing.T) string {
 	return fmt.Sprintf("test_%s_%s", testName, randomHex)
 }
 
-// addSearchPathToConnString appends search_path parameter to a PostgreSQL connection string.
+// AddSearchPathToConnString appends search_path parameter to a PostgreSQL connection string.
 // This ensures all connections in the pool use the specified schema.
-func addSearchPathToConnString(connStr, schemaName string) string {
+func AddSearchPathToConnString(connStr, schemaName string) string {
 	// Add search_path as a connection parameter
 	separator := "?"
 	if strings.Contains(connStr, "?") {

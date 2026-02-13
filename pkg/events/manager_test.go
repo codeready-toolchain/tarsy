@@ -170,7 +170,8 @@ func TestConnectionManager_PingPong(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupOverflow(t *testing.T) {
-	// Create querier that returns more events than catchup limit
+	// Auto catch-up on subscribe with more events than the limit sends
+	// catchupLimit events then a catchup.overflow message.
 	manyEvents := make([]CatchupEvent, catchupLimit+5)
 	for i := range manyEvents {
 		manyEvents[i] = CatchupEvent{
@@ -197,19 +198,11 @@ func TestConnectionManager_CatchupOverflow(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	// Subscribe
+	// Subscribe — auto catch-up fires immediately
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:overflow-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:overflow-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:overflow-test", LastEventID: &lastEventID})
-
-	// Read catchup events (up to limit) and then overflow message
+	// Read auto-catchup events (up to limit) then overflow message
 	var overflowReceived bool
 	for i := 0; i < catchupLimit+5; i++ {
 		msg := readJSON(t, conn)
@@ -333,7 +326,8 @@ func TestConnectionManager_Unsubscribe(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupNormal(t *testing.T) {
-	// Normal catchup: events under the limit are delivered in order
+	// Auto catch-up on subscribe: prior events are delivered in order
+	// immediately after subscription.confirmed.
 	events := []CatchupEvent{
 		{ID: 10, Payload: map[string]interface{}{"type": "timeline_event.created", "seq": float64(1)}},
 		{ID: 11, Payload: map[string]interface{}{"type": "stream.chunk", "seq": float64(2)}},
@@ -353,19 +347,11 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
-	// Subscribe
+	// Subscribe — auto catch-up fires immediately after confirmation
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:catchup-test"})
 	readJSON(t, conn) // subscription.confirmed
 
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:catchup-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup from event 0 — should receive all 3 events, no overflow
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:catchup-test", LastEventID: &lastEventID})
-
-	// Read all 3 catchup events — each should have db_event_id injected
+	// Read all 3 auto-catchup events — each should have db_event_id injected
 	for i := 0; i < 3; i++ {
 		msg := readJSON(t, conn)
 		assert.Equal(t, float64(i+1), msg["seq"])
@@ -380,8 +366,8 @@ func TestConnectionManager_CatchupNormal(t *testing.T) {
 }
 
 func TestConnectionManager_CatchupError(t *testing.T) {
-	// Catchup error should be logged but not crash the connection.
-	// Verify the connection remains usable after a catchup query failure.
+	// Catchup error (including auto-catchup on subscribe) should be logged
+	// but not crash the connection. Connection remains usable.
 	manager := NewConnectionManager(&mockCatchupQuerier{err: fmt.Errorf("database unreachable")}, 5*time.Second)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
@@ -395,19 +381,9 @@ func TestConnectionManager_CatchupError(t *testing.T) {
 	conn := connectWS(t, server)
 	readJSON(t, conn) // connection.established
 
+	// Subscribe — auto catch-up fires and fails silently (DB error)
 	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:err-test"})
 	readJSON(t, conn) // subscription.confirmed
-
-	require.Eventually(t, func() bool {
-		return manager.subscriberCount("session:err-test") == 1
-	}, 2*time.Second, 10*time.Millisecond)
-
-	// Request catchup — error should be silently handled
-	lastEventID := 0
-	writeJSON(t, conn, ClientMessage{Action: "catchup", Channel: "session:err-test", LastEventID: &lastEventID})
-
-	// Give server time to process catchup and log error
-	time.Sleep(100 * time.Millisecond)
 
 	// Connection should still be alive — ping/pong works
 	writeJSON(t, conn, ClientMessage{Action: "ping"})
@@ -489,6 +465,148 @@ func TestConnectionManager_SetListener(t *testing.T) {
 	manager.listenerMu.RLock()
 	assert.Equal(t, listener, manager.listener)
 	manager.listenerMu.RUnlock()
+}
+
+func TestConnectionManager_SubscribeListenFailure(t *testing.T) {
+	// When LISTEN fails, subscribe should return subscription.error
+	// instead of subscription.confirmed, and no catchup should be sent.
+	events := []CatchupEvent{
+		{ID: 1, Payload: map[string]interface{}{"type": "test"}},
+	}
+	manager := NewConnectionManager(&mockCatchupQuerier{events: events}, 5*time.Second)
+
+	// Set a listener that was never started — Subscribe will fail with
+	// "LISTEN connection not established".
+	listener := NewNotifyListener("host=localhost", manager)
+	manager.SetListener(listener)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	conn := connectWS(t, server)
+	readJSON(t, conn) // connection.established
+
+	// Subscribe — LISTEN will fail
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:listen-fail"})
+
+	// Should receive subscription.error, NOT subscription.confirmed
+	msg := readJSON(t, conn)
+	assert.Equal(t, "subscription.error", msg["type"])
+	assert.Equal(t, "session:listen-fail", msg["channel"])
+
+	// Channel should not have any subscribers
+	assert.Equal(t, 0, manager.subscriberCount("session:listen-fail"))
+
+	// Connection should still be alive — ping/pong works
+	writeJSON(t, conn, ClientMessage{Action: "ping"})
+	msg = readJSON(t, conn)
+	assert.Equal(t, "pong", msg["type"])
+}
+
+func TestConnectionManager_SubscribeListenFailure_CleansUpOrphanedSubscribers(t *testing.T) {
+	// When LISTEN fails, other connections that subscribed to the same channel
+	// between the channelMu unlock and the LISTEN call must be removed from
+	// m.channels and notified with subscription.error.
+	//
+	// Notification via real WebSockets is exercised by
+	// TestConnectionManager_SubscribeListenFailure; here we verify that the
+	// channel map is cleaned up for ALL subscribers (not just the triggering one).
+	manager := NewConnectionManager(&mockCatchupQuerier{}, 5*time.Second)
+
+	channel := "session:orphan-test"
+
+	// Create fake connections. We only register connA in manager.connections;
+	// connB and connC are placed in the channel map to simulate the race, but
+	// are not in manager.connections — so cleanupFailedChannel won't attempt to
+	// send to them (avoiding nil-Conn panics). The important assertion is that
+	// the entire channel entry is deleted, not just the triggering connection.
+	connA := &Connection{ID: "conn-a", subscriptions: make(map[string]bool)}
+
+	manager.mu.Lock()
+	manager.connections[connA.ID] = connA
+	manager.mu.Unlock()
+
+	// Simulate the state after all three subscribed but before LISTEN completes:
+	// - Channel exists in m.channels with all three connection IDs
+	manager.channelMu.Lock()
+	manager.channels[channel] = map[string]bool{
+		connA.ID: true,
+		"conn-b": true,
+		"conn-c": true,
+	}
+	manager.channelMu.Unlock()
+
+	// Now simulate LISTEN failure: call cleanupFailedChannel as subscribe would.
+	manager.cleanupFailedChannel(connA, channel)
+
+	// Channel should be completely removed from m.channels — not just connA.
+	assert.Equal(t, 0, manager.subscriberCount(channel),
+		"channel should have zero subscribers after cleanup")
+
+	manager.channelMu.RLock()
+	_, exists := manager.channels[channel]
+	manager.channelMu.RUnlock()
+	assert.False(t, exists, "channel entry should be deleted from m.channels")
+}
+
+func TestConnectionManager_SubscribeListenFailure_NotifiesOrphanedSubscribers(t *testing.T) {
+	// End-to-end test: two real WebSocket clients each subscribe to the same
+	// channel backed by a listener whose LISTEN always fails. Both should
+	// receive subscription.error and the channel should have zero subscribers.
+	events := []CatchupEvent{
+		{ID: 1, Payload: map[string]interface{}{"type": "test"}},
+	}
+	manager := NewConnectionManager(&mockCatchupQuerier{events: events}, 5*time.Second)
+
+	// Listener whose Subscribe always fails.
+	listener := NewNotifyListener("host=localhost", manager)
+	manager.SetListener(listener)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	// Connect first client and subscribe — this triggers the (failing) LISTEN.
+	conn1 := connectWS(t, server)
+	readJSON(t, conn1) // connection.established
+	writeJSON(t, conn1, ClientMessage{Action: "subscribe", Channel: "session:orphan-ws"})
+
+	msg1 := readJSON(t, conn1)
+	assert.Equal(t, "subscription.error", msg1["type"],
+		"first client should receive subscription.error")
+
+	// Connect second client and subscribe — triggers another (failing) LISTEN
+	// because the channel was cleaned up after the first failure.
+	conn2 := connectWS(t, server)
+	readJSON(t, conn2) // connection.established
+	writeJSON(t, conn2, ClientMessage{Action: "subscribe", Channel: "session:orphan-ws"})
+
+	msg2 := readJSON(t, conn2)
+	assert.Equal(t, "subscription.error", msg2["type"],
+		"second client should receive subscription.error")
+
+	// Channel should have zero subscribers after both failures.
+	assert.Equal(t, 0, manager.subscriberCount("session:orphan-ws"))
+
+	// Both connections should still be alive.
+	writeJSON(t, conn1, ClientMessage{Action: "ping"})
+	pong1 := readJSON(t, conn1)
+	assert.Equal(t, "pong", pong1["type"], "conn1 should still be alive")
+
+	writeJSON(t, conn2, ClientMessage{Action: "ping"})
+	pong2 := readJSON(t, conn2)
+	assert.Equal(t, "pong", pong2["type"], "conn2 should still be alive")
 }
 
 func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {

@@ -217,6 +217,13 @@ func (c *ReActController) forceConclusion(
 
 	startTime := time.Now()
 
+	// Metadata for forced conclusion — carried by all streaming events + final_analysis.
+	forcedMeta := map[string]interface{}{
+		"forced_conclusion": true,
+		"iterations_used":   state.CurrentIteration,
+		"max_iterations":    state.MaxIterations,
+	}
+
 	// Apply same iteration timeout as the main loop to prevent indefinite hangs
 	conclusionCtx, conclusionCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 	defer conclusionCancel()
@@ -228,7 +235,7 @@ func (c *ReActController) forceConclusion(
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil,
 		Backend:     execCtx.Config.Backend,
-	}, eventSeq)
+	}, eventSeq, forcedMeta)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
 		return &agent.ExecutionResult{
@@ -255,9 +262,8 @@ func (c *ReActController) forceConclusion(
 	// Parse forced conclusion — may or may not have ReAct format
 	parsed := ParseReActResponse(resp.Text)
 	if parsed.Thought != "" {
-		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, parsed.Thought, map[string]interface{}{
-			"source": "react",
-		}, eventSeq)
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, parsed.Thought,
+			mergeMetadata(map[string]interface{}{"source": "react"}, forcedMeta), eventSeq)
 	}
 
 	finalAnswer := ExtractForcedConclusionAnswer(parsed)
@@ -265,7 +271,7 @@ func (c *ReActController) forceConclusion(
 		// If the parser couldn't extract anything, use the raw text
 		finalAnswer = resp.Text
 	}
-	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnswer, nil, eventSeq)
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnswer, forcedMeta, eventSeq)
 
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,

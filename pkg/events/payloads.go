@@ -24,12 +24,13 @@ type TimelineCreatedPayload struct {
 // TimelineCompletedPayload is the payload for timeline_event.completed events.
 // Published when a streaming timeline event transitions to a terminal status.
 type TimelineCompletedPayload struct {
-	Type      string               `json:"type"`     // always EventTypeTimelineCompleted
-	EventID   string               `json:"event_id"` // timeline event UUID
-	Content   string               `json:"content"`  // final content
-	Status    timelineevent.Status `json:"status"`   // completed, failed, cancelled, timed_out
-	Metadata  map[string]any       `json:"metadata,omitempty"`
-	Timestamp string               `json:"timestamp"` // RFC3339Nano
+	Type      string                  `json:"type"`       // always EventTypeTimelineCompleted
+	EventID   string                  `json:"event_id"`   // timeline event UUID
+	EventType timelineevent.EventType `json:"event_type"` // llm_thinking, llm_response, llm_tool_call, etc.
+	Content   string                  `json:"content"`    // final content
+	Status    timelineevent.Status    `json:"status"`     // completed, failed, cancelled, timed_out
+	Metadata  map[string]any          `json:"metadata,omitempty"`
+	Timestamp string                  `json:"timestamp"` // RFC3339Nano
 }
 
 // StreamChunkPayload is the payload for stream.chunk transient events.
@@ -69,18 +70,5 @@ type ChatCreatedPayload struct {
 	SessionID string `json:"session_id"` // owning session UUID
 	ChatID    string `json:"chat_id"`    // new chat UUID
 	CreatedBy string `json:"created_by"` // author who initiated the chat
-	Timestamp string `json:"timestamp"`  // RFC3339Nano
-}
-
-// ChatUserMessagePayload is the payload for chat.user_message events.
-// Published when a user sends a chat message.
-type ChatUserMessagePayload struct {
-	Type      string `json:"type"`       // always EventTypeChatUserMessage
-	SessionID string `json:"session_id"` // owning session UUID
-	ChatID    string `json:"chat_id"`    // owning chat UUID
-	MessageID string `json:"message_id"` // new message UUID
-	Content   string `json:"content"`    // message text
-	Author    string `json:"author"`     // who sent the message
-	StageID   string `json:"stage_id"`   // response stage (for tracking)
 	Timestamp string `json:"timestamp"`  // RFC3339Nano
 }

@@ -1,0 +1,126 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_17}",
+  "input_tokens": 80,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 24,
+    "tool_calls_count": 1
+  },
+  "model_name": "test-model",
+  "output_tokens": 20,
+  "thinking_content": "Let me verify the SLO metrics for pod-1.",
+  "total_tokens": 100
+}
+
+=== MESSAGE: system ===
+## General SRE Agent Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze alerts thoroughly and provide actionable insights based on:
+1. Alert information and context
+2. Associated runbook procedures
+3. Real-time system data from available tools
+
+Always be specific, reference actual data, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Agent-Specific Instructions
+
+You are MetricsValidator, checking SLO compliance.
+
+Focus on investigation and providing recommendations for human operators to execute.
+
+=== MESSAGE: user ===
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-alert
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Pod OOMKilled
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+<!-- RUNBOOK END -->
+````
+
+## Previous Stage Data
+<!-- CHAIN_CONTEXT_START -->
+
+### Stage 1: investigation
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+### Stage 2: remediation
+
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
+
+<!-- CHAIN_CONTEXT_END -->
+
+## Your Task
+Use the available tools to investigate this alert and provide:
+1. Root cause analysis
+2. Current system state assessment
+3. Specific remediation steps for human operators
+4. Prevention recommendations
+
+Be thorough in your investigation before providing the final answer.
+
+=== MESSAGE: assistant ===
+Checking SLO compliance.
+--- TOOL_CALLS ---
+[call-v1] prometheus-mcp__query_slo({"pod":"pod-1"})
+

@@ -38,6 +38,7 @@ func createTimelineEvent(
 		ExecutionID:    &execCtx.ExecutionID,
 		SequenceNumber: *eventSeq,
 		EventType:      eventType,
+		Status:         timelineevent.StatusCompleted,
 		Content:        content,
 		Metadata:       metadata,
 	})
@@ -89,7 +90,9 @@ func publishTimelineCreated(
 func finalizeStreamingEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
-	eventID, content, label string,
+	eventID string,
+	eventType timelineevent.EventType,
+	content, label string,
 ) {
 	if content != "" {
 		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, eventID, content, nil, nil); complErr != nil {
@@ -100,6 +103,7 @@ func finalizeStreamingEvent(
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   eventID,
+				EventType: eventType,
 				Content:   content,
 				Status:    timelineevent.StatusCompleted,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -127,6 +131,7 @@ func finalizeStreamingEvent(
 		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 			Type:      events.EventTypeTimelineCompleted,
 			EventID:   eventID,
+			EventType: eventType,
 			Content:   failContent,
 			Status:    timelineevent.StatusFailed,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -149,7 +154,7 @@ func markStreamingEventsFailed(
 	thinkingEventID, textEventID string,
 	streamErr error,
 ) {
-	failEvent := func(eventID string) {
+	failEvent := func(eventID string, eventType timelineevent.EventType) {
 		if eventID == "" {
 			return
 		}
@@ -169,6 +174,7 @@ func markStreamingEventsFailed(
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   eventID,
+				EventType: eventType,
 				Status:    timelineevent.StatusFailed,
 				Content:   failContent,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -182,8 +188,8 @@ func markStreamingEventsFailed(
 		}
 	}
 
-	failEvent(thinkingEventID)
-	failEvent(textEventID)
+	failEvent(thinkingEventID, timelineevent.EventTypeLlmThinking)
+	failEvent(textEventID, timelineevent.EventTypeLlmResponse)
 }
 
 // createToolCallEvent creates a streaming llm_tool_call timeline event.
@@ -276,6 +282,7 @@ func completeToolCallEvent(
 		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 			Type:      events.EventTypeTimelineCompleted,
 			EventID:   event.ID,
+			EventType: timelineevent.EventTypeLlmToolCall,
 			Content:   content,
 			Status:    timelineevent.StatusCompleted,
 			Metadata:  completionMeta,

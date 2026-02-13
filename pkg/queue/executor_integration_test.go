@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -78,9 +79,13 @@ type testEventPublisher struct {
 	mu              sync.Mutex
 	stageStatuses   []events.StageStatusPayload
 	sessionStatuses []events.SessionStatusPayload
+	timelineCreated []events.TimelineCreatedPayload
 }
 
-func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, _ events.TimelineCreatedPayload) error {
+func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.timelineCreated = append(p.timelineCreated, payload)
 	return nil
 }
 
@@ -107,10 +112,6 @@ func (p *testEventPublisher) PublishStageStatus(_ context.Context, _ string, pay
 }
 
 func (p *testEventPublisher) PublishChatCreated(_ context.Context, _ string, _ events.ChatCreatedPayload) error {
-	return nil
-}
-
-func (p *testEventPublisher) PublishChatUserMessage(_ context.Context, _ string, _ events.ChatUserMessagePayload) error {
 	return nil
 }
 
@@ -514,6 +515,30 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	assert.Contains(t, summaryEvent.Content, "Executive summary: Pod-1 OOM killed.")
 	assert.Nil(t, summaryEvent.StageID, "executive_summary should have nil stage_id")
 	assert.Nil(t, summaryEvent.ExecutionID, "executive_summary should have nil execution_id")
+
+	// Verify executive_summary LLM interaction (session-level, nil stage/execution).
+	llmInteractions, err := entClient.LLMInteraction.Query().All(context.Background())
+	require.NoError(t, err)
+
+	var execSummaryInteraction *ent.LLMInteraction
+	for _, li := range llmInteractions {
+		if li.InteractionType == llminteraction.InteractionTypeExecutiveSummary {
+			execSummaryInteraction = li
+			break
+		}
+	}
+	require.NotNil(t, execSummaryInteraction, "should have executive_summary LLM interaction")
+	assert.Nil(t, execSummaryInteraction.StageID, "executive_summary interaction should have nil stage_id")
+	assert.Nil(t, execSummaryInteraction.ExecutionID, "executive_summary interaction should have nil execution_id")
+	assert.Equal(t, session.ID, execSummaryInteraction.SessionID)
+	assert.NotNil(t, execSummaryInteraction.DurationMs, "should record duration")
+
+	// Verify inline conversation is stored in llm_request.
+	convRaw, ok := execSummaryInteraction.LlmRequest["conversation"]
+	assert.True(t, ok, "llm_request should contain conversation")
+	conv, ok := convRaw.([]any)
+	assert.True(t, ok, "conversation should be a slice")
+	assert.Len(t, conv, 3, "should have system + user + assistant messages")
 }
 
 func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {
@@ -1161,6 +1186,116 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 	}
 	require.NotNil(t, synthExec, "should have SynthesisAgent execution")
 	assert.Equal(t, "synthesis", synthExec.IterationStrategy)
+}
+
+func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
+	// When the iteration strategy is set in the agent registry (not at
+	// stage level), the AgentExecution DB record must store the resolved
+	// strategy — not the empty stage-level value or the system default.
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "NativeAgent"}, // no strategy override at stage level
+					{Name: "ReactAgent"},  // no strategy override at stage level
+				},
+			},
+		},
+	}
+
+	// LLM: agent1 answer, agent2 answer, synthesis
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Native result."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: React result."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesis done."},
+			}},
+		},
+	}
+
+	// Agent registry defines strategies; stage config does NOT override them.
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:       "test-provider",
+			IterationStrategy: config.IterationStrategyReact, // system default
+			MaxIterations:     &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"NativeAgent": {
+				IterationStrategy: config.IterationStrategyNativeThinking,
+				MaxIterations:     &maxIter,
+			},
+			"ReactAgent": {
+				IterationStrategy: config.IterationStrategyReact,
+				MaxIterations:     &maxIter,
+			},
+			"SynthesisAgent": {
+				IterationStrategy: config.IterationStrategySynthesis,
+				MaxIterations:     &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		}),
+		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+
+	// Verify execution records store the resolved strategy from agent registry
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 3) // NativeAgent, ReactAgent, SynthesisAgent
+
+	execByName := make(map[string]*ent.AgentExecution)
+	for _, e := range execs {
+		execByName[e.AgentName] = e
+	}
+
+	require.Contains(t, execByName, "NativeAgent")
+	assert.Equal(t, "native-thinking", execByName["NativeAgent"].IterationStrategy,
+		"NativeAgent should have resolved strategy from agent registry, not default")
+
+	require.Contains(t, execByName, "ReactAgent")
+	assert.Equal(t, "react", execByName["ReactAgent"].IterationStrategy,
+		"ReactAgent should have resolved strategy from agent registry")
+
+	require.Contains(t, execByName, "SynthesisAgent")
+	assert.Equal(t, "synthesis", execByName["SynthesisAgent"].IterationStrategy)
+
+	// Verify the synthesis LLM call received correct strategy labels.
+	// The 3rd LLM call is synthesis — its input messages should contain
+	// the correct agent strategy labels.
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
+	synthInput := llm.capturedInputs[2]
+	synthUserMsg := ""
+	for _, msg := range synthInput.Messages {
+		if msg.Role == agent.RoleUser {
+			synthUserMsg = msg.Content
+		}
+	}
+	assert.Contains(t, synthUserMsg, "NativeAgent (native-thinking, test-provider)",
+		"synthesis prompt should show resolved strategy for NativeAgent")
+	assert.Contains(t, synthUserMsg, "ReactAgent (react, test-provider)",
+		"synthesis prompt should show resolved strategy for ReactAgent")
 }
 
 func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {

@@ -1,0 +1,77 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+    summarization:
+      enabled: true
+      size_threshold_tokens: 100
+  prometheus-mcp:
+    transport:
+      type: stdio
+      command: mock
+    summarization:
+      enabled: true
+      size_threshold_tokens: 100
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  DataCollector:
+    mcp_servers: [test-mcp, prometheus-mcp]
+    custom_instructions: "You are DataCollector, gathering system metrics and pod status."
+  Remediator:
+    mcp_servers: [test-mcp, prometheus-mcp]
+    custom_instructions: "You are Remediator, analyzing logs and recommending fixes."
+  ConfigValidator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are ConfigValidator, verifying resource configurations."
+  MetricsValidator:
+    max_iterations: 1  # Triggers forced conclusion after 1 iteration (tool call)
+    mcp_servers: [prometheus-mcp]
+    custom_instructions: "You are MetricsValidator, checking SLO compliance."
+  ScalingReviewer:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are ScalingReviewer, evaluating horizontal scaling recommendations."
+
+agent_chains:
+  test-chain:
+    alert_types: [test-alert]
+    llm_provider: "test-provider"
+    executive_summary_provider: "test-provider-fast"
+    iteration_strategy: "native-thinking"
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      iteration_strategy: "native-thinking"
+    stages:
+      - name: investigation
+        agents:
+          - name: DataCollector
+      - name: remediation
+        agents:
+          - name: Remediator
+            iteration_strategy: "react"
+      - name: validation
+        success_policy: all
+        agents:
+          - name: ConfigValidator
+            iteration_strategy: "react"
+          - name: MetricsValidator
+        synthesis:
+          llm_provider: "test-provider"
+          iteration_strategy: "synthesis-native-thinking"
+      - name: scaling-review
+        replicas: 2
+        agents:
+          - name: ScalingReviewer
+        synthesis:
+          llm_provider: "test-provider-fast"
+          iteration_strategy: "synthesis"

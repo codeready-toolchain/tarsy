@@ -210,7 +210,21 @@ func main() {
 	httpServer.SetChatExecutor(chatExecutor)
 	httpServer.SetEventPublisher(eventPublisher)
 
-	// 8. Start HTTP server (non-blocking)
+	// 7a. Wire debug/observability and timeline endpoints.
+	messageService := services.NewMessageService(dbClient.Client)
+	interactionService := services.NewInteractionService(dbClient.Client, messageService)
+	stageService := services.NewStageService(dbClient.Client)
+	timelineService := services.NewTimelineService(dbClient.Client)
+	httpServer.SetInteractionService(interactionService)
+	httpServer.SetStageService(stageService)
+	httpServer.SetTimelineService(timelineService)
+
+	// 8. Validate wiring and start HTTP server (non-blocking)
+	if err := httpServer.ValidateWiring(); err != nil {
+		slog.Error("HTTP server wiring incomplete", "error", err)
+		os.Exit(1)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		addr := ":" + httpPort

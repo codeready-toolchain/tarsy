@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -58,8 +59,8 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 
 		req := models.CreateLLMInteractionRequest{
 			SessionID:        session.ID,
-			StageID:          stg.ID,
-			ExecutionID:      exec.ID,
+			StageID:          &stg.ID,
+			ExecutionID:      &exec.ID,
 			InteractionType:  "iteration",
 			ModelName:        "gemini-2.0-flash",
 			LLMRequest:       map[string]any{"prompt": "test"},
@@ -78,6 +79,42 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 		assert.Equal(t, thinking, *interaction.ThinkingContent)
 		assert.Equal(t, inputTokens, *interaction.InputTokens)
 	})
+}
+
+func TestInteractionService_CreateLLMInteraction_SessionLevel(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	messageService := NewMessageService(client.Client)
+	interactionService := NewInteractionService(client.Client, messageService)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	// Create session-level interaction (nil stage_id, nil execution_id).
+	interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		SessionID:       session.ID,
+		InteractionType: "executive_summary",
+		ModelName:       "gemini-2.0-flash",
+		LLMRequest:      map[string]any{"conversation": []any{}},
+		LLMResponse:     map[string]any{"text_length": 42},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, interaction.ID)
+	assert.Nil(t, interaction.StageID)
+	assert.Nil(t, interaction.ExecutionID)
+	assert.Equal(t, "gemini-2.0-flash", interaction.ModelName)
+	assert.Equal(t, llminteraction.InteractionTypeExecutiveSummary, interaction.InteractionType)
+
+	// Reconstruct conversation should return empty (no messages, no execution_id).
+	messages, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+	require.NoError(t, err)
+	assert.Empty(t, messages)
 }
 
 func TestInteractionService_CreateMCPInteraction(t *testing.T) {
@@ -190,8 +227,8 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 	// Create interactions
 	_, err = interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
-		StageID:         stg.ID,
-		ExecutionID:     exec.ID,
+		StageID:         &stg.ID,
+		ExecutionID:     &exec.ID,
 		InteractionType: "iteration",
 		ModelName:       "gemini-2.0-flash",
 		LLMRequest:      map[string]any{},
@@ -261,8 +298,8 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 
 	llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
-		StageID:         stg.ID,
-		ExecutionID:     exec.ID,
+		StageID:         &stg.ID,
+		ExecutionID:     &exec.ID,
 		InteractionType: "iteration",
 		ModelName:       "gemini-2.0-flash",
 		LLMRequest:      map[string]any{"key": "value"},
@@ -378,8 +415,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		// Create interaction pointing to msg2
 		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LastMessageID:   &msg2.ID,
@@ -399,8 +436,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	t.Run("returns empty conversation when no last_message_id", func(t *testing.T) {
 		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LLMRequest:      map[string]any{},
@@ -438,8 +475,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		// Create interaction pointing to first message
 		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec2.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec2.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LastMessageID:   &msg1.ID,
@@ -488,8 +525,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		// Create interaction pointing to message 5 (middle)
 		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec3.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec3.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LastMessageID:   &messages[4].ID, // Message 5 (index 4)
@@ -526,8 +563,8 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		// Create interaction with no last_message_id (no messages created)
 		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec4.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec4.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LLMRequest:      map[string]any{},

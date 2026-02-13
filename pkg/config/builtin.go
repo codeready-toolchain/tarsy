@@ -60,14 +60,13 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 			MCPServers:        []string{"kubernetes-server"},
 		},
 		"ChatAgent": {
-			Description:       "Built-in agent for follow-up conversations",
-			IterationStrategy: IterationStrategyReact,
-			MCPServers:        []string{"kubernetes-server"},
+			Description: "Built-in agent for follow-up conversations",
+			// No IterationStrategy — inherits from defaults like any other agent.
+			// No MCPServers — inherits from chain stages via aggregateChainMCPServers.
 		},
 		"SynthesisAgent": {
 			Description:       "Synthesizes parallel investigation results",
 			IterationStrategy: IterationStrategySynthesis,
-			MCPServers:        []string{"kubernetes-server"}, // Needs at least one server for validation
 			CustomInstructions: `You are an Incident Commander synthesizing results from multiple parallel investigations.
 
 Your task:

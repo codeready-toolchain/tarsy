@@ -34,6 +34,8 @@ const (
 	FieldErrorMessage = "error_message"
 	// FieldIterationStrategy holds the string denoting the iteration_strategy field in the database.
 	FieldIterationStrategy = "iteration_strategy"
+	// FieldLlmProvider holds the string denoting the llm_provider field in the database.
+	FieldLlmProvider = "llm_provider"
 	// EdgeStage holds the string denoting the stage edge name in mutations.
 	EdgeStage = "stage"
 	// EdgeSession holds the string denoting the session edge name in mutations.
@@ -117,6 +119,7 @@ var Columns = []string{
 	FieldDurationMs,
 	FieldErrorMessage,
 	FieldIterationStrategy,
+	FieldLlmProvider,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -215,6 +218,11 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 // ByIterationStrategy orders the results by the iteration_strategy field.
 func ByIterationStrategy(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIterationStrategy, opts...).ToFunc()
+}
+
+// ByLlmProvider orders the results by the llm_provider field.
+func ByLlmProvider(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLlmProvider, opts...).ToFunc()
 }
 
 // ByStageField orders the results by stage field.

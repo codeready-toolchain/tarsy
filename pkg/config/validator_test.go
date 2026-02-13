@@ -30,15 +30,35 @@ func TestValidateAgents(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "agent with no MCP servers",
+			name: "agent with no MCP servers is valid",
 			agents: map[string]*AgentConfig{
 				"test-agent": {
 					MCPServers: []string{},
 				},
 			},
 			servers: map[string]*MCPServerConfig{},
-			wantErr: true,
-			errMsg:  "at least one MCP server required",
+			wantErr: false,
+		},
+		{
+			name: "agent with nil MCP servers is valid",
+			agents: map[string]*AgentConfig{
+				"toolless-agent": {
+					MCPServers: nil,
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
+		},
+		{
+			name: "synthesis agent without MCP servers is valid",
+			agents: map[string]*AgentConfig{
+				"synth": {
+					IterationStrategy: IterationStrategySynthesis,
+					MCPServers:        nil,
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
 		},
 		{
 			name: "agent with invalid MCP server reference",
@@ -1324,16 +1344,18 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 
 // TestValidateAllFailFast tests that ValidateAll fails fast on first error
 func TestValidateAllFailFast(t *testing.T) {
-	// Create config with multiple validation errors
-	// Agent has no MCP servers (will fail after queue passes)
+	// Create config with multiple validation errors:
+	// - Agent references nonexistent MCP server (fails in agent validation)
+	// - Chain has no alert types (would fail in chain validation)
+	// ValidateAll should stop at the first error.
 	cfg := &Config{
 		Queue: DefaultQueueConfig(),
 		AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
-			"bad-agent": {MCPServers: []string{}}, // Error: no MCP servers
+			"bad-agent": {MCPServers: []string{"nonexistent"}},
 		}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 			"bad-chain": {
-				AlertTypes: []string{}, // Error: no alert types
+				AlertTypes: []string{}, // Error: no alert types (never reached)
 				Stages:     []StageConfig{},
 			},
 		}),
@@ -1344,10 +1366,10 @@ func TestValidateAllFailFast(t *testing.T) {
 	validator := NewValidator(cfg)
 	err := validator.ValidateAll()
 
-	// Should fail fast and return only the first error (agent validation, after queue passes)
+	// Should fail fast at agent validation (before reaching chain validation)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "agent validation failed")
-	assert.Contains(t, err.Error(), "at least one MCP server required")
+	assert.Contains(t, err.Error(), "MCP server 'nonexistent' not found")
 }
 
 // TestValidateMCPServersSSETransport tests SSE transport validation

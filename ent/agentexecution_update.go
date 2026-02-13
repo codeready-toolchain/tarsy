@@ -182,6 +182,26 @@ func (_u *AgentExecutionUpdate) SetNillableIterationStrategy(v *string) *AgentEx
 	return _u
 }
 
+// SetLlmProvider sets the "llm_provider" field.
+func (_u *AgentExecutionUpdate) SetLlmProvider(v string) *AgentExecutionUpdate {
+	_u.mutation.SetLlmProvider(v)
+	return _u
+}
+
+// SetNillableLlmProvider sets the "llm_provider" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableLlmProvider(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetLlmProvider(*v)
+	}
+	return _u
+}
+
+// ClearLlmProvider clears the value of the "llm_provider" field.
+func (_u *AgentExecutionUpdate) ClearLlmProvider() *AgentExecutionUpdate {
+	_u.mutation.ClearLlmProvider()
+	return _u
+}
+
 // AddTimelineEventIDs adds the "timeline_events" edge to the TimelineEvent entity by IDs.
 func (_u *AgentExecutionUpdate) AddTimelineEventIDs(ids ...string) *AgentExecutionUpdate {
 	_u.mutation.AddTimelineEventIDs(ids...)
@@ -427,6 +447,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.IterationStrategy(); ok {
 		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
+	}
+	if _u.mutation.LlmProviderCleared() {
+		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
 	}
 	if _u.mutation.TimelineEventsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -778,6 +804,26 @@ func (_u *AgentExecutionUpdateOne) SetNillableIterationStrategy(v *string) *Agen
 	return _u
 }
 
+// SetLlmProvider sets the "llm_provider" field.
+func (_u *AgentExecutionUpdateOne) SetLlmProvider(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetLlmProvider(v)
+	return _u
+}
+
+// SetNillableLlmProvider sets the "llm_provider" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableLlmProvider(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetLlmProvider(*v)
+	}
+	return _u
+}
+
+// ClearLlmProvider clears the value of the "llm_provider" field.
+func (_u *AgentExecutionUpdateOne) ClearLlmProvider() *AgentExecutionUpdateOne {
+	_u.mutation.ClearLlmProvider()
+	return _u
+}
+
 // AddTimelineEventIDs adds the "timeline_events" edge to the TimelineEvent entity by IDs.
 func (_u *AgentExecutionUpdateOne) AddTimelineEventIDs(ids ...string) *AgentExecutionUpdateOne {
 	_u.mutation.AddTimelineEventIDs(ids...)
@@ -1053,6 +1099,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	}
 	if value, ok := _u.mutation.IterationStrategy(); ok {
 		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
+	}
+	if _u.mutation.LlmProviderCleared() {
+		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
 	}
 	if _u.mutation.TimelineEventsCleared() {
 		edge := &sqlgraph.EdgeSpec{

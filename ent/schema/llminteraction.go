@@ -25,10 +25,15 @@ func (LLMInteraction) Fields() []ent.Field {
 		field.String("session_id").
 			Immutable(),
 		field.String("stage_id").
-			Immutable(),
-		field.String("execution_id").
+			Optional().
+			Nillable().
 			Immutable().
-			Comment("Which agent"),
+			Comment("Nil for session-level interactions (e.g. executive summary)"),
+		field.String("execution_id").
+			Optional().
+			Nillable().
+			Immutable().
+			Comment("Which agent; nil for session-level interactions"),
 
 		// Timing
 		field.Time("created_at").
@@ -37,7 +42,7 @@ func (LLMInteraction) Fields() []ent.Field {
 
 		// Interaction Details
 		field.Enum("interaction_type").
-			Values("iteration", "final_analysis", "executive_summary", "chat_response", "summarization"),
+			Values("iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion"),
 		field.String("model_name").
 			Comment("e.g., 'gemini-2.0-flash-thinking-exp'"),
 
@@ -93,13 +98,11 @@ func (LLMInteraction) Edges() []ent.Edge {
 			Ref("llm_interactions").
 			Field("stage_id").
 			Unique().
-			Required().
 			Immutable(),
 		edge.From("agent_execution", AgentExecution.Type).
 			Ref("llm_interactions").
 			Field("execution_id").
 			Unique().
-			Required().
 			Immutable(),
 		edge.From("last_message", Message.Type).
 			Ref("llm_interactions").
@@ -112,9 +115,11 @@ func (LLMInteraction) Edges() []ent.Edge {
 // Indexes of the LLMInteraction.
 func (LLMInteraction) Indexes() []ent.Index {
 	return []ent.Index{
-		// Agent's LLM calls chronologically
+		// Agent's LLM calls chronologically (NULL execution_id excluded by DB)
 		index.Fields("execution_id", "created_at"),
-		// Stage's LLM calls
+		// Stage's LLM calls (NULL stage_id excluded by DB)
 		index.Fields("stage_id", "created_at"),
+		// Session-level interactions (e.g. executive summary)
+		index.Fields("session_id", "created_at"),
 	}
 }

@@ -1,0 +1,46 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+  # max_iterations=1 ensures BlockUntilCancelled agents don't retry: when the
+  # LLM channel closes (due to cancellation), the agent treats the empty response
+  # as a completed iteration. Without this, it would loop up to 20 times.
+  max_iterations: 1
+
+mcp_servers:
+  # Dummy entry so built-in agents pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  InvestigatorA:
+    custom_instructions: "You are InvestigatorA, investigating the alert."
+  InvestigatorB:
+    custom_instructions: "You are InvestigatorB, investigating the alert."
+  QuickInvestigator:
+    custom_instructions: "You are QuickInvestigator, performing a fast check."
+  ChatAgent:
+    custom_instructions: "You are ChatAgent, answering follow-up questions."
+
+agent_chains:
+  cancel-investigation:
+    alert_types: [test-cancel]
+    stages:
+      - name: investigation
+        success_policy: any
+        agents:
+          - name: InvestigatorA
+          - name: InvestigatorB
+
+  cancel-chat:
+    alert_types: [test-chat-cancel]
+    executive_summary_provider: "test-provider"
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      iteration_strategy: "native-thinking"
+    stages:
+      - name: quick-check
+        agents:
+          - name: QuickInvestigator

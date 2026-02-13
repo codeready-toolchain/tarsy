@@ -196,6 +196,13 @@ func (c *NativeThinkingController) forceConclusion(
 
 	startTime := time.Now()
 
+	// Metadata for forced conclusion — carried by all streaming events + final_analysis.
+	forcedMeta := map[string]interface{}{
+		"forced_conclusion": true,
+		"iterations_used":   state.CurrentIteration,
+		"max_iterations":    state.MaxIterations,
+	}
+
 	// Call LLM WITHOUT tools with streaming — forces text-only response
 	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
@@ -204,7 +211,7 @@ func (c *NativeThinkingController) forceConclusion(
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools — force conclusion
 		Backend:     execCtx.Config.Backend,
-	}, eventSeq)
+	}, eventSeq, forcedMeta)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
 		return &agent.ExecutionResult{
@@ -229,16 +236,15 @@ func (c *NativeThinkingController) forceConclusion(
 	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, &assistantMsg.ID, startTime)
 
 	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
-		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText, map[string]interface{}{
-			"source": "native",
-		}, eventSeq)
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText,
+			mergeMetadata(map[string]interface{}{"source": "native"}, forcedMeta), eventSeq)
 	}
 
 	// Create native tool events (can occur during forced conclusion too)
 	createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, eventSeq)
 	createGroundingEvents(ctx, execCtx, resp.Groundings, eventSeq)
 
-	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, eventSeq)
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, forcedMeta, eventSeq)
 
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,

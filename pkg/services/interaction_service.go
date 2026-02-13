@@ -35,8 +35,8 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 	builder := s.client.LLMInteraction.Create().
 		SetID(interactionID).
 		SetSessionID(req.SessionID).
-		SetStageID(req.StageID).
-		SetExecutionID(req.ExecutionID).
+		SetNillableStageID(req.StageID).
+		SetNillableExecutionID(req.ExecutionID).
 		SetInteractionType(llminteraction.InteractionType(req.InteractionType)).
 		SetModelName(req.ModelName).
 		SetLlmRequest(req.LLMRequest).
@@ -183,7 +183,7 @@ func (s *InteractionService) ReconstructConversation(ctx context.Context, intera
 		return nil, err
 	}
 
-	if interaction.LastMessageID == nil {
+	if interaction.LastMessageID == nil || interaction.ExecutionID == nil {
 		return []*ent.Message{}, nil
 	}
 
@@ -199,7 +199,7 @@ func (s *InteractionService) ReconstructConversation(ctx context.Context, intera
 	// Get all messages up to that sequence number
 	messages, err := s.messageService.GetMessagesUpToSequence(
 		ctx,
-		interaction.ExecutionID,
+		*interaction.ExecutionID,
 		lastMessage.SequenceNumber,
 	)
 	if err != nil {

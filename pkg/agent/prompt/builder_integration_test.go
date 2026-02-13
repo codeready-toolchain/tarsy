@@ -175,8 +175,32 @@ func newSynthesisExecCtx() *agent.ExecutionContext {
 	}
 }
 
+func newSynthesisNativeThinkingExecCtx() *agent.ExecutionContext {
+	return &agent.ExecutionContext{
+		SessionID:      "test-session",
+		AgentName:      "SynthesisAgent",
+		AlertData:      `{"description": "Test alert scenario", "namespace": "test-namespace"}`,
+		AlertType:      "test-investigation",
+		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
+		Config: &agent.ResolvedAgentConfig{
+			AgentName:          "SynthesisAgent",
+			IterationStrategy:  config.IterationStrategySynthesisNativeThinking,
+			MCPServers:         []string{}, // Synthesis has no MCP servers
+			CustomInstructions: synthesisCustomInstructions,
+			LLMProvider: &config.LLMProviderConfig{
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "gemini-2.5-pro",
+				NativeTools: map[config.GoogleNativeTool]bool{
+					config.GoogleNativeToolGoogleSearch: true,
+					config.GoogleNativeToolURLContext:   true,
+				},
+			},
+		},
+	}
+}
+
 // realisticInvestigationContext is a brief but structurally realistic
-// investigation context matching what FormatInvestigationContext produces.
+// investigation context matching what FormatStructuredInvestigation produces.
 // It includes all key sections: header, initial request, agent responses,
 // tool observations, and final analysis.
 const realisticInvestigationContext = `═══════════════════════════════════════════════════════════════════════════════
@@ -214,6 +238,22 @@ Thought: Pod-1 is in CrashLoopBackOff. Let me check the logs.
 
 Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
 `
+
+// synthesisStageContext is a sample prevStageContext for synthesis tests,
+// representing the output of a parallel investigation stage with two agents.
+const synthesisStageContext = `### Results from parallel stage 'investigation':
+
+**Parallel Execution Summary**: 2/2 agents succeeded
+
+#### Agent 1: KubernetesAgent (google-default, native-thinking)
+**Status**: completed
+
+Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
+
+#### Agent 2: LogAgent (anthropic-default, react)
+**Status**: completed
+
+Log analysis reveals database connection timeout errors to db.example.com:5432.`
 
 func newChatExecCtx() *agent.ExecutionContext {
 	ctx := newIntegrationExecCtx()
@@ -284,24 +324,21 @@ func TestIntegration_NativeThinkingInvestigation(t *testing.T) {
 func TestIntegration_Synthesis(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newSynthesisExecCtx()
-	prevStageContext := `### Results from parallel stage 'investigation':
 
-**Parallel Execution Summary**: 2/2 agents succeeded
-
-#### Agent 1: KubernetesAgent (google-default, native-thinking)
-**Status**: completed
-
-Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
-
-#### Agent 2: LogAgent (anthropic-default, react)
-**Status**: completed
-
-Log analysis reveals database connection timeout errors to db.example.com:5432.`
-
-	messages := builder.BuildSynthesisMessages(execCtx, prevStageContext)
+	messages := builder.BuildSynthesisMessages(execCtx, synthesisStageContext)
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "synthesis", serializeMessages(messages))
+}
+
+func TestIntegration_SynthesisNativeThinking(t *testing.T) {
+	builder := newIntegrationBuilder()
+	execCtx := newSynthesisNativeThinkingExecCtx()
+
+	messages := builder.BuildSynthesisMessages(execCtx, synthesisStageContext)
+
+	require.Len(t, messages, 2)
+	assertGolden(t, "synthesis_native_thinking", serializeMessages(messages))
 }
 
 // ===========================================================================
@@ -412,6 +449,44 @@ func TestIntegration_SynthesisSystemHasNoTaskFocus(t *testing.T) {
 	assert.NotContains(t, systemMsg, "Focus on investigation and providing recommendations")
 	// But should have the synthesis custom instructions
 	assert.Contains(t, systemMsg, "Incident Commander")
+}
+
+func TestIntegration_SynthesisNativeToolsGuidanceConditional(t *testing.T) {
+	builder := newIntegrationBuilder()
+
+	t.Run("absent when no native tools", func(t *testing.T) {
+		execCtx := newSynthesisExecCtx()
+		messages := builder.BuildSynthesisMessages(execCtx, "some results")
+		systemMsg := messages[0].Content
+		assert.NotContains(t, systemMsg, "Web Search and URL Context")
+		assert.NotContains(t, systemMsg, "Google Search")
+	})
+
+	t.Run("present when Google Search enabled", func(t *testing.T) {
+		execCtx := newSynthesisNativeThinkingExecCtx()
+		messages := builder.BuildSynthesisMessages(execCtx, "some results")
+		systemMsg := messages[0].Content
+		assert.Contains(t, systemMsg, "## Web Search and URL Context Capabilities")
+		assert.Contains(t, systemMsg, "Google Search")
+		assert.Contains(t, systemMsg, "URL Context")
+	})
+
+	t.Run("present when only URL Context enabled", func(t *testing.T) {
+		execCtx := newSynthesisNativeThinkingExecCtx()
+		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch] = false
+		messages := builder.BuildSynthesisMessages(execCtx, "some results")
+		systemMsg := messages[0].Content
+		assert.Contains(t, systemMsg, "## Web Search and URL Context Capabilities")
+	})
+
+	t.Run("absent when both explicitly disabled", func(t *testing.T) {
+		execCtx := newSynthesisNativeThinkingExecCtx()
+		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch] = false
+		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolURLContext] = false
+		messages := builder.BuildSynthesisMessages(execCtx, "some results")
+		systemMsg := messages[0].Content
+		assert.NotContains(t, systemMsg, "Web Search and URL Context")
+	})
 }
 
 func TestIntegration_ChatSystemUsesCorrectTier1(t *testing.T) {

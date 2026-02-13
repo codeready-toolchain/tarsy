@@ -63,7 +63,7 @@ func TestBuiltinAgents(t *testing.T) {
 			name:      "ChatAgent",
 			agentID:   "ChatAgent",
 			wantDesc:  "Built-in agent for follow-up conversations",
-			wantStrat: IterationStrategyReact,
+			wantStrat: "", // No explicit strategy — inherits from defaults.
 		},
 		{
 			name:                    "SynthesisAgent",
@@ -88,6 +88,27 @@ func TestBuiltinAgents(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuiltinChatAgentInheritsFromDefaults(t *testing.T) {
+	cfg := GetBuiltinConfig()
+	agent, exists := cfg.Agents["ChatAgent"]
+	require.True(t, exists)
+
+	// ChatAgent should not pin a specific iteration strategy or MCP servers.
+	// Both are inherited at resolution time: strategy from defaults, MCP
+	// servers from the chain's investigation stages via aggregation.
+	assert.Empty(t, agent.IterationStrategy, "ChatAgent should not set IterationStrategy")
+	assert.Empty(t, agent.MCPServers, "ChatAgent should not set MCPServers")
+	assert.Empty(t, agent.CustomInstructions, "ChatAgent should not set CustomInstructions")
+}
+
+func TestBuiltinSynthesisAgentHasNoMCPServers(t *testing.T) {
+	cfg := GetBuiltinConfig()
+	agent, exists := cfg.Agents["SynthesisAgent"]
+	require.True(t, exists)
+
+	assert.Empty(t, agent.MCPServers, "SynthesisAgent should not have MCP servers (it never calls tools)")
 }
 
 func TestBuiltinMCPServers(t *testing.T) {

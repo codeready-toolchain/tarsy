@@ -245,6 +245,16 @@ func StageIDHasSuffix(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldHasSuffix(FieldStageID, v))
 }
 
+// StageIDIsNil applies the IsNil predicate on the "stage_id" field.
+func StageIDIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldStageID))
+}
+
+// StageIDNotNil applies the NotNil predicate on the "stage_id" field.
+func StageIDNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldStageID))
+}
+
 // StageIDEqualFold applies the EqualFold predicate on the "stage_id" field.
 func StageIDEqualFold(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEqualFold(FieldStageID, v))
@@ -308,6 +318,16 @@ func ExecutionIDHasPrefix(v string) predicate.LLMInteraction {
 // ExecutionIDHasSuffix applies the HasSuffix predicate on the "execution_id" field.
 func ExecutionIDHasSuffix(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldHasSuffix(FieldExecutionID, v))
+}
+
+// ExecutionIDIsNil applies the IsNil predicate on the "execution_id" field.
+func ExecutionIDIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldExecutionID))
+}
+
+// ExecutionIDNotNil applies the NotNil predicate on the "execution_id" field.
+func ExecutionIDNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldExecutionID))
 }
 
 // ExecutionIDEqualFold applies the EqualFold predicate on the "execution_id" field.

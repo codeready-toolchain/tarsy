@@ -110,6 +110,11 @@ func IterationStrategy(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldIterationStrategy, v))
 }
 
+// LlmProvider applies equality check predicate on the "llm_provider" field. It's identical to LlmProviderEQ.
+func LlmProvider(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldLlmProvider, v))
+}
+
 // StageIDEQ applies the EQ predicate on the "stage_id" field.
 func StageIDEQ(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldStageID, v))
@@ -653,6 +658,81 @@ func IterationStrategyEqualFold(v string) predicate.AgentExecution {
 // IterationStrategyContainsFold applies the ContainsFold predicate on the "iteration_strategy" field.
 func IterationStrategyContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldIterationStrategy, v))
+}
+
+// LlmProviderEQ applies the EQ predicate on the "llm_provider" field.
+func LlmProviderEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldLlmProvider, v))
+}
+
+// LlmProviderNEQ applies the NEQ predicate on the "llm_provider" field.
+func LlmProviderNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldLlmProvider, v))
+}
+
+// LlmProviderIn applies the In predicate on the "llm_provider" field.
+func LlmProviderIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldLlmProvider, vs...))
+}
+
+// LlmProviderNotIn applies the NotIn predicate on the "llm_provider" field.
+func LlmProviderNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldLlmProvider, vs...))
+}
+
+// LlmProviderGT applies the GT predicate on the "llm_provider" field.
+func LlmProviderGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldLlmProvider, v))
+}
+
+// LlmProviderGTE applies the GTE predicate on the "llm_provider" field.
+func LlmProviderGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldLlmProvider, v))
+}
+
+// LlmProviderLT applies the LT predicate on the "llm_provider" field.
+func LlmProviderLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldLlmProvider, v))
+}
+
+// LlmProviderLTE applies the LTE predicate on the "llm_provider" field.
+func LlmProviderLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldLlmProvider, v))
+}
+
+// LlmProviderContains applies the Contains predicate on the "llm_provider" field.
+func LlmProviderContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldLlmProvider, v))
+}
+
+// LlmProviderHasPrefix applies the HasPrefix predicate on the "llm_provider" field.
+func LlmProviderHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldLlmProvider, v))
+}
+
+// LlmProviderHasSuffix applies the HasSuffix predicate on the "llm_provider" field.
+func LlmProviderHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldLlmProvider, v))
+}
+
+// LlmProviderIsNil applies the IsNil predicate on the "llm_provider" field.
+func LlmProviderIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldLlmProvider))
+}
+
+// LlmProviderNotNil applies the NotNil predicate on the "llm_provider" field.
+func LlmProviderNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldLlmProvider))
+}
+
+// LlmProviderEqualFold applies the EqualFold predicate on the "llm_provider" field.
+func LlmProviderEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldLlmProvider, v))
+}
+
+// LlmProviderContainsFold applies the ContainsFold predicate on the "llm_provider" field.
+func LlmProviderContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldLlmProvider, v))
 }
 
 // HasStage applies the HasEdge predicate on the "stage" edge.

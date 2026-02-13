@@ -27,6 +27,13 @@ func (b *PromptBuilder) buildChatUserMessage(
 		sb.WriteString("\n\n")
 	}
 
+	// Alert data + runbook — same components used by investigation agents.
+	// The chat agent needs the original alert context to answer follow-up questions.
+	sb.WriteString(FormatAlertSection(execCtx.AlertType, execCtx.AlertData))
+	sb.WriteString("\n")
+	sb.WriteString(FormatRunbookSection(execCtx.RunbookContent))
+	sb.WriteString("\n")
+
 	// Investigation context (pre-formatted by executor — includes full timeline
 	// with investigation history and any previous chat exchanges)
 	sb.WriteString(chat.InvestigationContext)

@@ -1,0 +1,419 @@
+{
+  "session_interactions": [
+    {
+      "created_at": "{TIMESTAMP}",
+      "duration_ms": {DURATION_MS},
+      "id": "{INTERACTION_ID_31}",
+      "interaction_type": "executive_summary",
+      "model_name": "test-model-fast"
+    }
+  ],
+  "stages": [
+    {
+      "executions": [
+        {
+          "agent_name": "DataCollector",
+          "execution_id": "{EXEC_ID_1}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_1}",
+              "input_tokens": 100,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 30,
+              "total_tokens": 130
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_2}",
+              "input_tokens": 10,
+              "interaction_type": "summarization",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_3}",
+              "input_tokens": 200,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 30,
+              "total_tokens": 230
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_4}",
+              "input_tokens": 150,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 50,
+              "total_tokens": 200
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_5}",
+              "interaction_type": "tool_call",
+              "server_name": "test-mcp",
+              "tool_name": "get_nodes"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_6}",
+              "interaction_type": "tool_call",
+              "server_name": "test-mcp",
+              "tool_name": "get_pods"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_7}",
+              "interaction_type": "tool_call",
+              "server_name": "prometheus-mcp",
+              "tool_name": "query_metrics"
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_1}",
+      "stage_name": "investigation"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "Remediator",
+          "execution_id": "{EXEC_ID_2}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_8}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_9}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_10}",
+              "input_tokens": 10,
+              "interaction_type": "summarization",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_11}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_12}",
+              "interaction_type": "tool_call",
+              "server_name": "test-mcp",
+              "tool_name": "get_pod_logs"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_13}",
+              "interaction_type": "tool_call",
+              "server_name": "prometheus-mcp",
+              "tool_name": "query_alerts"
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_2}",
+      "stage_name": "remediation"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ConfigValidator",
+          "execution_id": "{EXEC_ID_3}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_14}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_15}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_16}",
+              "interaction_type": "tool_call",
+              "server_name": "test-mcp",
+              "tool_name": "get_resource_config"
+            }
+          ]
+        },
+        {
+          "agent_name": "MetricsValidator",
+          "execution_id": "{EXEC_ID_4}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_17}",
+              "input_tokens": 80,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 20,
+              "total_tokens": 100
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_18}",
+              "input_tokens": 100,
+              "interaction_type": "forced_conclusion",
+              "model_name": "test-model",
+              "output_tokens": 30,
+              "total_tokens": 130
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_19}",
+              "interaction_type": "tool_call",
+              "server_name": "prometheus-mcp",
+              "tool_name": "query_slo"
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_3}",
+      "stage_name": "validation"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "SynthesisAgent",
+          "execution_id": "{EXEC_ID_5}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_20}",
+              "input_tokens": 120,
+              "interaction_type": "synthesis",
+              "model_name": "test-model",
+              "output_tokens": 40,
+              "total_tokens": 160
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{STAGE_ID_4}",
+      "stage_name": "validation - Synthesis"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ScalingReviewer-1",
+          "execution_id": "{EXEC_ID_6}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_21}",
+              "input_tokens": 80,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 25,
+              "total_tokens": 105
+            }
+          ],
+          "mcp_interactions": []
+        },
+        {
+          "agent_name": "ScalingReviewer-2",
+          "execution_id": "{EXEC_ID_7}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_22}",
+              "input_tokens": 80,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 25,
+              "total_tokens": 105
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{STAGE_ID_5}",
+      "stage_name": "scaling-review"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "SynthesisAgent",
+          "execution_id": "{EXEC_ID_8}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_23}",
+              "input_tokens": 10,
+              "interaction_type": "synthesis",
+              "model_name": "test-model-fast",
+              "output_tokens": 5,
+              "total_tokens": 15
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{STAGE_ID_6}",
+      "stage_name": "scaling-review - Synthesis"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ChatAgent",
+          "execution_id": "{EXEC_ID_9}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_24}",
+              "input_tokens": 200,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 30,
+              "total_tokens": 230
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_25}",
+              "input_tokens": 10,
+              "interaction_type": "summarization",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_26}",
+              "input_tokens": 250,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 50,
+              "total_tokens": 300
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_27}",
+              "interaction_type": "tool_call",
+              "server_name": "test-mcp",
+              "tool_name": "get_pods"
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_7}",
+      "stage_name": "Chat Response"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ChatAgent",
+          "execution_id": "{EXEC_ID_10}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_28}",
+              "input_tokens": 300,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 25,
+              "total_tokens": 325
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_29}",
+              "input_tokens": 350,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 40,
+              "total_tokens": 390
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_30}",
+              "interaction_type": "tool_call",
+              "server_name": "prometheus-mcp",
+              "tool_name": "query_slo"
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_8}",
+      "stage_name": "Chat Response"
+    }
+  ]
+}

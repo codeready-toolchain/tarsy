@@ -13,6 +13,7 @@ type CreateTimelineEventRequest struct {
 	ExecutionID    *string                 `json:"execution_id,omitempty"`
 	SequenceNumber int                     `json:"sequence_number"`
 	EventType      timelineevent.EventType `json:"event_type"`
+	Status         timelineevent.Status    `json:"status,omitempty"` // defaults to StatusStreaming if empty
 	Content        string                  `json:"content"`
 	Metadata       map[string]any          `json:"metadata,omitempty"`
 }

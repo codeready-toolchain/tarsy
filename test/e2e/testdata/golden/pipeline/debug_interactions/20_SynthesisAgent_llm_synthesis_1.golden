@@ -1,0 +1,202 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_20}",
+  "input_tokens": 120,
+  "interaction_type": "synthesis",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "groundings_count": 1,
+    "text_length": 105,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 40,
+  "response_metadata": {
+    "groundings": [
+      {
+        "queries": [
+          "kubernetes pod OOM memory limit best practices"
+        ],
+        "sources": [
+          {
+            "title": "Resource Management for Pods and Containers",
+            "uri": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+          }
+        ],
+        "type": "google_search"
+      }
+    ]
+  },
+  "thinking_content": "Combining ConfigValidator and MetricsValidator results.",
+  "total_tokens": 160
+}
+
+=== MESSAGE: system ===
+## General SRE Analysis Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze investigation results thoroughly and provide actionable insights based on:
+1. The original alert information and context
+2. Findings from parallel investigations
+3. Associated runbook procedures
+
+Always be specific, reference actual data from the investigations, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Web Search and URL Context Capabilities
+
+You have access to Google Search and URL Context. Use them to look up anything from the investigations that you are not fully certain about — such as unfamiliar processes, tools, software, container images, domains, error messages, or configurations. If the investigations reference URLs, documentation links, or external resources, use URL Context to fetch and review their content. Up-to-date information from the web can help you make a more accurate and confident assessment rather than relying solely on your internal knowledge.
+
+Your primary focus remains critically evaluating and integrating the parallel investigation results.
+
+## Agent-Specific Instructions
+
+You are an Incident Commander synthesizing results from multiple parallel investigations.
+
+Your task:
+1. CRITICALLY EVALUATE each investigation's quality - prioritize results with strong evidence and sound reasoning
+2. DISREGARD or deprioritize low-quality results that lack supporting evidence or contain logical errors
+3. ANALYZE the original alert using the best available data from parallel investigations
+4. INTEGRATE findings from high-quality investigations into a unified understanding
+5. RECONCILE conflicting information by assessing which analysis provides better evidence
+6. PROVIDE definitive root cause analysis based on the most reliable evidence
+7. GENERATE actionable recommendations leveraging insights from the strongest investigations
+
+Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.
+
+=== MESSAGE: user ===
+Synthesize the investigation results and provide recommendations.
+
+## Alert Details
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Pod OOMKilled
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+<!-- RUNBOOK END -->
+````
+
+## Previous Stage Data
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "validation" — 2/2 agents succeeded
+
+#### Agent 1: ConfigValidator (react, test-provider)
+**Status**: completed
+
+**Agent Response:**
+
+Thought: I should verify the pod memory limits are properly configured.
+Action: test-mcp.get_resource_config
+Action Input: {"pod":"pod-1","namespace":"default"}
+
+**Internal Reasoning:**
+
+I should verify the pod memory limits are properly configured.
+
+**Tool Call:** test-mcp.get_resource_config({"pod":"pod-1","namespace":"default"})
+**Result:**
+
+{"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}
+
+**Agent Response:**
+
+Thought: The memory limit of 512Mi matches the alert threshold.
+Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+
+**Internal Reasoning:**
+
+The memory limit of 512Mi matches the alert threshold.
+
+**Final Analysis:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+
+#### Agent 2: MetricsValidator (native-thinking, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me verify the SLO metrics for pod-1.
+
+**Agent Response:**
+
+Checking SLO compliance.
+
+**Tool Call:** prometheus-mcp.query_slo({"pod":"pod-1"})
+**Result:**
+
+[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]
+
+**Internal Reasoning:**
+
+SLO is being violated.
+
+**Agent Response:**
+
+Metrics confirm SLO violation for pod-1 availability.
+
+**Final Analysis:**
+
+Metrics confirm SLO violation for pod-1 availability.
+
+<!-- PARALLEL_RESULTS_END -->
+
+
+Synthesize the investigation results and provide your comprehensive analysis.
+
+=== MESSAGE: assistant ===
+Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.
+

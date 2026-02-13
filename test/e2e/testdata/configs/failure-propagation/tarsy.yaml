@@ -1,0 +1,41 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+  # max_iterations=1 is critical for failure tests: when Generate() returns an
+  # error, the agent framework treats it as a failed iteration and retries up to
+  # max_iterations. Without this, CheckerB would retry 20 times (the default)
+  # instead of failing immediately on the first LLM error.
+  max_iterations: 1
+
+mcp_servers:
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Preparer:
+    custom_instructions: "You are Preparer, preparing the investigation."
+  CheckerA:
+    custom_instructions: "You are CheckerA, verifying system status."
+  CheckerB:
+    custom_instructions: "You are CheckerB, verifying alert conditions."
+  Finalizer:
+    custom_instructions: "You are Finalizer, producing the final report."
+
+agent_chains:
+  failure-chain:
+    alert_types: [test-failure]
+    stages:
+      - name: preparation
+        agents:
+          - name: Preparer
+      - name: parallel-check
+        success_policy: all
+        agents:
+          - name: CheckerA
+          - name: CheckerB
+      - name: final
+        agents:
+          - name: Finalizer

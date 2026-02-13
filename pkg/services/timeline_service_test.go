@@ -65,6 +65,23 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		assert.NotNil(t, event.UpdatedAt)
 	})
 
+	t.Run("creates event with explicit completed status", func(t *testing.T) {
+		req := models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
+			SequenceNumber: 50,
+			EventType:      timelineevent.EventTypeFinalAnalysis,
+			Status:         timelineevent.StatusCompleted,
+			Content:        "Final answer here.",
+		}
+
+		event, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.NoError(t, err)
+		assert.Equal(t, req.Content, event.Content)
+		assert.Equal(t, timelineevent.StatusCompleted, event.Status)
+	})
+
 	t.Run("creates event with empty content for streaming", func(t *testing.T) {
 		req := models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
@@ -282,8 +299,8 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 		llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,
-			StageID:         stg.ID,
-			ExecutionID:     exec.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &exec.ID,
 			InteractionType: "iteration",
 			ModelName:       "test-model",
 			LLMRequest:      map[string]any{},

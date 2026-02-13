@@ -1,0 +1,11 @@
+llm_providers:
+  test-provider:
+    type: google
+    model: test-model
+    max_tool_result_tokens: 10000
+    native_tools:
+      google_search: true
+  test-provider-fast:
+    type: openai
+    model: test-model-fast
+    max_tool_result_tokens: 5000

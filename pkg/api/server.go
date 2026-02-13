@@ -3,6 +3,9 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -20,19 +23,22 @@ import (
 
 // Server is the HTTP API server.
 type Server struct {
-	echo           *echo.Echo
-	httpServer     *http.Server
-	cfg            *config.Config
-	dbClient       *database.Client
-	alertService   *services.AlertService
-	sessionService *services.SessionService
-	workerPool     *queue.WorkerPool
-	connManager    *events.ConnectionManager
-	healthMonitor  *mcp.HealthMonitor              // nil if MCP disabled
-	warningService *services.SystemWarningsService // nil if MCP disabled
-	chatService    *services.ChatService           // nil until set
-	chatExecutor   *queue.ChatMessageExecutor      // nil until set
-	eventPublisher agent.EventPublisher            // nil if streaming disabled
+	echo               *echo.Echo
+	httpServer         *http.Server
+	cfg                *config.Config
+	dbClient           *database.Client
+	alertService       *services.AlertService
+	sessionService     *services.SessionService
+	workerPool         *queue.WorkerPool
+	connManager        *events.ConnectionManager
+	healthMonitor      *mcp.HealthMonitor              // nil if MCP disabled
+	warningService     *services.SystemWarningsService // nil if MCP disabled
+	chatService        *services.ChatService           // nil until set
+	chatExecutor       *queue.ChatMessageExecutor      // nil until set
+	eventPublisher     agent.EventPublisher            // nil if streaming disabled
+	interactionService *services.InteractionService    // nil until set (debug endpoints)
+	stageService       *services.StageService          // nil until set (debug endpoints)
+	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -85,6 +91,54 @@ func (s *Server) SetEventPublisher(pub agent.EventPublisher) {
 	s.eventPublisher = pub
 }
 
+// SetInteractionService sets the interaction service for debug endpoints.
+func (s *Server) SetInteractionService(svc *services.InteractionService) {
+	s.interactionService = svc
+}
+
+// SetStageService sets the stage service for debug endpoints.
+func (s *Server) SetStageService(svc *services.StageService) {
+	s.stageService = svc
+}
+
+// SetTimelineService sets the timeline service for the timeline endpoint.
+func (s *Server) SetTimelineService(svc *services.TimelineService) {
+	s.timelineService = svc
+}
+
+// ValidateWiring checks that all required services have been wired via their
+// Set* methods. Call this after all Set* calls and before Start/StartWithListener.
+// Returns an error listing every missing service so that wiring gaps are caught
+// at startup rather than surfacing as 503s at request time.
+//
+// Services that are legitimately optional (e.g. healthMonitor / warningService
+// when MCP is disabled) are NOT checked here.
+func (s *Server) ValidateWiring() error {
+	var errs []error
+	if s.chatService == nil {
+		errs = append(errs, fmt.Errorf("chatService not set (call SetChatService)"))
+	}
+	if s.chatExecutor == nil {
+		errs = append(errs, fmt.Errorf("chatExecutor not set (call SetChatExecutor)"))
+	}
+	if s.eventPublisher == nil {
+		errs = append(errs, fmt.Errorf("eventPublisher not set (call SetEventPublisher)"))
+	}
+	if s.interactionService == nil {
+		errs = append(errs, fmt.Errorf("interactionService not set (call SetInteractionService)"))
+	}
+	if s.stageService == nil {
+		errs = append(errs, fmt.Errorf("stageService not set (call SetStageService)"))
+	}
+	if s.timelineService == nil {
+		errs = append(errs, fmt.Errorf("timelineService not set (call SetTimelineService)"))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("server wiring incomplete: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
 	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
@@ -102,6 +156,12 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
+	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
+
+	// Debug/observability endpoints (two-level loading).
+	v1.GET("/sessions/:id/debug", s.getDebugListHandler)
+	v1.GET("/sessions/:id/debug/llm/:interaction_id", s.getLLMInteractionHandler)
+	v1.GET("/sessions/:id/debug/mcp/:interaction_id", s.getMCPInteractionHandler)
 
 	// WebSocket endpoint for real-time event streaming.
 	// Auth deferred to Phase 9 (Security) — currently open to any client,
@@ -116,6 +176,13 @@ func (s *Server) Start(addr string) error {
 		Handler: s.echo,
 	}
 	return s.httpServer.ListenAndServe()
+}
+
+// StartWithListener starts the HTTP server on a pre-created listener.
+// Used by test infrastructure to serve on a random OS-assigned port.
+func (s *Server) StartWithListener(ln net.Listener) error {
+	s.httpServer = &http.Server{Handler: s.echo}
+	return s.httpServer.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the HTTP server.

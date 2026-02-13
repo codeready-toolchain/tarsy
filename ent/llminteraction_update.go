@@ -338,12 +338,6 @@ func (_u *LLMInteractionUpdate) check() error {
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "LLMInteraction.session"`)
 	}
-	if _u.mutation.StageCleared() && len(_u.mutation.StageIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "LLMInteraction.stage"`)
-	}
-	if _u.mutation.AgentExecutionCleared() && len(_u.mutation.AgentExecutionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "LLMInteraction.agent_execution"`)
-	}
 	return nil
 }
 
@@ -840,12 +834,6 @@ func (_u *LLMInteractionUpdateOne) check() error {
 	}
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "LLMInteraction.session"`)
-	}
-	if _u.mutation.StageCleared() && len(_u.mutation.StageIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "LLMInteraction.stage"`)
-	}
-	if _u.mutation.AgentExecutionCleared() && len(_u.mutation.AgentExecutionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "LLMInteraction.agent_execution"`)
 	}
 	return nil
 }

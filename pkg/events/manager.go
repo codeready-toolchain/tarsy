@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -15,6 +16,11 @@ import (
 // If more events are missed, a catchup.overflow message tells the client to
 // do a full REST reload.
 const catchupLimit = 200
+
+// listenTimeout bounds how long a LISTEN command may block when subscribing to
+// a new PG channel. Without this, a stalled connection would block the
+// subscribing goroutine (and thus the client's read loop) indefinitely.
+const listenTimeout = 10 * time.Second
 
 // CatchupEvent holds the data returned by the catchup query.
 type CatchupEvent struct {
@@ -50,6 +56,12 @@ type ConnectionManager struct {
 }
 
 // Connection represents a single WebSocket client.
+//
+// subscriptions is accessed WITHOUT a lock. This is safe because all reads and
+// writes (subscribe, unsubscribe, unregisterConnection) happen on the single
+// goroutine that owns this connection (HandleConnection's read loop and its
+// deferred cleanup). If a Connection is ever mutated from a different goroutine
+// (e.g. an admin "kick" feature), subscriptions must be protected by a mutex.
 type Connection struct {
 	ID            string
 	Conn          *websocket.Conn
@@ -178,11 +190,20 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 			m.sendJSON(c, map[string]string{"type": "error", "message": "channel is required for subscribe"})
 			return
 		}
-		m.subscribe(c, msg.Channel)
+		if err := m.subscribe(c, msg.Channel); err != nil {
+			m.sendJSON(c, map[string]string{
+				"type":    "subscription.error",
+				"channel": msg.Channel,
+				"message": "failed to subscribe to channel",
+			})
+			return
+		}
 		m.sendJSON(c, map[string]string{
 			"type":    "subscription.confirmed",
 			"channel": msg.Channel,
 		})
+		// Auto catch-up: deliver all prior events so late subscribers don't miss anything.
+		m.handleCatchup(ctx, c, msg.Channel, 0)
 
 	case "unsubscribe":
 		if msg.Channel == "" {
@@ -206,7 +227,13 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 }
 
 // subscribe registers a connection for a channel and starts LISTEN if first subscriber.
-func (m *ConnectionManager) subscribe(c *Connection, channel string) {
+// LISTEN is synchronous so it completes before subscribe returns — this guarantees
+// that the subsequent auto-catchup runs with LISTEN already active, closing the gap
+// where events published between catchup and LISTEN would be lost.
+//
+// Returns an error if LISTEN fails so the caller can inform the client instead of
+// sending a false subscription.confirmed.
+func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 	m.channelMu.Lock()
 	needsListen := false
 	if _, exists := m.channels[channel]; !exists {
@@ -214,35 +241,83 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 		needsListen = true
 	}
 	m.channels[channel][c.ID] = true
+	m.channelMu.Unlock()
 
 	if needsListen {
-		// First subscriber on this channel — start LISTEN
 		m.listenerMu.RLock()
 		l := m.listener
 		m.listenerMu.RUnlock()
 		if l != nil {
-			// Capture subscriber count after c.ID is added. The goroutine
-			// can only acquire channelMu after we release it below, so
-			// initialCount correctly reflects the post-add state.
-			initialCount := len(m.channels[channel])
-			go func() {
-				if err := l.Subscribe(context.Background(), channel); err != nil {
-					slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
-					// Only remove the channel entry if no new subscribers were
-					// added since we started. This avoids wiping subscribers
-					// that joined while the LISTEN call was in flight.
-					m.channelMu.Lock()
-					if len(m.channels[channel]) == initialCount {
-						delete(m.channels, channel)
-					}
-					m.channelMu.Unlock()
-				}
-			}()
+			listenCtx, listenCancel := context.WithTimeout(context.Background(), listenTimeout)
+			defer listenCancel()
+			if err := l.Subscribe(listenCtx, channel); err != nil {
+				slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
+				m.cleanupFailedChannel(c, channel)
+				return fmt.Errorf("LISTEN on channel %s: %w", channel, err)
+			}
 		}
 	}
-	m.channelMu.Unlock()
 
 	c.subscriptions[channel] = true
+	return nil
+}
+
+// cleanupFailedChannel removes ALL subscribers from a channel after a LISTEN
+// failure and notifies every affected connection (except the triggering one,
+// which is notified by the caller via the returned error).
+//
+// Between unlocking channelMu (after creating the channel entry) and l.Subscribe
+// completing, other goroutines may have subscribed to the same channel. Because
+// they saw the channel already existed they skipped LISTEN and returned success.
+// Those connections are now orphaned — they received subscription.confirmed but
+// the underlying PG LISTEN was never established. This helper cleans them up.
+//
+// Client-side contract: an orphaned connection may observe the sequence
+// subscription.confirmed → catchup events → subscription.error. This is an
+// inherent artefact of the concurrent subscribe/LISTEN window and only occurs
+// during transient LISTEN failures. Clients MUST treat subscription.error as
+// authoritative: discard any previously received events for that channel and
+// either re-subscribe (with back-off) or fall back to REST polling.
+//
+// Note: affected connections may retain a stale c.subscriptions[channel] entry.
+// This is harmless: Broadcast uses m.channels (now deleted), and unsubscribe /
+// unregisterConnection handle missing channel entries gracefully.
+func (m *ConnectionManager) cleanupFailedChannel(triggering *Connection, channel string) {
+	// Collect all affected connection IDs and delete the channel entirely.
+	m.channelMu.Lock()
+	affectedIDs := make([]string, 0, len(m.channels[channel]))
+	for connID := range m.channels[channel] {
+		if connID != triggering.ID {
+			affectedIDs = append(affectedIDs, connID)
+		}
+	}
+	delete(m.channels, channel)
+	m.channelMu.Unlock()
+
+	if len(affectedIDs) == 0 {
+		return
+	}
+
+	// Look up connection pointers (without holding channelMu).
+	m.mu.RLock()
+	conns := make([]*Connection, 0, len(affectedIDs))
+	for _, id := range affectedIDs {
+		if conn, ok := m.connections[id]; ok {
+			conns = append(conns, conn)
+		}
+	}
+	m.mu.RUnlock()
+
+	// Notify each affected connection that the subscription failed.
+	for _, conn := range conns {
+		slog.Warn("Removing orphaned subscriber after LISTEN failure",
+			"connection_id", conn.ID, "channel", channel)
+		m.sendJSON(conn, map[string]string{
+			"type":    "subscription.error",
+			"channel": channel,
+			"message": "channel listen failed; subscription removed",
+		})
+	}
 }
 
 // unsubscribe removes a connection from a channel and stops LISTEN if last subscriber.

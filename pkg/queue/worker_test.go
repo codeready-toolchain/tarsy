@@ -135,10 +135,6 @@ func (m *mockEventPublisher) PublishChatCreated(_ context.Context, _ string, _ e
 	return nil
 }
 
-func (m *mockEventPublisher) PublishChatUserMessage(_ context.Context, _ string, _ events.ChatUserMessagePayload) error {
-	return nil
-}
-
 func TestWorkerStopIdempotent(t *testing.T) {
 	cfg := testQueueConfig()
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)

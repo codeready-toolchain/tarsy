@@ -102,15 +102,18 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	defer cancel()
 
 	executionID := uuid.New().String()
-	execution, err := s.client.AgentExecution.Create().
+	builder := s.client.AgentExecution.Create().
 		SetID(executionID).
 		SetStageID(req.StageID).
 		SetSessionID(req.SessionID).
 		SetAgentName(req.AgentName).
 		SetAgentIndex(req.AgentIndex).
 		SetStatus(agentexecution.StatusPending).
-		SetIterationStrategy(string(req.IterationStrategy)).
-		Save(ctx)
+		SetIterationStrategy(string(req.IterationStrategy))
+	if req.LLMProvider != "" {
+		builder.SetLlmProvider(req.LLMProvider)
+	}
+	execution, err := builder.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent execution: %w", err)
 	}
@@ -291,6 +294,29 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 	}
 
 	return update.Exec(writeCtx)
+}
+
+// ForceStageFailure directly sets a stage to terminal failed state.
+// Used as a last-resort fallback when no AgentExecution record exists
+// (e.g. config resolution failed before execution could be created)
+// and the execution-derived UpdateStageStatus would be a no-op.
+func (s *StageService) ForceStageFailure(ctx context.Context, stageID string, errMsg string) error {
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	now := time.Now()
+	update := s.client.Stage.UpdateOneID(stageID).
+		SetStatus(stage.StatusFailed).
+		SetCompletedAt(now).
+		SetErrorMessage(errMsg)
+
+	if err := update.Exec(writeCtx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to force stage failure: %w", err)
+	}
+	return nil
 }
 
 // GetStageByID retrieves a stage by ID with optional edges

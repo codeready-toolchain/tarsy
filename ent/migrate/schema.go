@@ -20,6 +20,7 @@ var (
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "iteration_strategy", Type: field.TypeString},
+		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "stage_id", Type: field.TypeString},
 	}
@@ -31,13 +32,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "agent_executions_alert_sessions_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[9]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[10]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_stages_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[10]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[11]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -46,12 +47,12 @@ var (
 			{
 				Name:    "agentexecution_stage_id_agent_index",
 				Unique:  true,
-				Columns: []*schema.Column{AgentExecutionsColumns[10], AgentExecutionsColumns[2]},
+				Columns: []*schema.Column{AgentExecutionsColumns[11], AgentExecutionsColumns[2]},
 			},
 			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[9]},
+				Columns: []*schema.Column{AgentExecutionsColumns[10]},
 			},
 		},
 	}
@@ -255,7 +256,7 @@ var (
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
@@ -266,10 +267,10 @@ var (
 		{Name: "total_tokens", Type: field.TypeInt, Nullable: true},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
-		{Name: "execution_id", Type: field.TypeString},
+		{Name: "execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "last_message_id", Type: field.TypeString, Nullable: true},
-		{Name: "stage_id", Type: field.TypeString},
+		{Name: "stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// LlmInteractionsTable holds the schema information for the "llm_interactions" table.
 	LlmInteractionsTable = &schema.Table{
@@ -312,6 +313,11 @@ var (
 				Name:    "llminteraction_stage_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{LlmInteractionsColumns[16], LlmInteractionsColumns[1]},
+			},
+			{
+				Name:    "llminteraction_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{LlmInteractionsColumns[14], LlmInteractionsColumns[1]},
 			},
 		},
 	}

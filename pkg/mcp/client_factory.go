@@ -11,6 +11,11 @@ import (
 type ClientFactory struct {
 	registry       *config.MCPServerRegistry
 	maskingService *masking.Service
+
+	// createClientFn overrides the default client creation logic.
+	// When non-nil, it is called instead of newClient + Initialize.
+	// Used by test infrastructure (see export_test.go).
+	createClientFn func(ctx context.Context, serverIDs []string) (*Client, error)
 }
 
 // NewClientFactory creates a new factory.
@@ -22,6 +27,9 @@ func NewClientFactory(registry *config.MCPServerRegistry, maskingService *maskin
 // CreateClient creates a new Client connected to the specified servers.
 // The caller is responsible for calling Close() when done.
 func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string) (*Client, error) {
+	if f.createClientFn != nil {
+		return f.createClientFn(ctx, serverIDs)
+	}
 	client := newClient(f.registry)
 	if err := client.Initialize(ctx, serverIDs); err != nil {
 		_ = client.Close() // Clean up partial initialization

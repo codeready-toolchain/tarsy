@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
 // generalInstructions is Tier 1 for investigation agents.
@@ -115,11 +116,31 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 	return strings.Join(sections, "\n\n")
 }
 
+// synthesisNativeToolsGuidance is appended to the synthesis system prompt when
+// native Gemini tools (Google Search, URL Context) are available
+// (synthesis-native-thinking with Gemini backend). Since synthesis has no MCP
+// tools, native tools are not suppressed by the Gemini API's mutual-exclusivity
+// constraint.
+const synthesisNativeToolsGuidance = `## Web Search and URL Context Capabilities
+
+You have access to Google Search and URL Context. Use them to look up anything from the investigations that you are not fully certain about — such as unfamiliar processes, tools, software, container images, domains, error messages, or configurations. If the investigations reference URLs, documentation links, or external resources, use URL Context to fetch and review their content. Up-to-date information from the web can help you make a more accurate and confident assessment rather than relying solely on your internal knowledge.
+
+Your primary focus remains critically evaluating and integrating the parallel investigation results.`
+
 // composeSynthesisInstructions builds the system prompt for synthesis agents.
-// Uses synthesisGeneralInstructions (Tier 1, no tool references) + custom instructions (Tier 3).
-// Skips MCP instructions (Tier 2) since synthesis is a tool-less stage.
+// Uses synthesisGeneralInstructions (Tier 1, no tool references) + optional
+// native tools guidance (when Google Search / URL Context are available) +
+// custom instructions (Tier 3).
+// Skips MCP instructions (Tier 2) since synthesis has no MCP servers.
 func (b *PromptBuilder) composeSynthesisInstructions(execCtx *agent.ExecutionContext) string {
 	sections := []string{synthesisGeneralInstructions}
+
+	// Add native tools guidance when Google Search or URL Context is available
+	// (synthesis-native-thinking). Synthesis has no MCP tools, so native tools
+	// are not suppressed by the Gemini API's mutual-exclusivity constraint.
+	if hasNativeWebTools(execCtx) {
+		sections = append(sections, synthesisNativeToolsGuidance)
+	}
 
 	// Tier 3: Agent-specific custom instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -127,6 +148,16 @@ func (b *PromptBuilder) composeSynthesisInstructions(execCtx *agent.ExecutionCon
 	}
 
 	return strings.Join(sections, "\n\n")
+}
+
+// hasNativeWebTools checks whether the execution context has native
+// Google Search or URL Context enabled in the LLM provider configuration.
+func hasNativeWebTools(execCtx *agent.ExecutionContext) bool {
+	if execCtx.Config == nil || execCtx.Config.LLMProvider == nil {
+		return false
+	}
+	nt := execCtx.Config.LLMProvider.NativeTools
+	return nt[config.GoogleNativeToolGoogleSearch] || nt[config.GoogleNativeToolURLContext]
 }
 
 // appendUnavailableServerWarnings adds a warning section when MCP servers failed to initialize.

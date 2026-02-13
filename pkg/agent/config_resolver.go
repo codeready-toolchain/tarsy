@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -113,12 +114,31 @@ func ResolveAgentConfig(
 		AgentName:          agentConfig.Name,
 		IterationStrategy:  strategy,
 		LLMProvider:        provider,
+		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 		Backend:            ResolveBackend(strategy),
 	}, nil
+}
+
+// ResolveChatProviderName resolves the LLM provider name for a chat execution
+// using the hierarchy: defaults → chain → chatCfg.
+// This is extracted so the same logic can be used in error paths before full
+// config resolution (e.g., for audit-trail records when ResolveChatAgentConfig fails).
+func ResolveChatProviderName(defaults *config.Defaults, chain *config.ChainConfig, chatCfg *config.ChatConfig) string {
+	var providerName string
+	if defaults != nil {
+		providerName = defaults.LLMProvider
+	}
+	if chain != nil && chain.LLMProvider != "" {
+		providerName = chain.LLMProvider
+	}
+	if chatCfg != nil && chatCfg.LLMProvider != "" {
+		providerName = chatCfg.LLMProvider
+	}
+	return providerName
 }
 
 // ResolveChatAgentConfig builds the agent configuration for a chat execution.
@@ -163,13 +183,7 @@ func ResolveChatAgentConfig(
 	}
 
 	// Resolve LLM provider: defaults → chain → chatCfg
-	providerName := defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if chatCfg != nil && chatCfg.LLMProvider != "" {
-		providerName = chatCfg.LLMProvider
-	}
+	providerName := ResolveChatProviderName(defaults, chain, chatCfg)
 	provider, err := cfg.GetLLMProvider(providerName)
 	if err != nil {
 		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
@@ -200,7 +214,7 @@ func ResolveChatAgentConfig(
 	if len(chain.MCPServers) > 0 {
 		mcpServers = chain.MCPServers
 	} else {
-		stageServers := aggregateChainMCPServers(chain)
+		stageServers := aggregateChainMCPServers(cfg, chain)
 		if len(stageServers) > 0 {
 			mcpServers = stageServers
 		}
@@ -213,6 +227,7 @@ func ResolveChatAgentConfig(
 		AgentName:          agentName,
 		IterationStrategy:  strategy,
 		LLMProvider:        provider,
+		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
@@ -221,24 +236,33 @@ func ResolveChatAgentConfig(
 	}, nil
 }
 
-// aggregateChainMCPServers collects the union of all MCP servers from chain stages.
-func aggregateChainMCPServers(chain *config.ChainConfig) []string {
+// aggregateChainMCPServers collects the union of all MCP servers used by the
+// chain's investigation stages. It checks stage-level overrides, stage-agent
+// overrides, and the agent definitions from the registry. This ensures the
+// chat agent inherits all tools that investigation agents had access to.
+func aggregateChainMCPServers(cfg *config.Config, chain *config.ChainConfig) []string {
 	seen := make(map[string]struct{})
 	var servers []string
-	for _, stage := range chain.Stages {
-		for _, s := range stage.MCPServers {
+	add := func(ids []string) {
+		for _, s := range ids {
 			if _, ok := seen[s]; !ok {
 				seen[s] = struct{}{}
 				servers = append(servers, s)
 			}
 		}
+	}
+	for _, stage := range chain.Stages {
+		add(stage.MCPServers)
 		for _, ag := range stage.Agents {
-			for _, s := range ag.MCPServers {
-				if _, ok := seen[s]; !ok {
-					seen[s] = struct{}{}
-					servers = append(servers, s)
-				}
+			add(ag.MCPServers)
+			// Also resolve the agent definition to pick up its MCP servers.
+			agentDef, err := cfg.GetAgent(ag.Name)
+			if err != nil {
+				slog.Warn("aggregateChainMCPServers: failed to resolve agent definition",
+					"agent", ag.Name, "error", err)
+				continue
 			}
+			add(agentDef.MCPServers)
 		}
 	}
 	return servers

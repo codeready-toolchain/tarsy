@@ -17,7 +17,11 @@ func TestBuildChatUserMessage(t *testing.T) {
 
 	result := builder.buildChatUserMessage(execCtx, nil)
 
-	expected := "Investigation found memory issues." +
+	// Alert + runbook sections reuse the same FormatAlertSection / FormatRunbookSection
+	// components as investigation agents, giving the chat agent full alert context.
+	expected := FormatAlertSection(execCtx.AlertType, execCtx.AlertData) + "\n" +
+		FormatRunbookSection(execCtx.RunbookContent) + "\n" +
+		"Investigation found memory issues." +
 		"\n" + separator + "\n" +
 		"🎯 CURRENT TASK\n" +
 		separator + "\n\n" +
@@ -29,6 +33,12 @@ func TestBuildChatUserMessage(t *testing.T) {
 		"- Provide clear, actionable responses\n\n" +
 		"Begin your response:\n"
 	assert.Equal(t, expected, result)
+
+	// Verify alert data and runbook are actually present in the output
+	assert.Contains(t, result, "## Alert Details")
+	assert.Contains(t, result, execCtx.AlertData)
+	assert.Contains(t, result, "## Runbook Content")
+	assert.Contains(t, result, "# Test Runbook")
 }
 
 func TestBuildChatUserMessage_WithTools(t *testing.T) {
@@ -50,6 +60,8 @@ func TestBuildChatUserMessage_WithTools(t *testing.T) {
 		"1. **k8s.pods**: List pods\n" +
 		"    **Parameters**: None\n" +
 		"\n\n" +
+		FormatAlertSection(execCtx.AlertType, execCtx.AlertData) + "\n" +
+		FormatRunbookSection(execCtx.RunbookContent) + "\n" +
 		"Context." +
 		"\n" + separator + "\n" +
 		"🎯 CURRENT TASK\n" +

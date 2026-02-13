@@ -41,12 +41,16 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 	defer cancel()
 
 	eventID := uuid.New().String()
+	status := req.Status
+	if status == "" {
+		status = timelineevent.StatusStreaming
+	}
 	create := s.client.TimelineEvent.Create().
 		SetID(eventID).
 		SetSessionID(req.SessionID).
 		SetSequenceNumber(req.SequenceNumber).
 		SetEventType(req.EventType).
-		SetStatus(timelineevent.StatusStreaming).
+		SetStatus(status).
 		SetContent(req.Content).
 		SetMetadata(req.Metadata).
 		SetCreatedAt(time.Now()).

@@ -144,9 +144,12 @@ func callSummarizationLLM(
 		return "", nil, fmt.Errorf("summarization produced empty result")
 	}
 
-	// Record LLM interaction for observability
-	recordLLMInteraction(ctx, execCtx, 0, "summarization", len(messages),
-		streamed.LLMResponse, nil, startTime)
+	// Record LLM interaction with inline conversation for observability.
+	// Summarization has its own self-contained conversation (system + user + assistant)
+	// that is separate from the iteration's message sequence, so we store it
+	// inline in llm_request rather than in the Message table.
+	recordSummarizationInteraction(ctx, execCtx, messages, summary,
+		streamed.LLMResponse, startTime)
 
 	return summary, streamed.Usage, nil
 }
@@ -262,6 +265,7 @@ func callSummarizationLLMWithStreaming(
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				Type:      events.EventTypeTimelineCompleted,
 				EventID:   summaryEventID,
+				EventType: timelineevent.EventTypeMcpToolSummary,
 				Content:   failContent,
 				Status:    timelineevent.StatusFailed,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
@@ -275,13 +279,77 @@ func callSummarizationLLMWithStreaming(
 
 	// Finalize summary event
 	if summaryEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, summaryEventID, resp.Text, "summary")
+		finalizeStreamingEvent(ctx, execCtx, summaryEventID, timelineevent.EventTypeMcpToolSummary, resp.Text, "summary")
 	}
 
 	return &StreamedResponse{
 		LLMResponse:      resp,
 		TextEventCreated: summaryEventID != "",
 	}, nil
+}
+
+// recordSummarizationInteraction records an LLMInteraction with the conversation
+// stored inline in llm_request. Summarization conversations are self-contained
+// (system + user + assistant) and don't share the iteration's message sequence,
+// so we embed them directly rather than using the Message table.
+func recordSummarizationInteraction(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	inputMessages []agent.ConversationMessage,
+	assistantText string,
+	resp *LLMResponse,
+	startTime time.Time,
+) {
+	durationMs := int(time.Since(startTime).Milliseconds())
+
+	var inputTokens, outputTokens, totalTokens *int
+	var textLen int
+
+	if resp != nil {
+		if resp.Usage != nil {
+			inputTokens = &resp.Usage.InputTokens
+			outputTokens = &resp.Usage.OutputTokens
+			totalTokens = &resp.Usage.TotalTokens
+		}
+		textLen = len(resp.Text)
+	}
+
+	// Build inline conversation: input messages + assistant response.
+	conversation := make([]map[string]string, 0, len(inputMessages)+1)
+	for _, msg := range inputMessages {
+		conversation = append(conversation, map[string]string{
+			"role":    string(msg.Role),
+			"content": msg.Content,
+		})
+	}
+	conversation = append(conversation, map[string]string{
+		"role":    string(agent.RoleAssistant),
+		"content": assistantText,
+	})
+
+	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+		SessionID:       execCtx.SessionID,
+		StageID:         &execCtx.StageID,
+		ExecutionID:     &execCtx.ExecutionID,
+		InteractionType: "summarization",
+		ModelName:       execCtx.Config.LLMProvider.Model,
+		LLMRequest: map[string]any{
+			"messages_count": len(inputMessages),
+			"iteration":      0,
+			"conversation":   conversation,
+		},
+		LLMResponse: map[string]any{
+			"text_length":      textLen,
+			"tool_calls_count": 0,
+		},
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		TotalTokens:  totalTokens,
+		DurationMs:   &durationMs,
+	}); err != nil {
+		slog.Error("Failed to record summarization LLM interaction",
+			"session_id", execCtx.SessionID, "error", err)
+	}
 }
 
 // buildConversationContext formats the current conversation for summarization context.
