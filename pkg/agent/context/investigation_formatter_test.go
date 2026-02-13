@@ -433,6 +433,45 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		assert.Contains(t, result, "(No investigation history available)")
 	})
 
+	t.Run("parallel-agent stage with empty LLMProvider omits provider", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "validation",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:   "AgentA",
+						AgentIndex:  1,
+						Strategy:    "react",
+						LLMProvider: "gemini-2.5-pro",
+						Status:      alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "OK."},
+						},
+					},
+					{
+						AgentName:  "AgentB",
+						AgentIndex: 2,
+						Strategy:   "native-thinking",
+						// LLMProvider intentionally empty
+						Status: alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Also OK."},
+						},
+					},
+				},
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		// Agent with provider shows "(strategy, provider)"
+		assert.Contains(t, result, "#### Agent 1: AgentA (react, gemini-2.5-pro)")
+		// Agent without provider shows "(strategy)" only — no trailing comma/space
+		assert.Contains(t, result, "#### Agent 2: AgentB (native-thinking)")
+		assert.NotContains(t, result, "AgentB (native-thinking, )")
+	})
+
 	t.Run("parallel format matches synthesis format exactly", func(t *testing.T) {
 		// Same agents used in both formatters should produce identical parallel blocks
 		agents := []AgentInvestigation{
@@ -592,6 +631,26 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 
 		assert.Contains(t, result, "1/1 agents succeeded")
 		assert.NotContains(t, result, "(No investigation history available)")
+	})
+
+	t.Run("agent with empty LLMProvider omits provider from header", func(t *testing.T) {
+		agents := []AgentInvestigation{
+			{
+				AgentName:  "AgentA",
+				AgentIndex: 1,
+				Strategy:   "react",
+				// LLMProvider intentionally empty
+				Status: alertsession.StatusCompleted,
+				Events: []*ent.TimelineEvent{
+					{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Done."},
+				},
+			},
+		}
+
+		result := FormatInvestigationForSynthesis(agents, "stage-1")
+
+		assert.Contains(t, result, "#### Agent 1: AgentA (react)\n**Status**: completed")
+		assert.NotContains(t, result, "AgentA (react, )")
 	})
 
 	t.Run("events are formatted through shared formatter", func(t *testing.T) {

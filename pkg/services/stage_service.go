@@ -311,6 +311,9 @@ func (s *StageService) ForceStageFailure(ctx context.Context, stageID string, er
 		SetErrorMessage(errMsg)
 
 	if err := update.Exec(writeCtx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("failed to force stage failure: %w", err)
 	}
 	return nil

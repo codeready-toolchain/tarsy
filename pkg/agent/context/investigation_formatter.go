@@ -107,7 +107,11 @@ func formatParallelAgents(sb *strings.Builder, agents []AgentInvestigation, stag
 	fmt.Fprintf(sb, "### Parallel Investigation: %q — %d/%d agents succeeded\n\n", stageName, succeeded, len(agents))
 
 	for _, a := range agents {
-		fmt.Fprintf(sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.Strategy, a.LLMProvider)
+		if a.LLMProvider != "" {
+			fmt.Fprintf(sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.Strategy, a.LLMProvider)
+		} else {
+			fmt.Fprintf(sb, "#### Agent %d: %s (%s)\n", a.AgentIndex, a.AgentName, a.Strategy)
+		}
 		fmt.Fprintf(sb, "**Status**: %s\n\n", a.Status)
 		formatAgentBody(sb, a)
 	}

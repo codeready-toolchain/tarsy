@@ -509,6 +509,92 @@ func TestConnectionManager_SubscribeListenFailure(t *testing.T) {
 	assert.Equal(t, "pong", msg["type"])
 }
 
+func TestConnectionManager_SubscribeListenFailure_CleansUpOrphanedSubscribers(t *testing.T) {
+	// When LISTEN fails, other connections that subscribed to the same channel
+	// between the channelMu unlock and the LISTEN call must be removed from
+	// m.channels and notified with subscription.error.
+	//
+	// Notification via real WebSockets is exercised by
+	// TestConnectionManager_SubscribeListenFailure; here we verify that the
+	// channel map is cleaned up for ALL subscribers (not just the triggering one).
+	manager := NewConnectionManager(&mockCatchupQuerier{}, 5*time.Second)
+
+	channel := "session:orphan-test"
+
+	// Create fake connections. We only register connA in manager.connections;
+	// connB and connC are placed in the channel map to simulate the race, but
+	// are not in manager.connections — so cleanupFailedChannel won't attempt to
+	// send to them (avoiding nil-Conn panics). The important assertion is that
+	// the entire channel entry is deleted, not just the triggering connection.
+	connA := &Connection{ID: "conn-a", subscriptions: make(map[string]bool)}
+
+	manager.mu.Lock()
+	manager.connections[connA.ID] = connA
+	manager.mu.Unlock()
+
+	// Simulate the state after all three subscribed but before LISTEN completes:
+	// - Channel exists in m.channels with all three connection IDs
+	manager.channelMu.Lock()
+	manager.channels[channel] = map[string]bool{
+		connA.ID: true,
+		"conn-b": true,
+		"conn-c": true,
+	}
+	manager.channelMu.Unlock()
+
+	// Now simulate LISTEN failure: call cleanupFailedChannel as subscribe would.
+	manager.cleanupFailedChannel(connA, channel)
+
+	// Channel should be completely removed from m.channels — not just connA.
+	assert.Equal(t, 0, manager.subscriberCount(channel),
+		"channel should have zero subscribers after cleanup")
+
+	manager.channelMu.RLock()
+	_, exists := manager.channels[channel]
+	manager.channelMu.RUnlock()
+	assert.False(t, exists, "channel entry should be deleted from m.channels")
+}
+
+func TestConnectionManager_SubscribeListenFailure_NotifiesOrphanedSubscribers(t *testing.T) {
+	// End-to-end test: two real WebSocket clients subscribe to the same channel.
+	// The first triggers LISTEN (which fails); both should receive subscription.error
+	// and the channel should have zero subscribers.
+	events := []CatchupEvent{
+		{ID: 1, Payload: map[string]interface{}{"type": "test"}},
+	}
+	manager := NewConnectionManager(&mockCatchupQuerier{events: events}, 5*time.Second)
+
+	// Listener whose Subscribe always fails.
+	listener := NewNotifyListener("host=localhost", manager)
+	manager.SetListener(listener)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	// Connect first client and subscribe — this triggers the (failing) LISTEN.
+	conn1 := connectWS(t, server)
+	readJSON(t, conn1) // connection.established
+	writeJSON(t, conn1, ClientMessage{Action: "subscribe", Channel: "session:orphan-ws"})
+
+	msg1 := readJSON(t, conn1)
+	assert.Equal(t, "subscription.error", msg1["type"],
+		"triggering connection should receive subscription.error")
+
+	// Channel should have zero subscribers.
+	assert.Equal(t, 0, manager.subscriberCount("session:orphan-ws"))
+
+	// Both connections should still be alive.
+	writeJSON(t, conn1, ClientMessage{Action: "ping"})
+	pong := readJSON(t, conn1)
+	assert.Equal(t, "pong", pong["type"])
+}
+
 func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
 	manager, server := setupTestManager(t)
 

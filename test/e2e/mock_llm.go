@@ -19,7 +19,7 @@ type LLMScriptEntry struct {
 	// Test control
 	BlockUntilCancelled bool            // Block Generate() until ctx is cancelled
 	WaitCh              <-chan struct{} // Block Generate() until closed, then return normal response
-	OnBlock             chan<- struct{} // Notified when Generate() starts blocking on WaitCh (before select)
+	OnBlock             chan<- struct{} // Notified when Generate() enters its blocking path (BlockUntilCancelled or WaitCh)
 }
 
 // ScriptedLLMClient implements agent.LLMClient with a dual-dispatch mock:
@@ -74,6 +74,9 @@ func (c *ScriptedLLMClient) Generate(ctx context.Context, input *agent.GenerateI
 			<-ctx.Done()
 			close(ch)
 		}()
+		if entry.OnBlock != nil {
+			entry.OnBlock <- struct{}{}
+		}
 		return ch, nil
 	}
 

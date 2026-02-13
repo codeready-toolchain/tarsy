@@ -36,8 +36,11 @@ func TestE2E_Cancellation(t *testing.T) {
 	// ═══════════════════════════════════════════════════════
 
 	// Both agents block until context is cancelled.
-	llm.AddRouted("InvestigatorA", LLMScriptEntry{BlockUntilCancelled: true})
-	llm.AddRouted("InvestigatorB", LLMScriptEntry{BlockUntilCancelled: true})
+	// investigatorsBlocked receives a signal when each agent enters Generate()'s
+	// blocking path, replacing the previous time.Sleep heuristic.
+	investigatorsBlocked := make(chan struct{}, 2)
+	llm.AddRouted("InvestigatorA", LLMScriptEntry{BlockUntilCancelled: true, OnBlock: investigatorsBlocked})
+	llm.AddRouted("InvestigatorB", LLMScriptEntry{BlockUntilCancelled: true, OnBlock: investigatorsBlocked})
 
 	// ═══════════════════════════════════════════════════════
 	// Session 2 LLM entries (sequential dispatch)
@@ -61,7 +64,9 @@ func TestE2E_Cancellation(t *testing.T) {
 	})
 
 	// Chat 1: BlockUntilCancelled (will be cancelled).
-	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true})
+	// chatBlocked signals when the chat agent's Generate() enters its blocking path.
+	chatBlocked := make(chan struct{}, 1)
+	llm.AddSequential(LLMScriptEntry{BlockUntilCancelled: true, OnBlock: chatBlocked})
 
 	// Chat 2 (follow-up): thinking + final answer.
 	llm.AddSequential(LLMScriptEntry{
@@ -104,14 +109,16 @@ func TestE2E_Cancellation(t *testing.T) {
 	// Wait until the session is in_progress and agents are executing.
 	app.WaitForSessionStatus(t, session1ID, "in_progress")
 
-	// Poll until agent executions exist — this means agents have been created
-	// and are about to call (or are already blocking on) Generate().
-	require.Eventually(t, func() bool {
-		execs := app.QueryExecutions(t, session1ID)
-		return len(execs) >= 2
-	}, 10*time.Second, 100*time.Millisecond, "agent executions not created")
-	// Small buffer to ensure Generate() is called and blocking.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for both agents to enter Generate()'s blocking path.
+	// OnBlock fires once each agent is blocking on ctx.Done(), so after
+	// receiving both signals we know cancellation will be observed immediately.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-investigatorsBlocked:
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for investigator agents to block in Generate()")
+		}
+	}
 
 	// Cancel the session while both agents are blocked.
 	app.CancelSession(t, session1ID)
@@ -182,18 +189,13 @@ func TestE2E_Cancellation(t *testing.T) {
 	chat1StageID := chat1Resp["stage_id"].(string)
 	require.NotEmpty(t, chat1StageID)
 
-	// Wait for the chat agent execution to become active (Generate() is being called).
-	require.Eventually(t, func() bool {
-		execs := app.QueryExecutions(t, session2ID)
-		for _, e := range execs {
-			if e.AgentName == "ChatAgent" && e.Status == "active" {
-				return true
-			}
-		}
-		return false
-	}, 10*time.Second, 100*time.Millisecond, "chat agent execution not active")
-	// Small buffer to ensure Generate() is called and blocking.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the chat agent to enter Generate()'s blocking path.
+	// OnBlock fires once the agent is blocking on ctx.Done().
+	select {
+	case <-chatBlocked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for chat agent to block in Generate()")
+	}
 
 	// Cancel the session — Bug 1 fix ensures chat cancellation works on completed sessions.
 	app.CancelSession(t, session2ID)

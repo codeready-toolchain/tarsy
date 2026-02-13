@@ -51,6 +51,12 @@ type ConnectionManager struct {
 }
 
 // Connection represents a single WebSocket client.
+//
+// subscriptions is accessed WITHOUT a lock. This is safe because all reads and
+// writes (subscribe, unsubscribe, unregisterConnection) happen on the single
+// goroutine that owns this connection (HandleConnection's read loop and its
+// deferred cleanup). If a Connection is ever mutated from a different goroutine
+// (e.g. an admin "kick" feature), subscriptions must be protected by a mutex.
 type Connection struct {
 	ID            string
 	Conn          *websocket.Conn
@@ -239,13 +245,7 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 		if l != nil {
 			if err := l.Subscribe(context.Background(), channel); err != nil {
 				slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
-				// Remove this subscriber and clean up the channel if empty.
-				m.channelMu.Lock()
-				delete(m.channels[channel], c.ID)
-				if len(m.channels[channel]) == 0 {
-					delete(m.channels, channel)
-				}
-				m.channelMu.Unlock()
+				m.cleanupFailedChannel(c, channel)
 				return fmt.Errorf("LISTEN on channel %s: %w", channel, err)
 			}
 		}
@@ -253,6 +253,57 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 
 	c.subscriptions[channel] = true
 	return nil
+}
+
+// cleanupFailedChannel removes ALL subscribers from a channel after a LISTEN
+// failure and notifies every affected connection (except the triggering one,
+// which is notified by the caller via the returned error).
+//
+// Between unlocking channelMu (after creating the channel entry) and l.Subscribe
+// completing, other goroutines may have subscribed to the same channel. Because
+// they saw the channel already existed they skipped LISTEN and returned success.
+// Those connections are now orphaned — they received subscription.confirmed but
+// the underlying PG LISTEN was never established. This helper cleans them up.
+//
+// Note: affected connections may retain a stale c.subscriptions[channel] entry.
+// This is harmless: Broadcast uses m.channels (now deleted), and unsubscribe /
+// unregisterConnection handle missing channel entries gracefully.
+func (m *ConnectionManager) cleanupFailedChannel(triggering *Connection, channel string) {
+	// Collect all affected connection IDs and delete the channel entirely.
+	m.channelMu.Lock()
+	affectedIDs := make([]string, 0, len(m.channels[channel]))
+	for connID := range m.channels[channel] {
+		if connID != triggering.ID {
+			affectedIDs = append(affectedIDs, connID)
+		}
+	}
+	delete(m.channels, channel)
+	m.channelMu.Unlock()
+
+	if len(affectedIDs) == 0 {
+		return
+	}
+
+	// Look up connection pointers (without holding channelMu).
+	m.mu.RLock()
+	conns := make([]*Connection, 0, len(affectedIDs))
+	for _, id := range affectedIDs {
+		if conn, ok := m.connections[id]; ok {
+			conns = append(conns, conn)
+		}
+	}
+	m.mu.RUnlock()
+
+	// Notify each affected connection that the subscription failed.
+	for _, conn := range conns {
+		slog.Warn("Removing orphaned subscriber after LISTEN failure",
+			"connection_id", conn.ID, "channel", channel)
+		m.sendJSON(conn, map[string]string{
+			"type":    "subscription.error",
+			"channel": channel,
+			"message": "channel listen failed; subscription removed",
+		})
+	}
 }
 
 // unsubscribe removes a connection from a channel and stops LISTEN if last subscriber.
