@@ -613,6 +613,70 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 	})
 }
 
+func TestStageService_ForceStageFailure(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	t.Run("marks stage as failed with error message", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Config Resolution",
+			StageIndex:         1,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusPending, stg.Status)
+
+		// Force stage to failed (no agent executions exist — this is the scenario)
+		err = stageService.ForceStageFailure(ctx, stg.ID, "failed to resolve agent config: agent not found")
+		require.NoError(t, err)
+
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusFailed, updated.Status)
+		assert.NotNil(t, updated.CompletedAt)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Contains(t, *updated.ErrorMessage, "failed to resolve agent config")
+	})
+
+	t.Run("works even when stage already has executions", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "With Execution",
+			StageIndex:         2,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		// Create a pending execution (simulates the fallback path where
+		// CreateAgentExecution succeeded but UpdateAgentExecutionStatus might fail)
+		_, err = stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "TestAgent",
+			AgentIndex: 1,
+		})
+		require.NoError(t, err)
+
+		err = stageService.ForceStageFailure(ctx, stg.ID, "resolution error")
+		require.NoError(t, err)
+
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusFailed, updated.Status)
+	})
+}
+
 func TestStageService_GetStagesBySession(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)

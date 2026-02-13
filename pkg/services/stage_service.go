@@ -296,6 +296,26 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 	return update.Exec(writeCtx)
 }
 
+// ForceStageFailure directly sets a stage to terminal failed state.
+// Used as a last-resort fallback when no AgentExecution record exists
+// (e.g. config resolution failed before execution could be created)
+// and the execution-derived UpdateStageStatus would be a no-op.
+func (s *StageService) ForceStageFailure(ctx context.Context, stageID string, errMsg string) error {
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	now := time.Now()
+	update := s.client.Stage.UpdateOneID(stageID).
+		SetStatus(stage.StatusFailed).
+		SetCompletedAt(now).
+		SetErrorMessage(errMsg)
+
+	if err := update.Exec(writeCtx); err != nil {
+		return fmt.Errorf("failed to force stage failure: %w", err)
+	}
+	return nil
+}
+
 // GetStageByID retrieves a stage by ID with optional edges
 func (s *StageService) GetStageByID(ctx context.Context, stageID string, withEdges bool) (*ent.Stage, error) {
 	query := s.client.Stage.Query().Where(stage.IDEQ(stageID))

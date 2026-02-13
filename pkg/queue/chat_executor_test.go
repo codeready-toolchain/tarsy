@@ -2,10 +2,12 @@ package queue
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -424,6 +426,90 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 	assert.Contains(t, result.InvestigationContext, "SYNTHESIS-RESULT-BETA",
 		"second synthesis result should be present when stage names collide")
 	assert.Equal(t, "What happened?", result.UserQuestion)
+}
+
+// ────────────────────────────────────────────────────────────
+// finishStage / createFailedChatExecution tests
+// ────────────────────────────────────────────────────────────
+
+func TestChatMessageExecutor_FinishStage_MarksStageFailedWithoutExecutions(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	ctx := context.Background()
+
+	stageService := services.NewStageService(client.Client)
+	session := createChatTestSession(t, client.Client)
+
+	// Create a stage with no agent executions (simulates early-exit before execution creation)
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Chat Response",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusPending, stg.Status)
+
+	executor := &ChatMessageExecutor{
+		stageService: stageService,
+		// eventPublisher is nil — publishStageStatus handles nil gracefully
+	}
+
+	executor.finishStage(stg.ID, session.ID, "Chat Response", 1, events.StageStatusFailed, "chain not found")
+
+	// Stage must be failed in DB (previously would stay pending)
+	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusFailed, updated.Status)
+	assert.NotNil(t, updated.CompletedAt)
+	require.NotNil(t, updated.ErrorMessage)
+	assert.Contains(t, *updated.ErrorMessage, "chain not found")
+}
+
+func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	ctx := context.Background()
+
+	stageService := services.NewStageService(client.Client)
+	session := createChatTestSession(t, client.Client)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Chat Response",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	executor := &ChatMessageExecutor{
+		stageService: stageService,
+	}
+
+	logger := slog.Default()
+
+	executor.createFailedChatExecution(ctx, stg.ID, session.ID, "chat", "test-provider", "config resolution error", logger)
+
+	// Verify the execution record was created and is in failed state
+	executions, err := stageService.GetAgentExecutions(ctx, stg.ID)
+	require.NoError(t, err)
+	require.Len(t, executions, 1)
+
+	exec := executions[0]
+	assert.Equal(t, "chat", exec.AgentName)
+	assert.Equal(t, 1, exec.AgentIndex)
+	assert.Equal(t, agentexecution.StatusFailed, exec.Status)
+	require.NotNil(t, exec.ErrorMessage)
+	assert.Contains(t, *exec.ErrorMessage, "config resolution error")
+	require.NotNil(t, exec.LlmProvider)
+	assert.Equal(t, "test-provider", *exec.LlmProvider)
+
+	// Stage can now be finalized via UpdateStageStatus (the whole point)
+	err = stageService.UpdateStageStatus(ctx, stg.ID)
+	require.NoError(t, err)
+
+	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusFailed, updated.Status,
+		"UpdateStageStatus should finalize stage as failed when the only execution is failed")
 }
 
 // ────────────────────────────────────────────────────────────

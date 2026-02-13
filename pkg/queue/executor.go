@@ -368,25 +368,57 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Resolve agent config from hierarchy (before creating execution record
-	// so the DB record captures the correctly resolved iteration strategy).
-	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
-	if err != nil {
-		logger.Error("Failed to resolve agent config", "error", err)
-		return agentResult{
-			status: agent.ExecutionStatusFailed,
-			err:    fmt.Errorf("failed to resolve agent config: %w", err),
-		}
-	}
-
 	// Resolve LLM provider name for observability (synthesis context display).
 	// Hierarchy: defaults → chain → stage-agent.
+	// Hoisted above ResolveAgentConfig so it's available in the error path.
 	providerName := e.cfg.Defaults.LLMProvider
 	if input.chain.LLMProvider != "" {
 		providerName = input.chain.LLMProvider
 	}
 	if agentConfig.LLMProvider != "" {
 		providerName = agentConfig.LLMProvider
+	}
+
+	// Resolve agent config from hierarchy (before creating execution record
+	// so the DB record captures the correctly resolved iteration strategy).
+	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
+	if err != nil {
+		resErr := fmt.Errorf("failed to resolve agent config: %w", err)
+		logger.Error("Failed to resolve agent config", "error", err)
+
+		// Best-effort: create a failed AgentExecution record so the stage can
+		// be finalized via UpdateStageStatus. Without this, the stage has no
+		// executions and UpdateStageStatus is a no-op, leaving it "pending".
+		exec, createErr := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:     stg.ID,
+			SessionID:   input.session.ID,
+			AgentName:   displayName,
+			AgentIndex:  agentIndex + 1, // 1-based in DB
+			LLMProvider: providerName,
+		})
+		if createErr != nil {
+			logger.Error("Failed to create failed agent execution record", "error", createErr)
+			// Last resort: directly mark stage as failed so the pipeline doesn't stay in_progress.
+			if stageErr := input.stageService.ForceStageFailure(context.Background(), stg.ID, resErr.Error()); stageErr != nil {
+				logger.Error("Failed to force stage to failed state", "error", stageErr)
+			}
+			return agentResult{
+				status: agent.ExecutionStatusFailed,
+				err:    resErr,
+			}
+		}
+		// Mark the execution as failed with the resolution error.
+		if updateErr := input.stageService.UpdateAgentExecutionStatus(
+			context.Background(), exec.ID, agentexecution.StatusFailed, resErr.Error(),
+		); updateErr != nil {
+			logger.Error("Failed to update agent execution status to failed", "error", updateErr)
+		}
+		return agentResult{
+			executionID:     exec.ID,
+			status:          agent.ExecutionStatusFailed,
+			err:             resErr,
+			llmProviderName: providerName,
+		}
 	}
 
 	// Create AgentExecution DB record with resolved strategy and provider

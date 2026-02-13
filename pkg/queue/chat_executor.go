@@ -200,9 +200,21 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		return
 	}
 
+	// Resolve LLM provider name for observability (defaults → chain → chat).
+	// Hoisted above config resolution so it's available in error paths.
+	chatProviderName := e.cfg.Defaults.LLMProvider
+	if chain.LLMProvider != "" {
+		chatProviderName = chain.LLMProvider
+	}
+	if chain.Chat != nil && chain.Chat.LLMProvider != "" {
+		chatProviderName = chain.Chat.LLMProvider
+	}
+
 	resolvedConfig, err := agent.ResolveChatAgentConfig(e.cfg, chain, chain.Chat)
 	if err != nil {
 		logger.Error("Failed to resolve chat agent config", "error", err)
+		// Best-effort: create a failed AgentExecution for audit trail.
+		e.createFailedChatExecution(execCtx, stageID, input.Session.ID, "chat", chatProviderName, err.Error(), logger)
 		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, events.StageStatusFailed, err.Error())
 		return
 	}
@@ -211,17 +223,10 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	serverIDs, toolFilter, err := resolveMCPSelection(input.Session, resolvedConfig, e.cfg.MCPServerRegistry)
 	if err != nil {
 		logger.Error("Failed to resolve MCP selection", "error", err)
+		// Best-effort: create a failed AgentExecution for audit trail.
+		e.createFailedChatExecution(execCtx, stageID, input.Session.ID, resolvedConfig.AgentName, chatProviderName, err.Error(), logger)
 		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, events.StageStatusFailed, err.Error())
 		return
-	}
-
-	// Resolve LLM provider name for observability (defaults → chain → chat).
-	chatProviderName := e.cfg.Defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		chatProviderName = chain.LLMProvider
-	}
-	if chain.Chat != nil && chain.Chat.LLMProvider != "" {
-		chatProviderName = chain.Chat.LLMProvider
 	}
 
 	// 3. Create AgentExecution record
@@ -732,11 +737,37 @@ func (e *ChatMessageExecutor) unregisterExecution(chatID string) {
 	delete(e.activeExecs, chatID)
 }
 
+// createFailedChatExecution creates a best-effort failed AgentExecution record
+// for audit trail when early-exit errors occur before the normal execution
+// record is created. Errors are logged but not returned (best-effort).
+func (e *ChatMessageExecutor) createFailedChatExecution(
+	ctx context.Context, stageID, sessionID, agentName, llmProvider, errMsg string, logger *slog.Logger,
+) {
+	exec, createErr := e.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:     stageID,
+		SessionID:   sessionID,
+		AgentName:   agentName,
+		AgentIndex:  1,
+		LLMProvider: llmProvider,
+	})
+	if createErr != nil {
+		logger.Error("Failed to create failed agent execution record", "error", createErr)
+		return
+	}
+	if updateErr := e.stageService.UpdateAgentExecutionStatus(
+		context.Background(), exec.ID, agentexecution.StatusFailed, errMsg,
+	); updateErr != nil {
+		logger.Error("Failed to update agent execution status to failed", "error", updateErr)
+	}
+}
+
 // finishStage publishes terminal stage status and updates the Stage DB record.
-// Used for early-exit error paths.
+// Used for early-exit error paths where no AgentExecution may exist yet.
+// Uses ForceStageFailure to directly set terminal status, bypassing the
+// execution-derived UpdateStageStatus which is a no-op without executions.
 func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, status, errMsg string) {
 	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, stageName, stageIndex, status)
-	if updateErr := e.stageService.UpdateStageStatus(context.Background(), stageID); updateErr != nil {
+	if updateErr := e.stageService.ForceStageFailure(context.Background(), stageID, errMsg); updateErr != nil {
 		slog.Warn("Failed to update stage status on early exit",
 			"stage_id", stageID,
 			"error", updateErr,
