@@ -394,3 +394,87 @@ var FailurePropagationExpectedEvents = []ExpectedEvent{
 	// ── Fail-fast: no stage 3 events, session fails ──
 	{Type: "session.status", Status: "failed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: FailureResilience
+// Two-stage chain + exec summary failure exercising policy=any resilience
+// and executive summary fail-open.
+//   1. analysis (Analyzer ∥ Investigator, policy=any)
+//      Analyzer: LLM error → fails (max_iterations=1)
+//      Investigator: tool call + final answer → succeeds
+//      → analysis - Synthesis (synthesis-native-thinking)
+//   2. summary (Summarizer) — succeeds
+//   Executive summary: LLM error → fail-open, session still completed
+// ────────────────────────────────────────────────────────────
+
+var FailureResilienceExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: analysis (Analyzer fails ∥ Investigator succeeds, policy=any) ──
+	{Type: "stage.status", StageName: "analysis", Status: "started"},
+
+	// Parallel agents — events interleave non-deterministically → Group 1.
+	//
+	// Analyzer: Generate() returns error → NativeThinking controller creates
+	// a fire-and-forget "error" timeline event (no streaming phase).
+	{Type: "timeline_event.created", EventType: "error", Status: "completed", Group: 1},
+
+	// Investigator iteration 1: thinking + response + tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 1},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 1,
+		Content: "Let me check the system status."},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 1,
+		Content: "Checking system status to investigate the alert."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Group: 1, Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "check_status",
+		"arguments":   `{"component":"api-server"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 1},
+
+	// Investigator iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 1},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 1,
+		Content: "System check complete, API server is healthy."},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 1,
+		Content: "Investigation complete: API server is healthy, alert was transient."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 1,
+		Content: "Investigation complete: API server is healthy, alert was transient."},
+
+	{Type: "stage.status", StageName: "analysis", Status: "completed"},
+
+	// ── Synthesis: analysis - Synthesis (synthesis-native-thinking) ──
+	{Type: "stage.status", StageName: "analysis - Synthesis", Status: "started"},
+
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "One agent succeeded, one failed. Summarizing available results.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Synthesis: Investigator confirmed API server is healthy. Analyzer failed due to LLM error.", Group: 2},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Synthesis: Investigator confirmed API server is healthy. Analyzer failed due to LLM error."},
+
+	{Type: "stage.status", StageName: "analysis - Synthesis", Status: "completed"},
+
+	// ── Stage 2: summary (Summarizer, native-thinking) ──
+	{Type: "stage.status", StageName: "summary", Status: "started"},
+
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Creating final summary of the investigation.", Group: 3},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Summary: API server alert was transient. No action required.", Group: 3},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Summary: API server alert was transient. No action required."},
+
+	{Type: "stage.status", StageName: "summary", Status: "completed"},
+
+	// ── Executive summary: LLM error → fail-open ──
+	// Executive summary produces NO WebSocket events (DB-only timeline event on success,
+	// and nothing at all on failure). Session still completes.
+	{Type: "session.status", Status: "completed"},
+}

@@ -1,0 +1,45 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Analyzer:
+    # max_iterations=1 is critical for the failing agent: when Generate() returns
+    # an error, the agent framework treats it as a failed iteration and retries up
+    # to max_iterations. Without this, Analyzer would retry 20 times (the default)
+    # instead of failing immediately on the first LLM error.
+    max_iterations: 1
+    custom_instructions: "You are Analyzer, analyzing the alert data."
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, investigating system status."
+  Summarizer:
+    custom_instructions: "You are Summarizer, creating a final summary."
+
+agent_chains:
+  resilience-chain:
+    alert_types: [test-resilience]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: analysis
+        success_policy: any
+        agents:
+          - name: Analyzer
+          - name: Investigator
+        synthesis:
+          llm_provider: "test-provider"
+          iteration_strategy: "synthesis-native-thinking"
+      - name: summary
+        agents:
+          - name: Summarizer
