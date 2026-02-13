@@ -203,7 +203,7 @@ Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 ### Parallel Investigation: "validation" — 2/2 agents succeeded
 
-#### Agent 1: ConfigValidator (react, )
+#### Agent 1: ConfigValidator (react, test-provider)
 **Status**: completed
 
 **Agent Response:**
@@ -234,7 +234,7 @@ The memory limit of 512Mi matches the alert threshold.
 
 Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
-#### Agent 2: MetricsValidator (native-thinking, )
+#### Agent 2: MetricsValidator (native-thinking, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -262,7 +262,8 @@ Metrics confirm SLO violation for pod-1 availability.
 
 Metrics confirm SLO violation for pod-1 availability.
 
-<!-- PARALLEL_RESULTS_END -->### Synthesis Result
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
 
 Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.
 
@@ -272,7 +273,7 @@ Combined validation confirms pod-1 has correct memory limit of 512Mi but violate
 
 ### Parallel Investigation: "scaling-review" — 2/2 agents succeeded
 
-#### Agent 1: ScalingReviewer-1 (native-thinking, )
+#### Agent 1: ScalingReviewer-1 (native-thinking, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -287,7 +288,7 @@ Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-#### Agent 2: ScalingReviewer-2 (native-thinking, )
+#### Agent 2: ScalingReviewer-2 (native-thinking, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -302,7 +303,8 @@ Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-<!-- PARALLEL_RESULTS_END -->### Synthesis Result
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
 
 Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
 

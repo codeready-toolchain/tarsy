@@ -54,6 +54,10 @@ func (AgentExecution) Fields() []ent.Field {
 		// Agent Configuration
 		field.String("iteration_strategy").
 			Comment("e.g., 'react', 'native_thinking' (for observability)"),
+		field.String("llm_provider").
+			Optional().
+			Nillable().
+			Comment("Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')"),
 	}
 }
 

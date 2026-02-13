@@ -62,6 +62,7 @@ type AgentExecutionMutation struct {
 	addduration_ms          *int
 	error_message           *string
 	iteration_strategy      *string
+	llm_provider            *string
 	clearedFields           map[string]struct{}
 	stage                   *string
 	clearedstage            bool
@@ -641,6 +642,55 @@ func (m *AgentExecutionMutation) ResetIterationStrategy() {
 	m.iteration_strategy = nil
 }
 
+// SetLlmProvider sets the "llm_provider" field.
+func (m *AgentExecutionMutation) SetLlmProvider(s string) {
+	m.llm_provider = &s
+}
+
+// LlmProvider returns the value of the "llm_provider" field in the mutation.
+func (m *AgentExecutionMutation) LlmProvider() (r string, exists bool) {
+	v := m.llm_provider
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLlmProvider returns the old "llm_provider" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldLlmProvider(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLlmProvider is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLlmProvider requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLlmProvider: %w", err)
+	}
+	return oldValue.LlmProvider, nil
+}
+
+// ClearLlmProvider clears the value of the "llm_provider" field.
+func (m *AgentExecutionMutation) ClearLlmProvider() {
+	m.llm_provider = nil
+	m.clearedFields[agentexecution.FieldLlmProvider] = struct{}{}
+}
+
+// LlmProviderCleared returns if the "llm_provider" field was cleared in this mutation.
+func (m *AgentExecutionMutation) LlmProviderCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldLlmProvider]
+	return ok
+}
+
+// ResetLlmProvider resets all changes to the "llm_provider" field.
+func (m *AgentExecutionMutation) ResetLlmProvider() {
+	m.llm_provider = nil
+	delete(m.clearedFields, agentexecution.FieldLlmProvider)
+}
+
 // ClearStage clears the "stage" edge to the Stage entity.
 func (m *AgentExecutionMutation) ClearStage() {
 	m.clearedstage = true
@@ -945,7 +995,7 @@ func (m *AgentExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.stage != nil {
 		fields = append(fields, agentexecution.FieldStageID)
 	}
@@ -976,6 +1026,9 @@ func (m *AgentExecutionMutation) Fields() []string {
 	if m.iteration_strategy != nil {
 		fields = append(fields, agentexecution.FieldIterationStrategy)
 	}
+	if m.llm_provider != nil {
+		fields = append(fields, agentexecution.FieldLlmProvider)
+	}
 	return fields
 }
 
@@ -1004,6 +1057,8 @@ func (m *AgentExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.ErrorMessage()
 	case agentexecution.FieldIterationStrategy:
 		return m.IterationStrategy()
+	case agentexecution.FieldLlmProvider:
+		return m.LlmProvider()
 	}
 	return nil, false
 }
@@ -1033,6 +1088,8 @@ func (m *AgentExecutionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldErrorMessage(ctx)
 	case agentexecution.FieldIterationStrategy:
 		return m.OldIterationStrategy(ctx)
+	case agentexecution.FieldLlmProvider:
+		return m.OldLlmProvider(ctx)
 	}
 	return nil, fmt.Errorf("unknown AgentExecution field %s", name)
 }
@@ -1112,6 +1169,13 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetIterationStrategy(v)
 		return nil
+	case agentexecution.FieldLlmProvider:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLlmProvider(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution field %s", name)
 }
@@ -1181,6 +1245,9 @@ func (m *AgentExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(agentexecution.FieldErrorMessage) {
 		fields = append(fields, agentexecution.FieldErrorMessage)
 	}
+	if m.FieldCleared(agentexecution.FieldLlmProvider) {
+		fields = append(fields, agentexecution.FieldLlmProvider)
+	}
 	return fields
 }
 
@@ -1206,6 +1273,9 @@ func (m *AgentExecutionMutation) ClearField(name string) error {
 		return nil
 	case agentexecution.FieldErrorMessage:
 		m.ClearErrorMessage()
+		return nil
+	case agentexecution.FieldLlmProvider:
+		m.ClearLlmProvider()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution nullable field %s", name)
@@ -1244,6 +1314,9 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 		return nil
 	case agentexecution.FieldIterationStrategy:
 		m.ResetIterationStrategy()
+		return nil
+	case agentexecution.FieldLlmProvider:
+		m.ResetLlmProvider()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution field %s", name)

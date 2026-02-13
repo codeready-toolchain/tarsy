@@ -215,6 +215,15 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		return
 	}
 
+	// Resolve LLM provider name for observability (defaults → chain → chat).
+	chatProviderName := e.cfg.Defaults.LLMProvider
+	if chain.LLMProvider != "" {
+		chatProviderName = chain.LLMProvider
+	}
+	if chain.Chat != nil && chain.Chat.LLMProvider != "" {
+		chatProviderName = chain.Chat.LLMProvider
+	}
+
 	// 3. Create AgentExecution record
 	exec, err := e.stageService.CreateAgentExecution(execCtx, models.CreateAgentExecutionRequest{
 		StageID:           stageID,
@@ -222,6 +231,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		AgentName:         resolvedConfig.AgentName,
 		AgentIndex:        1,
 		IterationStrategy: resolvedConfig.IterationStrategy,
+		LLMProvider:       chatProviderName,
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -438,11 +448,12 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 			}
 
 			agents[i] = agentctx.AgentInvestigation{
-				AgentName:   exec.AgentName,
-				AgentIndex:  exec.AgentIndex,
-				Strategy:    exec.IterationStrategy,
-				Status:      mapExecStatusToSessionStatus(exec.Status),
-				Events:      events,
+				AgentName:    exec.AgentName,
+				AgentIndex:   exec.AgentIndex,
+				Strategy:     exec.IterationStrategy,
+				LLMProvider:  stringFromNillable(exec.LlmProvider),
+				Status:       mapExecStatusToSessionStatus(exec.Status),
+				Events:       events,
 				ErrorMessage: stringFromNillable(exec.ErrorMessage),
 			}
 		}

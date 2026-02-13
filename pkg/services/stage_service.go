@@ -102,15 +102,18 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	defer cancel()
 
 	executionID := uuid.New().String()
-	execution, err := s.client.AgentExecution.Create().
+	builder := s.client.AgentExecution.Create().
 		SetID(executionID).
 		SetStageID(req.StageID).
 		SetSessionID(req.SessionID).
 		SetAgentName(req.AgentName).
 		SetAgentIndex(req.AgentIndex).
 		SetStatus(agentexecution.StatusPending).
-		SetIterationStrategy(string(req.IterationStrategy)).
-		Save(ctx)
+		SetIterationStrategy(string(req.IterationStrategy))
+	if req.LLMProvider != "" {
+		builder.SetLlmProvider(req.LLMProvider)
+	}
+	execution, err := builder.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent execution: %w", err)
 	}

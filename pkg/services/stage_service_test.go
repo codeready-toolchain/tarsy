@@ -153,6 +153,30 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 		assert.Equal(t, req.AgentName, exec.AgentName)
 		assert.Equal(t, req.AgentIndex, exec.AgentIndex)
 		assert.Equal(t, agentexecution.StatusPending, exec.Status)
+		// LLMProvider omitted → should be nil
+		assert.Nil(t, exec.LlmProvider)
+	})
+
+	t.Run("persists llm_provider when set", func(t *testing.T) {
+		req := models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "GeminiAgent",
+			AgentIndex:        2,
+			IterationStrategy: config.IterationStrategyNativeThinking,
+			LLMProvider:       "gemini-2.5-pro",
+		}
+
+		exec, err := stageService.CreateAgentExecution(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, exec.LlmProvider)
+		assert.Equal(t, "gemini-2.5-pro", *exec.LlmProvider)
+
+		// Round-trip: re-read from DB to confirm persistence
+		reloaded, err := client.Client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.LlmProvider)
+		assert.Equal(t, "gemini-2.5-pro", *reloaded.LlmProvider)
 	})
 
 	t.Run("validates required fields", func(t *testing.T) {

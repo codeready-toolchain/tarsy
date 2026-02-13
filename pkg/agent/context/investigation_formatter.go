@@ -108,7 +108,7 @@ func formatParallelAgents(sb *strings.Builder, agents []AgentInvestigation, stag
 		formatAgentBody(sb, a)
 	}
 
-	sb.WriteString("<!-- PARALLEL_RESULTS_END -->")
+	sb.WriteString("<!-- PARALLEL_RESULTS_END -->\n")
 }
 
 // formatAgentBody renders error message (if any) and timeline events for one agent.

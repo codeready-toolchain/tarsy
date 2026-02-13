@@ -126,6 +126,20 @@ func (_c *AgentExecutionCreate) SetIterationStrategy(v string) *AgentExecutionCr
 	return _c
 }
 
+// SetLlmProvider sets the "llm_provider" field.
+func (_c *AgentExecutionCreate) SetLlmProvider(v string) *AgentExecutionCreate {
+	_c.mutation.SetLlmProvider(v)
+	return _c
+}
+
+// SetNillableLlmProvider sets the "llm_provider" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableLlmProvider(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetLlmProvider(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *AgentExecutionCreate) SetID(v string) *AgentExecutionCreate {
 	_c.mutation.SetID(v)
@@ -340,6 +354,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 	if value, ok := _c.mutation.IterationStrategy(); ok {
 		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
 		_node.IterationStrategy = value
+	}
+	if value, ok := _c.mutation.LlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
+		_node.LlmProvider = &value
 	}
 	if nodes := _c.mutation.StageIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -24,6 +24,7 @@ type CreateAgentExecutionRequest struct {
 	AgentName         string                   `json:"agent_name"`
 	AgentIndex        int                      `json:"agent_index"`
 	IterationStrategy config.IterationStrategy `json:"iteration_strategy"`
+	LLMProvider       string                   `json:"llm_provider,omitempty"` // resolved provider name (for observability)
 }
 
 // StageResponse wraps a Stage with optional loaded edges

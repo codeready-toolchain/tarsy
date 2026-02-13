@@ -270,26 +270,40 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	// Add investigation stage with agent execution and timeline event
-	// (simulates completed investigation)
+	// Add investigation stage with two parallel agent executions
+	// (simulates completed parallel investigation — exercises provider display in context)
 	_, err = entClient.Stage.Create().
 		SetID("inv-stage-accum").
 		SetSessionID(session.ID).
 		SetStageName("investigation").
 		SetStageIndex(1).
-		SetExpectedAgentCount(1).
+		SetExpectedAgentCount(2).
 		SetStatus(stage.StatusCompleted).
 		Save(ctx)
 	require.NoError(t, err)
 
-	invExecID := "inv-exec-accum"
+	invExecID1 := "inv-exec-accum-1"
 	_, err = entClient.AgentExecution.Create().
-		SetID(invExecID).
+		SetID(invExecID1).
 		SetStageID("inv-stage-accum").
 		SetSessionID(session.ID).
 		SetAgentName("TestAgent").
 		SetAgentIndex(1).
 		SetIterationStrategy("native-thinking").
+		SetLlmProvider("gemini-2.5-pro").
+		SetStatus(agentexecution.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+
+	invExecID2 := "inv-exec-accum-2"
+	_, err = entClient.AgentExecution.Create().
+		SetID(invExecID2).
+		SetStageID("inv-stage-accum").
+		SetSessionID(session.ID).
+		SetAgentName("TestAgent").
+		SetAgentIndex(2).
+		SetIterationStrategy("native-thinking").
+		SetLlmProvider("gemini-2.5-pro").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(ctx)
 	require.NoError(t, err)
@@ -299,10 +313,19 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
 		StageID:        &invStageID,
-		ExecutionID:    &invExecID,
+		ExecutionID:    &invExecID1,
 		SequenceNumber: 1,
 		EventType:      timelineevent.EventTypeFinalAnalysis,
 		Content:        "Investigation: Pod-1 has been OOM killed 5 times in the last hour.",
+	})
+	require.NoError(t, err)
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &invStageID,
+		ExecutionID:    &invExecID2,
+		SequenceNumber: 2,
+		EventType:      timelineevent.EventTypeFinalAnalysis,
+		Content:        "Agent-2: Memory spike correlates with deployment at 14:03.",
 	})
 	require.NoError(t, err)
 
@@ -352,17 +375,25 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 	require.GreaterOrEqual(t, len(llm.capturedInputs), 2)
 
 	secondInput := llm.capturedInputs[1]
-	var foundInvestigation, foundFirstExchange bool
+	var foundInvestigation, foundFirstExchange, foundLLMProvider, foundAgent2 bool
 	for _, msg := range secondInput.Messages {
 		if strings.Contains(msg.Content, "OOM killed 5 times") {
 			foundInvestigation = true
 		}
+		if strings.Contains(msg.Content, "Memory spike correlates") {
+			foundAgent2 = true
+		}
 		if strings.Contains(msg.Content, "What caused the OOM?") || strings.Contains(msg.Content, "excessive memory usage") {
 			foundFirstExchange = true
 		}
+		if strings.Contains(msg.Content, "gemini-2.5-pro") {
+			foundLLMProvider = true
+		}
 	}
-	assert.True(t, foundInvestigation, "2nd chat call should see original investigation context")
+	assert.True(t, foundInvestigation, "2nd chat call should see agent-1 investigation context")
+	assert.True(t, foundAgent2, "2nd chat call should see agent-2 investigation context")
 	assert.True(t, foundFirstExchange, "2nd chat call should see first chat exchange context")
+	assert.True(t, foundLLMProvider, "chat context should include agent's LLM provider name from AgentExecution")
 }
 
 func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {

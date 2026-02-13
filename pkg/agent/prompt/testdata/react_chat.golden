@@ -122,6 +122,24 @@ Available tools:
     - namespace (optional, string)
 
 
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-investigation
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+{"description": "Test alert scenario", "namespace": "test-namespace"}
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Test Runbook
+This is a test runbook for integration testing.
+<!-- RUNBOOK END -->
+````
+
 ═══════════════════════════════════════════════════════════════════════════════
 📋 INVESTIGATION HISTORY
 ═══════════════════════════════════════════════════════════════════════════════

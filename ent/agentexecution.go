@@ -39,6 +39,8 @@ type AgentExecution struct {
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// e.g., 'react', 'native_thinking' (for observability)
 	IterationStrategy string `json:"iteration_strategy,omitempty"`
+	// Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')
+	LlmProvider *string `json:"llm_provider,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AgentExecutionQuery when eager-loading is set.
 	Edges        AgentExecutionEdges `json:"edges"`
@@ -129,7 +131,7 @@ func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentexecution.FieldAgentIndex, agentexecution.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldIterationStrategy:
+		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldIterationStrategy, agentexecution.FieldLlmProvider:
 			values[i] = new(sql.NullString)
 		case agentexecution.FieldStartedAt, agentexecution.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -217,6 +219,13 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field iteration_strategy", values[i])
 			} else if value.Valid {
 				_m.IterationStrategy = value.String
+			}
+		case agentexecution.FieldLlmProvider:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field llm_provider", values[i])
+			} else if value.Valid {
+				_m.LlmProvider = new(string)
+				*_m.LlmProvider = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -321,6 +330,11 @@ func (_m *AgentExecution) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("iteration_strategy=")
 	builder.WriteString(_m.IterationStrategy)
+	builder.WriteString(", ")
+	if v := _m.LlmProvider; v != nil {
+		builder.WriteString("llm_provider=")
+		builder.WriteString(*v)
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -20,6 +20,7 @@ var (
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "iteration_strategy", Type: field.TypeString},
+		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "stage_id", Type: field.TypeString},
 	}
@@ -31,13 +32,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "agent_executions_alert_sessions_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[9]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[10]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_stages_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[10]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[11]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -46,12 +47,12 @@ var (
 			{
 				Name:    "agentexecution_stage_id_agent_index",
 				Unique:  true,
-				Columns: []*schema.Column{AgentExecutionsColumns[10], AgentExecutionsColumns[2]},
+				Columns: []*schema.Column{AgentExecutionsColumns[11], AgentExecutionsColumns[2]},
 			},
 			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[9]},
+				Columns: []*schema.Column{AgentExecutionsColumns[10]},
 			},
 		},
 	}

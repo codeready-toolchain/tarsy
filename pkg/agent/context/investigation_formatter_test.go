@@ -343,6 +343,9 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		assert.Contains(t, result, "### Synthesis Result")
 		assert.Contains(t, result, "Partial success.")
 
+		// Verify newline between PARALLEL_RESULTS_END and Synthesis heading
+		assert.Contains(t, result, "<!-- PARALLEL_RESULTS_END -->\n### Synthesis Result")
+
 		// Executive summary
 		assert.Contains(t, result, "## Executive Summary")
 		assert.Contains(t, result, "Everything analyzed.")
@@ -438,7 +441,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		// The parallel block within the chat output should match synthesis exactly
 		// Extract the parallel block from chat output (after the stage header)
 		parallelStart := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_START -->")
-		parallelEnd := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_END -->") + len("<!-- PARALLEL_RESULTS_END -->")
+		parallelEnd := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_END -->\n") + len("<!-- PARALLEL_RESULTS_END -->\n")
 		require.Greater(t, parallelStart, 0, "chat result should contain PARALLEL_RESULTS_START")
 
 		chatParallelBlock := chatResult[parallelStart:parallelEnd]
@@ -478,7 +481,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 		result := FormatInvestigationForSynthesis(agents, "investigation")
 
 		assert.True(t, strings.HasPrefix(result, "<!-- PARALLEL_RESULTS_START -->"))
-		assert.True(t, strings.HasSuffix(result, "<!-- PARALLEL_RESULTS_END -->"))
+		assert.True(t, strings.HasSuffix(result, "<!-- PARALLEL_RESULTS_END -->\n"))
 		assert.Contains(t, result, `"investigation" — 2/2 agents succeeded`)
 		assert.Contains(t, result, "#### Agent 1: AgentA (react, gemini-2.5-pro)\n**Status**: completed")
 		assert.Contains(t, result, "#### Agent 2: AgentB (native-thinking, claude-sonnet)\n**Status**: completed")

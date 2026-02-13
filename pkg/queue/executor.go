@@ -379,22 +379,6 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 	}
 
-	// Create AgentExecution DB record with resolved strategy
-	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         input.session.ID,
-		AgentName:         displayName,
-		AgentIndex:        agentIndex + 1, // 1-based in DB
-		IterationStrategy: resolvedConfig.IterationStrategy,
-	})
-	if err != nil {
-		logger.Error("Failed to create agent execution", "error", err)
-		return agentResult{
-			status: agent.ExecutionStatusFailed,
-			err:    fmt.Errorf("failed to create agent execution: %w", err),
-		}
-	}
-
 	// Resolve LLM provider name for observability (synthesis context display).
 	// Hierarchy: defaults → chain → stage-agent.
 	providerName := e.cfg.Defaults.LLMProvider
@@ -403,6 +387,23 @@ func (e *RealSessionExecutor) executeAgent(
 	}
 	if agentConfig.LLMProvider != "" {
 		providerName = agentConfig.LLMProvider
+	}
+
+	// Create AgentExecution DB record with resolved strategy and provider
+	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           stg.ID,
+		SessionID:         input.session.ID,
+		AgentName:         displayName,
+		AgentIndex:        agentIndex + 1, // 1-based in DB
+		IterationStrategy: resolvedConfig.IterationStrategy,
+		LLMProvider:       providerName,
+	})
+	if err != nil {
+		logger.Error("Failed to create agent execution", "error", err)
+		return agentResult{
+			status: agent.ExecutionStatusFailed,
+			err:    fmt.Errorf("failed to create agent execution: %w", err),
+		}
 	}
 
 	// Metadata carried on all agentResult returns below (for synthesis context).
