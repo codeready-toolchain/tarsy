@@ -441,8 +441,15 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		// The parallel block within the chat output should match synthesis exactly
 		// Extract the parallel block from chat output (after the stage header)
 		parallelStart := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_START -->")
-		parallelEnd := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_END -->\n") + len("<!-- PARALLEL_RESULTS_END -->\n")
 		require.Greater(t, parallelStart, 0, "chat result should contain PARALLEL_RESULTS_START")
+
+		endMarker := "<!-- PARALLEL_RESULTS_END -->\n"
+		endIdx := strings.Index(chatResult, endMarker)
+		require.GreaterOrEqual(t, endIdx, 0, "chat result should contain PARALLEL_RESULTS_END marker")
+
+		parallelEnd := endIdx + len(endMarker)
+		require.Greater(t, parallelEnd, parallelStart,
+			"PARALLEL_RESULTS_END must come after PARALLEL_RESULTS_START in chatResult")
 
 		chatParallelBlock := chatResult[parallelStart:parallelEnd]
 		assert.Equal(t, synthesisResult, chatParallelBlock, "parallel block in chat must match synthesis output exactly")

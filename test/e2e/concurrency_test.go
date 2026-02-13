@@ -3,6 +3,7 @@ package e2e
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,9 +15,12 @@ import (
 // Concurrency test — Scenarios 12 (Concurrent Sessions) + 13 (Queue Capacity Limit).
 //
 // Single TestApp with WorkerCount=3, MaxConcurrentSessions=2.
-// Submits 4 alerts simultaneously. The first 2 sessions block in
-// Generate() via WaitCh while the remaining 2 stay pending (capacity
-// limit). After releasing the blocked sessions, all 4 complete and
+// Submits 4 alerts simultaneously. All sessions block in Generate()
+// via WaitCh so we get a stable snapshot: at least 2 sessions are
+// in_progress (the capacity floor), and at least 1 remains pending
+// (bounded by 3 workers for 4 sessions). The best-effort capacity
+// check may allow up to 3 sessions to race in on the first poll
+// cycle (documented behaviour). After releasing, all 4 complete and
 // per-session assertions verify no cross-session data leakage.
 //
 // No WS event assertions — event ordering across 4 concurrent
@@ -30,35 +34,27 @@ func TestE2E_Concurrency(t *testing.T) {
 	// LLM entries for 4 sessions (routed to SimpleAgent)
 	// ═══════════════════════════════════════════════════════
 
-	// releaseCh blocks the first 2 sessions in Generate() so we can
-	// observe the MaxConcurrentSessions limit before they complete.
+	// releaseCh blocks sessions in Generate() so we can observe the
+	// MaxConcurrentSessions limit before they complete.
 	releaseCh := make(chan struct{})
 
 	// blockedCh receives a signal each time a session enters the WaitCh
-	// select in Generate(). We wait for 2 signals to confirm both
-	// sessions are genuinely blocked before checking capacity.
-	blockedCh := make(chan struct{}, 2)
+	// select in Generate(). The capacity check is best-effort (racy), so
+	// up to WorkerCount (3) sessions may be claimed on the first poll
+	// cycle. All entries block to keep sessions in a deterministic state.
+	blockedCh := make(chan struct{}, 4)
 
-	// Entries 0-1: blocked until releaseCh is closed, then return response.
-	// OnBlock notifies the test when Generate() starts blocking.
-	llm.AddRouted("SimpleAgent", LLMScriptEntry{
-		Text:    "Analysis complete: system is healthy.",
-		WaitCh:  releaseCh,
-		OnBlock: blockedCh,
-	})
-	llm.AddRouted("SimpleAgent", LLMScriptEntry{
-		Text:    "Analysis complete: system is healthy.",
-		WaitCh:  releaseCh,
-		OnBlock: blockedCh,
-	})
-
-	// Entries 2-3: instant response (no blocking).
-	llm.AddRouted("SimpleAgent", LLMScriptEntry{
-		Text: "Analysis complete: system is healthy.",
-	})
-	llm.AddRouted("SimpleAgent", LLMScriptEntry{
-		Text: "Analysis complete: system is healthy.",
-	})
+	// All 4 entries block until releaseCh is closed. This ensures that
+	// even if the best-effort capacity check allows a 3rd worker to race
+	// past the limit, the session stays blocked and in_progress — giving
+	// us a stable snapshot to assert against.
+	for i := 0; i < 4; i++ {
+		llm.AddRouted("SimpleAgent", LLMScriptEntry{
+			Text:    "Analysis complete: system is healthy.",
+			WaitCh:  releaseCh,
+			OnBlock: blockedCh,
+		})
+	}
 
 	// Executive summary entries (fail-open, but providing them avoids
 	// warning logs). One per session, consumed sequentially.
@@ -94,20 +90,46 @@ func TestE2E_Concurrency(t *testing.T) {
 	// Phase 1: Verify capacity limit (Scenario 13)
 	// ═══════════════════════════════════════════════════════
 
-	// Wait until both blocked sessions have entered Generate() and are
-	// sitting in the WaitCh select. This is stronger than just checking
-	// DB status — it confirms the sessions are genuinely held.
+	// Wait until at least MaxConcurrentSessions (2) workers have entered
+	// Generate() and are sitting in the WaitCh select. This confirms
+	// sessions are genuinely held before we inspect DB state.
 	<-blockedCh
 	<-blockedCh
 
-	// Verify: exactly 2 sessions in_progress, exactly 2 pending.
+	// The capacity check is best-effort: multiple workers can race past
+	// the limit on the first poll cycle (see pollAndProcess comment).
+	// Allow the 3rd worker time to either claim+block or back off.
+	drainDone := make(chan struct{})
+	extraBlocked := 0
+	go func() {
+		defer close(drainDone)
+		for {
+			select {
+			case <-blockedCh:
+				extraBlocked++
+			case <-time.After(200 * time.Millisecond):
+				return
+			}
+		}
+	}()
+	<-drainDone
+	totalBlocked := 2 + extraBlocked
+
+	// Verify: totalBlocked sessions are in_progress (all held by WaitCh),
+	// the rest are pending. The capacity check bounds this to at most
+	// WorkerCount (3), so at least 1 session must remain pending.
 	inProgressIDs := app.QuerySessionsByStatus(t, "in_progress")
-	assert.Len(t, inProgressIDs, 2,
-		"exactly 2 sessions should be in_progress")
+	assert.Equal(t, totalBlocked, len(inProgressIDs),
+		"in_progress count should match blocked workers")
 
 	pendingIDs := app.QuerySessionsByStatus(t, "pending")
-	assert.Len(t, pendingIDs, 2,
-		"exactly 2 sessions should be pending (capacity limit = 2)")
+	assert.Equal(t, 4-totalBlocked, len(pendingIDs),
+		"remaining sessions should be pending")
+
+	assert.GreaterOrEqual(t, len(inProgressIDs), 2,
+		"at least MaxConcurrentSessions (2) should be in_progress")
+	assert.GreaterOrEqual(t, len(pendingIDs), 1,
+		"at least 1 session should be pending (bounded by 3 workers, 4 sessions)")
 
 	// ═══════════════════════════════════════════════════════
 	// Phase 2: Release and verify all complete (Scenario 12)

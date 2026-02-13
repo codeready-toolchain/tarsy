@@ -467,6 +467,48 @@ func TestConnectionManager_SetListener(t *testing.T) {
 	manager.listenerMu.RUnlock()
 }
 
+func TestConnectionManager_SubscribeListenFailure(t *testing.T) {
+	// When LISTEN fails, subscribe should return subscription.error
+	// instead of subscription.confirmed, and no catchup should be sent.
+	events := []CatchupEvent{
+		{ID: 1, Payload: map[string]interface{}{"type": "test"}},
+	}
+	manager := NewConnectionManager(&mockCatchupQuerier{events: events}, 5*time.Second)
+
+	// Set a listener that was never started — Subscribe will fail with
+	// "LISTEN connection not established".
+	listener := NewNotifyListener("host=localhost", manager)
+	manager.SetListener(listener)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		manager.HandleConnection(r.Context(), conn)
+	}))
+	defer server.Close()
+
+	conn := connectWS(t, server)
+	readJSON(t, conn) // connection.established
+
+	// Subscribe — LISTEN will fail
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: "session:listen-fail"})
+
+	// Should receive subscription.error, NOT subscription.confirmed
+	msg := readJSON(t, conn)
+	assert.Equal(t, "subscription.error", msg["type"])
+	assert.Equal(t, "session:listen-fail", msg["channel"])
+
+	// Channel should not have any subscribers
+	assert.Equal(t, 0, manager.subscriberCount("session:listen-fail"))
+
+	// Connection should still be alive — ping/pong works
+	writeJSON(t, conn, ClientMessage{Action: "ping"})
+	msg = readJSON(t, conn)
+	assert.Equal(t, "pong", msg["type"])
+}
+
 func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
 	manager, server := setupTestManager(t)
 

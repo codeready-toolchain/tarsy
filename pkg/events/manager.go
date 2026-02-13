@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -178,7 +179,14 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 			m.sendJSON(c, map[string]string{"type": "error", "message": "channel is required for subscribe"})
 			return
 		}
-		m.subscribe(c, msg.Channel)
+		if err := m.subscribe(c, msg.Channel); err != nil {
+			m.sendJSON(c, map[string]string{
+				"type":    "subscription.error",
+				"channel": msg.Channel,
+				"message": "failed to subscribe to channel",
+			})
+			return
+		}
 		m.sendJSON(c, map[string]string{
 			"type":    "subscription.confirmed",
 			"channel": msg.Channel,
@@ -211,7 +219,10 @@ func (m *ConnectionManager) handleClientMessage(ctx context.Context, c *Connecti
 // LISTEN is synchronous so it completes before subscribe returns — this guarantees
 // that the subsequent auto-catchup runs with LISTEN already active, closing the gap
 // where events published between catchup and LISTEN would be lost.
-func (m *ConnectionManager) subscribe(c *Connection, channel string) {
+//
+// Returns an error if LISTEN fails so the caller can inform the client instead of
+// sending a false subscription.confirmed.
+func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 	m.channelMu.Lock()
 	needsListen := false
 	if _, exists := m.channels[channel]; !exists {
@@ -219,7 +230,6 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 		needsListen = true
 	}
 	m.channels[channel][c.ID] = true
-	initialCount := len(m.channels[channel])
 	m.channelMu.Unlock()
 
 	if needsListen {
@@ -229,18 +239,20 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) {
 		if l != nil {
 			if err := l.Subscribe(context.Background(), channel); err != nil {
 				slog.Error("Failed to LISTEN on channel", "channel", channel, "error", err)
-				// Only remove the channel entry if no new subscribers were
-				// added since we started.
+				// Remove this subscriber and clean up the channel if empty.
 				m.channelMu.Lock()
-				if len(m.channels[channel]) == initialCount {
+				delete(m.channels[channel], c.ID)
+				if len(m.channels[channel]) == 0 {
 					delete(m.channels, channel)
 				}
 				m.channelMu.Unlock()
+				return fmt.Errorf("LISTEN on channel %s: %w", channel, err)
 			}
 		}
 	}
 
 	c.subscriptions[channel] = true
+	return nil
 }
 
 // unsubscribe removes a connection from a channel and stops LISTEN if last subscriber.
