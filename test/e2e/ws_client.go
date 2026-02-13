@@ -69,6 +69,30 @@ func (c *WSClient) Events() []WSEvent {
 	return result
 }
 
+// WaitForEvent polls the collected events until one matches the predicate or
+// the timeout expires. This is preferred over time.Sleep for waiting on
+// trailing WS events, as it adapts to CI load automatically.
+func (c *WSClient) WaitForEvent(t interface {
+	Helper()
+	Fatalf(string, ...interface{})
+}, match func(WSEvent) bool, timeout time.Duration, msgAndArgs ...interface{}) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, e := range c.Events() {
+			if match(e) {
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(msgAndArgs) > 0 {
+		t.Fatalf(msgAndArgs[0].(string), msgAndArgs[1:]...)
+	} else {
+		t.Fatalf("WaitForEvent: timed out after %s waiting for matching WS event", timeout)
+	}
+}
+
 // Close closes the WebSocket connection and waits for the read loop to exit.
 func (c *WSClient) Close() error {
 	c.cancel()

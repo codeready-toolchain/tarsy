@@ -239,6 +239,22 @@ Thought: Pod-1 is in CrashLoopBackOff. Let me check the logs.
 Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
 `
 
+// synthesisStageContext is a sample prevStageContext for synthesis tests,
+// representing the output of a parallel investigation stage with two agents.
+const synthesisStageContext = `### Results from parallel stage 'investigation':
+
+**Parallel Execution Summary**: 2/2 agents succeeded
+
+#### Agent 1: KubernetesAgent (google-default, native-thinking)
+**Status**: completed
+
+Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
+
+#### Agent 2: LogAgent (anthropic-default, react)
+**Status**: completed
+
+Log analysis reveals database connection timeout errors to db.example.com:5432.`
+
 func newChatExecCtx() *agent.ExecutionContext {
 	ctx := newIntegrationExecCtx()
 	ctx.ChatContext = &agent.ChatContext{
@@ -308,21 +324,8 @@ func TestIntegration_NativeThinkingInvestigation(t *testing.T) {
 func TestIntegration_Synthesis(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newSynthesisExecCtx()
-	prevStageContext := `### Results from parallel stage 'investigation':
 
-**Parallel Execution Summary**: 2/2 agents succeeded
-
-#### Agent 1: KubernetesAgent (google-default, native-thinking)
-**Status**: completed
-
-Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
-
-#### Agent 2: LogAgent (anthropic-default, react)
-**Status**: completed
-
-Log analysis reveals database connection timeout errors to db.example.com:5432.`
-
-	messages := builder.BuildSynthesisMessages(execCtx, prevStageContext)
+	messages := builder.BuildSynthesisMessages(execCtx, synthesisStageContext)
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "synthesis", serializeMessages(messages))
@@ -331,21 +334,8 @@ Log analysis reveals database connection timeout errors to db.example.com:5432.`
 func TestIntegration_SynthesisNativeThinking(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newSynthesisNativeThinkingExecCtx()
-	prevStageContext := `### Results from parallel stage 'investigation':
 
-**Parallel Execution Summary**: 2/2 agents succeeded
-
-#### Agent 1: KubernetesAgent (google-default, native-thinking)
-**Status**: completed
-
-Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
-
-#### Agent 2: LogAgent (anthropic-default, react)
-**Status**: completed
-
-Log analysis reveals database connection timeout errors to db.example.com:5432.`
-
-	messages := builder.BuildSynthesisMessages(execCtx, prevStageContext)
+	messages := builder.BuildSynthesisMessages(execCtx, synthesisStageContext)
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "synthesis_native_thinking", serializeMessages(messages))

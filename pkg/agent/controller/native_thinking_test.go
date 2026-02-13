@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -128,7 +129,7 @@ func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
 	require.NoError(t, qErr)
 	found := false
 	for _, ev := range events {
-		if ev.EventType == "final_analysis" {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
 			found = true
 			require.Equal(t, true, ev.Metadata["forced_conclusion"], "final_analysis should have forced_conclusion=true")
 			require.EqualValues(t, 3, ev.Metadata["iterations_used"], "should report 3 iterations used")

@@ -103,8 +103,10 @@ func TestE2E_Timeout(t *testing.T) {
 	// Wait for session to reach timed_out — the 2s deadline fires automatically.
 	app.WaitForSessionStatus(t, session1ID, "timed_out")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the final WS event (session.status timed_out) instead of a fixed sleep.
+	ws1.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "timed_out"
+	}, 5*time.Second, "session 1: expected session.status timed_out WS event")
 
 	// ── Session 1 assertions ──
 	session1 := app.GetSession(t, session1ID)
@@ -180,8 +182,12 @@ func TestE2E_Timeout(t *testing.T) {
 
 	app.WaitForStageStatus(t, chat2StageID, "completed")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the final WS event (Chat Response stage completed) instead of a fixed sleep.
+	ws2.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "stage.status" &&
+			e.Parsed["stage_name"] == "Chat Response" &&
+			e.Parsed["status"] == "completed"
+	}, 5*time.Second, "session 2: expected Chat Response stage.status completed WS event")
 
 	// ── Session 2 stage assertions ──
 	stages2 := app.QueryStages(t, session2ID)

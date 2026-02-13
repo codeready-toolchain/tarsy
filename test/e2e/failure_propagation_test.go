@@ -140,8 +140,6 @@ func TestE2E_FailurePropagation(t *testing.T) {
 	for i, raw := range apiTimeline {
 		event, _ := raw.(map[string]interface{})
 		eventType, _ := event["event_type"].(string)
-		content, _ := event["content"].(string)
-		_ = content
 		// All events should belong to either Preparer or CheckerA's executions.
 		// There's no direct way to check "no Finalizer events" except by verifying
 		// stage count (already done above — only 2 stages exist).

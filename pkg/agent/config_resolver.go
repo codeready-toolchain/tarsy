@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -241,9 +242,13 @@ func aggregateChainMCPServers(cfg *config.Config, chain *config.ChainConfig) []s
 		for _, ag := range stage.Agents {
 			add(ag.MCPServers)
 			// Also resolve the agent definition to pick up its MCP servers.
-			if agentDef, err := cfg.GetAgent(ag.Name); err == nil {
-				add(agentDef.MCPServers)
+			agentDef, err := cfg.GetAgent(ag.Name)
+			if err != nil {
+				slog.Warn("aggregateChainMCPServers: failed to resolve agent definition",
+					"agent", ag.Name, "error", err)
+				continue
 			}
+			add(agentDef.MCPServers)
 		}
 	}
 	return servers

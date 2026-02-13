@@ -99,18 +99,19 @@ func TestE2E_MultiReplica(t *testing.T) {
 
 	app1.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Allow trailing WS events to arrive on replica 2.
-	time.Sleep(500 * time.Millisecond)
-
 	// ═══════════════════════════════════════════════════════
 	// Assert: WS events received on replica 2 (cross-replica)
 	// ═══════════════════════════════════════════════════════
 
-	events := ws.Events()
+	// Wait for the trailing "session.status completed" WS event rather than
+	// using a fixed sleep, which can be flaky under CI load.
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "completed"
+	}, 5*time.Second, "replica 2 should receive session.status completed via WS")
 
-	// Filter out infra events (connection.established, subscription.confirmed, pong).
+	// Filter out infra events for assertion.
 	var appEvents []WSEvent
-	for _, e := range events {
+	for _, e := range ws.Events() {
 		switch e.Type {
 		case "connection.established", "subscription.confirmed", "pong":
 			continue
@@ -135,19 +136,6 @@ func TestE2E_MultiReplica(t *testing.T) {
 		"replica 2 should receive stage.status events")
 	assert.True(t, eventTypes["timeline_event.created"],
 		"replica 2 should receive timeline_event.created events")
-
-	// Verify that session.status "completed" was received.
-	var gotCompleted bool
-	for _, e := range appEvents {
-		if e.Type == "session.status" {
-			if status, ok := e.Parsed["status"].(string); ok && status == "completed" {
-				gotCompleted = true
-				break
-			}
-		}
-	}
-	assert.True(t, gotCompleted,
-		"replica 2 should receive session.status with status=completed")
 
 	// ═══════════════════════════════════════════════════════
 	// Assert: REST API cross-replica (GET session via replica 2)
