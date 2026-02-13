@@ -257,13 +257,22 @@ func (app *TestApp) QuerySessionsByStatus(t *testing.T, status string) []string 
 }
 
 // WaitForNSessionsInStatus waits until exactly n sessions have the given status.
+// It inlines the DB query (instead of calling QuerySessionsByStatus) so that
+// transient DB errors cause a retry rather than aborting the test via require.NoError.
 func (app *TestApp) WaitForNSessionsInStatus(t *testing.T, n int, status string) {
 	t.Helper()
+	var lastCount int
 	require.Eventually(t, func() bool {
-		ids := app.QuerySessionsByStatus(t, status)
-		return len(ids) == n
+		sessions, err := app.EntClient.AlertSession.Query().
+			Where(alertsession.StatusEQ(alertsession.Status(status))).
+			All(context.Background())
+		if err != nil {
+			return false // transient error — let Eventually retry
+		}
+		lastCount = len(sessions)
+		return lastCount == n
 	}, 30*time.Second, 100*time.Millisecond,
-		"expected %d sessions in status %q", n, status)
+		"expected %d sessions in status %q, last saw %d", n, status, lastCount)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -299,6 +308,26 @@ func ProjectTimelineForGolden(te *ent.TimelineEvent) map[string]interface{} {
 	return m
 }
 
+// toInt converts a JSON-decoded numeric value (typically float64) to int.
+// Returns 0 if the value is nil or not a recognized numeric type.
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case float32:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
 // ProjectAPITimelineForGolden extracts the same key fields from a JSON-parsed
 // timeline event (from the API response) as ProjectTimelineForGolden does from
 // an ent object. This enables golden comparison of API and DB results.
@@ -306,7 +335,7 @@ func ProjectAPITimelineForGolden(event map[string]interface{}) map[string]interf
 	m := map[string]interface{}{
 		"event_type": event["event_type"],
 		"status":     event["status"],
-		"sequence":   int(event["sequence_number"].(float64)),
+		"sequence":   toInt(event["sequence_number"]),
 	}
 	if c, ok := event["content"].(string); ok && c != "" {
 		m["content"] = c
