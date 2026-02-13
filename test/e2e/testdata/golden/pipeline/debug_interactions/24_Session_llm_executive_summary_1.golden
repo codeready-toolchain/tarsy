@@ -10,7 +10,7 @@
     "text_length": 71,
     "tool_calls_count": 0
   },
-  "model_name": "test-model"
+  "model_name": "test-model-fast"
 }
 
 === MESSAGE: system ===

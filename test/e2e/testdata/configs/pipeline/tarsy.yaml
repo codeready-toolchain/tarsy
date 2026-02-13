@@ -50,6 +50,7 @@ agent_chains:
   test-chain:
     alert_types: [test-alert]
     llm_provider: "test-provider"
+    executive_summary_provider: "test-provider-fast"
     iteration_strategy: "native-thinking"
     stages:
       - name: investigation
@@ -73,5 +74,5 @@ agent_chains:
         agents:
           - name: ScalingReviewer
         synthesis:
-          llm_provider: "test-provider"
+          llm_provider: "test-provider-fast"
           iteration_strategy: "synthesis"

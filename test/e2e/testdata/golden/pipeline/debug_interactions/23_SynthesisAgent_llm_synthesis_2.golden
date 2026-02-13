@@ -12,7 +12,7 @@
     "text_length": 79,
     "tool_calls_count": 0
   },
-  "model_name": "test-model",
+  "model_name": "test-model-fast",
   "output_tokens": 5,
   "total_tokens": 15
 }
