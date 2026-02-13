@@ -101,11 +101,11 @@ func (TimelineEvent) Fields() []ent.Field {
 		field.String("llm_interaction_id").
 			Optional().
 			Nillable().
-			Comment("Link to debug details"),
+			Comment("Link to trace details"),
 		field.String("mcp_interaction_id").
 			Optional().
 			Nillable().
-			Comment("Link to debug details"),
+			Comment("Link to trace details"),
 	}
 }
 

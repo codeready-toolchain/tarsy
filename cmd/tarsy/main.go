@@ -210,7 +210,7 @@ func main() {
 	httpServer.SetChatExecutor(chatExecutor)
 	httpServer.SetEventPublisher(eventPublisher)
 
-	// 7a. Wire debug/observability and timeline endpoints.
+	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)
 	interactionService := services.NewInteractionService(dbClient.Client, messageService)
 	stageService := services.NewStageService(dbClient.Client)

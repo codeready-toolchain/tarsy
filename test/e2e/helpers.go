@@ -99,25 +99,25 @@ func (app *TestApp) getJSONArray(t *testing.T, path string, expectedStatus int) 
 }
 
 // ────────────────────────────────────────────────────────────
-// Debug API Helpers
+// Trace API Helpers
 // ────────────────────────────────────────────────────────────
 
-// GetDebugList calls GET /api/v1/sessions/:id/debug.
-func (app *TestApp) GetDebugList(t *testing.T, sessionID string) map[string]interface{} {
+// GetTraceList calls GET /api/v1/sessions/:id/trace.
+func (app *TestApp) GetTraceList(t *testing.T, sessionID string) map[string]interface{} {
 	t.Helper()
-	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug", http.StatusOK)
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/trace", http.StatusOK)
 }
 
-// GetLLMInteractionDetail calls GET /api/v1/sessions/:id/debug/llm/:interaction_id.
+// GetLLMInteractionDetail calls GET /api/v1/sessions/:id/trace/llm/:interaction_id.
 func (app *TestApp) GetLLMInteractionDetail(t *testing.T, sessionID, interactionID string) map[string]interface{} {
 	t.Helper()
-	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug/llm/"+interactionID, http.StatusOK)
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/trace/llm/"+interactionID, http.StatusOK)
 }
 
-// GetMCPInteractionDetail calls GET /api/v1/sessions/:id/debug/mcp/:interaction_id.
+// GetMCPInteractionDetail calls GET /api/v1/sessions/:id/trace/mcp/:interaction_id.
 func (app *TestApp) GetMCPInteractionDetail(t *testing.T, sessionID, interactionID string) map[string]interface{} {
 	t.Helper()
-	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/debug/mcp/"+interactionID, http.StatusOK)
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/trace/mcp/"+interactionID, http.StatusOK)
 }
 
 // ────────────────────────────────────────────────────────────

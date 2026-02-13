@@ -43,9 +43,9 @@ type TimelineEvent struct {
 	Content string `json:"content,omitempty"`
 	// Type-specific data (tool_name, server_name, etc.)
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
-	// Link to debug details
+	// Link to trace details
 	LlmInteractionID *string `json:"llm_interaction_id,omitempty"`
-	// Link to debug details
+	// Link to trace details
 	McpInteractionID *string `json:"mcp_interaction_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the TimelineEventQuery when eager-loading is set.

@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// InteractionService manages LLM and MCP interactions (debug data)
+// InteractionService manages LLM and MCP interactions (trace data)
 type InteractionService struct {
 	client         *ent.Client
 	messageService *MessageService
