@@ -36,6 +36,7 @@ type Server struct {
 	eventPublisher     agent.EventPublisher            // nil if streaming disabled
 	interactionService *services.InteractionService    // nil until set (debug endpoints)
 	stageService       *services.StageService          // nil until set (debug endpoints)
+	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -98,6 +99,11 @@ func (s *Server) SetStageService(svc *services.StageService) {
 	s.stageService = svc
 }
 
+// SetTimelineService sets the timeline service for the timeline endpoint.
+func (s *Server) SetTimelineService(svc *services.TimelineService) {
+	s.timelineService = svc
+}
+
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
 	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
@@ -115,6 +121,7 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
+	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 
 	// Debug/observability endpoints (two-level loading).
 	v1.GET("/sessions/:id/debug", s.getDebugListHandler)

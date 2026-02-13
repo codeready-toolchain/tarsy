@@ -77,6 +77,26 @@ func (app *TestApp) getJSON(t *testing.T, path string, expectedStatus int) map[s
 	return result
 }
 
+// GetTimeline calls GET /api/v1/sessions/:id/timeline.
+// Returns the parsed JSON array of timeline events.
+func (app *TestApp) GetTimeline(t *testing.T, sessionID string) []interface{} {
+	t.Helper()
+	return app.getJSONArray(t, "/api/v1/sessions/"+sessionID+"/timeline", http.StatusOK)
+}
+
+func (app *TestApp) getJSONArray(t *testing.T, path string, expectedStatus int) []interface{} {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, app.BaseURL+path, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, expectedStatus, resp.StatusCode, "GET %s: unexpected status", path)
+	var result []interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	return result
+}
+
 // ────────────────────────────────────────────────────────────
 // Debug API Helpers
 // ────────────────────────────────────────────────────────────
@@ -226,6 +246,38 @@ func ProjectTimelineForGolden(te *ent.TimelineEvent) map[string]interface{} {
 		m["metadata"] = te.Metadata
 	}
 	return m
+}
+
+// ProjectAPITimelineForGolden extracts the same key fields from a JSON-parsed
+// timeline event (from the API response) as ProjectTimelineForGolden does from
+// an ent object. This enables golden comparison of API and DB results.
+func ProjectAPITimelineForGolden(event map[string]interface{}) map[string]interface{} {
+	m := map[string]interface{}{
+		"event_type": event["event_type"],
+		"status":     event["status"],
+		"sequence":   int(event["sequence_number"].(float64)),
+	}
+	if c, ok := event["content"].(string); ok && c != "" {
+		m["content"] = c
+	}
+	if meta, ok := event["metadata"].(map[string]interface{}); ok && len(meta) > 0 {
+		m["metadata"] = meta
+	}
+	return m
+}
+
+// AnnotateAPITimelineWithAgent adds "agent" field to projected API timeline maps
+// by looking up execution_id → agent_name. Session-level events (no execution_id)
+// are left without an agent field.
+func AnnotateAPITimelineWithAgent(projected []map[string]interface{}, apiEvents []interface{}, agentIndex map[string]string) {
+	for i, raw := range apiEvents {
+		event, _ := raw.(map[string]interface{})
+		if execID, ok := event["execution_id"].(string); ok {
+			if name, found := agentIndex[execID]; found {
+				projected[i]["agent"] = name
+			}
+		}
+	}
 }
 
 // BuildAgentNameIndex creates a map from execution_id → agent_name for

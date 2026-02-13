@@ -318,6 +318,46 @@ func TestE2E_Pipeline(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 
+	// ── Timeline API verification ──────────────────────────────
+	// Verify the GET /sessions/:id/timeline endpoint returns correct data.
+	apiTimeline := app.GetTimeline(t, sessionID)
+	require.Len(t, apiTimeline, len(timeline),
+		"API timeline event count must match DB query")
+
+	// Verify each event has required fields and correct values.
+	for i, raw := range apiTimeline {
+		event, ok := raw.(map[string]interface{})
+		require.True(t, ok, "timeline event %d should be a JSON object", i)
+
+		// Required fields must be present.
+		assert.NotEmpty(t, event["id"], "event %d: id required", i)
+		assert.NotEmpty(t, event["session_id"], "event %d: session_id required", i)
+		assert.NotEmpty(t, event["event_type"], "event %d: event_type required", i)
+		assert.NotEmpty(t, event["status"], "event %d: status required", i)
+
+		// All events belong to this session.
+		assert.Equal(t, sessionID, event["session_id"], "event %d: wrong session_id", i)
+
+		// Sequence numbers are in ascending order (API returns ordered).
+		seq := int(event["sequence_number"].(float64))
+		if i > 0 {
+			prevEvent, _ := apiTimeline[i-1].(map[string]interface{})
+			prevSeq := int(prevEvent["sequence_number"].(float64))
+			assert.GreaterOrEqual(t, seq, prevSeq,
+				"event %d: sequence_number %d should be >= previous %d", i, seq, prevSeq)
+		}
+
+		// Cross-reference with DB: event IDs must match.
+		assert.Equal(t, timeline[i].ID, event["id"],
+			"event %d: API id must match DB id", i)
+		assert.Equal(t, string(timeline[i].EventType), event["event_type"],
+			"event %d: API event_type must match DB", i)
+		assert.Equal(t, string(timeline[i].Status), event["status"],
+			"event %d: API status must match DB", i)
+		assert.Equal(t, timeline[i].Content, event["content"],
+			"event %d: API content must match DB", i)
+	}
+
 	// Verify LLM call count:
 	// Stage 1: iteration 1 + summarization + iteration 2 + iteration 3 = 4
 	// Stage 2: iteration 1 + iteration 2 + summarization + iteration 3 = 4
@@ -396,6 +436,18 @@ func TestE2E_Pipeline(t *testing.T) {
 	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
 	SortTimelineProjection(projectedTimeline)
 	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), projectedTimeline, normalizer)
+
+	// Timeline API golden — project the API response the same way as the DB
+	// response and verify it produces the identical golden output. This proves
+	// the REST endpoint returns the exact same data as the direct DB query.
+	apiProjectedTimeline := make([]map[string]interface{}, len(apiTimeline))
+	for i, raw := range apiTimeline {
+		event, _ := raw.(map[string]interface{})
+		apiProjectedTimeline[i] = ProjectAPITimelineForGolden(event)
+	}
+	AnnotateAPITimelineWithAgent(apiProjectedTimeline, apiTimeline, agentIndex)
+	SortTimelineProjection(apiProjectedTimeline)
+	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), apiProjectedTimeline, normalizer)
 
 	// ── Debug golden assertions ─────────────────────────────────
 	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_list.golden"), debugList, normalizer)

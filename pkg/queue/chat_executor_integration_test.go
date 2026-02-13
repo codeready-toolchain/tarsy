@@ -182,6 +182,8 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 		if ev.EventType == timelineevent.EventTypeUserQuestion {
 			hasUserQuestion = true
 			assert.Equal(t, "What caused the OOM?", ev.Content)
+			assert.Equal(t, timelineevent.StatusCompleted, ev.Status,
+				"user_question must be persisted as completed (fire-and-forget) so the API returns the same status as the WS event")
 		}
 		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
 			hasFinalAnalysis = true

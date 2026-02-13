@@ -125,14 +125,14 @@
     "content": "What caused the OOM kill for pod-1?",
     "event_type": "user_question",
     "sequence": 1000000,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "What are the current SLO metrics for pod-1?",
     "event_type": "user_question",
     "sequence": 1000001,
-    "status": "streaming"
+    "status": "completed"
   },
   {
     "agent": "ConfigValidator",

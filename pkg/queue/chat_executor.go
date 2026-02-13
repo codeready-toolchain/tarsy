@@ -252,6 +252,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		ExecutionID:    &exec.ID,
 		SequenceNumber: userQuestionSeq,
 		EventType:      timelineevent.EventTypeUserQuestion,
+		Status:         timelineevent.StatusCompleted, // fire-and-forget: full content known at creation
 		Content:        input.Message.Content,
 	})
 	if err != nil {

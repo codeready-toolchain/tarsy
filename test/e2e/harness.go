@@ -175,12 +175,14 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	server.SetChatExecutor(chatExecutor)
 	server.SetEventPublisher(eventPublisher)
 
-	// Debug/observability endpoints.
+	// Debug/observability and timeline endpoints.
 	messageService := services.NewMessageService(entClient)
 	interactionService := services.NewInteractionService(entClient, messageService)
 	stageService := services.NewStageService(entClient)
+	timelineService := services.NewTimelineService(entClient)
 	server.SetInteractionService(interactionService)
 	server.SetStageService(stageService)
+	server.SetTimelineService(timelineService)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
