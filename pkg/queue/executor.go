@@ -92,8 +92,12 @@ type executeStageInput struct {
 	session     *ent.AlertSession
 	chain       *config.ChainConfig
 	stageConfig config.StageConfig
-	stageIndex  int // 0-based
+	stageIndex  int // 0-based DB stage index (includes synthesis stages)
 	prevContext string
+
+	// Total expected stages (config + synthesis + executive summary).
+	// Used for progress reporting so CurrentStageIndex never exceeds TotalStages.
+	totalExpectedStages int
 
 	// Services (shared across stages)
 	stageService       *services.StageService
@@ -144,9 +148,12 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	// 3. Sequential chain loop
 	// dbStageIndex tracks the actual DB stage index, which may differ from the
 	// config stage index when synthesis stages are inserted.
+	// totalExpectedStages includes config stages + synthesis + executive summary,
+	// so progress reporting never shows CurrentStageIndex > TotalStages.
 	var completedStages []stageResult
 	prevContext := ""
 	dbStageIndex := 0
+	totalExpectedStages := countExpectedStages(chain)
 
 	for _, stageCfg := range chain.Stages {
 		// Check for cancellation between stages
@@ -157,15 +164,16 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		// session progress + stage.status: started are published inside executeStage()
 		// after Stage DB record is created (so stageID is always present)
 		sr := e.executeStage(ctx, executeStageInput{
-			session:            session,
-			chain:              chain,
-			stageConfig:        stageCfg,
-			stageIndex:         dbStageIndex,
-			prevContext:        prevContext,
-			stageService:       stageService,
-			messageService:     messageService,
-			timelineService:    timelineService,
-			interactionService: interactionService,
+			session:             session,
+			chain:               chain,
+			stageConfig:         stageCfg,
+			stageIndex:          dbStageIndex,
+			prevContext:         prevContext,
+			totalExpectedStages: totalExpectedStages,
+			stageService:        stageService,
+			messageService:      messageService,
+			timelineService:     timelineService,
+			interactionService:  interactionService,
 		})
 
 		// Publish stage terminal status (use background context — ctx may be cancelled)
@@ -188,15 +196,16 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		// Synthesis runs after stages with >1 agent (mandatory, no opt-out)
 		if len(sr.agentResults) > 1 {
 			synthSr := e.executeSynthesisStage(ctx, executeStageInput{
-				session:            session,
-				chain:              chain,
-				stageConfig:        stageCfg,
-				stageIndex:         dbStageIndex,
-				prevContext:        prevContext,
-				stageService:       stageService,
-				messageService:     messageService,
-				timelineService:    timelineService,
-				interactionService: interactionService,
+				session:             session,
+				chain:               chain,
+				stageConfig:         stageCfg,
+				stageIndex:          dbStageIndex,
+				prevContext:         prevContext,
+				totalExpectedStages: totalExpectedStages,
+				stageService:        stageService,
+				messageService:      messageService,
+				timelineService:     timelineService,
+				interactionService:  interactionService,
 			}, sr)
 
 			// Publish synthesis stage terminal status (use background context — ctx may be cancelled)
@@ -304,7 +313,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
-		input.stageIndex, len(input.chain.Stages), len(configs),
+		input.stageIndex, input.totalExpectedStages, len(configs),
 		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))
 
 	// 4. Launch goroutines (one per execution config — even if just one)
@@ -607,7 +616,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
-		input.stageIndex, len(input.chain.Stages), 1,
+		input.stageIndex, input.totalExpectedStages, 1,
 		"Synthesizing...")
 	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
 		events.ProgressPhaseSynthesizing, fmt.Sprintf("Starting synthesis for %s", parallelResult.stageName))
@@ -800,11 +809,16 @@ func publishSessionProgress(ctx context.Context, eventPublisher agent.EventPubli
 	if eventPublisher == nil {
 		return
 	}
+	// 1-based index for clients, clamped so it never exceeds TotalStages.
+	currentIndex := stageIndex + 1
+	if totalStages > 0 && currentIndex > totalStages {
+		currentIndex = totalStages
+	}
 	if err := eventPublisher.PublishSessionProgress(ctx, events.SessionProgressPayload{
 		Type:              events.EventTypeSessionProgress,
 		SessionID:         sessionID,
 		CurrentStageName:  stageName,
-		CurrentStageIndex: stageIndex + 1, // 1-based for clients
+		CurrentStageIndex: currentIndex,
 		TotalStages:       totalStages,
 		ActiveExecutions:  activeExecutions,
 		StatusText:        statusText,
@@ -883,9 +897,12 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	logger := slog.With("session_id", session.ID)
 	startTime := time.Now()
 
-	// Publish session progress: finalizing
+	// Publish session progress: finalizing.
+	// Executive summary is the last expected step; use totalExpectedStages - 1 as
+	// the 0-based index so CurrentStageIndex (1-based) equals totalExpectedStages.
+	totalExpectedStages := countExpectedStages(chain)
 	publishSessionProgress(ctx, e.eventPublisher, session.ID, "Executive Summary",
-		len(chain.Stages), len(chain.Stages), 0, "Generating executive summary")
+		totalExpectedStages-1, totalExpectedStages, 0, "Generating executive summary")
 	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, session.ID, "", "",
 		events.ProgressPhaseFinalizing, "Generating executive summary")
 
@@ -1077,6 +1094,21 @@ func resolveMCPSelection(
 	}
 
 	return serverIDs, toolFilter, nil
+}
+
+// countExpectedStages computes the total number of progress steps for the chain,
+// including synthesis stages (for multi-agent/replica stages) and the executive
+// summary step. Used for accurate progress reporting so CurrentStageIndex never
+// exceeds TotalStages.
+func countExpectedStages(chain *config.ChainConfig) int {
+	total := len(chain.Stages)
+	for _, stageCfg := range chain.Stages {
+		if len(stageCfg.Agents) > 1 || stageCfg.Replicas > 1 {
+			total++ // synthesis stage will follow
+		}
+	}
+	total++ // executive summary step
+	return total
 }
 
 // ────────────────────────────────────────────────────────────

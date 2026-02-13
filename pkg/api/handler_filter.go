@@ -30,6 +30,7 @@ func (s *Server) filterOptionsHandler(c *echo.Context) error {
 	}
 
 	// Statuses are the static enum values — always return all possible values.
+	// NOTE: Update this list when new alertsession.Status values are added.
 	statuses := []string{
 		string(alertsession.StatusPending),
 		string(alertsession.StatusInProgress),

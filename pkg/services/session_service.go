@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	stdsql "database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -692,11 +693,6 @@ func (s *SessionService) GetActiveSessions(ctx context.Context) (*models.ActiveS
 
 	active := make([]models.ActiveSessionItem, 0, len(activeSessions))
 	for _, sess := range activeSessions {
-		// Count total stages for this session.
-		totalStages, _ := s.client.Stage.Query().
-			Where(stage.SessionIDEQ(sess.ID)).
-			Count(ctx)
-
 		var alertType *string
 		if sess.AlertType != "" {
 			alertType = &sess.AlertType
@@ -712,7 +708,6 @@ func (s *SessionService) GetActiveSessions(ctx context.Context) (*models.ActiveS
 			StartedAt:         sess.StartedAt,
 			CurrentStageIndex: sess.CurrentStageIndex,
 			CurrentStageID:    sess.CurrentStageID,
-			TotalStages:       totalStages,
 		})
 	}
 
@@ -842,13 +837,23 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		query = query.Order(orderFunc)
 	}
 
+	// Clamp pagination params to safe values (defensive against zero/negative).
+	pageSize := params.PageSize
+	if pageSize < 1 {
+		pageSize = 25
+	}
+	page := params.Page
+	if page < 1 {
+		page = 1
+	}
+
 	// Paginate.
-	offset := (params.Page - 1) * params.PageSize
+	offset := (page - 1) * pageSize
 
 	// Scan with aggregate subqueries in a single query.
 	var rows []dashboardRow
 	err = query.
-		Limit(params.PageSize).
+		Limit(pageSize).
 		Offset(offset).
 		Modify(func(sel *sql.Selector) {
 			t := sel.TableName()
@@ -971,14 +976,14 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 
 	totalPages := 0
 	if totalCount > 0 {
-		totalPages = (totalCount + params.PageSize - 1) / params.PageSize
+		totalPages = (totalCount + pageSize - 1) / pageSize
 	}
 
 	return &models.DashboardListResponse{
 		Sessions: items,
 		Pagination: models.PaginationInfo{
-			Page:       params.Page,
-			PageSize:   params.PageSize,
+			Page:       page,
+			PageSize:   pageSize,
 			TotalPages: totalPages,
 			TotalItems: totalCount,
 		},
@@ -989,11 +994,13 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 
 // aggregateLLMStats returns LLM interaction count and token sums for a session.
 func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string) (count int, inputTokens, outputTokens, totalTokens int64, err error) {
+	// SUM returns NULL when all values are NULL (nullable token columns).
+	// Use sql.NullInt64 to avoid scan errors and default to 0.
 	var results []struct {
-		Count     int   `json:"count"`
-		InputSum  int64 `json:"input_sum"`
-		OutputSum int64 `json:"output_sum"`
-		TotalSum  int64 `json:"total_sum"`
+		Count     int              `json:"count"`
+		InputSum  stdsql.NullInt64 `json:"input_sum"`
+		OutputSum stdsql.NullInt64 `json:"output_sum"`
+		TotalSum  stdsql.NullInt64 `json:"total_sum"`
 	}
 
 	err = s.client.LLMInteraction.Query().
@@ -1010,7 +1017,7 @@ func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string
 	}
 
 	if len(results) > 0 {
-		return results[0].Count, results[0].InputSum, results[0].OutputSum, results[0].TotalSum, nil
+		return results[0].Count, results[0].InputSum.Int64, results[0].OutputSum.Int64, results[0].TotalSum.Int64, nil
 	}
 	return 0, 0, 0, 0, nil
 }

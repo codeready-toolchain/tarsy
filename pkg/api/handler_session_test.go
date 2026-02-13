@@ -51,7 +51,7 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			errMsg:  "invalid start_date",
 		},
 		{
-			name:    "invalid end_date",
+			name:    "end_date wrong format (not RFC3339)",
 			query:   "end_date=2024-01-01",
 			wantErr: http.StatusBadRequest,
 			errMsg:  "invalid end_date",

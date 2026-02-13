@@ -110,6 +110,8 @@ type ActiveSessionsResponse struct {
 }
 
 // ActiveSessionItem is an in-progress or cancelling session.
+// TotalStages is intentionally omitted — clients get it from real-time
+// progress events (SessionProgressPayload) or the dashboard list endpoint.
 type ActiveSessionItem struct {
 	ID                string     `json:"id"`
 	AlertType         *string    `json:"alert_type"`
@@ -120,7 +122,6 @@ type ActiveSessionItem struct {
 	StartedAt         *time.Time `json:"started_at"`
 	CurrentStageIndex *int       `json:"current_stage_index"`
 	CurrentStageID    *string    `json:"current_stage_id"`
-	TotalStages       int        `json:"total_stages"`
 }
 
 // QueuedSessionItem is a pending session waiting for a worker.
