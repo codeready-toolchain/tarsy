@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 5.3 (Follow-up Chat)
+**Last updated after**: Phase 6 (E2E Testing)
 
 ---
 
@@ -35,7 +35,7 @@ Key design: **no stored output fields** on Stage or AgentExecution. Context is b
 
 ```
 pkg/
-├── api/              # HTTP handlers, requests, responses, error mapping
+├── api/              # HTTP handlers (session, timeline, debug, chat, health), requests, responses, error mapping
 ├── agent/            # Agent interface, lifecycle, LLM client, tool executor
 │   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser, tool execution, summarization
 │   ├── context/      # Context formatter, investigation formatter, stage context builder
@@ -44,8 +44,8 @@ pkg/
 ├── database/         # Client, migrations
 ├── events/           # EventPublisher, ConnectionManager, NotifyListener
 ├── masking/          # Data masking service (regex patterns, code maskers, K8s Secret masker)
-├── mcp/              # MCP client infrastructure (client, executor, transport, health)
-├── models/           # MCP selection, shared types
+├── mcp/              # MCP client infrastructure (client, executor, transport, health, testing helpers)
+├── models/           # MCP selection, debug API response types, shared types
 ├── queue/            # Worker, WorkerPool, orphan detection, session executor, chat executor
 └── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
@@ -57,6 +57,11 @@ proto/
 └── llm_service.proto
 llm-service/
 └── llm/providers/    # Python LLM providers (GoogleNativeProvider, LangChainProvider stub)
+test/
+├── e2e/              # End-to-end tests (harness, mocks, helpers, scenarios, golden files)
+│   └── testdata/     # YAML configs per scenario, golden files, expected event definitions
+├── database/         # SharedTestDB, NewTestClient (test DB helpers)
+└── util/             # SetupTestDatabase, schema helpers, connection string utilities
 ```
 
 ---
@@ -190,7 +195,7 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 `id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type` (multi_agent/replica, nullable), `success_policy` (all/any, nullable), `chat_id` (nullable — set for chat response stages), `chat_user_message_id` (nullable), `status`, `error_message`, timestamps
 
 ### AgentExecution
-`id`, `stage_id`, `session_id` (denormalized), `agent_name`, `agent_index`, `iteration_strategy`, `status`, `error_message`, timestamps
+`id`, `stage_id`, `session_id` (denormalized), `agent_name`, `agent_index`, `iteration_strategy`, `llm_provider` (optional — resolved provider name e.g. `"gemini-2.5-pro"`), `status`, `error_message`, timestamps
 
 ### TimelineEvent
 `id`, `session_id`, `stage_id` (**optional** — null for session-level events like `executive_summary`), `execution_id` (**optional** — null for session-level events), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content` (TEXT, grows during streaming), `metadata` (JSON), timestamps
@@ -209,6 +214,10 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 | GET | `/api/v1/sessions/:id` | Get session status and details |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or active chat execution |
 | POST | `/api/v1/sessions/:id/chat/messages` | Send chat message (auto-creates chat on first message, 202 Accepted) |
+| GET | `/api/v1/sessions/:id/timeline` | Get session timeline events ordered by sequence |
+| GET | `/api/v1/sessions/:id/debug` | Debug interaction list grouped by stage → execution |
+| GET | `/api/v1/sessions/:id/debug/llm/:interaction_id` | Full LLM interaction detail with reconstructed conversation |
+| GET | `/api/v1/sessions/:id/debug/mcp/:interaction_id` | Full MCP interaction detail (arguments, result, available tools) |
 | GET | `/ws` | WebSocket connection for real-time streaming |
 
 ---
@@ -966,7 +975,7 @@ Client connects, subscribes to channels (`session:{id}`, `sessions`), receives e
 
 **Client actions**: `subscribe`, `unsubscribe`, `catchup` (with `last_event_id`), `ping`
 
-**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `chat.created`, `chat.user_message`
+**Persistent events** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed` (includes `event_type` for observability), `session.status`, `stage.status`, `chat.created`, `chat.user_message`
 
 **Transient events** (NOTIFY only, no DB): `stream.chunk` (LLM token deltas)
 
@@ -990,7 +999,60 @@ DB INSERT + `pg_notify` in the same transaction for persistent events. `PublishT
 
 ### Catchup
 
-On reconnect, client sends `catchup` with `last_event_id`. Server returns missed events (limit: 200). If overflow, sends `catchup.overflow` signaling client to do full REST reload.
+**Auto-catchup on subscribe**: New channel subscriptions automatically receive prior events for that channel — no explicit `catchup` action needed. On reconnect, client can also send `catchup` with `last_event_id` for fine-grained replay. Server returns missed events (limit: 200). If overflow, sends `catchup.overflow` signaling client to do full REST reload.
+
+---
+
+## Debug / Observability API (`pkg/api/handler_debug.go`)
+
+Three-level debug endpoints for inspecting investigation internals. Designed for the dashboard's observability views and for e2e test verification of all 4 data layers (WS events, API responses, LLM interactions, MCP interactions).
+
+### Level 1: Interaction List (`GET /sessions/:id/debug`)
+
+Returns interactions grouped in a stage → execution hierarchy. Session-level interactions (e.g., executive summary) are returned separately.
+
+```go
+// pkg/models/debug.go
+type DebugListResponse struct {
+    Stages              []DebugStageGroup         // Stage → execution → interactions hierarchy
+    SessionInteractions []LLMInteractionListItem  // Session-level (e.g., executive summary)
+}
+
+type DebugStageGroup struct {
+    StageID, StageName string
+    Executions         []DebugExecutionGroup
+}
+
+type DebugExecutionGroup struct {
+    ExecutionID, AgentName string
+    LLMInteractions        []LLMInteractionListItem
+    MCPInteractions        []MCPInteractionListItem
+}
+```
+
+### Level 2: LLM Interaction Detail (`GET /sessions/:id/debug/llm/:interaction_id`)
+
+Full LLM interaction with reconstructed conversation from the Message table. For self-contained interactions (summarization) that don't use the Message table, the conversation is extracted from inline `llm_request` JSON.
+
+### Level 2: MCP Interaction Detail (`GET /sessions/:id/debug/mcp/:interaction_id`)
+
+Full MCP interaction: tool arguments, tool result, available tools, timing, error details.
+
+### Startup Validation
+
+`Server.ValidateWiring()` checks all required services (timeline, interaction, stage, session, chat, alert, event publisher, etc.) are set before the HTTP server starts accepting requests. Called from `cmd/tarsy/main.go` after all setters. Prevents cryptic 503 errors from nil service fields at request time.
+
+---
+
+## E2E Testing (`test/e2e/`)
+
+In-process e2e tests boot a full TARSy instance per test (`TestApp`) with real PostgreSQL (testcontainers, per-test schema), real event streaming, real WebSocket — only LLM (`ScriptedLLMClient` with dual sequential/agent-routed dispatch) and MCP servers (in-memory SDK via `mcpsdk.InMemoryTransport`) are mocked. The real `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised. MCP test support via `pkg/mcp/testing.go` (`InjectSession`, `NewTestClientFactory`).
+
+7 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN).
+
+Makefile: `test-unit` (pkg only), `test-e2e` (e2e only), `test-go` (all Go + coverage), `test` (Go + Python).
+
+See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrastructure, mock design, golden file system, and scenario coverage.
 
 ---
 
@@ -1044,6 +1106,15 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 | **Shared executor helpers** | `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` refactored from `RealSessionExecutor` methods to package-level functions in `pkg/queue/executor.go` — shared by both investigation and chat executors |
 | **Chat message cleanup on rejection** | If `Submit` rejects (active execution or shutting down), handler deletes the created `ChatUserMessage` to prevent orphaned records |
 | **Chat shutdown ordering** | Chat executor stops before worker pool. Marks `stopped` (rejects new submissions with 503), cancels all active contexts, waits for goroutines to drain |
+| **Cancel succeeds if either session or chat cancelled** | Cancel handler attempts both worker pool and chat cancellation; returns success if either succeeded. Prevents 409 errors when cancelling a chat on an already-completed session |
+| **Background context for post-cancellation DB updates** | After cancellation/timeout, DB status updates and event publishing use `context.Background()` instead of the cancelled context — prevents failed writes from losing terminal status |
+| **Status override from context error** | On context cancellation, agent execution status is derived from `ctx.Err()`: `DeadlineExceeded` → `timed_out`, other cancellation → `cancelled` — overriding the agent's raw reported status |
+| **Auto-catchup on WebSocket subscribe** | New subscribers receive prior events for their channel immediately on subscription — no separate catchup request needed |
+| **Startup wiring validation** | `Server.ValidateWiring()` checks all required services are set before HTTP server starts. Prevents cryptic 503s from nil service fields at request time |
+| **In-process e2e testing** | E2e tests boot full TARSy in-process with mock LLM + in-memory MCP servers. Real DB (testcontainers), real WebSocket, real event streaming. Per-test schema isolation |
+| **Dual-dispatch LLM mock** | `ScriptedLLMClient` uses sequential fallback + agent-routed dispatch. Parallel agents get deterministic responses via route matching on agent name from system prompt |
+| **Real MCP stack in e2e tests** | E2e tests exercise the full `mcp.Client` → `mcp.ToolExecutor` pipeline backed by in-memory MCP SDK servers, not a custom mock — validates tool routing, name mangling, masking in every test |
+| **Golden file verification** | Pipeline test asserts all 4 data layers via golden files (session, stages, timeline, 31 interaction details). Other tests use targeted assertions. `-update` flag regenerates goldens |
 
 ---
 
@@ -1069,10 +1140,10 @@ On reconnect, client sends `catchup` with `last_event_id`. Server returns missed
 
 ## Deferred Items Tracker
 
-### Deferred to Phase 6/7
+### Deferred to Phase 8+
 
-- **Real LangChainProvider**: Currently stubs to GoogleNativeProvider. Phase 6 adds real multi-provider support.
-- **Runbook fetching**: `RunbookContent` uses builtin default. Phase 7 adds GitHub integration.
+- **Real LangChainProvider**: Currently stubs to GoogleNativeProvider. Phase 8.2 adds real multi-provider support.
+- **Runbook fetching**: `RunbookContent` uses builtin default. Phase 8.1 adds GitHub integration.
 - **Per-provider code execution mapping**: Documented but not implemented until multi-LLM.
 
 ### Deferred (No Phase Specified)
