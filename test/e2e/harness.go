@@ -184,6 +184,8 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	server.SetStageService(stageService)
 	server.SetTimelineService(timelineService)
 
+	require.NoError(t, server.ValidateWiring(), "server wiring incomplete — did you forget a Set* call?")
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 

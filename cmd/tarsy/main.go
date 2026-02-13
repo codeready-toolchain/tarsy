@@ -219,7 +219,12 @@ func main() {
 	httpServer.SetStageService(stageService)
 	httpServer.SetTimelineService(timelineService)
 
-	// 8. Start HTTP server (non-blocking)
+	// 8. Validate wiring and start HTTP server (non-blocking)
+	if err := httpServer.ValidateWiring(); err != nil {
+		slog.Error("HTTP server wiring incomplete", "error", err)
+		os.Exit(1)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		addr := ":" + httpPort

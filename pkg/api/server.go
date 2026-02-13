@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -102,6 +104,39 @@ func (s *Server) SetStageService(svc *services.StageService) {
 // SetTimelineService sets the timeline service for the timeline endpoint.
 func (s *Server) SetTimelineService(svc *services.TimelineService) {
 	s.timelineService = svc
+}
+
+// ValidateWiring checks that all required services have been wired via their
+// Set* methods. Call this after all Set* calls and before Start/StartWithListener.
+// Returns an error listing every missing service so that wiring gaps are caught
+// at startup rather than surfacing as 503s at request time.
+//
+// Services that are legitimately optional (e.g. healthMonitor / warningService
+// when MCP is disabled) are NOT checked here.
+func (s *Server) ValidateWiring() error {
+	var errs []error
+	if s.chatService == nil {
+		errs = append(errs, fmt.Errorf("chatService not set (call SetChatService)"))
+	}
+	if s.chatExecutor == nil {
+		errs = append(errs, fmt.Errorf("chatExecutor not set (call SetChatExecutor)"))
+	}
+	if s.eventPublisher == nil {
+		errs = append(errs, fmt.Errorf("eventPublisher not set (call SetEventPublisher)"))
+	}
+	if s.interactionService == nil {
+		errs = append(errs, fmt.Errorf("interactionService not set (call SetInteractionService)"))
+	}
+	if s.stageService == nil {
+		errs = append(errs, fmt.Errorf("stageService not set (call SetStageService)"))
+	}
+	if s.timelineService == nil {
+		errs = append(errs, fmt.Errorf("timelineService not set (call SetTimelineService)"))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("server wiring incomplete: %w", errors.Join(errs...))
+	}
+	return nil
 }
 
 // setupRoutes registers all API routes.

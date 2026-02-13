@@ -1,24 +1,17 @@
 # Phase 6: Additional E2E Test Scenarios — Proposal
 
-## Discovered Production Gap: Missing Timeline API Endpoint
+## Timeline API — Fixed
 
-**Bug:** There is no `GET /sessions/:id/timeline` API endpoint. The dashboard currently
-renders timeline events only from live WebSocket events held in an in-memory JS cache.
-When a user refreshes the page or opens a completed session, the timeline is empty — there
-is no way to fetch the historical timeline for a completed session.
+The `GET /api/v1/sessions/:id/timeline` endpoint has been implemented. It returns timeline
+events ordered by sequence number via `TimelineService.GetSessionTimeline()`. The endpoint
+is wired into the e2e test harness, and the pipeline test already verifies it comprehensively:
 
-The `GET /sessions/:id` returns session metadata (`status`, `final_analysis`, `executive_summary`)
-but does **not** include timeline events. The debug API (`GET /sessions/:id/debug`) shows
-LLM/MCP interactions but not timeline events per se.
+- `GetTimeline()` helper on `TestApp` calls the API
+- Cross-references API response against direct DB query (same count, IDs, event types, statuses, content)
+- Projects the API response through `ProjectAPITimelineForGolden()` and asserts against the
+  same golden file as the DB query — proving API and DB return identical data
 
-**Impact:** The dashboard is broken for any non-live session viewing (page refresh, opening
-old sessions, sharing session links).
-
-**Action:** Track as a separate issue — add `GET /sessions/:id/timeline` endpoint that returns
-timeline events ordered by sequence number. **This must be implemented before the new e2e tests
-below**, since all tests verify timeline events through the API (not DB queries). The API is
-what the dashboard uses — if the API is broken, the user sees nothing, regardless of what's
-in the DB.
+All new tests below verify timeline events through this API endpoint.
 
 ---
 
@@ -270,7 +263,7 @@ Stage 3: "final" — single agent (SHOULD NEVER START — fail-fast)
 
 | Test | Golden Files | Session/Stages/Execs | Timeline API | WS Events | Debug API |
 |------|-------------|----------------------|-------------|-----------|-----------|
-| Pipeline (existing) | Full (session, stages, timeline, debug list, 26 interactions) | Stages, execs golden | DB golden (should add API check too) | Full structural | Full detail |
+| Pipeline (existing) | Full (session, stages, timeline, debug list, 26 interactions) | Stages, execs golden | API + DB cross-referenced, same golden | Full structural | Full detail |
 | FailureResilience | None | Status, count, error fields | API: failed events `failed` + error; success events `completed` | Structural order | No |
 | FailurePropagation | None | Status, count (stage 3 absent) | API: failed events `failed`; no stage 3 events | Structural order | No |
 | Cancellation | None | Status: `cancelled` | API: **no `streaming` orphans** — all → `cancelled` | Structural order | No |
@@ -283,7 +276,8 @@ Timeline event status checks are a critical verification for the cancellation an
 
 This keeps the golden file maintenance burden concentrated in the pipeline test while the new tests focus on verifying specific behaviors through targeted assertions.
 
-**Note on Pipeline test:** The existing pipeline test verifies timeline via DB query + golden file. Once the Timeline API endpoint is implemented, we should also add an API-level timeline check to the pipeline test (or replace the DB query with the API call).
+**Note on Pipeline test:** The pipeline test already verifies the Timeline API — it cross-references
+the API response against the DB query and asserts both produce identical golden output.
 
 ---
 
@@ -302,24 +296,11 @@ func WithChatTimeout(d time.Duration) TestAppOption     // For chat timeout test
 
 These fields already exist in `testAppConfig` — just need public `With*` functions.
 
-### 2. New API Endpoint (Production Code)
+### 2. New TestApp Helper Methods
 
-```
-GET /api/v1/sessions/:id/timeline
-```
-
-Returns timeline events ordered by sequence number. This is a production gap (see top of doc)
-that must be fixed before these tests can be implemented. All new tests verify timeline
-through this API, not via direct DB queries.
-
-### 3. New TestApp Helper Methods
+`GetTimeline()` already exists. The following are still needed:
 
 ```go
-// GetTimeline calls GET /api/v1/sessions/:id/timeline and returns the parsed response.
-// This is the primary way tests verify timeline event statuses — it exercises the same
-// code path the dashboard uses.
-func (app *TestApp) GetTimeline(t *testing.T, sessionID string) []map[string]interface{}
-
 // CancelSession sends POST /api/v1/sessions/:id/cancel
 func (app *TestApp) CancelSession(t *testing.T, sessionID string) map[string]interface{}
 
@@ -338,8 +319,7 @@ Each combined test needs its own YAML config (or could build configs in-code). R
 
 ## Implementation Order
 
-1. **Timeline API endpoint** — `GET /sessions/:id/timeline` (production bug fix, prerequisite)
-2. **Infrastructure additions** — `With*` options, `GetTimeline`, `CancelSession` helpers, concurrency helpers
+1. **Infrastructure additions** — `With*` options, `CancelSession` helper, concurrency helpers
 3. **`TestE2E_FailurePropagation`** (3 + 6) — Simplest new test, exercises error + LLM Error entry
 4. **`TestE2E_FailureResilience`** (5 + 8) — Exercises policy=any + exec summary failure
 5. **`TestE2E_Cancellation`** (4 + 10) — Exercises `BlockUntilCancelled` + cancel API
