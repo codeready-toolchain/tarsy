@@ -17,7 +17,9 @@ type LLMScriptEntry struct {
 	Error  error         // Return error from Generate()
 
 	// Test control
-	BlockUntilCancelled bool // Block Generate() until ctx is cancelled
+	BlockUntilCancelled bool               // Block Generate() until ctx is cancelled
+	WaitCh              <-chan struct{}     // Block Generate() until closed, then return normal response
+	OnBlock             chan<- struct{}     // Notified when Generate() starts blocking on WaitCh (before select)
 }
 
 // ScriptedLLMClient implements agent.LLMClient with a dual-dispatch mock:
@@ -73,6 +75,21 @@ func (c *ScriptedLLMClient) Generate(ctx context.Context, input *agent.GenerateI
 			close(ch)
 		}()
 		return ch, nil
+	}
+
+	// Handle WaitCh: block until released, then continue with normal response.
+	if entry.WaitCh != nil {
+		if entry.OnBlock != nil {
+			entry.OnBlock <- struct{}{}
+		}
+		select {
+		case <-entry.WaitCh:
+			// Released — fall through to send chunks normally
+		case <-ctx.Done():
+			ch := make(chan agent.Chunk)
+			close(ch)
+			return ch, nil
+		}
 	}
 
 	// Handle error entries.
