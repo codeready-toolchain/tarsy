@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
 // NativeThinkingController implements the Gemini native function calling loop.
@@ -60,6 +61,10 @@ func (c *NativeThinkingController) Run(
 	// Main iteration loop
 	for iteration := 0; iteration < maxIter; iteration++ {
 		state.CurrentIteration = iteration + 1
+
+		// Publish execution progress: investigating
+		publishExecutionProgress(ctx, execCtx, events.ProgressPhaseInvestigating,
+			fmt.Sprintf("Iteration %d/%d", iteration+1, maxIter))
 
 		if state.ShouldAbortOnTimeouts() {
 			return failedResult(state, totalUsage), nil
@@ -188,6 +193,10 @@ func (c *NativeThinkingController) forceConclusion(
 			TokensUsed: *totalUsage,
 		}, nil
 	}
+
+	// Publish execution progress: concluding
+	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseConcluding,
+		fmt.Sprintf("Forcing conclusion after %d iterations", state.CurrentIteration))
 
 	// Append forced conclusion prompt
 	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyNativeThinking)

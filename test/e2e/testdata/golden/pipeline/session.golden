@@ -1,19 +1,113 @@
 {
-  "agent_type": "test-alert",
   "alert_data": "Pod OOMKilled",
   "alert_type": "test-alert",
   "author": "api-client",
   "chain_id": "test-chain",
+  "chat_enabled": true,
+  "chat_id": "{UUID}",
+  "chat_message_count": 2,
   "completed_at": "{TIMESTAMP}",
+  "completed_stages": 8,
   "created_at": "{TIMESTAMP}",
   "current_stage_id": "{STAGE_ID_6}",
   "current_stage_index": 6,
-  "edges": {},
+  "duration_ms": {DURATION_MS},
+  "error_message": null,
   "executive_summary": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+  "executive_summary_error": null,
+  "failed_stages": 0,
   "final_analysis": "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
+  "has_parallel_stages": true,
   "id": "{SESSION_ID}",
-  "last_interaction_at": "{TIMESTAMP}",
-  "pod_id": "e2e-test-TestE2E_Pipeline",
+  "input_tokens": 2100,
+  "llm_interaction_count": 22,
+  "mcp_interaction_count": 9,
+  "output_tokens": 440,
+  "runbook_url": null,
+  "stages": [
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_1}",
+      "parallel_type": null,
+      "stage_index": 1,
+      "stage_name": "investigation",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_2}",
+      "parallel_type": null,
+      "stage_index": 2,
+      "stage_name": "remediation",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 2,
+      "id": "{STAGE_ID_3}",
+      "parallel_type": "multi_agent",
+      "stage_index": 3,
+      "stage_name": "validation",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_4}",
+      "parallel_type": null,
+      "stage_index": 4,
+      "stage_name": "validation - Synthesis",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 2,
+      "id": "{STAGE_ID_5}",
+      "parallel_type": "replica",
+      "stage_index": 5,
+      "stage_name": "scaling-review",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_6}",
+      "parallel_type": null,
+      "stage_index": 6,
+      "stage_name": "scaling-review - Synthesis",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_7}",
+      "parallel_type": null,
+      "stage_index": 7,
+      "stage_name": "Chat Response",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_8}",
+      "parallel_type": null,
+      "stage_index": 8,
+      "stage_name": "Chat Response",
+      "started_at": null,
+      "status": "completed"
+    }
+  ],
   "started_at": "{TIMESTAMP}",
-  "status": "completed"
+  "status": "completed",
+  "total_stages": 8,
+  "total_tokens": 2540
 }

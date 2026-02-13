@@ -137,7 +137,7 @@ db-restore: ## Restore database from file (usage: make db-restore FILE=backup.sq
 
 # Ent configuration
 ENT_SCHEMA_DIR := ./ent/schema
-ENT_GENERATE_CMD := go run -mod=mod entgo.io/ent/cmd/ent generate --feature sql/versioned-migration --feature sql/lock $(ENT_SCHEMA_DIR)
+ENT_GENERATE_CMD := go run -mod=mod entgo.io/ent/cmd/ent generate --feature sql/versioned-migration --feature sql/lock --feature sql/modifier $(ENT_SCHEMA_DIR)
 
 .PHONY: ent-generate
 ent-generate: ## Generate Ent code from schemas

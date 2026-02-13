@@ -44,22 +44,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 7: Dashboard
 
-**Real-time Features (Phase 7.1)**
-- [ ] Live LLM streaming UI
-- [ ] Stage timeline visualization
-- [ ] Native thinking indicators
-- [ ] Progress status events — transient `session.progress_update` notifications (notify-only, no DB persistence) with ProgressPhase enum: investigating (default), gathering_info (before MCP tool call), distilling (tool result summarization), concluding (forced conclusion at iteration limit), synthesizing (synthesis agent), finalizing (executive summary generation). Retrofit publishing calls into Phase 3 controllers, Phase 4 tool executor/summarization, Phase 5.1 chain orchestrator, Phase 5.2 parallel executor.
-
-**History Views (Phase 7.2)**
-- [ ] Session list with filters
-- [ ] Detailed session view
-- [ ] Conversation replay
-- [ ] Chat interface
-
-**System Views (Phase 7.3)**
-- [ ] MCP server status
-- [ ] System warnings display
-- [ ] Queue metrics dashboard
+See docs/phase7-dashboard-plan.md
 
 ---
 

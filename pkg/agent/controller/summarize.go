@@ -73,6 +73,10 @@ func maybeSummarize(
 		"server", serverID, "tool", toolName,
 		"estimated_tokens", estimatedTokens, "threshold", threshold)
 
+	// Publish execution progress: distilling
+	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseDistilling,
+		fmt.Sprintf("Summarizing %s.%s (%d tokens)", serverID, toolName, estimatedTokens))
+
 	maxSummaryTokens := sumConfig.SummaryMaxTokenLimit
 	if maxSummaryTokens <= 0 {
 		maxSummaryTokens = 1000 // Default max summary tokens
@@ -327,7 +331,7 @@ func recordSummarizationInteraction(
 		"content": assistantText,
 	})
 
-	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	interaction, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       execCtx.SessionID,
 		StageID:         &execCtx.StageID,
 		ExecutionID:     &execCtx.ExecutionID,
@@ -346,10 +350,15 @@ func recordSummarizationInteraction(
 		OutputTokens: outputTokens,
 		TotalTokens:  totalTokens,
 		DurationMs:   &durationMs,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("Failed to record summarization LLM interaction",
 			"session_id", execCtx.SessionID, "error", err)
+		return
 	}
+
+	// Publish interaction.created event for trace view live updates.
+	publishInteractionCreated(ctx, execCtx, interaction.ID, events.InteractionTypeLLM)
 }
 
 // buildConversationContext formats the current conversation for summarization context.

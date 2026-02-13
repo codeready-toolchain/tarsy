@@ -115,6 +115,18 @@ func (p *testEventPublisher) PublishChatCreated(_ context.Context, _ string, _ e
 	return nil
 }
 
+func (p *testEventPublisher) PublishInteractionCreated(_ context.Context, _ string, _ events.InteractionCreatedPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishSessionProgress(_ context.Context, _ events.SessionProgressPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
+}
+
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 	p.mu.Lock()

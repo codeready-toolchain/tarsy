@@ -18,8 +18,9 @@ import (
 // ChatUserMessageUpdate is the builder for updating ChatUserMessage entities.
 type ChatUserMessageUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ChatUserMessageMutation
+	hooks     []Hook
+	mutation  *ChatUserMessageMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ChatUserMessageUpdate builder.
@@ -121,6 +122,12 @@ func (_u *ChatUserMessageUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ChatUserMessageUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ChatUserMessageUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ChatUserMessageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -168,6 +175,7 @@ func (_u *ChatUserMessageUpdate) sqlSave(ctx context.Context) (_node int, err er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{chatusermessage.Label}
@@ -183,9 +191,10 @@ func (_u *ChatUserMessageUpdate) sqlSave(ctx context.Context) (_node int, err er
 // ChatUserMessageUpdateOne is the builder for updating a single ChatUserMessage entity.
 type ChatUserMessageUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ChatUserMessageMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ChatUserMessageMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetContent sets the "content" field.
@@ -294,6 +303,12 @@ func (_u *ChatUserMessageUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ChatUserMessageUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ChatUserMessageUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ChatUserMessageUpdateOne) sqlSave(ctx context.Context) (_node *ChatUserMessage, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -358,6 +373,7 @@ func (_u *ChatUserMessageUpdateOne) sqlSave(ctx context.Context) (_node *ChatUse
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ChatUserMessage{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

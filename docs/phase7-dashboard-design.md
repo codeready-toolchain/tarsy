@@ -506,8 +506,8 @@ Used by the session detail page to show per-agent progress in the stage display 
 | Field | Type | Description |
 |-------|------|-------------|
 | `session_id` | string | Session ID |
-| `stage_id` | string | Stage the interaction belongs to |
-| `execution_id` | string | Execution the interaction belongs to |
+| `stage_id` | string \| null | Stage the interaction belongs to (null for session-level interactions, e.g., executive summary) |
+| `execution_id` | string \| null | Execution the interaction belongs to (null for session-level interactions) |
 | `interaction_id` | string | Interaction ID (LLM or MCP) |
 | `interaction_type` | `"llm"` \| `"mcp"` | Type of interaction |
 
@@ -878,7 +878,7 @@ if dashboardDir != "" {
 }
 ```
 
-**Production deployment**: `oauth2-proxy → Go (serves static + /api/* + /ws)` — single upstream, no CORS, no Nginx.
+**Production deployment**: `oauth2-proxy → Go (serves static + /api/*)` — single upstream, no CORS, no Nginx. WebSocket is at `/api/v1/ws`, so a single `/api/*` rule covers everything.
 
 ---
 

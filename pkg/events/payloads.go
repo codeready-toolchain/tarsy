@@ -72,3 +72,41 @@ type ChatCreatedPayload struct {
 	CreatedBy string `json:"created_by"` // author who initiated the chat
 	Timestamp string `json:"timestamp"`  // RFC3339Nano
 }
+
+// InteractionCreatedPayload is the payload for interaction.created events.
+// Fired once when an LLM or MCP interaction record is saved to DB.
+// Used by trace view for live updates via event-notification + REST re-fetch.
+type InteractionCreatedPayload struct {
+	Type            string `json:"type"`                       // always EventTypeInteractionCreated
+	SessionID       string `json:"session_id"`                 // session UUID
+	StageID         string `json:"stage_id,omitempty"`         // stage UUID (empty for session-level, e.g. executive summary)
+	ExecutionID     string `json:"execution_id,omitempty"`     // execution UUID (empty for session-level)
+	InteractionID   string `json:"interaction_id"`             // LLM or MCP interaction UUID
+	InteractionType string `json:"interaction_type"`           // "llm" or "mcp"
+	Timestamp       string `json:"timestamp"`                  // RFC3339Nano
+}
+
+// SessionProgressPayload is the payload for session.progress transient events.
+// Published to GlobalSessionsChannel for the active alerts panel.
+type SessionProgressPayload struct {
+	Type              string `json:"type"`                // always EventTypeSessionProgress
+	SessionID         string `json:"session_id"`          // session UUID
+	CurrentStageName  string `json:"current_stage_name"`  // human-readable stage name
+	CurrentStageIndex int    `json:"current_stage_index"` // 1-based
+	TotalStages       int    `json:"total_stages"`        // total configured stages
+	ActiveExecutions  int    `json:"active_executions"`   // number of agents running
+	StatusText        string `json:"status_text"`         // human-readable status
+	Timestamp         string `json:"timestamp"`           // RFC3339Nano
+}
+
+// ExecutionProgressPayload is the payload for execution.progress transient events.
+// Published to SessionChannel(sessionID) for per-agent progress display.
+type ExecutionProgressPayload struct {
+	Type        string `json:"type"`         // always EventTypeExecutionProgress
+	SessionID   string `json:"session_id"`   // session UUID
+	StageID     string `json:"stage_id"`     // stage UUID
+	ExecutionID string `json:"execution_id"` // agent execution UUID
+	Phase       string `json:"phase"`        // ProgressPhase constant
+	Message     string `json:"message"`      // human-readable message
+	Timestamp   string `json:"timestamp"`    // RFC3339Nano
+}

@@ -23,6 +23,7 @@ type CancelResponse struct {
 // HealthResponse is returned by GET /health.
 type HealthResponse struct {
 	Status        string                       `json:"status"`
+	Version       string                       `json:"version"`
 	Database      *database.HealthStatus       `json:"database"`
 	Phase         string                       `json:"phase"`
 	Configuration ConfigurationStats           `json:"configuration"`

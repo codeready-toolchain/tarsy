@@ -135,6 +135,18 @@ func (m *mockEventPublisher) PublishChatCreated(_ context.Context, _ string, _ e
 	return nil
 }
 
+func (m *mockEventPublisher) PublishInteractionCreated(_ context.Context, _ string, _ events.InteractionCreatedPayload) error {
+	return nil
+}
+
+func (m *mockEventPublisher) PublishSessionProgress(_ context.Context, _ events.SessionProgressPayload) error {
+	return nil
+}
+
+func (m *mockEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
+}
+
 func TestWorkerStopIdempotent(t *testing.T) {
 	cfg := testQueueConfig()
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)

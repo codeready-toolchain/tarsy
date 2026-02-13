@@ -454,8 +454,9 @@ func (_q *AlertSessionQuery) Clone() *AlertSessionQuery {
 		withEvents:          _q.withEvents.Clone(),
 		withChat:            _q.withChat.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -1066,6 +1067,12 @@ func (_q *AlertSessionQuery) ForShare(opts ...sql.LockOption) *AlertSessionQuery
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *AlertSessionQuery) Modify(modifiers ...func(s *sql.Selector)) *AlertSessionSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // AlertSessionGroupBy is the group-by builder for AlertSession entities.
 type AlertSessionGroupBy struct {
 	selector
@@ -1154,4 +1161,10 @@ func (_s *AlertSessionSelect) sqlScan(ctx context.Context, root *AlertSessionQue
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *AlertSessionSelect) Modify(modifiers ...func(s *sql.Selector)) *AlertSessionSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

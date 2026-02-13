@@ -19,8 +19,9 @@ import (
 // MCPInteractionUpdate is the builder for updating MCPInteraction entities.
 type MCPInteractionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *MCPInteractionMutation
+	hooks     []Hook
+	mutation  *MCPInteractionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the MCPInteractionUpdate builder.
@@ -253,6 +254,12 @@ func (_u *MCPInteractionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *MCPInteractionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *MCPInteractionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *MCPInteractionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -360,6 +367,7 @@ func (_u *MCPInteractionUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{mcpinteraction.Label}
@@ -375,9 +383,10 @@ func (_u *MCPInteractionUpdate) sqlSave(ctx context.Context) (_node int, err err
 // MCPInteractionUpdateOne is the builder for updating a single MCPInteraction entity.
 type MCPInteractionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *MCPInteractionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *MCPInteractionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetInteractionType sets the "interaction_type" field.
@@ -617,6 +626,12 @@ func (_u *MCPInteractionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *MCPInteractionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *MCPInteractionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *MCPInteractionUpdateOne) sqlSave(ctx context.Context) (_node *MCPInteraction, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -741,6 +756,7 @@ func (_u *MCPInteractionUpdateOne) sqlSave(ctx context.Context) (_node *MCPInter
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &MCPInteraction{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

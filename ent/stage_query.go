@@ -454,8 +454,9 @@ func (_q *StageQuery) Clone() *StageQuery {
 		withChat:            _q.withChat.Clone(),
 		withChatUserMessage: _q.withChatUserMessage.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -1085,6 +1086,12 @@ func (_q *StageQuery) ForShare(opts ...sql.LockOption) *StageQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *StageQuery) Modify(modifiers ...func(s *sql.Selector)) *StageSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // StageGroupBy is the group-by builder for Stage entities.
 type StageGroupBy struct {
 	selector
@@ -1173,4 +1180,10 @@ func (_s *StageSelect) sqlScan(ctx context.Context, root *StageQuery, v any) err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *StageSelect) Modify(modifiers ...func(s *sql.Selector)) *StageSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

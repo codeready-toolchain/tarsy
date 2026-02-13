@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
+	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -476,6 +479,588 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 	}
 
 	return sessions, nil
+}
+
+// GetSessionDetail returns an enriched session detail DTO with computed fields.
+func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string) (*models.SessionDetailResponse, error) {
+	session, err := s.client.AlertSession.Query().
+		Where(alertsession.IDEQ(sessionID)).
+		WithStages(func(q *ent.StageQuery) {
+			q.Order(ent.Asc(stage.FieldStageIndex))
+		}).
+		WithChat(func(q *ent.ChatQuery) {
+			q.WithUserMessages()
+		}).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Compute token and interaction stats via aggregate queries.
+	llmCount, inputTokens, outputTokens, totalTokens, err := s.aggregateLLMStats(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	mcpCount, err := s.countMCPInteractions(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute stage stats.
+	totalStages := len(session.Edges.Stages)
+	completedStages := 0
+	failedStages := 0
+	hasParallel := false
+
+	stages := make([]models.StageOverview, 0, totalStages)
+	for _, stg := range session.Edges.Stages {
+		if stg.Status == stage.StatusCompleted {
+			completedStages++
+		}
+		if stg.Status == stage.StatusFailed {
+			failedStages++
+		}
+		if stg.ParallelType != nil {
+			hasParallel = true
+		}
+
+		var pt *string
+		if stg.ParallelType != nil {
+			s := string(*stg.ParallelType)
+			pt = &s
+		}
+
+		stages = append(stages, models.StageOverview{
+			ID:                 stg.ID,
+			StageName:          stg.StageName,
+			StageIndex:         stg.StageIndex,
+			Status:             string(stg.Status),
+			ParallelType:       pt,
+			ExpectedAgentCount: stg.ExpectedAgentCount,
+			StartedAt:          stg.StartedAt,
+			CompletedAt:        stg.CompletedAt,
+		})
+	}
+
+	// Compute chat info.
+	chatEnabled := false
+	var chatID *string
+	chatMessageCount := 0
+	if session.Edges.Chat != nil {
+		chatEnabled = true
+		chatID = &session.Edges.Chat.ID
+		if session.Edges.Chat.Edges.UserMessages != nil {
+			chatMessageCount = len(session.Edges.Chat.Edges.UserMessages)
+		}
+	}
+
+	// Compute duration.
+	var durationMs *int64
+	if session.StartedAt != nil && session.CompletedAt != nil {
+		ms := session.CompletedAt.Sub(*session.StartedAt).Milliseconds()
+		durationMs = &ms
+	}
+
+	// Map optional string fields — Ent uses string for optional fields with omitempty.
+	var alertType *string
+	if session.AlertType != "" {
+		alertType = &session.AlertType
+	}
+
+	return &models.SessionDetailResponse{
+		ID:                  session.ID,
+		AlertData:           session.AlertData,
+		AlertType:           alertType,
+		Status:              string(session.Status),
+		ChainID:             session.ChainID,
+		Author:              session.Author,
+		ErrorMessage:          session.ErrorMessage,
+		FinalAnalysis:         session.FinalAnalysis,
+		ExecutiveSummary:      session.ExecutiveSummary,
+		ExecutiveSummaryError: session.ExecutiveSummaryError,
+		RunbookURL:            session.RunbookURL,
+		MCPSelection:        session.McpSelection,
+		CreatedAt:           session.CreatedAt,
+		StartedAt:           session.StartedAt,
+		CompletedAt:         session.CompletedAt,
+		DurationMs:          durationMs,
+		ChatEnabled:         chatEnabled,
+		ChatID:              chatID,
+		ChatMessageCount:    chatMessageCount,
+		TotalStages:         totalStages,
+		CompletedStages:     completedStages,
+		FailedStages:        failedStages,
+		HasParallelStages:   hasParallel,
+		InputTokens:         inputTokens,
+		OutputTokens:        outputTokens,
+		TotalTokens:         totalTokens,
+		LLMInteractionCount: llmCount,
+		MCPInteractionCount: mcpCount,
+		CurrentStageIndex:   session.CurrentStageIndex,
+		CurrentStageID:      session.CurrentStageID,
+		Stages:              stages,
+	}, nil
+}
+
+// GetSessionSummary returns lightweight statistics for a session.
+func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string) (*models.SessionSummaryResponse, error) {
+	// Verify session exists.
+	session, err := s.client.AlertSession.Query().
+		Where(alertsession.IDEQ(sessionID)).
+		WithStages().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	llmCount, inputTokens, outputTokens, totalTokens, err := s.aggregateLLMStats(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	mcpCount, err := s.countMCPInteractions(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	totalStages := len(session.Edges.Stages)
+	completedStages := 0
+	failedStages := 0
+	for _, stg := range session.Edges.Stages {
+		if stg.Status == stage.StatusCompleted {
+			completedStages++
+		}
+		if stg.Status == stage.StatusFailed {
+			failedStages++
+		}
+	}
+
+	var durationMs *int64
+	if session.StartedAt != nil && session.CompletedAt != nil {
+		ms := session.CompletedAt.Sub(*session.StartedAt).Milliseconds()
+		durationMs = &ms
+	}
+
+	return &models.SessionSummaryResponse{
+		SessionID:         sessionID,
+		TotalInteractions: llmCount + mcpCount,
+		LLMInteractions:   llmCount,
+		MCPInteractions:   mcpCount,
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		TotalTokens:       totalTokens,
+		TotalDurationMs:   durationMs,
+		ChainStatistics: models.ChainStatistics{
+			TotalStages:       totalStages,
+			CompletedStages:   completedStages,
+			FailedStages:      failedStages,
+			CurrentStageIndex: session.CurrentStageIndex,
+		},
+	}, nil
+}
+
+// GetActiveSessions returns in-progress + pending sessions.
+func (s *SessionService) GetActiveSessions(ctx context.Context) (*models.ActiveSessionsResponse, error) {
+	// Active sessions (in_progress or cancelling).
+	activeSessions, err := s.client.AlertSession.Query().
+		Where(
+			alertsession.DeletedAtIsNil(),
+			alertsession.StatusIn(alertsession.StatusInProgress, alertsession.StatusCancelling),
+		).
+		Order(ent.Asc(alertsession.FieldStartedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active sessions: %w", err)
+	}
+
+	// Queued sessions (pending).
+	queuedSessions, err := s.client.AlertSession.Query().
+		Where(
+			alertsession.DeletedAtIsNil(),
+			alertsession.StatusEQ(alertsession.StatusPending),
+		).
+		Order(ent.Asc(alertsession.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query queued sessions: %w", err)
+	}
+
+	active := make([]models.ActiveSessionItem, 0, len(activeSessions))
+	for _, sess := range activeSessions {
+		// Count total stages for this session.
+		totalStages, _ := s.client.Stage.Query().
+			Where(stage.SessionIDEQ(sess.ID)).
+			Count(ctx)
+
+		var alertType *string
+		if sess.AlertType != "" {
+			alertType = &sess.AlertType
+		}
+
+		active = append(active, models.ActiveSessionItem{
+			ID:                sess.ID,
+			AlertType:         alertType,
+			ChainID:           sess.ChainID,
+			Status:            string(sess.Status),
+			Author:            sess.Author,
+			CreatedAt:         sess.CreatedAt,
+			StartedAt:         sess.StartedAt,
+			CurrentStageIndex: sess.CurrentStageIndex,
+			CurrentStageID:    sess.CurrentStageID,
+			TotalStages:       totalStages,
+		})
+	}
+
+	queued := make([]models.QueuedSessionItem, 0, len(queuedSessions))
+	for i, sess := range queuedSessions {
+		var alertType *string
+		if sess.AlertType != "" {
+			alertType = &sess.AlertType
+		}
+
+		queued = append(queued, models.QueuedSessionItem{
+			ID:            sess.ID,
+			AlertType:     alertType,
+			ChainID:       sess.ChainID,
+			Status:        string(sess.Status),
+			Author:        sess.Author,
+			CreatedAt:     sess.CreatedAt,
+			QueuePosition: i + 1,
+		})
+	}
+
+	return &models.ActiveSessionsResponse{
+		Active: active,
+		Queued: queued,
+	}, nil
+}
+
+// dashboardRow is the scan target for the single-query dashboard list.
+// Uses explicit sql tags for column mapping since Scan doesn't support entity embedding.
+type dashboardRow struct {
+	// Entity fields.
+	ID                string     `sql:"session_id"`
+	AlertType         string     `sql:"alert_type"`
+	ChainID           string     `sql:"chain_id"`
+	Status            string     `sql:"status"`
+	Author            *string    `sql:"author"`
+	CreatedAt         time.Time  `sql:"created_at"`
+	StartedAt         *time.Time `sql:"started_at"`
+	CompletedAt       *time.Time `sql:"completed_at"`
+	ErrorMessage      *string    `sql:"error_message"`
+	ExecutiveSummary  *string    `sql:"executive_summary"`
+	CurrentStageIndex *int       `sql:"current_stage_index"`
+	CurrentStageID    *string    `sql:"current_stage_id"`
+	// Aggregated columns from subqueries.
+	LLMCount        int   `sql:"llm_count"`
+	LLMInputTokens  int64 `sql:"llm_input_tokens"`
+	LLMOutputTokens int64 `sql:"llm_output_tokens"`
+	LLMTotalTokens  int64 `sql:"llm_total_tokens"`
+	MCPCount        int   `sql:"mcp_count"`
+	TotalStages     int   `sql:"total_stages"`
+	CompletedStages int   `sql:"completed_stages"`
+	HasParallel     int   `sql:"has_parallel"` // 0/1, mapped to bool on output
+	ChatMsgCount    int   `sql:"chat_msg_count"`
+}
+
+// ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
+// All aggregated statistics are computed via SQL subqueries in a single query to avoid N+1.
+func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params models.DashboardListParams) (*models.DashboardListResponse, error) {
+	query := s.client.AlertSession.Query().Where(alertsession.DeletedAtIsNil())
+
+	// Apply filters.
+	if params.Status != "" {
+		statuses := strings.Split(params.Status, ",")
+		entStatuses := make([]alertsession.Status, 0, len(statuses))
+		for _, st := range statuses {
+			entStatuses = append(entStatuses, alertsession.Status(st))
+		}
+		query = query.Where(alertsession.StatusIn(entStatuses...))
+	}
+	if params.AlertType != "" {
+		query = query.Where(alertsession.AlertTypeEQ(params.AlertType))
+	}
+	if params.ChainID != "" {
+		query = query.Where(alertsession.ChainIDEQ(params.ChainID))
+	}
+	if params.Search != "" {
+		query = query.Where(func(sel *sql.Selector) {
+			sel.Where(sql.Or(
+				sql.ContainsFold(alertsession.FieldAlertData, params.Search),
+				sql.ContainsFold(alertsession.FieldFinalAnalysis, params.Search),
+			))
+		})
+	}
+	if params.StartDate != nil {
+		query = query.Where(alertsession.CreatedAtGTE(*params.StartDate))
+	}
+	if params.EndDate != nil {
+		query = query.Where(alertsession.CreatedAtLT(*params.EndDate))
+	}
+
+	// Count total (before pagination).
+	totalCount, err := query.Clone().Count(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count sessions: %w", err)
+	}
+
+	// Apply sorting. Duration sort uses a computed expression; others use Ent helpers.
+	isDurationSort := params.SortBy == "duration"
+	if !isDurationSort {
+		orderFunc := ent.Desc(alertsession.FieldCreatedAt)
+		switch params.SortBy {
+		case "created_at":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldCreatedAt)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldCreatedAt)
+			}
+		case "status":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldStatus)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldStatus)
+			}
+		case "alert_type":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldAlertType)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldAlertType)
+			}
+		case "author":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldAuthor)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldAuthor)
+			}
+		}
+		query = query.Order(orderFunc)
+	}
+
+	// Paginate.
+	offset := (params.Page - 1) * params.PageSize
+
+	// Scan with aggregate subqueries in a single query.
+	var rows []dashboardRow
+	err = query.
+		Limit(params.PageSize).
+		Offset(offset).
+		Modify(func(sel *sql.Selector) {
+			t := sel.TableName()
+			sid := fmt.Sprintf("%q.%q", t, alertsession.FieldID)
+
+			// Explicitly select only the entity columns we need (avoids unmapped column errors).
+			sel.Select(
+				sel.C(alertsession.FieldID),
+				sel.C(alertsession.FieldAlertType),
+				sel.C(alertsession.FieldChainID),
+				sel.C(alertsession.FieldStatus),
+				sel.C(alertsession.FieldAuthor),
+				sel.C(alertsession.FieldCreatedAt),
+				sel.C(alertsession.FieldStartedAt),
+				sel.C(alertsession.FieldCompletedAt),
+				sel.C(alertsession.FieldErrorMessage),
+				sel.C(alertsession.FieldExecutiveSummary),
+				sel.C(alertsession.FieldCurrentStageIndex),
+				sel.C(alertsession.FieldCurrentStageID),
+			)
+
+			// LLM interaction aggregates.
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s)", sid),
+				"llm_count",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COALESCE(SUM(input_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
+				"llm_input_tokens",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COALESCE(SUM(output_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
+				"llm_output_tokens",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COALESCE(SUM(total_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
+				"llm_total_tokens",
+			)
+
+			// MCP interaction count.
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM mcp_interactions WHERE session_id = %s)", sid),
+				"mcp_count",
+			)
+
+			// Stage aggregates.
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM stages WHERE session_id = %s)", sid),
+				"total_stages",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM stages WHERE session_id = %s AND status = 'completed')", sid),
+				"completed_stages",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND parallel_type IS NOT NULL) THEN 1 ELSE 0 END)", sid),
+				"has_parallel",
+			)
+
+			// Chat message count (chat_user_messages → chats → session).
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM chat_user_messages WHERE chat_id IN (SELECT chat_id FROM chats WHERE session_id = %s))", sid),
+				"chat_msg_count",
+			)
+
+			// Duration sort: ORDER BY (completed_at - started_at).
+			if isDurationSort {
+				dir := "DESC"
+				if params.SortOrder == "asc" {
+					dir = "ASC"
+				}
+				sel.OrderExpr(sql.Expr(fmt.Sprintf("(completed_at - started_at) %s NULLS LAST", dir)))
+			}
+		}).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+
+	// Build response items from scanned rows.
+	items := make([]models.DashboardSessionItem, 0, len(rows))
+	for _, row := range rows {
+		var durationMs *int64
+		if row.StartedAt != nil && row.CompletedAt != nil {
+			ms := row.CompletedAt.Sub(*row.StartedAt).Milliseconds()
+			durationMs = &ms
+		}
+
+		var alertType *string
+		if row.AlertType != "" {
+			at := row.AlertType
+			alertType = &at
+		}
+
+		items = append(items, models.DashboardSessionItem{
+			ID:                  row.ID,
+			AlertType:           alertType,
+			ChainID:             row.ChainID,
+			Status:              row.Status,
+			Author:              row.Author,
+			CreatedAt:           row.CreatedAt,
+			StartedAt:           row.StartedAt,
+			CompletedAt:         row.CompletedAt,
+			DurationMs:          durationMs,
+			ErrorMessage:        row.ErrorMessage,
+			ExecutiveSummary:    row.ExecutiveSummary,
+			LLMInteractionCount: row.LLMCount,
+			MCPInteractionCount: row.MCPCount,
+			InputTokens:         row.LLMInputTokens,
+			OutputTokens:        row.LLMOutputTokens,
+			TotalTokens:         row.LLMTotalTokens,
+			TotalStages:         row.TotalStages,
+			CompletedStages:     row.CompletedStages,
+			HasParallelStages:   row.HasParallel != 0,
+			ChatMessageCount:    row.ChatMsgCount,
+			CurrentStageIndex:   row.CurrentStageIndex,
+			CurrentStageID:      row.CurrentStageID,
+		})
+	}
+
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + params.PageSize - 1) / params.PageSize
+	}
+
+	return &models.DashboardListResponse{
+		Sessions: items,
+		Pagination: models.PaginationInfo{
+			Page:       params.Page,
+			PageSize:   params.PageSize,
+			TotalPages: totalPages,
+			TotalItems: totalCount,
+		},
+	}, nil
+}
+
+// --- Aggregate helpers ---
+
+// aggregateLLMStats returns LLM interaction count and token sums for a session.
+func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string) (count int, inputTokens, outputTokens, totalTokens int64, err error) {
+	var results []struct {
+		Count     int   `json:"count"`
+		InputSum  int64 `json:"input_sum"`
+		OutputSum int64 `json:"output_sum"`
+		TotalSum  int64 `json:"total_sum"`
+	}
+
+	err = s.client.LLMInteraction.Query().
+		Where(llminteraction.SessionIDEQ(sessionID)).
+		Aggregate(
+			ent.As(ent.Count(), "count"),
+			ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
+			ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
+			ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
+		).
+		Scan(ctx, &results)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("failed to aggregate LLM stats: %w", err)
+	}
+
+	if len(results) > 0 {
+		return results[0].Count, results[0].InputSum, results[0].OutputSum, results[0].TotalSum, nil
+	}
+	return 0, 0, 0, 0, nil
+}
+
+// countMCPInteractions returns the MCP interaction count for a session.
+func (s *SessionService) countMCPInteractions(ctx context.Context, sessionID string) (int, error) {
+	count, err := s.client.MCPInteraction.Query().
+		Where(mcpinteraction.SessionIDEQ(sessionID)).
+		Count(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count MCP interactions: %w", err)
+	}
+	return count, nil
+}
+
+// GetDistinctAlertTypes returns distinct alert_type values from non-deleted sessions.
+func (s *SessionService) GetDistinctAlertTypes(ctx context.Context) ([]string, error) {
+	var results []string
+	err := s.client.AlertSession.Query().
+		Where(
+			alertsession.DeletedAtIsNil(),
+			alertsession.AlertTypeNotNil(),
+		).
+		Unique(true).
+		Select(alertsession.FieldAlertType).
+		Scan(ctx, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct alert types: %w", err)
+	}
+	if results == nil {
+		results = []string{}
+	}
+	return results, nil
+}
+
+// GetDistinctChainIDs returns distinct chain_id values from non-deleted sessions.
+func (s *SessionService) GetDistinctChainIDs(ctx context.Context) ([]string, error) {
+	var results []string
+	err := s.client.AlertSession.Query().
+		Where(alertsession.DeletedAtIsNil()).
+		Unique(true).
+		Select(alertsession.FieldChainID).
+		Scan(ctx, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct chain IDs: %w", err)
+	}
+	if results == nil {
+		results = []string{}
+	}
+	return results, nil
 }
 
 // validateMCPOverride validates MCP server selection override

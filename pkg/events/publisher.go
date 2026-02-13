@@ -108,6 +108,36 @@ func (p *EventPublisher) PublishChatCreated(ctx context.Context, sessionID strin
 	return p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON)
 }
 
+// PublishInteractionCreated persists and broadcasts an interaction.created event.
+// Fired when an LLM or MCP interaction record is saved to the database.
+func (p *EventPublisher) PublishInteractionCreated(ctx context.Context, sessionID string, payload InteractionCreatedPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal InteractionCreatedPayload: %w", err)
+	}
+	return p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON)
+}
+
+// PublishSessionProgress broadcasts a session.progress transient event (no DB persistence).
+// Published to the global sessions channel for the active alerts panel.
+func (p *EventPublisher) PublishSessionProgress(ctx context.Context, payload SessionProgressPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal SessionProgressPayload: %w", err)
+	}
+	return p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON)
+}
+
+// PublishExecutionProgress broadcasts an execution.progress transient event (no DB persistence).
+// Published to the session channel for per-agent progress display.
+func (p *EventPublisher) PublishExecutionProgress(ctx context.Context, sessionID string, payload ExecutionProgressPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ExecutionProgressPayload: %w", err)
+	}
+	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
+}
+
 // --- Internal core methods ---
 
 // persistAndNotify persists a pre-marshaled event to the database and broadcasts

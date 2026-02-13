@@ -303,6 +303,9 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
+	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
+		input.stageIndex, len(input.chain.Stages), len(configs),
+		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))
 
 	// 4. Launch goroutines (one per execution config — even if just one)
 	results := make(chan indexedAgentResult, len(configs))
@@ -603,6 +606,11 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
+		input.stageIndex, len(input.chain.Stages), 1,
+		"Synthesizing...")
+	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
+		events.ProgressPhaseSynthesizing, fmt.Sprintf("Starting synthesis for %s", parallelResult.stageName))
 
 	// Build synthesis agent config — synthesis: block is optional, defaults apply
 	synthAgentConfig := config.StageAgentConfig{
@@ -786,6 +794,53 @@ func (e *RealSessionExecutor) updateSessionProgress(ctx context.Context, session
 	}
 }
 
+// publishSessionProgress publishes a session.progress transient event to the global channel.
+// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
+func publishSessionProgress(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageName string, stageIndex, totalStages, activeExecutions int, statusText string) {
+	if eventPublisher == nil {
+		return
+	}
+	if err := eventPublisher.PublishSessionProgress(ctx, events.SessionProgressPayload{
+		Type:              events.EventTypeSessionProgress,
+		SessionID:         sessionID,
+		CurrentStageName:  stageName,
+		CurrentStageIndex: stageIndex + 1, // 1-based for clients
+		TotalStages:       totalStages,
+		ActiveExecutions:  activeExecutions,
+		StatusText:        statusText,
+		Timestamp:         time.Now().Format(time.RFC3339Nano),
+	}); err != nil {
+		slog.Warn("Failed to publish session progress",
+			"session_id", sessionID,
+			"stage_name", stageName,
+			"error", err,
+		)
+	}
+}
+
+// publishExecutionProgress publishes an execution.progress transient event.
+// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
+func publishExecutionProgressFromExecutor(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID, phase, message string) {
+	if eventPublisher == nil {
+		return
+	}
+	if err := eventPublisher.PublishExecutionProgress(ctx, sessionID, events.ExecutionProgressPayload{
+		Type:        events.EventTypeExecutionProgress,
+		SessionID:   sessionID,
+		StageID:     stageID,
+		ExecutionID: executionID,
+		Phase:       phase,
+		Message:     message,
+		Timestamp:   time.Now().Format(time.RFC3339Nano),
+	}); err != nil {
+		slog.Warn("Failed to publish execution progress",
+			"session_id", sessionID,
+			"phase", phase,
+			"error", err,
+		)
+	}
+}
+
 // publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
 func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, status string) {
@@ -827,6 +882,12 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 ) (string, error) {
 	logger := slog.With("session_id", session.ID)
 	startTime := time.Now()
+
+	// Publish session progress: finalizing
+	publishSessionProgress(ctx, e.eventPublisher, session.ID, "Executive Summary",
+		len(chain.Stages), len(chain.Stages), 0, "Generating executive summary")
+	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, session.ID, "", "",
+		events.ProgressPhaseFinalizing, "Generating executive summary")
 
 	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
 	providerName := e.cfg.Defaults.LLMProvider
@@ -899,7 +960,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		{"role": string(agent.RoleUser), "content": userPrompt},
 		{"role": string(agent.RoleAssistant), "content": summary},
 	}
-	if _, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	interaction, createErr := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
 		InteractionType: "executive_summary",
 		ModelName:       provider.Model,
@@ -912,9 +973,22 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 			"tool_calls_count": 0,
 		},
 		DurationMs: &durationMs,
-	}); err != nil {
+	})
+	if createErr != nil {
 		logger.Warn("Failed to record executive summary LLM interaction",
-			"error", err)
+			"error", createErr)
+	} else if e.eventPublisher != nil {
+		// Publish interaction.created for trace view live updates.
+		if pubErr := e.eventPublisher.PublishInteractionCreated(ctx, session.ID, events.InteractionCreatedPayload{
+			Type:            events.EventTypeInteractionCreated,
+			SessionID:       session.ID,
+			InteractionID:   interaction.ID,
+			InteractionType: events.InteractionTypeLLM,
+			Timestamp:       time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			logger.Warn("Failed to publish interaction created for executive summary",
+				"error", pubErr)
+		}
 	}
 
 	// Create session-level timeline event (no stage_id, no execution_id).

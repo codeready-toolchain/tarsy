@@ -378,8 +378,9 @@ func (_q *TimelineEventQuery) Clone() *TimelineEventQuery {
 		withLlmInteraction: _q.withLlmInteraction.Clone(),
 		withMcpInteraction: _q.withMcpInteraction.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -864,6 +865,12 @@ func (_q *TimelineEventQuery) ForShare(opts ...sql.LockOption) *TimelineEventQue
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *TimelineEventQuery) Modify(modifiers ...func(s *sql.Selector)) *TimelineEventSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // TimelineEventGroupBy is the group-by builder for TimelineEvent entities.
 type TimelineEventGroupBy struct {
 	selector
@@ -952,4 +959,10 @@ func (_s *TimelineEventSelect) sqlScan(ctx context.Context, root *TimelineEventQ
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *TimelineEventSelect) Modify(modifiers ...func(s *sql.Selector)) *TimelineEventSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }
