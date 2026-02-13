@@ -17,9 +17,9 @@ type LLMScriptEntry struct {
 	Error  error         // Return error from Generate()
 
 	// Test control
-	BlockUntilCancelled bool               // Block Generate() until ctx is cancelled
-	WaitCh              <-chan struct{}     // Block Generate() until closed, then return normal response
-	OnBlock             chan<- struct{}     // Notified when Generate() starts blocking on WaitCh (before select)
+	BlockUntilCancelled bool            // Block Generate() until ctx is cancelled
+	WaitCh              <-chan struct{} // Block Generate() until closed, then return normal response
+	OnBlock             chan<- struct{} // Notified when Generate() starts blocking on WaitCh (before select)
 }
 
 // ScriptedLLMClient implements agent.LLMClient with a dual-dispatch mock:
