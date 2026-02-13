@@ -36,9 +36,14 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 5.3: Follow-up Chat** -- Full end-to-end chat: `POST /sessions/:id/chat/messages` → `ChatMessageExecutor` async execution → streaming response via existing WebSocket. Chat is a prompt concern — same controllers (ReAct, NativeThinking) handle chat via `ChatContext` on `ExecutionContext`, no separate chat controllers. `ChatMessageExecutor` (`pkg/queue/chat_executor.go`) spawns one goroutine per message (no pool — chats are rare, one-at-a-time per chat enforced). Context built from unified timeline (`GetSessionTimeline` + `FormatInvestigationContext`) — deleted `ChatExchange`/`ChatHistory`/`FormatChatHistory`/`GetChatHistory` in favor of timeline-based context. `ResolveChatAgentConfig()` added to `pkg/agent/config_resolver.go` with `aggregateChainMCPServers()` fallback. Refactored `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` from `RealSessionExecutor` methods to shared package-level functions. New events: `chat.created`, `chat.user_message`. Cancel handler extended via `CancelBySessionID()`. Chat executor shuts down before worker pool.
 
-**Phase 6: End-to-End Testing** -- Comprehensive in-process e2e test suite (`test/e2e/`) exercising the full pipeline from HTTP API through chain execution to WebSocket delivery. Real PostgreSQL (testcontainers, per-test schema), real event streaming, real WebSocket — only LLM (ScriptedLLMClient with dual dispatch) and MCP servers (in-memory SDK) are mocked, while the full `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised. 7 test scenarios: Pipeline (4 stages, synthesis, ReAct + NativeThinking, 2 MCP servers, summarization, forced conclusion, replicas, chat — with 31 golden-file interaction details), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation (investigation + chat), Timeout (session + chat), Concurrency (MaxConcurrentSessions enforcement), MultiReplica (cross-replica WS via NOTIFY/LISTEN). Bug fixes during testing: cancel handler for completed sessions with active chats, post-cancellation DB updates using `context.Background()`, agent status mapping from `ctx.Err()`, API startup wiring validation. New APIs: timeline endpoint (`GET /sessions/:id/timeline`), debug/observability endpoints (interaction list, LLM detail with conversation reconstruction, MCP detail). Infrastructure: `pkg/mcp/testing.go` (InjectSession, NewTestClientFactory), `test/database/` (SharedTestDB), auto-catchup on WebSocket subscribe, `AgentExecution.llm_provider` field, Makefile targets (test-unit, test-e2e, test-go, test-go-coverage).
-
 Full design docs for completed phases are in `docs/archive/`.
+
+---
+
+### Phase 6: End-to-End Testing
+
+**E2E Tests (Phase 6.1)**
+- [ ] E2E tests (similar to old tarsy) for the entire flow with mocks for external services (MCP, LLMs, GitHub)
 
 ---
 
