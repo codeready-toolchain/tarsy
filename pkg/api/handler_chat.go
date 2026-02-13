@@ -120,24 +120,7 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 		return mapChatExecutorError(err)
 	}
 
-	// 10. Publish chat.user_message event
-	if s.eventPublisher != nil {
-		if pubErr := s.eventPublisher.PublishChatUserMessage(c.Request().Context(), sessionID, events.ChatUserMessagePayload{
-			Type:      events.EventTypeChatUserMessage,
-			SessionID: sessionID,
-			ChatID:    chatObj.ID,
-			MessageID: msg.ID,
-			Content:   req.Content,
-			Author:    author,
-			StageID:   stageID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		}); pubErr != nil {
-			slog.Warn("Failed to publish chat.user_message event",
-				"session_id", sessionID, "error", pubErr)
-		}
-	}
-
-	// 11. Return 202 Accepted
+	// 10. Return 202 Accepted
 	return c.JSON(http.StatusAccepted, &SendChatMessageResponse{
 		ChatID:    chatObj.ID,
 		MessageID: msg.ID,

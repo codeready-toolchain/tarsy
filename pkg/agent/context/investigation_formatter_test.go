@@ -167,30 +167,282 @@ func TestFormatTimelineEvents(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
-// FormatInvestigationContext — header + formatted events
+// FormatStructuredInvestigation (chat context)
 // ────────────────────────────────────────────────────────────
 
-func TestFormatInvestigationContext(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		result := FormatInvestigationContext(nil)
+func TestFormatStructuredInvestigation(t *testing.T) {
+	t.Run("empty stages and no summary", func(t *testing.T) {
+		result := FormatStructuredInvestigation(nil, "")
 
-		expected := investigationSeparator + "\n" +
-			"📋 INVESTIGATION HISTORY\n" +
-			investigationSeparator + "\n\n" +
-			"# Original Investigation\n\n"
-		assert.Equal(t, expected, result)
+		assert.Contains(t, result, "📋 INVESTIGATION HISTORY")
+		// No stage or summary sections
+		assert.NotContains(t, result, "## Stage")
+		assert.NotContains(t, result, "## Executive Summary")
 	})
 
-	t.Run("with events", func(t *testing.T) {
-		events := []*ent.TimelineEvent{
-			{EventType: timelineevent.EventTypeLlmThinking, Content: "Thinking."},
-			{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Done."},
+	t.Run("single-agent stage uses simplified header", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "data-collection",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName: "DataCollector",
+						AgentIndex: 1,
+						Strategy:  "native-thinking",
+						Status:    alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Collected data."},
+						},
+					},
+				},
+			},
 		}
-		result := FormatInvestigationContext(events)
 
-		assert.True(t, strings.HasPrefix(result, investigationSeparator))
-		assert.Contains(t, result, "**Internal Reasoning:**\n\nThinking.\n\n")
-		assert.Contains(t, result, "**Final Analysis:**\n\nDone.\n\n")
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "## Stage 1: data-collection")
+		assert.Contains(t, result, "**Agent:** DataCollector (native-thinking)")
+		assert.Contains(t, result, "**Status**: completed")
+		assert.Contains(t, result, "**Final Analysis:**\n\nCollected data.")
+		// Single-agent should NOT use the parallel format
+		assert.NotContains(t, result, "<!-- PARALLEL_RESULTS_START -->")
+		assert.NotContains(t, result, "#### Agent")
+		assert.NotContains(t, result, "### Parallel Investigation")
+	})
+
+	t.Run("parallel-agent stage uses synthesis format", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "validation",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:   "ConfigValidator",
+						AgentIndex:  1,
+						Strategy:    "react",
+						LLMProvider: "gemini-2.5-pro",
+						Status:      alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Config OK."},
+						},
+					},
+					{
+						AgentName:   "MetricsValidator",
+						AgentIndex:  2,
+						Strategy:    "react",
+						LLMProvider: "claude-sonnet",
+						Status:      alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Metrics OK."},
+						},
+					},
+				},
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		// Uses the same format as synthesis
+		assert.Contains(t, result, "<!-- PARALLEL_RESULTS_START -->")
+		assert.Contains(t, result, "<!-- PARALLEL_RESULTS_END -->")
+		assert.Contains(t, result, `"validation" — 2/2 agents succeeded`)
+		assert.Contains(t, result, "#### Agent 1: ConfigValidator (react, gemini-2.5-pro)")
+		assert.Contains(t, result, "#### Agent 2: MetricsValidator (react, claude-sonnet)")
+		assert.Contains(t, result, "**Final Analysis:**\n\nConfig OK.")
+		assert.Contains(t, result, "**Final Analysis:**\n\nMetrics OK.")
+	})
+
+	t.Run("stage with synthesis result", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "validation",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:   "Agent",
+						AgentIndex:  1,
+						Strategy:    "react",
+						LLMProvider: "gemini",
+						Status:      alertsession.StatusCompleted,
+					},
+				},
+				SynthesisResult: "Both agents agree: no issues found.",
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "### Synthesis Result")
+		assert.Contains(t, result, "Both agents agree: no issues found.")
+	})
+
+	t.Run("executive summary", func(t *testing.T) {
+		result := FormatStructuredInvestigation(nil, "Overall: system is healthy.")
+
+		assert.Contains(t, result, "## Executive Summary")
+		assert.Contains(t, result, "Overall: system is healthy.")
+	})
+
+	t.Run("multi-stage mixed scenario", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "data-collection",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName: "DataCollector",
+						AgentIndex: 1,
+						Strategy:  "native-thinking",
+						Status:    alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Data collected."},
+						},
+					},
+				},
+			},
+			{
+				StageName:  "validation",
+				StageIndex: 1,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:   "AgentA",
+						AgentIndex:  1,
+						Strategy:    "react",
+						LLMProvider: "gemini",
+						Status:      alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Valid."},
+						},
+					},
+					{
+						AgentName:    "AgentB",
+						AgentIndex:   2,
+						Strategy:     "react",
+						LLMProvider:  "gemini",
+						Status:       alertsession.StatusFailed,
+						ErrorMessage: "timeout",
+					},
+				},
+				SynthesisResult: "Partial success.",
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "Everything analyzed.")
+
+		// Stage 1: single-agent
+		assert.Contains(t, result, "## Stage 1: data-collection")
+		assert.Contains(t, result, "**Agent:** DataCollector (native-thinking)")
+
+		// Stage 2: parallel with synthesis
+		assert.Contains(t, result, "## Stage 2: validation")
+		assert.Contains(t, result, `"validation" — 1/2 agents succeeded`)
+		assert.Contains(t, result, "#### Agent 2: AgentB (react, gemini)")
+		assert.Contains(t, result, "**Error**: timeout")
+		assert.Contains(t, result, "(No investigation history available)")
+		assert.Contains(t, result, "### Synthesis Result")
+		assert.Contains(t, result, "Partial success.")
+
+		// Executive summary
+		assert.Contains(t, result, "## Executive Summary")
+		assert.Contains(t, result, "Everything analyzed.")
+	})
+
+	t.Run("sequential stage numbering ignores StageIndex", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{StageName: "first", StageIndex: 0, Agents: []AgentInvestigation{
+				{AgentName: "A", AgentIndex: 1, Strategy: "react", Status: alertsession.StatusCompleted},
+			}},
+			{StageName: "third", StageIndex: 5, Agents: []AgentInvestigation{
+				{AgentName: "B", AgentIndex: 1, Strategy: "react", Status: alertsession.StatusCompleted},
+			}},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		// Sequential numbering: 1, 2 — not 1, 6
+		assert.Contains(t, result, "## Stage 1: first")
+		assert.Contains(t, result, "## Stage 2: third")
+		assert.NotContains(t, result, "## Stage 6")
+	})
+
+	t.Run("stage with no agents produces only header", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{StageName: "empty-stage", StageIndex: 0},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "## Stage 1: empty-stage")
+		assert.NotContains(t, result, "**Agent:")
+		assert.NotContains(t, result, "<!-- PARALLEL_RESULTS_START -->")
+	})
+
+	t.Run("failed single agent with error shows error and placeholder", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "investigation",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:    "Analyzer",
+						AgentIndex:   1,
+						Strategy:     "react",
+						Status:       alertsession.StatusFailed,
+						ErrorMessage: "LLM provider unreachable",
+					},
+				},
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "**Agent:** Analyzer (react)")
+		assert.Contains(t, result, "**Status**: failed")
+		assert.Contains(t, result, "**Error**: LLM provider unreachable")
+		assert.Contains(t, result, "(No investigation history available)")
+	})
+
+	t.Run("parallel format matches synthesis format exactly", func(t *testing.T) {
+		// Same agents used in both formatters should produce identical parallel blocks
+		agents := []AgentInvestigation{
+			{
+				AgentName:   "AgentA",
+				AgentIndex:  1,
+				Strategy:    "react",
+				LLMProvider: "gemini-2.5-pro",
+				Status:      alertsession.StatusCompleted,
+				Events: []*ent.TimelineEvent{
+					{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Finding A."},
+				},
+			},
+			{
+				AgentName:   "AgentB",
+				AgentIndex:  2,
+				Strategy:    "native-thinking",
+				LLMProvider: "claude-sonnet",
+				Status:      alertsession.StatusCompleted,
+				Events: []*ent.TimelineEvent{
+					{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Finding B."},
+				},
+			},
+		}
+
+		synthesisResult := FormatInvestigationForSynthesis(agents, "investigation")
+
+		stages := []StageInvestigation{
+			{StageName: "investigation", StageIndex: 0, Agents: agents},
+		}
+		chatResult := FormatStructuredInvestigation(stages, "")
+
+		// The parallel block within the chat output should match synthesis exactly
+		// Extract the parallel block from chat output (after the stage header)
+		parallelStart := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_START -->")
+		parallelEnd := strings.Index(chatResult, "<!-- PARALLEL_RESULTS_END -->") + len("<!-- PARALLEL_RESULTS_END -->")
+		require.Greater(t, parallelStart, 0, "chat result should contain PARALLEL_RESULTS_START")
+
+		chatParallelBlock := chatResult[parallelStart:parallelEnd]
+		assert.Equal(t, synthesisResult, chatParallelBlock, "parallel block in chat must match synthesis output exactly")
 	})
 }
 

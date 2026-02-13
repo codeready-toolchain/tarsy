@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/event"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -232,20 +235,37 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		logger.Warn("Failed to get max sequence number", "error", err)
 		maxSeq = 0 // fallback to 1
 	}
-	_, err = e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
+	userQuestionSeq := maxSeq + 1
+	userQuestionEvent, err := e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
 		SessionID:      input.Session.ID,
 		StageID:        &stageID,
 		ExecutionID:    &exec.ID,
-		SequenceNumber: maxSeq + 1,
+		SequenceNumber: userQuestionSeq,
 		EventType:      timelineevent.EventTypeUserQuestion,
 		Content:        input.Message.Content,
 	})
 	if err != nil {
 		logger.Warn("Failed to create user_question timeline event", "error", err)
 		// Non-fatal: continue execution
+	} else if e.eventPublisher != nil {
+		// Publish via WS so the dashboard can render the user question in real time.
+		if pubErr := e.eventPublisher.PublishTimelineCreated(execCtx, input.Session.ID, events.TimelineCreatedPayload{
+			Type:           events.EventTypeTimelineCreated,
+			EventID:        userQuestionEvent.ID,
+			SessionID:      input.Session.ID,
+			StageID:        stageID,
+			ExecutionID:    exec.ID,
+			EventType:      timelineevent.EventTypeUserQuestion,
+			Status:         timelineevent.StatusCompleted,
+			Content:        input.Message.Content,
+			SequenceNumber: userQuestionSeq,
+			Timestamp:      userQuestionEvent.CreatedAt.Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			logger.Warn("Failed to publish user_question timeline event", "error", pubErr)
+		}
 	}
 
-	// 5. Build ChatContext (GetSessionTimeline → FormatInvestigationContext)
+	// 5. Build ChatContext (structured investigation history)
 	chatContext := e.buildChatContext(execCtx, input)
 
 	// 6. Update Stage status: active, publish stage.status: started, start heartbeat
@@ -350,22 +370,212 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 // Context building
 // ────────────────────────────────────────────────────────────
 
-// buildChatContext retrieves the full session timeline and formats it for the chat agent.
+// buildChatContext retrieves the structured investigation history for the chat agent.
+// Stages are grouped with per-agent timelines, matching the structured format
+// used by synthesis. Synthesis results are paired with their parent stages.
 func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatExecuteInput) *agent.ChatContext {
-	timelineEvents, err := e.timelineService.GetSessionTimeline(ctx, input.Session.ID)
+	logger := slog.With("session_id", input.Session.ID)
+
+	// 1. Get all stages for the session (with agent execution edges).
+	stages, err := e.stageService.GetStagesBySession(ctx, input.Session.ID, true)
 	if err != nil {
-		slog.Warn("Failed to get session timeline for chat context",
-			"session_id", input.Session.ID,
-			"error", err,
-		)
-		// Fail-open: empty context (agent still has tools)
+		logger.Warn("Failed to get stages for chat context", "error", err)
 		return &agent.ChatContext{UserQuestion: input.Message.Content}
+	}
+
+	// 2. Build structured stage investigations.
+	//    - Investigation stages → per-agent timelines
+	//    - Synthesis stages (name ends with " - Synthesis") → paired with parent
+	//    - Chat stages (have chat_id) → treated as previous chat Q&A
+	//    Synthesis results are keyed by parent stage name for pairing.
+	synthResults := make(map[string]string) // parent stage name → synthesis final analysis
+	for _, stg := range stages {
+		if strings.HasSuffix(stg.StageName, " - Synthesis") {
+			// Extract synthesis final_analysis from this stage's timeline.
+			parentName := strings.TrimSuffix(stg.StageName, " - Synthesis")
+			if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
+				synthResults[parentName] = fa
+			}
+		}
+	}
+
+	var investigations []agentctx.StageInvestigation
+	var previousChats []chatQA
+	var executiveSummary string
+
+	for _, stg := range stages {
+		// Skip synthesis stages — already paired above.
+		if strings.HasSuffix(stg.StageName, " - Synthesis") {
+			continue
+		}
+
+		// Chat stages → collect as previous Q&A (skip the current chat's stage).
+		if stg.ChatID != nil && *stg.ChatID != "" {
+			isCurrentChat := stg.ChatUserMessageID != nil && *stg.ChatUserMessageID == input.Message.ID
+			if !isCurrentChat {
+				if qa := e.buildChatQA(ctx, stg); qa.Question != "" {
+					previousChats = append(previousChats, qa)
+				}
+			}
+			continue
+		}
+
+		// Investigation stage — build per-agent timelines.
+		// Sort by agent_index for deterministic ordering (edge loading doesn't guarantee order).
+		execs := stg.Edges.AgentExecutions
+		sort.Slice(execs, func(i, j int) bool {
+			return execs[i].AgentIndex < execs[j].AgentIndex
+		})
+		agents := make([]agentctx.AgentInvestigation, len(execs))
+		for i, exec := range execs {
+			var events []*ent.TimelineEvent
+			timeline, tlErr := e.timelineService.GetAgentTimeline(ctx, exec.ID)
+			if tlErr != nil {
+				logger.Warn("Failed to get agent timeline for chat context",
+					"execution_id", exec.ID, "error", tlErr)
+			} else {
+				events = timeline
+			}
+
+			agents[i] = agentctx.AgentInvestigation{
+				AgentName:   exec.AgentName,
+				AgentIndex:  exec.AgentIndex,
+				Strategy:    exec.IterationStrategy,
+				Status:      mapExecStatusToSessionStatus(exec.Status),
+				Events:      events,
+				ErrorMessage: stringFromNillable(exec.ErrorMessage),
+			}
+		}
+
+		si := agentctx.StageInvestigation{
+			StageName:  stg.StageName,
+			StageIndex: stg.StageIndex,
+			Agents:     agents,
+		}
+		if synth, ok := synthResults[stg.StageName]; ok {
+			si.SynthesisResult = synth
+		}
+		investigations = append(investigations, si)
+	}
+
+	// 3. Get executive summary from session-level timeline event.
+	executiveSummary = e.getExecutiveSummary(ctx, input.Session.ID)
+
+	// 4. Format the structured investigation context.
+	context := agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
+
+	// 5. Append previous chat Q&A if any.
+	if len(previousChats) > 0 {
+		context += formatPreviousChats(previousChats)
 	}
 
 	return &agent.ChatContext{
 		UserQuestion:         input.Message.Content,
-		InvestigationContext: agentctx.FormatInvestigationContext(timelineEvents),
+		InvestigationContext: context,
 	}
+}
+
+// chatQA holds a previous chat question and answer for context.
+type chatQA struct {
+	Question string
+	Answer   string
+}
+
+// extractFinalAnalysis gets the final_analysis content from a stage's timeline.
+func (e *ChatMessageExecutor) extractFinalAnalysis(ctx context.Context, stg *ent.Stage) string {
+	// Get all executions for this stage, find final_analysis in any execution's timeline.
+	execs, err := e.stageService.GetAgentExecutions(ctx, stg.ID)
+	if err != nil || len(execs) == 0 {
+		return ""
+	}
+	for _, exec := range execs {
+		timeline, err := e.timelineService.GetAgentTimeline(ctx, exec.ID)
+		if err != nil {
+			continue
+		}
+		for _, evt := range timeline {
+			if evt.EventType == timelineevent.EventTypeFinalAnalysis {
+				return evt.Content
+			}
+		}
+	}
+	return ""
+}
+
+// buildChatQA extracts the user question and agent answer from a chat stage.
+func (e *ChatMessageExecutor) buildChatQA(ctx context.Context, stg *ent.Stage) chatQA {
+	var qa chatQA
+	execs := stg.Edges.AgentExecutions
+	if len(execs) == 0 {
+		return qa
+	}
+	// Chat stage has one execution — get its timeline.
+	timeline, err := e.timelineService.GetAgentTimeline(ctx, execs[0].ID)
+	if err != nil {
+		return qa
+	}
+	for _, evt := range timeline {
+		if evt.EventType == timelineevent.EventTypeUserQuestion {
+			qa.Question = evt.Content
+		}
+		if evt.EventType == timelineevent.EventTypeFinalAnalysis {
+			qa.Answer = evt.Content
+		}
+	}
+	return qa
+}
+
+// getExecutiveSummary retrieves the executive summary from session-level timeline events.
+func (e *ChatMessageExecutor) getExecutiveSummary(ctx context.Context, sessionID string) string {
+	// Executive summary is stored as a session-level timeline event with no execution_id.
+	// Use GetSessionTimeline and filter for executive_summary event type.
+	events, err := e.timelineService.GetSessionTimeline(ctx, sessionID)
+	if err != nil {
+		return ""
+	}
+	for _, evt := range events {
+		if evt.EventType == timelineevent.EventTypeExecutiveSummary {
+			return evt.Content
+		}
+	}
+	return ""
+}
+
+// formatPreviousChats formats previous chat Q&A for the context.
+func formatPreviousChats(chats []chatQA) string {
+	var sb strings.Builder
+	sb.WriteString("## Previous Chat Messages\n\n")
+	for i, qa := range chats {
+		fmt.Fprintf(&sb, "**Q%d:** %s\n\n", i+1, qa.Question)
+		if qa.Answer != "" {
+			fmt.Fprintf(&sb, "**A%d:** %s\n\n", i+1, qa.Answer)
+		}
+	}
+	return sb.String()
+}
+
+// mapExecStatusToSessionStatus maps agent execution status to alertsession.Status.
+func mapExecStatusToSessionStatus(status agentexecution.Status) alertsession.Status {
+	switch status {
+	case agentexecution.StatusCompleted:
+		return alertsession.StatusCompleted
+	case agentexecution.StatusFailed:
+		return alertsession.StatusFailed
+	case agentexecution.StatusCancelled:
+		return alertsession.StatusCancelled
+	case agentexecution.StatusTimedOut:
+		return alertsession.StatusTimedOut
+	default:
+		return alertsession.StatusInProgress
+	}
+}
+
+// stringFromNillable safely dereferences a *string, returning "" for nil.
+func stringFromNillable(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // ────────────────────────────────────────────────────────────

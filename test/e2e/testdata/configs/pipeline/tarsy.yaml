@@ -52,6 +52,11 @@ agent_chains:
     llm_provider: "test-provider"
     executive_summary_provider: "test-provider-fast"
     iteration_strategy: "native-thinking"
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      iteration_strategy: "native-thinking"
+      max_iterations: 3
     stages:
       - name: investigation
         agents:

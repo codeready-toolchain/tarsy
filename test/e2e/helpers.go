@@ -125,6 +125,40 @@ func (app *TestApp) WaitForSessionStatus(t *testing.T, sessionID string, expecte
 }
 
 // ────────────────────────────────────────────────────────────
+// Chat Helpers
+// ────────────────────────────────────────────────────────────
+
+// SendChatMessage sends a POST /api/v1/sessions/:id/chat/messages.
+// Returns the response map with chat_id, message_id, stage_id.
+func (app *TestApp) SendChatMessage(t *testing.T, sessionID, content string) map[string]interface{} {
+	t.Helper()
+	return app.postJSON(t, "/api/v1/sessions/"+sessionID+"/chat/messages",
+		map[string]string{"content": content}, http.StatusAccepted)
+}
+
+// WaitForStageStatus polls the DB until the stage reaches a terminal status.
+// Returns the terminal status string.
+func (app *TestApp) WaitForStageStatus(t *testing.T, stageID string, expected ...string) string {
+	t.Helper()
+	var actual string
+	require.Eventually(t, func() bool {
+		s, err := app.EntClient.Stage.Get(context.Background(), stageID)
+		if err != nil {
+			return false
+		}
+		actual = string(s.Status)
+		for _, exp := range expected {
+			if actual == exp {
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 100*time.Millisecond,
+		"stage %s did not reach status %v (last: %s)", stageID, expected, actual)
+	return actual
+}
+
+// ────────────────────────────────────────────────────────────
 // DB Query Helpers
 // ────────────────────────────────────────────────────────────
 

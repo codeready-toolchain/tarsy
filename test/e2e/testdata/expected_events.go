@@ -24,16 +24,18 @@ type ExpectedEvent struct {
 
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
-// Four stages + two synthesis stages:
+// Four stages + two synthesis stages + two chat messages:
 //   1. investigation  (DataCollector, NativeThinking)
 //   2. remediation    (Remediator, ReAct)
 //   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (synthesis-native-thinking)
 //   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
 //      → scaling-review - Synthesis (plain synthesis)
+//   + Chat 1: native-thinking with test-mcp tool call
+//   + Chat 2: native-thinking with prometheus-mcp tool call
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
 // parallel agents, replicas, both synthesis strategies, forced conclusion,
-// and executive summary.
+// executive summary, and follow-up chat with MCP tools.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
@@ -267,4 +269,80 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "scaling-review - Synthesis", Status: "completed"},
 
 	{Type: "session.status", Status: "completed"},
+
+	// ── Chat 1: "What caused the OOM?" (ChatAgent, native-thinking with test-mcp tool) ──
+	{Type: "chat.created"},
+
+	// user_question published via WS so the dashboard can render it.
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "What caused the OOM kill for pod-1?"},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+
+	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "The user wants to know the OOM root cause. Let me check current pod status.", Group: 30},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Let me check the current pod status to explain the OOM kill.", Group: 30},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_pods",
+		"arguments":   `{"namespace":"default"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"}, // content is large tool output
+	// Tool result summarization for get_pods (triggered by size_threshold_tokens=100).
+	{Type: "timeline_event.created", EventType: "mcp_tool_summary", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_pods",
+	}},
+	{Type: "timeline_event.completed", EventType: "mcp_tool_summary",
+		Content: "Pod pod-1 is OOMKilled with 5 restarts in default namespace."},
+
+	// Iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "The pod data confirms the OOM kill pattern.", Group: 31},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue.", Group: 31},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue."},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+
+	// ── Chat 2: "What are the current SLO metrics?" (ChatAgent, native-thinking with prometheus-mcp tool) ──
+	// user_question published via WS so the dashboard can render it.
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "What are the current SLO metrics for pod-1?"},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+
+	// Iteration 1: thinking + text + tool call to prometheus-mcp/query_slo.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "The user wants current SLO status. Let me query Prometheus.", Group: 32},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Let me check the current SLO metrics for pod-1.", Group: 32},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "prometheus-mcp",
+		"tool_name":   "query_slo",
+		"arguments":   `{"pod":"pod-1"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call",
+		Content: `[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]`},
+
+	// Iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "The SLO data shows the availability target is not being met.", Group: 33},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.", Group: 33},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention."},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
 }

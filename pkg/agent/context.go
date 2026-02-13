@@ -111,7 +111,6 @@ type EventPublisher interface {
 	PublishSessionStatus(ctx context.Context, sessionID string, payload events.SessionStatusPayload) error
 	PublishStageStatus(ctx context.Context, sessionID string, payload events.StageStatusPayload) error
 	PublishChatCreated(ctx context.Context, sessionID string, payload events.ChatCreatedPayload) error
-	PublishChatUserMessage(ctx context.Context, sessionID string, payload events.ChatUserMessagePayload) error
 }
 
 // ChatContext carries chat-specific data for controllers.

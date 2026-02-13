@@ -20,16 +20,18 @@ import (
 
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
-// Four stages + two synthesis stages:
+// Four stages + two synthesis stages + two chat messages:
 //   1. investigation  (DataCollector, NativeThinking)
 //   2. remediation    (Remediator, ReAct)
 //   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (synthesis-native-thinking)
 //   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
 //      → scaling-review - Synthesis (plain synthesis)
+//   + Chat 1: native-thinking with test-mcp tool call
+//   + Chat 2: native-thinking with prometheus-mcp tool call
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
 // parallel agents, replicas, both synthesis strategies, forced conclusion,
-// and executive summary.
+// executive summary, and follow-up chat with MCP tools.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
@@ -167,6 +169,46 @@ func TestE2E_Pipeline(t *testing.T) {
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit."})
 
+	// ── Chat 1: "What caused the OOM?" — native-thinking with test-mcp tool call ──
+	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "The user wants to know the OOM root cause. Let me check current pod status."},
+			&agent.TextChunk{Content: "Let me check the current pod status to explain the OOM kill."},
+			&agent.ToolCallChunk{CallID: "chat-call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 30, TotalTokens: 230},
+		},
+	})
+	// Tool result summarization for get_pods (triggered by size_threshold_tokens=100).
+	llm.AddSequential(LLMScriptEntry{Text: "Pod pod-1 is OOMKilled with 5 restarts in default namespace."})
+	// Iteration 2: thinking + final answer (no tools).
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "The pod data confirms the OOM kill pattern."},
+			&agent.TextChunk{Content: "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue."},
+			&agent.UsageChunk{InputTokens: 250, OutputTokens: 50, TotalTokens: 300},
+		},
+	})
+
+	// ── Chat 2: "What are the current SLO metrics?" — native-thinking with prometheus-mcp tool call ──
+	// Iteration 1: thinking + text + tool call to prometheus-mcp/query_slo.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "The user wants current SLO status. Let me query Prometheus."},
+			&agent.TextChunk{Content: "Let me check the current SLO metrics for pod-1."},
+			&agent.ToolCallChunk{CallID: "chat-call-2", Name: "prometheus-mcp__query_slo", Arguments: `{"pod":"pod-1"}`},
+			&agent.UsageChunk{InputTokens: 300, OutputTokens: 25, TotalTokens: 325},
+		},
+	})
+	// Iteration 2: thinking + final answer (no tools).
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "The SLO data shows the availability target is not being met."},
+			&agent.TextChunk{Content: "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention."},
+			&agent.UsageChunk{InputTokens: 350, OutputTokens: 40, TotalTokens: 390},
+		},
+	})
+
 	// ── Tool results ──
 	nodesResult := `[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]`
 	podsResult := `[` +
@@ -220,7 +262,21 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Wait for session completion via DB polling (most reliable).
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Allow trailing WS events to arrive after session.status:completed.
+	// ── Chat messages (sent after session completes — chat requires terminal session) ──
+
+	// Chat 1: "What caused the OOM?"
+	chat1Resp := app.SendChatMessage(t, sessionID, "What caused the OOM kill for pod-1?")
+	chat1StageID := chat1Resp["stage_id"].(string)
+	require.NotEmpty(t, chat1StageID)
+	app.WaitForStageStatus(t, chat1StageID, "completed")
+
+	// Chat 2: "What are the current SLO metrics?"
+	chat2Resp := app.SendChatMessage(t, sessionID, "What are the current SLO metrics for pod-1?")
+	chat2StageID := chat2Resp["stage_id"].(string)
+	require.NotEmpty(t, chat2StageID)
+	app.WaitForStageStatus(t, chat2StageID, "completed")
+
+	// Allow trailing WS events to arrive after chat completes.
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify session via API.
@@ -228,18 +284,21 @@ func TestE2E_Pipeline(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
 
-	// Verify DB state.
+	// Verify DB state — 6 pipeline stages + 2 chat stages.
 	stages := app.QueryStages(t, sessionID)
-	assert.Len(t, stages, 6)
+	assert.Len(t, stages, 8)
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, "remediation", stages[1].StageName)
 	assert.Equal(t, "validation", stages[2].StageName)
 	assert.Equal(t, "validation - Synthesis", stages[3].StageName)
 	assert.Equal(t, "scaling-review", stages[4].StageName)
 	assert.Equal(t, "scaling-review - Synthesis", stages[5].StageName)
+	assert.Equal(t, "Chat Response", stages[6].StageName)
+	assert.Equal(t, "Chat Response", stages[7].StageName)
 
+	// 8 pipeline execs + 2 chat execs = 10.
 	execs := app.QueryExecutions(t, sessionID)
-	assert.Len(t, execs, 8)
+	assert.Len(t, execs, 10)
 	assert.Equal(t, "DataCollector", execs[0].AgentName)
 	assert.Equal(t, "Remediator", execs[1].AgentName)
 	// Validation parallel agents — order may vary, so check by name set.
@@ -252,6 +311,9 @@ func TestE2E_Pipeline(t *testing.T) {
 	assert.True(t, replicaNames["ScalingReviewer-1"], "expected ScalingReviewer-1 execution")
 	assert.True(t, replicaNames["ScalingReviewer-2"], "expected ScalingReviewer-2 execution")
 	assert.Equal(t, "SynthesisAgent", execs[7].AgentName)
+	// Chat executions — both use the built-in ChatAgent.
+	assert.Equal(t, "ChatAgent", execs[8].AgentName)
+	assert.Equal(t, "ChatAgent", execs[9].AgentName)
 
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
@@ -264,8 +326,10 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Stage 4: ScalingReviewer-1 (1) + ScalingReviewer-2 (1) = 2
 	// Scaling-review Synthesis: 1
 	// Executive summary: 1
-	// Total: 17
-	assert.Equal(t, 17, llm.CallCount())
+	// Chat 1: iteration 1 (tool call) + summarization + iteration 2 (answer) = 3
+	// Chat 2: iteration 1 (tool call) + iteration 2 (answer) = 2
+	// Total: 22
+	assert.Equal(t, 22, llm.CallCount())
 
 	// ── Debug API (fetch first — used to register IDs in deterministic order) ──
 	//

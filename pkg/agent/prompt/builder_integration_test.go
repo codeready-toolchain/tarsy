@@ -200,7 +200,7 @@ func newSynthesisNativeThinkingExecCtx() *agent.ExecutionContext {
 }
 
 // realisticInvestigationContext is a brief but structurally realistic
-// investigation context matching what FormatInvestigationContext produces.
+// investigation context matching what FormatStructuredInvestigation produces.
 // It includes all key sections: header, initial request, agent responses,
 // tool observations, and final analysis.
 const realisticInvestigationContext = `═══════════════════════════════════════════════════════════════════════════════

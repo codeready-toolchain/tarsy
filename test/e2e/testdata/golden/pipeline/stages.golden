@@ -28,5 +28,15 @@
     "stage_index": 6,
     "stage_name": "scaling-review - Synthesis",
     "status": "completed"
+  },
+  {
+    "stage_index": 7,
+    "stage_name": "Chat Response",
+    "status": "completed"
+  },
+  {
+    "stage_index": 8,
+    "stage_name": "Chat Response",
+    "status": "completed"
   }
 ]

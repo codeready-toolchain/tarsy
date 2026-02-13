@@ -73,8 +73,7 @@ const (
 
 // Chat event types (stored in DB + NOTIFY).
 const (
-	EventTypeChatCreated     = "chat.created"
-	EventTypeChatUserMessage = "chat.user_message"
+	EventTypeChatCreated = "chat.created"
 )
 
 // Transient event types (NOTIFY only, no DB persistence).

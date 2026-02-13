@@ -196,6 +196,22 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
 	assert.Equal(t, "Chat Response", publisher.stageStatuses[0].StageName)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[len(publisher.stageStatuses)-1].Status)
+
+	// Verify user_question timeline event was published via WS (prod bug fix).
+	// Without the PublishTimelineCreated call in chat_executor, the dashboard
+	// would never receive the user question for rendering.
+	publisher.mu.Lock()
+	var foundUserQuestionWS bool
+	for _, evt := range publisher.timelineCreated {
+		if evt.EventType == timelineevent.EventTypeUserQuestion {
+			foundUserQuestionWS = true
+			assert.Equal(t, "What caused the OOM?", evt.Content)
+			assert.Equal(t, session.ID, evt.SessionID)
+			break
+		}
+	}
+	publisher.mu.Unlock()
+	assert.True(t, foundUserQuestionWS, "user_question must be published via WS for dashboard rendering")
 }
 
 func TestChatExecutor_ContextAccumulation(t *testing.T) {
@@ -254,7 +270,8 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	// Add investigation timeline event (simulates completed investigation)
+	// Add investigation stage with agent execution and timeline event
+	// (simulates completed investigation)
 	_, err = entClient.Stage.Create().
 		SetID("inv-stage-accum").
 		SetSessionID(session.ID).
@@ -265,11 +282,24 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
+	invExecID := "inv-exec-accum"
+	_, err = entClient.AgentExecution.Create().
+		SetID(invExecID).
+		SetStageID("inv-stage-accum").
+		SetSessionID(session.ID).
+		SetAgentName("TestAgent").
+		SetAgentIndex(1).
+		SetIterationStrategy("native-thinking").
+		SetStatus(agentexecution.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+
 	timelineService := services.NewTimelineService(entClient)
 	invStageID := "inv-stage-accum"
 	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      session.ID,
 		StageID:        &invStageID,
+		ExecutionID:    &invExecID,
 		SequenceNumber: 1,
 		EventType:      timelineevent.EventTypeFinalAnalysis,
 		Content:        "Investigation: Pod-1 has been OOM killed 5 times in the last hour.",

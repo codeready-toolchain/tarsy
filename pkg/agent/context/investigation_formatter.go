@@ -11,22 +11,20 @@ import (
 
 const investigationSeparator = "═══════════════════════════════════════════════════════════════════════════════"
 
-// FormatInvestigationContext formats timeline events from the original
-// investigation into a readable context for chat sessions.
-// This is called by the executor/service layer, not by the prompt builder.
-func FormatInvestigationContext(events []*ent.TimelineEvent) string {
-	var sb strings.Builder
-	sb.WriteString(investigationSeparator + "\n")
-	sb.WriteString("📋 INVESTIGATION HISTORY\n")
-	sb.WriteString(investigationSeparator + "\n\n")
-	sb.WriteString("# Original Investigation\n\n")
+// ────────────────────────────────────────────────────────────
+// Types
+// ────────────────────────────────────────────────────────────
 
-	formatTimelineEvents(&sb, events)
-
-	return sb.String()
+// StageInvestigation holds one stage's investigation data for structured context.
+type StageInvestigation struct {
+	StageName       string
+	StageIndex      int
+	Agents          []AgentInvestigation
+	SynthesisResult string // final_analysis from the synthesis stage, if any
 }
 
-// AgentInvestigation holds one agent's investigation data for synthesis formatting.
+// AgentInvestigation holds one agent's investigation data.
+// Used by both synthesis and chat context formatting.
 type AgentInvestigation struct {
 	AgentName    string
 	AgentIndex   int
@@ -37,12 +35,63 @@ type AgentInvestigation struct {
 	ErrorMessage string               // for failed agents
 }
 
-// FormatInvestigationForSynthesis formats multi-agent full investigation
-// histories for the synthesis agent. Uses timeline events (which include thinking,
-// tool calls, tool results, and responses) rather than raw messages.
-// Each agent's investigation is wrapped with identifying metadata.
+// ────────────────────────────────────────────────────────────
+// Public formatters
+// ────────────────────────────────────────────────────────────
+
+// FormatStructuredInvestigation formats the full investigation across all stages
+// for the chat agent context. Each stage is clearly delineated, and parallel
+// stages use the same per-agent format as synthesis.
+func FormatStructuredInvestigation(stages []StageInvestigation, executiveSummary string) string {
+	var sb strings.Builder
+	sb.WriteString(investigationSeparator + "\n")
+	sb.WriteString("📋 INVESTIGATION HISTORY\n")
+	sb.WriteString(investigationSeparator + "\n\n")
+
+	for i, stg := range stages {
+		fmt.Fprintf(&sb, "## Stage %d: %s\n\n", i+1, stg.StageName)
+
+		if len(stg.Agents) == 1 {
+			// Single agent — show timeline directly under the stage header.
+			a := stg.Agents[0]
+			fmt.Fprintf(&sb, "**Agent:** %s (%s)\n", a.AgentName, a.Strategy)
+			fmt.Fprintf(&sb, "**Status**: %s\n\n", a.Status)
+			formatAgentBody(&sb, a)
+		} else if len(stg.Agents) > 1 {
+			formatParallelAgents(&sb, stg.Agents, stg.StageName)
+		}
+
+		if stg.SynthesisResult != "" {
+			sb.WriteString("### Synthesis Result\n\n")
+			sb.WriteString(stg.SynthesisResult)
+			sb.WriteString("\n\n")
+		}
+	}
+
+	if executiveSummary != "" {
+		sb.WriteString("## Executive Summary\n\n")
+		sb.WriteString(executiveSummary)
+		sb.WriteString("\n\n")
+	}
+
+	return sb.String()
+}
+
+// FormatInvestigationForSynthesis formats multi-agent investigation histories
+// for the synthesis agent. Uses the same per-agent format as the chat context.
 func FormatInvestigationForSynthesis(agents []AgentInvestigation, stageName string) string {
-	// Count successes
+	var sb strings.Builder
+	formatParallelAgents(&sb, agents, stageName)
+	return sb.String()
+}
+
+// ────────────────────────────────────────────────────────────
+// Shared formatting helpers
+// ────────────────────────────────────────────────────────────
+
+// formatParallelAgents renders a parallel agent section with HTML markers,
+// a header showing the success count, and each agent's investigation.
+func formatParallelAgents(sb *strings.Builder, agents []AgentInvestigation, stageName string) {
 	succeeded := 0
 	for _, a := range agents {
 		if a.Status == alertsession.StatusCompleted {
@@ -50,27 +99,29 @@ func FormatInvestigationForSynthesis(agents []AgentInvestigation, stageName stri
 		}
 	}
 
-	var sb strings.Builder
 	sb.WriteString("<!-- PARALLEL_RESULTS_START -->\n\n")
-	fmt.Fprintf(&sb, "### Parallel Investigation: %q — %d/%d agents succeeded\n\n", stageName, succeeded, len(agents))
+	fmt.Fprintf(sb, "### Parallel Investigation: %q — %d/%d agents succeeded\n\n", stageName, succeeded, len(agents))
 
 	for _, a := range agents {
-		fmt.Fprintf(&sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.Strategy, a.LLMProvider)
-		fmt.Fprintf(&sb, "**Status**: %s\n\n", a.Status)
-
-		if a.Status != alertsession.StatusCompleted && a.ErrorMessage != "" {
-			fmt.Fprintf(&sb, "**Error**: %s\n\n", a.ErrorMessage)
-		}
-
-		if len(a.Events) == 0 && a.Status != alertsession.StatusCompleted {
-			sb.WriteString("(No investigation history available)\n\n")
-		} else {
-			formatTimelineEvents(&sb, a.Events)
-		}
+		fmt.Fprintf(sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.Strategy, a.LLMProvider)
+		fmt.Fprintf(sb, "**Status**: %s\n\n", a.Status)
+		formatAgentBody(sb, a)
 	}
 
 	sb.WriteString("<!-- PARALLEL_RESULTS_END -->")
-	return sb.String()
+}
+
+// formatAgentBody renders error message (if any) and timeline events for one agent.
+func formatAgentBody(sb *strings.Builder, a AgentInvestigation) {
+	if a.Status != alertsession.StatusCompleted && a.ErrorMessage != "" {
+		fmt.Fprintf(sb, "**Error**: %s\n\n", a.ErrorMessage)
+	}
+
+	if len(a.Events) == 0 && a.Status != alertsession.StatusCompleted {
+		sb.WriteString("(No investigation history available)\n\n")
+	} else {
+		formatTimelineEvents(sb, a.Events)
+	}
 }
 
 // formatTimelineEvents writes formatted timeline events to the builder.

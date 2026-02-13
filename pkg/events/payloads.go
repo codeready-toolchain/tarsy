@@ -73,15 +73,3 @@ type ChatCreatedPayload struct {
 	Timestamp string `json:"timestamp"`  // RFC3339Nano
 }
 
-// ChatUserMessagePayload is the payload for chat.user_message events.
-// Published when a user sends a chat message.
-type ChatUserMessagePayload struct {
-	Type      string `json:"type"`       // always EventTypeChatUserMessage
-	SessionID string `json:"session_id"` // owning session UUID
-	ChatID    string `json:"chat_id"`    // owning chat UUID
-	MessageID string `json:"message_id"` // new message UUID
-	Content   string `json:"content"`    // message text
-	Author    string `json:"author"`     // who sent the message
-	StageID   string `json:"stage_id"`   // response stage (for tracking)
-	Timestamp string `json:"timestamp"`  // RFC3339Nano
-}

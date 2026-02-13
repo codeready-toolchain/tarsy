@@ -76,12 +76,16 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
-	mu              sync.Mutex
-	stageStatuses   []events.StageStatusPayload
-	sessionStatuses []events.SessionStatusPayload
+	mu               sync.Mutex
+	stageStatuses    []events.StageStatusPayload
+	sessionStatuses  []events.SessionStatusPayload
+	timelineCreated  []events.TimelineCreatedPayload
 }
 
-func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, _ events.TimelineCreatedPayload) error {
+func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.timelineCreated = append(p.timelineCreated, payload)
 	return nil
 }
 
@@ -108,10 +112,6 @@ func (p *testEventPublisher) PublishStageStatus(_ context.Context, _ string, pay
 }
 
 func (p *testEventPublisher) PublishChatCreated(_ context.Context, _ string, _ events.ChatCreatedPayload) error {
-	return nil
-}
-
-func (p *testEventPublisher) PublishChatUserMessage(_ context.Context, _ string, _ events.ChatUserMessagePayload) error {
 	return nil
 }
 
