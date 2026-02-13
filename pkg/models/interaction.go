@@ -35,24 +35,24 @@ type CreateMCPInteractionRequest struct {
 }
 
 // ────────────────────────────────────────────────────────────
-// Debug List (Level 1) — GET /api/v1/sessions/:id/debug
+// Trace List (Level 1) — GET /api/v1/sessions/:id/trace
 // ────────────────────────────────────────────────────────────
 
-// DebugListResponse is the top-level response for GET /debug.
-type DebugListResponse struct {
-	Stages              []DebugStageGroup        `json:"stages"`
+// TraceListResponse is the top-level response for GET /trace.
+type TraceListResponse struct {
+	Stages              []TraceStageGroup        `json:"stages"`
 	SessionInteractions []LLMInteractionListItem `json:"session_interactions"` // Session-level LLM calls (e.g. executive summary)
 }
 
-// DebugStageGroup contains executions for one pipeline stage.
-type DebugStageGroup struct {
+// TraceStageGroup contains executions for one pipeline stage.
+type TraceStageGroup struct {
 	StageID    string                `json:"stage_id"`
 	StageName  string                `json:"stage_name"`
-	Executions []DebugExecutionGroup `json:"executions"`
+	Executions []TraceExecutionGroup `json:"executions"`
 }
 
-// DebugExecutionGroup contains interactions for one agent execution.
-type DebugExecutionGroup struct {
+// TraceExecutionGroup contains interactions for one agent execution.
+type TraceExecutionGroup struct {
 	ExecutionID     string                   `json:"execution_id"`
 	AgentName       string                   `json:"agent_name"`
 	LLMInteractions []LLMInteractionListItem `json:"llm_interactions"`
@@ -84,10 +84,10 @@ type MCPInteractionListItem struct {
 }
 
 // ────────────────────────────────────────────────────────────
-// LLM Detail (Level 2) — GET /api/v1/sessions/:id/debug/llm/:interaction_id
+// LLM Detail (Level 2) — GET /api/v1/sessions/:id/trace/llm/:interaction_id
 // ────────────────────────────────────────────────────────────
 
-// LLMInteractionDetailResponse is returned by GET /debug/llm/:interaction_id.
+// LLMInteractionDetailResponse is returned by GET /trace/llm/:interaction_id.
 type LLMInteractionDetailResponse struct {
 	ID               string                `json:"id"`
 	InteractionType  string                `json:"interaction_type"`
@@ -122,10 +122,10 @@ type MessageToolCall struct {
 }
 
 // ────────────────────────────────────────────────────────────
-// MCP Detail (Level 2) — GET /api/v1/sessions/:id/debug/mcp/:interaction_id
+// MCP Detail (Level 2) — GET /api/v1/sessions/:id/trace/mcp/:interaction_id
 // ────────────────────────────────────────────────────────────
 
-// MCPInteractionDetailResponse is returned by GET /debug/mcp/:interaction_id.
+// MCPInteractionDetailResponse is returned by GET /trace/mcp/:interaction_id.
 type MCPInteractionDetailResponse struct {
 	ID              string         `json:"id"`
 	InteractionType string         `json:"interaction_type"`

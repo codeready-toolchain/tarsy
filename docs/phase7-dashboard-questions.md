@@ -6,19 +6,19 @@ Questions requiring discussion before implementation. Organized by category. UX-
 
 ## 1. UX-Visible Changes
 
-### Q1.1 ✅ Debug View — Page vs Tab Navigation
+### Q1.1 ✅ Trace View — Page vs Tab Navigation
 
-**Decision: Segmented control (Conversation | Debug) in the session header.** Routes to separate pages (`/sessions/:id` and `/sessions/:id/debug`) but visually feels like the old tab UX. Both views share the session header. Can revisit if it feels redundant.
+**Decision: Segmented control (Conversation | Trace) in the session header.** Routes to separate pages (`/sessions/:id` and `/sessions/:id/trace`) but visually feels like the old tab UX. Both views share the session header. Can revisit if it feels redundant.
 
 Rejected alternatives: simple button navigation (less discoverable), slide-out drawer (too complex for the content volume).
 
 ---
 
-### Q1.2 ✅ Debug View URL Pattern
+### Q1.2 ✅ Trace View URL Pattern
 
-**Decision: `/sessions/:id/debug`** — sub-path of session. Clear hierarchy, session → debug relationship obvious.
+**Decision: `/sessions/:id/trace`** — sub-path of session. Clear hierarchy, session → trace relationship obvious.
 
-Rejected alternative: `/debug/sessions/:id` (breaks session URL grouping).
+Rejected alternative: `/trace/sessions/:id` (breaks session URL grouping).
 
 ---
 
@@ -83,7 +83,7 @@ Rejected alternatives: `dashboard/` top-level (clutters root, PoC removal needed
 
 ### Q2.3 ✅ Session Detail — One Rich Endpoint vs Multiple Calls
 
-**Decision: Parallel fetch pattern.** Keep separate endpoints (`GET /sessions/:id`, `GET /sessions/:id/timeline`, `GET /sessions/:id/debug`); frontend fetches in parallel via `Promise.all`. Debug data loaded only when the debug page is visited. Clean API design, no waterfall.
+**Decision: Parallel fetch pattern.** Keep separate endpoints (`GET /sessions/:id`, `GET /sessions/:id/timeline`, `GET /sessions/:id/trace`); frontend fetches in parallel via `Promise.all`. Trace data loaded only when the trace page is visited. Clean API design, no waterfall.
 
 Rejected alternatives: single rich endpoint (over-fetches, complex handler), current separate-but-sequential (unnecessary waterfall).
 
@@ -125,7 +125,7 @@ Rejected alternatives: no auth UI (more Phase 9 work), stub-only context (delays
 
 **Decision: Full version monitoring.** Still relevant with single-app model (Q2.1):
 - **Refresh banner**: Browser caches JS bundle. After rolling update, user has stale UI until refresh. Health endpoint returns `version` → dashboard polls → detects mismatch → shows "New version available" banner.
-- **Footer versions**: During rolling updates (multiple replicas, OpenShift), user's API calls may hit a different-version replica than the one that served their JS. Footer shows "UI: v1.0 / Backend: v1.1" for debugging. Versions converge once rollout completes.
+- **Footer versions**: During rolling updates (multiple replicas, OpenShift), user's API calls may hit a different-version replica than the one that served their JS. Footer shows "UI: v1.0 / Backend: v1.1" for troubleshooting. Versions converge once rollout completes.
 
 Backend: add `version` field to health endpoint. Frontend: `useVersionMonitor` hook + `VersionUpdateBanner` + version footer, matching old TARSy UX.
 
@@ -143,7 +143,7 @@ Rejected alternatives: clean-room rewrite (slower, risk of missing subtle behavi
 
 ### Q4.2 ✅ Testing Strategy
 
-**Decision: Integration tests for data layer + critical components.** Unit tests for `api.ts`, `websocket.ts`, `timelineParser.ts`. Component tests for complex UI (conversation timeline, debug view). Skip E2E browser tests for now — good balance of confidence vs effort.
+**Decision: Integration tests for data layer + critical components.** Unit tests for `api.ts`, `websocket.ts`, `timelineParser.ts`. Component tests for complex UI (conversation timeline, trace view). Skip E2E browser tests for now — good balance of confidence vs effort.
 
 Rejected alternatives: no tests (no regression safety), full component tests (too much effort), E2E browser tests (slow, brittle, infrastructure overhead).
 
@@ -192,8 +192,8 @@ Track decisions as they're made:
 
 | Question | Decision | Date | Notes |
 |----------|----------|------|-------|
-| Q1.1 | Option B: Segmented control (Conversation \| Debug) | 2026-02-13 | Can revisit if it feels redundant |
-| Q1.2 | Option A: `/sessions/:id/debug` | 2026-02-13 | Clear hierarchy |
+| Q1.1 | Option B: Segmented control (Conversation \| Trace) | 2026-02-13 | Can revisit if it feels redundant |
+| Q1.2 | Option A: `/sessions/:id/trace` | 2026-02-13 | Clear hierarchy |
 | Q1.3 | Option A: Drop pause/resume | 2026-02-13 | No paused state in new TARSy |
 | Q1.4 | Option A: Drop per-agent cancel | 2026-02-13 | Was tied to pause/resume flow |
 | Q1.5 | Option C: ILIKE now, full-text later | 2026-02-13 | Same API contract either way |

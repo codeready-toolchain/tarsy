@@ -14,16 +14,16 @@ import (
 )
 
 // ============================================================================
-// buildDebugListResponse tests
+// buildTraceListResponse tests
 // ============================================================================
 
-func TestBuildDebugListResponse_Empty(t *testing.T) {
-	resp := buildDebugListResponse(nil, nil, nil)
+func TestBuildTraceListResponse_Empty(t *testing.T) {
+	resp := buildTraceListResponse(nil, nil, nil)
 	require.NotNil(t, resp)
 	assert.Empty(t, resp.Stages)
 }
 
-func TestBuildDebugListResponse_StageWithNoInteractions(t *testing.T) {
+func TestBuildTraceListResponse_StageWithNoInteractions(t *testing.T) {
 	stages := []*ent.Stage{
 		{
 			ID:        "stg-1",
@@ -36,7 +36,7 @@ func TestBuildDebugListResponse_StageWithNoInteractions(t *testing.T) {
 		},
 	}
 
-	resp := buildDebugListResponse(stages, nil, nil)
+	resp := buildTraceListResponse(stages, nil, nil)
 	require.Len(t, resp.Stages, 1)
 	assert.Equal(t, "stg-1", resp.Stages[0].StageID)
 	assert.Equal(t, "investigation", resp.Stages[0].StageName)
@@ -50,7 +50,7 @@ func TestBuildDebugListResponse_StageWithNoInteractions(t *testing.T) {
 	assert.NotNil(t, resp.Stages[0].Executions[0].MCPInteractions)
 }
 
-func TestBuildDebugListResponse_GroupingAndSorting(t *testing.T) {
+func TestBuildTraceListResponse_GroupingAndSorting(t *testing.T) {
 	now := time.Now()
 
 	stages := []*ent.Stage{
@@ -89,7 +89,7 @@ func TestBuildDebugListResponse_GroupingAndSorting(t *testing.T) {
 		{ID: "mcp-1", ExecutionID: "exec-1", InteractionType: mcpinteraction.InteractionTypeToolCall, ServerName: "k8s", ToolName: &toolName, CreatedAt: now},
 	}
 
-	resp := buildDebugListResponse(stages, llmInteractions, mcpInteractions)
+	resp := buildTraceListResponse(stages, llmInteractions, mcpInteractions)
 
 	// Two stages.
 	require.Len(t, resp.Stages, 2)
@@ -125,7 +125,7 @@ func TestBuildDebugListResponse_GroupingAndSorting(t *testing.T) {
 	assert.Empty(t, resp.Stages[1].Executions[1].MCPInteractions)
 }
 
-func TestBuildDebugListResponse_SessionLevelInteractions(t *testing.T) {
+func TestBuildTraceListResponse_SessionLevelInteractions(t *testing.T) {
 	now := time.Now()
 	exec1 := "exec-1"
 
@@ -146,7 +146,7 @@ func TestBuildDebugListResponse_SessionLevelInteractions(t *testing.T) {
 		{ID: "llm-exec-summary", ExecutionID: nil, InteractionType: llminteraction.InteractionTypeExecutiveSummary, ModelName: "m", CreatedAt: now},
 	}
 
-	resp := buildDebugListResponse(stages, llmInteractions, nil)
+	resp := buildTraceListResponse(stages, llmInteractions, nil)
 
 	// Stage-level interaction goes into stages.
 	require.Len(t, resp.Stages, 1)
@@ -160,7 +160,7 @@ func TestBuildDebugListResponse_SessionLevelInteractions(t *testing.T) {
 	assert.Equal(t, string(llminteraction.InteractionTypeExecutiveSummary), resp.SessionInteractions[0].InteractionType)
 }
 
-func TestBuildDebugListResponse_StageWithNoExecutions(t *testing.T) {
+func TestBuildTraceListResponse_StageWithNoExecutions(t *testing.T) {
 	stages := []*ent.Stage{
 		{
 			ID:        "stg-1",
@@ -169,7 +169,7 @@ func TestBuildDebugListResponse_StageWithNoExecutions(t *testing.T) {
 		},
 	}
 
-	resp := buildDebugListResponse(stages, nil, nil)
+	resp := buildTraceListResponse(stages, nil, nil)
 	require.Len(t, resp.Stages, 1)
 	assert.Empty(t, resp.Stages[0].Executions)
 	assert.NotNil(t, resp.Stages[0].Executions) // Not nil — clean JSON.

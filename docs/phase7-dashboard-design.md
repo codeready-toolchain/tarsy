@@ -107,9 +107,9 @@ web/dashboard/
 │   │   │   ├── ChatMessageList.tsx
 │   │   │   ├── ChatUserMessageCard.tsx
 │   │   │   └── ChatAssistantMessageCard.tsx
-│   │   ├── debug/
-│   │   │   ├── DebugView.tsx
-│   │   │   ├── DebugTimeline.tsx
+│   │   ├── trace/
+│   │   │   ├── TraceView.tsx
+│   │   │   ├── TraceTimeline.tsx
 │   │   │   ├── StageAccordion.tsx
 │   │   │   ├── ExecutionGroup.tsx
 │   │   │   ├── InteractionCard.tsx
@@ -139,9 +139,37 @@ web/dashboard/
 
 ## Backend API Extensions (Phase 7.0)
 
+### Existing Endpoints (no changes needed)
+
+These already exist and are used by the dashboard as-is:
+
+- `GET /api/v1/sessions/:id/timeline` — Timeline events for conversation view
+- `GET /api/v1/sessions/:id/trace` — Trace list (stages → executions → interactions)
+- `GET /api/v1/sessions/:id/trace/llm/:interaction_id` — LLM interaction detail
+- `GET /api/v1/sessions/:id/trace/mcp/:interaction_id` — MCP interaction detail
+- `POST /api/v1/alerts` — Submit alert
+- `POST /api/v1/sessions/:id/cancel` — Cancel session
+- `POST /api/v1/sessions/:id/chat/messages` — Send chat message
+
+### Moved Endpoints
+
+#### WebSocket: `/ws` → `/api/v1/ws`
+
+Move WebSocket endpoint from `/ws` to `/api/v1/ws`. Rationale: all sensitive endpoints under `/api/*` for a single oauth2-proxy auth rule; protocol versioning alignment with REST API.
+
+### Enriched Endpoints
+
+#### GET /health — Health Check (enrichment)
+
+Exists today. Needs `version` field added (build-time git tag or hash) for dashboard version monitoring and footer display.
+
+#### GET /api/v1/sessions/:id — Enriched Session Detail
+
+Exists today but returns raw `ent.AlertSession` JSON. Needs computed fields added (see section 3 below).
+
 ### New Endpoints
 
-#### 1. GET /api/v1/sessions — List Sessions
+#### 1. GET /api/v1/sessions — List Sessions (NEW)
 
 **Query parameters**:
 
@@ -174,7 +202,7 @@ web/dashboard/
       "completed_at": "RFC3339",
       "duration_ms": 45000,
       "error_message": null,
-      "final_analysis_preview": "First 200 chars...",
+      "executive_summary": "Concise summary of the investigation outcome",
       "llm_interaction_count": 5,
       "mcp_interaction_count": 3,
       "input_tokens": 12000,
@@ -251,7 +279,7 @@ Returns sessions that are actively being processed or queued.
 
 ---
 
-#### 3. GET /api/v1/sessions/:id — Enriched Session Detail
+#### 3. GET /api/v1/sessions/:id — Enriched Session Detail (EXISTING — enrichment)
 
 Extend existing handler to return computed fields. The raw `ent.AlertSession` fields remain; additional computed fields are added.
 
@@ -400,50 +428,48 @@ Returns distinct values currently in use.
 }
 ```
 
-**GET /api/v1/chains/:id** — Chain definition summary (used by alert submission form to preview chain stages):
-
-```json
-{
-  "id": "standard-investigation",
-  "description": "Standard investigation chain",
-  "stages": [
-    {
-      "name": "Investigation",
-      "index": 1,
-      "parallel_type": null,
-      "agent_count": 1
-    },
-    {
-      "name": "Parallel Analysis",
-      "index": 2,
-      "parallel_type": "multi_agent",
-      "agent_count": 3
-    }
-  ]
-}
-```
-
-**Implementation**: Read from chain registry config. No DB query needed.
-
 ---
 
 #### 7. Progress Status Events
 
-New transient WebSocket event (no DB persistence):
+Two levels of transient progress events (NOTIFY only, no DB persistence). Needed because sessions can have multiple parallel agent executions — a single progress event can't serve both the session list and the per-agent detail view.
+
+**7a. Session-level progress** — published to `sessions` channel (global):
+
+Used by the active alerts panel to show current stage and high-level status without REST re-fetch.
 
 ```json
 {
-  "type": "session.progress_update",
+  "type": "session.progress",
   "session_id": "uuid",
-  "phase": "gathering_info",
-  "message": "Calling kubernetes.get_pods...",
-  "stage_id": "uuid",
-  "execution_id": "uuid",
+  "current_stage_name": "Parallel Analysis",
+  "current_stage_index": 2,
+  "total_stages": 4,
+  "active_executions": 3,
+  "status_text": "Running 3 agents in parallel...",
   "timestamp": "RFC3339Nano"
 }
 ```
 
-**ProgressPhase enum**:
+Published on: stage transitions, synthesis/finalization start, periodically during long stages.
+
+**7b. Execution-level progress** — published to `session:{id}` channel:
+
+Used by the session detail page to show per-agent progress in the stage display and parallel agent tabs.
+
+```json
+{
+  "type": "execution.progress",
+  "session_id": "uuid",
+  "stage_id": "uuid",
+  "execution_id": "uuid",
+  "phase": "gathering_info",
+  "message": "Gathering info...",
+  "timestamp": "RFC3339Nano"
+}
+```
+
+**ProgressPhase enum** (for execution-level events):
 
 | Phase | Published From | Trigger |
 |-------|---------------|---------|
@@ -454,7 +480,42 @@ New transient WebSocket event (no DB persistence):
 | `synthesizing` | `executeSynthesisStage()` | Synthesis stage start |
 | `finalizing` | `generateExecutiveSummary()` | Executive summary generation |
 
-**Implementation**: Add `PublishProgressUpdate(ctx, sessionID, phase, message, stageID, execID)` to `EventPublisher`. Calls `PublishTransient()` (NOTIFY only, no DB). Retrofit calls into existing code paths.
+**Implementation**:
+- `PublishSessionProgress(ctx, sessionID, stageName, stageIndex, totalStages, activeExecs, statusText)` → publishes to `sessions` channel via `PublishTransient()`
+- `PublishExecutionProgress(ctx, sessionID, stageID, execID, phase, message)` → publishes to `session:{id}` channel via `PublishTransient()`
+- Retrofit calls into existing code paths (controllers, tool executor, summarizer, parallel executor)
+
+### Interaction Created Event
+
+**Event type**: `interaction.created`
+**Channel**: `session:{id}`
+**Purpose**: Lightweight notification when an LLM or MCP interaction record is saved to the database. Used by the trace view for live updates via event-notification + REST re-fetch pattern.
+
+**Payload**:
+```json
+{
+  "event": "interaction.created",
+  "session_id": "sess-123",
+  "stage_id": "stage-456",
+  "execution_id": "exec-789",
+  "interaction_id": "int-abc",
+  "interaction_type": "llm"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | Session ID |
+| `stage_id` | string | Stage the interaction belongs to |
+| `execution_id` | string | Execution the interaction belongs to |
+| `interaction_id` | string | Interaction ID (LLM or MCP) |
+| `interaction_type` | `"llm"` \| `"mcp"` | Type of interaction |
+
+**Note**: Interactions are saved as complete records (no create-then-update lifecycle). The event fires once, after the LLM/MCP call completes and the full record is persisted. This is a persisted event (not transient) since it represents a DB record creation.
+
+**Implementation**:
+- `PublishInteractionCreated(ctx, sessionID, stageID, execID, interactionID, interactionType)` → publishes to `session:{id}` channel via `Publish()`
+- Add publish call in `InteractionService.CreateLLMInteraction()` and `InteractionService.CreateMCPInteraction()` (or in the calling code: `recordLLMInteraction`, `recordMCPInteraction`)
 
 ---
 
@@ -472,16 +533,22 @@ New transient WebSocket event (no DB persistence):
 | `session.timed_out` | `session.status` (status=timed_out) | Map from status field |
 | `session.paused` | N/A | Feature removed (no paused state) |
 | `session.resumed` | N/A | Feature removed |
-| `session.progress_update` | `session.progress_update` | Same concept, new payload |
+| `session.progress_update` | `session.progress` + `execution.progress` | Split: session-level (global channel) + execution-level (session channel) |
 | `stage.started` | `stage.status` (status=started) | Map from status field |
 | `stage.completed` | `stage.status` (status=completed) | Map from status field |
 | `stage.failed` | `stage.status` (status=failed) | Map from status field |
+| N/A | `stage.status` (status=timed_out) | New in new TARSy — stage-level timeout |
+| N/A | `stage.status` (status=cancelled) | New in new TARSy — stage-level cancellation |
 | `llm.interaction` | `timeline_event.created` | Different model: timeline events carry content |
 | `mcp.tool_call.started` | `timeline_event.created` (llm_tool_call, streaming) | Lifecycle model |
 | `mcp.tool_call` | `timeline_event.completed` (llm_tool_call) | Lifecycle model |
 | `llm.stream.chunk` | `stream.chunk` | Simpler: `{delta}` vs `{chunk, stream_type}` |
-| `chat.created` | `chat.created` | Same |
-| `chat.user_message` | `chat.user_message` | Same |
+| `chat.created` | `chat.created` | Same (fired once when chat is first created) |
+| `chat.user_message` | N/A | Removed — user messages appear as `timeline_event.created` with `event_type: "user_question"` |
+| N/A | `timeline_event.created` (status=cancelled) | New — timeline events can be cancelled |
+| N/A | `timeline_event.created` (status=timed_out) | New — timeline events can time out |
+| N/A | `timeline_event.completed` (status=cancelled/timed_out) | New — streaming events can terminate with cancel/timeout |
+| N/A | `interaction.created` | New — lightweight notification when LLM/MCP interaction is saved. Used by trace view for live updates (event-notification → REST re-fetch) |
 
 ### Key Protocol Differences
 
@@ -534,7 +601,7 @@ ws.on('timeline_event.completed', (data) => {
 });
 ```
 
-**4. WebSocket URL**: Old: `/api/v1/ws`. New: `/ws`. Configure in `env.ts`.
+**4. WebSocket URL**: Move from current `/ws` to `/api/v1/ws` (matching old TARSy). Rationale: single oauth2-proxy rule (`/api/*`) covers all sensitive endpoints (REST + WS); protocol versioning; clean separation from static files. Backend change: move route registration in `server.go` (Phase 7.0). Configure in `env.ts`.
 
 **5. Catchup**: Both support auto-catchup on subscribe + explicit catchup with `last_event_id`. New protocol adds `catchup.overflow` signal (limit 200 events, signal full REST reload if more). Dashboard must handle overflow by refreshing from REST.
 
@@ -590,14 +657,15 @@ function getStreamRenderer(eventType: string) {
 Chat messages are unified with the session timeline. No separate chat history API needed.
 
 **Data flow**:
-1. User sends message → `POST /sessions/:id/chat/messages` → 202 Accepted
-2. Dashboard receives `chat.user_message` event → show user message optimistically
-3. Dashboard receives `timeline_event.created` (type=`user_question`) → confirm user message
+1. User sends message → `POST /sessions/:id/chat/messages` → 202 Accepted (returns `chat_id`, `message_id`, `stage_id`)
+2. Dashboard shows user message **optimistically** from the POST response content (no separate WS event — `chat.user_message` doesn't exist in new TARSy)
+3. Dashboard receives `chat.created` (if first message only) → update chat state
 4. Dashboard receives `stage.status` (started) → show "processing" indicator
-5. Dashboard receives `timeline_event.created` (status=streaming) → start streaming
-6. Dashboard receives `stream.chunk` events → append deltas
-7. Dashboard receives `timeline_event.completed` → finalize response
-8. Dashboard receives `stage.status` (completed) → clear processing indicator
+5. Dashboard receives `timeline_event.created` (type=`user_question`) → confirm user message in timeline
+6. Dashboard receives `timeline_event.created` (status=streaming) → start streaming assistant response
+7. Dashboard receives `stream.chunk` events → append deltas
+8. Dashboard receives `timeline_event.completed` → finalize response
+9. Dashboard receives `stage.status` (completed) → clear processing indicator
 
 **Cancel**: Call `POST /sessions/:id/cancel` (same endpoint as session cancel — works for both).
 
@@ -607,26 +675,38 @@ Stages with multiple agents (parallel_type = multi_agent or replica) are rendere
 
 ```
 ┌─ Stage: Investigation ─── [Agent-1] [Agent-2] [Agent-3] ──┐
-│  [Agent-1 tab selected]                                     │
-│  - Thinking: "Let me check the pod status..."               │
-│  - Tool Call: kubernetes.get_pods                            │
-│  - Response: "The pod is in CrashLoopBackOff..."            │
-└─────────────────────────────────────────────────────────────┘
+│  [Agent-1 tab selected]                                   │
+│  - Thinking: "Let me check the pod status..."             │
+│  - Tool Call: kubernetes.get_pods                         │
+│  - Response: "The pod is in CrashLoopBackOff..."          │
+└───────────────────────────────────────────────────────────┘
 ```
 
 Timeline events carry `execution_id` which allows grouping by agent. Stage metadata (from enriched session detail) provides the parallel type and agent names.
 
-### Debug View Data Flow
+### Trace View Data Flow
+
+Available for all sessions (active and terminated). Uses event-notification + REST re-fetch pattern for live updates.
 
 ```
+Initial load:
 1. Load session detail:    GET /sessions/:id
-2. Load debug list:        GET /sessions/:id/debug → DebugListResponse
+2. Load trace list:        GET /sessions/:id/trace → TraceListResponse
 3. Render stage hierarchy: stages → executions → interaction cards
-4. On interaction click:   GET /sessions/:id/debug/llm/:id  (or .../mcp/:id)
-5. Show interaction detail in expanded card or modal
+
+Live updates (active sessions):
+4. Subscribe to session:{id} channel (already subscribed from page load)
+5. On stage.status event        → re-fetch GET /sessions/:id/trace
+6. On interaction.created event → re-fetch GET /sessions/:id/trace
+7. Re-render stage hierarchy with updated data
+
+Interaction detail (on demand):
+8. On interaction click:   GET /sessions/:id/trace/llm/:id  (or .../mcp/:id)
+9. Show interaction detail in expanded card or modal
+   (always returns complete data — interactions are saved as complete records)
 ```
 
-The debug page is entirely REST-driven (no WebSocket needed — debug view is for completed sessions).
+**Design rationale**: Events are lightweight "something changed" notifications. REST endpoints are the source of truth — no complex client-side state stitching needed. For terminated sessions, no events arrive and the view is purely static (same REST endpoints, no re-fetches).
 
 ---
 
@@ -711,7 +791,7 @@ type SessionListItem struct {
     CompletedAt         *time.Time `json:"completed_at"`
     DurationMs          *int64  `json:"duration_ms"`
     ErrorMessage        *string `json:"error_message"`
-    FinalAnalysisPreview *string `json:"final_analysis_preview"`
+    ExecutiveSummary      *string `json:"executive_summary"`
     LLMInteractionCount int     `json:"llm_interaction_count"`
     MCPInteractionCount int     `json:"mcp_interaction_count"`
     InputTokens         int64   `json:"input_tokens"`
@@ -772,8 +852,11 @@ Vite dev server with proxy:
 export default defineConfig({
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/ws': { target: 'ws://localhost:8080', ws: true },
+      '/api': {
+        target: 'http://localhost:8080',
+        // Covers both REST (/api/v1/*) and WebSocket (/api/v1/ws)
+        ws: true,
+      },
       '/health': 'http://localhost:8080',
     },
   },
@@ -816,10 +899,9 @@ if dashboardDir != "" {
 1. On mount: `GET /sessions/filter-options` → populate filters
 2. On mount: `GET /sessions?page=1&page_size=25&sort_by=created_at&sort_order=desc` → populate list
 3. On mount: `GET /sessions/active` → populate active + queued panels
-4. Subscribe to `sessions` channel → on `session.status` event:
-   - Re-fetch `GET /sessions/active` → refresh active/queued panels
-   - If status changed to terminal → also re-fetch `GET /sessions` for historical list
-   - On `session.progress_update` → update active session card progress text
+4. Subscribe to `sessions` channel:
+   - On `session.status` → re-fetch `GET /sessions/active` for active/queued panels; if terminal → also re-fetch historical list
+   - On `session.progress` → update active session card in-place (stage name, stage index, status text) without REST re-fetch
 5. On filter/sort/page change: re-fetch `GET /sessions` with new params
 6. Persist filter state in localStorage
 
@@ -834,32 +916,32 @@ if dashboardDir != "" {
 5. On `stream.chunk` → append delta to matching event_id
 6. On `timeline_event.completed` → finalize flow item content
 7. On `stage.status` → update stage progress bar
-8. On `session.progress_update` → update progress phase text in stage display
+8. On `execution.progress` → update per-agent progress phase text in stage display / parallel tabs
 9. On `session.status` → optimistic status badge update, then background re-fetch `GET /sessions/:id` for full computed data (token counts, stage counts)
 
-### Phase 7.5 (Debug View) — Segmented Control Navigation
+### Phase 7.5 (Trace View) — Segmented Control Navigation
 
-The debug view is a separate route (`/sessions/:id/debug`) but shares the session header component. A segmented control (Conversation | Debug) in the header provides tab-like navigation between routes:
+The trace view is a separate route (`/sessions/:id/trace`) but shares the session header component. A segmented control (Conversation | Trace) in the header provides tab-like navigation between routes:
 
 ```
 Session Detail Page (/sessions/:id):
 ┌────────────────────────────────────────┐
 │ [← Back]  Session Header               │
-│ [ Conversation | Debug ]  ← segmented  │
+│ [ Conversation | Trace ]  ← segmented  │
 │     ^^^^^^^^^^^                         │
 │ Conversation Timeline                   │
 │ ...                                     │
 │ Chat Panel                              │
 └─────────────────────────────────────────┘
 
-Debug Page (/sessions/:id/debug):
+Trace Page (/sessions/:id/trace):
 ┌────────────────────────────────────────┐
 │ [← Back]  Session Header               │
-│ [ Conversation | Debug ]  ← segmented  │
+│ [ Conversation | Trace ]  ← segmented  │
 │                  ^^^^^                  │
-│ Debug Timeline (Accordions)             │
+│ Trace Timeline (Accordions)             │
 │ ...                                     │
 └─────────────────────────────────────────┘
 ```
 
-Both views share the same `SessionHeader` component with the segmented control. Clicking a segment navigates to the corresponding route. Visually feels like the old tab UX; under the hood they're separate pages with independent data loading (conversation loads timeline; debug loads debug list).
+Both views share the same `SessionHeader` component with the segmented control. Clicking a segment navigates to the corresponding route. Visually feels like the old tab UX; under the hood they're separate pages with independent data loading (conversation loads timeline; trace loads trace list).

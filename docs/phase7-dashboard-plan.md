@@ -2,7 +2,7 @@
 
 ## Overview
 
-Port the old TARSy React dashboard to the new Go-based TARSy backend, preserving all existing UX while adapting to the new API surface and WebSocket event protocol. The debug/technical view moves from an in-page tab to a dedicated page.
+Port the old TARSy React dashboard to the new Go-based TARSy backend, preserving all existing UX while adapting to the new API surface and WebSocket event protocol. The trace view (formerly debug/technical tab) moves from an in-page tab to a dedicated page.
 
 ### Old TARSy Reference
 
@@ -36,7 +36,7 @@ The old TARSy codebase lives at `/home/igels/Projects/AI/tarsy-bot` and is the p
 2. **Same UX**: Visual design, layout, interactions remain identical (99%+ match)
 3. **New backend**: All data comes from the new Go API; no legacy Python backend dependency
 4. **Improved architecture**: Cleaner data flow, better real-time protocol, no blind copying
-5. **Debug view evolution**: Technical/debug view becomes a dedicated page (not a tab)
+5. **Trace view evolution**: Technical/debug view becomes a dedicated "Trace" page (not a tab)
 
 ### Non-Goals (Deferred)
 
@@ -57,46 +57,56 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ### Phase 7.0: Backend API Extensions
 
-**Goal**: Expose all REST endpoints the dashboard requires. This is backend-only Go work — no frontend.
+**Goal**: Expose all REST endpoints the dashboard requires. This is backend-only Go work — no frontend. Many session-level endpoints already exist (timeline, trace, cancel, chat) — this phase adds the missing list/filter/system endpoints and enriches the existing session detail response.
 
 **Deliverables**:
 
-1. **Session list endpoint** — `GET /api/v1/sessions`
+1. **Session list endpoint** *(new)* — `GET /api/v1/sessions`
    - Pagination (page, page_size)
    - Filters: status (multi), alert_type, chain_id, search (text), date range
    - Sorting: created_at, status, alert_type, author, duration
    - Response: `SessionListItem` DTO with pre-computed stats (token totals, interaction counts, stage counts, chat message count, duration)
 
-2. **Active sessions endpoint** — `GET /api/v1/sessions/active`
+2. **Active sessions endpoint** *(new)* — `GET /api/v1/sessions/active`
    - Returns in-progress + pending sessions with progress metadata
    - Used by active alerts panel and queued alerts section
 
-3. **Session detail enrichment** — Enrich existing `GET /api/v1/sessions/:id`
+3. **Session detail enrichment** *(existing — enrich)* — Enrich existing `GET /api/v1/sessions/:id`
    - Add computed fields: `chat_enabled`, `chat_id`, `chat_message_count`, `total_stages`, `completed_stages`, `has_parallel_stages`, token totals, `duration_ms`
    - Add `stages` array with stage metadata (id, name, index, status, parallel_type, agent count)
 
-4. **Session summary endpoint** — `GET /api/v1/sessions/:id/summary`
+4. **Session summary endpoint** *(new)* — `GET /api/v1/sessions/:id/summary`
    - Lightweight stats: interaction counts, token totals, duration, chain statistics
 
-5. **Filter options endpoint** — `GET /api/v1/sessions/filter-options`
+5. **Filter options endpoint** *(new)* — `GET /api/v1/sessions/filter-options`
    - Returns distinct values for: alert_types, chain_ids, statuses
 
-6. **System endpoints**:
+6. **System endpoints** *(new)*:
    - `GET /api/v1/system/warnings` — System warnings from `SystemWarningsService`
    - `GET /api/v1/system/mcp-servers` — MCP server statuses from `HealthMonitor`
    - `GET /api/v1/system/default-tools` — Default tools configuration
 
-7. **Alert metadata endpoints**:
+7. **Alert metadata endpoint** *(new)*:
    - `GET /api/v1/alert-types` — Available alert types from config (chain registry)
-   - `GET /api/v1/chains/:id` — Chain definition summary (stages, agents)
 
-8. **Progress status events** — Transient `session.progress_update` WebSocket events
+8. **Progress status events** *(new)* — Two levels of transient WebSocket progress events:
+   - **Session-level** (`session.progress` on `sessions` channel): current stage name/index, total stages, active execution count, status text — for the active alerts panel
+   - **Execution-level** (`execution.progress` on `session:{id}` channel): per-agent phase + message — for the session detail page parallel agent tabs
    - `ProgressPhase` enum: `investigating`, `gathering_info`, `distilling`, `concluding`, `synthesizing`, `finalizing`
    - Retrofit publishing into: controllers (investigating), tool executor (gathering_info), summarization (distilling), chain orchestrator (concluding, finalizing), parallel executor (synthesizing)
 
-9. **Health endpoint enrichment** — Add `version` field to health endpoint response
+   **Interaction event** *(new)* — `interaction.created` on `session:{id}` channel:
+   - Fired when LLM or MCP interaction is saved to DB (interactions are created as complete records)
+   - Lightweight notification payload: `{ session_id, stage_id, execution_id, interaction_id, interaction_type: "llm"|"mcp" }`
+   - Used by trace view for live updates (event-notification → REST re-fetch pattern)
+
+9. **Health endpoint enrichment** *(existing — enrich)* — Add `version` field to health endpoint response
    - Build-time version string (git tag or build hash)
    - Used by dashboard for version monitoring and footer display
+
+10. **WebSocket route change** *(existing — move)* — Move `/ws` → `/api/v1/ws`
+    - All sensitive endpoints under `/api/*` for single oauth2-proxy auth rule
+    - Protocol versioning alignment with REST API
 
 **Dependencies**: None (builds on Phase 6 codebase)
 
@@ -119,7 +129,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 3. **Routing** — React Router with routes:
    - `/` → Dashboard (session list)
    - `/sessions/:id` → Session detail (conversation)
-   - `/sessions/:id/debug` → Debug view (dedicated page)
+   - `/sessions/:id/trace` → Trace view (dedicated page)
    - `/submit-alert` → Manual alert submission
 
 4. **Shared layout** — `SharedHeader`, `VersionFooter`, `VersionUpdateBanner`, `SystemWarningBanner` (component shells — wired to real data in later sub-phases)
@@ -138,7 +148,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 7. **WebSocket service** — Adapted for new protocol:
    - Channel subscription model (`sessions`, `session:{id}`)
-   - Event type handling (unified `session.status`, `stage.status`, `timeline_event.*`, `stream.chunk`, `session.progress_update`, `chat.created`, `chat.user_message`)
+   - Event type handling (unified `session.status`, `stage.status`, `timeline_event.*`, `stream.chunk`, `session.progress`, `execution.progress`, `chat.created`, `interaction.created`)
    - Reconnect with exponential backoff
    - Auto-catchup on subscribe + `catchup.overflow` handling (full REST reload)
    - Keepalive (ping/pong)
@@ -146,7 +156,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 8. **Go static file serving** — Serve dashboard build from Go backend
    - Serve `web/dashboard/dist/` from root `/`
    - SPA fallback (all non-API, non-WS, non-health routes → index.html)
-   - API routes (`/api/*`, `/ws`, `/health`) take priority over static files
+   - API routes (`/api/*`, `/health`) take priority over static files (WebSocket is at `/api/v1/ws`)
 
 **Dependencies**: Phase 7.0 (API endpoints must exist)
 
@@ -167,7 +177,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - WebSocket status indicator (Live/Offline)
    - Active session cards with progress (chain stage, progress phase)
    - Auto-refresh on WebSocket events
-   - Real-time progress via `session.progress_update` events
+   - Real-time progress via `session.progress` events (session-level, from `sessions` channel)
 
 3. **Queued alerts section** — `QueuedAlertsSection`
    - Pending sessions with wait time
@@ -204,7 +214,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 1. **Session detail page** — `SessionDetailPage`
    - Session header: status badge, cancel button, token usage summary, MCP server summary
-   - Segmented control (Conversation | Debug) in header — routes to `/sessions/:id` and `/sessions/:id/debug`
+   - Segmented control (Conversation | Trace) in header — routes to `/sessions/:id` and `/sessions/:id/trace`
    - Original alert card (collapsible)
    - Final analysis card (collapsible, with markdown rendering)
    - Executive summary section
@@ -217,6 +227,8 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
      - `llm_tool_call` → Tool call card (server.tool, args, result)
      - `mcp_tool_summary` → Summary indicator
      - `final_analysis` → Final analysis marker
+     - `user_question` → User chat message (from follow-up chat)
+     - `executive_summary` → Executive summary display
      - `code_execution` → Code execution display
      - `google_search_result` → Search result display
      - `url_context_result` → URL context display
@@ -236,7 +248,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - Stage progress bar (completed / total)
    - Stage status chips (current, completed, failed)
    - `stage.status` events for live updates
-   - `session.progress_update` for granular status text
+   - `execution.progress` for per-agent granular status text
 
 5. **Markdown rendering** — react-markdown with:
    - Syntax-highlighted code blocks
@@ -272,38 +284,45 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - Scroll management
 
 4. **Chat state management** — `useChatState` hook
-   - Optimistic user message display
+   - Optimistic user message display (from POST response, no `chat.user_message` event in new TARSy)
    - Active execution tracking
-   - WebSocket event handling for chat stages
+   - WebSocket event handling for chat stages (`stage.status`, `timeline_event.*`, `stream.chunk`)
    - Cancel execution support
 
 **Dependencies**: Phase 7.3 (session detail page, streaming infrastructure)
 
 ---
 
-### Phase 7.5: Debug / Observability View
+### Phase 7.5: Trace View
 
-**Goal**: Dedicated page for debug/observability information, replacing the old technical tab.
+**Goal**: Dedicated trace page for observability information, replacing the old technical/debug tab. Available for all sessions (active and terminated) with live updates for active sessions.
 
 **Deliverables**:
 
-1. **Debug page** — `/sessions/:id/debug`
-   - Shared session header with segmented control (Conversation | Debug) — same component as conversation view
-   - Debug segment active; clicking Conversation navigates back to `/sessions/:id`
+1. **Trace page** — `/sessions/:id/trace`
+   - Shared session header with segmented control (Conversation | Trace) — same component as conversation view
+   - Trace segment active; clicking Conversation navigates back to `/sessions/:id`
 
-2. **Stage/execution hierarchy** — `DebugTimeline`
+2. **Stage/execution hierarchy** — `TraceTimeline`
    - Accordion-based stage list
    - Stage header: status icon, name, parallel badge, agent names, interaction counts
    - Within each stage: execution groups
    - Within each execution: chronological interactions (LLM + MCP)
    - Parallel stages: tabs for each agent execution
 
-3. **Interaction cards** — `InteractionCard`
+3. **Live updates** — Event-notification + REST re-fetch pattern:
+   - Subscribe to `session:{id}` channel (already subscribed from page load)
+   - On `stage.status` event → re-fetch `GET /sessions/:id/trace` (stage hierarchy changed)
+   - On `interaction.created` event → re-fetch `GET /sessions/:id/trace` (new interaction appeared)
+   - No streaming or complex state — just re-fetch the full trace tree on each event
+   - Works for both active and terminated sessions (terminated sessions simply receive no events)
+
+4. **Interaction cards** — `InteractionCard`
    - LLM interactions: type, model, tokens, duration, expandable detail
    - MCP interactions: server, tool, duration, expandable detail
-   - Click to expand → full details loaded from debug API
+   - Click to expand → full details loaded from trace API (always returns complete data since interactions are saved as complete records)
 
-4. **LLM interaction detail** — `LLMInteractionDetail`
+5. **LLM interaction detail** — `LLMInteractionDetail`
    - Full reconstructed conversation (system, user, assistant, tool messages)
    - Token breakdown
    - Timing information
@@ -311,16 +330,16 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - Request/response metadata
    - Syntax-highlighted JSON for raw request/response
 
-5. **MCP interaction detail** — `MCPInteractionDetail`
+6. **MCP interaction detail** — `MCPInteractionDetail`
    - Server and tool names
    - Arguments (JSON formatted)
    - Tool result (with truncation indicator)
    - Available tools list
    - Timing and error info
 
-6. **Copy functionality** — "Copy Entire Flow" button for chain debugging
+7. **Copy functionality** — "Copy Entire Flow" button for chain debugging
 
-**Dependencies**: Phase 7.1, Phase 7.0 (debug endpoints already exist)
+**Dependencies**: Phase 7.1, Phase 7.0 (trace endpoints + `interaction.created` event)
 
 ---
 
@@ -396,7 +415,7 @@ Phase 7.0 (Backend APIs)
     │       │       │
     │       │       └─→ Phase 7.4 (Chat)
     │       │
-    │       ├─→ Phase 7.5 (Debug View)
+    │       ├─→ Phase 7.5 (Trace View)
     │       │
     │       └─→ Phase 7.6 (System + Alerts)
     │

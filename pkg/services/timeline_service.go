@@ -94,8 +94,8 @@ func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID strin
 	return nil
 }
 
-// CompleteTimelineEvent marks an event as completed and sets debug links.
-// llmInteractionID and mcpInteractionID are optional debug links (pass nil if not applicable).
+// CompleteTimelineEvent marks an event as completed and sets trace links.
+// llmInteractionID and mcpInteractionID are optional trace links (pass nil if not applicable).
 func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID string, content string, llmInteractionID *string, mcpInteractionID *string) error {
 	if eventID == "" {
 		return NewValidationError("eventID", "required")
@@ -132,7 +132,7 @@ func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID str
 
 // CompleteTimelineEventWithMetadata marks an event as completed with metadata merge.
 // Merges the provided metadata into the existing metadata JSON (read-modify-write).
-// llmInteractionID and mcpInteractionID are optional debug links (pass nil if not applicable).
+// llmInteractionID and mcpInteractionID are optional trace links (pass nil if not applicable).
 func (s *TimelineService) CompleteTimelineEventWithMetadata(ctx context.Context, eventID string, content string, metadata map[string]interface{}, llmInteractionID *string, mcpInteractionID *string) error {
 	if eventID == "" {
 		return NewValidationError("eventID", "required")

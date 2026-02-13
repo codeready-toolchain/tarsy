@@ -12,17 +12,17 @@ import (
 )
 
 // ────────────────────────────────────────────────────────────
-// GET /api/v1/sessions/:id/debug
+// GET /api/v1/sessions/:id/trace
 // Level 1: Interaction list grouped by execution (metadata only).
 // ────────────────────────────────────────────────────────────
 
-func (s *Server) getDebugListHandler(c *echo.Context) error {
+func (s *Server) getTraceListHandler(c *echo.Context) error {
 	sessionID := c.Param("id")
 	if sessionID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
 	}
 	if s.interactionService == nil || s.stageService == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "debug endpoints not configured")
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "trace endpoints not configured")
 	}
 
 	ctx := c.Request().Context()
@@ -43,12 +43,12 @@ func (s *Server) getDebugListHandler(c *echo.Context) error {
 		return mapServiceError(err)
 	}
 
-	resp := buildDebugListResponse(stages, llmInteractions, mcpInteractions)
+	resp := buildTraceListResponse(stages, llmInteractions, mcpInteractions)
 	return c.JSON(http.StatusOK, resp)
 }
 
 // ────────────────────────────────────────────────────────────
-// GET /api/v1/sessions/:id/debug/llm/:interaction_id
+// GET /api/v1/sessions/:id/trace/llm/:interaction_id
 // Level 2: Full LLM interaction with reconstructed conversation.
 // ────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ func (s *Server) getLLMInteractionHandler(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "interaction_id is required")
 	}
 	if s.interactionService == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "debug endpoints not configured")
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "trace endpoints not configured")
 	}
 
 	ctx := c.Request().Context()
@@ -78,7 +78,7 @@ func (s *Server) getLLMInteractionHandler(c *echo.Context) error {
 }
 
 // ────────────────────────────────────────────────────────────
-// GET /api/v1/sessions/:id/debug/mcp/:interaction_id
+// GET /api/v1/sessions/:id/trace/mcp/:interaction_id
 // Level 2: Full MCP interaction details.
 // ────────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ func (s *Server) getMCPInteractionHandler(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "interaction_id is required")
 	}
 	if s.interactionService == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "debug endpoints not configured")
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "trace endpoints not configured")
 	}
 
 	ctx := c.Request().Context()
@@ -106,12 +106,12 @@ func (s *Server) getMCPInteractionHandler(c *echo.Context) error {
 // Grouping logic (pure function — no HTTP/service dependencies)
 // ────────────────────────────────────────────────────────────
 
-// buildDebugListResponse groups interactions into the stage → execution hierarchy.
-func buildDebugListResponse(
+// buildTraceListResponse groups interactions into the stage → execution hierarchy.
+func buildTraceListResponse(
 	stages []*ent.Stage,
 	llmInteractions []*ent.LLMInteraction,
 	mcpInteractions []*ent.MCPInteraction,
-) *models.DebugListResponse {
+) *models.TraceListResponse {
 	// Separate session-level interactions (nil execution_id) from stage-level.
 	llmByExec := make(map[string][]*ent.LLMInteraction)
 	var sessionLLM []models.LLMInteractionListItem
@@ -133,9 +133,9 @@ func buildDebugListResponse(
 	}
 
 	// Build two-level response: stages → executions → interactions.
-	var stageGroups []models.DebugStageGroup
+	var stageGroups []models.TraceStageGroup
 	for _, stg := range stages {
-		sg := models.DebugStageGroup{
+		sg := models.TraceStageGroup{
 			StageID:   stg.ID,
 			StageName: stg.StageName,
 		}
@@ -147,7 +147,7 @@ func buildDebugListResponse(
 		})
 
 		for _, exec := range executions {
-			eg := models.DebugExecutionGroup{
+			eg := models.TraceExecutionGroup{
 				ExecutionID: exec.ID,
 				AgentName:   exec.AgentName,
 			}
@@ -171,16 +171,16 @@ func buildDebugListResponse(
 			sg.Executions = append(sg.Executions, eg)
 		}
 		if sg.Executions == nil {
-			sg.Executions = []models.DebugExecutionGroup{}
+			sg.Executions = []models.TraceExecutionGroup{}
 		}
 
 		stageGroups = append(stageGroups, sg)
 	}
 	if stageGroups == nil {
-		stageGroups = []models.DebugStageGroup{}
+		stageGroups = []models.TraceStageGroup{}
 	}
 
-	return &models.DebugListResponse{
+	return &models.TraceListResponse{
 		Stages:              stageGroups,
 		SessionInteractions: sessionLLM,
 	}

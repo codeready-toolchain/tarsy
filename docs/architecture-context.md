@@ -24,7 +24,7 @@ AlertSession (session metadata, status, alert data)
        └─ AgentExecution (individual agent work within a stage)
             ├─ Layer 1: TimelineEvent (UX timeline — what the user sees)
             ├─ Layer 2: Message (LLM conversation — linear, no duplication)
-            └─ Layer 3-4: LLMInteraction / MCPInteraction (debug/observability)
+            └─ Layer 3-4: LLMInteraction / MCPInteraction (trace/observability)
   └─ Event (WebSocket distribution — transient)
   └─ Chat → ChatUserMessage (follow-up chat)
 ```
@@ -35,7 +35,7 @@ Key design: **no stored output fields** on Stage or AgentExecution. Context is b
 
 ```
 pkg/
-├── api/              # HTTP handlers (session, timeline, debug, chat, health), requests, responses, error mapping
+├── api/              # HTTP handlers (session, timeline, trace, chat, health), requests, responses, error mapping
 ├── agent/            # Agent interface, lifecycle, LLM client, tool executor
 │   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser, tool execution, summarization
 │   ├── context/      # Context formatter, investigation formatter, stage context builder
@@ -45,7 +45,7 @@ pkg/
 ├── events/           # EventPublisher, ConnectionManager, NotifyListener
 ├── masking/          # Data masking service (regex patterns, code maskers, K8s Secret masker)
 ├── mcp/              # MCP client infrastructure (client, executor, transport, health, testing helpers)
-├── models/           # MCP selection, debug API response types, shared types
+├── models/           # MCP selection, trace API response types, shared types
 ├── queue/            # Worker, WorkerPool, orphan detection, session executor, chat executor
 └── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
@@ -215,10 +215,10 @@ NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChun
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or active chat execution |
 | POST | `/api/v1/sessions/:id/chat/messages` | Send chat message (auto-creates chat on first message, 202 Accepted) |
 | GET | `/api/v1/sessions/:id/timeline` | Get session timeline events ordered by sequence |
-| GET | `/api/v1/sessions/:id/debug` | Debug interaction list grouped by stage → execution |
-| GET | `/api/v1/sessions/:id/debug/llm/:interaction_id` | Full LLM interaction detail with reconstructed conversation |
-| GET | `/api/v1/sessions/:id/debug/mcp/:interaction_id` | Full MCP interaction detail (arguments, result, available tools) |
-| GET | `/ws` | WebSocket connection for real-time streaming |
+| GET | `/api/v1/sessions/:id/trace` | Trace interaction list grouped by stage → execution |
+| GET | `/api/v1/sessions/:id/trace/llm/:interaction_id` | Full LLM interaction detail with reconstructed conversation |
+| GET | `/api/v1/sessions/:id/trace/mcp/:interaction_id` | Full MCP interaction detail (arguments, result, available tools) |
+| GET | `/api/v1/ws` | WebSocket connection for real-time streaming |
 
 ---
 
@@ -1003,38 +1003,38 @@ DB INSERT + `pg_notify` in the same transaction for persistent events. `PublishT
 
 ---
 
-## Debug / Observability API (`pkg/api/handler_debug.go`)
+## Trace / Observability API (`pkg/api/handler_trace.go`)
 
-Three-level debug endpoints for inspecting investigation internals. Designed for the dashboard's observability views and for e2e test verification of all 4 data layers (WS events, API responses, LLM interactions, MCP interactions).
+Three-level trace endpoints for inspecting investigation internals. Designed for the dashboard's trace view and for e2e test verification of all 4 data layers (WS events, API responses, LLM interactions, MCP interactions).
 
-### Level 1: Interaction List (`GET /sessions/:id/debug`)
+### Level 1: Interaction List (`GET /sessions/:id/trace`)
 
 Returns interactions grouped in a stage → execution hierarchy. Session-level interactions (e.g., executive summary) are returned separately.
 
 ```go
-// pkg/models/debug.go
-type DebugListResponse struct {
-    Stages              []DebugStageGroup         // Stage → execution → interactions hierarchy
+// pkg/models/interaction.go
+type TraceListResponse struct {
+    Stages              []TraceStageGroup         // Stage → execution → interactions hierarchy
     SessionInteractions []LLMInteractionListItem  // Session-level (e.g., executive summary)
 }
 
-type DebugStageGroup struct {
+type TraceStageGroup struct {
     StageID, StageName string
-    Executions         []DebugExecutionGroup
+    Executions         []TraceExecutionGroup
 }
 
-type DebugExecutionGroup struct {
+type TraceExecutionGroup struct {
     ExecutionID, AgentName string
     LLMInteractions        []LLMInteractionListItem
     MCPInteractions        []MCPInteractionListItem
 }
 ```
 
-### Level 2: LLM Interaction Detail (`GET /sessions/:id/debug/llm/:interaction_id`)
+### Level 2: LLM Interaction Detail (`GET /sessions/:id/trace/llm/:interaction_id`)
 
 Full LLM interaction with reconstructed conversation from the Message table. For self-contained interactions (summarization) that don't use the Message table, the conversation is extracted from inline `llm_request` JSON.
 
-### Level 2: MCP Interaction Detail (`GET /sessions/:id/debug/mcp/:interaction_id`)
+### Level 2: MCP Interaction Detail (`GET /sessions/:id/trace/mcp/:interaction_id`)
 
 Full MCP interaction: tool arguments, tool result, available tools, timing, error details.
 

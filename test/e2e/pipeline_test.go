@@ -375,36 +375,36 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Total: 22
 	assert.Equal(t, 22, llm.CallCount())
 
-	// ── Debug API (fetch first — used to register IDs in deterministic order) ──
+	// ── Trace API (fetch first — used to register IDs in deterministic order) ──
 	//
-	// The debug list endpoint returns executions in stage_index + agent_index
+	// The trace list endpoint returns executions in stage_index + agent_index
 	// order, which is deterministic even for parallel agents. We use this order
 	// to register execution and interaction IDs BEFORE running golden assertions,
 	// so placeholder numbering is stable across runs regardless of parallel
 	// agent start times.
-	debugList := app.GetDebugList(t, sessionID)
-	debugStages, ok := debugList["stages"].([]interface{})
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages, ok := traceList["stages"].([]interface{})
 	require.True(t, ok, "stages should be an array")
-	require.NotEmpty(t, debugStages, "should have stage groups")
+	require.NotEmpty(t, traceStages, "should have stage groups")
 
 	// Build normalizer with IDs registered in deterministic order.
-	// The debug list is ordered by stage_index → agent_index, so placeholder
+	// The trace list is ordered by stage_index → agent_index, so placeholder
 	// numbering is stable regardless of parallel agent start times.
 	normalizer := NewNormalizer(sessionID)
-	for si, rawStage := range debugStages {
+	for si, rawStage := range traceStages {
 		stg, ok := rawStage.(map[string]interface{})
-		require.True(t, ok, "debug stage %d: expected object", si)
+		require.True(t, ok, "trace stage %d: expected object", si)
 		stageID, ok := stg["stage_id"].(string)
-		require.True(t, ok, "debug stage %d: stage_id missing or not a string", si)
+		require.True(t, ok, "trace stage %d: stage_id missing or not a string", si)
 		normalizer.RegisterStageID(stageID)
 
 		executions, ok := stg["executions"].([]interface{})
-		require.True(t, ok, "debug stage %d: executions missing or not an array", si)
+		require.True(t, ok, "trace stage %d: executions missing or not an array", si)
 		for ei, rawExec := range executions {
 			exec, ok := rawExec.(map[string]interface{})
-			require.True(t, ok, "debug stage %d exec %d: expected object", si, ei)
+			require.True(t, ok, "trace stage %d exec %d: expected object", si, ei)
 			execID, ok := exec["execution_id"].(string)
-			require.True(t, ok, "debug stage %d exec %d: execution_id missing or not a string", si, ei)
+			require.True(t, ok, "trace stage %d exec %d: execution_id missing or not a string", si, ei)
 			normalizer.RegisterExecutionID(execID)
 
 			llmInteractions, _ := exec["llm_interactions"].([]interface{})
@@ -425,8 +425,8 @@ func TestE2E_Pipeline(t *testing.T) {
 	}
 
 	// Register session-level interactions (e.g. executive summary).
-	debugSessionInteractions, _ := debugList["session_interactions"].([]interface{})
-	for _, rawLI := range debugSessionInteractions {
+	traceSessionInteractions, _ := traceList["session_interactions"].([]interface{})
+	for _, rawLI := range traceSessionInteractions {
 		li, _ := rawLI.(map[string]interface{})
 		normalizer.RegisterInteractionID(li["id"].(string))
 	}
@@ -469,8 +469,8 @@ func TestE2E_Pipeline(t *testing.T) {
 	SortTimelineProjection(apiProjectedTimeline)
 	AssertGoldenJSON(t, GoldenPath("pipeline", "timeline.golden"), apiProjectedTimeline, normalizer)
 
-	// ── Debug golden assertions ─────────────────────────────────
-	AssertGoldenJSON(t, GoldenPath("pipeline", "debug_list.golden"), debugList, normalizer)
+	// ── Trace golden assertions ─────────────────────────────────
+	AssertGoldenJSON(t, GoldenPath("pipeline", "trace_list.golden"), traceList, normalizer)
 
 	// ── Level 2: Verify ALL interaction details in chronological order ──
 	//
@@ -489,11 +489,11 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Collect interactions per-execution in chronological order.
 	// Within a single execution, LLM and MCP interactions are merged
 	// by created_at (deterministic because one agent runs sequentially).
-	// Across executions we use the debug list's structural order
+	// Across executions we use the trace list's structural order
 	// (stage_index → agent_index), which is deterministic even for
 	// parallel agents where absolute timestamps vary between runs.
 	var allInteractions []interactionEntry
-	for _, rawStage := range debugStages {
+	for _, rawStage := range traceStages {
 		stg, _ := rawStage.(map[string]interface{})
 		for _, rawExec := range stg["executions"].([]interface{}) {
 			exec, _ := rawExec.(map[string]interface{})
@@ -534,7 +534,7 @@ func TestE2E_Pipeline(t *testing.T) {
 	}
 
 	// Append session-level interactions (e.g. executive summary) after stages.
-	for _, rawLI := range debugSessionInteractions {
+	for _, rawLI := range traceSessionInteractions {
 		li, _ := rawLI.(map[string]interface{})
 		allInteractions = append(allInteractions, interactionEntry{
 			Kind:      "llm",
@@ -557,7 +557,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		// Build filename: 01_DataCollector_llm_iteration_1.golden
 		label := strings.ReplaceAll(entry.Label, " ", "_")
 		filename := fmt.Sprintf("%02d_%s_%s_%s_%d.golden", idx+1, entry.AgentName, entry.Kind, label, count)
-		goldenPath := GoldenPath("pipeline", filepath.Join("debug_interactions", filename))
+		goldenPath := GoldenPath("pipeline", filepath.Join("trace_interactions", filename))
 
 		if entry.Kind == "llm" {
 			detail := app.GetLLMInteractionDetail(t, sessionID, entry.ID)

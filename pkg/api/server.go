@@ -36,8 +36,8 @@ type Server struct {
 	chatService        *services.ChatService           // nil until set
 	chatExecutor       *queue.ChatMessageExecutor      // nil until set
 	eventPublisher     agent.EventPublisher            // nil if streaming disabled
-	interactionService *services.InteractionService    // nil until set (debug endpoints)
-	stageService       *services.StageService          // nil until set (debug endpoints)
+	interactionService *services.InteractionService    // nil until set (trace endpoints)
+	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 }
 
@@ -91,12 +91,12 @@ func (s *Server) SetEventPublisher(pub agent.EventPublisher) {
 	s.eventPublisher = pub
 }
 
-// SetInteractionService sets the interaction service for debug endpoints.
+// SetInteractionService sets the interaction service for trace endpoints.
 func (s *Server) SetInteractionService(svc *services.InteractionService) {
 	s.interactionService = svc
 }
 
-// SetStageService sets the stage service for debug endpoints.
+// SetStageService sets the stage service for trace endpoints.
 func (s *Server) SetStageService(svc *services.StageService) {
 	s.stageService = svc
 }
@@ -158,10 +158,10 @@ func (s *Server) setupRoutes() {
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 
-	// Debug/observability endpoints (two-level loading).
-	v1.GET("/sessions/:id/debug", s.getDebugListHandler)
-	v1.GET("/sessions/:id/debug/llm/:interaction_id", s.getLLMInteractionHandler)
-	v1.GET("/sessions/:id/debug/mcp/:interaction_id", s.getMCPInteractionHandler)
+	// Trace/observability endpoints (two-level loading).
+	v1.GET("/sessions/:id/trace", s.getTraceListHandler)
+	v1.GET("/sessions/:id/trace/llm/:interaction_id", s.getLLMInteractionHandler)
+	v1.GET("/sessions/:id/trace/mcp/:interaction_id", s.getMCPInteractionHandler)
 
 	// WebSocket endpoint for real-time event streaming.
 	// Auth deferred to Phase 9 (Security) — currently open to any client,
