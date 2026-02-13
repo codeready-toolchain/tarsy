@@ -368,15 +368,15 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Resolve LLM provider name for observability (synthesis context display).
-	// Hierarchy: defaults → chain → stage-agent.
-	// Hoisted above ResolveAgentConfig so it's available in the error path.
-	providerName := e.cfg.Defaults.LLMProvider
+	// Best-effort provider name for the error path (before ResolveAgentConfig
+	// succeeds). The happy path uses resolvedConfig.LLMProviderName instead,
+	// keeping ResolveAgentConfig as the single source of truth.
+	fallbackProviderName := e.cfg.Defaults.LLMProvider
 	if input.chain.LLMProvider != "" {
-		providerName = input.chain.LLMProvider
+		fallbackProviderName = input.chain.LLMProvider
 	}
 	if agentConfig.LLMProvider != "" {
-		providerName = agentConfig.LLMProvider
+		fallbackProviderName = agentConfig.LLMProvider
 	}
 
 	// Resolve agent config from hierarchy (before creating execution record
@@ -394,7 +394,7 @@ func (e *RealSessionExecutor) executeAgent(
 			SessionID:   input.session.ID,
 			AgentName:   displayName,
 			AgentIndex:  agentIndex + 1, // 1-based in DB
-			LLMProvider: providerName,
+			LLMProvider: fallbackProviderName,
 		})
 		if createErr != nil {
 			logger.Error("Failed to create failed agent execution record", "error", createErr)
@@ -417,7 +417,7 @@ func (e *RealSessionExecutor) executeAgent(
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
 			err:             resErr,
-			llmProviderName: providerName,
+			llmProviderName: fallbackProviderName,
 		}
 	}
 
@@ -428,7 +428,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentName:         displayName,
 		AgentIndex:        agentIndex + 1, // 1-based in DB
 		IterationStrategy: resolvedConfig.IterationStrategy,
-		LLMProvider:       providerName,
+		LLMProvider:       resolvedConfig.LLMProviderName,
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -450,7 +450,7 @@ func (e *RealSessionExecutor) executeAgent(
 			status:            agent.ExecutionStatusFailed,
 			err:               fmt.Errorf("invalid MCP selection: %w", err),
 			iterationStrategy: resolvedStrategy,
-			llmProviderName:   providerName,
+			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -490,7 +490,7 @@ func (e *RealSessionExecutor) executeAgent(
 			status:            agent.ExecutionStatusFailed,
 			err:               fmt.Errorf("failed to create agent: %w", err),
 			iterationStrategy: resolvedStrategy,
-			llmProviderName:   providerName,
+			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -516,7 +516,7 @@ func (e *RealSessionExecutor) executeAgent(
 			status:            errStatus,
 			err:               err,
 			iterationStrategy: resolvedStrategy,
-			llmProviderName:   providerName,
+			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -551,7 +551,7 @@ func (e *RealSessionExecutor) executeAgent(
 			finalAnalysis:     result.FinalAnalysis,
 			err:               fmt.Errorf("agent completed but status update failed: %w", updateErr),
 			iterationStrategy: resolvedStrategy,
-			llmProviderName:   providerName,
+			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -561,7 +561,7 @@ func (e *RealSessionExecutor) executeAgent(
 		finalAnalysis:     result.FinalAnalysis,
 		err:               result.Error,
 		iterationStrategy: resolvedStrategy,
-		llmProviderName:   providerName,
+		llmProviderName:   resolvedConfig.LLMProviderName,
 	}
 }
 

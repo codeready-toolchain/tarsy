@@ -508,13 +508,8 @@ func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.Exp
 						}
 					}
 				}
-				if foundAny {
-					actualIdx++
-				} else {
-					// Current actual event doesn't match any unmatched group member.
-					// Keep scanning — there may be extra events (stream.chunk, duplicates).
-					actualIdx++
-				}
+			// Advance past this actual event whether it matched a group member or not.
+			actualIdx++
 			}
 			// Check all group members were matched.
 			for i, m := range matched {
