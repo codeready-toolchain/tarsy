@@ -542,6 +542,7 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 			HeartbeatInterval: 5 * time.Second,
 		},
 	)
+	defer chatExecutor.Stop()
 
 	session, err := entClient.AlertSession.Create().
 		SetID("session-cancel-1").
@@ -732,6 +733,7 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 			HeartbeatInterval: 5 * time.Second,
 		},
 	)
+	defer chatExecutor.Stop()
 
 	session, err := entClient.AlertSession.Create().
 		SetID("session-cancel-by-sid").

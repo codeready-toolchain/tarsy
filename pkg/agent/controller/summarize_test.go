@@ -243,15 +243,18 @@ func TestMaybeSummarize(t *testing.T) {
 		require.Len(t, convSlice, 3, "conversation should have system + user + assistant")
 
 		// Verify roles.
-		msg0 := convSlice[0].(map[string]any)
+		msg0, ok := convSlice[0].(map[string]any)
+		require.True(t, ok, "conversation[0] should be map[string]any")
 		assert.Equal(t, "system", msg0["role"])
 		assert.NotEmpty(t, msg0["content"])
 
-		msg1 := convSlice[1].(map[string]any)
+		msg1, ok := convSlice[1].(map[string]any)
+		require.True(t, ok, "conversation[1] should be map[string]any")
 		assert.Equal(t, "user", msg1["role"])
 		assert.NotEmpty(t, msg1["content"])
 
-		msg2 := convSlice[2].(map[string]any)
+		msg2, ok := convSlice[2].(map[string]any)
+		require.True(t, ok, "conversation[2] should be map[string]any")
 		assert.Equal(t, "assistant", msg2["role"])
 		assert.Equal(t, "Summary result", msg2["content"])
 	})

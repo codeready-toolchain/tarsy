@@ -253,6 +253,32 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		assert.Contains(t, result, "**Final Analysis:**\n\nMetrics OK.")
 	})
 
+	t.Run("single-agent stage with LLMProvider includes provider", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:  "investigation",
+				StageIndex: 0,
+				Agents: []AgentInvestigation{
+					{
+						AgentName:   "DataCollector",
+						AgentIndex:  1,
+						Strategy:    "native-thinking",
+						LLMProvider: "gemini-2.5-pro",
+						Status:      alertsession.StatusCompleted,
+						Events: []*ent.TimelineEvent{
+							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Collected data."},
+						},
+					},
+				},
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "**Agent:** DataCollector (native-thinking, gemini-2.5-pro)")
+		assert.NotContains(t, result, "<!-- PARALLEL_RESULTS_START -->")
+	})
+
 	t.Run("stage with synthesis result", func(t *testing.T) {
 		stages := []StageInvestigation{
 			{
@@ -273,6 +299,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 
 		result := FormatStructuredInvestigation(stages, "")
 
+		assert.Contains(t, result, "**Agent:** Agent (react, gemini)")
 		assert.Contains(t, result, "### Synthesis Result")
 		assert.Contains(t, result, "Both agents agree: no issues found.")
 	})

@@ -105,7 +105,7 @@ Pod OOMKilled
 
 ## Stage 1: investigation
 
-**Agent:** DataCollector (native-thinking)
+**Agent:** DataCollector (native-thinking, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -153,7 +153,7 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 ## Stage 2: remediation
 
-**Agent:** Remediator (react)
+**Agent:** Remediator (react, test-provider)
 **Status**: completed
 
 **Agent Response:**

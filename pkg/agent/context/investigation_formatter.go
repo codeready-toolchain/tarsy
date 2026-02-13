@@ -54,7 +54,11 @@ func FormatStructuredInvestigation(stages []StageInvestigation, executiveSummary
 		if len(stg.Agents) == 1 {
 			// Single agent — show timeline directly under the stage header.
 			a := stg.Agents[0]
+			if a.LLMProvider != "" {
+			fmt.Fprintf(&sb, "**Agent:** %s (%s, %s)\n", a.AgentName, a.Strategy, a.LLMProvider)
+		} else {
 			fmt.Fprintf(&sb, "**Agent:** %s (%s)\n", a.AgentName, a.Strategy)
+		}
 			fmt.Fprintf(&sb, "**Status**: %s\n\n", a.Status)
 			formatAgentBody(&sb, a)
 		} else if len(stg.Agents) > 1 {
