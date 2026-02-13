@@ -81,25 +81,67 @@ func recordLLMInteraction(
 		llmResponseMeta["code_executions"] = codeExecs
 	}
 
-	// Add grounding data if present
+	// Add grounding count summary if present
 	if resp != nil && len(resp.Groundings) > 0 {
 		llmResponseMeta["groundings_count"] = len(resp.Groundings)
 	}
 
+	// Build response_metadata with full grounding details for dashboard rendering.
+	var responseMeta map[string]any
+	if resp != nil && len(resp.Groundings) > 0 {
+		groundings := make([]map[string]any, 0, len(resp.Groundings))
+		for _, g := range resp.Groundings {
+			entry := map[string]any{}
+
+			// Classify as google_search or url_context
+			if len(g.WebSearchQueries) > 0 {
+				entry["type"] = "google_search"
+				entry["queries"] = g.WebSearchQueries
+			} else {
+				entry["type"] = "url_context"
+			}
+
+			if len(g.Sources) > 0 {
+				sources := make([]map[string]string, len(g.Sources))
+				for i, s := range g.Sources {
+					sources[i] = map[string]string{"uri": s.URI, "title": s.Title}
+				}
+				entry["sources"] = sources
+			}
+
+			if len(g.Supports) > 0 {
+				supports := make([]map[string]any, len(g.Supports))
+				for i, s := range g.Supports {
+					supports[i] = map[string]any{
+						"start_index":    s.StartIndex,
+						"end_index":      s.EndIndex,
+						"text":           s.Text,
+						"source_indices": s.GroundingChunkIndices,
+					}
+				}
+				entry["supports"] = supports
+			}
+
+			groundings = append(groundings, entry)
+		}
+		responseMeta = map[string]any{"groundings": groundings}
+	}
+
 	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
-		SessionID:       execCtx.SessionID,
-		StageID:         &execCtx.StageID,
-		ExecutionID:     &execCtx.ExecutionID,
-		InteractionType: interactionType,
-		ModelName:       execCtx.Config.LLMProvider.Model,
-		LastMessageID:   lastMessageID,
-		LLMRequest:      map[string]any{"messages_count": messagesCount, "iteration": iteration},
-		LLMResponse:     llmResponseMeta,
-		ThinkingContent: thinkingPtr,
-		InputTokens:     inputTokens,
-		OutputTokens:    outputTokens,
-		TotalTokens:     totalTokens,
-		DurationMs:      &durationMs,
+		SessionID:        execCtx.SessionID,
+		StageID:          &execCtx.StageID,
+		ExecutionID:      &execCtx.ExecutionID,
+		InteractionType:  interactionType,
+		ModelName:        execCtx.Config.LLMProvider.Model,
+		LastMessageID:    lastMessageID,
+		LLMRequest:       map[string]any{"messages_count": messagesCount, "iteration": iteration},
+		LLMResponse:      llmResponseMeta,
+		ResponseMetadata: responseMeta,
+		ThinkingContent:  thinkingPtr,
+		InputTokens:      inputTokens,
+		OutputTokens:     outputTokens,
+		TotalTokens:      totalTokens,
+		DurationMs:       &durationMs,
 	}); err != nil {
 		slog.Error("Failed to record LLM interaction",
 			"session_id", execCtx.SessionID, "type", interactionType, "error", err)

@@ -15,6 +15,22 @@
   },
   "model_name": "test-model",
   "output_tokens": 40,
+  "response_metadata": {
+    "groundings": [
+      {
+        "queries": [
+          "kubernetes pod OOM memory limit best practices"
+        ],
+        "sources": [
+          {
+            "title": "Resource Management for Pods and Containers",
+            "uri": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+          }
+        ],
+        "type": "google_search"
+      }
+    ]
+  },
   "thinking_content": "Combining ConfigValidator and MetricsValidator results.",
   "total_tokens": 160
 }
