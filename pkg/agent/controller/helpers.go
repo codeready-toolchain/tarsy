@@ -87,45 +87,7 @@ func recordLLMInteraction(
 	}
 
 	// Build response_metadata with full grounding details for dashboard rendering.
-	var responseMeta map[string]any
-	if resp != nil && len(resp.Groundings) > 0 {
-		groundings := make([]map[string]any, 0, len(resp.Groundings))
-		for _, g := range resp.Groundings {
-			entry := map[string]any{}
-
-			// Classify as google_search or url_context
-			if len(g.WebSearchQueries) > 0 {
-				entry["type"] = "google_search"
-				entry["queries"] = g.WebSearchQueries
-			} else {
-				entry["type"] = "url_context"
-			}
-
-			if len(g.Sources) > 0 {
-				sources := make([]map[string]string, len(g.Sources))
-				for i, s := range g.Sources {
-					sources[i] = map[string]string{"uri": s.URI, "title": s.Title}
-				}
-				entry["sources"] = sources
-			}
-
-			if len(g.Supports) > 0 {
-				supports := make([]map[string]any, len(g.Supports))
-				for i, s := range g.Supports {
-					supports[i] = map[string]any{
-						"start_index":    s.StartIndex,
-						"end_index":      s.EndIndex,
-						"text":           s.Text,
-						"source_indices": s.GroundingChunkIndices,
-					}
-				}
-				entry["supports"] = supports
-			}
-
-			groundings = append(groundings, entry)
-		}
-		responseMeta = map[string]any{"groundings": groundings}
-	}
+	responseMeta := buildResponseMetadata(resp)
 
 	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:        execCtx.SessionID,
@@ -191,4 +153,52 @@ func tokenUsageFromResp(resp *LLMResponse) agent.TokenUsage {
 		return agent.TokenUsage{}
 	}
 	return *resp.Usage
+}
+
+// buildResponseMetadata constructs the response_metadata map from grounding
+// chunks in the LLM response. Returns nil when there are no groundings,
+// so the optional DB field remains NULL for non-grounded responses.
+func buildResponseMetadata(resp *LLMResponse) map[string]any {
+	if resp == nil || len(resp.Groundings) == 0 {
+		return nil
+	}
+
+	groundings := make([]map[string]any, 0, len(resp.Groundings))
+	for _, g := range resp.Groundings {
+		entry := map[string]any{}
+
+		// Classify as google_search or url_context based on whether
+		// WebSearchQueries is populated.
+		if len(g.WebSearchQueries) > 0 {
+			entry["type"] = "google_search"
+			entry["queries"] = g.WebSearchQueries
+		} else {
+			entry["type"] = "url_context"
+		}
+
+		if len(g.Sources) > 0 {
+			sources := make([]map[string]string, len(g.Sources))
+			for i, s := range g.Sources {
+				sources[i] = map[string]string{"uri": s.URI, "title": s.Title}
+			}
+			entry["sources"] = sources
+		}
+
+		if len(g.Supports) > 0 {
+			supports := make([]map[string]any, len(g.Supports))
+			for i, s := range g.Supports {
+				supports[i] = map[string]any{
+					"start_index":    s.StartIndex,
+					"end_index":      s.EndIndex,
+					"text":           s.Text,
+					"source_indices": s.GroundingChunkIndices,
+				}
+			}
+			entry["supports"] = supports
+		}
+
+		groundings = append(groundings, entry)
+	}
+
+	return map[string]any{"groundings": groundings}
 }

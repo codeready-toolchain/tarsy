@@ -178,3 +178,166 @@ func TestTokenUsageFromResp(t *testing.T) {
 		assert.Equal(t, 0, usage.TotalTokens)
 	})
 }
+
+// ============================================================================
+// buildResponseMetadata tests
+// ============================================================================
+
+func TestBuildResponseMetadata(t *testing.T) {
+	t.Run("nil resp returns nil", func(t *testing.T) {
+		result := buildResponseMetadata(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("no groundings returns nil", func(t *testing.T) {
+		resp := &LLMResponse{Text: "some text"}
+		result := buildResponseMetadata(resp)
+		assert.Nil(t, result)
+	})
+
+	t.Run("empty groundings slice returns nil", func(t *testing.T) {
+		resp := &LLMResponse{Groundings: []agent.GroundingChunk{}}
+		result := buildResponseMetadata(resp)
+		assert.Nil(t, result)
+	})
+
+	t.Run("google search grounding", func(t *testing.T) {
+		resp := &LLMResponse{
+			Groundings: []agent.GroundingChunk{
+				{
+					WebSearchQueries: []string{"kubernetes OOM best practices", "pod memory limits"},
+					Sources: []agent.GroundingSource{
+						{URI: "https://k8s.io/docs/memory", Title: "Memory Management"},
+						{URI: "https://example.com/oom", Title: "OOM Guide"},
+					},
+				},
+			},
+		}
+
+		result := buildResponseMetadata(resp)
+		assert.NotNil(t, result)
+
+		groundings, ok := result["groundings"].([]map[string]any)
+		assert.True(t, ok)
+		assert.Len(t, groundings, 1)
+
+		entry := groundings[0]
+		assert.Equal(t, "google_search", entry["type"])
+		assert.Equal(t, []string{"kubernetes OOM best practices", "pod memory limits"}, entry["queries"])
+
+		sources, ok := entry["sources"].([]map[string]string)
+		assert.True(t, ok)
+		assert.Len(t, sources, 2)
+		assert.Equal(t, "https://k8s.io/docs/memory", sources[0]["uri"])
+		assert.Equal(t, "Memory Management", sources[0]["title"])
+		assert.Equal(t, "https://example.com/oom", sources[1]["uri"])
+	})
+
+	t.Run("url context grounding (no web search queries)", func(t *testing.T) {
+		resp := &LLMResponse{
+			Groundings: []agent.GroundingChunk{
+				{
+					Sources: []agent.GroundingSource{
+						{URI: "https://docs.example.com/api", Title: "API Reference"},
+					},
+				},
+			},
+		}
+
+		result := buildResponseMetadata(resp)
+		assert.NotNil(t, result)
+
+		groundings := result["groundings"].([]map[string]any)
+		assert.Len(t, groundings, 1)
+		assert.Equal(t, "url_context", groundings[0]["type"])
+		assert.Nil(t, groundings[0]["queries"]) // no queries for url_context
+	})
+
+	t.Run("grounding with supports", func(t *testing.T) {
+		resp := &LLMResponse{
+			Groundings: []agent.GroundingChunk{
+				{
+					WebSearchQueries: []string{"query"},
+					Sources: []agent.GroundingSource{
+						{URI: "https://example.com", Title: "Example"},
+					},
+					Supports: []agent.GroundingSupport{
+						{
+							StartIndex:            0,
+							EndIndex:               50,
+							Text:                  "Supported text segment",
+							GroundingChunkIndices: []int{0},
+						},
+						{
+							StartIndex:            60,
+							EndIndex:               100,
+							Text:                  "Another segment",
+							GroundingChunkIndices: []int{0},
+						},
+					},
+				},
+			},
+		}
+
+		result := buildResponseMetadata(resp)
+		groundings := result["groundings"].([]map[string]any)
+		entry := groundings[0]
+
+		supports, ok := entry["supports"].([]map[string]any)
+		assert.True(t, ok)
+		assert.Len(t, supports, 2)
+
+		assert.Equal(t, 0, supports[0]["start_index"])
+		assert.Equal(t, 50, supports[0]["end_index"])
+		assert.Equal(t, "Supported text segment", supports[0]["text"])
+		assert.Equal(t, []int{0}, supports[0]["source_indices"])
+
+		assert.Equal(t, 60, supports[1]["start_index"])
+		assert.Equal(t, 100, supports[1]["end_index"])
+	})
+
+	t.Run("multiple groundings (google search + url context)", func(t *testing.T) {
+		resp := &LLMResponse{
+			Groundings: []agent.GroundingChunk{
+				{
+					WebSearchQueries: []string{"search query"},
+					Sources: []agent.GroundingSource{
+						{URI: "https://search-result.com", Title: "Search Result"},
+					},
+				},
+				{
+					Sources: []agent.GroundingSource{
+						{URI: "https://fetched-url.com/doc", Title: "Fetched Doc"},
+					},
+				},
+			},
+		}
+
+		result := buildResponseMetadata(resp)
+		groundings := result["groundings"].([]map[string]any)
+		assert.Len(t, groundings, 2)
+
+		assert.Equal(t, "google_search", groundings[0]["type"])
+		assert.Equal(t, "url_context", groundings[1]["type"])
+	})
+
+	t.Run("grounding without sources or supports", func(t *testing.T) {
+		resp := &LLMResponse{
+			Groundings: []agent.GroundingChunk{
+				{
+					WebSearchQueries: []string{"query with no sources yet"},
+				},
+			},
+		}
+
+		result := buildResponseMetadata(resp)
+		groundings := result["groundings"].([]map[string]any)
+		assert.Len(t, groundings, 1)
+
+		entry := groundings[0]
+		assert.Equal(t, "google_search", entry["type"])
+		assert.Equal(t, []string{"query with no sources yet"}, entry["queries"])
+		assert.Nil(t, entry["sources"])  // no sources key when empty
+		assert.Nil(t, entry["supports"]) // no supports key when empty
+	})
+}
