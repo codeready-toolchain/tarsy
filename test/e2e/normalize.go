@@ -12,7 +12,7 @@ import (
 type Normalizer struct {
 	sessionID string
 
-	mu       sync.Mutex
+	mu             sync.Mutex
 	stageIDs       map[string]string // original → placeholder
 	execIDs        map[string]string
 	chatIDs        map[string]string

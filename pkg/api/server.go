@@ -21,16 +21,16 @@ import (
 
 // Server is the HTTP API server.
 type Server struct {
-	echo           *echo.Echo
-	httpServer     *http.Server
-	cfg            *config.Config
-	dbClient       *database.Client
-	alertService   *services.AlertService
-	sessionService *services.SessionService
-	workerPool     *queue.WorkerPool
-	connManager    *events.ConnectionManager
-	healthMonitor  *mcp.HealthMonitor              // nil if MCP disabled
-	warningService *services.SystemWarningsService // nil if MCP disabled
+	echo               *echo.Echo
+	httpServer         *http.Server
+	cfg                *config.Config
+	dbClient           *database.Client
+	alertService       *services.AlertService
+	sessionService     *services.SessionService
+	workerPool         *queue.WorkerPool
+	connManager        *events.ConnectionManager
+	healthMonitor      *mcp.HealthMonitor              // nil if MCP disabled
+	warningService     *services.SystemWarningsService // nil if MCP disabled
 	chatService        *services.ChatService           // nil until set
 	chatExecutor       *queue.ChatMessageExecutor      // nil until set
 	eventPublisher     agent.EventPublisher            // nil if streaming disabled

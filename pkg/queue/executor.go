@@ -606,7 +606,7 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 
 		investigation := agentctx.AgentInvestigation{
 			AgentName:   displayName,
-			AgentIndex:  i + 1, // 1-based
+			AgentIndex:  i + 1,                // 1-based
 			Strategy:    ar.iterationStrategy, // resolved at execution time
 			LLMProvider: ar.llmProviderName,   // resolved at execution time
 			Status:      mapAgentStatusToSessionStatus(ar.status),

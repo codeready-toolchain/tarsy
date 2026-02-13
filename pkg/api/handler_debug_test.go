@@ -172,9 +172,9 @@ func TestBuildDebugListResponse_StageWithNoExecutions(t *testing.T) {
 	resp := buildDebugListResponse(stages, nil, nil)
 	require.Len(t, resp.Stages, 1)
 	assert.Empty(t, resp.Stages[0].Executions)
-	assert.NotNil(t, resp.Stages[0].Executions)         // Not nil — clean JSON.
-	assert.Empty(t, resp.SessionInteractions)            // No session-level interactions.
-	assert.NotNil(t, resp.SessionInteractions)           // Not nil — clean JSON.
+	assert.NotNil(t, resp.Stages[0].Executions) // Not nil — clean JSON.
+	assert.Empty(t, resp.SessionInteractions)   // No session-level interactions.
+	assert.NotNil(t, resp.SessionInteractions)  // Not nil — clean JSON.
 }
 
 // ============================================================================

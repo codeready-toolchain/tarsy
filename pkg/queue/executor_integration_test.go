@@ -1201,8 +1201,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 			{
 				Name: "investigation",
 				Agents: []config.StageAgentConfig{
-					{Name: "NativeAgent"},  // no strategy override at stage level
-					{Name: "ReactAgent"},   // no strategy override at stage level
+					{Name: "NativeAgent"}, // no strategy override at stage level
+					{Name: "ReactAgent"},  // no strategy override at stage level
 				},
 			},
 		},

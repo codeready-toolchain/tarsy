@@ -40,7 +40,7 @@ type CreateMCPInteractionRequest struct {
 
 // DebugListResponse is the top-level response for GET /debug.
 type DebugListResponse struct {
-	Stages              []DebugStageGroup      `json:"stages"`
+	Stages              []DebugStageGroup        `json:"stages"`
 	SessionInteractions []LLMInteractionListItem `json:"session_interactions"` // Session-level LLM calls (e.g. executive summary)
 }
 
@@ -89,29 +89,29 @@ type MCPInteractionListItem struct {
 
 // LLMInteractionDetailResponse is returned by GET /debug/llm/:interaction_id.
 type LLMInteractionDetailResponse struct {
-	ID               string                 `json:"id"`
-	InteractionType  string                 `json:"interaction_type"`
-	ModelName        string                 `json:"model_name"`
-	ThinkingContent  *string                `json:"thinking_content,omitempty"`
-	InputTokens      *int                   `json:"input_tokens,omitempty"`
-	OutputTokens     *int                   `json:"output_tokens,omitempty"`
-	TotalTokens      *int                   `json:"total_tokens,omitempty"`
-	DurationMs       *int                   `json:"duration_ms,omitempty"`
-	ErrorMessage     *string                `json:"error_message,omitempty"`
-	LLMRequest       map[string]any         `json:"llm_request"`
-	LLMResponse      map[string]any         `json:"llm_response"`
-	ResponseMetadata map[string]any         `json:"response_metadata,omitempty"`
-	CreatedAt        string                 `json:"created_at"`
-	Conversation     []ConversationMessage  `json:"conversation"`
+	ID               string                `json:"id"`
+	InteractionType  string                `json:"interaction_type"`
+	ModelName        string                `json:"model_name"`
+	ThinkingContent  *string               `json:"thinking_content,omitempty"`
+	InputTokens      *int                  `json:"input_tokens,omitempty"`
+	OutputTokens     *int                  `json:"output_tokens,omitempty"`
+	TotalTokens      *int                  `json:"total_tokens,omitempty"`
+	DurationMs       *int                  `json:"duration_ms,omitempty"`
+	ErrorMessage     *string               `json:"error_message,omitempty"`
+	LLMRequest       map[string]any        `json:"llm_request"`
+	LLMResponse      map[string]any        `json:"llm_response"`
+	ResponseMetadata map[string]any        `json:"response_metadata,omitempty"`
+	CreatedAt        string                `json:"created_at"`
+	Conversation     []ConversationMessage `json:"conversation"`
 }
 
 // ConversationMessage is a single message in the reconstructed conversation.
 type ConversationMessage struct {
-	Role       string             `json:"role"`
-	Content    string             `json:"content"`
-	ToolCalls  []MessageToolCall  `json:"tool_calls,omitempty"`
-	ToolCallID *string            `json:"tool_call_id,omitempty"`
-	ToolName   *string            `json:"tool_name,omitempty"`
+	Role       string            `json:"role"`
+	Content    string            `json:"content"`
+	ToolCalls  []MessageToolCall `json:"tool_calls,omitempty"`
+	ToolCallID *string           `json:"tool_call_id,omitempty"`
+	ToolName   *string           `json:"tool_name,omitempty"`
 }
 
 // MessageToolCall mirrors ent/schema.MessageToolCall for API responses.

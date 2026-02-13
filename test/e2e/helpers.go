@@ -462,4 +462,3 @@ func formatExpected(e testdata.ExpectedEvent) string {
 	}
 	return s
 }
-

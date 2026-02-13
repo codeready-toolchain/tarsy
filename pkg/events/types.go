@@ -10,34 +10,34 @@
 //
 // Pattern 1 — STREAMING (status: "streaming"):
 //
-//   timeline_event.created   {status: "streaming", content: ""}
-//   stream.chunk             {delta: "..."}  (repeated, not persisted)
-//   timeline_event.completed {status: "completed", content: "full text"}
+//	timeline_event.created   {status: "streaming", content: ""}
+//	stream.chunk             {delta: "..."}  (repeated, not persisted)
+//	timeline_event.completed {status: "completed", content: "full text"}
 //
-//   The event is created empty while the LLM is still producing output.
-//   Deltas arrive via stream.chunk (transient — lost on reconnect, but
-//   the final content is delivered by the completed event). Clients
-//   concatenate deltas locally for a live typing effect.
+//	The event is created empty while the LLM is still producing output.
+//	Deltas arrive via stream.chunk (transient — lost on reconnect, but
+//	the final content is delivered by the completed event). Clients
+//	concatenate deltas locally for a live typing effect.
 //
-//   Event types using this pattern:
-//     - llm_thinking  (NativeThinking strategy — thinking text streams)
-//     - llm_response  (all strategies — assistant text streams)
-//     - llm_tool_call (tool execution in progress → completed with result)
-//     - mcp_tool_summary (summarization LLM call streams)
+//	Event types using this pattern:
+//	  - llm_thinking  (NativeThinking strategy — thinking text streams)
+//	  - llm_response  (all strategies — assistant text streams)
+//	  - llm_tool_call (tool execution in progress → completed with result)
+//	  - mcp_tool_summary (summarization LLM call streams)
 //
 // Pattern 2 — FIRE-AND-FORGET (status: "completed"):
 //
-//   timeline_event.created   {status: "completed", content: "full text"}
+//	timeline_event.created   {status: "completed", content: "full text"}
 //
-//   The event is created with its final content in a single message.
-//   There is NO subsequent timeline_event.completed — this IS the
-//   terminal state. Clients should render the content immediately.
+//	The event is created with its final content in a single message.
+//	There is NO subsequent timeline_event.completed — this IS the
+//	terminal state. Clients should render the content immediately.
 //
-//   Event types using this pattern:
-//     - final_analysis   (all strategies — the agent's conclusion)
-//     - llm_thinking     (ReAct strategy only — thought is parsed from
-//                         the llm_response text after the stream ends,
-//                         not itself streamed)
+//	Event types using this pattern:
+//	  - final_analysis   (all strategies — the agent's conclusion)
+//	  - llm_thinking     (ReAct strategy only — thought is parsed from
+//	                      the llm_response text after the stream ends,
+//	                      not itself streamed)
 //
 // Note: the same event_type (llm_thinking) follows different patterns
 // depending on the iteration strategy. The "status" field is the only

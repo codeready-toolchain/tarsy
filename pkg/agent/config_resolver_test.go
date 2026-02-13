@@ -378,7 +378,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		chatlessCfg := &config.Config{
 			Defaults: defaults,
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ChatAgent":    {},                                          // no MCP servers
+				"ChatAgent":     {},                                         // no MCP servers
 				"DataCollector": {MCPServers: []string{"monitoring-tools"}}, // investigation agent
 			}),
 			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
