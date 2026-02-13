@@ -24,13 +24,16 @@ type ExpectedEvent struct {
 
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
-// Three stages + synthesis:
-//   1. investigation (DataCollector, NativeThinking)
-//   2. remediation   (Remediator, ReAct)
-//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
-//      → validation - Synthesis (automatic)
+// Four stages + two synthesis stages:
+//   1. investigation  (DataCollector, NativeThinking)
+//   2. remediation    (Remediator, ReAct)
+//   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
+//      → validation - Synthesis (synthesis-native-thinking)
+//   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
+//      → scaling-review - Synthesis (plain synthesis)
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
-// parallel agents, synthesis, forced conclusion, and executive summary.
+// parallel agents, replicas, both synthesis strategies, forced conclusion,
+// and executive summary.
 // ────────────────────────────────────────────────────────────
 
 var PipelineExpectedEvents = []ExpectedEvent{
@@ -212,14 +215,51 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "validation", Status: "completed"},
 
-	// ── Synthesis (automatic after parallel stage) ──
+	// ── Validation Synthesis (synthesis-native-thinking — includes thinking) ──
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Combining ConfigValidator and MetricsValidator results.", Group: 11},
 	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
+		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.", Group: 11},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "completed"},
+
+	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, native-thinking) ──
+	// Replicas run in parallel — events interleave non-deterministically.
+	{Type: "stage.status", StageName: "scaling-review", Status: "started"},
+
+	// ScalingReviewer-1 and ScalingReviewer-2 events (parallel — Group 20).
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 20},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 20},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 20,
+		Content: "Evaluating horizontal scaling needs for pod-1."},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 20,
+		Content: "HPA target should be 70% CPU utilization for pod-1."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 20,
+		Content: "HPA target should be 70% CPU utilization for pod-1."},
+
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 20},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 20},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 20,
+		Content: "Checking current scaling configuration."},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 20,
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 20,
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+
+	{Type: "stage.status", StageName: "scaling-review", Status: "completed"},
+
+	// ── Scaling-review Synthesis (plain "synthesis" — no thinking) ──
+	{Type: "stage.status", StageName: "scaling-review - Synthesis", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas."},
+	{Type: "stage.status", StageName: "scaling-review - Synthesis", Status: "completed"},
 
 	{Type: "session.status", Status: "completed"},
 }

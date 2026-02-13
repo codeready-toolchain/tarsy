@@ -26,29 +26,31 @@ mcp_servers:
 
 agents:
   DataCollector:
-    iteration_strategy: "native-thinking"
     max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
     custom_instructions: "You are DataCollector, gathering system metrics and pod status."
   Remediator:
-    iteration_strategy: "react"
     max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
     custom_instructions: "You are Remediator, analyzing logs and recommending fixes."
   ConfigValidator:
-    iteration_strategy: "react"
     max_iterations: 3
     mcp_servers: [test-mcp]
     custom_instructions: "You are ConfigValidator, verifying resource configurations."
   MetricsValidator:
-    iteration_strategy: "native-thinking"
     max_iterations: 1  # Triggers forced conclusion after 1 iteration (tool call)
     mcp_servers: [prometheus-mcp]
     custom_instructions: "You are MetricsValidator, checking SLO compliance."
+  ScalingReviewer:
+    max_iterations: 3
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are ScalingReviewer, evaluating horizontal scaling recommendations."
 
 agent_chains:
   test-chain:
     alert_types: [test-alert]
+    llm_provider: "test-provider"
+    iteration_strategy: "native-thinking"
     stages:
       - name: investigation
         agents:
@@ -56,8 +58,20 @@ agent_chains:
       - name: remediation
         agents:
           - name: Remediator
+            iteration_strategy: "react"
       - name: validation
         success_policy: all
         agents:
           - name: ConfigValidator
+            iteration_strategy: "react"
           - name: MetricsValidator
+        synthesis:
+          llm_provider: "test-provider"
+          iteration_strategy: "synthesis-native-thinking"
+      - name: scaling-review
+        replicas: 2
+        agents:
+          - name: ScalingReviewer
+        synthesis:
+          llm_provider: "test-provider"
+          iteration_strategy: "synthesis"

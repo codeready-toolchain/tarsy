@@ -3,7 +3,7 @@
     {
       "created_at": "{TIMESTAMP}",
       "duration_ms": {DURATION_MS},
-      "id": "{INTERACTION_ID_21}",
+      "id": "{INTERACTION_ID_24}",
       "interaction_type": "executive_summary",
       "model_name": "test-model"
     }
@@ -245,6 +245,69 @@
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
               "id": "{INTERACTION_ID_20}",
+              "input_tokens": 120,
+              "interaction_type": "synthesis",
+              "model_name": "test-model",
+              "output_tokens": 40,
+              "total_tokens": 160
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{STAGE_ID_4}",
+      "stage_name": "validation - Synthesis"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ScalingReviewer-1",
+          "execution_id": "{EXEC_ID_6}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_21}",
+              "input_tokens": 80,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 25,
+              "total_tokens": 105
+            }
+          ],
+          "mcp_interactions": []
+        },
+        {
+          "agent_name": "ScalingReviewer-2",
+          "execution_id": "{EXEC_ID_7}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_22}",
+              "input_tokens": 80,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 20,
+              "total_tokens": 100
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{STAGE_ID_5}",
+      "stage_name": "scaling-review"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "SynthesisAgent",
+          "execution_id": "{EXEC_ID_8}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_23}",
               "input_tokens": 10,
               "interaction_type": "synthesis",
               "model_name": "test-model",
@@ -255,8 +318,8 @@
           "mcp_interactions": []
         }
       ],
-      "stage_id": "{STAGE_ID_4}",
-      "stage_name": "validation - Synthesis"
+      "stage_id": "{STAGE_ID_6}",
+      "stage_name": "scaling-review - Synthesis"
     }
   ]
 }

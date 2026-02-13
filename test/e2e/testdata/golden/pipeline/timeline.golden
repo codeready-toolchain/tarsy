@@ -328,17 +328,89 @@
     "status": "completed"
   },
   {
+    "agent": "ScalingReviewer-1",
+    "content": "Checking current scaling configuration.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ScalingReviewer-1",
+    "content": "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "ScalingReviewer-1",
+    "content": "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas.",
+    "event_type": "final_analysis",
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "ScalingReviewer-2",
+    "content": "Evaluating horizontal scaling needs for pod-1.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ScalingReviewer-2",
+    "content": "HPA target should be 70% CPU utilization for pod-1.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "ScalingReviewer-2",
+    "content": "HPA target should be 70% CPU utilization for pod-1.",
+    "event_type": "final_analysis",
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
     "agent": "SynthesisAgent",
-    "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+    "content": "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas.",
     "event_type": "llm_response",
     "sequence": 1,
     "status": "completed"
   },
   {
     "agent": "SynthesisAgent",
-    "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+    "content": "Combining ConfigValidator and MetricsValidator results.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "SynthesisAgent",
+    "content": "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas.",
     "event_type": "final_analysis",
     "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "SynthesisAgent",
+    "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "SynthesisAgent",
+    "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+    "event_type": "final_analysis",
+    "sequence": 3,
     "status": "completed"
   },
   {

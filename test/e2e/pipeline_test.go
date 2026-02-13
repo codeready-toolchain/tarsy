@@ -20,13 +20,16 @@ import (
 
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
-// Three stages + synthesis:
-//   1. investigation (DataCollector, NativeThinking)
-//   2. remediation   (Remediator, ReAct)
-//   3. validation    (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
-//      → validation - Synthesis (automatic)
+// Four stages + two synthesis stages:
+//   1. investigation  (DataCollector, NativeThinking)
+//   2. remediation    (Remediator, ReAct)
+//   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
+//      → validation - Synthesis (synthesis-native-thinking)
+//   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
+//      → scaling-review - Synthesis (plain synthesis)
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
-// parallel agents, synthesis, forced conclusion, and executive summary.
+// parallel agents, replicas, both synthesis strategies, forced conclusion,
+// and executive summary.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_Pipeline(t *testing.T) {
@@ -121,9 +124,37 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Synthesis (automatic after parallel stage with >1 agent) ──
+	// ── Validation Synthesis (synthesis-native-thinking — includes thinking) ──
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Combining ConfigValidator and MetricsValidator results."},
+			&agent.TextChunk{Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
+			&agent.UsageChunk{InputTokens: 120, OutputTokens: 40, TotalTokens: 160},
+		},
+	})
+
+	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, native-thinking) ──
+	// Replicas run in parallel with the same agent config. Both extract "ScalingReviewer"
+	// from custom instructions, so routed dispatch handles them (entries consumed in arrival order).
+
+	llm.AddRouted("ScalingReviewer", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Evaluating horizontal scaling needs for pod-1."},
+			&agent.TextChunk{Content: "HPA target should be 70% CPU utilization for pod-1."},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+		},
+	})
+	llm.AddRouted("ScalingReviewer", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Checking current scaling configuration."},
+			&agent.TextChunk{Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 25, TotalTokens: 105},
+		},
+	})
+
+	// ── Scaling-review Synthesis (plain "synthesis" strategy — no thinking) ──
+	llm.AddSequential(LLMScriptEntry{
+		Text: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas.",
 	})
 
 	// ── Executive summary ──
@@ -192,21 +223,28 @@ func TestE2E_Pipeline(t *testing.T) {
 
 	// Verify DB state.
 	stages := app.QueryStages(t, sessionID)
-	assert.Len(t, stages, 4)
+	assert.Len(t, stages, 6)
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, "remediation", stages[1].StageName)
 	assert.Equal(t, "validation", stages[2].StageName)
 	assert.Equal(t, "validation - Synthesis", stages[3].StageName)
+	assert.Equal(t, "scaling-review", stages[4].StageName)
+	assert.Equal(t, "scaling-review - Synthesis", stages[5].StageName)
 
 	execs := app.QueryExecutions(t, sessionID)
-	assert.Len(t, execs, 5)
+	assert.Len(t, execs, 8)
 	assert.Equal(t, "DataCollector", execs[0].AgentName)
 	assert.Equal(t, "Remediator", execs[1].AgentName)
-	// Parallel agents — order may vary, so check by name set.
-	parallelNames := map[string]bool{execs[2].AgentName: true, execs[3].AgentName: true}
-	assert.True(t, parallelNames["ConfigValidator"], "expected ConfigValidator execution")
-	assert.True(t, parallelNames["MetricsValidator"], "expected MetricsValidator execution")
+	// Validation parallel agents — order may vary, so check by name set.
+	validationNames := map[string]bool{execs[2].AgentName: true, execs[3].AgentName: true}
+	assert.True(t, validationNames["ConfigValidator"], "expected ConfigValidator execution")
+	assert.True(t, validationNames["MetricsValidator"], "expected MetricsValidator execution")
 	assert.Equal(t, "SynthesisAgent", execs[4].AgentName)
+	// Scaling-review replicas — order may vary, so check by name set.
+	replicaNames := map[string]bool{execs[5].AgentName: true, execs[6].AgentName: true}
+	assert.True(t, replicaNames["ScalingReviewer-1"], "expected ScalingReviewer-1 execution")
+	assert.True(t, replicaNames["ScalingReviewer-2"], "expected ScalingReviewer-2 execution")
+	assert.Equal(t, "SynthesisAgent", execs[7].AgentName)
 
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
@@ -215,10 +253,12 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Stage 1: iteration 1 + summarization + iteration 2 + iteration 3 = 4
 	// Stage 2: iteration 1 + iteration 2 + summarization + iteration 3 = 4
 	// Stage 3: ConfigValidator (2) + MetricsValidator (1 iteration + 1 forced conclusion) = 4
-	// Synthesis: 1
+	// Validation Synthesis: 1
+	// Stage 4: ScalingReviewer-1 (1) + ScalingReviewer-2 (1) = 2
+	// Scaling-review Synthesis: 1
 	// Executive summary: 1
-	// Total: 14
-	assert.Equal(t, 14, llm.CallCount())
+	// Total: 17
+	assert.Equal(t, 17, llm.CallCount())
 
 	// ── Debug API (fetch first — used to register IDs in deterministic order) ──
 	//

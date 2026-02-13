@@ -18,5 +18,15 @@
     "stage_index": 4,
     "stage_name": "validation - Synthesis",
     "status": "completed"
+  },
+  {
+    "stage_index": 5,
+    "stage_name": "scaling-review",
+    "status": "completed"
+  },
+  {
+    "stage_index": 6,
+    "stage_name": "scaling-review - Synthesis",
+    "status": "completed"
   }
 ]
