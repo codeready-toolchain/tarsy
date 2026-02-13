@@ -508,8 +508,8 @@ func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.Exp
 						}
 					}
 				}
-			// Advance past this actual event whether it matched a group member or not.
-			actualIdx++
+				// Advance past this actual event whether it matched a group member or not.
+				actualIdx++
 			}
 			// Check all group members were matched.
 			for i, m := range matched {
