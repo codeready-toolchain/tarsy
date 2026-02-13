@@ -119,8 +119,10 @@ func TestE2E_Cancellation(t *testing.T) {
 	// Wait for session to reach terminal status.
 	app.WaitForSessionStatus(t, session1ID, "cancelled")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the final WS event (session.status cancelled) instead of a fixed sleep.
+	ws1.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "cancelled"
+	}, 5*time.Second, "session 1: expected session.status cancelled WS event")
 
 	// ── Session 1 assertions ──
 	session1 := app.GetSession(t, session1ID)
@@ -211,8 +213,12 @@ func TestE2E_Cancellation(t *testing.T) {
 
 	app.WaitForStageStatus(t, chat2StageID, "completed")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the final WS event (chat 2 stage completed) instead of a fixed sleep.
+	ws2.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "stage.status" &&
+			e.Parsed["stage_id"] == chat2StageID &&
+			e.Parsed["status"] == "completed"
+	}, 5*time.Second, "session 2: expected Chat Response stage.status completed WS event for chat 2")
 
 	// ── Session 2 stage assertions ──
 	stages2 := app.QueryStages(t, session2ID)

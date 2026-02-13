@@ -276,8 +276,12 @@ func TestE2E_Pipeline(t *testing.T) {
 	require.NotEmpty(t, chat2StageID)
 	app.WaitForStageStatus(t, chat2StageID, "completed")
 
-	// Allow trailing WS events to arrive after chat completes.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the final WS event (chat 2 stage completed) instead of a fixed sleep.
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "stage.status" &&
+			e.Parsed["stage_id"] == chat2StageID &&
+			e.Parsed["status"] == "completed"
+	}, 5*time.Second, "expected Chat Response stage.status completed WS event for chat 2")
 
 	// Verify session via API.
 	session := app.GetSession(t, sessionID)
