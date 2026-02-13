@@ -209,7 +209,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	if err != nil {
 		logger.Error("Failed to resolve chat agent config", "error", err)
 		// Best-effort: create a failed AgentExecution for audit trail.
-		e.createFailedChatExecution(execCtx, stageID, input.Session.ID, "chat", chatProviderName, err.Error(), logger)
+		e.createFailedChatExecution(stageID, input.Session.ID, "chat", chatProviderName, err.Error(), logger)
 		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, events.StageStatusFailed, err.Error())
 		return
 	}
@@ -219,7 +219,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	if err != nil {
 		logger.Error("Failed to resolve MCP selection", "error", err)
 		// Best-effort: create a failed AgentExecution for audit trail.
-		e.createFailedChatExecution(execCtx, stageID, input.Session.ID, resolvedConfig.AgentName, chatProviderName, err.Error(), logger)
+		e.createFailedChatExecution(stageID, input.Session.ID, resolvedConfig.AgentName, chatProviderName, err.Error(), logger)
 		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, events.StageStatusFailed, err.Error())
 		return
 	}
@@ -491,16 +491,16 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 	executiveSummary = e.getExecutiveSummary(ctx, input.Session.ID)
 
 	// 4. Format the structured investigation context.
-	context := agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
+	formattedContext := agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
 
 	// 5. Append previous chat Q&A if any.
 	if len(previousChats) > 0 {
-		context += formatPreviousChats(previousChats)
+		formattedContext += formatPreviousChats(previousChats)
 	}
 
 	return &agent.ChatContext{
 		UserQuestion:         input.Message.Content,
-		InvestigationContext: context,
+		InvestigationContext: formattedContext,
 	}
 }
 
@@ -511,10 +511,11 @@ type chatQA struct {
 }
 
 // extractFinalAnalysis gets the final_analysis content from a stage's timeline.
+// Uses pre-loaded stg.Edges.AgentExecutions (loaded via GetStagesBySession with
+// withExecutions=true) to avoid a redundant DB round-trip.
 func (e *ChatMessageExecutor) extractFinalAnalysis(ctx context.Context, stg *ent.Stage) string {
-	// Get all executions for this stage, find final_analysis in any execution's timeline.
-	execs, err := e.stageService.GetAgentExecutions(ctx, stg.ID)
-	if err != nil || len(execs) == 0 {
+	execs := stg.Edges.AgentExecutions
+	if len(execs) == 0 {
 		return ""
 	}
 	for _, exec := range execs {
@@ -736,9 +737,11 @@ func (e *ChatMessageExecutor) unregisterExecution(chatID string) {
 // for audit trail when early-exit errors occur before the normal execution
 // record is created. Errors are logged but not returned (best-effort).
 func (e *ChatMessageExecutor) createFailedChatExecution(
-	ctx context.Context, stageID, sessionID, agentName, llmProvider, errMsg string, logger *slog.Logger,
+	stageID, sessionID, agentName, llmProvider, errMsg string, logger *slog.Logger,
 ) {
-	exec, createErr := e.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+	// Use context.Background() for both create and status update since this is
+	// a best-effort audit path — the incoming ctx may be near its deadline.
+	exec, createErr := e.stageService.CreateAgentExecution(context.Background(), models.CreateAgentExecutionRequest{
 		StageID:     stageID,
 		SessionID:   sessionID,
 		AgentName:   agentName,

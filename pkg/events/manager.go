@@ -265,6 +265,13 @@ func (m *ConnectionManager) subscribe(c *Connection, channel string) error {
 // Those connections are now orphaned — they received subscription.confirmed but
 // the underlying PG LISTEN was never established. This helper cleans them up.
 //
+// Client-side contract: an orphaned connection may observe the sequence
+// subscription.confirmed → catchup events → subscription.error. This is an
+// inherent artefact of the concurrent subscribe/LISTEN window and only occurs
+// during transient LISTEN failures. Clients MUST treat subscription.error as
+// authoritative: discard any previously received events for that channel and
+// either re-subscribe (with back-off) or fall back to REST polling.
+//
 // Note: affected connections may retain a stale c.subscriptions[channel] entry.
 // This is harmless: Broadcast uses m.channels (now deleted), and unsubscribe /
 // unregisterConnection handle missing channel entries gracefully.

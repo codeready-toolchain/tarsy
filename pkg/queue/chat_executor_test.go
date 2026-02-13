@@ -486,7 +486,7 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 
 	logger := slog.Default()
 
-	executor.createFailedChatExecution(ctx, stg.ID, session.ID, "chat", "test-provider", "config resolution error", logger)
+	executor.createFailedChatExecution(stg.ID, session.ID, "chat", "test-provider", "config resolution error", logger)
 
 	// Verify the execution record was created and is in failed state
 	executions, err := stageService.GetAgentExecutions(ctx, stg.ID)

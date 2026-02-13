@@ -556,9 +556,9 @@ func TestConnectionManager_SubscribeListenFailure_CleansUpOrphanedSubscribers(t 
 }
 
 func TestConnectionManager_SubscribeListenFailure_NotifiesOrphanedSubscribers(t *testing.T) {
-	// End-to-end test: two real WebSocket clients subscribe to the same channel.
-	// The first triggers LISTEN (which fails); both should receive subscription.error
-	// and the channel should have zero subscribers.
+	// End-to-end test: two real WebSocket clients each subscribe to the same
+	// channel backed by a listener whose LISTEN always fails. Both should
+	// receive subscription.error and the channel should have zero subscribers.
 	events := []CatchupEvent{
 		{ID: 1, Payload: map[string]interface{}{"type": "test"}},
 	}
@@ -584,15 +584,29 @@ func TestConnectionManager_SubscribeListenFailure_NotifiesOrphanedSubscribers(t 
 
 	msg1 := readJSON(t, conn1)
 	assert.Equal(t, "subscription.error", msg1["type"],
-		"triggering connection should receive subscription.error")
+		"first client should receive subscription.error")
 
-	// Channel should have zero subscribers.
+	// Connect second client and subscribe — triggers another (failing) LISTEN
+	// because the channel was cleaned up after the first failure.
+	conn2 := connectWS(t, server)
+	readJSON(t, conn2) // connection.established
+	writeJSON(t, conn2, ClientMessage{Action: "subscribe", Channel: "session:orphan-ws"})
+
+	msg2 := readJSON(t, conn2)
+	assert.Equal(t, "subscription.error", msg2["type"],
+		"second client should receive subscription.error")
+
+	// Channel should have zero subscribers after both failures.
 	assert.Equal(t, 0, manager.subscriberCount("session:orphan-ws"))
 
 	// Both connections should still be alive.
 	writeJSON(t, conn1, ClientMessage{Action: "ping"})
-	pong := readJSON(t, conn1)
-	assert.Equal(t, "pong", pong["type"])
+	pong1 := readJSON(t, conn1)
+	assert.Equal(t, "pong", pong1["type"], "conn1 should still be alive")
+
+	writeJSON(t, conn2, ClientMessage{Action: "ping"})
+	pong2 := readJSON(t, conn2)
+	assert.Equal(t, "pong", pong2["type"], "conn2 should still be alive")
 }
 
 func TestConnectionManager_CleanupOnDisconnect(t *testing.T) {
