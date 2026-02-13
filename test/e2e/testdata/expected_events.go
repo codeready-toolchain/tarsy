@@ -557,3 +557,82 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Timeout — Session 1 (Investigation timeout)
+// Single stage with 1 agent that blocks via BlockUntilCancelled.
+// Session timeout (2s) fires → context.DeadlineExceeded → timed_out.
+//   1. investigation (TimeoutAgent, NativeThinking)
+//      Agent blocks on BlockUntilCancelled → no streaming events created.
+//      Deadline fires → agent + stage + session timed_out.
+// ────────────────────────────────────────────────────────────
+
+var TimeoutInvestigationExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (TimeoutAgent) ──
+	{Type: "stage.status", StageName: "investigation", Status: "started"},
+
+	// BlockUntilCancelled closes the channel without sending chunks, so
+	// no streaming timeline events are created. The stage jumps straight
+	// from started to timed_out once the session deadline fires.
+	{Type: "stage.status", StageName: "investigation", Status: "timed_out"},
+	{Type: "session.status", Status: "timed_out"},
+}
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Timeout — Session 2 (Chat timeout)
+// Single-stage investigation completes normally, then chat times out
+// and a follow-up chat succeeds.
+//   1. quick-check (QuickInvestigator, native-thinking) — succeeds
+//   + Executive summary — succeeds
+//   + Chat 1: BlockUntilCancelled → timed_out (chat deadline fires)
+//   + Chat 2: thinking + final answer → succeeds
+// ────────────────────────────────────────────────────────────
+
+var TimeoutChatExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: quick-check (QuickInvestigator, native-thinking) ──
+	{Type: "stage.status", StageName: "quick-check", Status: "started"},
+
+	// Single iteration: thinking + response + final_analysis.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Quick check on the alert.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Alert verified: system is stable, no action needed.", Group: 1},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Alert verified: system is stable, no action needed."},
+
+	{Type: "stage.status", StageName: "quick-check", Status: "completed"},
+
+	// Executive summary succeeds (no WS events — DB-only timeline event).
+	{Type: "session.status", Status: "completed"},
+
+	// ── Chat 1: BlockUntilCancelled → timed_out ──
+	{Type: "chat.created"},
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "Ask a question"},
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	// BlockUntilCancelled: no streaming events. Stage timed_out.
+	{Type: "stage.status", StageName: "Chat Response", Status: "timed_out"},
+
+	// ── Chat 2: follow-up succeeds ──
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "Follow-up question"},
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+
+	// Single iteration: thinking + response + final_analysis.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Answering the follow-up.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Here is your follow-up answer: everything looks good.", Group: 2},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Here is your follow-up answer: everything looks good."},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+}
