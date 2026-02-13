@@ -80,6 +80,26 @@ func WithMCPServers(servers map[string]map[string]mcpsdk.ToolHandler) TestAppOpt
 	return func(c *testAppConfig) { c.mcpServers = servers }
 }
 
+// WithWorkerCount sets the number of worker pool goroutines.
+func WithWorkerCount(n int) TestAppOption {
+	return func(c *testAppConfig) { c.workerCount = n }
+}
+
+// WithMaxConcurrentSessions sets the maximum number of concurrently executing sessions.
+func WithMaxConcurrentSessions(n int) TestAppOption {
+	return func(c *testAppConfig) { c.maxConcurrentSessions = n }
+}
+
+// WithSessionTimeout sets the timeout for investigation session execution.
+func WithSessionTimeout(d time.Duration) TestAppOption {
+	return func(c *testAppConfig) { c.sessionTimeout = d }
+}
+
+// WithChatTimeout sets the timeout for chat message execution.
+func WithChatTimeout(d time.Duration) TestAppOption {
+	return func(c *testAppConfig) { c.chatTimeout = d }
+}
+
 // NewTestApp creates and starts a full TARSy test instance.
 // Shutdown is registered via t.Cleanup automatically.
 func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {

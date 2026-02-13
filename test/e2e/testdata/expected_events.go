@@ -346,3 +346,51 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: FailurePropagation
+// Three-stage chain where stage 2 (policy=all) fails when one parallel
+// agent's LLM returns an error. Fail-fast prevents stage 3 from starting.
+//   1. preparation (Preparer, NativeThinking) — succeeds
+//   2. parallel-check (CheckerA ∥ CheckerB, policy=all) — CheckerB errors → stage fails
+//   3. final (Finalizer) — NEVER STARTS (fail-fast)
+// ────────────────────────────────────────────────────────────
+
+var FailurePropagationExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: preparation (Preparer, native-thinking) ──
+	{Type: "stage.status", StageName: "preparation", Status: "started"},
+
+	// Preparer: single iteration — thinking + response + final_analysis.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Analyzing the alert data.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Preparation complete: alert data reviewed and ready for parallel checks.", Group: 1},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Preparation complete: alert data reviewed and ready for parallel checks."},
+
+	{Type: "stage.status", StageName: "preparation", Status: "completed"},
+
+	// ── Stage 2: parallel-check (CheckerA succeeds ∥ CheckerB errors, policy=all) ──
+	{Type: "stage.status", StageName: "parallel-check", Status: "started"},
+
+	// CheckerA (native-thinking): succeeds — thinking + response + final_analysis.
+	// CheckerB: LLM error on Generate() → no timeline events at all.
+	// Since only CheckerA produces events, they don't need a Group.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "System status looks nominal.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "CheckerA verification passed: all systems operational.", Group: 2},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "CheckerA verification passed: all systems operational."},
+
+	{Type: "stage.status", StageName: "parallel-check", Status: "failed"},
+
+	// ── Fail-fast: no stage 3 events, session fails ──
+	{Type: "session.status", Status: "failed"},
+}

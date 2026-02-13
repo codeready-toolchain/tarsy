@@ -17,6 +17,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
@@ -156,6 +157,12 @@ func (app *TestApp) SendChatMessage(t *testing.T, sessionID, content string) map
 		map[string]string{"content": content}, http.StatusAccepted)
 }
 
+// CancelSession sends POST /api/v1/sessions/:id/cancel.
+func (app *TestApp) CancelSession(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.postJSON(t, "/api/v1/sessions/"+sessionID+"/cancel", nil, http.StatusOK)
+}
+
 // WaitForStageStatus polls the DB until the stage reaches a terminal status.
 // Returns the terminal status string.
 func (app *TestApp) WaitForStageStatus(t *testing.T, stageID string, expected ...string) string {
@@ -213,6 +220,30 @@ func (app *TestApp) QueryExecutions(t *testing.T, sessionID string) []*ent.Agent
 		All(context.Background())
 	require.NoError(t, err)
 	return execs
+}
+
+// QuerySessionsByStatus returns session IDs matching the given status.
+func (app *TestApp) QuerySessionsByStatus(t *testing.T, status string) []string {
+	t.Helper()
+	sessions, err := app.EntClient.AlertSession.Query().
+		Where(alertsession.StatusEQ(alertsession.Status(status))).
+		All(context.Background())
+	require.NoError(t, err)
+	ids := make([]string, len(sessions))
+	for i, s := range sessions {
+		ids[i] = s.ID
+	}
+	return ids
+}
+
+// WaitForNSessionsInStatus waits until exactly n sessions have the given status.
+func (app *TestApp) WaitForNSessionsInStatus(t *testing.T, n int, status string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		ids := app.QuerySessionsByStatus(t, status)
+		return len(ids) == n
+	}, 30*time.Second, 100*time.Millisecond,
+		"expected %d sessions in status %q", n, status)
 }
 
 // ────────────────────────────────────────────────────────────
