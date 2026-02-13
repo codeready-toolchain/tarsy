@@ -76,10 +76,10 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
-	mu               sync.Mutex
-	stageStatuses    []events.StageStatusPayload
-	sessionStatuses  []events.SessionStatusPayload
-	timelineCreated  []events.TimelineCreatedPayload
+	mu              sync.Mutex
+	stageStatuses   []events.StageStatusPayload
+	sessionStatuses []events.SessionStatusPayload
+	timelineCreated []events.TimelineCreatedPayload
 }
 
 func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {

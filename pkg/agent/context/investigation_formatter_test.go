@@ -187,10 +187,10 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 				StageIndex: 0,
 				Agents: []AgentInvestigation{
 					{
-						AgentName: "DataCollector",
+						AgentName:  "DataCollector",
 						AgentIndex: 1,
-						Strategy:  "native-thinking",
-						Status:    alertsession.StatusCompleted,
+						Strategy:   "native-thinking",
+						Status:     alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
 							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Collected data."},
 						},
@@ -291,10 +291,10 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 				StageIndex: 0,
 				Agents: []AgentInvestigation{
 					{
-						AgentName: "DataCollector",
+						AgentName:  "DataCollector",
 						AgentIndex: 1,
-						Strategy:  "native-thinking",
-						Status:    alertsession.StatusCompleted,
+						Strategy:   "native-thinking",
+						Status:     alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
 							{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Data collected."},
 						},

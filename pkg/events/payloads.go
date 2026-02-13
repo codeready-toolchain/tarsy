@@ -72,4 +72,3 @@ type ChatCreatedPayload struct {
 	CreatedBy string `json:"created_by"` // author who initiated the chat
 	Timestamp string `json:"timestamp"`  // RFC3339Nano
 }
-

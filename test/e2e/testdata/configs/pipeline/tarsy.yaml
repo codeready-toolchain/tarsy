@@ -1,7 +1,6 @@
 defaults:
   llm_provider: "test-provider"
   iteration_strategy: "native-thinking"
-  max_iterations: 3
 
 mcp_servers:
   test-mcp:
@@ -26,15 +25,12 @@ mcp_servers:
 
 agents:
   DataCollector:
-    max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
     custom_instructions: "You are DataCollector, gathering system metrics and pod status."
   Remediator:
-    max_iterations: 5
     mcp_servers: [test-mcp, prometheus-mcp]
     custom_instructions: "You are Remediator, analyzing logs and recommending fixes."
   ConfigValidator:
-    max_iterations: 3
     mcp_servers: [test-mcp]
     custom_instructions: "You are ConfigValidator, verifying resource configurations."
   MetricsValidator:
@@ -42,7 +38,6 @@ agents:
     mcp_servers: [prometheus-mcp]
     custom_instructions: "You are MetricsValidator, checking SLO compliance."
   ScalingReviewer:
-    max_iterations: 3
     mcp_servers: [test-mcp]
     custom_instructions: "You are ScalingReviewer, evaluating horizontal scaling recommendations."
 
@@ -56,7 +51,6 @@ agent_chains:
       enabled: true
       agent: "ChatAgent"
       iteration_strategy: "native-thinking"
-      max_iterations: 3
     stages:
       - name: investigation
         agents:

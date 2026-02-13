@@ -264,13 +264,13 @@ func TestBuildResponseMetadata(t *testing.T) {
 					Supports: []agent.GroundingSupport{
 						{
 							StartIndex:            0,
-							EndIndex:               50,
+							EndIndex:              50,
 							Text:                  "Supported text segment",
 							GroundingChunkIndices: []int{0},
 						},
 						{
 							StartIndex:            60,
-							EndIndex:               100,
+							EndIndex:              100,
 							Text:                  "Another segment",
 							GroundingChunkIndices: []int{0},
 						},

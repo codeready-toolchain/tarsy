@@ -173,7 +173,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 		assert.Equal(t, "gemini-2.5-pro", *exec.LlmProvider)
 
 		// Round-trip: re-read from DB to confirm persistence
-		reloaded, err := client.Client.AgentExecution.Get(ctx, exec.ID)
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
 		require.NoError(t, err)
 		require.NotNil(t, reloaded.LlmProvider)
 		assert.Equal(t, "gemini-2.5-pro", *reloaded.LlmProvider)
