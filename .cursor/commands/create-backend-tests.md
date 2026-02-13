@@ -5,8 +5,10 @@
 ### From Project Root
 
 **All tests:**
-- `make test` - Run all tests (Go + Python + Dashboard)
-- `make test-go` - Run all Go tests only
+- `make test` - Run all tests (Go + Python)
+- `make test-go` - Run all Go tests (unit + e2e)
+- `make test-unit` - Run Go unit/integration tests only
+- `make test-e2e` - Run Go e2e tests only
 - `make test-go-coverage` - Run Go tests and open HTML coverage report
 
 ### Direct Go Commands
@@ -42,6 +44,7 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 
 - **Unit tests**: `*_test.go` - Fast, mocked, no external dependencies
 - **Integration tests**: `*_integration_test.go` - Real database, slower, comprehensive
+- **E2E tests**: `test/e2e/` - Full in-process TARSy with real DB, mocked LLM/MCP
 
 ## Project Conventions
 
@@ -59,6 +62,7 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 - **Service integration tests**: `pkg/services/integration_test.go`
 - **Database integration tests**: `pkg/queue/integration_test.go`
 - **Concurrent behavior tests**: `pkg/queue/integration_test.go`
+- **E2E tests**: `test/e2e/*_test.go` — full pipeline with `TestApp` harness, `ScriptedLLMClient`, in-memory MCP (see [E2E Tests](#e2e-tests) section below)
 
 ## Approach
 
@@ -67,6 +71,15 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 3. **Determine what to test**: happy path, edge cases, error handling, concurrency if applicable
 4. **Choose the right level**: unit tests for logic, integration tests for database/service interactions
 5. **Write mostly unit tests, some integration tests** - each test independent, no execution order dependencies
+
+## E2E Tests
+
+E2E tests live in `test/e2e/` and run a full in-process TARSy instance with a real database, scripted LLM responses, and optional in-memory MCP servers. Read existing tests (e.g. `pipeline_test.go`, `timeout_test.go`, `concurrency_test.go`) to understand the patterns — each scenario has a config directory, a scripted LLM client, and assertions on session state, WS events, and/or golden files.
+
+- **When to write/update e2e tests** — new alert types or agent chains, changes to session lifecycle (timeout, cancellation, concurrency), new stage types or policies, changes to WebSocket events or API responses
+- **New functionality** — add a new test scenario or extend an existing one, following the same structure
+- **Incremental changes** — prefer extending an existing scenario over creating a new one; update LLM scripts, expected events, and golden files (run with `-update` flag) to match
+- **Always start from an existing test** as a template rather than writing from scratch
 
 ## Pitfalls
 
@@ -78,7 +91,7 @@ DO NOT create summary documents, README files, or any markdown documentation fil
 
 ---
 
-**BE PRACTICAL. CREATE ONLY TESTS THAT BRING REAL VALUE. DO NOT DUPLICATE TESTS.**
+**BE PRACTICAL. CREATE ONLY TESTS THAT BRING REAL VALUE. DO NOT DUPLICATE TESTS AT THE SAME LEVEL — but covering the same functionality at different levels (unit, integration, e2e) is expected and encouraged.**
 
 **DO NOT CREATE DOCUMENTATION OR SUMMARY FILES UNLESS EXPLICITLY REQUESTED.**
 
