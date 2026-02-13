@@ -232,23 +232,25 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "scaling-review", Status: "started"},
 
 	// ScalingReviewer-1 and ScalingReviewer-2 events (parallel — Group 20).
+	// Both replicas produce identical output (interchangeable), so content matches
+	// regardless of goroutine dispatch order.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 20},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 20},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 20,
 		Content: "Evaluating horizontal scaling needs for pod-1."},
 	{Type: "timeline_event.completed", EventType: "llm_response", Group: 20,
-		Content: "HPA target should be 70% CPU utilization for pod-1."},
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target."},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 20,
-		Content: "HPA target should be 70% CPU utilization for pod-1."},
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target."},
 
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 20},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 20},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 20,
-		Content: "Checking current scaling configuration."},
+		Content: "Evaluating horizontal scaling needs for pod-1."},
 	{Type: "timeline_event.completed", EventType: "llm_response", Group: 20,
-		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target."},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 20,
-		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+		Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target."},
 
 	{Type: "stage.status", StageName: "scaling-review", Status: "completed"},
 
@@ -256,9 +258,9 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "scaling-review - Synthesis", Status: "started"},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
 	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas."},
+		Content: "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1."},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
-		Content: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas."},
+		Content: "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1."},
 	{Type: "stage.status", StageName: "scaling-review - Synthesis", Status: "completed"},
 
 	{Type: "session.status", Status: "completed"},

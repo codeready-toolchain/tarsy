@@ -1,10 +1,10 @@
+// Package e2e provides end-to-end test infrastructure for the tarsy pipeline.
 package e2e
 
 import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -158,7 +158,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	// 8. Worker pool.
 	podID := fmt.Sprintf("e2e-test-%s", t.Name())
 	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher)
-	workerPool.Start(ctx)
+	require.NoError(t, workerPool.Start(ctx))
 
 	// 9. Chat executor.
 	chatExecutor := queue.NewChatMessageExecutor(
@@ -239,14 +239,4 @@ func defaultTestConfig() *config.Config {
 		MCPServerRegistry:   config.NewMCPServerRegistry(nil),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(nil),
 	}
-}
-
-// addSearchPath appends search_path to a PostgreSQL connection string.
-// Duplicated from test/util (unexported there) for use in harness setup.
-func addSearchPath(connStr, schemaName string) string {
-	separator := "?"
-	if strings.Contains(connStr, "?") {
-		separator = "&"
-	}
-	return fmt.Sprintf("%s%ssearch_path=%s", connStr, separator, schemaName)
 }

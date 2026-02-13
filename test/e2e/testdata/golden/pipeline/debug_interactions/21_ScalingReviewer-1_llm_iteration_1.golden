@@ -9,12 +9,12 @@
     "messages_count": 2
   },
   "llm_response": {
-    "text_length": 67,
+    "text_length": 78,
     "tool_calls_count": 0
   },
   "model_name": "test-model",
   "output_tokens": 25,
-  "thinking_content": "Checking current scaling configuration.",
+  "thinking_content": "Evaluating horizontal scaling needs for pod-1.",
   "total_tokens": 105
 }
 
@@ -124,5 +124,5 @@ Use the available tools to investigate this alert and provide:
 Be thorough in your investigation before providing the final answer.
 
 === MESSAGE: assistant ===
-Current replicas=1 is insufficient. Recommend min=2 max=5 replicas.
+Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 

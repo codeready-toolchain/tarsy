@@ -57,7 +57,7 @@ func (app *TestApp) postJSON(t *testing.T, path string, body interface{}, expect
 	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, expectedStatus, resp.StatusCode, "POST %s: unexpected status", path)
 	var result map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
@@ -70,7 +70,7 @@ func (app *TestApp) getJSON(t *testing.T, path string, expectedStatus int) map[s
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, expectedStatus, resp.StatusCode, "GET %s: unexpected status", path)
 	var result map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))

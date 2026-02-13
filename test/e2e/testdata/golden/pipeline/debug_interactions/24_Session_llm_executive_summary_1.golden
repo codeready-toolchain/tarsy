@@ -28,7 +28,7 @@ CRITICAL RULES:
 Analysis to summarize:
 
 =================================================================================
-Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas.
+Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
 =================================================================================
 
 Executive Summary (1-4 lines, facts only):

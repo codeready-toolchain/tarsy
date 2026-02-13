@@ -137,24 +137,22 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Replicas run in parallel with the same agent config. Both extract "ScalingReviewer"
 	// from custom instructions, so routed dispatch handles them (entries consumed in arrival order).
 
-	llm.AddRouted("ScalingReviewer", LLMScriptEntry{
+	// Both replica entries are identical — replicas are interchangeable and goroutine
+	// scheduling determines which replica gets which entry. Identical entries ensure
+	// golden file stability regardless of dispatch order.
+	scalingReviewerEntry := LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "Evaluating horizontal scaling needs for pod-1."},
-			&agent.TextChunk{Content: "HPA target should be 70% CPU utilization for pod-1."},
-			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
-		},
-	})
-	llm.AddRouted("ScalingReviewer", LLMScriptEntry{
-		Chunks: []agent.Chunk{
-			&agent.ThinkingChunk{Content: "Checking current scaling configuration."},
-			&agent.TextChunk{Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 replicas."},
+			&agent.TextChunk{Content: "Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target."},
 			&agent.UsageChunk{InputTokens: 80, OutputTokens: 25, TotalTokens: 105},
 		},
-	})
+	}
+	llm.AddRouted("ScalingReviewer", scalingReviewerEntry)
+	llm.AddRouted("ScalingReviewer", scalingReviewerEntry)
 
 	// ── Scaling-review Synthesis (plain "synthesis" strategy — no thinking) ──
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Both scaling reviews agree: set HPA to 70% CPU with min=2, max=5 replicas.",
+		Text: "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
 	})
 
 	// ── Executive summary ──

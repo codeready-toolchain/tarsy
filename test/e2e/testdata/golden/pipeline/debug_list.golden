@@ -288,8 +288,8 @@
               "input_tokens": 80,
               "interaction_type": "iteration",
               "model_name": "test-model",
-              "output_tokens": 20,
-              "total_tokens": 100
+              "output_tokens": 25,
+              "total_tokens": 105
             }
           ],
           "mcp_interactions": []

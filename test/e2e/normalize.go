@@ -30,7 +30,7 @@ type Normalizer struct {
 var (
 	uuidRe       = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 	timestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
-	unixTsRe     = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
+	unixTSRe     = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
 	dbEventIDRe  = regexp.MustCompile(`"db_event_id":\s*\d+`)
 	connIDRe     = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
 	durationMsRe = regexp.MustCompile(`"duration_ms":\s*\d+`)
@@ -141,7 +141,7 @@ func (n *Normalizer) Normalize(data string) string {
 	data = timestampRe.ReplaceAllString(data, "{TIMESTAMP}")
 
 	// 9. Replace Unix timestamps in known fields.
-	data = unixTsRe.ReplaceAllStringFunc(data, func(match string) string {
+	data = unixTSRe.ReplaceAllStringFunc(data, func(match string) string {
 		// Keep the field name, replace the value.
 		idx := strings.Index(match, ":")
 		return match[:idx+1] + " {UNIX_TS}"
