@@ -44,6 +44,9 @@ func TestEventTypeConstants(t *testing.T) {
 		EventTypeSessionStatus,
 		EventTypeStageStatus,
 		EventTypeStreamChunk,
+		EventTypeSessionProgress,
+		EventTypeExecutionProgress,
+		EventTypeInteractionCreated,
 	}
 
 	seen := make(map[string]bool)
@@ -52,6 +55,30 @@ func TestEventTypeConstants(t *testing.T) {
 		assert.False(t, seen[typ], "duplicate event type: %s", typ)
 		seen[typ] = true
 	}
+}
+
+func TestProgressPhaseConstants(t *testing.T) {
+	phases := []string{
+		ProgressPhaseInvestigating,
+		ProgressPhaseGatheringInfo,
+		ProgressPhaseDistilling,
+		ProgressPhaseConcluding,
+		ProgressPhaseSynthesizing,
+		ProgressPhaseFinalizing,
+	}
+
+	seen := make(map[string]bool)
+	for _, phase := range phases {
+		assert.NotEmpty(t, phase, "progress phase should not be empty")
+		assert.False(t, seen[phase], "duplicate progress phase: %s", phase)
+		seen[phase] = true
+	}
+}
+
+func TestInteractionTypeConstants(t *testing.T) {
+	assert.Equal(t, "llm", InteractionTypeLLM)
+	assert.Equal(t, "mcp", InteractionTypeMCP)
+	assert.NotEqual(t, InteractionTypeLLM, InteractionTypeMCP)
 }
 
 func TestGlobalSessionsChannel(t *testing.T) {

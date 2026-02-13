@@ -77,13 +77,13 @@ type ChatCreatedPayload struct {
 // Fired once when an LLM or MCP interaction record is saved to DB.
 // Used by trace view for live updates via event-notification + REST re-fetch.
 type InteractionCreatedPayload struct {
-	Type            string `json:"type"`                       // always EventTypeInteractionCreated
-	SessionID       string `json:"session_id"`                 // session UUID
-	StageID         string `json:"stage_id,omitempty"`         // stage UUID (empty for session-level, e.g. executive summary)
-	ExecutionID     string `json:"execution_id,omitempty"`     // execution UUID (empty for session-level)
-	InteractionID   string `json:"interaction_id"`             // LLM or MCP interaction UUID
-	InteractionType string `json:"interaction_type"`           // "llm" or "mcp"
-	Timestamp       string `json:"timestamp"`                  // RFC3339Nano
+	Type            string `json:"type"`                   // always EventTypeInteractionCreated
+	SessionID       string `json:"session_id"`             // session UUID
+	StageID         string `json:"stage_id,omitempty"`     // stage UUID (empty for session-level, e.g. executive summary)
+	ExecutionID     string `json:"execution_id,omitempty"` // execution UUID (empty for session-level)
+	InteractionID   string `json:"interaction_id"`         // LLM or MCP interaction UUID
+	InteractionType string `json:"interaction_type"`       // "llm" or "mcp"
+	Timestamp       string `json:"timestamp"`              // RFC3339Nano
 }
 
 // SessionProgressPayload is the payload for session.progress transient events.

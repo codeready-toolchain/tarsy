@@ -25,9 +25,9 @@ func TestDashboardEndpoints(t *testing.T) {
 
 	// ── Per-session expected data ──
 	type sessionSpec struct {
-		alertData   string
-		investText  string // investigation LLM response → final_analysis
-		summaryText string // executive summary LLM response → executive_summary
+		alertData               string
+		investText              string // investigation LLM response → final_analysis
+		summaryText             string // executive summary LLM response → executive_summary
 		invIn, invOut, invTotal int
 		sumIn, sumOut, sumTotal int
 	}
@@ -37,21 +37,21 @@ func TestDashboardEndpoints(t *testing.T) {
 			alertData:   "Session Alpha payload",
 			investText:  "Alpha investigation: CPU spike detected on node-1.",
 			summaryText: "Alpha summary: CPU spike resolved.",
-			invIn: 100, invOut: 50, invTotal: 150,
+			invIn:       100, invOut: 50, invTotal: 150,
 			sumIn: 30, sumOut: 10, sumTotal: 40,
 		},
 		{
 			alertData:   "Session Beta payload",
 			investText:  "Beta investigation: memory pressure on pod-xyz.",
 			summaryText: "Beta summary: OOM risk mitigated.",
-			invIn: 200, invOut: 100, invTotal: 300,
+			invIn:       200, invOut: 100, invTotal: 300,
 			sumIn: 40, sumOut: 20, sumTotal: 60,
 		},
 		{
 			alertData:   "Session Charlie payload",
 			investText:  "Charlie investigation: network latency anomaly.",
 			summaryText: "Charlie summary: latency normalized.",
-			invIn: 150, invOut: 75, invTotal: 225,
+			invIn:       150, invOut: 75, invTotal: 225,
 			sumIn: 35, sumOut: 15, sumTotal: 50,
 		},
 	}

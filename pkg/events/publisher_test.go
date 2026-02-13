@@ -205,3 +205,80 @@ func TestStageStatusPayload_EmptyStageID(t *testing.T) {
 	// StageID should be omitted from JSON due to omitempty
 	assert.NotContains(t, string(data), "stage_id")
 }
+
+func TestSessionProgressPayload_JSON(t *testing.T) {
+	payload := SessionProgressPayload{
+		Type:              EventTypeSessionProgress,
+		SessionID:         "sess-100",
+		CurrentStageName:  "analysis",
+		CurrentStageIndex: 2,
+		TotalStages:       3,
+		ActiveExecutions:  1,
+		StatusText:        "Starting stage: analysis",
+		Timestamp:         "2026-02-13T10:00:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded SessionProgressPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeSessionProgress, decoded.Type)
+	assert.Equal(t, "sess-100", decoded.SessionID)
+	assert.Equal(t, "analysis", decoded.CurrentStageName)
+	assert.Equal(t, 2, decoded.CurrentStageIndex)
+	assert.Equal(t, 3, decoded.TotalStages)
+	assert.Equal(t, 1, decoded.ActiveExecutions)
+	assert.Equal(t, "Starting stage: analysis", decoded.StatusText)
+}
+
+func TestExecutionProgressPayload_JSON(t *testing.T) {
+	payload := ExecutionProgressPayload{
+		Type:        EventTypeExecutionProgress,
+		SessionID:   "sess-200",
+		StageID:     "stg-1",
+		ExecutionID: "exec-1",
+		Phase:       ProgressPhaseInvestigating,
+		Message:     "Iteration 1/5",
+		Timestamp:   "2026-02-13T10:00:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded ExecutionProgressPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeExecutionProgress, decoded.Type)
+	assert.Equal(t, "sess-200", decoded.SessionID)
+	assert.Equal(t, "stg-1", decoded.StageID)
+	assert.Equal(t, "exec-1", decoded.ExecutionID)
+	assert.Equal(t, ProgressPhaseInvestigating, decoded.Phase)
+	assert.Equal(t, "Iteration 1/5", decoded.Message)
+}
+
+func TestInteractionCreatedPayload_JSON(t *testing.T) {
+	payload := InteractionCreatedPayload{
+		Type:            EventTypeInteractionCreated,
+		SessionID:       "sess-300",
+		StageID:         "stg-2",
+		ExecutionID:     "exec-2",
+		InteractionID:   "int-1",
+		InteractionType: InteractionTypeLLM,
+		Timestamp:       "2026-02-13T10:00:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded InteractionCreatedPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeInteractionCreated, decoded.Type)
+	assert.Equal(t, "sess-300", decoded.SessionID)
+	assert.Equal(t, "int-1", decoded.InteractionID)
+	assert.Equal(t, InteractionTypeLLM, decoded.InteractionType)
+	assert.Equal(t, "stg-2", decoded.StageID)
+	assert.Equal(t, "exec-2", decoded.ExecutionID)
+}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
+	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -827,4 +829,401 @@ func TestSessionService_SearchSessions(t *testing.T) {
 		}
 		assert.True(t, found)
 	})
+}
+
+// ────────────────────────────────────────────────────────────
+// Dashboard Service Methods (Phase 7.0)
+// ────────────────────────────────────────────────────────────
+
+// seedDashboardSession creates a completed session with stages, LLM and MCP
+// interactions for dashboard tests. Returns the session ID.
+func seedDashboardSession(
+	t *testing.T,
+	client *ent.Client,
+	alertData, alertType, chainID string,
+	inputTokens, outputTokens, totalTokens int,
+	mcpCount int,
+) string {
+	t.Helper()
+	ctx := context.Background()
+	sessionID := uuid.New().String()
+	now := time.Now()
+	started := now.Add(-5 * time.Second)
+	completed := now
+
+	// Create session.
+	sess := client.AlertSession.Create().
+		SetID(sessionID).
+		SetAlertData(alertData).
+		SetAlertType(alertType).
+		SetChainID(chainID).
+		SetAgentType("kubernetes").
+		SetStatus(alertsession.StatusCompleted).
+		SetStartedAt(started).
+		SetCompletedAt(completed).
+		SetFinalAnalysis("Investigation result for " + alertData).
+		SetExecutiveSummary("Summary for " + alertData).
+		SetNillableAuthor(strPtr("test-author")).
+		SaveX(ctx)
+
+	// Create a completed stage.
+	stg := client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sess.ID).
+		SetStageName("analysis").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		SetStartedAt(started).
+		SetCompletedAt(completed).
+		SaveX(ctx)
+
+	// Create agent execution.
+	exec := client.AgentExecution.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sess.ID).
+		SetStageID(stg.ID).
+		SetAgentName("TestAgent").
+		SetAgentIndex(1).
+		SetIterationStrategy("react").
+		SetStartedAt(started).
+		SetStatus("completed").
+		SaveX(ctx)
+
+	// Create LLM interactions with token counts.
+	client.LLMInteraction.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sess.ID).
+		SetStageID(stg.ID).
+		SetExecutionID(exec.ID).
+		SetInteractionType(llminteraction.InteractionTypeIteration).
+		SetModelName("test-model").
+		SetLlmRequest(map[string]interface{}{}).
+		SetLlmResponse(map[string]interface{}{}).
+		SetInputTokens(inputTokens).
+		SetOutputTokens(outputTokens).
+		SetTotalTokens(totalTokens).
+		SaveX(ctx)
+
+	// Create MCP interactions.
+	for i := 0; i < mcpCount; i++ {
+		client.MCPInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetInteractionType(mcpinteraction.InteractionTypeToolCall).
+			SetServerName("test-server").
+			SetToolName(fmt.Sprintf("tool_%d", i)).
+			SaveX(ctx)
+	}
+
+	return sessionID
+}
+
+func strPtr(s string) *string { return &s }
+
+func TestSessionService_GetSessionDetail(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("returns enriched detail for completed session", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"CPU alert data", "pod-crash", "k8s-analysis",
+			100, 50, 150, 2)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		// Core fields.
+		assert.Equal(t, sessionID, detail.ID)
+		assert.Equal(t, "CPU alert data", detail.AlertData)
+		require.NotNil(t, detail.AlertType)
+		assert.Equal(t, "pod-crash", *detail.AlertType)
+		assert.Equal(t, "completed", detail.Status)
+		assert.Equal(t, "k8s-analysis", detail.ChainID)
+		require.NotNil(t, detail.Author)
+		assert.Equal(t, "test-author", *detail.Author)
+
+		// Analysis results.
+		require.NotNil(t, detail.FinalAnalysis)
+		assert.Contains(t, *detail.FinalAnalysis, "CPU alert data")
+		require.NotNil(t, detail.ExecutiveSummary)
+		assert.Contains(t, *detail.ExecutiveSummary, "CPU alert data")
+
+		// Computed stats.
+		assert.Equal(t, 1, detail.LLMInteractionCount)
+		assert.Equal(t, 2, detail.MCPInteractionCount)
+		assert.Equal(t, int64(100), detail.InputTokens)
+		assert.Equal(t, int64(50), detail.OutputTokens)
+		assert.Equal(t, int64(150), detail.TotalTokens)
+		assert.Equal(t, 1, detail.TotalStages)
+		assert.Equal(t, 1, detail.CompletedStages)
+		assert.Equal(t, 0, detail.FailedStages)
+		assert.Equal(t, false, detail.HasParallelStages)
+		assert.Equal(t, 0, detail.ChatMessageCount)
+
+		// Duration.
+		require.NotNil(t, detail.DurationMs)
+		assert.Greater(t, *detail.DurationMs, int64(0))
+
+		// Stages.
+		require.Len(t, detail.Stages, 1)
+		assert.Equal(t, "analysis", detail.Stages[0].StageName)
+		assert.Equal(t, 1, detail.Stages[0].StageIndex)
+		assert.Equal(t, "completed", detail.Stages[0].Status)
+		assert.Equal(t, 1, detail.Stages[0].ExpectedAgentCount)
+	})
+
+	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
+		_, err := service.GetSessionDetail(ctx, "nonexistent-id")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestSessionService_GetSessionSummary(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("returns correct token aggregation", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"summary test", "pod-crash", "k8s-analysis",
+			200, 100, 300, 3)
+
+		summary, err := service.GetSessionSummary(ctx, sessionID)
+		require.NoError(t, err)
+
+		assert.Equal(t, sessionID, summary.SessionID)
+		assert.Equal(t, 4, summary.TotalInteractions) // 1 LLM + 3 MCP
+		assert.Equal(t, 1, summary.LLMInteractions)
+		assert.Equal(t, 3, summary.MCPInteractions)
+		assert.Equal(t, int64(200), summary.InputTokens)
+		assert.Equal(t, int64(100), summary.OutputTokens)
+		assert.Equal(t, int64(300), summary.TotalTokens)
+		require.NotNil(t, summary.TotalDurationMs)
+		assert.Greater(t, *summary.TotalDurationMs, int64(0))
+
+		assert.Equal(t, 1, summary.ChainStatistics.TotalStages)
+		assert.Equal(t, 1, summary.ChainStatistics.CompletedStages)
+		assert.Equal(t, 0, summary.ChainStatistics.FailedStages)
+	})
+
+	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
+		_, err := service.GetSessionSummary(ctx, "nonexistent-id")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestSessionService_GetActiveSessions(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Create sessions in various states.
+	mkSession := func(status alertsession.Status) string {
+		id := uuid.New().String()
+		builder := client.AlertSession.Create().
+			SetID(id).
+			SetAlertData("data").
+			SetAlertType("test").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(status)
+		if status == alertsession.StatusInProgress {
+			builder = builder.SetStartedAt(time.Now())
+		}
+		builder.SaveX(ctx)
+		return id
+	}
+
+	pendingID := mkSession(alertsession.StatusPending)
+	activeID := mkSession(alertsession.StatusInProgress)
+	mkSession(alertsession.StatusCompleted) // should not appear
+
+	result, err := service.GetActiveSessions(ctx)
+	require.NoError(t, err)
+
+	// Active list should contain the in_progress session.
+	require.Len(t, result.Active, 1)
+	assert.Equal(t, activeID, result.Active[0].ID)
+	assert.Equal(t, "in_progress", result.Active[0].Status)
+
+	// Queued list should contain the pending session.
+	require.Len(t, result.Queued, 1)
+	assert.Equal(t, pendingID, result.Queued[0].ID)
+	assert.Equal(t, "pending", result.Queued[0].Status)
+	assert.Equal(t, 1, result.Queued[0].QueuePosition)
+}
+
+func TestSessionService_ListSessionsForDashboard(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Seed 3 sessions with different alert types and token profiles.
+	idA := seedDashboardSession(t, client.Client, "Alpha data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	time.Sleep(10 * time.Millisecond) // ensure distinct created_at
+	idB := seedDashboardSession(t, client.Client, "Beta data", "oom-kill", "k8s-analysis", 200, 100, 300, 1)
+	time.Sleep(10 * time.Millisecond)
+	idC := seedDashboardSession(t, client.Client, "Charlie data", "pod-crash", "test-chain", 150, 75, 225, 2)
+
+	t.Run("returns all sessions with default params", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Pagination.TotalItems)
+		assert.Equal(t, 1, result.Pagination.TotalPages)
+		require.Len(t, result.Sessions, 3)
+
+		// Default sort is created_at desc: C first, A last.
+		assert.Equal(t, idC, result.Sessions[0].ID)
+		assert.Equal(t, idA, result.Sessions[2].ID)
+	})
+
+	t.Run("pagination", func(t *testing.T) {
+		p1, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 2, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.Len(t, p1.Sessions, 2)
+		assert.Equal(t, 3, p1.Pagination.TotalItems)
+		assert.Equal(t, 2, p1.Pagination.TotalPages)
+
+		p2, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 2, PageSize: 2, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.Len(t, p2.Sessions, 1)
+
+		// All 3 IDs across both pages.
+		ids := map[string]bool{}
+		for _, s := range p1.Sessions {
+			ids[s.ID] = true
+		}
+		for _, s := range p2.Sessions {
+			ids[s.ID] = true
+		}
+		assert.True(t, ids[idA] && ids[idB] && ids[idC])
+	})
+
+	t.Run("status filter", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Status: "completed",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Pagination.TotalItems)
+
+		result, err = service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Status: "pending",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Sessions)
+	})
+
+	t.Run("alert type filter", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			AlertType: "pod-crash",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, result.Pagination.TotalItems) // A and C
+	})
+
+	t.Run("chain ID filter", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			ChainID: "test-chain",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, idC, result.Sessions[0].ID)
+	})
+
+	t.Run("search filter", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Search: "Alpha",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, idA, result.Sessions[0].ID)
+	})
+
+	t.Run("sorting asc", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "asc",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 3)
+		assert.Equal(t, idA, result.Sessions[0].ID)
+		assert.Equal(t, idC, result.Sessions[2].ID)
+	})
+
+	t.Run("duration sort", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "duration", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Sessions, 3)
+	})
+
+	t.Run("aggregate stats are correct", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		// Find session B by ID and verify its stats.
+		for _, s := range result.Sessions {
+			if s.ID == idB {
+				assert.Equal(t, 1, s.LLMInteractionCount)
+				assert.Equal(t, 1, s.MCPInteractionCount)
+				assert.Equal(t, int64(200), s.InputTokens)
+				assert.Equal(t, int64(100), s.OutputTokens)
+				assert.Equal(t, int64(300), s.TotalTokens)
+				assert.Equal(t, 1, s.TotalStages)
+				assert.Equal(t, 1, s.CompletedStages)
+				assert.Equal(t, false, s.HasParallelStages)
+				return
+			}
+		}
+		t.Fatal("session B not found in list")
+	})
+}
+
+func TestSessionService_GetDistinctAlertTypes(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Seed sessions with different alert types.
+	seedDashboardSession(t, client.Client, "data1", "type-a", "k8s-analysis", 10, 5, 15, 0)
+	seedDashboardSession(t, client.Client, "data2", "type-b", "k8s-analysis", 10, 5, 15, 0)
+	seedDashboardSession(t, client.Client, "data3", "type-a", "k8s-analysis", 10, 5, 15, 0) // duplicate
+
+	types, err := service.GetDistinctAlertTypes(ctx)
+	require.NoError(t, err)
+	assert.Len(t, types, 2)
+	assert.Contains(t, types, "type-a")
+	assert.Contains(t, types, "type-b")
+}
+
+func TestSessionService_GetDistinctChainIDs(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	seedDashboardSession(t, client.Client, "data1", "test", "k8s-analysis", 10, 5, 15, 0)
+	seedDashboardSession(t, client.Client, "data2", "test", "test-chain", 10, 5, 15, 0)
+
+	chains, err := service.GetDistinctChainIDs(ctx)
+	require.NoError(t, err)
+	assert.Len(t, chains, 2)
+	assert.Contains(t, chains, "k8s-analysis")
+	assert.Contains(t, chains, "test-chain")
 }
