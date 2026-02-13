@@ -1,0 +1,23 @@
+defaults:
+  llm_provider: "test-provider"
+  iteration_strategy: "native-thinking"
+  max_iterations: 1
+
+mcp_servers:
+  # Dummy entry so built-in agents pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  SimpleAgent:
+    custom_instructions: "You are SimpleAgent, performing a quick analysis."
+
+agent_chains:
+  multi-replica-chain:
+    alert_types: [test-multi-replica]
+    stages:
+      - name: analysis
+        agents:
+          - name: SimpleAgent

@@ -59,6 +59,8 @@ type testAppConfig struct {
 	maxConcurrentSessions int
 	sessionTimeout        time.Duration
 	chatTimeout           time.Duration
+	dbClient              *database.Client // injected DB client (for multi-replica tests)
+	podID                 string           // custom pod ID (for multi-replica tests)
 }
 
 // TestAppOption configures the test app.
@@ -98,6 +100,20 @@ func WithSessionTimeout(d time.Duration) TestAppOption {
 // WithChatTimeout sets the timeout for chat message execution.
 func WithChatTimeout(d time.Duration) TestAppOption {
 	return func(c *testAppConfig) { c.chatTimeout = d }
+}
+
+// WithDBClient injects a pre-created database client, skipping the default
+// per-test schema creation. Used for multi-replica tests where multiple
+// TestApp instances share the same database schema.
+func WithDBClient(client *database.Client) TestAppOption {
+	return func(c *testAppConfig) { c.dbClient = client }
+}
+
+// WithPodID overrides the auto-generated pod ID. Required for multi-replica
+// tests so each replica gets a distinct identity for worker claiming and
+// orphan detection.
+func WithPodID(id string) TestAppOption {
+	return func(c *testAppConfig) { c.podID = id }
 }
 
 // NewTestApp creates and starts a full TARSy test instance.
@@ -143,7 +159,12 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	}
 
 	// 1. Database — need both *database.Client (for API server) and *ent.Client (for executors).
-	dbClient := testdb.NewTestClient(t)
+	var dbClient *database.Client
+	if tc.dbClient != nil {
+		dbClient = tc.dbClient
+	} else {
+		dbClient = testdb.NewTestClient(t)
+	}
 	entClient := dbClient.Client
 
 	// 2. Event publishing — real, backed by test DB.
@@ -176,7 +197,10 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory)
 
 	// 8. Worker pool.
-	podID := fmt.Sprintf("e2e-test-%s", t.Name())
+	podID := tc.podID
+	if podID == "" {
+		podID = fmt.Sprintf("e2e-test-%s", t.Name())
+	}
 	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher)
 	require.NoError(t, workerPool.Start(ctx))
 
