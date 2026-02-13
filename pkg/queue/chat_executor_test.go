@@ -258,6 +258,175 @@ func TestMapChatAgentStatus(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// buildChatContext tests
+// ────────────────────────────────────────────────────────────
+
+func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStageNames(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	ctx := context.Background()
+
+	stageService := services.NewStageService(client.Client)
+	timelineService := services.NewTimelineService(client.Client)
+	chatService := services.NewChatService(client.Client)
+
+	session := createChatTestSession(t, client.Client)
+
+	// Create two investigation stages with the SAME name — this is the collision scenario.
+	investStage1, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Analysis",
+		StageIndex:         0,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	synthStage1, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Analysis - Synthesis",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	investStage2, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Analysis",
+		StageIndex:         2,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	synthStage2, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Analysis - Synthesis",
+		StageIndex:         3,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	// Create agent executions for investigation stages (required for edges).
+	exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           investStage1.ID,
+		SessionID:         session.ID,
+		AgentName:         "agent-1",
+		AgentIndex:        1,
+		IterationStrategy: "react",
+	})
+	require.NoError(t, err)
+
+	exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           investStage2.ID,
+		SessionID:         session.ID,
+		AgentName:         "agent-1",
+		AgentIndex:        1,
+		IterationStrategy: "react",
+	})
+	require.NoError(t, err)
+
+	// Create agent executions for synthesis stages (extractFinalAnalysis reads these).
+	synthExec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           synthStage1.ID,
+		SessionID:         session.ID,
+		AgentName:         "synthesizer",
+		AgentIndex:        1,
+		IterationStrategy: "react",
+	})
+	require.NoError(t, err)
+
+	synthExec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           synthStage2.ID,
+		SessionID:         session.ID,
+		AgentName:         "synthesizer",
+		AgentIndex:        1,
+		IterationStrategy: "react",
+	})
+	require.NoError(t, err)
+
+	// Create final_analysis timeline events with distinct content for each synthesis stage.
+	synthStage1ID := synthStage1.ID
+	synthExec1ID := synthExec1.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &synthStage1ID,
+		ExecutionID:    &synthExec1ID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "SYNTHESIS-RESULT-ALPHA",
+	})
+	require.NoError(t, err)
+
+	synthStage2ID := synthStage2.ID
+	synthExec2ID := synthExec2.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &synthStage2ID,
+		ExecutionID:    &synthExec2ID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "SYNTHESIS-RESULT-BETA",
+	})
+	require.NoError(t, err)
+
+	// Also create a timeline event for each investigation agent (so the agent timelines load).
+	investStage1ID := investStage1.ID
+	exec1ID := exec1.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &investStage1ID,
+		ExecutionID:    &exec1ID,
+		SequenceNumber: 1,
+		EventType:      "llm_response",
+		Content:        "investigation 1 findings",
+	})
+	require.NoError(t, err)
+
+	investStage2ID := investStage2.ID
+	exec2ID := exec2.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &investStage2ID,
+		ExecutionID:    &exec2ID,
+		SequenceNumber: 1,
+		EventType:      "llm_response",
+		Content:        "investigation 2 findings",
+	})
+	require.NoError(t, err)
+
+	// Create the chat + message needed for the input.
+	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+		SessionID: session.ID,
+		CreatedBy: "test@example.com",
+	})
+	require.NoError(t, err)
+
+	msg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+		ChatID:  chat.ID,
+		Content: "What happened?",
+		Author:  "test@example.com",
+	})
+	require.NoError(t, err)
+
+	// Build the executor with the real services.
+	executor := &ChatMessageExecutor{
+		stageService:    stageService,
+		timelineService: timelineService,
+	}
+
+	result := executor.buildChatContext(ctx, ChatExecuteInput{
+		Chat:    chat,
+		Message: msg,
+		Session: session,
+	})
+
+	// Both synthesis results must appear — if keyed by name, only one would survive.
+	assert.Contains(t, result.InvestigationContext, "SYNTHESIS-RESULT-ALPHA",
+		"first synthesis result should be present when stage names collide")
+	assert.Contains(t, result.InvestigationContext, "SYNTHESIS-RESULT-BETA",
+		"second synthesis result should be present when stage names collide")
+	assert.Equal(t, "What happened?", result.UserQuestion)
+}
+
+// ────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────
 

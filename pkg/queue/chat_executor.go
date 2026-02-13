@@ -407,14 +407,22 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 	//    - Investigation stages → per-agent timelines
 	//    - Synthesis stages (name ends with " - Synthesis") → paired with parent
 	//    - Chat stages (have chat_id) → treated as previous chat Q&A
-	//    Synthesis results are keyed by parent stage name for pairing.
-	synthResults := make(map[string]string) // parent stage name → synthesis final analysis
-	for _, stg := range stages {
+	//    Synthesis results are keyed by parent stage ID for pairing.
+	//    Since stages are ordered by StageIndex, each synthesis stage is paired
+	//    with the closest preceding investigation stage whose name matches.
+	//    This avoids collisions when multiple stages share the same name.
+	synthResults := make(map[string]string) // parent stage ID → synthesis final analysis
+	for i, stg := range stages {
 		if strings.HasSuffix(stg.StageName, " - Synthesis") {
-			// Extract synthesis final_analysis from this stage's timeline.
 			parentName := strings.TrimSuffix(stg.StageName, " - Synthesis")
-			if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
-				synthResults[parentName] = fa
+			// Scan backwards to find the nearest parent investigation stage.
+			for j := i - 1; j >= 0; j-- {
+				if stages[j].StageName == parentName {
+					if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
+						synthResults[stages[j].ID] = fa
+					}
+					break
+				}
 			}
 		}
 	}
@@ -473,7 +481,7 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 			StageIndex: stg.StageIndex,
 			Agents:     agents,
 		}
-		if synth, ok := synthResults[stg.StageName]; ok {
+		if synth, ok := synthResults[stg.ID]; ok {
 			si.SynthesisResult = synth
 		}
 		investigations = append(investigations, si)
