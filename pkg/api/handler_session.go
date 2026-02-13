@@ -28,18 +28,24 @@ func (s *Server) cancelSessionHandler(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
 	}
 
-	if err := s.sessionService.CancelSession(c.Request().Context(), sessionID); err != nil {
-		return mapServiceError(err)
-	}
+	// Try to cancel the investigation (DB status in_progress → cancelling).
+	sessionErr := s.sessionService.CancelSession(c.Request().Context(), sessionID)
 
-	// Also try to cancel on this pod via worker pool
+	// Always try to cancel on this pod via worker pool, regardless of DB result.
 	if s.workerPool != nil {
 		s.workerPool.CancelSession(sessionID)
 	}
 
-	// Also try to cancel any active chat execution for this session
+	// Always try to cancel any active chat execution — a chat may be running
+	// even when the session is already completed/failed/timed_out.
+	chatCancelled := false
 	if s.chatExecutor != nil {
-		s.chatExecutor.CancelBySessionID(c.Request().Context(), sessionID)
+		chatCancelled = s.chatExecutor.CancelBySessionID(c.Request().Context(), sessionID)
+	}
+
+	// Return success if either the session or a chat was cancelled.
+	if sessionErr != nil && !chatCancelled {
+		return mapServiceError(sessionErr)
 	}
 
 	return c.JSON(http.StatusOK, &CancelResponse{

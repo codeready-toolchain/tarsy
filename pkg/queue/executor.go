@@ -168,8 +168,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			interactionService: interactionService,
 		})
 
-		// Publish stage terminal status
-		publishStageStatus(ctx, e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
+		// Publish stage terminal status (use background context — ctx may be cancelled)
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -199,8 +199,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 				interactionService: interactionService,
 			}, sr)
 
-			// Publish synthesis stage terminal status
-			publishStageStatus(ctx, e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
+			// Publish synthesis stage terminal status (use background context — ctx may be cancelled)
+			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -327,8 +327,8 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	// 7. Aggregate status via success policy
 	stageStatus := aggregateStatus(agentResults, policy)
 
-	// 8. Update Stage in DB (triggers aggregation from AgentExecution records)
-	if updateErr := input.stageService.UpdateStageStatus(ctx, stg.ID); updateErr != nil {
+	// 8. Update Stage in DB (use background context — ctx may be cancelled)
+	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
 		logger.Error("Failed to update stage status", "error", updateErr)
 	}
 
@@ -464,26 +464,54 @@ func (e *RealSessionExecutor) executeAgent(
 
 	result, err := agentInstance.Execute(ctx, execCtx, input.prevContext)
 	if err != nil {
-		logger.Error("Agent execution error", "error", err)
-		if updateErr := input.stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusFailed, err.Error()); updateErr != nil {
+		// Determine whether the error was caused by context cancellation/timeout.
+		// When the context is cancelled (e.g. user cancel), the agent may fail with
+		// an unrelated error (e.g. "failed to store assistant message") because it
+		// tried to operate on a cancelled context. Override to the correct status.
+		errStatus := agent.ExecutionStatusFailed
+		if ctx.Err() == context.DeadlineExceeded {
+			errStatus = agent.ExecutionStatusTimedOut
+		} else if ctx.Err() != nil {
+			errStatus = agent.ExecutionStatusCancelled
+		}
+		entErrStatus := mapAgentStatusToEntStatus(errStatus)
+		logger.Error("Agent execution error", "error", err, "resolved_status", errStatus)
+		if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entErrStatus, err.Error()); updateErr != nil {
 			logger.Error("Failed to update agent execution status after error", "error", updateErr)
 		}
 		return agentResult{
 			executionID:       exec.ID,
-			status:            agent.ExecutionStatusFailed,
+			status:            errStatus,
 			err:               err,
 			iterationStrategy: resolvedStrategy,
 			llmProviderName:   providerName,
 		}
 	}
 
-	// Update AgentExecution status
+	// When the session context is cancelled/timed-out, the agent may return a
+	// misleading status (e.g. "failed" due to a validation error caused by an
+	// empty LLM response, or "completed" with empty content). Override to the
+	// correct terminal status based on ctx.Err(). Only skip the override if the
+	// agent already reported the right cancellation/timeout status.
+	if result != nil && ctx.Err() != nil &&
+		result.Status != agent.ExecutionStatusCancelled &&
+		result.Status != agent.ExecutionStatusTimedOut {
+		if ctx.Err() == context.DeadlineExceeded {
+			result.Status = agent.ExecutionStatusTimedOut
+			result.Error = ctx.Err()
+		} else {
+			result.Status = agent.ExecutionStatusCancelled
+			result.Error = ctx.Err()
+		}
+	}
+
+	// Update AgentExecution status (use background context — ctx may be cancelled)
 	entStatus := mapAgentStatusToEntStatus(result.Status)
 	errMsg := ""
 	if result.Error != nil {
 		errMsg = result.Error.Error()
 	}
-	if updateErr := input.stageService.UpdateAgentExecutionStatus(ctx, exec.ID, entStatus, errMsg); updateErr != nil {
+	if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entStatus, errMsg); updateErr != nil {
 		logger.Error("Failed to update agent execution status", "error", updateErr)
 		return agentResult{
 			executionID:       exec.ID,
@@ -570,8 +598,8 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	ar := e.executeAgent(ctx, synthInput, stg, synthAgentConfig, 0, synthAgentConfig.Name)
 
-	// Update synthesis stage status
-	if updateErr := input.stageService.UpdateStageStatus(ctx, stg.ID); updateErr != nil {
+	// Update synthesis stage status (use background context — ctx may be cancelled)
+	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
 		logger.Error("Failed to update synthesis stage status", "error", updateErr)
 	}
 

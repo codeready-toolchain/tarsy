@@ -347,8 +347,17 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 			terminalStatus = events.StageStatusCancelled
 		}
 	} else if result != nil {
-		agentStatus = result.Status
-		terminalStatus = mapChatAgentStatus(result.Status)
+		// Check if context was cancelled during execution even though agent returned OK
+		if execCtx.Err() == context.DeadlineExceeded {
+			agentStatus = agent.ExecutionStatusTimedOut
+			terminalStatus = events.StageStatusTimedOut
+		} else if execCtx.Err() != nil {
+			agentStatus = agent.ExecutionStatusCancelled
+			terminalStatus = events.StageStatusCancelled
+		} else {
+			agentStatus = result.Status
+			terminalStatus = mapChatAgentStatus(result.Status)
+		}
 		if result.Error != nil {
 			errMsg = result.Error.Error()
 		}

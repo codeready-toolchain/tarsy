@@ -478,3 +478,82 @@ var FailureResilienceExpectedEvents = []ExpectedEvent{
 	// and nothing at all on failure). Session still completes.
 	{Type: "session.status", Status: "completed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Cancellation — Session 1 (Investigation cancellation)
+// Single stage with 2 parallel agents (policy=any), both BlockUntilCancelled.
+// Test cancels the session while agents are blocked.
+//   1. investigation (InvestigatorA ∥ InvestigatorB, policy=any)
+//      Both agents block on BlockUntilCancelled → no streaming events created.
+//      Cancel triggers context cancellation → agents + stage + session cancelled.
+// ────────────────────────────────────────────────────────────
+
+var CancellationInvestigationExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (InvestigatorA ∥ InvestigatorB, policy=any) ──
+	{Type: "stage.status", StageName: "investigation", Status: "started"},
+
+	// BlockUntilCancelled closes the channel without sending chunks, so
+	// no streaming timeline events are created. The stage jumps straight
+	// from started to cancelled once the cancel API is called.
+	{Type: "stage.status", StageName: "investigation", Status: "cancelled"},
+	{Type: "session.status", Status: "cancelled"},
+}
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Cancellation — Session 2 (Chat cancellation)
+// Single-stage investigation completes normally, then chat is cancelled
+// and a follow-up chat succeeds.
+//   1. quick-check (QuickInvestigator, native-thinking) — succeeds
+//   + Executive summary — succeeds
+//   + Chat 1: BlockUntilCancelled → cancelled
+//   + Chat 2: thinking + final answer → succeeds
+// ────────────────────────────────────────────────────────────
+
+var CancellationChatExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: quick-check (QuickInvestigator, native-thinking) ──
+	{Type: "stage.status", StageName: "quick-check", Status: "started"},
+
+	// Single iteration: thinking + response + final_analysis.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Quick check on the alert.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Alert verified: system is stable, no action needed.", Group: 1},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Alert verified: system is stable, no action needed."},
+
+	{Type: "stage.status", StageName: "quick-check", Status: "completed"},
+
+	// Executive summary succeeds (no WS events — DB-only timeline event).
+	{Type: "session.status", Status: "completed"},
+
+	// ── Chat 1: BlockUntilCancelled → cancelled ──
+	{Type: "chat.created"},
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "Ask a question"},
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	// BlockUntilCancelled: no streaming events. Stage cancelled.
+	{Type: "stage.status", StageName: "Chat Response", Status: "cancelled"},
+
+	// ── Chat 2: follow-up succeeds ──
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "Follow-up question"},
+	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+
+	// Single iteration: thinking + response + final_analysis.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Answering the follow-up.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Here is your follow-up answer: everything looks good.", Group: 2},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Here is your follow-up answer: everything looks good."},
+
+	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+}

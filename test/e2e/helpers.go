@@ -185,6 +185,26 @@ func (app *TestApp) WaitForStageStatus(t *testing.T, stageID string, expected ..
 	return actual
 }
 
+// WaitForActiveStage polls the DB until a stage with "active" status exists
+// for the given session and returns it. Useful for cancellation tests where you
+// need to wait until execution has started before cancelling.
+func (app *TestApp) WaitForActiveStage(t *testing.T, sessionID string) *ent.Stage {
+	t.Helper()
+	var found *ent.Stage
+	require.Eventually(t, func() bool {
+		stages, err := app.EntClient.Stage.Query().
+			Where(stage.SessionID(sessionID), stage.StatusEQ(stage.StatusActive)).
+			All(context.Background())
+		if err != nil || len(stages) == 0 {
+			return false
+		}
+		found = stages[0]
+		return true
+	}, 30*time.Second, 100*time.Millisecond,
+		"no active stage found for session %s", sessionID)
+	return found
+}
+
 // ────────────────────────────────────────────────────────────
 // DB Query Helpers
 // ────────────────────────────────────────────────────────────
