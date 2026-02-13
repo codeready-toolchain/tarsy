@@ -46,7 +46,7 @@ test: test-go test-python ## Run all tests (Go + Python)
 # -----------------------------------------------------------------------------
 
 .PHONY: test-go
-test-go: ## Run all Go tests (unit + e2e)
+test-go: ## Run all Go tests (unit + e2e) with coverage
 	@echo -e "$(YELLOW)Running Go tests...$(NC)"
 	@go test -v -race -coverprofile=coverage.out -coverpkg=./pkg/... $$(go list ./... | grep -v -E '/(ent|proto)(/|$$)')
 	@echo -e "$(GREEN)✅ Go tests passed$(NC)"
