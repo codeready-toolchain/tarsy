@@ -123,6 +123,24 @@ func ResolveAgentConfig(
 	}, nil
 }
 
+// ResolveChatProviderName resolves the LLM provider name for a chat execution
+// using the hierarchy: defaults → chain → chatCfg.
+// This is extracted so the same logic can be used in error paths before full
+// config resolution (e.g., for audit-trail records when ResolveChatAgentConfig fails).
+func ResolveChatProviderName(defaults *config.Defaults, chain *config.ChainConfig, chatCfg *config.ChatConfig) string {
+	var providerName string
+	if defaults != nil {
+		providerName = defaults.LLMProvider
+	}
+	if chain != nil && chain.LLMProvider != "" {
+		providerName = chain.LLMProvider
+	}
+	if chatCfg != nil && chatCfg.LLMProvider != "" {
+		providerName = chatCfg.LLMProvider
+	}
+	return providerName
+}
+
 // ResolveChatAgentConfig builds the agent configuration for a chat execution.
 // Hierarchy: defaults → agent definition → chain → chat config.
 // Similar to ResolveAgentConfig but without stage-level overrides.
@@ -165,13 +183,7 @@ func ResolveChatAgentConfig(
 	}
 
 	// Resolve LLM provider: defaults → chain → chatCfg
-	providerName := defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if chatCfg != nil && chatCfg.LLMProvider != "" {
-		providerName = chatCfg.LLMProvider
-	}
+	providerName := ResolveChatProviderName(defaults, chain, chatCfg)
 	provider, err := cfg.GetLLMProvider(providerName)
 	if err != nil {
 		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)

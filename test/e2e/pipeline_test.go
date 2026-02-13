@@ -343,10 +343,10 @@ func TestE2E_Pipeline(t *testing.T) {
 		assert.Equal(t, sessionID, event["session_id"], "event %d: wrong session_id", i)
 
 		// Sequence numbers are in ascending order (API returns ordered).
-		seq := int(event["sequence_number"].(float64))
+		seq := toInt(event["sequence_number"])
 		if i > 0 {
 			prevEvent, _ := apiTimeline[i-1].(map[string]interface{})
-			prevSeq := int(prevEvent["sequence_number"].(float64))
+			prevSeq := toInt(prevEvent["sequence_number"])
 			assert.GreaterOrEqual(t, seq, prevSeq,
 				"event %d: sequence_number %d should be >= previous %d", i, seq, prevSeq)
 		}
@@ -391,19 +391,35 @@ func TestE2E_Pipeline(t *testing.T) {
 	// The debug list is ordered by stage_index → agent_index, so placeholder
 	// numbering is stable regardless of parallel agent start times.
 	normalizer := NewNormalizer(sessionID)
-	for _, rawStage := range debugStages {
-		stg, _ := rawStage.(map[string]interface{})
-		normalizer.RegisterStageID(stg["stage_id"].(string))
-		for _, rawExec := range stg["executions"].([]interface{}) {
-			exec, _ := rawExec.(map[string]interface{})
-			normalizer.RegisterExecutionID(exec["execution_id"].(string))
-			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+	for si, rawStage := range debugStages {
+		stg, ok := rawStage.(map[string]interface{})
+		require.True(t, ok, "debug stage %d: expected object", si)
+		stageID, ok := stg["stage_id"].(string)
+		require.True(t, ok, "debug stage %d: stage_id missing or not a string", si)
+		normalizer.RegisterStageID(stageID)
+
+		executions, ok := stg["executions"].([]interface{})
+		require.True(t, ok, "debug stage %d: executions missing or not an array", si)
+		for ei, rawExec := range executions {
+			exec, ok := rawExec.(map[string]interface{})
+			require.True(t, ok, "debug stage %d exec %d: expected object", si, ei)
+			execID, ok := exec["execution_id"].(string)
+			require.True(t, ok, "debug stage %d exec %d: execution_id missing or not a string", si, ei)
+			normalizer.RegisterExecutionID(execID)
+
+			llmInteractions, _ := exec["llm_interactions"].([]interface{})
+			for _, rawLI := range llmInteractions {
 				li, _ := rawLI.(map[string]interface{})
-				normalizer.RegisterInteractionID(li["id"].(string))
+				if id, ok := li["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
 			}
-			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+			mcpInteractions, _ := exec["mcp_interactions"].([]interface{})
+			for _, rawMI := range mcpInteractions {
 				mi, _ := rawMI.(map[string]interface{})
-				normalizer.RegisterInteractionID(mi["id"].(string))
+				if id, ok := mi["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
 			}
 		}
 	}

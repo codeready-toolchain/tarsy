@@ -202,13 +202,8 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 
 	// Resolve LLM provider name for observability (defaults → chain → chat).
 	// Hoisted above config resolution so it's available in error paths.
-	chatProviderName := e.cfg.Defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		chatProviderName = chain.LLMProvider
-	}
-	if chain.Chat != nil && chain.Chat.LLMProvider != "" {
-		chatProviderName = chain.Chat.LLMProvider
-	}
+	// Uses the shared helper to stay in sync with ResolveChatAgentConfig.
+	chatProviderName := agent.ResolveChatProviderName(e.cfg.Defaults, chain, chain.Chat)
 
 	resolvedConfig, err := agent.ResolveChatAgentConfig(e.cfg, chain, chain.Chat)
 	if err != nil {
@@ -563,11 +558,11 @@ func (e *ChatMessageExecutor) buildChatQA(ctx context.Context, stg *ent.Stage) c
 func (e *ChatMessageExecutor) getExecutiveSummary(ctx context.Context, sessionID string) string {
 	// Executive summary is stored as a session-level timeline event with no execution_id.
 	// Use GetSessionTimeline and filter for executive_summary event type.
-	events, err := e.timelineService.GetSessionTimeline(ctx, sessionID)
+	sessionEvents, err := e.timelineService.GetSessionTimeline(ctx, sessionID)
 	if err != nil {
 		return ""
 	}
-	for _, evt := range events {
+	for _, evt := range sessionEvents {
 		if evt.EventType == timelineevent.EventTypeExecutiveSummary {
 			return evt.Content
 		}
