@@ -8,7 +8,7 @@ import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 export function SubmitAlertPage() {
   return (
     <>
-      <SharedHeader title="Submit Alert" showBack />
+      <SharedHeader title="Submit Alert" showBackButton />
       <Container maxWidth="md">
         <Typography variant="h5" sx={{ mt: 2, mb: 2 }}>
           Submit Alert

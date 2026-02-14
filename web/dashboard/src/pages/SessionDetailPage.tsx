@@ -11,7 +11,7 @@ export function SessionDetailPage() {
 
   return (
     <>
-      <SharedHeader title="Session Detail" showBack />
+      <SharedHeader title="Session Detail" showBackButton />
       <Container maxWidth="lg">
         <Typography variant="h5" sx={{ mt: 2, mb: 2 }}>
           Session: {id}

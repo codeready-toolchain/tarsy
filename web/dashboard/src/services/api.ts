@@ -93,6 +93,8 @@ async function retryOnTemporaryError<T>(
 
 function isTemporaryError(error: unknown): boolean {
   if (!axios.isAxiosError(error)) return false;
+  // Cancelled requests are not temporary — don't retry them
+  if (axios.isCancel(error)) return false;
   // Network errors (no response)
   if (!error.response) return true;
   // Gateway errors

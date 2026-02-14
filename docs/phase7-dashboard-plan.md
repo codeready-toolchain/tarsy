@@ -6,6 +6,8 @@ Port the old TARSy React dashboard to the new Go-based TARSy backend, preserving
 
 ### Old TARSy Reference
 
+**IMPORTANT: Hybrid approach.** Copy structure, layout, and MUI component usage from old dashboard (proven visual layer). Rewrite all data fetching, event handling, services, hooks, types, and state management to match the new backend API and WebSocket protocol. TypeScript interfaces are all new.
+
 The old TARSy codebase lives at `/home/igels/Projects/AI/tarsy-bot` and is the primary reference for UX parity:
 
 | Area | Path |

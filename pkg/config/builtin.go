@@ -123,11 +123,14 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 }
 
 func initBuiltinLLMProviders() map[string]LLMProviderConfig {
-	// Google native tools shared across all Gemini providers.
-	geminiNativeTools := map[GoogleNativeTool]bool{
-		GoogleNativeToolGoogleSearch:  true,
-		GoogleNativeToolCodeExecution: false, // Disabled by default
-		GoogleNativeToolURLContext:    true,
+	// Google native tools factory for Gemini providers.
+	// Returns a fresh map each time to avoid shared mutable state across providers.
+	geminiNativeTools := func() map[GoogleNativeTool]bool {
+		return map[GoogleNativeTool]bool{
+			GoogleNativeToolGoogleSearch:  true,
+			GoogleNativeToolCodeExecution: false, // Disabled by default
+			GoogleNativeToolURLContext:    true,
+		}
 	}
 
 	return map[string]LLMProviderConfig{
@@ -137,35 +140,35 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			Model:               "gemini-3-flash-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools,
+			NativeTools:         geminiNativeTools(),
 		},
 		"gemini-3-flash": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-3-flash-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools,
+			NativeTools:         geminiNativeTools(),
 		},
 		"gemini-3-pro": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-3-pro-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools,
+			NativeTools:         geminiNativeTools(),
 		},
 		"gemini-2.5-flash": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-2.5-flash",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools,
+			NativeTools:         geminiNativeTools(),
 		},
 		"gemini-2.5-pro": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-2.5-pro",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools,
+			NativeTools:         geminiNativeTools(),
 		},
 
 		// --- OpenAI ---

@@ -11,7 +11,7 @@ export function TracePage() {
 
   return (
     <>
-      <SharedHeader title="Trace View" showBack />
+      <SharedHeader title="Trace View" showBackButton />
       <Container maxWidth="lg">
         <Typography variant="h5" sx={{ mt: 2, mb: 2 }}>
           Trace: {id}
