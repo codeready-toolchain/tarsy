@@ -17,13 +17,42 @@ export interface SystemWarningsResponse {
   warnings: SystemWarning[];
 }
 
+// ── MCP tool & selection types ──────────────────────────────────
+
+/** MCP tool info returned by the mcp-servers endpoint. */
+export interface MCPToolInfo {
+  name: string;
+  description: string;
+}
+
+/** A selected MCP server with optional tool filtering (for alert override). */
+export interface MCPServerSelection {
+  name: string;
+  tools?: string[] | null; // null/undefined = all tools, array = specific tools
+}
+
+/** Native LLM provider tools configuration. */
+export interface NativeToolsConfig {
+  google_search?: boolean;
+  code_execution?: boolean;
+  url_context?: boolean;
+}
+
+/** Per-alert MCP selection override sent to POST /api/v1/alerts. */
+export interface MCPSelectionConfig {
+  servers: MCPServerSelection[];
+  native_tools?: NativeToolsConfig;
+}
+
+// ── MCP server status ───────────────────────────────────────────
+
 /** MCP server status. */
 export interface MCPServerStatus {
   id: string;
   healthy: boolean;
   last_check: string;
   tool_count: number;
-  tools: string[];
+  tools: MCPToolInfo[];
   error: string | null;
 }
 
@@ -32,8 +61,10 @@ export interface MCPServersResponse {
   servers: MCPServerStatus[];
 }
 
-/** Default tools response. */
+/** Default tools response (GET /api/v1/system/default-tools). */
 export interface DefaultToolsResponse {
+  alert_type?: string;
+  mcp_servers: string[];
   native_tools: Record<string, boolean>;
 }
 

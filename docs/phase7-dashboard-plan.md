@@ -243,7 +243,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.3: Alert Submission
+### Phase 7.3: Alert Submission ✅ DONE
 
 **Goal**: Manual alert submission form — enables end-to-end testing of the dashboard (submit alert → watch it appear in session list → view session detail).
 

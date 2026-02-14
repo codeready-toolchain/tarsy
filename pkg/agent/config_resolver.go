@@ -214,7 +214,7 @@ func ResolveChatAgentConfig(
 	if len(chain.MCPServers) > 0 {
 		mcpServers = chain.MCPServers
 	} else {
-		stageServers := aggregateChainMCPServers(cfg, chain)
+		stageServers := AggregateChainMCPServers(cfg, chain)
 		if len(stageServers) > 0 {
 			mcpServers = stageServers
 		}
@@ -236,11 +236,14 @@ func ResolveChatAgentConfig(
 	}, nil
 }
 
-// aggregateChainMCPServers collects the union of all MCP servers used by the
+// AggregateChainMCPServers collects the union of all MCP servers used by the
 // chain's investigation stages. It checks stage-level overrides, stage-agent
 // overrides, and the agent definitions from the registry. This ensures the
 // chat agent inherits all tools that investigation agents had access to.
-func aggregateChainMCPServers(cfg *config.Config, chain *config.ChainConfig) []string {
+//
+// Also used by the dashboard default-tools endpoint to report which MCP servers
+// are configured for a given alert type's chain.
+func AggregateChainMCPServers(cfg *config.Config, chain *config.ChainConfig) []string {
 	seen := make(map[string]struct{})
 	var servers []string
 	add := func(ids []string) {
@@ -258,7 +261,7 @@ func aggregateChainMCPServers(cfg *config.Config, chain *config.ChainConfig) []s
 			// Also resolve the agent definition to pick up its MCP servers.
 			agentDef, err := cfg.GetAgent(ag.Name)
 			if err != nil {
-				slog.Warn("aggregateChainMCPServers: failed to resolve agent definition",
+				slog.Warn("AggregateChainMCPServers: failed to resolve agent definition",
 					"agent", ag.Name, "error", err)
 				continue
 			}

@@ -37,6 +37,7 @@ import { useAuth } from '../../contexts/AuthContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 import { VersionFooter } from '../layout/VersionFooter.tsx';
+import { FloatingSubmitAlertFab } from '../common/FloatingSubmitAlertFab.tsx';
 import {
   getSessions,
   getActiveSessions,
@@ -738,6 +739,9 @@ export function DashboardView() {
 
       {/* Version footer */}
       <VersionFooter />
+
+      {/* Floating Action Button for quick alert submission access */}
+      <FloatingSubmitAlertFab />
     </Container>
   );
 }
