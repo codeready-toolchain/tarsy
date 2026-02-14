@@ -49,7 +49,7 @@ const PRE_OVERRIDES = {
 const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
 
 /**
- * NativeToolItem - renders code_execution, google_search_result, and url_context_result timeline events.
+ * NativeToolItem - renders code_execution, search_result, and url_context timeline events.
  * Uses info/teal color scheme to differentiate from MCP tool calls.
  */
 function NativeToolItem({ item }: NativeToolItemProps) {

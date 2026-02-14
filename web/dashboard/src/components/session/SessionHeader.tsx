@@ -158,7 +158,7 @@ export default function SessionHeader({
 
   // Total interactions
   const totalInteractions =
-    session.llm_interaction_count + session.mcp_interaction_count;
+    (session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0);
 
   return (
     <Paper

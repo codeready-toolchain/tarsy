@@ -191,7 +191,7 @@ export function SessionDetailPage() {
 
   const flowItems: FlowItem[] = useMemo(
     () => (session ? parseTimelineToFlow(timelineEvents, session.stages) : []),
-    [timelineEvents, session?.stages],
+    [timelineEvents, session],
   );
 
   // Header title with session ID suffix (matching old dashboard)
