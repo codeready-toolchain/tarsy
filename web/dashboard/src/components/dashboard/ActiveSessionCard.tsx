@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, Typography, Box, Chip, LinearProgress, Tooltip } from '@mui/material';
-import { Link as LinkIcon, OpenInNew } from '@mui/icons-material';
+import { Link as LinkIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { liveDuration } from '../../utils/format.ts';
@@ -78,12 +78,7 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
             )}
           </Box>
 
-          <Box display="flex" alignItems="center" gap={1}>
-            <StatusBadge status={session.status} />
-            <Tooltip title="View Details">
-              <OpenInNew fontSize="small" color="action" />
-            </Tooltip>
-          </Box>
+          <StatusBadge status={session.status} />
         </Box>
 
         {/* Stage progress */}

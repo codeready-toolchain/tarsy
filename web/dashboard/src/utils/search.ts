@@ -18,11 +18,12 @@ export function highlightSearchTermNodes(
   if (!text || !searchTerm.trim()) return [text ?? ''];
 
   const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(${escaped})`, 'gi');
-  const parts = text.split(regex);
+  // Split with a capturing group yields alternating [non-match, match, non-match, ...]
+  // so odd indices (i % 2 === 1) are always the captured matches.
+  const parts = text.split(new RegExp(`(${escaped})`, 'i'));
 
   return parts.map((part, i) =>
-    regex.test(part)
+    i % 2 === 1
       ? createElement('mark', { key: i, style: { background: '#fff59d', padding: '0 1px' } }, part)
       : part,
   );

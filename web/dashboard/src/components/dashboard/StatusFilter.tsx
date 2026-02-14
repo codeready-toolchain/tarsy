@@ -18,7 +18,14 @@ interface StatusFilterProps {
 
 export function StatusFilter({ value, onChange, options = ALL_STATUSES }: StatusFilterProps) {
   const handleChange = (event: SelectChangeEvent<string[]>) => {
-    onChange(event.target.value as string[]);
+    // MUI autofill can pass a comma-separated string instead of string[];
+    // normalize to string[] so renderValue's .map always works.
+    const raw = event.target.value;
+    const normalized: string[] =
+      typeof raw === 'string'
+        ? raw.split(',').map((s) => s.trim()).filter(Boolean)
+        : raw;
+    onChange(normalized);
   };
 
   return (

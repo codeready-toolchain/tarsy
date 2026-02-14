@@ -178,7 +178,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
       {/* Tokens */}
       <TableCell>
         {session.total_tokens > 0 ? (
-          <Tooltip title={`In: ${session.input_tokens.toLocaleString()} / Out: ${session.output_tokens.toLocaleString()}`}>
+          <Tooltip title={`In: ${(session.input_tokens ?? 0).toLocaleString()} / Out: ${(session.output_tokens ?? 0).toLocaleString()}`}>
             <Typography variant="body2" color="text.secondary">
               {formatTokensCompact(session.total_tokens)}
             </Typography>

@@ -153,8 +153,10 @@ export function DashboardView() {
 
   // ── Refs for stable callbacks & stale-update detection ──
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeReconnRef = useRef(false);
   const historicalReconnRef = useRef(false);
+  const mountedRef = useRef(false); // suppress effect-based fetches on first render
   const filtersRef = useRef(filters);
   const paginationRef = useRef(pagination);
   const sortRef = useRef(sortState);
@@ -169,10 +171,11 @@ export function DashboardView() {
     sortRef.current = sortState;
   }, [sortState]);
 
-  // Cleanup throttle timer
+  // Cleanup timers
   useEffect(() => {
     return () => {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
   }, []);
 
@@ -289,6 +292,7 @@ export function DashboardView() {
   // ────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchActiveAlerts();
     fetchHistoricalAlerts();
 
@@ -308,15 +312,26 @@ export function DashboardView() {
   // ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const id = setTimeout(() => {
+    // Skip on mount — the initial effect above already fetched
+    if (!mountedRef.current) return;
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    filterDebounceRef.current = setTimeout(() => {
       fetchHistoricalAlerts();
+      filterDebounceRef.current = null;
     }, FILTER_DEBOUNCE_MS);
-    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   // Pagination / sort changes → immediate refetch
   useEffect(() => {
+    // Skip on mount — the initial effect above already fetched
+    if (!mountedRef.current) return;
+    // Skip if this was triggered by handleFiltersChange resetting page to 1
+    // (the debounced filter effect will handle the fetch instead)
+    if (filterResetPageRef.current) {
+      filterResetPageRef.current = false;
+      return;
+    }
     fetchHistoricalAlerts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize, sortState.field, sortState.direction]);
@@ -375,10 +390,14 @@ export function DashboardView() {
   // Handler callbacks for child components
   // ────────────────────────────────────────────────────────────
 
+  const filterResetPageRef = useRef(false); // flag to suppress pagination effect during filter-driven page reset
+
   const handleFiltersChange = (newFilters: SessionFilter) => {
     setFilters(newFilters);
     saveFiltersToStorage(newFilters);
-    // Reset to page 1 when filters change
+    // Reset to page 1 when filters change. Flag so the pagination/sort effect
+    // ignores this state change (the debounced filter effect handles the fetch).
+    filterResetPageRef.current = true;
     setPagination((prev) => ({ ...prev, page: 1 }));
     savePaginationToStorage({ page: 1 });
   };
