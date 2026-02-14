@@ -293,8 +293,8 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
 
 // --- Collapse helpers ---
 
-/** Types that support auto-collapse (thinking, tool_summary). */
-const COLLAPSIBLE_TYPES: Set<FlowItemType> = new Set(['thinking', 'tool_summary']);
+/** Types that support auto-collapse (thinking, tool_summary, final_analysis). */
+const COLLAPSIBLE_TYPES: Set<FlowItemType> = new Set(['thinking', 'tool_summary', 'final_analysis']);
 
 /**
  * Whether a FlowItem type supports auto-collapse behavior.

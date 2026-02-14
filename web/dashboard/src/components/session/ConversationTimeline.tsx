@@ -9,13 +9,8 @@ import {
   Button,
 } from '@mui/material';
 import {
-  UnfoldMore,
-  UnfoldLess,
-  Psychology,
-  Build,
-  Error as ErrorIcon,
-  QuestionAnswer,
-  AutoFixHigh,
+  ExpandMore,
+  ExpandLess,
 } from '@mui/icons-material';
 import type { FlowItem, TimelineStats } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -149,7 +144,7 @@ export default function ConversationTimeline({
   return (
     <Card>
       {/* Card header with chain ID, expand/collapse, and copy */}
-      <CardContent sx={{ pb: 0 }}>
+      <CardContent sx={{ pb: 0, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
         <Box
           sx={{
             display: 'flex',
@@ -166,7 +161,7 @@ export default function ConversationTimeline({
             <Button
               variant="outlined"
               size="small"
-              startIcon={expandAllReasoning ? <UnfoldLess /> : <UnfoldMore />}
+              startIcon={expandAllReasoning ? <ExpandLess /> : <ExpandMore />}
               onClick={() => {
                 setExpandAllReasoning((v) => !v);
                 setManualOverrides(new Set());
@@ -214,41 +209,15 @@ export default function ConversationTimeline({
             <Chip
               size="small"
               variant="outlined"
-              icon={<Build sx={{ fontSize: 16 }} />}
               label={`${stats.successfulToolCalls ?? stats.toolCallCount}/${stats.toolCallCount} tool calls`}
+              color={stats.successfulToolCalls === stats.toolCallCount ? 'success' : 'warning'}
             />
           )}
           {stats.thoughtCount > 0 && (
             <Chip
               size="small"
               variant="outlined"
-              icon={<Psychology sx={{ fontSize: 16 }} />}
               label={`${stats.thoughtCount} thoughts`}
-            />
-          )}
-          {stats.nativeToolCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              icon={<AutoFixHigh sx={{ fontSize: 16 }} />}
-              label={`${stats.nativeToolCount} native tools`}
-            />
-          )}
-          {stats.userQuestionCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              icon={<QuestionAnswer sx={{ fontSize: 16 }} />}
-              label={`${stats.userQuestionCount} questions`}
-            />
-          )}
-          {stats.errorCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              color="error"
-              icon={<ErrorIcon sx={{ fontSize: 16 }} />}
-              label={`${stats.errorCount} errors`}
             />
           )}
           {stats.finalAnswerCount > 0 && (
@@ -256,6 +225,7 @@ export default function ConversationTimeline({
               size="small"
               variant="outlined"
               label={`${stats.finalAnswerCount} analyses`}
+              color="success"
             />
           )}
         </Box>
@@ -281,7 +251,7 @@ export default function ConversationTimeline({
             letterSpacing: 0.3,
           }}
         >
-          AI Reasoning Flow
+          💬 AI Reasoning Flow
         </Typography>
       </Box>
 

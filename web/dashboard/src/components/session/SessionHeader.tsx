@@ -544,6 +544,11 @@ export default function SessionHeader({
                 border: '1px solid',
                 borderColor: alpha(theme.palette.warning.main, 0.3),
                 cursor: 'pointer',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.warning.main, 0.16),
+                  borderColor: alpha(theme.palette.warning.main, 0.5),
+                },
               })}
             >
               <Typography
@@ -708,7 +713,8 @@ export default function SessionHeader({
         <DialogContent>
           <DialogContentText>
             Are you sure you want to cancel this session? This action cannot be
-            undone.
+            undone. The session will be marked as cancelled and any ongoing
+            processing will be stopped.
           </DialogContentText>
           {cancelError && (
             <Box
