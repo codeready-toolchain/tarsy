@@ -1,22 +1,17 @@
-import { Container, Typography } from '@mui/material';
+import { Container } from '@mui/material';
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
+import { DashboardView } from '../components/dashboard/DashboardView.tsx';
 
 /**
- * Dashboard page — main session list view.
- * Placeholder shell — content implemented in Phase 7.2.
+ * Dashboard page — main session list view with active alerts, filters, and history.
  */
 export function DashboardPage() {
   return (
     <>
       <SharedHeader title="TARSy Dashboard" />
-      <Container maxWidth="xl">
-        <Typography variant="h5" sx={{ mt: 2, mb: 2 }}>
-          Dashboard
-        </Typography>
-        <Typography color="text.secondary">
-          Session list, active alerts, and filters will be implemented in Phase 7.2.
-        </Typography>
+      <Container maxWidth={false} sx={{ px: 2 }}>
+        <DashboardView />
       </Container>
       <VersionFooter />
     </>

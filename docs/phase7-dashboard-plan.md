@@ -208,7 +208,25 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.3: Session Detail & Conversation Timeline
+### Phase 7.3: Alert Submission
+
+**Goal**: Manual alert submission form — enables end-to-end testing of the dashboard (submit alert → watch it appear in session list → view session detail).
+
+**Deliverables**:
+
+1. **Manual alert submission** — `ManualAlertSubmission`
+   - Alert type selector (from `GET /api/v1/alert-types`)
+   - Alert data input (textarea)
+   - Runbook URL input (free-text — Phase 8.1 replaces with browsing/dropdown)
+   - MCP server/tool selection (`MCPSelection` component)
+   - Submit button → `POST /api/v1/alerts`
+   - Redirect to session detail on success
+
+**Dependencies**: Phase 7.1, Phase 7.0 (alert types endpoint, `POST /api/v1/alerts`)
+
+---
+
+### Phase 7.4: Session Detail & Conversation Timeline
 
 **Goal**: Session detail page with conversation timeline, live streaming, and stage progress.
 
@@ -261,7 +279,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.4: Chat Interface
+### Phase 7.5: Chat Interface
 
 **Goal**: Follow-up chat UI for completed sessions.
 
@@ -291,11 +309,11 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - WebSocket event handling for chat stages (`stage.status`, `timeline_event.*`, `stream.chunk`)
    - Cancel execution support
 
-**Dependencies**: Phase 7.3 (session detail page, streaming infrastructure)
+**Dependencies**: Phase 7.4 (session detail page, streaming infrastructure)
 
 ---
 
-### Phase 7.5: Trace View
+### Phase 7.6: Trace View
 
 **Goal**: Dedicated trace page for observability information, replacing the old technical/debug tab. Available for all sessions (active and terminated) with live updates for active sessions.
 
@@ -345,35 +363,27 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.6: System Views & Alert Submission
+### Phase 7.7: System Views & Queue Metrics
 
-**Goal**: System status pages and manual alert submission form.
+**Goal**: System status pages and queue metrics enrichment.
 
 **Deliverables**:
 
 1. **MCP server status page** — Dedicated system status view:
    - MCP server health, tool counts, error details
    - Data from `GET /api/v1/system/mcp-servers`
-   - Note: Per-session MCP summary in the session header is built in Phase 7.3
+   - Note: Per-session MCP summary in the session header is built in Phase 7.4
 
-2. **Manual alert submission** — `ManualAlertSubmission`
-   - Alert type selector (from `GET /api/v1/alert-types`)
-   - Alert data input (textarea)
-   - Runbook URL input (free-text — Phase 8.1 replaces with browsing/dropdown)
-   - MCP server/tool selection (`MCPSelection` component)
-   - Submit button → `POST /api/v1/alerts`
-   - Redirect to session detail on success
-
-3. **Queue metrics enrichment** — Additional queue/pool stats not covered by Phase 7.2:
+2. **Queue metrics enrichment** — Additional queue/pool stats not covered by Phase 7.2:
    - Worker pool info (capacity, active workers from `GET /health`)
    - Queue depth and wait time estimates
    - Note: Active/queued panels with cards and real-time updates are built in Phase 7.2
 
-**Dependencies**: Phase 7.1, Phase 7.0 (system endpoints, alert types endpoint)
+**Dependencies**: Phase 7.1, Phase 7.0 (system endpoints)
 
 ---
 
-### Phase 7.7: Polish & Integration
+### Phase 7.8: Polish & Integration
 
 **Goal**: Final polish, cross-cutting concerns, production readiness.
 
@@ -413,18 +423,20 @@ Phase 7.0 (Backend APIs)
     │       │
     │       ├─→ Phase 7.2 (Session List)
     │       │
-    │       ├─→ Phase 7.3 (Session Detail + Conversation)
+    │       ├─→ Phase 7.3 (Alert Submission)
+    │       │
+    │       ├─→ Phase 7.4 (Session Detail + Conversation)
     │       │       │
-    │       │       └─→ Phase 7.4 (Chat)
+    │       │       └─→ Phase 7.5 (Chat)
     │       │
-    │       ├─→ Phase 7.5 (Trace View)
+    │       ├─→ Phase 7.6 (Trace View)
     │       │
-    │       └─→ Phase 7.6 (System + Alerts)
+    │       └─→ Phase 7.7 (System + Queue Metrics)
     │
-    └─→ Phase 7.7 (Polish) — after all above
+    └─→ Phase 7.8 (Polish) — after all above
 ```
 
-Phases 7.2, 7.3, 7.5, and 7.6 can be developed in parallel after 7.1 is complete. Phase 7.4 depends on 7.3 (shared session detail page). Phase 7.7 is the final pass.
+Phases 7.2, 7.3, 7.4, 7.6, and 7.7 can be developed in parallel after 7.1 is complete. Phase 7.3 is prioritized early to enable end-to-end testing. Phase 7.5 depends on 7.4 (shared session detail page). Phase 7.8 is the final pass.
 
 ---
 
@@ -435,10 +447,11 @@ Phases 7.2, 7.3, 7.5, and 7.6 can be developed in parallel after 7.1 is complete
 | 7.0 | Heavy | None | Medium-High |
 | 7.1 | Light (static serving) | Heavy (setup) | Medium |
 | 7.2 | None | Heavy | Medium |
-| 7.3 | None | Very Heavy | High |
-| 7.4 | None | Medium | Medium |
-| 7.5 | None | Heavy | Medium-High |
-| 7.6 | None | Medium | Medium |
-| 7.7 | Light | Medium | Low-Medium |
+| 7.3 | None | Light-Medium | Low-Medium |
+| 7.4 | None | Very Heavy | High |
+| 7.5 | None | Medium | Medium |
+| 7.6 | None | Heavy | Medium-High |
+| 7.7 | None | Light-Medium | Low-Medium |
+| 7.8 | Light | Medium | Low-Medium |
 
-**Total**: ~8 sub-phases. Phase 7.0 and 7.1 are foundational. The core UI work is 7.2–7.6.
+**Total**: ~9 sub-phases. Phase 7.0 and 7.1 are foundational. Phase 7.3 (alert submission) is prioritized early for testability. The core UI work is 7.2–7.7.
