@@ -278,8 +278,9 @@ func (_q *EventQuery) Clone() *EventQuery {
 		predicates:  append([]predicate.Event{}, _q.predicates...),
 		withSession: _q.withSession.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -552,6 +553,12 @@ func (_q *EventQuery) ForShare(opts ...sql.LockOption) *EventQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *EventQuery) Modify(modifiers ...func(s *sql.Selector)) *EventSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // EventGroupBy is the group-by builder for Event entities.
 type EventGroupBy struct {
 	selector
@@ -640,4 +647,10 @@ func (_s *EventSelect) sqlScan(ctx context.Context, root *EventQuery, v any) err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *EventSelect) Modify(modifiers ...func(s *sql.Selector)) *EventSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

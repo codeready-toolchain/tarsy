@@ -99,6 +99,68 @@ func (app *TestApp) getJSONArray(t *testing.T, path string, expectedStatus int) 
 }
 
 // ────────────────────────────────────────────────────────────
+// Dashboard API Helpers
+// ────────────────────────────────────────────────────────────
+
+// GetSessionList calls GET /api/v1/sessions with optional query params.
+func (app *TestApp) GetSessionList(t *testing.T, queryParams string) map[string]interface{} {
+	t.Helper()
+	path := "/api/v1/sessions"
+	if queryParams != "" {
+		path += "?" + queryParams
+	}
+	return app.getJSON(t, path, http.StatusOK)
+}
+
+// GetActiveSessions calls GET /api/v1/sessions/active.
+func (app *TestApp) GetActiveSessions(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/active", http.StatusOK)
+}
+
+// GetSessionSummary calls GET /api/v1/sessions/:id/summary.
+func (app *TestApp) GetSessionSummary(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/summary", http.StatusOK)
+}
+
+// GetFilterOptions calls GET /api/v1/sessions/filter-options.
+func (app *TestApp) GetFilterOptions(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/filter-options", http.StatusOK)
+}
+
+// GetSystemWarnings calls GET /api/v1/system/warnings.
+func (app *TestApp) GetSystemWarnings(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/warnings", http.StatusOK)
+}
+
+// GetMCPServers calls GET /api/v1/system/mcp-servers.
+func (app *TestApp) GetMCPServers(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/mcp-servers", http.StatusOK)
+}
+
+// GetDefaultTools calls GET /api/v1/system/default-tools.
+func (app *TestApp) GetDefaultTools(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/default-tools", http.StatusOK)
+}
+
+// GetAlertTypes calls GET /api/v1/alert-types.
+func (app *TestApp) GetAlertTypes(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/alert-types", http.StatusOK)
+}
+
+// GetHealth calls GET /health.
+func (app *TestApp) GetHealth(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/health", http.StatusOK)
+}
+
+// ────────────────────────────────────────────────────────────
 // Trace API Helpers
 // ────────────────────────────────────────────────────────────
 

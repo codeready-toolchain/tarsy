@@ -26,8 +26,9 @@ import (
 // AlertSessionUpdate is the builder for updating AlertSession entities.
 type AlertSessionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AlertSessionMutation
+	hooks     []Hook
+	mutation  *AlertSessionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AlertSessionUpdate builder.
@@ -756,6 +757,12 @@ func (_u *AlertSessionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AlertSessionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AlertSessionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1232,6 +1239,7 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{alertsession.Label}
@@ -1247,9 +1255,10 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 // AlertSessionUpdateOne is the builder for updating a single AlertSession entity.
 type AlertSessionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AlertSessionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AlertSessionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetAlertData sets the "alert_data" field.
@@ -1985,6 +1994,12 @@ func (_u *AlertSessionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AlertSessionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AlertSessionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSession, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -2478,6 +2493,7 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AlertSession{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

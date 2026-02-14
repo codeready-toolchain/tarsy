@@ -22,8 +22,9 @@ import (
 // AgentExecutionUpdate is the builder for updating AgentExecution entities.
 type AgentExecutionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AgentExecutionMutation
+	hooks     []Hook
+	mutation  *AgentExecutionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AgentExecutionUpdate builder.
@@ -394,6 +395,12 @@ func (_u *AgentExecutionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AgentExecutionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AgentExecutionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -634,6 +641,7 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{agentexecution.Label}
@@ -649,9 +657,10 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 // AgentExecutionUpdateOne is the builder for updating a single AgentExecution entity.
 type AgentExecutionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AgentExecutionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AgentExecutionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetAgentName sets the "agent_name" field.
@@ -1029,6 +1038,12 @@ func (_u *AgentExecutionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AgentExecutionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AgentExecutionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExecution, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1286,6 +1301,7 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AgentExecution{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

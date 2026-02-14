@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
+	"github.com/codeready-toolchain/tarsy/pkg/version"
 )
 
 // Server is the HTTP API server.
@@ -153,10 +154,24 @@ func (s *Server) setupRoutes() {
 	// API v1
 	v1 := s.echo.Group("/api/v1")
 	v1.POST("/alerts", s.submitAlertHandler)
+
+	// Session list and filter endpoints (static paths before :id param).
+	v1.GET("/sessions", s.listSessionsHandler)
+	v1.GET("/sessions/active", s.activeSessionsHandler)
+	v1.GET("/sessions/filter-options", s.filterOptionsHandler)
+
+	// Session detail and actions.
 	v1.GET("/sessions/:id", s.getSessionHandler)
+	v1.GET("/sessions/:id/summary", s.sessionSummaryHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
+
+	// System endpoints.
+	v1.GET("/system/warnings", s.systemWarningsHandler)
+	v1.GET("/system/mcp-servers", s.mcpServersHandler)
+	v1.GET("/system/default-tools", s.defaultToolsHandler)
+	v1.GET("/alert-types", s.alertTypesHandler)
 
 	// Trace/observability endpoints (two-level loading).
 	v1.GET("/sessions/:id/trace", s.getTraceListHandler)
@@ -164,9 +179,11 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id/trace/mcp/:interaction_id", s.getMCPInteractionHandler)
 
 	// WebSocket endpoint for real-time event streaming.
+	// Moved under /api/v1 so all sensitive endpoints share a single
+	// oauth2-proxy auth rule (/api/*) in Phase 9.
 	// Auth deferred to Phase 9 (Security) — currently open to any client,
 	// consistent with the InsecureSkipVerify origin policy in handler_ws.go.
-	s.echo.GET("/ws", s.wsHandler)
+	v1.GET("/ws", s.wsHandler)
 }
 
 // Start starts the HTTP server on the given address (non-blocking).
@@ -209,6 +226,7 @@ func (s *Server) healthHandler(c *echo.Context) error {
 	stats := s.cfg.Stats()
 	response := &HealthResponse{
 		Status:   "healthy",
+		Version:  version.Full(),
 		Database: dbHealth,
 		Phase:    "2.3 - Queue & Worker System",
 		Configuration: ConfigurationStats{

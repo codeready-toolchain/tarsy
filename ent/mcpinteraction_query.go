@@ -354,8 +354,9 @@ func (_q *MCPInteractionQuery) Clone() *MCPInteractionQuery {
 		withAgentExecution: _q.withAgentExecution.Clone(),
 		withTimelineEvents: _q.withTimelineEvents.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -780,6 +781,12 @@ func (_q *MCPInteractionQuery) ForShare(opts ...sql.LockOption) *MCPInteractionQ
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *MCPInteractionQuery) Modify(modifiers ...func(s *sql.Selector)) *MCPInteractionSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // MCPInteractionGroupBy is the group-by builder for MCPInteraction entities.
 type MCPInteractionGroupBy struct {
 	selector
@@ -868,4 +875,10 @@ func (_s *MCPInteractionSelect) sqlScan(ctx context.Context, root *MCPInteractio
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *MCPInteractionSelect) Modify(modifiers ...func(s *sql.Selector)) *MCPInteractionSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

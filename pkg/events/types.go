@@ -76,10 +76,41 @@ const (
 	EventTypeChatCreated = "chat.created"
 )
 
+// Interaction event types (stored in DB + NOTIFY).
+const (
+	// Fired when an LLM or MCP interaction record is saved to DB.
+	// Lightweight notification for trace view live updates (event-notification → REST re-fetch).
+	EventTypeInteractionCreated = "interaction.created"
+)
+
+// InteractionType values for interaction.created payloads.
+const (
+	InteractionTypeLLM = "llm"
+	InteractionTypeMCP = "mcp"
+)
+
 // Transient event types (NOTIFY only, no DB persistence).
 const (
 	// LLM streaming chunks — high-frequency, ephemeral.
 	EventTypeStreamChunk = "stream.chunk"
+
+	// Session-level progress — published to GlobalSessionsChannel.
+	// Used by active alerts panel for current stage and high-level status.
+	EventTypeSessionProgress = "session.progress"
+
+	// Execution-level progress — published to SessionChannel(sessionID).
+	// Used by session detail page for per-agent progress phases.
+	EventTypeExecutionProgress = "execution.progress"
+)
+
+// ProgressPhase values for execution-level progress events.
+const (
+	ProgressPhaseInvestigating = "investigating"
+	ProgressPhaseGatheringInfo = "gathering_info"
+	ProgressPhaseDistilling    = "distilling"
+	ProgressPhaseConcluding    = "concluding"
+	ProgressPhaseSynthesizing  = "synthesizing"
+	ProgressPhaseFinalizing    = "finalizing"
 )
 
 // GlobalSessionsChannel is the channel for session-level status events.

@@ -239,7 +239,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 
 	addr := ln.Addr().String()
 	baseURL := fmt.Sprintf("http://%s", addr)
-	wsURL := fmt.Sprintf("ws://%s/ws", addr)
+	wsURL := fmt.Sprintf("ws://%s/api/v1/ws", addr)
 
 	app := &TestApp{
 		Config:         tc.cfg,

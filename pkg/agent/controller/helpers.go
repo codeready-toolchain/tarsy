@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -89,7 +90,7 @@ func recordLLMInteraction(
 	// Build response_metadata with full grounding details for dashboard rendering.
 	responseMeta := buildResponseMetadata(resp)
 
-	if _, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	interaction, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:        execCtx.SessionID,
 		StageID:          &execCtx.StageID,
 		ExecutionID:      &execCtx.ExecutionID,
@@ -104,10 +105,15 @@ func recordLLMInteraction(
 		OutputTokens:     outputTokens,
 		TotalTokens:      totalTokens,
 		DurationMs:       &durationMs,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("Failed to record LLM interaction",
 			"session_id", execCtx.SessionID, "type", interactionType, "error", err)
+		return
 	}
+
+	// Publish interaction.created event for trace view live updates.
+	publishInteractionCreated(ctx, execCtx, interaction.ID, events.InteractionTypeLLM)
 }
 
 // isTimeoutError checks if an error is a context deadline timeout.
@@ -153,6 +159,53 @@ func tokenUsageFromResp(resp *LLMResponse) agent.TokenUsage {
 		return agent.TokenUsage{}
 	}
 	return *resp.Usage
+}
+
+// publishInteractionCreated publishes an interaction.created persistent event.
+// Best-effort: logs on failure, never aborts the investigation.
+func publishInteractionCreated(ctx context.Context, execCtx *agent.ExecutionContext, interactionID, interactionType string) {
+	if execCtx.EventPublisher == nil {
+		return
+	}
+	if err := execCtx.EventPublisher.PublishInteractionCreated(ctx, execCtx.SessionID, events.InteractionCreatedPayload{
+		Type:            events.EventTypeInteractionCreated,
+		SessionID:       execCtx.SessionID,
+		StageID:         execCtx.StageID,
+		ExecutionID:     execCtx.ExecutionID,
+		InteractionID:   interactionID,
+		InteractionType: interactionType,
+		Timestamp:       time.Now().Format(time.RFC3339Nano),
+	}); err != nil {
+		slog.Warn("Failed to publish interaction created",
+			"session_id", execCtx.SessionID,
+			"interaction_id", interactionID,
+			"interaction_type", interactionType,
+			"error", err,
+		)
+	}
+}
+
+// publishExecutionProgress publishes an execution.progress transient event.
+// Best-effort: logs on failure, never aborts the investigation.
+func publishExecutionProgress(ctx context.Context, execCtx *agent.ExecutionContext, phase, message string) {
+	if execCtx.EventPublisher == nil {
+		return
+	}
+	if err := execCtx.EventPublisher.PublishExecutionProgress(ctx, execCtx.SessionID, events.ExecutionProgressPayload{
+		Type:        events.EventTypeExecutionProgress,
+		SessionID:   execCtx.SessionID,
+		StageID:     execCtx.StageID,
+		ExecutionID: execCtx.ExecutionID,
+		Phase:       phase,
+		Message:     message,
+		Timestamp:   time.Now().Format(time.RFC3339Nano),
+	}); err != nil {
+		slog.Warn("Failed to publish execution progress",
+			"session_id", execCtx.SessionID,
+			"phase", phase,
+			"error", err,
+		)
+	}
 }
 
 // buildResponseMetadata constructs the response_metadata map from grounding

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
@@ -54,6 +55,10 @@ func executeToolCall(
 		serverID = ""
 		toolName = call.Name
 	}
+
+	// Publish execution progress: gathering_info
+	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseGatheringInfo,
+		fmt.Sprintf("Calling %s.%s", serverID, toolName))
 
 	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner)
 	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, eventSeq)
@@ -144,8 +149,13 @@ func recordMCPInteraction(
 		ErrorMessage:    errMsg,
 	}
 
-	if _, err := execCtx.Services.Interaction.CreateMCPInteraction(ctx, req); err != nil {
+	interaction, err := execCtx.Services.Interaction.CreateMCPInteraction(ctx, req)
+	if err != nil {
 		slog.Error("Failed to record MCP interaction",
 			"session_id", execCtx.SessionID, "server", serverID, "tool", toolName, "error", err)
+		return
 	}
+
+	// Publish interaction.created event for trace view live updates.
+	publishInteractionCreated(ctx, execCtx, interaction.ID, events.InteractionTypeMCP)
 }

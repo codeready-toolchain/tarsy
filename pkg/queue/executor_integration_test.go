@@ -115,6 +115,18 @@ func (p *testEventPublisher) PublishChatCreated(_ context.Context, _ string, _ e
 	return nil
 }
 
+func (p *testEventPublisher) PublishInteractionCreated(_ context.Context, _ string, _ events.InteractionCreatedPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishSessionProgress(_ context.Context, _ events.SessionProgressPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
+}
+
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 	p.mu.Lock()
@@ -1834,4 +1846,55 @@ func TestMapTerminalStatus(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+func TestCountExpectedStages(t *testing.T) {
+	t.Run("single-agent stages only", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "A"}}},
+				{Agents: []config.StageAgentConfig{{Name: "B"}}},
+			},
+		}
+		// 2 config stages + 0 synthesis + 1 executive summary = 3
+		assert.Equal(t, 3, countExpectedStages(chain))
+	})
+
+	t.Run("multi-agent stage adds synthesis", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "A"}, {Name: "B"}}},
+				{Agents: []config.StageAgentConfig{{Name: "C"}}},
+			},
+		}
+		// 2 config stages + 1 synthesis (for first stage) + 1 executive summary = 4
+		assert.Equal(t, 4, countExpectedStages(chain))
+	})
+
+	t.Run("replica stage adds synthesis", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Replicas: 3, Agents: []config.StageAgentConfig{{Name: "A"}}},
+			},
+		}
+		// 1 config stage + 1 synthesis (replicas > 1) + 1 executive summary = 3
+		assert.Equal(t, 3, countExpectedStages(chain))
+	})
+
+	t.Run("all stages multi-agent", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "A"}, {Name: "B"}}},
+				{Agents: []config.StageAgentConfig{{Name: "C"}, {Name: "D"}}},
+			},
+		}
+		// 2 config stages + 2 synthesis + 1 executive summary = 5
+		assert.Equal(t, 5, countExpectedStages(chain))
+	})
+
+	t.Run("empty chain", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+		// 0 config stages + 0 synthesis + 1 executive summary = 1
+		assert.Equal(t, 1, countExpectedStages(chain))
+	})
 }
