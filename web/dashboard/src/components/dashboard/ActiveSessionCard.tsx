@@ -29,7 +29,7 @@ import {
   Schedule,
   OpenInNew,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useHref } from 'react-router-dom';
 import { liveDuration } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
@@ -96,6 +96,7 @@ interface ActiveSessionCardProps {
 
 export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps) {
   const navigate = useNavigate();
+  const detailHref = useHref(sessionDetailPath(session.id));
   const [, setTick] = useState(0);
 
   // Tick every second so the live duration updates
@@ -120,7 +121,7 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
 
   const handleNewTabClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}${sessionDetailPath(session.id)}`;
+    const url = new URL(detailHref, window.location.origin).toString();
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 

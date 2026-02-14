@@ -17,7 +17,10 @@ dev: db-start build ## Start full dev environment (DB + LLM + backend + dashboar
 	@echo ""
 	@trap 'kill 0' EXIT; \
 		cd llm-service && uv run python -m llm.server & \
-		sleep 2 && ./bin/tarsy & \
+		echo "Waiting for LLM service on :50051..."; \
+		for i in $$(seq 1 40); do (echo >/dev/tcp/127.0.0.1/50051) 2>/dev/null && break; sleep 0.5; done; \
+		(echo >/dev/tcp/127.0.0.1/50051) 2>/dev/null || { echo "ERROR: LLM service did not start on :50051 within 20s" >&2; exit 1; }; \
+		./bin/tarsy & \
 		cd web/dashboard && npm run dev
 
 .PHONY: dev-stop
