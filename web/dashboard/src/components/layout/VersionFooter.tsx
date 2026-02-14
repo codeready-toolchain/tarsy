@@ -4,24 +4,27 @@ import { DASHBOARD_VERSION } from '../../config/env.ts';
 
 /**
  * Footer displaying dashboard version.
- * Backend version comparison and mismatch display wired in Phase 7.7.
+ * Backend version comparison, tooltip, and mismatch display wired in Phase 7.7.
+ *
+ * Layout matches old TARSy footer: centered text, divider top, "Powered by AI" branding.
  */
 export function VersionFooter() {
+  // Phase 7.7: VersionContext will provide backendVersion and backendStatus
+  // for separate version display, tooltip, and loading/unavailable states.
   return (
     <Box
       component="footer"
       sx={{
-        py: 1,
-        px: 2,
-        mt: 'auto',
+        mt: 4,
+        mb: 2,
+        py: 2,
         textAlign: 'center',
         borderTop: '1px solid',
         borderColor: 'divider',
-        backgroundColor: 'background.default',
       }}
     >
-      <Typography variant="caption" color="text.secondary">
-        TARSy Dashboard v{DASHBOARD_VERSION}
+      <Typography variant="body2" color="text.secondary">
+        TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION}
       </Typography>
     </Box>
   );

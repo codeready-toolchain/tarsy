@@ -15,7 +15,7 @@ export const SESSION_STATUS = {
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 /** Terminal statuses — session will not change further. */
-export const TERMINAL_STATUSES = new Set<string>([
+export const TERMINAL_STATUSES = new Set<SessionStatus>([
   SESSION_STATUS.COMPLETED,
   SESSION_STATUS.FAILED,
   SESSION_STATUS.CANCELLED,
@@ -23,23 +23,23 @@ export const TERMINAL_STATUSES = new Set<string>([
 ]);
 
 /** Active statuses — session is still processing. */
-export const ACTIVE_STATUSES = new Set<string>([
+export const ACTIVE_STATUSES = new Set<SessionStatus>([
   SESSION_STATUS.IN_PROGRESS,
   SESSION_STATUS.CANCELLING,
 ]);
 
 /** Check if a session status is terminal. */
-export function isTerminalStatus(status: string): boolean {
+export function isTerminalStatus(status: SessionStatus): boolean {
   return TERMINAL_STATUSES.has(status);
 }
 
 /** Check if a session can be cancelled. */
-export function canCancelSession(status: string): boolean {
+export function canCancelSession(status: SessionStatus): boolean {
   return status === SESSION_STATUS.IN_PROGRESS || status === SESSION_STATUS.PENDING;
 }
 
 /** Human-readable display name for a status. */
-export function getStatusDisplayName(status: string): string {
+export function getStatusDisplayName(status: SessionStatus): string {
   switch (status) {
     case SESSION_STATUS.PENDING:
       return 'Pending';
@@ -55,14 +55,12 @@ export function getStatusDisplayName(status: string): string {
       return 'Cancelled';
     case SESSION_STATUS.TIMED_OUT:
       return 'Timed Out';
-    default:
-      return status;
   }
 }
 
 /** MUI color for a status (for Chip, Badge, etc.). */
 export function getStatusColor(
-  status: string,
+  status: SessionStatus,
 ): 'success' | 'error' | 'warning' | 'info' | 'default' {
   switch (status) {
     case SESSION_STATUS.COMPLETED:
@@ -76,8 +74,6 @@ export function getStatusColor(
     case SESSION_STATUS.PENDING:
       return 'warning';
     case SESSION_STATUS.CANCELLED:
-      return 'default';
-    default:
       return 'default';
   }
 }

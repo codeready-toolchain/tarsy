@@ -2,6 +2,8 @@
 
 ## Old TARSy Reference
 
+**IMPORTANT: Hybrid approach.** Copy structure, layout, and MUI component usage from old dashboard (proven visual layer). Rewrite all data fetching, event handling, services, hooks, types, and state management to match the new backend API and WebSocket protocol. TypeScript interfaces are all new.
+
 See the [Plan doc](phase7-dashboard-plan.md#old-tarsy-reference) for a full path table. Key paths for quick access:
 
 - **Old dashboard source**: `/home/igels/Projects/AI/tarsy-bot/dashboard/src/`
