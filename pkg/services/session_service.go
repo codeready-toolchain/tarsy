@@ -489,9 +489,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
 		}).
-		WithChat(func(q *ent.ChatQuery) {
-			q.WithUserMessages()
-		}).
+		WithChat().
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -553,9 +551,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 	if session.Edges.Chat != nil {
 		chatEnabled = true
 		chatID = &session.Edges.Chat.ID
-		if session.Edges.Chat.Edges.UserMessages != nil {
-			chatMessageCount = len(session.Edges.Chat.Edges.UserMessages)
+		count, countErr := session.Edges.Chat.QueryUserMessages().Count(ctx)
+		if countErr != nil {
+			return nil, fmt.Errorf("failed to count chat messages: %w", countErr)
 		}
+		chatMessageCount = count
 	}
 
 	// Compute duration.
@@ -740,7 +740,7 @@ func (s *SessionService) GetActiveSessions(ctx context.Context) (*models.ActiveS
 type dashboardRow struct {
 	// Entity fields.
 	ID                string     `sql:"session_id"`
-	AlertType         string     `sql:"alert_type"`
+	AlertType         *string    `sql:"alert_type"` // nullable in DB
 	ChainID           string     `sql:"chain_id"`
 	Status            string     `sql:"status"`
 	Author            *string    `sql:"author"`
@@ -942,15 +942,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			durationMs = &ms
 		}
 
-		var alertType *string
-		if row.AlertType != "" {
-			at := row.AlertType
-			alertType = &at
-		}
-
 		items = append(items, models.DashboardSessionItem{
 			ID:                  row.ID,
-			AlertType:           alertType,
+			AlertType:           row.AlertType,
 			ChainID:             row.ChainID,
 			Status:              row.Status,
 			Author:              row.Author,
