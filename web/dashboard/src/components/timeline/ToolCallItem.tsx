@@ -1,0 +1,166 @@
+import { useState } from 'react';
+import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
+import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import JsonDisplay from '../shared/JsonDisplay';
+import CopyButton from '../shared/CopyButton';
+import { formatDurationMs } from '../../utils/format';
+import type { FlowItem } from '../../utils/timelineParser';
+
+interface ToolCallItemProps {
+  item: FlowItem;
+}
+
+/**
+ * Check if arguments are simple (flat key-value pairs with primitive values)
+ */
+const isSimpleArguments = (args: any): boolean => {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return false;
+  const keys = Object.keys(args);
+  if (keys.length === 0) return false;
+  return keys.every(key => {
+    const value = args[key];
+    const type = typeof value;
+    if (value === null || type === 'string' || type === 'number' || type === 'boolean') return true;
+    if (Array.isArray(value)) {
+      return value.length <= 5 && value.every(item => {
+        const itemType = typeof item;
+        return item === null || itemType === 'string' || itemType === 'number' || itemType === 'boolean';
+      });
+    }
+    return false;
+  });
+};
+
+const SimpleArgumentsList = ({ args }: { args: any }) => (
+  <Box
+    sx={(theme) => ({
+      bgcolor: theme.palette.grey[50], borderRadius: 1,
+      border: `1px solid ${theme.palette.divider}`, p: 1.5,
+      fontFamily: 'monospace', fontSize: '0.875rem'
+    })}
+  >
+    {Object.entries(args).map(([key, value], index) => (
+      <Box key={key} sx={{ display: 'flex', mb: index < Object.keys(args).length - 1 ? 0.75 : 0, alignItems: 'flex-start' }}>
+        <Typography component="span" sx={(theme) => ({ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 600, color: theme.palette.primary.main, mr: 1, minWidth: '100px', flexShrink: 0 })}>
+          {key}:
+        </Typography>
+        <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.primary', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+          {Array.isArray(value) ? `[${(value as any[]).map(v => typeof v === 'string' ? `"${v}"` : String(v)).join(', ')}]` : typeof value === 'string' ? `"${value}"` : String(value)}
+        </Typography>
+      </Box>
+    ))}
+  </Box>
+);
+
+/**
+ * ToolCallItem - renders llm_tool_call timeline events.
+ * Expandable box showing tool name, arguments preview, duration, and result.
+ */
+function ToolCallItem({ item }: ToolCallItemProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Extract data from FlowItem metadata
+  const toolName = (item.metadata?.tool_name as string) || 'unknown';
+  const serverName = (item.metadata?.server_name as string) || 'unknown';
+  const toolArguments = (item.metadata?.arguments as Record<string, unknown>) || {};
+  const isError = !!item.metadata?.is_error;
+  const errorMessage = (item.metadata?.error_message as string) || '';
+  const durationMs = item.metadata?.duration_ms as number | null | undefined;
+  const success = !isError;
+  // Tool result is in item.content (after completion)
+  const toolResult = item.content || null;
+
+  const getArgumentsPreview = (): string => {
+    if (!toolArguments || typeof toolArguments !== 'object') return '';
+    const keys = Object.keys(toolArguments);
+    if (keys.length === 0) return '(no arguments)';
+    const previewKeys = keys.slice(0, 2);
+    const preview = previewKeys.map(key => {
+      const value = toolArguments[key];
+      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+      const truncated = valueStr.length > 25 ? valueStr.substring(0, 25) + '...' : valueStr;
+      return `${key}: ${truncated}`;
+    }).join(', ');
+    return keys.length > 2 ? `${preview}, ...` : preview;
+  };
+
+  const StatusIcon = success ? CheckCircle : ErrorIcon;
+
+  return (
+    <Box
+      sx={(theme) => ({
+        ml: 4, my: 1, mr: 1,
+        border: '2px solid',
+        borderColor: success ? alpha(theme.palette.primary.main, 0.5) : alpha(theme.palette.error.main, 0.5),
+        borderRadius: 1.5,
+        bgcolor: success ? alpha(theme.palette.primary.main, 0.08) : alpha(theme.palette.error.main, 0.08),
+        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`
+      })}
+    >
+      <Box
+        sx={(theme) => ({
+          display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
+          cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
+          '&:hover': { bgcolor: success ? alpha(theme.palette.primary.main, 0.2) : alpha(theme.palette.error.main, 0.2) }
+        })}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <StatusIcon sx={(theme) => ({ fontSize: 18, color: success ? theme.palette.primary.main : theme.palette.error.main })} />
+        <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: success ? theme.palette.primary.main : theme.palette.error.main })}>
+          {toolName}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
+          {getArgumentsPreview()}
+        </Typography>
+        {durationMs != null && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            {formatDurationMs(durationMs)}
+          </Typography>
+        )}
+        <IconButton size="small" sx={{ p: 0.25 }}>
+          {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      <Collapse in={expanded}>
+        <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Server: {serverName}
+          </Typography>
+
+          {!success && errorMessage && (
+            <Box sx={(theme) => ({ mb: 1, p: 1, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1, border: `1px solid ${alpha(theme.palette.error.main, 0.3)}` })}>
+              <Typography variant="caption" sx={(theme) => ({ fontWeight: 600, color: theme.palette.error.dark, fontSize: '0.8rem' })}>
+                Error: {errorMessage}
+              </Typography>
+            </Box>
+          )}
+
+          <Box sx={{ mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Arguments</Typography>
+              <CopyButton text={JSON.stringify(toolArguments, null, 2)} variant="icon" size="small" tooltip="Copy arguments" />
+            </Box>
+            {toolArguments && Object.keys(toolArguments).length > 0 ? (
+              isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
+            ) : (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
+            )}
+          </Box>
+
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Result</Typography>
+              <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+            </Box>
+            {toolResult ? <JsonDisplay data={toolResult} maxHeight={300} /> : (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
+            )}
+          </Box>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+export default ToolCallItem;

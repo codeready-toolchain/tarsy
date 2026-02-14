@@ -1,0 +1,43 @@
+/* Custom JSON view styling with transparent background and colorful syntax highlighting */
+
+/* Transparent container - inherits background from parent */
+.json-custom-container {
+  background: transparent !important;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Field names/labels - darker blue */
+.json-label {
+  font-weight: 600;
+  margin-right: 5px;
+  color: #1976d2; /* MUI primary blue */
+}
+
+/* String values - green */
+.json-string-value {
+  color: #2e7d32; /* MUI success green */
+}
+
+/* Number values - orange */
+.json-number-value {
+  color: #ed6c02; /* MUI warning orange */
+}
+
+/* Boolean values - purple */
+.json-boolean-value {
+  color: #9c27b0; /* MUI purple */
+}
+
+/* Null/undefined values - grey */
+.json-null-value {
+  color: #757575; /* MUI grey */
+  font-style: italic;
+}
+
+/* Punctuation (braces, brackets, colons, commas) - subtle grey */
+.json-punctuation {
+  color: #424242; /* Dark grey for punctuation */
+  font-weight: 500;
+}
