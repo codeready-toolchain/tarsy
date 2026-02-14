@@ -49,6 +49,9 @@ func main() {
 	configDir := flag.String("config-dir",
 		getEnv("CONFIG_DIR", "./deploy/config"),
 		"Path to configuration directory")
+	dashboardDir := flag.String("dashboard-dir",
+		getEnv("DASHBOARD_DIR", ""),
+		"Path to dashboard build directory (e.g. web/dashboard/dist). Empty = no static serving")
 	flag.Parse()
 
 	// Load .env file from config directory
@@ -218,6 +221,12 @@ func main() {
 	httpServer.SetInteractionService(interactionService)
 	httpServer.SetStageService(stageService)
 	httpServer.SetTimelineService(timelineService)
+
+	// 7b. Wire dashboard static file serving (optional).
+	if *dashboardDir != "" {
+		httpServer.SetDashboardDir(*dashboardDir)
+		slog.Info("Dashboard directory configured", "dir", *dashboardDir)
+	}
 
 	// 8. Validate wiring and start HTTP server (non-blocking)
 	if err := httpServer.ValidateWiring(); err != nil {

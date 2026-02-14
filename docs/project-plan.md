@@ -46,6 +46,8 @@ Full design docs for completed phases are in `docs/archive/`.
 
 See docs/phase7-dashboard-plan.md
 
+**Phase 7.0: Backend API Extensions** -- DONE. Session list/active/filter-options/summary endpoints, system endpoints (warnings, MCP servers, default tools), alert types endpoint, progress events (session.progress, execution.progress, interaction.created), health version field, WebSocket moved to /api/v1/ws.
+
 ---
 
 ### Phase 8: Integrations

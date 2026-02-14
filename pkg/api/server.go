@@ -5,8 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	echo "github.com/labstack/echo/v5"
@@ -40,6 +45,7 @@ type Server struct {
 	interactionService *services.InteractionService    // nil until set (trace endpoints)
 	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
+	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -105,6 +111,18 @@ func (s *Server) SetStageService(svc *services.StageService) {
 // SetTimelineService sets the timeline service for the timeline endpoint.
 func (s *Server) SetTimelineService(svc *services.TimelineService) {
 	s.timelineService = svc
+}
+
+// SetDashboardDir sets the path to the dashboard build directory and
+// registers static file serving routes. When set and the directory
+// contains an index.html, assets are served from /assets/* and a SPA
+// fallback is registered for all non-API routes.
+//
+// Must be called after NewServer (which registers API routes first)
+// so that API routes take priority over the wildcard SPA fallback.
+func (s *Server) SetDashboardDir(dir string) {
+	s.dashboardDir = dir
+	s.setupDashboardRoutes()
 }
 
 // ValidateWiring checks that all required services have been wired via their
@@ -184,6 +202,65 @@ func (s *Server) setupRoutes() {
 	// Auth deferred to Phase 9 (Security) — currently open to any client,
 	// consistent with the InsecureSkipVerify origin policy in handler_ws.go.
 	v1.GET("/ws", s.wsHandler)
+
+	// Dashboard static file serving is registered via SetDashboardDir(),
+	// called after NewServer. This ensures API routes (registered above)
+	// take priority over the wildcard SPA fallback.
+}
+
+// setupDashboardRoutes registers static file serving for the dashboard build
+// directory. When dashboardDir is set and contains an index.html, Vite-built
+// assets are served from /assets/* and all other non-API paths fall back to
+// index.html (SPA routing).
+//
+// Uses os.DirFS to create an fs.FS rooted at the dashboard directory, because
+// Echo v5's c.File() resolves paths against its internal Filesystem (os.DirFS("."))
+// and cannot handle absolute paths. c.FileFS() with an explicit filesystem works
+// correctly regardless of the dashboard directory location.
+func (s *Server) setupDashboardRoutes() {
+	if s.dashboardDir == "" {
+		return
+	}
+
+	indexPath := filepath.Join(s.dashboardDir, "index.html")
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		slog.Warn("Dashboard directory set but index.html not found — skipping static serving",
+			"dir", s.dashboardDir)
+		return
+	}
+
+	slog.Info("Serving dashboard from disk", "dir", s.dashboardDir)
+
+	dashFS := os.DirFS(s.dashboardDir)
+
+	// Serve hashed Vite assets (JS, CSS, images) from /assets/.
+	assetsFS, err := fs.Sub(dashFS, "assets")
+	if err == nil {
+		s.echo.StaticFS("/assets", assetsFS)
+	}
+
+	// SPA fallback: all other non-API, non-health, non-ws paths serve index.html.
+	// This allows React Router to handle client-side routing.
+	s.echo.GET("/*", func(c *echo.Context) error {
+		path := c.Request().URL.Path
+
+		// API and health routes are handled by earlier registrations.
+		// This is a safety check — shouldn't normally be reached for these.
+		if strings.HasPrefix(path, "/api/") || path == "/health" {
+			return echo.NewHTTPError(http.StatusNotFound, "not found")
+		}
+
+		// Try to serve the exact file first (e.g., /favicon.ico, /robots.txt)
+		relPath := strings.TrimPrefix(path, "/")
+		if relPath != "" {
+			if info, statErr := fs.Stat(dashFS, relPath); statErr == nil && !info.IsDir() {
+				return c.FileFS(relPath, dashFS)
+			}
+		}
+
+		// Fall back to index.html for SPA routing
+		return c.FileFS("index.html", dashFS)
+	})
 }
 
 // Start starts the HTTP server on the given address (non-blocking).

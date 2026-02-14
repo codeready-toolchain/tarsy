@@ -68,5 +68,9 @@ deploy/config/.env
 # Logs
 *.log
 
+# Dashboard
+web/dashboard/node_modules/
+web/dashboard/dist/
+
 # Temporary files
 temp/

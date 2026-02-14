@@ -123,36 +123,76 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 }
 
 func initBuiltinLLMProviders() map[string]LLMProviderConfig {
+	// Google native tools shared across all Gemini providers.
+	geminiNativeTools := map[GoogleNativeTool]bool{
+		GoogleNativeToolGoogleSearch:  true,
+		GoogleNativeToolCodeExecution: false, // Disabled by default
+		GoogleNativeToolURLContext:    true,
+	}
+
 	return map[string]LLMProviderConfig{
+		// --- Google Gemini ---
 		"google-default": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3-flash-preview",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools,
+		},
+		"gemini-3-flash": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3-flash-preview",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools,
+		},
+		"gemini-3-pro": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3-pro-preview",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools,
+		},
+		"gemini-2.5-flash": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-2.5-flash",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools,
+		},
+		"gemini-2.5-pro": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-2.5-pro",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools: map[GoogleNativeTool]bool{
-				GoogleNativeToolGoogleSearch:  true,
-				GoogleNativeToolCodeExecution: false, // Disabled by default
-				GoogleNativeToolURLContext:    true,
-			},
+			NativeTools:         geminiNativeTools,
 		},
+
+		// --- OpenAI ---
 		"openai-default": {
 			Type:                LLMProviderTypeOpenAI,
-			Model:               "gpt-5",
+			Model:               "o3",
 			APIKeyEnv:           "OPENAI_API_KEY",
 			MaxToolResultTokens: 250000, // Conservative for 272K context
 		},
+
+		// --- Anthropic ---
 		"anthropic-default": {
 			Type:                LLMProviderTypeAnthropic,
-			Model:               "claude-sonnet-4-20250514",
+			Model:               "claude-sonnet-4-5-20250929",
 			APIKeyEnv:           "ANTHROPIC_API_KEY",
 			MaxToolResultTokens: 150000, // Conservative for 200K context
 		},
+
+		// --- xAI ---
 		"xai-default": {
 			Type:                LLMProviderTypeXAI,
-			Model:               "grok-4",
+			Model:               "grok-4-1-fast-reasoning",
 			APIKeyEnv:           "XAI_API_KEY",
-			MaxToolResultTokens: 200000, // Conservative for 256K context
+			MaxToolResultTokens: 1500000, // Conservative for 2M context
 		},
+
+		// --- Vertex AI ---
 		"vertexai-default": {
 			Type:                LLMProviderTypeVertexAI,
 			Model:               "claude-sonnet-4-5@20250929", // Claude Sonnet 4.5 on Vertex AI

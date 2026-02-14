@@ -16,7 +16,7 @@ help: ## Show this help message
 	@echo ""
 	@echo -e "$(YELLOW)🚀 Quick Start:$(NC)"
 	@echo "  make dev-setup    # First time setup (DB + code generation)"
-	@echo "  make db-start     # Start PostgreSQL"
+	@echo "  make dev          # Start everything (DB + backend + dashboard)"
 	@echo "  make build        # Build the application"
 	@echo ""
 	@echo -e "$(YELLOW)📋 Available Commands:$(NC)"

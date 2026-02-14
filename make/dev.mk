@@ -7,6 +7,24 @@ check: fmt build lint-fix test ## Format, build, lint, and run all tests
 	@echo ""
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 
+.PHONY: dev
+dev: db-start build ## Start full dev environment (DB + backend + dashboard)
+	@echo -e "$(GREEN)Starting development environment...$(NC)"
+	@echo -e "$(BLUE)  PostgreSQL: localhost:5432$(NC)"
+	@echo -e "$(BLUE)  Go backend: localhost:8080$(NC)"
+	@echo -e "$(BLUE)  Dashboard:  localhost:5173$(NC)"
+	@echo ""
+	@trap 'kill 0' EXIT; \
+		./bin/tarsy & \
+		cd web/dashboard && npm run dev
+
+.PHONY: dev-stop
+dev-stop: db-stop ## Stop all dev services (DB + backend + dashboard)
+	@echo -e "$(YELLOW)Stopping development services...$(NC)"
+	@-pkill -f 'bin/tarsy' 2>/dev/null; true
+	@-pkill -f 'web/dashboard.*vite' 2>/dev/null; true
+	@echo -e "$(GREEN)✅ All services stopped$(NC)"
+
 .PHONY: dev-setup
 dev-setup: db-start ent-generate ## Setup development environment
 	@echo ""
@@ -102,14 +120,37 @@ test-llm-coverage: ## Run LLM service tests with coverage
 	@echo -e "$(GREEN)✅ LLM service tests complete$(NC)"
 
 # -----------------------------------------------------------------------------
-# Dashboard Tests (placeholder for future)
+# Dashboard
 # -----------------------------------------------------------------------------
 
-# .PHONY: test-dashboard
-# test-dashboard: ## Run dashboard tests
-# 	@echo -e "$(YELLOW)Running dashboard tests...$(NC)"
-# 	@cd dashboard && npm test
-# 	@echo -e "$(GREEN)✅ Dashboard tests passed$(NC)"
+.PHONY: dashboard-install
+dashboard-install: ## Install dashboard dependencies
+	@echo -e "$(YELLOW)Installing dashboard dependencies...$(NC)"
+	@cd web/dashboard && npm install
+	@echo -e "$(GREEN)✅ Dashboard dependencies installed$(NC)"
+
+.PHONY: dashboard-dev
+dashboard-dev: ## Start dashboard dev server (Vite)
+	@echo -e "$(YELLOW)Starting dashboard dev server...$(NC)"
+	@cd web/dashboard && npm run dev
+
+.PHONY: dashboard-build
+dashboard-build: ## Build dashboard for production
+	@echo -e "$(YELLOW)Building dashboard...$(NC)"
+	@cd web/dashboard && npm run build
+	@echo -e "$(GREEN)✅ Dashboard built to web/dashboard/dist/$(NC)"
+
+.PHONY: dashboard-test
+dashboard-test: ## Run dashboard tests
+	@echo -e "$(YELLOW)Running dashboard tests...$(NC)"
+	@cd web/dashboard && npm run test:run
+	@echo -e "$(GREEN)✅ Dashboard tests passed$(NC)"
+
+.PHONY: dashboard-lint
+dashboard-lint: ## Lint dashboard code
+	@echo -e "$(YELLOW)Linting dashboard...$(NC)"
+	@cd web/dashboard && npm run lint
+	@echo -e "$(GREEN)✅ Dashboard lint passed$(NC)"
 
 .PHONY: lint
 lint: ## Run golangci-lint

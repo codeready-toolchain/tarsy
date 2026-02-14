@@ -140,7 +140,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, 4, toInt(cfg["agents"]))
 		assert.Equal(t, 2, toInt(cfg["chains"]))
 		assert.Equal(t, 1, toInt(cfg["mcp_servers"]))
-		assert.Equal(t, 6, toInt(cfg["llm_providers"]))
+		assert.Equal(t, 10, toInt(cfg["llm_providers"]))
 
 		// Worker pool.
 		wp, ok := health["worker_pool"].(map[string]interface{})
