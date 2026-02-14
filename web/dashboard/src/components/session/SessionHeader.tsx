@@ -14,15 +14,11 @@ import {
   Tooltip,
   alpha,
   LinearProgress,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import {
   CancelOutlined,
   Replay as ReplayIcon,
   CallSplit,
-  Psychology,
-  AccountTree,
 } from '@mui/icons-material';
 import { StatusBadge } from '../common/StatusBadge';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
@@ -67,12 +63,8 @@ const pulseAnimationSx = {
   animation: 'livePulse 2s ease-in-out infinite',
 };
 
-export type SessionView = 'reasoning' | 'trace';
-
 interface SessionHeaderProps {
   session: SessionDetailResponse;
-  view: SessionView;
-  onViewChange: (view: SessionView) => void;
   /** Live duration for active sessions (ticking) */
   liveDurationMs?: number | null;
 }
@@ -84,8 +76,6 @@ interface SessionHeaderProps {
  */
 export default function SessionHeader({
   session,
-  view,
-  onViewChange,
   liveDurationMs,
 }: SessionHeaderProps) {
   const navigate = useNavigate();
@@ -685,36 +675,6 @@ export default function SessionHeader({
           </Box>
         )}
 
-        {/* View segmented control */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <ToggleButtonGroup
-            value={view}
-            exclusive
-            onChange={(_, newView) => newView && onViewChange(newView)}
-            size="small"
-          >
-            <ToggleButton
-              value="reasoning"
-              sx={{ px: 2, textTransform: 'none', fontWeight: 600 }}
-            >
-              <Psychology sx={{ mr: 0.5, fontSize: 18 }} />
-              Reasoning
-            </ToggleButton>
-            <ToggleButton
-              value="trace"
-              sx={{ px: 2, textTransform: 'none', fontWeight: 600 }}
-            >
-              <AccountTree sx={{ mr: 0.5, fontSize: 18 }} />
-              Trace
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
       </Box>
 
       {/* Cancel Dialog */}
