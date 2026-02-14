@@ -13,10 +13,30 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Box } from '@mui/material';
+import type { MouseEvent } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import {
+  Container,
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  Tooltip,
+  CircularProgress,
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+} from '@mui/material';
+import { Refresh, Menu as MenuIcon, Send as SendIcon } from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
+import { useAuth } from '../../contexts/AuthContext.tsx';
+import { LoginButton } from '../auth/LoginButton.tsx';
+import { UserMenu } from '../auth/UserMenu.tsx';
+import { VersionFooter } from '../layout/VersionFooter.tsx';
 import {
   getSessions,
   getActiveSessions,
@@ -45,8 +65,6 @@ import {
   getDefaultSort,
   mergeWithDefaults,
 } from '../../utils/filterPersistence.ts';
-import { hasActiveFilters } from '../../utils/search.ts';
-
 const REFRESH_THROTTLE_MS = 1000;
 const FILTER_DEBOUNCE_MS = 300;
 
@@ -88,6 +106,22 @@ function buildQueryParams(
 }
 
 export function DashboardView() {
+  const { isAuthenticated, authAvailable } = useAuth();
+
+  // ── Navigation menu state ──
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+
+  const handleMenuOpen = (event: MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+  const handleManualAlertSubmission = () => {
+    window.open('/submit-alert', '_blank', 'noopener,noreferrer');
+    handleMenuClose();
+  };
+
   // ── Active sessions state ──
   const [activeSessions, setActiveSessions] = useState<ActiveSessionItem[]>([]);
   const [queuedSessions, setQueuedSessions] = useState<QueuedSessionItem[]>([]);
@@ -381,12 +415,271 @@ export function DashboardView() {
   const handleRefreshActive = () => fetchActiveAlerts();
   const handleRefreshHistorical = () => fetchHistoricalAlerts();
 
+  const handleWebSocketRetry = () => {
+    websocketService.connect();
+  };
+
   // ────────────────────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────────────────────
 
   return (
-    <Box>
+    <Container maxWidth={false} sx={{ px: 2 }}>
+      {/* AppBar with dashboard title and live indicator — ported from old dashboard */}
+      <AppBar
+        position="static"
+        elevation={0}
+        sx={{
+          borderRadius: 1,
+          background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+          boxShadow: '0 4px 16px rgba(25, 118, 210, 0.3)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}
+      >
+        <Toolbar>
+          {/* Navigation Menu */}
+          <IconButton
+            id="navigation-menu-button"
+            size="large"
+            edge="start"
+            color="inherit"
+            aria-label="menu"
+            onClick={handleMenuOpen}
+            sx={{
+              mr: 2,
+              background: 'rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                background: 'rgba(255, 255, 255, 0.2)',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
+              },
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box
+              component={RouterLink}
+              to="/"
+              aria-label="Home"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                background: 'rgba(255, 255, 255, 0.1)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow:
+                  '0 4px 12px rgba(0, 0, 0, 0.15), 0 0 20px rgba(255, 255, 255, 0.1)',
+                transition: 'all 0.3s ease',
+                position: 'relative',
+                overflow: 'hidden',
+                textDecoration: 'none',
+                '&:before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: '-100%',
+                  width: '100%',
+                  height: '100%',
+                  background:
+                    'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
+                  animation: 'none',
+                },
+                '&:hover': {
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  transform: 'translateY(-2px) scale(1.05)',
+                  boxShadow:
+                    '0 8px 25px rgba(0, 0, 0, 0.2), 0 0 30px rgba(255, 255, 255, 0.2)',
+                  '&:before': {
+                    animation: 'shimmer 0.6s ease-out',
+                  },
+                },
+                '&:focus-visible': {
+                  outline: '2px solid rgba(255, 255, 255, 0.8)',
+                  outlineOffset: '2px',
+                },
+                '@keyframes shimmer': {
+                  '0%': { left: '-100%' },
+                  '100%': { left: '100%' },
+                },
+              }}
+            >
+              <img
+                src="/tarsy-logo.png"
+                alt="TARSy logo"
+                style={{
+                  height: '28px',
+                  width: 'auto',
+                  borderRadius: '3px',
+                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))',
+                }}
+              />
+            </Box>
+            <Typography
+              variant="h5"
+              component="div"
+              sx={{
+                fontWeight: 600,
+                letterSpacing: '-0.5px',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                background:
+                  'linear-gradient(45deg, #ffffff 0%, rgba(255, 255, 255, 0.9) 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                color: 'white',
+              }}
+            >
+              TARSy
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              flexGrow: 1,
+              justifyContent: 'flex-end',
+            }}
+          >
+            {/* WebSocket Retry Button - only show when disconnected */}
+            {!wsConnected && (
+              <Tooltip title="Retry WebSocket connection">
+                <IconButton
+                  size="small"
+                  onClick={handleWebSocketRetry}
+                  sx={{
+                    color: 'inherit',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                >
+                  <Refresh fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Loading indicator */}
+            {(activeLoading || historicalLoading) && (
+              <Tooltip title="Loading data...">
+                <CircularProgress size={18} sx={{ color: 'inherit' }} />
+              </Tooltip>
+            )}
+
+            {/* Connection Status Indicator - Fancy LIVE / Offline badge */}
+            <Tooltip
+              title={
+                wsConnected
+                  ? 'Connected - Real-time updates active'
+                  : 'Disconnected - Use manual refresh buttons or retry connection'
+              }
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1.5,
+                  py: 0.6,
+                  borderRadius: 3,
+                  background: wsConnected
+                    ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(139, 195, 74, 0.2))'
+                    : 'linear-gradient(135deg, rgba(244, 67, 54, 0.2), rgba(255, 87, 51, 0.2))',
+                  border: `2px solid ${wsConnected ? 'rgba(76, 175, 80, 0.6)' : 'rgba(244, 67, 54, 0.6)'}`,
+                  minWidth: 'fit-content',
+                  boxShadow: wsConnected
+                    ? '0 4px 20px rgba(76, 175, 80, 0.4), 0 0 15px rgba(76, 175, 80, 0.2)'
+                    : '0 4px 20px rgba(244, 67, 54, 0.4), 0 0 15px rgba(244, 67, 54, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    boxShadow: wsConnected
+                      ? '0 6px 25px rgba(76, 175, 80, 0.5), 0 0 20px rgba(76, 175, 80, 0.3)'
+                      : '0 6px 25px rgba(244, 67, 54, 0.5), 0 0 20px rgba(244, 67, 54, 0.3)',
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    backgroundColor: wsConnected ? '#81C784' : '#FF7043',
+                    boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
+                    animation: wsConnected ? 'none' : 'pulse 2s infinite',
+                    '@keyframes pulse': {
+                      '0%': {
+                        opacity: 0.7,
+                        transform: 'scale(1)',
+                        boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
+                      },
+                      '50%': {
+                        opacity: 1,
+                        transform: 'scale(1.3)',
+                        boxShadow: `0 0 12px ${wsConnected ? '#4CAF50' : '#F44336'}`,
+                      },
+                      '100%': {
+                        opacity: 0.7,
+                        transform: 'scale(1)',
+                        boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
+                      },
+                    },
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'white',
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                    letterSpacing: '0.8px',
+                    textTransform: 'uppercase',
+                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                  }}
+                >
+                  {wsConnected ? 'Live' : 'Offline'}
+                </Typography>
+              </Box>
+            </Tooltip>
+
+            {/* Authentication Elements */}
+            {authAvailable && !isAuthenticated && <LoginButton size="medium" />}
+            {authAvailable && isAuthenticated && <UserMenu />}
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      {/* Navigation Menu */}
+      <Menu
+        id="navigation-menu"
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        MenuListProps={{
+          'aria-labelledby': 'navigation-menu-button',
+        }}
+      >
+        <MenuItem onClick={handleManualAlertSubmission}>
+          <ListItemIcon>
+            <SendIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Manual Alert Submission</ListItemText>
+        </MenuItem>
+      </Menu>
+
       {/* Filter Panel */}
       <FilterPanel
         filters={filters}
@@ -395,8 +688,9 @@ export function DashboardView() {
         filterOptions={filterOptions}
       />
 
-      {/* Active Alerts Panel */}
+      {/* Main content area */}
       <Box sx={{ mt: 2 }}>
+        {/* Active Alerts Panel */}
         <ActiveAlertsPanel
           activeSessions={activeSessions}
           queuedSessions={queuedSessions}
@@ -406,22 +700,25 @@ export function DashboardView() {
           wsConnected={wsConnected}
           onRefresh={handleRefreshActive}
         />
+
+        {/* Historical Alerts Table */}
+        <HistoricalAlertsList
+          sessions={historicalSessions}
+          loading={historicalLoading}
+          error={historicalError}
+          filters={filters}
+          filteredCount={pagination.totalItems}
+          sortState={sortState}
+          pagination={pagination}
+          onRefresh={handleRefreshHistorical}
+          onSortChange={handleSortChange}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </Box>
 
-      {/* Historical Sessions Table */}
-      <HistoricalAlertsList
-        sessions={historicalSessions}
-        loading={historicalLoading}
-        error={historicalError}
-        filters={filters}
-        filteredCount={pagination.totalItems}
-        sortState={sortState}
-        pagination={pagination}
-        onRefresh={handleRefreshHistorical}
-        onSortChange={handleSortChange}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
-    </Box>
+      {/* Version footer */}
+      <VersionFooter />
+    </Container>
   );
 }

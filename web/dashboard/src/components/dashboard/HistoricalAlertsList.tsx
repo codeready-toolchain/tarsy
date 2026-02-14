@@ -66,7 +66,7 @@ export function HistoricalAlertsList({
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Session History
+          Alert History
           <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
             ({filteredCount.toLocaleString()} result{filteredCount !== 1 ? 's' : ''})
           </Typography>
@@ -137,17 +137,17 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Chain — not sortable (matches old dashboard column order) */}
-                  <TableCell sx={{ fontWeight: 600 }}>Chain</TableCell>
+                  {/* Agent Chain — not sortable (matches old dashboard column order) */}
+                  <TableCell sx={{ fontWeight: 600 }}>Agent Chain</TableCell>
 
-                  {/* Author — sortable */}
+                  {/* Submitted by — sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>
                     <TableSortLabel
                       active={sortState.field === 'author'}
                       direction={sortState.field === 'author' ? sortState.direction : 'asc'}
                       onClick={() => onSortChange('author')}
                     >
-                      Author
+                      Submitted by
                     </TableSortLabel>
                   </TableCell>
 
@@ -204,7 +204,7 @@ export function HistoricalAlertsList({
                           <>
                             <SearchOff sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
                             <Typography variant="h6" color="text.secondary" gutterBottom>
-                              No sessions found
+                              No alerts found
                             </Typography>
                             <Typography variant="body2" color="text.disabled">
                               Try adjusting your search terms or filters
@@ -213,10 +213,10 @@ export function HistoricalAlertsList({
                         ) : (
                           <>
                             <Typography variant="h6" color="text.secondary" gutterBottom>
-                              No Session History
+                              No Historical Alerts
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                              No completed, failed, or cancelled sessions found.
+                              No completed, failed, or cancelled alerts found.
                             </Typography>
                           </>
                         )}

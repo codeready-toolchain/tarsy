@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import type { PaginationState } from '../../types/dashboard.ts';
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 interface PaginationControlsProps {
   pagination: PaginationState;
@@ -113,7 +113,7 @@ export function PaginationControls({
         {pagination.totalPages > 10 && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              Go to:
+              Go to page:
             </Typography>
             <TextField
               size="small"

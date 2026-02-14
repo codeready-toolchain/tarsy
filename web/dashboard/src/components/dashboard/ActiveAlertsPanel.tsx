@@ -104,7 +104,7 @@ export function ActiveAlertsPanel({
             No Active Alerts
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            All alerts are completed or there are no alerts in the system.
+            All alerts are currently completed or there are no alerts in the system.
           </Typography>
         </Box>
       ) : (
@@ -133,9 +133,9 @@ export function ActiveAlertsPanel({
           <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
             <Typography variant="body2" color="text.secondary">
               {activeSessions.length > 0 && `${activeSessions.length} active`}
-              {queuedSessions.length > 0 && activeSessions.length > 0 && ' · '}
+              {queuedSessions.length > 0 && activeSessions.length > 0 && ' • '}
               {queuedSessions.length > 0 && `${queuedSessions.length} queued`}
-              {wsConnected && ' · Live updates enabled'}
+              {wsConnected && ' • Live updates enabled'}
             </Typography>
           </Box>
         </>

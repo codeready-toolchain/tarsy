@@ -13,7 +13,7 @@ export interface SessionFilter {
   chain_id: string;
   start_date: string | null; // RFC3339
   end_date: string | null; // RFC3339
-  date_preset: string | null; // 'today' | '7d' | '30d' | null (custom)
+  date_preset: string | null; // '10m' | '1h' | '12h' | '1d' | '7d' | '30d' | null (custom)
 }
 
 /** Pagination state tracking both local page and backend totals. */

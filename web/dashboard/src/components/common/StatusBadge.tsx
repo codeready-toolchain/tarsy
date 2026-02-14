@@ -38,7 +38,7 @@ function getStatusConfig(status: string): StatusConfig {
       return {
         color: 'warning',
         icon: <HourglassEmpty sx={{ fontSize: 16 }} />,
-        label: 'Cancelling',
+        label: 'Canceling',
       };
     case SESSION_STATUS.COMPLETED:
       return { color: 'success', icon: <CheckCircle sx={{ fontSize: 16 }} />, label: 'Completed' };

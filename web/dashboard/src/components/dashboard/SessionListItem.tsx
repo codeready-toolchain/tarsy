@@ -123,7 +123,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
       {/* Parallel stages indicator */}
       <TableCell sx={{ width: 40, textAlign: 'center', px: 0.5 }}>
         {session.has_parallel_stages && (
-          <Tooltip title="Parallel Agents — multiple agents ran in parallel">
+          <Tooltip title="Parallel Agents - Multiple agents run in parallel">
             <Chip
               icon={<CallSplit sx={{ fontSize: '0.875rem' }} />}
               size="small"
@@ -147,12 +147,12 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Typography>
       </TableCell>
 
-      {/* Chain */}
+      {/* Agent Chain */}
       <TableCell>
         <Typography variant="body2">{session.chain_id}</Typography>
       </TableCell>
 
-      {/* Author */}
+      {/* Submitted by */}
       <TableCell>
         <Typography variant="body2" color="text.secondary">
           {session.author ?? '—'}
@@ -194,7 +194,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
       <TableCell sx={{ width: 40, textAlign: 'center', px: 0.5 }}>
         {session.chat_message_count > 0 && (
           <Tooltip
-            title={`${session.chat_message_count} chat message${session.chat_message_count !== 1 ? 's' : ''}`}
+            title={`Follow-up chat active (${session.chat_message_count} message${session.chat_message_count !== 1 ? 's' : ''})`}
           >
             <Chip
               icon={<ChatIcon sx={{ fontSize: '0.875rem' }} />}

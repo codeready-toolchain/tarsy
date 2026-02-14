@@ -124,7 +124,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
             </Typography>
             <Chip label={sessions.length} color="warning" size="small" sx={{ fontWeight: 600 }} />
             <Typography variant="body2" color="text.secondary">
-              — Expected to start soon
+              • Expected to start soon
             </Typography>
           </Box>
         </AccordionSummary>
@@ -272,7 +272,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
             disabled={isCanceling}
             startIcon={isCanceling ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isCanceling ? 'Cancelling...' : 'Yes, Cancel Session'}
+            {isCanceling ? 'Canceling...' : 'Yes, Cancel Session'}
           </Button>
         </DialogActions>
       </Dialog>
