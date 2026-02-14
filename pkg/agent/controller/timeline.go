@@ -268,6 +268,11 @@ func completeToolCallEvent(
 		return
 	}
 
+	// Guard against empty content which fails DB validation
+	if content == "" {
+		content = "(empty result)"
+	}
+
 	completionMeta := map[string]interface{}{"is_error": isError}
 
 	if err := execCtx.Services.Timeline.CompleteTimelineEventWithMetadata(

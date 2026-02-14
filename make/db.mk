@@ -4,7 +4,7 @@
 
 # Container configuration
 CONTAINER_NAME := tarsy-postgres
-IMAGE_NAME := docker.io/library/postgres:16-alpine
+IMAGE_NAME := docker.io/library/postgres:17-alpine
 COMPOSE_FILE := $(CURDIR)/deploy/podman-compose.yml
 
 # Database configuration (can be overridden via environment)
@@ -95,6 +95,9 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	read REPLY; \
 	case "$$REPLY" in \
 		[Yy]|[Yy][Ee][Ss]) \
+			echo -e "$(YELLOW)Terminating active connections...$(NC)"; \
+			podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c \
+				"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(DB_NAME)' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true; \
 			echo -e "$(YELLOW)Dropping and recreating database...$(NC)"; \
 			podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(DB_NAME);"; \
 			podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "CREATE DATABASE $(DB_NAME);"; \
@@ -166,6 +169,12 @@ ent-clean: ## Clean generated Ent code (keeps schemas)
 # =============================================================================
 # Uses Atlas CLI to generate migrations, golang-migrate to apply them
 # Migrations are stored in pkg/database/migrations/ and embedded into the binary
+#
+# Atlas needs a clean "dev database" to replay migrations and compute diffs.
+# We use a temporary database (tarsy_atlas_dev) so the real dev DB is untouched.
+
+ATLAS_DEV_DB := tarsy_atlas_dev
+ATLAS_DEV_DSN := postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(ATLAS_DEV_DB)?sslmode=disable
 
 .PHONY: migrate-create
 migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_feature)
@@ -173,11 +182,29 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 		echo -e "$(RED)Error: Please specify NAME=migration_name$(NC)"; \
 		exit 1; \
 	fi
+	@echo -e "$(YELLOW)Creating temporary Atlas dev database...$(NC)"
+	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c \
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(ATLAS_DEV_DB)' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true
+	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(ATLAS_DEV_DB);" > /dev/null 2>&1
+	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "CREATE DATABASE $(ATLAS_DEV_DB);" > /dev/null 2>&1
 	@echo -e "$(YELLOW)Creating migration: $(NAME)...$(NC)"
 	@atlas migrate diff $(NAME) \
 		--dir "file://pkg/database/migrations?format=golang-migrate" \
 		--to "ent://ent/schema" \
-		--dev-url "$(DB_DSN)"
-	@echo -e "$(GREEN)✅ Migration created in pkg/database/migrations/$(NC)"
-	@echo -e "$(BLUE)Review the SQL files, then commit to git$(NC)"
-	@echo -e "$(BLUE)Note: Migrations are embedded into binary at compile time$(NC)"
+		--dev-url "$(ATLAS_DEV_DSN)" \
+	&& { \
+		rm -f pkg/database/migrations/*.down.sql; \
+		echo -e "$(GREEN)✅ Migration created in pkg/database/migrations/$(NC)"; \
+		echo -e "$(BLUE)Review the .up.sql file, then commit to git$(NC)"; \
+	}; \
+	EXIT_CODE=$$?; \
+	podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c \
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(ATLAS_DEV_DB)' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true; \
+	podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(ATLAS_DEV_DB);" > /dev/null 2>&1; \
+	exit $$EXIT_CODE
+
+.PHONY: migrate-hash
+migrate-hash: ## Regenerate atlas.sum checksum file
+	@echo -e "$(YELLOW)Regenerating atlas.sum...$(NC)"
+	@atlas migrate hash --dir "file://pkg/database/migrations?format=golang-migrate"
+	@echo -e "$(GREEN)✅ atlas.sum updated$(NC)"

@@ -116,7 +116,7 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 		initScriptPath := resolveInitScriptPath()
 
 		pgContainer, err := postgres.Run(ctx,
-			"postgres:16-alpine",
+			"postgres:17-alpine",
 			postgres.WithDatabase("test"),
 			postgres.WithUsername("test"),
 			postgres.WithPassword("test"),
