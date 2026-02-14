@@ -5,7 +5,7 @@
 # Container configuration
 CONTAINER_NAME := tarsy-postgres
 IMAGE_NAME := docker.io/library/postgres:16-alpine
-COMPOSE_FILE := deploy/podman-compose.yml
+COMPOSE_FILE := $(CURDIR)/deploy/podman-compose.yml
 
 # Database configuration (can be overridden via environment)
 DB_HOST := localhost
@@ -23,8 +23,12 @@ DB_DSN := postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME
 
 .PHONY: db-start
 db-start: ## Start PostgreSQL container
-	@echo -e "$(YELLOW)Starting PostgreSQL container...$(NC)"
-	@podman-compose -f $(COMPOSE_FILE) up -d
+	@if podman ps --format '{{.Names}}' | grep -q '^$(CONTAINER_NAME)$$'; then \
+		echo -e "$(GREEN)PostgreSQL container already running$(NC)"; \
+	else \
+		echo -e "$(YELLOW)Starting PostgreSQL container...$(NC)"; \
+		podman-compose -f $(COMPOSE_FILE) up -d; \
+	fi
 	@echo -e "$(BLUE)Waiting for PostgreSQL to be ready...$(NC)"
 	@until podman exec $(CONTAINER_NAME) pg_isready -U $(DB_USER) > /dev/null 2>&1; do \
 		sleep 1; \
