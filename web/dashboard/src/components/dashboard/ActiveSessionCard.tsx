@@ -111,8 +111,7 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
 
   const totalStages = progress?.total_stages ?? 0;
   const currentIndex = progress?.current_stage_index ?? session.current_stage_index ?? 0;
-  const progressPercent = totalStages > 0 ? Math.round((currentIndex / totalStages) * 100) : 0;
-  const stageName = progress?.current_stage_name ?? 'Starting...';
+  const stageName = progress?.current_stage_name ?? 'starting';
   const statusText = progress?.status_text ?? '';
 
   const statusConfig = getStatusChipConfig(session.status);
@@ -159,9 +158,11 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
                 size="small"
                 sx={{ fontWeight: 500 }}
               />
-              <Typography variant="body2" color="text.secondary">
-                {session.alert_type || 'Alert'}
-              </Typography>
+              {session.chain_id && (
+                <Typography variant="body2" color="text.secondary">
+                  {session.chain_id}
+                </Typography>
+              )}
             </Box>
           </Box>
 
@@ -183,9 +184,9 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
           </Tooltip>
         </Box>
 
-        {/* Alert type title */}
+        {/* Alert type as main title */}
         <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-          {session.chain_id || session.alert_type || 'Processing'}
+          {session.alert_type || 'Alert'}
         </Typography>
 
         {/* Author + started time */}
@@ -207,52 +208,16 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
           </Typography>
         </Box>
 
-        {/* Stage progress (chain stages — new TARSy feature) */}
-        {totalStages > 0 && (
-          <Box sx={{ mb: 1.5 }}>
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                mb: 0.5,
-              }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                {stageName}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {currentIndex}/{totalStages} stages
-              </Typography>
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              value={progressPercent}
-              sx={{
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: 'grey.200',
-                '& .MuiLinearProgress-bar': { backgroundColor: 'success.main', borderRadius: 3 },
-              }}
-            />
-          </Box>
-        )}
-
         {/* Activity indicator — animated indeterminate bar (from old dashboard ProgressIndicator) */}
         {(isActive || isCancelling) && (
           <Box sx={{ mb: 1.5 }}>
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                mb: 0.5,
-              }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                {isActive ? 'Processing...' : 'Cancelling...'}
-              </Typography>
-            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+              {isCancelling
+                ? 'Cancelling...'
+                : totalStages > 0
+                  ? `Processing (${currentIndex}/${totalStages} stages, ${stageName})...`
+                  : 'Processing...'}
+            </Typography>
             <LinearProgress
               variant="indeterminate"
               color={isCancelling ? 'warning' : 'info'}

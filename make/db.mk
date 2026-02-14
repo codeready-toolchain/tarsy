@@ -183,6 +183,8 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 		exit 1; \
 	fi
 	@echo -e "$(YELLOW)Creating temporary Atlas dev database...$(NC)"
+	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c \
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(ATLAS_DEV_DB)' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true
 	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(ATLAS_DEV_DB);" > /dev/null 2>&1
 	@podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "CREATE DATABASE $(ATLAS_DEV_DB);" > /dev/null 2>&1
 	@echo -e "$(YELLOW)Creating migration: $(NAME)...$(NC)"
@@ -196,6 +198,8 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 		echo -e "$(BLUE)Review the .up.sql file, then commit to git$(NC)"; \
 	}; \
 	EXIT_CODE=$$?; \
+	podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c \
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$(ATLAS_DEV_DB)' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true; \
 	podman exec $(CONTAINER_NAME) psql -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(ATLAS_DEV_DB);" > /dev/null 2>&1; \
 	exit $$EXIT_CODE
 
