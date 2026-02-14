@@ -194,7 +194,7 @@ class GoogleNativeProvider(LLMProvider):
             if native_tools.get("code_execution"):
                 result_tools.append(genai_types.Tool(code_execution=genai_types.ToolCodeExecution()))
             if native_tools.get("url_context"):
-                result_tools.append(genai_types.Tool(url_context=genai_types.ToolUrlContext()))
+                result_tools.append(genai_types.Tool(url_context=genai_types.UrlContext()))
 
         return result_tools if result_tools else None
 

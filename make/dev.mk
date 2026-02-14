@@ -8,20 +8,23 @@ check: fmt build lint-fix test ## Format, build, lint, and run all tests
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 
 .PHONY: dev
-dev: db-start build ## Start full dev environment (DB + backend + dashboard)
+dev: db-start build ## Start full dev environment (DB + LLM + backend + dashboard)
 	@echo -e "$(GREEN)Starting development environment...$(NC)"
-	@echo -e "$(BLUE)  PostgreSQL: localhost:5432$(NC)"
-	@echo -e "$(BLUE)  Go backend: localhost:8080$(NC)"
-	@echo -e "$(BLUE)  Dashboard:  localhost:5173$(NC)"
+	@echo -e "$(BLUE)  PostgreSQL:   localhost:5432$(NC)"
+	@echo -e "$(BLUE)  LLM service:  localhost:50051$(NC)"
+	@echo -e "$(BLUE)  Go backend:   localhost:8080$(NC)"
+	@echo -e "$(BLUE)  Dashboard:    localhost:5173$(NC)"
 	@echo ""
 	@trap 'kill 0' EXIT; \
-		./bin/tarsy & \
+		cd llm-service && uv run python -m llm.server & \
+		sleep 2 && ./bin/tarsy & \
 		cd web/dashboard && npm run dev
 
 .PHONY: dev-stop
-dev-stop: db-stop ## Stop all dev services (DB + backend + dashboard)
+dev-stop: db-stop ## Stop all dev services (DB + LLM + backend + dashboard)
 	@echo -e "$(YELLOW)Stopping development services...$(NC)"
 	@-pkill -f 'bin/tarsy' 2>/dev/null; true
+	@-pkill -f 'llm.server' 2>/dev/null; true
 	@-pkill -f 'web/dashboard.*vite' 2>/dev/null; true
 	@echo -e "$(GREEN)✅ All services stopped$(NC)"
 

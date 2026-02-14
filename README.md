@@ -48,8 +48,8 @@ HTTP API + WebSocket server with PostgreSQL persistence.
 ## Prerequisites
 
 - Python 3.11+ with `uv` installed
-- Go 1.21+
-- PostgreSQL 16+ (or podman/docker for local development)
+- Go 1.25+
+- PostgreSQL 17+ (or podman/docker for local development)
 - `protoc` (Protocol Buffers compiler)
 
 ## Setup

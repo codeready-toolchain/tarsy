@@ -4,7 +4,7 @@
 
 # Container configuration
 CONTAINER_NAME := tarsy-postgres
-IMAGE_NAME := docker.io/library/postgres:16-alpine
+IMAGE_NAME := docker.io/library/postgres:17-alpine
 COMPOSE_FILE := $(CURDIR)/deploy/podman-compose.yml
 
 # Database configuration (can be overridden via environment)

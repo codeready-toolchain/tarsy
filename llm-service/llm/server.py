@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 async def serve(port: int = 50051):
     """Start the gRPC server."""
-    # Load .env file from deploy directory (relative to project root)
-    env_path = Path(__file__).parent.parent.parent / "deploy" / ".env"
+    # Load .env file from deploy/config directory (relative to project root)
+    env_path = Path(__file__).parent.parent.parent / "deploy" / "config" / ".env"
     if env_path.exists():
         load_dotenv(env_path)
         logger.info("Loaded environment variables from %s", env_path)

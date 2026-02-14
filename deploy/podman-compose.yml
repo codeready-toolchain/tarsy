@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: docker.io/library/postgres:16-alpine
+    image: docker.io/library/postgres:17-alpine
     container_name: tarsy-postgres
     environment:
       POSTGRES_USER: tarsy
