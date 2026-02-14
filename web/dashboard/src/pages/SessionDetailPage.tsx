@@ -374,7 +374,9 @@ export function SessionDetailPage() {
 
           // If terminal, re-fetch session for final fields
           if (isTerminalStatus(payload.status as SessionStatus)) {
-            getSession(id).then((fresh) => setSession(fresh)).catch(() => {});
+            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+              console.warn('Failed to re-fetch session after terminal status:', err);
+            });
           }
           return;
         }
@@ -576,7 +578,7 @@ export function SessionDetailPage() {
         {/* Session info */}
         {session && !loading && (
           <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'white' }}>
-            {session.stages?.length || 0} stages &bull; {session.llm_interaction_count + session.mcp_interaction_count} interactions
+            {session.stages?.length || 0} stages &bull; {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
           </Typography>
         )}
 

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Box, Collapse } from '@mui/material';
+import { Box, Collapse, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import EmojiIcon from '../shared/EmojiIcon';
@@ -8,7 +8,6 @@ import CollapseButton from '../shared/CollapseButton';
 import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import type { FlowItem } from '../../utils/timelineParser';
-import { Typography } from '@mui/material';
 
 interface ToolSummaryItemProps {
   item: FlowItem;

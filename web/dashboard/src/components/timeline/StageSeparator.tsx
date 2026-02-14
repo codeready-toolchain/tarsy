@@ -43,10 +43,10 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
             borderRadius: 1, px: 1, py: 0.5,
             transition: 'all 0.2s ease-in-out',
             '&:hover': onToggleCollapse ? {
-              backgroundColor: alpha(isErrorStatus ? '#d32f2f' : '#1976d2', 0.08),
+              backgroundColor: (theme: any) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.08),
               '& .MuiChip-root': {
-                backgroundColor: alpha(isErrorStatus ? '#d32f2f' : '#1976d2', 0.12),
-                borderColor: isErrorStatus ? '#d32f2f' : '#1976d2',
+                backgroundColor: (theme: any) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.12),
+                borderColor: (theme: any) => isErrorStatus ? theme.palette.error.main : theme.palette.primary.main,
               }
             } : {}
           }}
@@ -66,11 +66,11 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
               onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
               sx={{
                 padding: 0.75,
-                backgroundColor: isCollapsed ? alpha('#666', 0.1) : alpha(isErrorStatus ? '#d32f2f' : '#1976d2', 0.1),
+                backgroundColor: (theme: any) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.1),
                 border: '1px solid',
-                borderColor: isCollapsed ? alpha('#666', 0.2) : alpha(isErrorStatus ? '#d32f2f' : '#1976d2', 0.2),
-                color: isCollapsed ? '#666' : 'inherit',
-                '&:hover': { backgroundColor: isCollapsed ? '#666' : (isErrorStatus ? '#d32f2f' : '#1976d2'), color: 'white', transform: 'scale(1.1)' },
+                borderColor: (theme: any) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.2),
+                color: isCollapsed ? 'text.secondary' : 'inherit',
+                '&:hover': { backgroundColor: (theme: any) => isCollapsed ? theme.palette.text.secondary : (isErrorStatus ? theme.palette.error.main : theme.palette.primary.main), color: 'white', transform: 'scale(1.1)' },
                 transition: 'all 0.2s ease-in-out',
               }}
             >

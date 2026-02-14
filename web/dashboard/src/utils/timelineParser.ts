@@ -75,6 +75,7 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
   [TIMELINE_EVENT_TYPES.CODE_EXECUTION]: 'code_execution',
   [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: 'search_result',
   [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: 'url_context',
+  [TIMELINE_EVENT_TYPES.NATIVE_THINKING]: 'thinking',
   [TIMELINE_EVENT_TYPES.ERROR]: 'error',
 };
 
@@ -145,7 +146,7 @@ export function parseTimelineToFlow(
           status: stage.status,
           timestamp: stage.started_at || event.created_at,
           sequenceNumber: event.sequence_number - 0.5, // Before first event in stage
-          isParallelStage: stage.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none' || undefined,
+          isParallelStage: stage.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none' ? true : undefined,
         });
       }
     }

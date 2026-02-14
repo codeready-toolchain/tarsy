@@ -128,7 +128,7 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
     if (!streamingEvents) return byExec;
 
     for (const [eventId, event] of streamingEvents) {
-      const execId = (event as any).executionId || '__default__';
+      const execId = event.executionId || '__default__';
       if (!byExec.has(execId)) byExec.set(execId, []);
       byExec.get(execId)!.push([eventId, event]);
     }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, Chip, alpha, useTheme } from '@mui/material';
 import { ExpandMore, ExpandLess, Code, Search, Link as LinkIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -531,4 +531,4 @@ function NativeToolItem({ item }: NativeToolItemProps) {
   );
 }
 
-export default NativeToolItem;
+export default memo(NativeToolItem);

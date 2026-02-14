@@ -279,12 +279,7 @@ export const parseContent = (value: any): ParsedContent => {
       return parseMixedContent(content);
     }
     
-    try {
-      const parsed = JSON.parse(content);
-      return { type: 'json', content: parsed };
-    } catch {
-      return { type: 'plain-text', content };
-    }
+    return { type: 'plain-text', content };
   }
 
   return { type: 'json', content: value };

@@ -8,6 +8,13 @@ import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../cons
 import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents';
 import { finalAnswerMarkdownComponents } from '../../utils/markdownComponents';
 
+/** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
+function copyToClipboard(text: string, onSuccess: () => void) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(() => { /* ignore */ });
+  }
+}
+
 interface FinalAnalysisCardProps {
   analysis: string | null;
   summary: string | null;
@@ -120,34 +127,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 onClick={(e) => {
                   e.stopPropagation();
                   const text = getCombinedDocument();
-                  if (navigator.clipboard?.writeText) {
-                    navigator.clipboard.writeText(text).then(() => setCopySuccess(true)).catch(() => {
-                      // Fallback for older browsers
-                      try {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        setCopySuccess(true);
-                      } catch { /* ignore */ }
-                    });
-                  } else {
-                    try {
-                      const textarea = document.createElement('textarea');
-                      textarea.value = text;
-                      textarea.style.position = 'fixed';
-                      textarea.style.opacity = '0';
-                      document.body.appendChild(textarea);
-                      textarea.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(textarea);
-                      setCopySuccess(true);
-                    } catch { /* ignore */ }
-                  }
+                  copyToClipboard(text, () => setCopySuccess(true));
                 }}
               >
                 Copy {isFakeAnalysis ? 'Message' : 'Analysis'}

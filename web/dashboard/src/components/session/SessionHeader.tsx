@@ -118,6 +118,7 @@ export default function SessionHeader({
     try {
       await cancelSession(session.id);
       setShowCancelDialog(false);
+      setIsCanceling(false);
     } catch (error) {
       setCancelError(handleAPIError(error));
       setIsCanceling(false);

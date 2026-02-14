@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Box, Typography, Chip, Stack } from '@mui/material';
 import type { ChipProps } from '@mui/material/Chip';
+import { formatTokens, formatTokensCompact } from '../../utils/format';
 
 // Token usage data interface
 export interface TokenUsageData {
@@ -38,19 +39,6 @@ function TokenUsageDisplay({
   if ([totalTokens, inputTokens, outputTokens].every(v => v == null)) {
     return null;
   }
-
-  const formatTokens = (tokens: number | null): string => {
-    if (tokens === null || tokens === undefined) return '—';
-    return tokens.toLocaleString();
-  };
-
-  const formatTokensCompact = (tokens: number | null): string => {
-    if (tokens === null || tokens === undefined) return '—';
-    if (tokens >= 1000) {
-      return (tokens / 1000).toFixed(1) + 'K';
-    }
-    return tokens.toString();
-  };
 
   const getTokenColor = (tokens: number | null): ChipProps['color'] => {
     if (tokens == null) return 'default';

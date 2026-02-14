@@ -90,7 +90,7 @@ export const finalAnswerMarkdownComponents = {
     return (
       <Typography
         variant="h5"
-        sx={{ fontWeight: 'bold', color: 'primary.main', gutterBottom: true }}
+        sx={{ fontWeight: 'bold', color: 'primary.main' }}
         gutterBottom
         {...safeProps}
       >

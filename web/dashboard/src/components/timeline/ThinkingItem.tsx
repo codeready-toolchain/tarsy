@@ -58,8 +58,8 @@ function ThinkingItem({
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <CollapsibleItemHeader
           headerText={
-            (item.metadata?.duration_ms as number) > 0
-              ? `Thought for ${formatDurationMs(item.metadata!.duration_ms as number)}`
+            typeof item.metadata?.duration_ms === 'number' && item.metadata.duration_ms > 0
+              ? `Thought for ${formatDurationMs(item.metadata.duration_ms)}`
               : 'Thought'
           }
           headerColor="info.main"

@@ -121,10 +121,10 @@ export default function ConversationTimeline({
   // --- Streaming events grouping ---
   const streamingByStage = useMemo(() => {
     if (!streamingEvents || streamingEvents.size === 0)
-      return new Map<string, Map<string, StreamingItem>>();
-    const byStage = new Map<string, Map<string, StreamingItem>>();
+      return new Map<string, Map<string, StreamingItem & { stageId?: string; executionId?: string }>>();
+    const byStage = new Map<string, Map<string, StreamingItem & { stageId?: string; executionId?: string }>>();
     for (const [eventId, event] of streamingEvents) {
-      const stageKey = (event as any).stageId || '__ungrouped__';
+      const stageKey = event.stageId || '__ungrouped__';
       if (!byStage.has(stageKey)) byStage.set(stageKey, new Map());
       byStage.get(stageKey)!.set(eventId, event);
     }
@@ -293,11 +293,7 @@ export default function ConversationTimeline({
                     items={group.items}
                     stageId={group.stageId}
                     expectedAgentCount={group.expectedAgentCount}
-                    streamingEvents={
-                      stageStreamingMap
-                        ? new Map(stageStreamingMap.entries() as any)
-                        : undefined
-                    }
+                    streamingEvents={stageStreamingMap}
                     shouldAutoCollapse={shouldAutoCollapse}
                     onToggleItemExpansion={toggleItemExpansion}
                     expandAllReasoning={expandAllReasoning}

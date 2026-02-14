@@ -98,7 +98,6 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
     }
 
     if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
-    userScrollTimeoutRef.current = setTimeout(() => {}, 1000);
   }, [isAtBottom]);
 
   const markUserInteraction = useCallback(() => {
@@ -191,8 +190,6 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
       }
     };
   }, [enabled, handleScroll, markUserInteraction, handlePointerDown, handlePointerUp, handleKeydown, setupMutationObserver, isAtBottom]);
-
-  useEffect(() => { setupMutationObserver(); }, [setupMutationObserver]);
 
   return {
     tryAutoScroll,
