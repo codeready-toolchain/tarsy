@@ -207,6 +207,12 @@ export function SessionDetailPage() {
     if (!id) return;
     setLoading(true);
     setError(null);
+
+    // Clear streaming and progress state so stale items don't linger
+    setStreamingEvents(new Map());
+    setProgressStatus('Processing...');
+    setAgentProgressStatuses(new Map());
+
     try {
       const [sessionData, timelineData] = await Promise.all([
         getSession(id),
@@ -317,9 +323,11 @@ export function SessionDetailPage() {
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
 
-          // Remove from streaming map
+          // Capture streaming entry metadata before removing it
+          let existingStream: ExtendedStreamingItem | undefined;
           setStreamingEvents((prev) => {
-            if (!prev.has(payload.event_id)) return prev;
+            existingStream = prev.get(payload.event_id);
+            if (!existingStream) return prev;
             const next = new Map(prev);
             next.delete(payload.event_id);
             return next;
@@ -349,8 +357,8 @@ export function SessionDetailPage() {
               {
                 id: payload.event_id,
                 session_id: id,
-                stage_id: null,
-                execution_id: null,
+                stage_id: existingStream?.stageId ?? null,
+                execution_id: existingStream?.executionId ?? null,
                 sequence_number: 0, // Will be sorted by parser
                 event_type: payload.event_type,
                 status: payload.status,

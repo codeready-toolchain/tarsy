@@ -295,35 +295,49 @@ export default function SessionHeader({
                 Submitted by: <strong>{session.author}</strong>
               </Typography>
             )}
-            {session.runbook_url && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  mt: 0.5,
-                }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  Runbook:{' '}
-                  <a
-                    href={session.runbook_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: 'inherit',
-                      textDecoration: 'underline',
-                      fontFamily: 'monospace',
-                      fontSize: '0.85em',
-                    }}
-                  >
-                    {session.runbook_url.length > 200
-                      ? `${session.runbook_url.substring(0, 197)}...`
-                      : session.runbook_url}
-                  </a>
-                </Typography>
-              </Box>
-            )}
+            {session.runbook_url && (() => {
+              let isSafeUrl = false;
+              try {
+                const parsed = new URL(session.runbook_url);
+                isSafeUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+              } catch { /* invalid URL */ }
+              const displayText = session.runbook_url.length > 200
+                ? `${session.runbook_url.substring(0, 197)}...`
+                : session.runbook_url;
+              return (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    mt: 0.5,
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    Runbook:{' '}
+                    {isSafeUrl ? (
+                      <a
+                        href={session.runbook_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: 'inherit',
+                          textDecoration: 'underline',
+                          fontFamily: 'monospace',
+                          fontSize: '0.85em',
+                        }}
+                      >
+                        {displayText}
+                      </a>
+                    ) : (
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+                        {displayText}
+                      </span>
+                    )}
+                  </Typography>
+                </Box>
+              );
+            })()}
           </Box>
 
           {/* Right: Duration + Actions */}
