@@ -57,7 +57,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ## Sub-Phase Breakdown
 
-### Phase 7.0: Backend API Extensions
+### Phase 7.0: Backend API Extensions ✅ DONE
 
 **Goal**: Expose all REST endpoints the dashboard requires. This is backend-only Go work — no frontend. Many session-level endpoints already exist (timeline, trace, cancel, chat) — this phase adds the missing list/filter/system endpoints and enriches the existing session detail response.
 
@@ -114,7 +114,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.1: Dashboard Foundation
+### Phase 7.1: Dashboard Foundation ✅ DONE
 
 **Goal**: Set up the React project with build tooling, theme, routing, shared layout, and core services (API client, WebSocket).
 
