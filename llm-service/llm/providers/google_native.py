@@ -8,6 +8,7 @@ import uuid
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from proto import llm_service_pb2 as pb
@@ -455,6 +456,10 @@ class GoogleNativeProvider(LLMProvider):
                                 thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
                             )
                         )
+
+        except genai_errors.ServerError as exc:
+            # 5xx errors from Google API are transient and should be retried
+            raise _RetryableError(f"[{request_id}] Google API server error: {exc}") from exc
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
