@@ -19,6 +19,7 @@ func TestDefaultToolsHandler(t *testing.T) {
 		s := &Server{
 			cfg: &config.Config{
 				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{}),
+				MCPServerRegistry:   config.NewMCPServerRegistry(nil),
 			},
 		}
 
@@ -37,6 +38,8 @@ func TestDefaultToolsHandler(t *testing.T) {
 		assert.Equal(t, false, resp.NativeTools["google_search"])
 		assert.Equal(t, false, resp.NativeTools["code_execution"])
 		assert.Equal(t, false, resp.NativeTools["url_context"])
+		assert.Empty(t, resp.AlertType)
+		assert.NotNil(t, resp.MCPServers)
 	})
 
 	t.Run("resolves from default provider", func(t *testing.T) {
@@ -55,6 +58,7 @@ func TestDefaultToolsHandler(t *testing.T) {
 						},
 					},
 				}),
+				MCPServerRegistry: config.NewMCPServerRegistry(nil),
 			},
 		}
 
@@ -91,6 +95,7 @@ func TestDefaultToolsHandler(t *testing.T) {
 						},
 					},
 				}),
+				MCPServerRegistry: config.NewMCPServerRegistry(nil),
 			},
 		}
 
@@ -106,6 +111,107 @@ func TestDefaultToolsHandler(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
 		assert.Equal(t, true, resp.NativeTools["code_execution"])
+	})
+
+	t.Run("returns all MCP servers when no alert_type provided", func(t *testing.T) {
+		s := &Server{
+			cfg: &config.Config{
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{}),
+				MCPServerRegistry: config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+					"kubernetes-server": {Transport: config.TransportConfig{Type: config.TransportTypeStdio}},
+					"github-server":     {Transport: config.TransportConfig{Type: config.TransportTypeStdio}},
+				}),
+			},
+		}
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/system/default-tools", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := s.defaultToolsHandler(c)
+		require.NoError(t, err)
+
+		var resp DefaultToolsResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+		assert.Empty(t, resp.AlertType)
+		assert.Len(t, resp.MCPServers, 2)
+		assert.Contains(t, resp.MCPServers, "kubernetes-server")
+		assert.Contains(t, resp.MCPServers, "github-server")
+		// Verify sorted
+		assert.True(t, resp.MCPServers[0] < resp.MCPServers[1])
+	})
+
+	t.Run("returns chain MCP servers for alert_type", func(t *testing.T) {
+		agentRegistry := config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"k8s-agent": {MCPServers: []string{"kubernetes-server"}},
+		})
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": {
+				AlertTypes: []string{"test-alert"},
+				Stages: []config.StageConfig{
+					{
+						Name:   "investigate",
+						Agents: []config.StageAgentConfig{{Name: "k8s-agent"}},
+					},
+				},
+			},
+		})
+
+		s := &Server{
+			cfg: &config.Config{
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{}),
+				AgentRegistry:       agentRegistry,
+				ChainRegistry:       chainRegistry,
+				MCPServerRegistry: config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+					"kubernetes-server": {Transport: config.TransportConfig{Type: config.TransportTypeStdio}},
+					"github-server":     {Transport: config.TransportConfig{Type: config.TransportTypeStdio}},
+				}),
+			},
+		}
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/system/default-tools?alert_type=test-alert", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := s.defaultToolsHandler(c)
+		require.NoError(t, err)
+
+		var resp DefaultToolsResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+		assert.Equal(t, "test-alert", resp.AlertType)
+		assert.Equal(t, []string{"kubernetes-server"}, resp.MCPServers)
+	})
+
+	t.Run("falls back to all servers for unknown alert_type", func(t *testing.T) {
+		chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{})
+
+		s := &Server{
+			cfg: &config.Config{
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{}),
+				ChainRegistry:       chainRegistry,
+				MCPServerRegistry: config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+					"kubernetes-server": {Transport: config.TransportConfig{Type: config.TransportTypeStdio}},
+				}),
+			},
+		}
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/system/default-tools?alert_type=unknown", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := s.defaultToolsHandler(c)
+		require.NoError(t, err)
+
+		var resp DefaultToolsResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+		assert.Equal(t, "unknown", resp.AlertType)
+		assert.Equal(t, []string{"kubernetes-server"}, resp.MCPServers)
 	})
 }
 

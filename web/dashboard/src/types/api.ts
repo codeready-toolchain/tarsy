@@ -3,6 +3,7 @@
  */
 
 import type { DashboardSessionItem } from './session.ts';
+import type { MCPSelectionConfig } from './system.ts';
 
 /** Pagination info in list responses. */
 export interface PaginationInfo {
@@ -32,14 +33,20 @@ export interface DashboardListParams {
   end_date?: string;
 }
 
-/** Alert submission request. */
+/**
+ * Alert submission request.
+ * Field names match Go backend JSON tags (pkg/api/requests.go).
+ * - `data`: alert payload text (Go: json:"data")
+ * - `alert_type`: optional, Go resolves chain from this (Go: json:"alert_type")
+ * - `runbook`: optional runbook URL (Go: json:"runbook")
+ * - `mcp`: optional MCP selection override (Go: json:"mcp")
+ * Note: `author` is extracted from X-Forwarded-User header, not request body.
+ */
 export interface SubmitAlertRequest {
-  alert_data: string;
+  data: string;
   alert_type?: string;
-  chain_id?: string;
-  author?: string;
-  runbook_url?: string;
-  mcp_selection?: Record<string, unknown>;
+  runbook?: string;
+  mcp?: MCPSelectionConfig;
 }
 
 /** Alert submission response. */

@@ -220,8 +220,11 @@ export async function getMCPServers(): Promise<MCPServersResponse> {
   return response.data;
 }
 
-export async function getDefaultTools(): Promise<DefaultToolsResponse> {
-  const response = await client.get<DefaultToolsResponse>('/api/v1/system/default-tools');
+export async function getDefaultTools(alertType?: string): Promise<DefaultToolsResponse> {
+  const params = alertType ? { alert_type: alertType } : undefined;
+  const response = await client.get<DefaultToolsResponse>('/api/v1/system/default-tools', {
+    params,
+  });
   return response.data;
 }
 
