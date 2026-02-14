@@ -46,7 +46,9 @@ Full design docs for completed phases are in `docs/archive/`.
 
 See docs/phase7-dashboard-plan.md
 
-**Phase 7.0: Backend API Extensions** -- DONE. Session list/active/filter-options/summary endpoints, system endpoints (warnings, MCP servers, default tools), alert types endpoint, progress events (session.progress, execution.progress, interaction.created), health version field, WebSocket moved to /api/v1/ws.
+**Phase 7.0: Backend API Extensions** -- ✅ DONE. Session list/active/filter-options/summary endpoints, system endpoints (warnings, MCP servers, default tools), alert types endpoint, progress events (session.progress, execution.progress, interaction.created), health version field, WebSocket moved to /api/v1/ws.
+
+**Phase 7.1: Dashboard Foundation** -- ✅ DONE. React 19 + TypeScript + Vite 7 + MUI 7 project setup, shared layout (SharedHeader with logo/glass styling, VersionFooter), auth with graceful degradation (LoginButton, UserMenu, AuthContext/AuthProvider), API client with retry/cancel logic, WebSocket service with channel subscriptions and reconnect, routing (createBrowserRouter), Go static file serving with SPA fallback, theme ported from old dashboard, `make dev` / `make dev-stop` targets.
 
 ---
 

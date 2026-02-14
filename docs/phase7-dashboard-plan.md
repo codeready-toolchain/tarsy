@@ -4,9 +4,38 @@
 
 Port the old TARSy React dashboard to the new Go-based TARSy backend, preserving all existing UX while adapting to the new API surface and WebSocket event protocol. The trace view (formerly debug/technical tab) moves from an in-page tab to a dedicated page.
 
-### Old TARSy Reference
+### Old TARSy Reference & Hybrid Approach
 
-**IMPORTANT: Hybrid approach.** Copy structure, layout, and MUI component usage from old dashboard (proven visual layer). Rewrite all data fetching, event handling, services, hooks, types, and state management to match the new backend API and WebSocket protocol. TypeScript interfaces are all new.
+> **⚠️ CRITICAL: Hybrid Approach — Read This Before Implementing Any Phase**
+>
+> The old TARSy dashboard is the **authoritative source** for all visual and UX decisions.
+> The plan describes **what** each component does; the old code determines **how it looks**.
+>
+> **What to copy from the old dashboard (visual layer):**
+> - Exact text labels, column headers, tooltips, placeholder text, empty-state messages
+> - MUI component selection (Paper, Chip, Accordion, Table, etc.) and `sx` prop values
+> - Spacing values (mt, mb, px, py, gap)
+> - Interaction patterns (hover states, click behavior, animations, transitions)
+> - Layout structure (flex directions, widths, alignment)
+> - Favicon, page title, AppBar structure, navigation menu
+>
+> **What to rewrite (data layer):**
+> - TypeScript interfaces and types (all new, matching Go backend)
+> - API calls and data fetching (Axios client → new Go endpoints)
+> - WebSocket event handling (new channel-based protocol)
+> - State management hooks and logic
+> - Services (auth, API, WebSocket)
+>
+> **When plan text conflicts with the old dashboard's visual layer → the old dashboard wins.**
+> The plan uses API field names (e.g. `author`, `chain_id`) for brevity; display labels
+> must match the old dashboard (e.g. "Submitted by", "Agent Chain").
+>
+> **One deliberate exception:** The old "Debug" / "Technical" tab is rebranded as **"Trace"**
+> and promoted to a dedicated page (`/sessions/:id/trace`). This is an intentional UX change,
+> not an oversight. All other labels and visual patterns should match the old dashboard exactly.
+>
+> **Before implementing any component:** Read the corresponding old dashboard component
+> first. Copy its visual layer. Then wire the new data layer underneath.
 
 The old TARSy codebase lives at `/home/igels/Projects/AI/tarsy-bot` and is the primary reference for UX parity:
 
@@ -35,9 +64,9 @@ The old TARSy codebase lives at `/home/igels/Projects/AI/tarsy-bot` and is the p
 ### Goals
 
 1. **Feature parity**: Every user-visible feature from the old dashboard is preserved
-2. **Same UX**: Visual design, layout, interactions remain identical (99%+ match)
+2. **Same UX**: Visual design, layout, interactions remain identical (99%+ match). This means exact labels, spacing, component choices, tooltips, empty states, and interaction patterns from the old code. The plan describes what to build; the old code is the spec for how it looks.
 3. **New backend**: All data comes from the new Go API; no legacy Python backend dependency
-4. **Improved architecture**: Cleaner data flow, better real-time protocol, no blind copying
+4. **Improved architecture**: Cleaner data flow, better real-time protocol, no blind copying of data logic
 5. **Trace view evolution**: Technical/debug view becomes a dedicated "Trace" page (not a tab)
 
 ### Non-Goals (Deferred)
@@ -57,7 +86,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ## Sub-Phase Breakdown
 
-### Phase 7.0: Backend API Extensions
+### Phase 7.0: Backend API Extensions ✅ DONE
 
 **Goal**: Expose all REST endpoints the dashboard requires. This is backend-only Go work — no frontend. Many session-level endpoints already exist (timeline, trace, cancel, chat) — this phase adds the missing list/filter/system endpoints and enriches the existing session detail response.
 
@@ -114,7 +143,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.1: Dashboard Foundation
+### Phase 7.1: Dashboard Foundation ✅ DONE
 
 **Goal**: Set up the React project with build tooling, theme, routing, shared layout, and core services (API client, WebSocket).
 
@@ -164,19 +193,24 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.2: Session List & Dashboard
+### Phase 7.2: Session List & Dashboard ✅ DONE
 
-**Goal**: Main dashboard page with active alerts, queued alerts, and historical session list.
+**Goal**: Main dashboard page with active alerts, queued alerts, and historical alert list.
+
+> **Hybrid approach reminder**: `DashboardView` owns the full page layout including the AppBar
+> (hamburger menu, logo, "TARSy" title, fancy LIVE/Offline badge, auth elements), filter panel,
+> content area, and version footer — exactly matching the old `DashboardView.tsx`. Do NOT use
+> a generic `SharedHeader`; copy the old AppBar verbatim.
 
 **Deliverables**:
 
 1. **Dashboard layout** — `DashboardView` with three sections:
-   - Active alerts panel (in-progress sessions)
-   - Queued alerts section (pending sessions)
-   - Historical sessions list (completed/failed/cancelled/timed_out)
+   - Active alerts panel (in-progress sessions) — header: "Active Alerts"
+   - Queued alerts section (pending sessions) — header: "Queued Alerts"
+   - Historical alert list (completed/failed/cancelled/timed_out) — header: "Alert History"
 
 2. **Active alerts panel** — `ActiveAlertsPanel`
-   - WebSocket status indicator (Live/Offline)
+   - WebSocket status indicator (Live/Offline chip)
    - Active session cards with progress (chain stage, progress phase)
    - Auto-refresh on WebSocket events
    - Real-time progress via `session.progress` events (session-level, from `sessions` channel)
@@ -185,18 +219,19 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - Pending sessions with wait time
    - Cancel from queue action
 
-4. **Historical sessions list** — `HistoricalAlertsList`
-   - Table with columns: status, type, chain, author, time, duration, tokens, actions
-   - Sort by any column
-   - Pagination (page size: 25/50/100)
-   - Status badge, parallel stage indicator, chat message count
+4. **Historical alert list** — `HistoricalAlertsList`
+   - Table with columns matching old dashboard display labels:
+     Status | ∥ (Parallel) | Type | Agent Chain | Submitted by | Time | Duration | Tokens | 💬 (Chat) | Actions
+   - Sortable columns: status, alert_type, author, created_at, duration
+   - Pagination (page size: **10**/25/50/100 — matching old dashboard)
+   - Status badge, parallel stage indicator, chat message count, executive summary hover
 
-5. **Filter panel** — `FilterPanel` + `FilterBar`
-   - Status filter (multi-select)
-   - Alert type filter
-   - Chain filter
-   - Text search (3+ char minimum)
-   - Date range with presets (Today, Last 7 days, Last 30 days, Custom)
+5. **Filter panel** — `FilterPanel`
+   - Basic filter row (matching old dashboard): Search | Status (multi-select) | Time Range button | Clear All
+   - Time Range button opens `TimeRangeModal` dialog with:
+     - Quick Select presets: 10m, 1h, 12h, 1d, 7d, 30d
+     - Custom Range with date-time pickers (`@mui/x-date-pickers`)
+   - Alert type and agent chain filters (were in old dashboard's "Advanced" section — temporarily in basic row or deferred)
    - Filter persistence in localStorage
 
 6. **Real-time list updates** — Subscribe to `sessions` channel
@@ -208,9 +243,32 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.3: Session Detail & Conversation Timeline
+### Phase 7.3: Alert Submission
+
+**Goal**: Manual alert submission form — enables end-to-end testing of the dashboard (submit alert → watch it appear in session list → view session detail).
+
+**Deliverables**:
+
+1. **Manual alert submission** — `ManualAlertSubmission`
+   - Alert type selector (from `GET /api/v1/alert-types`)
+   - Alert data input (textarea)
+   - Runbook URL input (free-text — Phase 8.1 replaces with browsing/dropdown)
+   - MCP server/tool selection (`MCPSelection` component)
+   - Submit button → `POST /api/v1/alerts`
+   - Redirect to session detail on success
+
+**Dependencies**: Phase 7.1, Phase 7.0 (alert types endpoint, `POST /api/v1/alerts`)
+
+---
+
+### Phase 7.4: Session Detail & Conversation Timeline
 
 **Goal**: Session detail page with conversation timeline, live streaming, and stage progress.
+
+> **Hybrid approach reminder**: The session detail page is the most complex UI in the dashboard.
+> Read the old `SessionDetailPageBase.tsx`, `SessionHeader.tsx`, `ConversationTimeline.tsx`,
+> `ChainProgressCard.tsx`, and all timeline event renderers before writing any code. Copy the
+> exact visual structure, then wire the new data layer.
 
 **Deliverables**:
 
@@ -261,7 +319,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.4: Chat Interface
+### Phase 7.5: Chat Interface
 
 **Goal**: Follow-up chat UI for completed sessions.
 
@@ -291,13 +349,17 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - WebSocket event handling for chat stages (`stage.status`, `timeline_event.*`, `stream.chunk`)
    - Cancel execution support
 
-**Dependencies**: Phase 7.3 (session detail page, streaming infrastructure)
+**Dependencies**: Phase 7.4 (session detail page, streaming infrastructure)
 
 ---
 
-### Phase 7.5: Trace View
+### Phase 7.6: Trace View
 
 **Goal**: Dedicated trace page for observability information, replacing the old technical/debug tab. Available for all sessions (active and terminated) with live updates for active sessions.
+
+> **Hybrid approach note**: The trace view is structurally new (dedicated page vs in-page tab),
+> but individual interaction cards and detail views should match the old dashboard's
+> `TraceTimeline.tsx`, `LLMInteractionCard.tsx`, `MCPInteractionCard.tsx` visual patterns.
 
 **Deliverables**:
 
@@ -345,35 +407,27 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.6: System Views & Alert Submission
+### Phase 7.7: System Views & Queue Metrics
 
-**Goal**: System status pages and manual alert submission form.
+**Goal**: System status pages and queue metrics enrichment.
 
 **Deliverables**:
 
 1. **MCP server status page** — Dedicated system status view:
    - MCP server health, tool counts, error details
    - Data from `GET /api/v1/system/mcp-servers`
-   - Note: Per-session MCP summary in the session header is built in Phase 7.3
+   - Note: Per-session MCP summary in the session header is built in Phase 7.4
 
-2. **Manual alert submission** — `ManualAlertSubmission`
-   - Alert type selector (from `GET /api/v1/alert-types`)
-   - Alert data input (textarea)
-   - Runbook URL input (free-text — Phase 8.1 replaces with browsing/dropdown)
-   - MCP server/tool selection (`MCPSelection` component)
-   - Submit button → `POST /api/v1/alerts`
-   - Redirect to session detail on success
-
-3. **Queue metrics enrichment** — Additional queue/pool stats not covered by Phase 7.2:
+2. **Queue metrics enrichment** — Additional queue/pool stats not covered by Phase 7.2:
    - Worker pool info (capacity, active workers from `GET /health`)
    - Queue depth and wait time estimates
    - Note: Active/queued panels with cards and real-time updates are built in Phase 7.2
 
-**Dependencies**: Phase 7.1, Phase 7.0 (system endpoints, alert types endpoint)
+**Dependencies**: Phase 7.1, Phase 7.0 (system endpoints)
 
 ---
 
-### Phase 7.7: Polish & Integration
+### Phase 7.8: Polish & Integration
 
 **Goal**: Final polish, cross-cutting concerns, production readiness.
 
@@ -413,18 +467,20 @@ Phase 7.0 (Backend APIs)
     │       │
     │       ├─→ Phase 7.2 (Session List)
     │       │
-    │       ├─→ Phase 7.3 (Session Detail + Conversation)
+    │       ├─→ Phase 7.3 (Alert Submission)
+    │       │
+    │       ├─→ Phase 7.4 (Session Detail + Conversation)
     │       │       │
-    │       │       └─→ Phase 7.4 (Chat)
+    │       │       └─→ Phase 7.5 (Chat)
     │       │
-    │       ├─→ Phase 7.5 (Trace View)
+    │       ├─→ Phase 7.6 (Trace View)
     │       │
-    │       └─→ Phase 7.6 (System + Alerts)
+    │       └─→ Phase 7.7 (System + Queue Metrics)
     │
-    └─→ Phase 7.7 (Polish) — after all above
+    └─→ Phase 7.8 (Polish) — after all above
 ```
 
-Phases 7.2, 7.3, 7.5, and 7.6 can be developed in parallel after 7.1 is complete. Phase 7.4 depends on 7.3 (shared session detail page). Phase 7.7 is the final pass.
+Phases 7.2, 7.3, 7.4, 7.6, and 7.7 can be developed in parallel after 7.1 is complete. Phase 7.3 is prioritized early to enable end-to-end testing. Phase 7.5 depends on 7.4 (shared session detail page). Phase 7.8 is the final pass.
 
 ---
 
@@ -435,10 +491,11 @@ Phases 7.2, 7.3, 7.5, and 7.6 can be developed in parallel after 7.1 is complete
 | 7.0 | Heavy | None | Medium-High |
 | 7.1 | Light (static serving) | Heavy (setup) | Medium |
 | 7.2 | None | Heavy | Medium |
-| 7.3 | None | Very Heavy | High |
-| 7.4 | None | Medium | Medium |
-| 7.5 | None | Heavy | Medium-High |
-| 7.6 | None | Medium | Medium |
-| 7.7 | Light | Medium | Low-Medium |
+| 7.3 | None | Light-Medium | Low-Medium |
+| 7.4 | None | Very Heavy | High |
+| 7.5 | None | Medium | Medium |
+| 7.6 | None | Heavy | Medium-High |
+| 7.7 | None | Light-Medium | Low-Medium |
+| 7.8 | Light | Medium | Low-Medium |
 
-**Total**: ~8 sub-phases. Phase 7.0 and 7.1 are foundational. The core UI work is 7.2–7.6.
+**Total**: ~9 sub-phases. Phase 7.0 and 7.1 are foundational. Phase 7.3 (alert submission) is prioritized early for testability. The core UI work is 7.2–7.7.

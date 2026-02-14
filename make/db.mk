@@ -175,7 +175,7 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 	fi
 	@echo -e "$(YELLOW)Creating migration: $(NAME)...$(NC)"
 	@atlas migrate diff $(NAME) \
-		--dir "file://pkg/database/migrations" \
+		--dir "file://pkg/database/migrations?format=golang-migrate" \
 		--to "ent://ent/schema" \
 		--dev-url "$(DB_DSN)"
 	@echo -e "$(GREEN)✅ Migration created in pkg/database/migrations/$(NC)"
