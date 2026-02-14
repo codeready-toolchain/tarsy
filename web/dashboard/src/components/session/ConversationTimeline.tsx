@@ -22,9 +22,8 @@ import {
   isFlowItemTerminal,
   flowItemsToPlainText,
 } from '../../utils/timelineParser';
-import TimelineItem from '../timeline/TimelineItem';
 import StageSeparator from '../timeline/StageSeparator';
-import ParallelStageTabs from '../timeline/ParallelStageTabs';
+import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
@@ -52,7 +51,7 @@ interface ConversationTimelineProps {
  * Responsibilities:
  * - Groups items by stage (via groupFlowItemsByStage)
  * - Renders stage separators with collapse/expand
- * - Handles parallel stage rendering via ParallelStageTabs
+ * - Delegates stage content to StageContent (unified single/parallel rendering)
  * - Manages auto-collapse system (per-item tracking with manual overrides)
  * - Shows stats chips (thoughts, tool calls, errors, etc.)
  * - Supports copy-all-flow
@@ -288,40 +287,16 @@ export default function ConversationTimeline({
 
               {/* Stage items (collapsible) */}
               <Collapse in={!isCollapsed} timeout={400}>
-                {group.isParallel ? (
-                  <ParallelStageTabs
-                    items={group.items}
-                    stageId={group.stageId}
-                    expectedAgentCount={group.expectedAgentCount}
-                    streamingEvents={stageStreamingMap}
-                    shouldAutoCollapse={shouldAutoCollapse}
-                    onToggleItemExpansion={toggleItemExpansion}
-                    expandAllReasoning={expandAllReasoning}
-                    isItemCollapsible={isItemCollapsible}
-                    agentProgressStatuses={agentProgressStatuses}
-                  />
-                ) : (
-                  <>
-                    {group.items.map((item) => (
-                      <TimelineItem
-                        key={item.id}
-                        item={item}
-                        isAutoCollapsed={shouldAutoCollapse(item)}
-                        onToggleAutoCollapse={() => toggleItemExpansion(item)}
-                        expandAll={expandAllReasoning}
-                        isCollapsible={isItemCollapsible(item)}
-                      />
-                    ))}
-
-                    {/* Streaming events for this stage */}
-                    {stageStreamingMap &&
-                      Array.from(stageStreamingMap.entries()).map(
-                        ([eventId, streamItem]) => (
-                          <StreamingContentRenderer key={eventId} item={streamItem} />
-                        ),
-                      )}
-                  </>
-                )}
+                <StageContent
+                  items={group.items}
+                  stageId={group.stageId}
+                  streamingEvents={stageStreamingMap}
+                  shouldAutoCollapse={shouldAutoCollapse}
+                  onToggleItemExpansion={toggleItemExpansion}
+                  expandAllReasoning={expandAllReasoning}
+                  isItemCollapsible={isItemCollapsible}
+                  agentProgressStatuses={agentProgressStatuses}
+                />
               </Collapse>
             </Box>
           );

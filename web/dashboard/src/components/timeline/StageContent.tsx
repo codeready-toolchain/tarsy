@@ -13,10 +13,9 @@ import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
 
-interface ParallelStagTabsProps {
+interface StageContentProps {
   items: FlowItem[];
   stageId: string;
-  expectedAgentCount: number;
   /** Active streaming events keyed by event_id */
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   // Auto-collapse system
@@ -80,14 +79,95 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+// Helper: derive execution status from items
+function deriveExecutionStatus(items: FlowItem[]): string {
+  if (items.length === 0) return 'started';
+  const hasError = items.some(i => i.type === 'error');
+  const allCompleted = items.every(i => i.status === 'completed' || i.status === 'failed');
+  if (hasError) return 'failed';
+  if (allCompleted && items.length > 0) return 'completed';
+  return 'started';
+}
+
+// Helper: derive token data from items metadata
+function deriveTokenData(items: FlowItem[]) {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let found = false;
+
+  for (const item of items) {
+    if (item.metadata?.input_tokens) {
+      inputTokens += item.metadata.input_tokens as number;
+      found = true;
+    }
+    if (item.metadata?.output_tokens) {
+      outputTokens += item.metadata.output_tokens as number;
+      found = true;
+    }
+  }
+
+  if (!found) return null;
+  return { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens };
+}
+
+interface ExecutionGroup {
+  executionId: string;
+  index: number;
+  items: FlowItem[];
+  status: string;
+}
+
 /**
- * ParallelStageTabs - renders parallel stage execution in a tabbed interface.
- * Groups flow items by execution_id and shows them in separate agent tabs.
+ * Group items by executionId and merge orphaned items (no executionId) into
+ * real execution groups when possible. This prevents session-level events
+ * (e.g. executive_summary) that land in a stage group without an executionId
+ * from creating phantom "agents".
  */
-const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
+function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
+  const groups = new Map<string, FlowItem[]>();
+  const executionOrder: string[] = [];
+
+  for (const item of items) {
+    if (item.type === 'stage_separator') continue;
+    const execId = item.executionId || '__default__';
+    if (!groups.has(execId)) {
+      groups.set(execId, []);
+      executionOrder.push(execId);
+    }
+    groups.get(execId)!.push(item);
+  }
+
+  // If there are real execution groups alongside __default__, merge orphaned
+  // items into the first real execution so they don't create a phantom agent.
+  const defaultItems = groups.get('__default__');
+  const realKeys = executionOrder.filter(k => k !== '__default__');
+  if (defaultItems && realKeys.length > 0) {
+    const firstReal = groups.get(realKeys[0])!;
+    firstReal.push(...defaultItems);
+    groups.delete('__default__');
+    const idx = executionOrder.indexOf('__default__');
+    if (idx !== -1) executionOrder.splice(idx, 1);
+  }
+
+  return executionOrder.map((execId, index) => ({
+    executionId: execId,
+    index,
+    items: groups.get(execId) || [],
+    status: deriveExecutionStatus(groups.get(execId) || []),
+  }));
+}
+
+/**
+ * StageContent — unified renderer for stage items.
+ *
+ * Groups flow items by execution_id. When there is a single execution
+ * (the common single-agent case) the items are rendered directly without
+ * any agent-card / tab chrome. When there are multiple executions
+ * (parallel agents) the full tabbed interface with agent cards is shown.
+ */
+const StageContent: React.FC<StageContentProps> = ({
   items,
   stageId: _stageId,
-  expectedAgentCount: _expectedAgentCount,
   streamingEvents,
   shouldAutoCollapse,
   onToggleItemExpansion,
@@ -98,29 +178,8 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
-  // Group items by executionId
-  const executions = useMemo(() => {
-    const groups = new Map<string, FlowItem[]>();
-    const executionOrder: string[] = [];
-
-    for (const item of items) {
-      if (item.type === 'stage_separator') continue;
-      const execId = item.executionId || '__default__';
-      if (!groups.has(execId)) {
-        groups.set(execId, []);
-        executionOrder.push(execId);
-      }
-      groups.get(execId)!.push(item);
-    }
-
-    return executionOrder.map((execId, index) => ({
-      executionId: execId,
-      index,
-      items: groups.get(execId) || [],
-      // Derive status from items' metadata or default to 'started'
-      status: deriveExecutionStatus(groups.get(execId) || []),
-    }));
-  }, [items]);
+  // Group items by executionId (merges orphaned items)
+  const executions: ExecutionGroup[] = useMemo(() => groupItemsByExecution(items), [items]);
 
   // Get streaming items grouped by execution
   const streamingByExecution = useMemo(() => {
@@ -132,8 +191,24 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
       if (!byExec.has(execId)) byExec.set(execId, []);
       byExec.get(execId)!.push([eventId, event]);
     }
+
+    // Same merge logic for streaming: if real executions exist, merge __default__
+    const defaultStreaming = byExec.get('__default__');
+    if (defaultStreaming && byExec.size > 1) {
+      // Find first non-default key
+      for (const [key] of byExec) {
+        if (key !== '__default__') {
+          byExec.get(key)!.push(...defaultStreaming);
+          byExec.delete('__default__');
+          break;
+        }
+      }
+    }
+
     return byExec;
   }, [streamingEvents]);
+
+  const isMultiAgent = executions.length > 1;
 
   // Notify parent when selected tab changes
   React.useEffect(() => {
@@ -142,17 +217,82 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
     }
   }, [selectedTab, executions, onSelectedAgentChange]);
 
+  // ── Shared renderer for a single execution's items ──
+  const renderExecutionItems = (execution: ExecutionGroup) => {
+    const executionStreamingItems = streamingByExecution.get(execution.executionId) || [];
+    const hasDbItems = execution.items.length > 0;
+    const hasStreamingItems = executionStreamingItems.length > 0;
+    const isFailed = execution.status === 'failed' || execution.status === 'timed_out';
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {execution.items.map((item) => (
+          <TimelineItem
+            key={item.id}
+            item={item}
+            isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
+            onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
+            expandAll={expandAllReasoning}
+            isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
+          />
+        ))}
+
+        {executionStreamingItems.map(([key, streamItem]) => (
+          <StreamingContentRenderer key={key} item={streamItem} />
+        ))}
+
+        {!hasDbItems && !hasStreamingItems && (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+            No reasoning steps available for this agent
+          </Typography>
+        )}
+
+        {isFailed && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Execution Failed</strong>
+              {(() => {
+                const errorItem = execution.items.find(i => i.type === 'error');
+                const errMsg = (errorItem?.content) || (execution.items[execution.items.length - 1]?.metadata?.error_message as string);
+                return errMsg ? `: ${errMsg}` : '';
+              })()}
+            </Typography>
+          </Alert>
+        )}
+      </Box>
+    );
+  };
+
+  // ── Empty state ──
   if (executions.length === 0) {
+    // Check for streaming-only content (no completed items yet)
+    const allStreamingItems = Array.from(streamingByExecution.values()).flat();
+    if (allStreamingItems.length > 0) {
+      return (
+        <Box>
+          {allStreamingItems.map(([key, streamItem]) => (
+            <StreamingContentRenderer key={key} item={streamItem} />
+          ))}
+        </Box>
+      );
+    }
+
     return (
       <Alert severity="info">
-        <Typography variant="body2">Waiting for parallel agent data...</Typography>
+        <Typography variant="body2">Waiting for agent data...</Typography>
       </Alert>
     );
   }
 
+  // ── Single-agent: render items directly, no tabs/cards ──
+  if (!isMultiAgent) {
+    return renderExecutionItems(executions[0]);
+  }
+
+  // ── Multi-agent: full tabbed interface with agent cards ──
   return (
     <Box>
-      {/* Header */}
+      {/* Parallel execution header */}
       <Box sx={{ mb: 3, pl: 4, pr: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <CallSplit color="secondary" fontSize="small" />
@@ -160,7 +300,7 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
             PARALLEL EXECUTION
           </Typography>
           <Chip
-            label={`${executions.length} agent${executions.length > 1 ? 's' : ''}`}
+            label={`${executions.length} agents`}
             size="small" color="secondary" variant="outlined"
             sx={{ height: 20, fontSize: '0.7rem' }}
           />
@@ -172,13 +312,10 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
             const isSelected = selectedTab === tabIndex;
             const statusColor = getStatusColor(execution.status);
             const statusIcon = getStatusIcon(execution.status);
-            // Derive label from stage name + index, or fallback to "Agent N"
             const stageName = execution.items[0]?.metadata?.stage_name as string | undefined;
             const label = stageName ? `${stageName} #${tabIndex + 1}` : `Agent ${tabIndex + 1}`;
             const progressStatus = agentProgressStatuses.get(execution.executionId);
             const isTerminalProgress = !progressStatus || ['Completed', 'Failed', 'Cancelled'].includes(progressStatus);
-
-            // Derive token data from items metadata if available
             const tokenData = deriveTokenData(execution.items);
 
             return (
@@ -231,88 +368,13 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
       </Box>
 
       {/* Tab panels */}
-      {executions.map((execution, index) => {
-        const executionStreamingItems = streamingByExecution.get(execution.executionId) || [];
-        const hasDbItems = execution.items.length > 0;
-        const hasStreamingItems = executionStreamingItems.length > 0;
-        const isFailed = execution.status === 'failed' || execution.status === 'timed_out';
-
-        return (
-          <TabPanel key={execution.executionId} value={selectedTab} index={index}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {execution.items.map((item) => (
-                <TimelineItem
-                  key={item.id}
-                  item={item}
-                  isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
-                  onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
-                  expandAll={expandAllReasoning}
-                  isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
-                />
-              ))}
-
-              {executionStreamingItems.map(([key, streamItem]) => (
-                <StreamingContentRenderer key={key} item={streamItem} />
-              ))}
-
-              {!hasDbItems && !hasStreamingItems && (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                  {executions.length > 0
-                    ? 'No parallel agent reasoning flows found'
-                    : 'No reasoning steps available for this agent'}
-                </Typography>
-              )}
-
-              {isFailed && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  <Typography variant="body2">
-                    <strong>Execution Failed</strong>
-                    {(() => {
-                      // Try to extract error message from items
-                      const errorItem = execution.items.find(i => i.type === 'error');
-                      const errMsg = (errorItem?.content) || (execution.items[execution.items.length - 1]?.metadata?.error_message as string);
-                      return errMsg ? `: ${errMsg}` : '';
-                    })()}
-                  </Typography>
-                </Alert>
-              )}
-            </Box>
-          </TabPanel>
-        );
-      })}
+      {executions.map((execution, index) => (
+        <TabPanel key={execution.executionId} value={selectedTab} index={index}>
+          {renderExecutionItems(execution)}
+        </TabPanel>
+      ))}
     </Box>
   );
 };
 
-// Helper: derive execution status from items
-function deriveExecutionStatus(items: FlowItem[]): string {
-  if (items.length === 0) return 'started';
-  const hasError = items.some(i => i.type === 'error');
-  const allCompleted = items.every(i => i.status === 'completed' || i.status === 'failed');
-  if (hasError) return 'failed';
-  if (allCompleted && items.length > 0) return 'completed';
-  return 'started';
-}
-
-// Helper: derive token data from items metadata
-function deriveTokenData(items: FlowItem[]) {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let found = false;
-
-  for (const item of items) {
-    if (item.metadata?.input_tokens) {
-      inputTokens += item.metadata.input_tokens as number;
-      found = true;
-    }
-    if (item.metadata?.output_tokens) {
-      outputTokens += item.metadata.output_tokens as number;
-      found = true;
-    }
-  }
-
-  if (!found) return null;
-  return { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens };
-}
-
-export default ParallelStageTabs;
+export default StageContent;
