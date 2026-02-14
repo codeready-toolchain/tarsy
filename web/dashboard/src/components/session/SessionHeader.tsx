@@ -529,7 +529,7 @@ export default function SessionHeader({
               variant="body2"
               sx={{ fontWeight: 600, color: 'primary.main' }}
             >
-              🧠 {session.llm_interaction_count}
+              🧠 {session.llm_interaction_count ?? 0}
             </Typography>
             <Typography variant="caption" color="primary.main">
               LLM
@@ -570,7 +570,7 @@ export default function SessionHeader({
                 variant="body2"
                 sx={{ fontWeight: 600, color: 'warning.main' }}
               >
-                🔧 {session.mcp_interaction_count}
+                🔧 {session.mcp_interaction_count ?? 0}
               </Typography>
               <Typography variant="caption" color="warning.main">
                 MCP
