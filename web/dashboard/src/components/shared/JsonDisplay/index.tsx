@@ -96,13 +96,60 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     </Box>
   );
 
+  const renderMarkdownContent = (content: string) => (
+    <Box
+      component="pre"
+      sx={{
+        fontFamily: 'monospace',
+        fontSize: '0.875rem',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        m: 0,
+        p: 2,
+        bgcolor: theme.palette.grey[50],
+        borderRadius: 1,
+        border: `1px solid ${theme.palette.divider}`,
+        maxHeight: maxHeight,
+        overflow: 'auto',
+        ...scrollbarSx,
+        // Apply strong/em styles for markdown-type content
+        '& strong, & b': { fontWeight: 700 },
+        '& em, & i': { fontStyle: 'italic' },
+      }}
+    >
+      {content}
+    </Box>
+  );
+
+  const renderPlainText = (content: string) => (
+    <Box
+      component="pre"
+      sx={{
+        fontFamily: 'monospace',
+        fontSize: '0.875rem',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        m: 0,
+        p: 2,
+        bgcolor: theme.palette.grey[50],
+        borderRadius: 1,
+        border: `1px solid ${theme.palette.divider}`,
+        maxHeight: maxHeight,
+        overflow: 'auto',
+        ...scrollbarSx,
+      }}
+    >
+      {content}
+    </Box>
+  );
+
   const renderContent = () => {
     switch (parsedContent.type) {
       case 'python-objects': return renderPythonObjects(parsedContent);
       case 'mixed': return renderMixedContent(parsedContent);
       case 'json': return renderJsonContent(parsedContent.content);
-      case 'markdown': return renderPreBlock(parsedContent.content);
-      default: return renderPreBlock(parsedContent.content);
+      case 'markdown': return renderMarkdownContent(parsedContent.content);
+      default: return renderPlainText(parsedContent.content);
     }
   };
 
@@ -149,7 +196,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
               )}
               {renderCopyButton(
                 typeof section.raw === 'string' ? section.raw : String(section.content),
-                section.type === 'system-prompt' ? 'System' : section.type === 'assistant-prompt' ? 'Assistant' : 'User'
+                section.type === 'system-prompt' ? 'System Message' : section.type === 'assistant-prompt' ? 'Assistant Message' : 'User Message'
               )}
             </Box>
           </AccordionDetails>
@@ -200,7 +247,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
           )}
           {renderCopyButton(
             typeof section.raw === 'string' ? section.raw : String(section.content),
-            section.type === 'yaml' ? 'YAML' : section.type.toUpperCase()
+            section.type === 'yaml' ? 'YAML Content' : `${section.type.toUpperCase()} Content`
           )}
         </Box>
       </AccordionDetails>

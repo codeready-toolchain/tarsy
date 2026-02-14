@@ -114,6 +114,11 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     return <ThinkingBlock content={item.content} textColor="text.primary" />;
   }
 
+  // Native thinking (native_thinking) — italic, secondary color
+  if (item.eventType === TIMELINE_EVENT_TYPES.NATIVE_THINKING) {
+    return <ThinkingBlock content={item.content} textColor="text.secondary" isItalic />;
+  }
+
   // Response (llm_response) — intermediate iterations
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_RESPONSE) {
     const hasMarkdown = hasMarkdownSyntax(item.content);

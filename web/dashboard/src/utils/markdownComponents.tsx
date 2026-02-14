@@ -6,6 +6,9 @@
 import { Box, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import CopyButton from '../components/shared/CopyButton';
 
 /**
  * Helper function to detect if text contains markdown syntax
@@ -28,13 +31,13 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
     lineHeight: 1.7,
     fontSize: '0.95rem',
     color: 'text.primary',
-    '&:last-child': { marginBottom: 0 }
+    '&:last-child': { marginBottom: 0 },
   },
   '& strong': {
-    fontWeight: 'bold'
+    fontWeight: 'bold',
   },
   '& em': {
-    fontStyle: 'italic'
+    fontStyle: 'italic',
   },
   // Inline code styling - using native CSS for proper inline behavior
   '& code': {
@@ -47,7 +50,7 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
     border: '1px solid',
     borderColor: alpha(theme.palette.grey[900], 0.12),
     whiteSpace: 'nowrap',
-    verticalAlign: 'baseline'
+    verticalAlign: 'baseline',
   },
   // Block code
   '& pre': {
@@ -63,29 +66,34 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
       backgroundColor: 'transparent',
       border: 'none',
       padding: 0,
-      whiteSpace: 'pre'
-    }
+      whiteSpace: 'pre',
+    },
   },
   // Lists
   '& ul, & ol': {
     paddingLeft: 2.5,
-    margin: '8px 0'
+    margin: '8px 0',
   },
   '& li': {
     marginBottom: 0.5,
-    lineHeight: 1.6
-  }
+    lineHeight: 1.6,
+  },
 });
 
 /**
- * Memoized markdown components for final answer rendering
- * Defined outside component to prevent recreation on every render
+ * Memoized markdown components for final answer rendering.
+ * Matches the old FinalAnalysisCard inline component styles exactly.
  */
 export const finalAnswerMarkdownComponents = {
   h1: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, mt: 1.5, fontSize: '1.1rem' }} {...safeProps}>
+      <Typography
+        variant="h5"
+        sx={{ fontWeight: 'bold', color: 'primary.main', gutterBottom: true }}
+        gutterBottom
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
@@ -93,7 +101,12 @@ export const finalAnswerMarkdownComponents = {
   h2: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.75, mt: 1.25, fontSize: '1rem' }} {...safeProps}>
+      <Typography
+        variant="h6"
+        sx={{ fontWeight: 'bold', color: 'primary.main', mt: 2 }}
+        gutterBottom
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
@@ -101,7 +114,12 @@ export const finalAnswerMarkdownComponents = {
   h3: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5, mt: 1, fontSize: '0.95rem' }} {...safeProps}>
+      <Typography
+        variant="subtitle1"
+        sx={{ fontWeight: 'bold', color: 'primary.main', mt: 1.5 }}
+        gutterBottom
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
@@ -109,7 +127,11 @@ export const finalAnswerMarkdownComponents = {
   p: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography variant="body2" sx={{ mb: 1, lineHeight: 1.7, fontSize: '0.95rem' }} {...safeProps}>
+      <Typography
+        variant="body1"
+        sx={{ mb: 1, lineHeight: 1.6, fontSize: '0.95rem' }}
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
@@ -117,7 +139,7 @@ export const finalAnswerMarkdownComponents = {
   ul: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Box component="ul" sx={{ mb: 1, pl: 2.5 }} {...safeProps}>
+      <Box component="ul" sx={{ mb: 1, pl: 2 }} {...safeProps}>
         {children}
       </Box>
     );
@@ -125,7 +147,7 @@ export const finalAnswerMarkdownComponents = {
   ol: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Box component="ol" sx={{ mb: 1, pl: 2.5 }} {...safeProps}>
+      <Box component="ol" sx={{ mb: 1, pl: 2 }} {...safeProps}>
         {children}
       </Box>
     );
@@ -133,23 +155,74 @@ export const finalAnswerMarkdownComponents = {
   li: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography component="li" variant="body2" sx={{ mb: 0.5, lineHeight: 1.6, fontSize: '0.95rem' }} {...safeProps}>
+      <Typography
+        component="li"
+        variant="body1"
+        sx={{ mb: 0.5, lineHeight: 1.6, fontSize: '0.95rem' }}
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
   },
   code: (props: any) => {
-    const { node: _node, inline: _inline, children, ...safeProps } = props;
+    const { node: _node, inline: _inline, className, children, ...safeProps } = props;
+    // Check if this is a fenced code block (has language class like "language-python")
+    const match = /language-(\w+)/.exec(className || '');
+    if (match) {
+      const language = match[1];
+      const codeString = String(children).replace(/\n$/, '');
+      return (
+        <Box sx={{ position: 'relative', my: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              bgcolor: 'grey.200',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: '4px 4px 0 0',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
+              {language}
+            </Typography>
+            <CopyButton text={codeString} variant="icon" size="small" tooltip="Copy code" />
+          </Box>
+          <SyntaxHighlighter
+            language={language}
+            style={vs}
+            customStyle={{
+              margin: 0,
+              padding: '12px',
+              fontSize: '0.875rem',
+              lineHeight: 1.5,
+              borderRadius: '0 0 4px 4px',
+            }}
+            wrapLines
+            wrapLongLines
+          >
+            {codeString}
+          </SyntaxHighlighter>
+        </Box>
+      );
+    }
+    // Inline code
     return (
       <Box
         component="code"
         sx={{
-          bgcolor: 'grey.100',
-          px: 0.75,
-          py: 0.25,
-          borderRadius: 0.5,
+          backgroundColor: 'rgba(0, 0, 0, 0.08)',
+          color: 'error.main',
+          padding: '2px 6px',
+          border: '1px solid',
+          borderColor: 'rgba(0, 0, 0, 0.1)',
+          borderRadius: '4px',
           fontFamily: 'monospace',
-          fontSize: '0.85rem'
+          fontSize: '0.85rem',
         }}
         {...safeProps}
       >
@@ -171,20 +244,20 @@ export const finalAnswerMarkdownComponents = {
       <Box
         component="blockquote"
         sx={{
-          borderLeft: '3px solid',
-          borderColor: 'grey.300',
+          borderLeft: '4px solid',
+          borderColor: 'primary.main',
           pl: 2,
           ml: 0,
           my: 1,
           color: 'text.secondary',
-          fontStyle: 'italic'
+          fontStyle: 'italic',
         }}
         {...safeProps}
       >
         {children}
       </Box>
     );
-  }
+  },
 };
 
 /**
@@ -227,7 +300,7 @@ export const thoughtMarkdownComponents = {
           py: 0.25,
           borderRadius: 0.5,
           fontFamily: 'monospace',
-          fontSize: '0.9em'
+          fontSize: '0.9em',
         }}
         {...safeProps}
       >
@@ -254,9 +327,14 @@ export const thoughtMarkdownComponents = {
   li: (props: any) => {
     const { node: _node, children, ...safeProps } = props;
     return (
-      <Typography component="li" variant="body1" sx={{ mb: 0.3, lineHeight: 1.6, fontSize: '1rem' }} {...safeProps}>
+      <Typography
+        component="li"
+        variant="body1"
+        sx={{ mb: 0.3, lineHeight: 1.6, fontSize: '1rem' }}
+        {...safeProps}
+      >
         {children}
       </Typography>
     );
-  }
+  },
 };

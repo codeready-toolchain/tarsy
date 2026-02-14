@@ -38,7 +38,7 @@ function ResponseItem({
     const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
     const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
     const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
-    const headerText = isForcedConclusion ? 'FINAL ANSWER (Warning: Max Iterations)' : 'FINAL ANSWER';
+    const headerText = isForcedConclusion ? 'FINAL ANSWER (⚠️Max Iterations)' : 'FINAL ANSWER';
 
     return (
       <Box

@@ -52,9 +52,11 @@ export interface TimelineStats {
   failedStages: number;
   thoughtCount: number;
   toolCallCount: number;
+  successfulToolCalls: number;
   toolSummaryCount: number;
   responseCount: number;
   analysisCount: number;
+  finalAnswerCount: number;
   errorCount: number;
   nativeToolCount: number;
   userQuestionCount: number;
@@ -254,9 +256,11 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
     failedStages: stages.filter(s => s.status === 'failed' || s.status === 'timed_out').length,
     thoughtCount: 0,
     toolCallCount: 0,
+    successfulToolCalls: 0,
     toolSummaryCount: 0,
     responseCount: 0,
     analysisCount: 0,
+    finalAnswerCount: 0,
     errorCount: 0,
     nativeToolCount: 0,
     userQuestionCount: 0,
@@ -265,10 +269,16 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
   for (const item of items) {
     switch (item.type) {
       case 'thinking': stats.thoughtCount++; break;
-      case 'tool_call': stats.toolCallCount++; break;
+      case 'tool_call':
+        stats.toolCallCount++;
+        if (item.status === 'completed') stats.successfulToolCalls++;
+        break;
       case 'tool_summary': stats.toolSummaryCount++; break;
       case 'response': stats.responseCount++; break;
       case 'final_analysis':
+        stats.analysisCount++;
+        stats.finalAnswerCount++;
+        break;
       case 'executive_summary': stats.analysisCount++; break;
       case 'error': stats.errorCount++; break;
       case 'code_execution':

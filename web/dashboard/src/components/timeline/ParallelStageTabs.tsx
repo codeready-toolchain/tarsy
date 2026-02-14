@@ -37,7 +37,13 @@ interface TabPanelProps {
 
 function TabPanel({ children, value, index, ...other }: TabPanelProps) {
   return (
-    <div role="tabpanel" hidden={value !== index} id={`reasoning-tabpanel-${index}`} {...other}>
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`reasoning-tabpanel-${index}`}
+      aria-labelledby={`reasoning-tab-${index}`}
+      {...other}
+    >
       {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
     </div>
   );
@@ -166,7 +172,9 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
             const isSelected = selectedTab === tabIndex;
             const statusColor = getStatusColor(execution.status);
             const statusIcon = getStatusIcon(execution.status);
-            const label = `Agent ${tabIndex + 1}`;
+            // Derive label from stage name + index, or fallback to "Agent N"
+            const stageName = execution.items[0]?.metadata?.stage_name as string | undefined;
+            const label = stageName ? `${stageName} #${tabIndex + 1}` : `Agent ${tabIndex + 1}`;
             const progressStatus = agentProgressStatuses.get(execution.executionId);
             const isTerminalProgress = !progressStatus || ['Completed', 'Failed', 'Cancelled'].includes(progressStatus);
 
@@ -213,6 +221,7 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
                   <Box mt={1} display="flex" alignItems="center" gap={0.5}>
                     <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>🪙</Typography>
                     <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
+                    <Typography variant="caption" color="text.secondary">tokens</Typography>
                   </Box>
                 )}
               </Box>
@@ -248,7 +257,9 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
 
               {!hasDbItems && !hasStreamingItems && (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                  No reasoning steps available for this agent
+                  {executions.length > 0
+                    ? 'No parallel agent reasoning flows found'
+                    : 'No reasoning steps available for this agent'}
                 </Typography>
               )}
 
@@ -256,6 +267,12 @@ const ParallelStageTabs: React.FC<ParallelStagTabsProps> = ({
                 <Alert severity="error" sx={{ mt: 2 }}>
                   <Typography variant="body2">
                     <strong>Execution Failed</strong>
+                    {(() => {
+                      // Try to extract error message from items
+                      const errorItem = execution.items.find(i => i.type === 'error');
+                      const errMsg = (errorItem?.content) || (execution.items[execution.items.length - 1]?.metadata?.error_message as string);
+                      return errMsg ? `: ${errMsg}` : '';
+                    })()}
                   </Typography>
                 </Alert>
               )}

@@ -1,7 +1,23 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Tooltip, alpha } from '@mui/material';
-import { ContentCopy, UnfoldMore, UnfoldLess, Psychology, Build, Error as ErrorIcon, QuestionAnswer, AutoFixHigh } from '@mui/icons-material';
-import type { FlowItem, StageGroup, TimelineStats } from '../../utils/timelineParser';
+import {
+  Box,
+  Typography,
+  Chip,
+  Collapse,
+  Card,
+  CardContent,
+  Button,
+} from '@mui/material';
+import {
+  UnfoldMore,
+  UnfoldLess,
+  Psychology,
+  Build,
+  Error as ErrorIcon,
+  QuestionAnswer,
+  AutoFixHigh,
+} from '@mui/icons-material';
+import type { FlowItem, TimelineStats } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
@@ -31,8 +47,8 @@ interface ConversationTimelineProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
-  /** data-autoscroll-container attribute for auto-scroll hook */
-  'data-autoscroll-container'?: boolean;
+  /** Chain ID for the header display */
+  chainId?: string;
 }
 
 /**
@@ -55,13 +71,13 @@ export default function ConversationTimeline({
   progressStatus,
   streamingEvents,
   agentProgressStatuses,
-  ...rest
+  chainId,
 }: ConversationTimelineProps) {
   // --- Stage collapse ---
   const [collapsedStages, setCollapsedStages] = useState<Map<string, boolean>>(new Map());
 
   const toggleStageCollapse = useCallback((stageId: string) => {
-    setCollapsedStages(prev => {
+    setCollapsedStages((prev) => {
       const next = new Map(prev);
       next.set(stageId, !next.get(stageId));
       return next;
@@ -78,11 +94,11 @@ export default function ConversationTimeline({
       if (manualOverrides.has(item.id)) return false; // user expanded it
       return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
     },
-    [manualOverrides]
+    [manualOverrides],
   );
 
   const toggleItemExpansion = useCallback((item: FlowItem) => {
-    setManualOverrides(prev => {
+    setManualOverrides((prev) => {
       const next = new Set(prev);
       if (next.has(item.id)) {
         next.delete(item.id);
@@ -95,7 +111,7 @@ export default function ConversationTimeline({
 
   const isItemCollapsible = useCallback(
     (item: FlowItem): boolean => isFlowItemCollapsible(item) && isFlowItemTerminal(item),
-    []
+    [],
   );
 
   // --- Stage grouping ---
@@ -109,7 +125,8 @@ export default function ConversationTimeline({
 
   // --- Streaming events grouping ---
   const streamingByStage = useMemo(() => {
-    if (!streamingEvents || streamingEvents.size === 0) return new Map<string, Map<string, StreamingItem>>();
+    if (!streamingEvents || streamingEvents.size === 0)
+      return new Map<string, Map<string, StreamingItem>>();
     const byStage = new Map<string, Map<string, StreamingItem>>();
     for (const [eventId, event] of streamingEvents) {
       const stageKey = (event as any).stageId || '__ungrouped__';
@@ -123,55 +140,153 @@ export default function ConversationTimeline({
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography variant="body2" color="text.secondary">
-          No conversation data yet.
+          No reasoning steps available for this session
         </Typography>
       </Box>
     );
   }
 
   return (
-    <Box {...rest}>
-      {/* Stats chips bar */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2, alignItems: 'center' }}>
-        {stats.totalStages > 0 && (
-          <Chip
-            size="small" variant="outlined"
-            label={`${stats.completedStages}/${stats.totalStages} stages`}
-            color={stats.failedStages > 0 ? 'error' : 'primary'}
-          />
-        )}
-        {stats.thoughtCount > 0 && (
-          <Chip size="small" variant="outlined" icon={<Psychology sx={{ fontSize: 16 }} />} label={`${stats.thoughtCount} thoughts`} />
-        )}
-        {stats.toolCallCount > 0 && (
-          <Chip size="small" variant="outlined" icon={<Build sx={{ fontSize: 16 }} />} label={`${stats.toolCallCount} tool calls`} />
-        )}
-        {stats.nativeToolCount > 0 && (
-          <Chip size="small" variant="outlined" icon={<AutoFixHigh sx={{ fontSize: 16 }} />} label={`${stats.nativeToolCount} native tools`} />
-        )}
-        {stats.userQuestionCount > 0 && (
-          <Chip size="small" variant="outlined" icon={<QuestionAnswer sx={{ fontSize: 16 }} />} label={`${stats.userQuestionCount} questions`} />
-        )}
-        {stats.errorCount > 0 && (
-          <Chip size="small" variant="outlined" color="error" icon={<ErrorIcon sx={{ fontSize: 16 }} />} label={`${stats.errorCount} errors`} />
-        )}
+    <Card>
+      {/* Card header with chain ID, expand/collapse, and copy */}
+      <CardContent sx={{ pb: 0 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 1,
+          }}
+        >
+          <Typography variant="h6" color="primary.main">
+            Chain: {chainId || '—'}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={expandAllReasoning ? <UnfoldLess /> : <UnfoldMore />}
+              onClick={() => {
+                setExpandAllReasoning((v) => !v);
+                setManualOverrides(new Set());
+              }}
+            >
+              {expandAllReasoning ? 'Collapse All Reasoning' : 'Expand All Reasoning'}
+            </Button>
+            <CopyButton
+              text={plainText}
+              variant="button"
+              buttonVariant="outlined"
+              size="small"
+              label="Copy Chat Flow"
+            />
+          </Box>
+        </Box>
 
-        {/* Spacer */}
-        <Box sx={{ flex: 1 }} />
+        {/* Stats chips bar */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.5, alignItems: 'center' }}>
+          {stats.totalStages > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${stats.totalStages} stages`}
+              color="primary"
+            />
+          )}
+          {stats.completedStages > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${stats.completedStages} completed`}
+              color="success"
+            />
+          )}
+          {stats.failedStages > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${stats.failedStages} failed`}
+              color="error"
+            />
+          )}
+          {stats.toolCallCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<Build sx={{ fontSize: 16 }} />}
+              label={`${stats.successfulToolCalls ?? stats.toolCallCount}/${stats.toolCallCount} tool calls`}
+            />
+          )}
+          {stats.thoughtCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<Psychology sx={{ fontSize: 16 }} />}
+              label={`${stats.thoughtCount} thoughts`}
+            />
+          )}
+          {stats.nativeToolCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<AutoFixHigh sx={{ fontSize: 16 }} />}
+              label={`${stats.nativeToolCount} native tools`}
+            />
+          )}
+          {stats.userQuestionCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<QuestionAnswer sx={{ fontSize: 16 }} />}
+              label={`${stats.userQuestionCount} questions`}
+            />
+          )}
+          {stats.errorCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              color="error"
+              icon={<ErrorIcon sx={{ fontSize: 16 }} />}
+              label={`${stats.errorCount} errors`}
+            />
+          )}
+          {stats.finalAnswerCount > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${stats.finalAnswerCount} analyses`}
+            />
+          )}
+        </Box>
+      </CardContent>
 
-        {/* Expand/Collapse all toggle */}
-        <Tooltip title={expandAllReasoning ? 'Auto-collapse reasoning' : 'Expand all reasoning'}>
-          <IconButton size="small" onClick={() => { setExpandAllReasoning(v => !v); setManualOverrides(new Set()); }}>
-            {expandAllReasoning ? <UnfoldLess fontSize="small" /> : <UnfoldMore fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-
-        {/* Copy flow */}
-        <CopyButton text={plainText} variant="icon" size="small" tooltip="Copy full reasoning flow" />
+      {/* Blue "AI Reasoning Flow" bar */}
+      <Box
+        sx={{
+          bgcolor: '#e3f2fd',
+          py: 1.5,
+          px: 3,
+          mt: 1,
+          borderTop: '2px solid #1976d2',
+          borderBottom: '1px solid #bbdefb',
+        }}
+      >
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            color: '#1565c0',
+            fontSize: '0.9rem',
+            letterSpacing: 0.3,
+          }}
+        >
+          AI Reasoning Flow
+        </Typography>
       </Box>
 
-      {/* Timeline content */}
-      <Box data-autoscroll-container>
+      {/* Content area */}
+      <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
         {stageGroups.map((group) => {
           const isCollapsed = collapsedStages.get(group.stageId) || false;
 
@@ -202,13 +317,17 @@ export default function ConversationTimeline({
               )}
 
               {/* Stage items (collapsible) */}
-              <Collapse in={!isCollapsed} timeout={300}>
+              <Collapse in={!isCollapsed} timeout={400}>
                 {group.isParallel ? (
                   <ParallelStageTabs
                     items={group.items}
                     stageId={group.stageId}
                     expectedAgentCount={group.expectedAgentCount}
-                    streamingEvents={stageStreamingMap ? new Map(stageStreamingMap.entries() as any) : undefined}
+                    streamingEvents={
+                      stageStreamingMap
+                        ? new Map(stageStreamingMap.entries() as any)
+                        : undefined
+                    }
                     shouldAutoCollapse={shouldAutoCollapse}
                     onToggleItemExpansion={toggleItemExpansion}
                     expandAllReasoning={expandAllReasoning}
@@ -229,9 +348,12 @@ export default function ConversationTimeline({
                     ))}
 
                     {/* Streaming events for this stage */}
-                    {stageStreamingMap && Array.from(stageStreamingMap.entries()).map(([eventId, streamItem]) => (
-                      <StreamingContentRenderer key={eventId} item={streamItem} />
-                    ))}
+                    {stageStreamingMap &&
+                      Array.from(stageStreamingMap.entries()).map(
+                        ([eventId, streamItem]) => (
+                          <StreamingContentRenderer key={eventId} item={streamItem} />
+                        ),
+                      )}
                   </>
                 )}
               </Collapse>
@@ -240,17 +362,16 @@ export default function ConversationTimeline({
         })}
 
         {/* Ungrouped streaming events (no stageId) */}
-        {streamingByStage.get('__ungrouped__') && (
-          Array.from(streamingByStage.get('__ungrouped__')!.entries()).map(([eventId, streamItem]) => (
-            <StreamingContentRenderer key={eventId} item={streamItem} />
-          ))
-        )}
-      </Box>
+        {streamingByStage.get('__ungrouped__') &&
+          Array.from(streamingByStage.get('__ungrouped__')!.entries()).map(
+            ([eventId, streamItem]) => (
+              <StreamingContentRenderer key={eventId} item={streamItem} />
+            ),
+          )}
 
-      {/* Processing indicator for active sessions */}
-      {isActive && (
-        <ProcessingIndicator message={progressStatus || 'Processing...'} />
-      )}
-    </Box>
+        {/* Processing indicator for active sessions */}
+        {isActive && <ProcessingIndicator message={progressStatus || 'Processing...'} />}
+      </Box>
+    </Card>
   );
 }

@@ -118,7 +118,7 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
   }, []);
 
   const handleKeydown = useCallback((e: KeyboardEvent) => {
-    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar'].includes(e.key)) {
       markUserInteraction();
     }
   }, [markUserInteraction]);
@@ -185,7 +185,10 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
       if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       if (autoScrollMonitorRafRef.current) cancelAnimationFrame(autoScrollMonitorRafRef.current);
-      if (clearUserInteractionTimeoutRef.current) clearTimeout(clearUserInteractionTimeoutRef.current);
+      if (clearUserInteractionTimeoutRef.current) {
+        clearTimeout(clearUserInteractionTimeoutRef.current);
+        clearUserInteractionTimeoutRef.current = null;
+      }
     };
   }, [enabled, handleScroll, markUserInteraction, handlePointerDown, handlePointerUp, handleKeydown, setupMutationObserver, isAtBottom]);
 

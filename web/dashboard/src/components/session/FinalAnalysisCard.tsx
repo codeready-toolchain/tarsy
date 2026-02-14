@@ -25,13 +25,13 @@ interface FinalAnalysisCardProps {
 function generateFakeAnalysis(status: string, errorMessage?: string | null): string {
   switch (status) {
     case SESSION_STATUS.CANCELLED:
-      return '# Session Cancelled\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.';
+      return '# Session Cancelled\n\n**Status:** Session was terminated before the AI could complete its analysis.\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.';
     case SESSION_STATUS.FAILED:
       return `# Session Failed\n\nThis analysis session failed before completion.\n\n**Error Details:**\n${errorMessage ? `\`\`\`\n${errorMessage}\n\`\`\`` : '_No error details available_'}\n\nPlease review the session logs or submit a new analysis session.`;
     case SESSION_STATUS.COMPLETED:
-      return '# Analysis Completed\n\nThis session completed successfully, but no final analysis was generated. Please check the session stages for details.';
+      return '# Analysis Completed\n\n**Note:** This may indicate the session completed but no structured final analysis was generated.\n\nThis session completed successfully, but no final analysis was generated. Please check the session stages for details.';
     default:
-      return `# No Analysis Available\n\nThis session has reached a terminal state (${status}), but no final analysis is available.`;
+      return `# No Analysis Available\n\nThis session has reached a terminal state (${status}), but no final analysis is available.\n\nPlease review the reasoning flow above for any partial findings.`;
   }
 }
 
@@ -110,14 +110,45 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               <Typography variant="h6">Final AI Analysis</Typography>
               {isNewlyUpdated && (
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'white', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
-                  Updated
+                  ✨ Updated
                 </Box>
               )}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Button
                 startIcon={<ContentCopy />} variant="outlined" size="small"
-                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(getCombinedDocument()).then(() => setCopySuccess(true)); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const text = getCombinedDocument();
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(text).then(() => setCopySuccess(true)).catch(() => {
+                      // Fallback for older browsers
+                      try {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        setCopySuccess(true);
+                      } catch { /* ignore */ }
+                    });
+                  } else {
+                    try {
+                      const textarea = document.createElement('textarea');
+                      textarea.value = text;
+                      textarea.style.position = 'fixed';
+                      textarea.style.opacity = '0';
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(textarea);
+                      setCopySuccess(true);
+                    } catch { /* ignore */ }
+                  }
+                }}
               >
                 Copy {isFakeAnalysis ? 'Message' : 'Analysis'}
               </Button>
@@ -129,7 +160,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
 
           {/* AI Warning */}
           {!isFakeAnalysis && (summary || displayAnalysis) && (
-            <Alert severity="info" icon={<AutoAwesome />} sx={{ mt: 2, bgcolor: (theme) => alpha(theme.palette.info.main, 0.04), border: '1px solid', borderColor: (theme) => alpha(theme.palette.info.main, 0.2) }}>
+            <Alert severity="info" icon={<AutoAwesome />} sx={{ mt: 2, bgcolor: (theme) => alpha(theme.palette.info.main, 0.04), border: '1px solid', borderColor: (theme) => alpha(theme.palette.info.main, 0.2), '& .MuiAlert-icon': { color: 'info.main' } }}>
               <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>AI-Generated Content</Typography>
                 <Typography variant="body2" color="text.secondary">Always review AI generated content prior to use.</Typography>

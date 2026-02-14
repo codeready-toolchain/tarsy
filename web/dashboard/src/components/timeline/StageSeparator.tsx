@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
 import { Flag, ExpandMore, ExpandLess } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
@@ -17,11 +17,26 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const stageStatus = (item.metadata?.stage_status as string) || '';
   const isErrorStatus = stageStatus === 'failed' || stageStatus === 'timed_out' || stageStatus === 'cancelled';
   const stageName = item.content;
+  const errorMessage = (item.metadata?.error_message as string) || '';
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (onToggleCollapse && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+        e.preventDefault();
+        onToggleCollapse();
+      }
+    },
+    [onToggleCollapse],
+  );
 
   return (
     <Box sx={{ my: 2.5 }}>
       <Divider sx={{ mb: 1, opacity: isCollapsed ? 0.6 : 1, transition: 'opacity 0.2s ease-in-out' }}>
         <Box
+          role={onToggleCollapse ? 'button' : undefined}
+          tabIndex={onToggleCollapse ? 0 : undefined}
+          aria-label={onToggleCollapse ? (isCollapsed ? 'Expand stage' : 'Collapse stage') : undefined}
+          onKeyDown={onToggleCollapse ? handleKeyDown : undefined}
           sx={{
             display: 'flex', alignItems: 'center', gap: 1,
             cursor: onToggleCollapse ? 'pointer' : 'default',
@@ -68,7 +83,7 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
         variant="caption" color="text.secondary"
         sx={{ display: 'block', textAlign: 'center', fontStyle: 'italic', fontSize: '0.75rem', opacity: isCollapsed ? 0.7 : 1 }}
       >
-        Stage {(item.metadata?.stage_index as number) ?? 0 + 1}
+        Agent: {(item.metadata?.agent_name as string) || stageName}
       </Typography>
 
       {isErrorStatus && !isCollapsed && (
@@ -77,6 +92,7 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
             <strong>
               {stageStatus === 'timed_out' ? 'Stage Timed Out' : stageStatus === 'cancelled' ? 'Stage Cancelled' : 'Stage Failed'}
             </strong>
+            {errorMessage && `: ${errorMessage}`}
           </Typography>
         </Alert>
       )}

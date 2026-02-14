@@ -7,6 +7,7 @@ import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
 import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
+import { formatDurationMs } from '../../utils/format';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ThinkingItemProps {
@@ -56,7 +57,11 @@ function ThinkingItem({
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <CollapsibleItemHeader
-          headerText="Thought"
+          headerText={
+            (item.metadata?.duration_ms as number) > 0
+              ? `Thought for ${formatDurationMs(item.metadata!.duration_ms as number)}`
+              : 'Thought'
+          }
           headerColor="info.main"
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}

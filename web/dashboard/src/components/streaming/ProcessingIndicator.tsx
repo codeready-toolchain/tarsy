@@ -1,16 +1,18 @@
-import { Box, Typography, CircularProgress, alpha } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 
 interface ProcessingIndicatorProps {
   message?: string;
+  centered?: boolean;
 }
 
 /**
  * ProcessingIndicator Component
+ * Animated bouncing dots with shimmer text effect.
  * Shown at the bottom of the timeline when a session is being processed.
- * Displays a pulsing status message (e.g., "Investigating...", "Synthesizing...").
  */
-export default function ProcessingIndicator({ 
-  message = 'Processing...' 
+export default function ProcessingIndicator({
+  message = 'Processing...',
+  centered = false,
 }: ProcessingIndicatorProps) {
   return (
     <Box
@@ -18,27 +20,60 @@ export default function ProcessingIndicator({
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
-        py: 2,
-        px: 2,
-        mt: 1,
-        borderRadius: 1,
-        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
-        border: '1px solid',
-        borderColor: (theme) => alpha(theme.palette.primary.main, 0.12),
-        animation: 'processingPulse 2s ease-in-out infinite',
-        '@keyframes processingPulse': {
-          '0%, 100%': { opacity: 0.7 },
-          '50%': { opacity: 1 }
-        }
+        ...(centered ? { py: 4, justifyContent: 'center' } : { mt: 2 }),
+        opacity: 0.7,
       }}
     >
-      <CircularProgress size={16} thickness={5} />
-      <Typography
-        variant="body2"
+      <Box
         sx={{
-          color: 'primary.main',
+          display: 'flex',
+          gap: 0.5,
+          alignItems: 'center',
+          height: 20,
+          '& > div': {
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            bgcolor: 'rgba(0, 0, 0, 0.6)',
+            animation: 'bounce-wave 1.4s ease-in-out infinite',
+          },
+          '& > div:nth-of-type(2)': {
+            animationDelay: '0.2s',
+          },
+          '& > div:nth-of-type(3)': {
+            animationDelay: '0.4s',
+          },
+          '@keyframes bounce-wave': {
+            '0%, 60%, 100%': {
+              transform: 'translateY(0)',
+            },
+            '30%': {
+              transform: 'translateY(-8px)',
+            },
+          },
+        }}
+      >
+        <Box />
+        <Box />
+        <Box />
+      </Box>
+      <Typography
+        variant="body1"
+        sx={{
+          fontSize: '1.1rem',
           fontWeight: 500,
-          fontSize: '0.875rem',
+          fontStyle: 'italic',
+          background:
+            'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
+          backgroundSize: '200% 100%',
+          backgroundClip: 'text',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          animation: 'shimmer-subtle 3s linear infinite',
+          '@keyframes shimmer-subtle': {
+            '0%': { backgroundPosition: '200% center' },
+            '100%': { backgroundPosition: '-200% center' },
+          },
         }}
       >
         {message}

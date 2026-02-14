@@ -261,7 +261,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.4: Session Detail & Conversation Timeline
+### Phase 7.4: Session Detail & Conversation Timeline ✅ DONE
 
 **Goal**: Session detail page with conversation timeline, live streaming, and stage progress.
 

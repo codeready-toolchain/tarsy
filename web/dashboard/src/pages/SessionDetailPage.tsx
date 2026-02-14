@@ -84,7 +84,7 @@ const ConversationTimeline = lazy(() => import('../components/session/Conversati
 
 function HeaderSkeleton() {
   return (
-    <Paper sx={{ p: 3, mb: 2 }}>
+    <Paper sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Skeleton variant="circular" width={40} height={40} />
         <Box sx={{ flex: 1 }}>
@@ -176,6 +176,8 @@ export function SessionDetailPage() {
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [collapseCounter, _setCollapseCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
   // --- Dedup tracking ---
@@ -602,7 +604,7 @@ export function SessionDetailPage() {
               }
               label={
                 <Typography variant="caption" sx={{ color: 'inherit' }}>
-                  Auto-scroll
+                  🔄 Auto-scroll
                 </Typography>
               }
               sx={{ m: 0, color: 'inherit' }}
@@ -617,7 +619,7 @@ export function SessionDetailPage() {
       <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         {/* Loading state */}
         {loading && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <HeaderSkeleton />
             <AlertCardSkeleton />
             <TimelineSkeleton />
@@ -703,6 +705,7 @@ export function SessionDetailPage() {
                   progressStatus={progressStatus}
                   streamingEvents={streamingEvents}
                   agentProgressStatuses={agentProgressStatuses}
+                  chainId={session.chain_id}
                 />
               </Suspense>
             ) : isActive ? (
@@ -732,7 +735,10 @@ export function SessionDetailPage() {
                   Backend Chain Execution Error
                 </Typography>
                 <Typography variant="body2">
-                  This session is missing stage execution data.
+                  This session is missing stage execution data. All sessions should be processed as chains.
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  Session: {session.id} &bull; Type: {session.alert_type || 'Unknown'}
                 </Typography>
               </Alert>
             )}
@@ -746,6 +752,7 @@ export function SessionDetailPage() {
                 sessionStatus={session.status}
                 errorMessage={session.error_message}
                 expandCounter={expandCounter}
+                collapseCounter={collapseCounter}
               />
             </Suspense>
           </Box>
