@@ -50,7 +50,7 @@ interface KeyValuePair {
   value: string;
 }
 
-const generateId = () => Math.random().toString(36).substr(2, 9);
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
 /**
  * Filter out servers with empty tool arrays from MCP selection config.

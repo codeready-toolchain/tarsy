@@ -133,16 +133,16 @@ export function MCPSelection({
   // Track if defaults have been loaded (to avoid premature onChange calls)
   const defaultsLoadedRef = useRef(false);
 
-  // Ref to track the latest alert type
-  const latestAlertTypeRef = useRef<string | undefined>(alertType);
-
-  useEffect(() => {
-    latestAlertTypeRef.current = alertType;
-  }, [alertType]);
+  // Guard against stale async completions: only the latest invocation may
+  // touch state. Each call to loadDefaultsAndServers mints a new ID and
+  // stores it in latestRequestIdRef; before every state update the callback
+  // checks that its local ID still matches.
+  const latestRequestIdRef = useRef(0);
 
   // ── Load defaults and server details ────────────────────
 
   const loadDefaultsAndServers = useCallback(async () => {
+    const requestId = ++latestRequestIdRef.current;
     const requestAlertType = alertType;
 
     setLoading(true);
@@ -154,8 +154,8 @@ export function MCPSelection({
         getMCPServers(),
       ]);
 
-      // Check if alertType changed while loading
-      if (latestAlertTypeRef.current !== requestAlertType) {
+      // Stale response — a newer request has been issued
+      if (latestRequestIdRef.current !== requestId) {
         return;
       }
 
@@ -176,12 +176,14 @@ export function MCPSelection({
       setExpandedServers(new Set());
       setNativeToolsExpanded(false);
     } catch (err: unknown) {
-      if (latestAlertTypeRef.current === requestAlertType) {
-        const message = err instanceof Error ? err.message : 'Failed to load configuration.';
-        setError(message);
-      }
+      if (latestRequestIdRef.current !== requestId) return;
+      const message = err instanceof Error ? err.message : 'Failed to load configuration.';
+      setError(message);
     } finally {
-      setLoading(false);
+      // Only clear loading if this is still the latest request
+      if (latestRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, [alertType]);
 
