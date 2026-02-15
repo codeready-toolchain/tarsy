@@ -44,11 +44,11 @@ func TestE2E_ReactStreamingChunkBoundaries(t *testing.T) {
 	// Then "\nAction:" arrives cleanly to trigger the phase transition.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thou"},                              // partial marker
-			&agent.TextChunk{Content: "ght: I need"},                       // marker completes, content starts
-			&agent.TextChunk{Content: " to check"},                         // mid-thought delta
-			&agent.TextChunk{Content: " the pods."},                        // thought continues
-			&agent.TextChunk{Content: "\nAction: test-mcp.get_pods"},       // phase transition
+			&agent.TextChunk{Content: "Thou"},                                 // partial marker
+			&agent.TextChunk{Content: "ght: I need"},                          // marker completes, content starts
+			&agent.TextChunk{Content: " to check"},                            // mid-thought delta
+			&agent.TextChunk{Content: " the pods."},                           // thought continues
+			&agent.TextChunk{Content: "\nAction: test-mcp.get_pods"},          // phase transition
 			&agent.TextChunk{Content: "\nAction Input: {\"ns\":\"default\"}"}, // action input
 			&agent.UsageChunk{InputTokens: 50, OutputTokens: 30, TotalTokens: 80},
 		},
@@ -59,13 +59,13 @@ func TestE2E_ReactStreamingChunkBoundaries(t *testing.T) {
 	// "Final Answer:" is split as "Final An" + "swer: content..."
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Though"},                   // partial "Thought:"
-			&agent.TextChunk{Content: "t: The pod"},               // marker completes
-			&agent.TextChunk{Content: " is OOMKilled."},           // thought content
-			&agent.TextChunk{Content: "\nFinal An"},               // partial "Final Answer:"
-			&agent.TextChunk{Content: "swer: Increase"},           // marker completes, answer starts
-			&agent.TextChunk{Content: " memory"},                  // mid-answer delta
-			&agent.TextChunk{Content: " to 1Gi."},                 // answer continues
+			&agent.TextChunk{Content: "Though"},         // partial "Thought:"
+			&agent.TextChunk{Content: "t: The pod"},     // marker completes
+			&agent.TextChunk{Content: " is OOMKilled."}, // thought content
+			&agent.TextChunk{Content: "\nFinal An"},     // partial "Final Answer:"
+			&agent.TextChunk{Content: "swer: Increase"}, // marker completes, answer starts
+			&agent.TextChunk{Content: " memory"},        // mid-answer delta
+			&agent.TextChunk{Content: " to 1Gi."},       // answer continues
 			&agent.UsageChunk{InputTokens: 80, OutputTokens: 50, TotalTokens: 130},
 		},
 	})

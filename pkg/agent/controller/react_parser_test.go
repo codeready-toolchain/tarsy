@@ -1428,11 +1428,11 @@ func TestParseReActResponse_ThoughtSpaceTier2Exclusion(t *testing.T) {
 
 func TestDetectReActPhase(t *testing.T) {
 	tests := []struct {
-		name               string
-		text               string
-		wantPhase          string
-		wantThought        string
-		wantFinalAnswer    string
+		name            string
+		text            string
+		wantPhase       string
+		wantThought     string
+		wantFinalAnswer string
 	}{
 		// --- Basic cases ---
 		{

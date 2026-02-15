@@ -713,4 +713,3 @@ func failOpenStreamingEvent(
 		}
 	}
 }
-
