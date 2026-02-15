@@ -17,6 +17,7 @@ import {
   EXECUTION_STATUS,
   TERMINAL_EXECUTION_STATUSES,
   FAILED_EXECUTION_STATUSES,
+  CANCELLED_EXECUTION_STATUSES,
 } from '../../constants/sessionStatus';
 
 interface StageContentProps {
@@ -334,6 +335,7 @@ const StageContent: React.FC<StageContentProps> = ({
     const wsStatus = executionStatuses?.get(execution.executionId)?.status;
     const effectiveStatus = wsStatus || eo?.status || execution.status;
     const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
+    const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
 
@@ -362,16 +364,23 @@ const StageContent: React.FC<StageContentProps> = ({
           </Typography>
         )}
 
-        {isFailed && (() => {
-          return (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                <strong>Execution Failed</strong>
-                {errorMessage ? `: ${errorMessage}` : ''}
-              </Typography>
-            </Alert>
-          );
-        })()}
+        {isFailed && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Execution Failed</strong>
+              {errorMessage ? `: ${errorMessage}` : ''}
+            </Typography>
+          </Alert>
+        )}
+
+        {isCancelled && (
+          <Alert severity="info" sx={{ mt: 2, bgcolor: 'grey.100', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Execution Cancelled</strong>
+              {errorMessage ? `: ${errorMessage}` : ''}
+            </Typography>
+          </Alert>
+        )}
 
       </Box>
     );

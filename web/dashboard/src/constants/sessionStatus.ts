@@ -41,6 +41,10 @@ export const TERMINAL_EXECUTION_STATUSES = new Set<string>([
 export const FAILED_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.FAILED,
   EXECUTION_STATUS.TIMED_OUT,
+]);
+
+/** Cancelled statuses (terminal but not an error — user-initiated). */
+export const CANCELLED_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.CANCELLED,
 ]);
 
