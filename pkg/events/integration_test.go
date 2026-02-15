@@ -439,3 +439,73 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	_, _, err = conn.Read(readCtx)
 	assert.Error(t, err, "should not receive more messages after catchup")
 }
+
+func TestIntegration_ResubscribeAfterUnsubscribe_KeepsListen(t *testing.T) {
+	// Regression test for the race condition where a rapid unsubscribe/resubscribe
+	// cycle (as caused by React StrictMode double-render) would drop the PG LISTEN.
+	//
+	// The race was:
+	//   1. subscribe → LISTEN active
+	//   2. unsubscribe → async goroutine: UNLISTEN (deferred)
+	//   3. resubscribe → l.Subscribe saw "already listening" → returned early
+	//   4. goroutine fired UNLISTEN → PG dropped the LISTEN
+	//   5. all subsequent NOTIFY events were silently lost
+	//
+	// The fix has two parts:
+	//   - l.Subscribe always sends LISTEN (no early return; PG handles duplicates)
+	//   - the UNLISTEN goroutine re-checks m.channels and skips if resubscribed
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	conn := env.connectWS(t)
+	msg := readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "connection.established", msg["type"])
+
+	// Subscribe
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: env.channel})
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "subscription.confirmed", msg["type"])
+
+	require.Eventually(t, func() bool {
+		return env.listener.isListening(env.channel)
+	}, 2*time.Second, 10*time.Millisecond, "initial LISTEN should propagate")
+
+	// Rapid unsubscribe + resubscribe (mimics React StrictMode cleanup/remount)
+	writeJSON(t, conn, ClientMessage{Action: "unsubscribe", Channel: env.channel})
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: env.channel})
+
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "subscription.confirmed", msg["type"])
+
+	// Wait for the UNLISTEN goroutine to settle and verify LISTEN is still active.
+	// The goroutine's re-check should see the channel was re-subscribed and skip
+	// the UNLISTEN, OR l.Subscribe should have re-issued LISTEN after the UNLISTEN.
+	// Either way, the channel must remain listened.
+	time.Sleep(200 * time.Millisecond) // Let the async UNLISTEN goroutine run
+	require.True(t, env.listener.isListening(env.channel),
+		"LISTEN must survive a rapid unsubscribe/resubscribe cycle")
+
+	// Publish an event — it must arrive via pg_notify → listener → WebSocket
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-resub-1",
+		Content: "should arrive after resubscribe",
+	})
+	require.NoError(t, err)
+
+	// Drain any catchup events from the resubscribe before checking for the live event
+	for {
+		msg = readJSONTimeout(t, conn, 5*time.Second)
+		if msg["event_id"] == "evt-resub-1" {
+			break
+		}
+	}
+
+	assert.Equal(t, EventTypeTimelineCreated, msg["type"])
+	assert.Equal(t, "should arrive after resubscribe", msg["content"])
+	assert.Equal(t, env.sessionID, msg["session_id"])
+}
