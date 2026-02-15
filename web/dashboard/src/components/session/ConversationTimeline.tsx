@@ -85,6 +85,12 @@ export default function ConversationTimeline({
   executionStatuses,
   chainId,
 }: ConversationTimelineProps) {
+  // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
+  const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
+  const handleSelectedAgentChange = useCallback((executionId: string | null) => {
+    setSelectedAgentExecutionId(executionId);
+  }, []);
+
   // --- Stage collapse (manual overrides + auto-collapse for Synthesis) ---
   const [stageCollapseOverrides, setStageCollapseOverrides] = useState<Map<string, boolean>>(new Map());
 
@@ -373,6 +379,7 @@ export default function ConversationTimeline({
                   isItemCollapsible={isItemCollapsible}
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
+                  onSelectedAgentChange={handleSelectedAgentChange}
                 />
               </Collapse>
             </Box>
@@ -388,7 +395,27 @@ export default function ConversationTimeline({
             ))}
 
         {/* Processing indicator for active sessions */}
-        {isActive && <ProcessingIndicator message={progressStatus || 'Processing...'} />}
+        {isActive && (() => {
+          let displayStatus = progressStatus || 'Processing...';
+          // When viewing a completed agent's tab while siblings in the same stage are still running,
+          // show "Waiting for other agents..." instead of the session-level progress message.
+          if (selectedAgentExecutionId && executionStatuses) {
+            const selectedEntry = executionStatuses.get(selectedAgentExecutionId);
+            if (selectedEntry && TERMINAL_EXECUTION_STATUSES.has(selectedEntry.status)) {
+              // Only check executions in the SAME stage (by stageId), not across all stages
+              const othersRunningInSameStage = Array.from(executionStatuses.entries()).some(
+                ([id, entry]) =>
+                  id !== selectedAgentExecutionId &&
+                  entry.stageId === selectedEntry.stageId &&
+                  !TERMINAL_EXECUTION_STATUSES.has(entry.status),
+              );
+              if (othersRunningInSameStage) {
+                displayStatus = 'Waiting for other agents...';
+              }
+            }
+          }
+          return <ProcessingIndicator message={displayStatus} />;
+        })()}
       </Box>
     </Card>
   );

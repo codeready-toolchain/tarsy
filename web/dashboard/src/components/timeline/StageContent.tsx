@@ -314,12 +314,13 @@ const StageContent: React.FC<StageContentProps> = ({
   // Check if any parallel agent is still running (for "Waiting for other agents...")
   const hasOtherActiveAgents = useMemo(() => {
     if (!isMultiAgent) return false;
-    return mergedExecutions.some((exec) => {
+    const result = mergedExecutions.some((exec) => {
       const wsStatus = executionStatuses?.get(exec.executionId)?.status;
       const eo = execOverviewMap.get(exec.executionId);
       const status = wsStatus || eo?.status || exec.status;
       return !TERMINAL_EXECUTION_STATUSES.has(status);
     });
+    return result;
   }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
 
   // ── Shared renderer for a single execution's items ──
@@ -335,8 +336,8 @@ const StageContent: React.FC<StageContentProps> = ({
     const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
-    // This agent is done but others are still working
-    const isWaitingForOthers = !isExecutionActive && hasOtherActiveAgents;
+
+
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -372,20 +373,6 @@ const StageContent: React.FC<StageContentProps> = ({
           );
         })()}
 
-        {isWaitingForOthers && !isFailed && (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              mt: 2,
-              fontStyle: 'italic',
-              textAlign: 'center',
-              opacity: 0.7,
-            }}
-          >
-            Waiting for other agents...
-          </Typography>
-        )}
       </Box>
     );
   };
