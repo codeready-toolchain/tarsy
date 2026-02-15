@@ -8,6 +8,7 @@ import {
   CancelOutlined,
 } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
+import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
@@ -16,6 +17,8 @@ import TimelineItem from './TimelineItem';
 interface StageContentProps {
   items: FlowItem[];
   stageId: string;
+  /** Execution overviews from the session detail API */
+  executionOverviews?: ExecutionOverview[];
   /** Active streaming events keyed by event_id */
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   // Auto-collapse system
@@ -168,6 +171,7 @@ function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
 const StageContent: React.FC<StageContentProps> = ({
   items,
   stageId: _stageId,
+  executionOverviews,
   streamingEvents,
   shouldAutoCollapse,
   onToggleItemExpansion,
@@ -180,6 +184,17 @@ const StageContent: React.FC<StageContentProps> = ({
 
   // Group items by executionId (merges orphaned items)
   const executions: ExecutionGroup[] = useMemo(() => groupItemsByExecution(items), [items]);
+
+  // Lookup execution overview by executionId
+  const execOverviewMap = useMemo(() => {
+    const map = new Map<string, ExecutionOverview>();
+    if (executionOverviews) {
+      for (const eo of executionOverviews) {
+        map.set(eo.execution_id, eo);
+      }
+    }
+    return map;
+  }, [executionOverviews]);
 
   // Get streaming items grouped by execution
   const streamingByExecution = useMemo(() => {
@@ -310,13 +325,17 @@ const StageContent: React.FC<StageContentProps> = ({
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           {executions.map((execution, tabIndex) => {
             const isSelected = selectedTab === tabIndex;
-            const statusColor = getStatusColor(execution.status);
-            const statusIcon = getStatusIcon(execution.status);
-            const stageName = execution.items[0]?.metadata?.stage_name as string | undefined;
-            const label = stageName ? `${stageName} #${tabIndex + 1}` : `Agent ${tabIndex + 1}`;
+            const eo = execOverviewMap.get(execution.executionId);
+            const statusColor = getStatusColor(eo?.status || execution.status);
+            const statusIcon = getStatusIcon(eo?.status || execution.status);
+            const label = eo?.agent_name || `Agent ${tabIndex + 1}`;
             const progressStatus = agentProgressStatuses.get(execution.executionId);
             const isTerminalProgress = !progressStatus || ['Completed', 'Failed', 'Cancelled'].includes(progressStatus);
-            const tokenData = deriveTokenData(execution.items);
+            // Prefer API-level token stats, fall back to deriving from item metadata
+            const tokenData = eo
+              ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
+              : deriveTokenData(execution.items);
+            const hasTokens = tokenData && (tokenData.input_tokens > 0 || tokenData.output_tokens > 0);
 
             return (
               <Box
@@ -341,8 +360,18 @@ const StageContent: React.FC<StageContentProps> = ({
                   </Typography>
                 </Box>
                 <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                  {eo?.llm_provider && (
+                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                      {eo.llm_provider}
+                    </Typography>
+                  )}
+                  {eo?.iteration_strategy && (
+                    <Typography variant="caption" color="text.secondary">
+                      {eo.iteration_strategy.replace(/_/g, '-')}
+                    </Typography>
+                  )}
                   <Chip
-                    label={getStatusLabel(execution.status)}
+                    label={getStatusLabel(eo?.status || execution.status)}
                     size="small" color={statusColor}
                     sx={{ height: 18, fontSize: '0.65rem' }}
                   />
@@ -354,7 +383,7 @@ const StageContent: React.FC<StageContentProps> = ({
                     />
                   )}
                 </Box>
-                {tokenData && (
+                {hasTokens && tokenData && (
                   <Box mt={1} display="flex" alignItems="center" gap={0.5}>
                     <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>🪙</Typography>
                     <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />

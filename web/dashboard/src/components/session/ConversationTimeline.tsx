@@ -118,6 +118,13 @@ export default function ConversationTimeline({
   // --- Copy ---
   const plainText = useMemo(() => flowItemsToPlainText(items), [items]);
 
+  // --- Stage lookup (for execution overviews) ---
+  const stageMap = useMemo(() => {
+    const map = new Map<string, StageOverview>();
+    for (const s of stages) map.set(s.id, s);
+    return map;
+  }, [stages]);
+
   // --- Streaming events grouping ---
   const streamingByStage = useMemo(() => {
     if (!streamingEvents || streamingEvents.size === 0)
@@ -300,6 +307,7 @@ export default function ConversationTimeline({
                 <StageContent
                   items={group.items}
                   stageId={group.stageId}
+                  executionOverviews={stageMap.get(group.stageId)?.executions}
                   streamingEvents={stageStreamingMap}
                   shouldAutoCollapse={shouldAutoCollapse}
                   onToggleItemExpansion={toggleItemExpansion}

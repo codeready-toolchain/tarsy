@@ -104,6 +104,24 @@ export interface StageOverview {
   expected_agent_count: number;
   started_at: string | null;
   completed_at: string | null;
+  executions?: ExecutionOverview[];
+}
+
+/** Summary of an agent execution within a stage. */
+export interface ExecutionOverview {
+  execution_id: string;
+  agent_name: string;
+  agent_index: number;
+  status: string;
+  iteration_strategy: string;
+  llm_provider: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
 }
 
 /** Session summary response. */

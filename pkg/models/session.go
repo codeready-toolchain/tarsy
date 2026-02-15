@@ -179,14 +179,32 @@ type SessionDetailResponse struct {
 
 // StageOverview is a summary of a stage within the session detail.
 type StageOverview struct {
-	ID                 string     `json:"id"`
-	StageName          string     `json:"stage_name"`
-	StageIndex         int        `json:"stage_index"`
-	Status             string     `json:"status"`
-	ParallelType       *string    `json:"parallel_type"`
-	ExpectedAgentCount int        `json:"expected_agent_count"`
-	StartedAt          *time.Time `json:"started_at"`
-	CompletedAt        *time.Time `json:"completed_at"`
+	ID                 string              `json:"id"`
+	StageName          string              `json:"stage_name"`
+	StageIndex         int                 `json:"stage_index"`
+	Status             string              `json:"status"`
+	ParallelType       *string             `json:"parallel_type"`
+	ExpectedAgentCount int                 `json:"expected_agent_count"`
+	StartedAt          *time.Time          `json:"started_at"`
+	CompletedAt        *time.Time          `json:"completed_at"`
+	Executions         []ExecutionOverview `json:"executions,omitempty"`
+}
+
+// ExecutionOverview is a summary of an agent execution within a stage.
+type ExecutionOverview struct {
+	ExecutionID       string     `json:"execution_id"`
+	AgentName         string     `json:"agent_name"`
+	AgentIndex        int        `json:"agent_index"`
+	Status            string     `json:"status"`
+	IterationStrategy string     `json:"iteration_strategy"`
+	LLMProvider       *string    `json:"llm_provider"`
+	StartedAt         *time.Time `json:"started_at"`
+	CompletedAt       *time.Time `json:"completed_at"`
+	DurationMs        *int       `json:"duration_ms"`
+	ErrorMessage      *string    `json:"error_message"`
+	InputTokens       int64      `json:"input_tokens"`
+	OutputTokens      int64      `json:"output_tokens"`
+	TotalTokens       int64      `json:"total_tokens"`
 }
 
 // SessionSummaryResponse is returned by GET /api/v1/sessions/:id/summary.
