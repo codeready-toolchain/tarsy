@@ -15,8 +15,8 @@ import (
 // receive loop, which is the sole goroutine that touches the pgx connection.
 type listenCmd struct {
 	sql     string
-	channel string     // channel name (used for generation checks on UNLISTEN)
-	gen     uint64     // generation at Unsubscribe time; 0 for LISTEN (always execute)
+	channel string // channel name (used for generation checks on UNLISTEN)
+	gen     uint64 // generation at Unsubscribe time; 0 for LISTEN (always execute)
 	result  chan error
 }
 
