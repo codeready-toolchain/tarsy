@@ -465,10 +465,17 @@ func (e *RealSessionExecutor) executeAgent(
 	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
 	if err != nil {
 		logger.Error("Failed to resolve MCP selection", "error", err)
+		failErr := fmt.Errorf("invalid MCP selection: %w", err)
+		if updateErr := input.stageService.UpdateAgentExecutionStatus(
+			context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+		); updateErr != nil {
+			logger.Error("Failed to update agent execution status after MCP error", "error", updateErr)
+		}
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            agent.ExecutionStatusFailed,
-			err:               fmt.Errorf("invalid MCP selection: %w", err),
+			err:               failErr,
 			iterationStrategy: resolvedStrategy,
 			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
@@ -505,10 +512,17 @@ func (e *RealSessionExecutor) executeAgent(
 	agentInstance, err := e.agentFactory.CreateAgent(execCtx)
 	if err != nil {
 		logger.Error("Failed to create agent", "error", err)
+		failErr := fmt.Errorf("failed to create agent: %w", err)
+		if updateErr := input.stageService.UpdateAgentExecutionStatus(
+			context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+		); updateErr != nil {
+			logger.Error("Failed to update agent execution status after agent creation error", "error", updateErr)
+		}
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            agent.ExecutionStatusFailed,
-			err:               fmt.Errorf("failed to create agent: %w", err),
+			err:               failErr,
 			iterationStrategy: resolvedStrategy,
 			llmProviderName:   resolvedConfig.LLMProviderName,
 		}

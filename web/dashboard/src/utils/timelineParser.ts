@@ -325,7 +325,7 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
       case FLOW_ITEM.THINKING: stats.thoughtCount++; break;
       case FLOW_ITEM.TOOL_CALL:
         stats.toolCallCount++;
-        if (item.status === EXECUTION_STATUS.COMPLETED) stats.successfulToolCalls++;
+        if (item.status === TIMELINE_STATUS.COMPLETED) stats.successfulToolCalls++;
         break;
       case FLOW_ITEM.TOOL_SUMMARY: stats.toolSummaryCount++; break;
       case FLOW_ITEM.RESPONSE: stats.responseCount++; break;

@@ -1963,3 +1963,144 @@ func TestCountExpectedStages(t *testing.T) {
 		assert.Equal(t, 1, countExpectedStages(chain))
 	})
 }
+
+// ────────────────────────────────────────────────────────────
+// Post-activation failure tests
+// ────────────────────────────────────────────────────────────
+
+func TestExecutor_MCPSelectionFailureEmitsTerminalStatus(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+			},
+		},
+	}
+
+	// LLM should never be called — execution fails before reaching the agent loop.
+	llm := &mockLLMClient{}
+
+	cfg := testConfig("test-chain", chain)
+	// Registry is non-nil but empty, so any server reference in the override
+	// will fail the Has() check inside resolveMCPSelection.
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+
+	// Create session with an MCP override referencing a non-existent server.
+	sessionID := uuid.New().String()
+	session, err := entClient.AlertSession.Create().
+		SetID(sessionID).
+		SetAlertData("Test alert data").
+		SetAgentType("test").
+		SetAlertType("test-alert").
+		SetChainID("test-chain").
+		SetStatus(alertsession.StatusInProgress).
+		SetAuthor("test").
+		SetMcpSelection(map[string]interface{}{
+			"servers": []interface{}{
+				map[string]interface{}{"name": "nonexistent-server"},
+			},
+		}).
+		Save(context.Background())
+	require.NoError(t, err)
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "nonexistent-server")
+
+	// Verify DB: execution record exists and is failed.
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 1)
+	assert.Equal(t, agentexecution.StatusFailed, execs[0].Status)
+
+	// Verify execution.status events: active → failed.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 2, "expected 2 execution.status events (active + failed)")
+
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 1, "agent should emit execution.status: active at startup")
+
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on MCP error")
+	assert.Contains(t, failedEvents[0].ErrorMessage, "nonexistent-server")
+}
+
+func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "BadAgent"}},
+			},
+		},
+	}
+
+	// LLM should never be called.
+	llm := &mockLLMClient{}
+
+	// Register "BadAgent" with an unsupported iteration strategy so that
+	// ResolveAgentConfig succeeds but CreateAgent (→ CreateController) fails.
+	maxIter := 1
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:       "test-provider",
+			IterationStrategy: config.IterationStrategyReact,
+			MaxIterations:     &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"BadAgent": {
+				IterationStrategy: config.IterationStrategy("unsupported-strategy"),
+				MaxIterations:     &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": chain,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "failed to create agent")
+
+	// Verify DB: execution record exists and is failed.
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 1)
+	assert.Equal(t, agentexecution.StatusFailed, execs[0].Status)
+
+	// Verify execution.status events: active → failed.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 2, "expected 2 execution.status events (active + failed)")
+
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 1, "agent should emit execution.status: active at startup")
+
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on creation error")
+	assert.Contains(t, failedEvents[0].ErrorMessage, "failed to create agent")
+}

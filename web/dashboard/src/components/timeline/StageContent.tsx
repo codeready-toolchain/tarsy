@@ -277,8 +277,25 @@ const StageContent: React.FC<StageContentProps> = ({
       }
     }
 
-    return [...executions, ...streamOnlyGroups, ...overviewGroups];
-  }, [executions, streamingByExecution, executionOverviews]);
+    // Agents known only from execution.status WS events (e.g. "active" arrives
+    // before any items, streaming, or REST overview data).
+    const statusOnlyGroups: ExecutionGroup[] = [];
+    if (executionStatuses) {
+      for (const execId of executionStatuses.keys()) {
+        if (!allExecIds.has(execId)) {
+          statusOnlyGroups.push({
+            executionId: execId,
+            index: executions.length + streamOnlyGroups.length + overviewGroups.length + statusOnlyGroups.length,
+            items: [],
+            status: executionStatuses.get(execId) || EXECUTION_STATUS.STARTED,
+          });
+          allExecIds.add(execId);
+        }
+      }
+    }
+
+    return [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups];
+  }, [executions, streamingByExecution, executionOverviews, executionStatuses]);
 
   // Detect multi-agent from BOTH completed items and active streaming events
   // so the tabbed interface appears immediately, not only after items complete.
