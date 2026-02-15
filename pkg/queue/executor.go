@@ -451,6 +451,13 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 	}
 
+	// Mark execution as active and notify the frontend immediately so it can
+	// track this agent as non-terminal while it runs.
+	if updateErr := input.stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, ""); updateErr != nil {
+		logger.Warn("Failed to update agent execution to active", "error", updateErr)
+	}
+	publishExecutionStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusActive), "")
+
 	// Metadata carried on all agentResult returns below (for synthesis context).
 	resolvedStrategy := string(resolvedConfig.IterationStrategy)
 

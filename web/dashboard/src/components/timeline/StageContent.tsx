@@ -7,7 +7,7 @@ import {
   CallSplit,
   CancelOutlined,
 } from '@mui/icons-material';
-import type { FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -60,7 +60,7 @@ function TabPanel({ children, value, index, ...other }: TabPanelProps) {
 }
 
 const getExecutionErrorMessage = (items: FlowItem[]): string => {
-  const errorItem = items.find(i => i.type === 'error');
+  const errorItem = items.find(i => i.type === FLOW_ITEM.ERROR);
   return errorItem?.content || (items[items.length - 1]?.metadata?.error_message as string) || '';
 };
 
@@ -95,15 +95,20 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// Helper: derive execution status from items
+// Helper: derive execution status from items.
+// IMPORTANT: Timeline item status "completed" means "streaming finished for this item",
+// NOT "the execution is done". Between LLM iterations all existing items can be
+// "completed" while the agent is still running. Only trust a final_analysis item
+// as a definitive completion signal.
 function deriveExecutionStatus(items: FlowItem[]): string {
   if (items.length === 0) return EXECUTION_STATUS.STARTED;
   const hasError = items.some(
-    i => i.type === 'error' || FAILED_EXECUTION_STATUSES.has(i.status || ''),
+    i => i.type === FLOW_ITEM.ERROR || FAILED_EXECUTION_STATUSES.has(i.status || ''),
   );
-  const allTerminal = items.every(i => TERMINAL_EXECUTION_STATUSES.has(i.status || ''));
   if (hasError) return EXECUTION_STATUS.FAILED;
-  if (allTerminal && items.length > 0) return EXECUTION_STATUS.COMPLETED;
+  // A final_analysis item is the definitive signal that the agent finished.
+  const hasFinalAnalysis = items.some(i => i.type === FLOW_ITEM.FINAL_ANALYSIS);
+  if (hasFinalAnalysis) return EXECUTION_STATUS.COMPLETED;
   return EXECUTION_STATUS.STARTED;
 }
 
@@ -146,7 +151,7 @@ function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
   const executionOrder: string[] = [];
 
   for (const item of items) {
-    if (item.type === 'stage_separator') continue;
+    if (item.type === FLOW_ITEM.STAGE_SEPARATOR) continue;
     const execId = item.executionId || '__default__';
     if (!groups.has(execId)) {
       groups.set(execId, []);

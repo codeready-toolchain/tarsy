@@ -7,7 +7,7 @@ import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
 import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
-import type { FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 
 interface ResponseItemProps {
   item: FlowItem;
@@ -29,7 +29,7 @@ function ResponseItem({
   expandAll = false,
   isCollapsible = false,
 }: ResponseItemProps) {
-  const isFinalAnalysis = item.type === 'final_analysis';
+  const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
 
