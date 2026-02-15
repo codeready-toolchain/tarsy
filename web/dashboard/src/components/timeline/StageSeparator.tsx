@@ -17,7 +17,10 @@ interface StageSeparatorProps {
 function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
   const isErrorStatus = stageStatus === 'failed' || stageStatus === 'timed_out' || stageStatus === 'cancelled';
-  const stageName = item.content;
+  // The backend prefixes stage names with the parent chain name
+  // (e.g. "investigation - Synthesis"). Display only the stage-specific part.
+  const rawName = item.content;
+  const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
   const errorMessage = (item.metadata?.error_message as string) || '';
 
   const handleKeyDown = useCallback(

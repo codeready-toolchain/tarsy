@@ -11,7 +11,6 @@ import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
-import TypingIndicator from '../streaming/TypingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
 
@@ -315,12 +314,6 @@ const StageContent: React.FC<StageContentProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
             No reasoning steps available for this agent
           </Typography>
-        )}
-
-        {isExecutionActive && (
-          <Box sx={{ mt: 2 }}>
-            <TypingIndicator dotsOnly size="small" />
-          </Box>
         )}
 
         {isFailed && (() => {

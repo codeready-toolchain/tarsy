@@ -28,6 +28,12 @@ function TimelineItem({
   expandAll = false,
   isCollapsible = false,
 }: TimelineItemProps) {
+  // Hide response/executive_summary items with empty content. Defense-in-depth
+  // for truncated WS payloads that may slip through the truncation handler.
+  if ((!item.content || !item.content.trim()) && (item.type === 'response' || item.type === 'executive_summary')) {
+    return null;
+  }
+
   switch (item.type) {
     case 'thinking':
       return (

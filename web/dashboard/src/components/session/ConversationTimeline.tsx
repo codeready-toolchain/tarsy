@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -31,10 +31,17 @@ import CopyButton from '../shared/CopyButton';
 
 const TERMINAL_STAGE_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
 
-/** Synthesis stages that are terminal should auto-collapse. */
-function shouldAutoCollapseStage(group: StageGroup): boolean {
+/**
+ * Synthesis stages auto-collapse only when the session is no longer active
+ * AND the stage itself has reached a terminal status.
+ * While the session is streaming, synthesis stays expanded so the user
+ * can watch the reasoning flow in real time.
+ */
+function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): boolean {
   const isSynthesis = group.stageName.toLowerCase().includes('synthesis');
-  return isSynthesis && TERMINAL_STAGE_STATUSES.has(group.stageStatus);
+  if (!isSynthesis) return false;
+  if (isSessionActive) return false;
+  return TERMINAL_STAGE_STATUSES.has(group.stageStatus);
 }
 
 interface ConversationTimelineProps {
@@ -84,12 +91,61 @@ export default function ConversationTimeline({
   // Manual overrides: items the user has explicitly toggled
   const [manualOverrides, setManualOverrides] = useState<Set<string>>(new Set());
 
+  // --- Animated collapse for newly completed items ---
+  // When items transition from streaming to completed, they should first render
+  // expanded and then smoothly collapse (300ms MUI Collapse animation).
+  // Without this, items would be born in the collapsed state with no animation.
+  // On initial page load (bulk REST data), items start collapsed immediately.
+  const initialLoadDoneRef = useRef(false);
+  const prevItemIdsRef = useRef<Set<string>>(new Set());
+  const [animatingCollapseIds, setAnimatingCollapseIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const currentIds = new Set(items.map(i => i.id));
+
+    if (!initialLoadDoneRef.current) {
+      if (items.length > 0) {
+        // First batch of data from REST — collapse immediately, no animation
+        initialLoadDoneRef.current = true;
+        prevItemIdsRef.current = currentIds;
+      }
+      return;
+    }
+
+    // Find newly added items that are collapsible and already terminal
+    const newCollapsible = new Set<string>();
+    for (const item of items) {
+      if (
+        !prevItemIdsRef.current.has(item.id) &&
+        isFlowItemCollapsible(item) &&
+        isFlowItemTerminal(item)
+      ) {
+        newCollapsible.add(item.id);
+      }
+    }
+
+    prevItemIdsRef.current = currentIds;
+
+    if (newCollapsible.size > 0) {
+      setAnimatingCollapseIds(newCollapsible);
+    }
+  }, [items]);
+
+  // Clear animating IDs after a brief delay so the MUI Collapse transition plays.
+  // The 50ms gap ensures the expanded state is painted before collapsing.
+  useEffect(() => {
+    if (animatingCollapseIds.size === 0) return;
+    const timer = setTimeout(() => setAnimatingCollapseIds(new Set()), 50);
+    return () => clearTimeout(timer);
+  }, [animatingCollapseIds]);
+
   const shouldAutoCollapse = useCallback(
     (item: FlowItem): boolean => {
       if (manualOverrides.has(item.id)) return false; // user expanded it
+      if (animatingCollapseIds.has(item.id)) return false; // grace period for animation
       return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
     },
-    [manualOverrides],
+    [manualOverrides, animatingCollapseIds],
   );
 
   const toggleItemExpansion = useCallback((item: FlowItem) => {
@@ -268,7 +324,7 @@ export default function ConversationTimeline({
           // Manual override takes precedence, otherwise auto-collapse Synthesis stages
           const isCollapsed = stageCollapseOverrides.has(group.stageId)
             ? stageCollapseOverrides.get(group.stageId)!
-            : shouldAutoCollapseStage(group);
+            : shouldAutoCollapseStage(group, isActive);
 
           // Get streaming events for this stage
           const stageStreamingMap = streamingByStage.get(group.stageId);

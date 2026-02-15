@@ -186,17 +186,46 @@ export function SessionDetailPage() {
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
 
+  // --- Truncation re-fetch debounce ---
+  // When truncated WS payloads arrive (content > 8KB), we re-fetch the full
+  // timeline from the REST API. Multiple truncated events can arrive in quick
+  // succession, so we debounce to avoid hammering the API.
+  const truncationRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // --- Streaming metadata ref (synchronous access for completed handler) ---
   // Tracks stageId, executionId, sequenceNumber, and original metadata for
   // streaming events. Unlike streamingEvents state (which updates async via
   // React batching), this ref is read/written synchronously, ensuring correct
   // values in the timeline_event.completed handler.
   const streamingMetaRef = useRef<Map<string, {
+    eventType: string;
     stageId?: string;
     executionId?: string;
     sequenceNumber: number;
     metadata?: Record<string, unknown> | null;
   }>>(new Map());
+
+  // Debounced re-fetch for truncated events. Coalesces multiple truncation
+  // events arriving within 300ms into a single API call.
+  const refetchTimelineDebounced = useCallback(() => {
+    if (!id) return;
+    if (truncationRefetchTimerRef.current) {
+      clearTimeout(truncationRefetchTimerRef.current);
+    }
+    truncationRefetchTimerRef.current = setTimeout(() => {
+      truncationRefetchTimerRef.current = null;
+      getTimeline(id).then((freshTimeline) => {
+        setTimelineEvents(freshTimeline);
+        const ids = new Set<string>();
+        for (const ev of freshTimeline) {
+          ids.add(ev.id);
+        }
+        knownEventIdsRef.current = ids;
+      }).catch((err) => {
+        console.warn('Failed to re-fetch timeline after truncated event:', err);
+      });
+    }, 300);
+  }, [id]);
 
   // --- Derived ---
   const isActive = session
@@ -235,13 +264,44 @@ export function SessionDetailPage() {
         getTimeline(id),
       ]);
       setSession(sessionData);
-      setTimelineEvents(timelineData);
 
-      // Populate dedup set
+      // Separate events with status "streaming" from completed events.
+      // Streaming events have empty content in the DB and must be routed to
+      // the streaming system so that:
+      // 1. They're rendered by StreamingContentRenderer (which hides empty content)
+      // 2. stream.chunk WebSocket events update them (chunks only update streamingEvents)
+      // 3. timeline_event.completed properly transitions them to timelineEvents
+      const completedEvents: TimelineEvent[] = [];
+      const restStreamingItems = new Map<string, ExtendedStreamingItem>();
       const ids = new Set<string>();
+
       for (const ev of timelineData) {
         ids.add(ev.id);
+        if (ev.status === TIMELINE_STATUS.STREAMING) {
+          // Route to streaming system
+          restStreamingItems.set(ev.id, {
+            eventType: ev.event_type,
+            content: ev.content || '',
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata || undefined,
+          });
+          // Store metadata for the completed handler
+          streamingMetaRef.current.set(ev.id, {
+            eventType: ev.event_type,
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata,
+          });
+        } else {
+          completedEvents.push(ev);
+        }
       }
+
+      setTimelineEvents(completedEvents);
+      setStreamingEvents(restStreamingItems);
       knownEventIdsRef.current = ids;
     } catch (err) {
       setError(handleAPIError(err));
@@ -280,6 +340,15 @@ export function SessionDetailPage() {
         // --- timeline_event.created ---
         if (eventType === EVENT_TIMELINE_CREATED) {
           const payload = data as unknown as TimelineCreatedPayload;
+          const isTruncated = !!(data as Record<string, unknown>).truncated;
+
+          // Truncated payloads only have type, event_id, session_id — re-fetch.
+          // The backend truncates NOTIFY payloads exceeding PostgreSQL's ~8KB
+          // limit, stripping all fields except routing info and truncated:true.
+          if (isTruncated) {
+            refetchTimelineDebounced();
+            return;
+          }
 
           // Dedup: skip if we already have this event from REST
           if (knownEventIdsRef.current.has(payload.event_id)) {
@@ -287,8 +356,11 @@ export function SessionDetailPage() {
           }
 
           if (payload.status === TIMELINE_STATUS.STREAMING) {
-            // Store metadata in synchronous ref for the completed handler
+            // Store metadata in synchronous ref for the completed handler.
+            // event_type is stored because the completed payload sometimes
+            // arrives without it (observed in runtime logs for fast tool calls).
             streamingMetaRef.current.set(payload.event_id, {
+              eventType: payload.event_type,
               stageId: payload.stage_id,
               executionId: payload.execution_id,
               sequenceNumber: payload.sequence_number,
@@ -349,6 +421,7 @@ export function SessionDetailPage() {
         // --- timeline_event.completed ---
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
+          const isTruncated = !!(data as Record<string, unknown>).truncated;
 
           // Read streaming metadata from synchronous ref (reliable, not
           // subject to React batching). Then clean up both ref and state.
@@ -363,6 +436,18 @@ export function SessionDetailPage() {
             return next;
           });
 
+          // ── Truncated payload handling ──────────────────────────
+          // The backend truncates NOTIFY payloads that exceed PostgreSQL's
+          // ~8KB limit (e.g. tool calls with large results). Truncated
+          // payloads only contain type, event_id, session_id, db_event_id,
+          // and truncated:true — all other fields are stripped.
+          // When detected, re-fetch the full timeline from the REST API.
+          if (isTruncated) {
+            refetchTimelineDebounced();
+            return;
+          }
+
+          // ── Full payload handling ──────────────────────────────
           // Add or update in timeline
           if (knownEventIdsRef.current.has(payload.event_id)) {
             // Update existing event in-place (content / status may have changed).
@@ -373,7 +458,7 @@ export function SessionDetailPage() {
             setTimelineEvents((prev) =>
               prev.map((ev) =>
                 ev.id === payload.event_id
-                  ? {
+                    ? {
                       ...ev,
                       content: payload.content,
                       status: payload.status,
