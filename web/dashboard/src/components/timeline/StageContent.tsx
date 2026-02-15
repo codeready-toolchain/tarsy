@@ -498,7 +498,7 @@ const StageContent: React.FC<StageContentProps> = ({
                     />
                   ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
                     <Chip
-                      label="Waiting for other agents..."
+                      label="Waiting..."
                       size="small" color="default" variant="outlined"
                       sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
                     />
