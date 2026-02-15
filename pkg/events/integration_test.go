@@ -510,3 +510,64 @@ func TestIntegration_ResubscribeAfterUnsubscribe_KeepsListen(t *testing.T) {
 	assert.Equal(t, "should arrive after resubscribe", msg["content"])
 	assert.Equal(t, env.sessionID, msg["session_id"])
 }
+
+func TestIntegration_ListenerGenerationCounter_StaleUnlistenSkipped(t *testing.T) {
+	// Tests the generation counter inside NotifyListener directly, bypassing
+	// the ConnectionManager. This exercises the exact scenario from code review:
+	//
+	//   1. Subscribe → LISTEN, gen=1
+	//   2. Concurrent Unsubscribe → captures gen=1, enqueues UNLISTEN(gen=1)
+	//   3. Subscribe again → gen=2, enqueues LISTEN
+	//   4. cmdCh processes: could be LISTEN then UNLISTEN(gen=1)
+	//   5. processPendingCmds detects gen mismatch → skips stale UNLISTEN
+	//   6. PG stays listened, l.channels stays true
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+	channel := env.channel
+
+	// 1. Initial Subscribe
+	require.NoError(t, env.listener.Subscribe(ctx, channel))
+	require.True(t, env.listener.isListening(channel))
+
+	// 2. Unsubscribe in a goroutine (simulates the async goroutine in manager)
+	unsubDone := make(chan struct{})
+	go func() {
+		defer close(unsubDone)
+		_ = env.listener.Unsubscribe(context.Background(), channel)
+	}()
+
+	// 3. Immediately re-Subscribe (may race with the Unsubscribe above)
+	require.NoError(t, env.listener.Subscribe(ctx, channel))
+
+	// Wait for the async Unsubscribe to complete
+	<-unsubDone
+
+	// Channel must still be listened — the generation counter should have
+	// prevented the stale UNLISTEN from taking effect, OR the re-Subscribe's
+	// LISTEN should have restored it.
+	require.True(t, env.listener.isListening(channel),
+		"l.channels must stay true after stale UNLISTEN is skipped")
+
+	// Verify PG is actually listening by publishing an event and receiving it
+	conn := env.subscribeAndWait(t)
+
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-gen-1",
+		Content: "generation counter test",
+	})
+	require.NoError(t, err)
+
+	// Drain catchup events, then expect the live event
+	for {
+		msg := readJSONTimeout(t, conn, 5*time.Second)
+		if msg["event_id"] == "evt-gen-1" {
+			assert.Equal(t, "generation counter test", msg["content"])
+			break
+		}
+	}
+}

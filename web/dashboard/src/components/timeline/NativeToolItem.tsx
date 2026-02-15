@@ -5,6 +5,14 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { FlowItem } from '../../utils/timelineParser';
 
+interface CodeBlock {
+  type: string;
+  content: string;
+  language?: string;
+  outcome?: string;
+  exit_code?: number;
+}
+
 interface NativeToolItemProps {
   item: FlowItem;
 }
@@ -16,8 +24,8 @@ function getPreviewSummary(item: FlowItem): string {
     if (item.type === 'code_execution') {
       const blocks: string[] = [];
       if (Array.isArray(parsed.blocks)) {
-        const codeCount = parsed.blocks.filter((b: any) => b.type === 'code').length;
-        const outputCount = parsed.blocks.filter((b: any) => b.type === 'output').length;
+        const codeCount = parsed.blocks.filter((b: CodeBlock) => b.type === 'code').length;
+        const outputCount = parsed.blocks.filter((b: CodeBlock) => b.type === 'output').length;
         if (codeCount > 0) blocks.push(`${codeCount} code block${codeCount > 1 ? 's' : ''}`);
         if (outputCount > 0) blocks.push(`${outputCount} output${outputCount > 1 ? 's' : ''}`);
         return blocks.join(', ') || '1 code block';
@@ -97,12 +105,12 @@ function NativeToolItem({ item }: NativeToolItemProps) {
           let outputIndex = 0;
           return (
             <Box>
-              {parsed.blocks.map((block: any, idx: number) => {
+              {parsed.blocks.map((block: CodeBlock, idx: number) => {
                 if (block.type === 'code') {
                   codeIndex++;
                   const lang = block.language || 'python';
                   const label =
-                    parsed.blocks.filter((b: any) => b.type === 'code').length > 1
+                    parsed.blocks.filter((b: CodeBlock) => b.type === 'code').length > 1
                       ? `Generated Code ${codeIndex} (${lang})`
                       : `Generated Code (${lang})`;
                   return (
@@ -151,7 +159,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
                 if (block.type === 'output') {
                   outputIndex++;
                   const outputLabel =
-                    parsed.blocks.filter((b: any) => b.type === 'output').length > 1
+                    parsed.blocks.filter((b: CodeBlock) => b.type === 'output').length > 1
                       ? `Execution Output ${outputIndex}`
                       : 'Output';
                   const isOk = block.outcome === 'ok' || block.exit_code === 0;

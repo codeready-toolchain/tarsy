@@ -182,7 +182,6 @@ export function SessionDetailPage() {
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [collapseCounter, _setCollapseCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
@@ -473,16 +472,17 @@ export function SessionDetailPage() {
   // ────────────────────────────────────────────────────────────
 
   // Update auto-scroll enabled state when session transitions between active/inactive
+  const sessionStatus = session?.status;
   useEffect(() => {
-    if (!session) return;
+    if (!sessionStatus) return;
 
     const previousActive = prevStatusRef.current
       ? ACTIVE_STATUSES.has(prevStatusRef.current as SessionStatus) ||
         prevStatusRef.current === SESSION_STATUS.PENDING
       : false;
     const currentActive =
-      ACTIVE_STATUSES.has(session.status as SessionStatus) ||
-      session.status === SESSION_STATUS.PENDING;
+      ACTIVE_STATUSES.has(sessionStatus as SessionStatus) ||
+      sessionStatus === SESSION_STATUS.PENDING;
 
     // Only update on first load or when crossing active↔inactive boundary
     if (prevStatusRef.current === undefined || previousActive !== currentActive) {
@@ -503,9 +503,9 @@ export function SessionDetailPage() {
           disableTimeoutRef.current = null;
         }, 2000);
       }
-      prevStatusRef.current = session.status;
+      prevStatusRef.current = sessionStatus;
     }
-  }, [session?.status]);
+  }, [sessionStatus]);
 
   // Initial scroll to bottom for active sessions
   useEffect(() => {

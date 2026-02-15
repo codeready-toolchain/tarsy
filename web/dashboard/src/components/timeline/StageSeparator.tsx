@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import { Flag, ExpandMore, ExpandLess } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 
@@ -43,10 +44,10 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
             borderRadius: 1, px: 1, py: 0.5,
             transition: 'all 0.2s ease-in-out',
             '&:hover': onToggleCollapse ? {
-              backgroundColor: (theme: any) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.08),
+              backgroundColor: (theme: Theme) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.08),
               '& .MuiChip-root': {
-                backgroundColor: (theme: any) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.12),
-                borderColor: (theme: any) => isErrorStatus ? theme.palette.error.main : theme.palette.primary.main,
+                backgroundColor: (theme: Theme) => alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.12),
+                borderColor: (theme: Theme) => isErrorStatus ? theme.palette.error.main : theme.palette.primary.main,
               }
             } : {}
           }}
@@ -66,11 +67,11 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
               onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
               sx={{
                 padding: 0.75,
-                backgroundColor: (theme: any) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.1),
+                backgroundColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.1),
                 border: '1px solid',
-                borderColor: (theme: any) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.2),
+                borderColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(isErrorStatus ? theme.palette.error.main : theme.palette.primary.main, 0.2),
                 color: isCollapsed ? 'text.secondary' : 'inherit',
-                '&:hover': { backgroundColor: (theme: any) => isCollapsed ? theme.palette.text.secondary : (isErrorStatus ? theme.palette.error.main : theme.palette.primary.main), color: 'white', transform: 'scale(1.1)' },
+                '&:hover': { backgroundColor: (theme: Theme) => isCollapsed ? theme.palette.text.secondary : (isErrorStatus ? theme.palette.error.main : theme.palette.primary.main), color: 'white', transform: 'scale(1.1)' },
                 transition: 'all 0.2s ease-in-out',
               }}
             >

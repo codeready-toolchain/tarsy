@@ -173,19 +173,27 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
 
     setupMutationObserver();
 
+    // Copy ref values for cleanup to avoid stale refs in the cleanup function
+    const mutationObserver = mutationObserverRef.current;
+    const scrollTimeout = scrollTimeoutRef.current;
+    const userScrollTimeout = userScrollTimeoutRef.current;
+    const rafId = rafIdRef.current;
+    const autoScrollMonitorRaf = autoScrollMonitorRafRef.current;
+    const clearUserInteractionTimeout = clearUserInteractionTimeoutRef.current;
+
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('wheel', markUserInteraction as EventListener);
       window.removeEventListener('pointerdown', handlePointerDown as EventListener);
       window.removeEventListener('pointerup', handlePointerUp as EventListener);
       window.removeEventListener('keydown', handleKeydown as EventListener);
-      if (mutationObserverRef.current) { mutationObserverRef.current.disconnect(); mutationObserverRef.current = null; }
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-      if (autoScrollMonitorRafRef.current) cancelAnimationFrame(autoScrollMonitorRafRef.current);
-      if (clearUserInteractionTimeoutRef.current) {
-        clearTimeout(clearUserInteractionTimeoutRef.current);
+      if (mutationObserver) { mutationObserver.disconnect(); mutationObserverRef.current = null; }
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (userScrollTimeout) clearTimeout(userScrollTimeout);
+      if (rafId) cancelAnimationFrame(rafId);
+      if (autoScrollMonitorRaf) cancelAnimationFrame(autoScrollMonitorRaf);
+      if (clearUserInteractionTimeout) {
+        clearTimeout(clearUserInteractionTimeout);
         clearUserInteractionTimeoutRef.current = null;
       }
     };

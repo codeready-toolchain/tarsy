@@ -652,20 +652,20 @@ func callLLMWithReActStreaming(
 	// Finalize any remaining ReAct events that weren't closed during streaming
 	// (e.g., thought is the last phase when no Action: follows, or final answer
 	// is still open at end of stream).
-	var finalPhase *StreamingPhase
-	if (reactThoughtEventID != "" && !reactThoughtFinalized) || (finalAnswerEventID != "" && !finalAnswerFinalized) {
+	needThoughtFinalize := reactThoughtEventID != "" && !reactThoughtFinalized
+	needFinalAnswerFinalize := finalAnswerEventID != "" && !finalAnswerFinalized
+	if needThoughtFinalize || needFinalAnswerFinalize {
 		detected := DetectReActPhase(resp.Text)
-		finalPhase = &detected
-	}
-	if reactThoughtEventID != "" && !reactThoughtFinalized {
-		content := strings.TrimSpace(finalPhase.ThoughtContent)
-		finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
-			timelineevent.EventTypeLlmThinking, content, "react-thought")
-	}
-	if finalAnswerEventID != "" && !finalAnswerFinalized {
-		content := strings.TrimSpace(finalPhase.FinalAnswerContent)
-		finalizeStreamingEvent(ctx, execCtx, finalAnswerEventID,
-			timelineevent.EventTypeFinalAnalysis, content, "final-answer")
+		if needThoughtFinalize {
+			content := strings.TrimSpace(detected.ThoughtContent)
+			finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
+				timelineevent.EventTypeLlmThinking, content, "react-thought")
+		}
+		if needFinalAnswerFinalize {
+			content := strings.TrimSpace(detected.FinalAnswerContent)
+			finalizeStreamingEvent(ctx, execCtx, finalAnswerEventID,
+				timelineevent.EventTypeFinalAnalysis, content, "final-answer")
+		}
 	}
 
 	return &StreamedResponse{

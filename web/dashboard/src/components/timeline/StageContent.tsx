@@ -90,10 +90,13 @@ const getStatusLabel = (status: string) => {
 // Helper: derive execution status from items
 function deriveExecutionStatus(items: FlowItem[]): string {
   if (items.length === 0) return 'started';
-  const hasError = items.some(i => i.type === 'error');
-  const allCompleted = items.every(i => i.status === 'completed' || i.status === 'failed');
+  const terminalStatuses = ['completed', 'failed', 'timed_out', 'cancelled'];
+  const hasError = items.some(
+    i => i.type === 'error' || i.status === 'failed' || i.status === 'timed_out' || i.status === 'cancelled',
+  );
+  const allTerminal = items.every(i => terminalStatuses.includes(i.status || ''));
   if (hasError) return 'failed';
-  if (allCompleted && items.length > 0) return 'completed';
+  if (allTerminal && items.length > 0) return 'completed';
   return 'started';
 }
 
@@ -212,21 +215,17 @@ const StageContent: React.FC<StageContentProps> = ({
       byExec.get(execId)!.push([eventId, event]);
     }
 
-    // Same merge logic for streaming: if real executions exist, merge __default__
+    // Merge __default__ into the first real execution from item grouping
     const defaultStreaming = byExec.get('__default__');
-    if (defaultStreaming && byExec.size > 1) {
-      // Find first non-default key
-      for (const [key] of byExec) {
-        if (key !== '__default__') {
-          byExec.get(key)!.push(...defaultStreaming);
-          byExec.delete('__default__');
-          break;
-        }
-      }
+    const primaryExecId = executions[0]?.executionId;
+    if (defaultStreaming && primaryExecId && primaryExecId !== '__default__') {
+      if (!byExec.has(primaryExecId)) byExec.set(primaryExecId, []);
+      byExec.get(primaryExecId)!.push(...defaultStreaming);
+      byExec.delete('__default__');
     }
 
     return byExec;
-  }, [streamingEvents]);
+  }, [streamingEvents, executions]);
 
   const isMultiAgent = executions.length > 1;
 
@@ -242,7 +241,12 @@ const StageContent: React.FC<StageContentProps> = ({
     const executionStreamingItems = streamingByExecution.get(execution.executionId) || [];
     const hasDbItems = execution.items.length > 0;
     const hasStreamingItems = executionStreamingItems.length > 0;
-    const isFailed = execution.status === 'failed' || execution.status === 'timed_out';
+
+    // Prefer execution overview status/message over item-derived values
+    const eo = execOverviewMap.get(execution.executionId);
+    const effectiveStatus = eo?.status || execution.status;
+    const isFailed = effectiveStatus === 'failed' || effectiveStatus === 'timed_out' || effectiveStatus === 'cancelled';
+    const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -268,12 +272,11 @@ const StageContent: React.FC<StageContentProps> = ({
         )}
 
         {isFailed && (() => {
-          const errMsg = getExecutionErrorMessage(execution.items);
           return (
             <Alert severity="error" sx={{ mt: 2 }}>
               <Typography variant="body2">
                 <strong>Execution Failed</strong>
-                {errMsg ? `: ${errMsg}` : ''}
+                {errorMessage ? `: ${errorMessage}` : ''}
               </Typography>
             </Alert>
           );

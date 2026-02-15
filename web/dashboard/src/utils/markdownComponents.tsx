@@ -3,12 +3,24 @@
  * Used by timeline items and FinalAnalysisCard for consistent markdown rendering
  */
 
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import CopyButton from '../components/shared/CopyButton';
+
+/**
+ * Type for react-markdown component override props.
+ * react-markdown passes standard HTML attributes plus a `node` property from
+ * the hast AST. The `inline` property is passed to the `code` component.
+ */
+type MdProps = HTMLAttributes<HTMLElement> & {
+  node?: unknown;
+  inline?: boolean;
+  children?: ReactNode;
+};
 
 /**
  * Helper function to detect if text contains markdown syntax
@@ -85,7 +97,7 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
  * Matches the old FinalAnalysisCard inline component styles exactly.
  */
 export const finalAnswerMarkdownComponents = {
-  h1: (props: any) => {
+  h1: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography
@@ -98,7 +110,7 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  h2: (props: any) => {
+  h2: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography
@@ -111,7 +123,7 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  h3: (props: any) => {
+  h3: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography
@@ -124,7 +136,7 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  p: (props: any) => {
+  p: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography
@@ -136,7 +148,7 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  ul: (props: any) => {
+  ul: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="ul" sx={{ mb: 1, pl: 2 }} {...safeProps}>
@@ -144,7 +156,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
-  ol: (props: any) => {
+  ol: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="ol" sx={{ mb: 1, pl: 2 }} {...safeProps}>
@@ -152,7 +164,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
-  li: (props: any) => {
+  li: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography
@@ -165,7 +177,7 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  code: (props: any) => {
+  code: (props: MdProps) => {
     const { node: _node, inline: _inline, className, children, ...safeProps } = props;
     // Check if this is a fenced code block (has language class like "language-python")
     const match = /language-(\w+)/.exec(className || '');
@@ -230,7 +242,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
-  strong: (props: any) => {
+  strong: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="strong" sx={{ fontWeight: 700 }} {...safeProps}>
@@ -238,7 +250,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
-  blockquote: (props: any) => {
+  blockquote: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box
@@ -265,7 +277,7 @@ export const finalAnswerMarkdownComponents = {
  * Similar to finalAnswerMarkdownComponents but simpler styling
  */
 export const thoughtMarkdownComponents = {
-  p: (props: any) => {
+  p: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography variant="body1" sx={{ mb: 0.5, lineHeight: 1.7, fontSize: '1rem' }} {...safeProps}>
@@ -273,7 +285,7 @@ export const thoughtMarkdownComponents = {
       </Typography>
     );
   },
-  strong: (props: any) => {
+  strong: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="strong" sx={{ fontWeight: 700 }} {...safeProps}>
@@ -281,7 +293,7 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  em: (props: any) => {
+  em: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="em" sx={{ fontStyle: 'italic' }} {...safeProps}>
@@ -289,7 +301,7 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  code: (props: any) => {
+  code: (props: MdProps) => {
     const { node: _node, inline: _inline, children, ...safeProps } = props;
     return (
       <Box
@@ -308,7 +320,7 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  ul: (props: any) => {
+  ul: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="ul" sx={{ mb: 0.5, pl: 2.5 }} {...safeProps}>
@@ -316,7 +328,7 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  ol: (props: any) => {
+  ol: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box component="ol" sx={{ mb: 0.5, pl: 2.5 }} {...safeProps}>
@@ -324,7 +336,7 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  li: (props: any) => {
+  li: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Typography

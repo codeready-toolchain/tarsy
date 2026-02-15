@@ -13,7 +13,7 @@ interface ToolCallItemProps {
 /**
  * Check if arguments are simple (flat key-value pairs with primitive values)
  */
-const isSimpleArguments = (args: any): boolean => {
+const isSimpleArguments = (args: Record<string, unknown> | null): boolean => {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return false;
   const keys = Object.keys(args);
   if (keys.length === 0) return false;
@@ -31,7 +31,7 @@ const isSimpleArguments = (args: any): boolean => {
   });
 };
 
-const SimpleArgumentsList = ({ args }: { args: any }) => (
+const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
   <Box
     sx={(theme) => ({
       bgcolor: theme.palette.grey[50], borderRadius: 1,
@@ -45,7 +45,7 @@ const SimpleArgumentsList = ({ args }: { args: any }) => (
           {key}:
         </Typography>
         <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.primary', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-          {Array.isArray(value) ? `[${(value as any[]).map(v => typeof v === 'string' ? `"${v}"` : String(v)).join(', ')}]` : typeof value === 'string' ? `"${value}"` : String(value)}
+          {Array.isArray(value) ? `[${(value as unknown[]).map(v => typeof v === 'string' ? `"${v}"` : String(v)).join(', ')}]` : typeof value === 'string' ? `"${value}"` : String(value)}
         </Typography>
       </Box>
     ))}
