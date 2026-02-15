@@ -76,10 +76,11 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
-	mu              sync.Mutex
-	stageStatuses   []events.StageStatusPayload
-	sessionStatuses []events.SessionStatusPayload
-	timelineCreated []events.TimelineCreatedPayload
+	mu                sync.Mutex
+	stageStatuses     []events.StageStatusPayload
+	sessionStatuses   []events.SessionStatusPayload
+	timelineCreated   []events.TimelineCreatedPayload
+	executionStatuses []events.ExecutionStatusPayload
 }
 
 func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
@@ -126,6 +127,12 @@ func (p *testEventPublisher) PublishSessionProgress(_ context.Context, _ events.
 func (p *testEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
 	return nil
 }
+func (p *testEventPublisher) PublishExecutionStatus(_ context.Context, _ string, payload events.ExecutionStatusPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.executionStatuses = append(p.executionStatuses, payload)
+	return nil
+}
 
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
@@ -137,6 +144,27 @@ func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 		}
 	}
 	return false
+}
+
+// getExecutionStatuses returns a thread-safe copy of the captured execution.status events.
+func (p *testEventPublisher) getExecutionStatuses() []events.ExecutionStatusPayload {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]events.ExecutionStatusPayload, len(p.executionStatuses))
+	copy(out, p.executionStatuses)
+	return out
+}
+
+// filterExecutionStatuses returns execution.status events matching the given status.
+func (p *testEventPublisher) filterExecutionStatuses(status string) []events.ExecutionStatusPayload {
+	all := p.getExecutionStatuses()
+	var filtered []events.ExecutionStatusPayload
+	for _, es := range all {
+		if es.Status == status {
+			filtered = append(filtered, es)
+		}
+	}
+	return filtered
 }
 
 // ────────────────────────────────────────────────────────────
@@ -668,6 +696,23 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	assert.Equal(t, "parallel-investigation - Synthesis", publisher.stageStatuses[2].StageName)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[2].Status)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
+
+	// Verify execution.status events: each agent emits active + terminal.
+	// 3 agents (2 investigation + 1 synthesis) × 2 events each = 6 total.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 6, "expected 6 execution.status events (active+completed for each of 3 agents)")
+	for _, es := range execStatuses {
+		assert.NotEmpty(t, es.ExecutionID, "execution.status should include execution_id")
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type, "event type should be execution.status")
+	}
+
+	// 3 "active" events (one per agent at startup)
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 3, "each agent should emit execution.status: active at startup")
+
+	// 3 "completed" events (one per agent at completion)
+	completedEvents := publisher.filterExecutionStatuses("completed")
+	assert.Len(t, completedEvents, 3, "all agents should complete successfully")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
@@ -714,6 +759,26 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, execs, 2)
+
+	// Verify execution.status events: both agents emit active + terminal.
+	// 2 agents × 2 events each = 4 total.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 4, "expected 4 execution.status events (active+terminal for each of 2 agents)")
+
+	for _, es := range execStatuses {
+		assert.NotEmpty(t, es.ExecutionID)
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type)
+	}
+
+	// 2 "active" events (one per agent at startup)
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 2, "each agent should emit execution.status: active at startup")
+
+	// Terminal events: one completed, one failed
+	completedEvents := publisher.filterExecutionStatuses("completed")
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, completedEvents, 1, "one agent should have completed")
+	assert.Len(t, failedEvents, 1, "one agent should have failed")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {

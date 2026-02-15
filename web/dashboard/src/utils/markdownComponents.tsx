@@ -177,32 +177,47 @@ export const finalAnswerMarkdownComponents = {
       </Typography>
     );
   },
-  code: (props: MdProps) => {
-    const { node: _node, inline, className, children, ...safeProps } = props;
-
-    // Inline code
-    if (inline) {
-      return (
-        <Box
-          component="code"
-          sx={{
-            backgroundColor: 'rgba(0, 0, 0, 0.08)',
-            color: 'error.main',
-            padding: '2px 6px',
-            border: '1px solid',
-            borderColor: 'rgba(0, 0, 0, 0.1)',
+  // Block code wrapper: uses a plain <div> so that SyntaxHighlighter (which
+  // renders its own <pre>) doesn't cause nested <pre> elements. For plain
+  // code blocks without a language, the inner <code> element renders the
+  // block styling. The `& code` selector resets inline code styles.
+  pre: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="div"
+        sx={{
+          my: 1,
+          '& > code': {
+            // Plain block code without language — style as pre block
+            display: 'block',
+            backgroundColor: 'rgba(0, 0, 0, 0.06)',
+            padding: '12px',
             borderRadius: '4px',
+            overflowX: 'auto',
             fontFamily: 'monospace',
             fontSize: '0.85rem',
-          }}
-          {...safeProps}
-        >
-          {children}
-        </Box>
-      );
-    }
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            // Reset inline code styles
+            color: 'inherit',
+            border: 'none',
+          },
+        }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
+  // Code element: handles both inline code and fenced code with language.
+  // When inside a <pre> wrapper (block code without language), the parent's
+  // `& > code` selector applies block styling. This avoids the <pre>-inside-<p>
+  // nesting issue that caused hydration errors.
+  code: (props: MdProps) => {
+    const { node: _node, inline: _inline, className, children, ...safeProps } = props;
 
-    // Fenced code block with language
+    // Fenced code block with language — render with syntax highlighting
     const match = /language-(\w+)/.exec(className || '');
     if (match) {
       const language = match[1];
@@ -245,22 +260,24 @@ export const finalAnswerMarkdownComponents = {
         </Box>
       );
     }
-    // Fenced code block without language
+
+    // Inline code (or block code without language — styled by parent pre's CSS)
     return (
       <Box
-        component="pre"
+        component="code"
         sx={{
-          backgroundColor: 'rgba(0, 0, 0, 0.06)',
-          padding: '12px',
+          backgroundColor: 'rgba(0, 0, 0, 0.08)',
+          color: 'error.main',
+          padding: '2px 6px',
+          border: '1px solid',
+          borderColor: 'rgba(0, 0, 0, 0.1)',
           borderRadius: '4px',
-          overflowX: 'auto',
           fontFamily: 'monospace',
           fontSize: '0.85rem',
-          margin: '8px 0',
         }}
         {...safeProps}
       >
-        <code>{children}</code>
+        {children}
       </Box>
     );
   },
@@ -323,30 +340,11 @@ export const thoughtMarkdownComponents = {
       </Box>
     );
   },
-  code: (props: MdProps) => {
-    const { node: _node, inline, children, ...safeProps } = props;
-
-    // Inline code
-    if (inline) {
-      return (
-        <Box
-          component="code"
-          sx={{
-            bgcolor: 'grey.100',
-            px: 0.5,
-            py: 0.25,
-            borderRadius: 0.5,
-            fontFamily: 'monospace',
-            fontSize: '0.9em',
-          }}
-          {...safeProps}
-        >
-          {children}
-        </Box>
-      );
-    }
-
-    // Fenced code block (with or without language)
+  // Block code wrapper: renders fenced code blocks. The inner <code> element
+  // is rendered by the `code` component below which always uses inline styling.
+  // The `& code` selector resets those inline styles inside the pre context.
+  pre: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
     return (
       <Box
         component="pre"
@@ -358,10 +356,42 @@ export const thoughtMarkdownComponents = {
           fontFamily: 'monospace',
           fontSize: '0.9em',
           margin: '8px 0',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          '& code': {
+            backgroundColor: 'transparent',
+            padding: 0,
+            border: 'none',
+            borderRadius: 0,
+            fontSize: 'inherit',
+          },
         }}
         {...safeProps}
       >
-        <code>{children}</code>
+        {children}
+      </Box>
+    );
+  },
+  // Code element: always renders as inline <code>. When inside a <pre> (block
+  // code), the parent pre's `& code` selector resets the inline styles. This
+  // avoids the <pre>-inside-<p> nesting issue that occurs when react-markdown
+  // doesn't pass the `inline` prop reliably.
+  code: (props: MdProps) => {
+    const { node: _node, inline: _inline, className: _className, children, ...safeProps } = props;
+    return (
+      <Box
+        component="code"
+        sx={{
+          bgcolor: 'grey.100',
+          px: 0.5,
+          py: 0.25,
+          borderRadius: 0.5,
+          fontFamily: 'monospace',
+          fontSize: '0.9em',
+        }}
+        {...safeProps}
+      >
+        {children}
       </Box>
     );
   },

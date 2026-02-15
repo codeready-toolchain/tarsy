@@ -285,6 +285,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	if updateErr := e.stageService.UpdateAgentExecutionStatus(execCtx, exec.ID, agentexecution.StatusActive, ""); updateErr != nil {
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
+	publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, string(agentexecution.StatusActive), "")
 	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, events.StageStatusStarted)
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(execCtx)
@@ -327,6 +328,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		if updateErr := e.stageService.UpdateAgentExecutionStatus(execCtx, exec.ID, agentexecution.StatusFailed, err.Error()); updateErr != nil {
 			logger.Error("Failed to update agent execution status", "error", updateErr)
 		}
+		publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, string(agentexecution.StatusFailed), err.Error())
 		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, events.StageStatusFailed, err.Error())
 		return
 	}
@@ -370,6 +372,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	if updateErr := e.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entStatus, errMsg); updateErr != nil {
 		logger.Error("Failed to update agent execution status", "error", updateErr)
 	}
+	publishExecutionStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, exec.ID, string(entStatus), errMsg)
 
 	// 13. Update Stage terminal status
 	if updateErr := e.stageService.UpdateStageStatus(context.Background(), stageID); updateErr != nil {
@@ -759,6 +762,7 @@ func (e *ChatMessageExecutor) createFailedChatExecution(
 	); updateErr != nil {
 		logger.Error("Failed to update agent execution status to failed", "error", updateErr)
 	}
+	publishExecutionStatus(context.Background(), e.eventPublisher, sessionID, stageID, exec.ID, string(agentexecution.StatusFailed), errMsg)
 }
 
 // finishStage publishes terminal stage status and updates the Stage DB record.

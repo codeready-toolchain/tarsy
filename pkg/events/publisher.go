@@ -138,6 +138,19 @@ func (p *EventPublisher) PublishExecutionProgress(ctx context.Context, sessionID
 	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
 }
 
+// PublishExecutionStatus broadcasts an execution.status transient event (no DB persistence).
+// Published to the session channel when an agent execution transitions to a new status.
+// The execution status is already persisted via UpdateAgentExecutionStatus — this event
+// provides real-time notification so the frontend can update individual agent cards
+// without waiting for the entire stage to complete.
+func (p *EventPublisher) PublishExecutionStatus(ctx context.Context, sessionID string, payload ExecutionStatusPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ExecutionStatusPayload: %w", err)
+	}
+	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
+}
+
 // --- Internal core methods ---
 
 // persistAndNotify persists a pre-marshaled event to the database and broadcasts

@@ -45,6 +45,10 @@ func storeAssistantMessage(
 	if resp == nil {
 		return nil, fmt.Errorf("storeAssistantMessage: resp is nil")
 	}
+	content := resp.Text
+	if content == "" {
+		content = "(empty response)"
+	}
 	*msgSeq++
 	return execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,
@@ -52,7 +56,7 @@ func storeAssistantMessage(
 		ExecutionID:    execCtx.ExecutionID,
 		SequenceNumber: *msgSeq,
 		Role:           message.RoleAssistant,
-		Content:        resp.Text,
+		Content:        content,
 	})
 }
 
@@ -65,6 +69,12 @@ func storeAssistantMessageWithToolCalls(
 ) (*ent.Message, error) {
 	if resp == nil {
 		return nil, fmt.Errorf("storeAssistantMessageWithToolCalls: resp is nil")
+	}
+	// LLMs commonly return empty text when making tool calls. The DB schema
+	// requires non-empty content, so use a placeholder for the audit record.
+	content := resp.Text
+	if content == "" {
+		content = "(tool calls only)"
 	}
 	*msgSeq++
 
@@ -83,7 +93,7 @@ func storeAssistantMessageWithToolCalls(
 		ExecutionID:    execCtx.ExecutionID,
 		SequenceNumber: *msgSeq,
 		Role:           message.RoleAssistant,
-		Content:        resp.Text,
+		Content:        content,
 		ToolCalls:      toolCallData,
 	})
 }
@@ -99,6 +109,12 @@ func storeToolResultMessage(
 	content string,
 	msgSeq *int,
 ) {
+	// DB schema requires non-empty content. MCP tools may return empty results
+	// (e.g. a namespace list with no items). Use a placeholder to satisfy the
+	// constraint while preserving the tool call in the audit trail.
+	if content == "" {
+		content = "(empty result)"
+	}
 	*msgSeq++
 	if _, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,
@@ -124,6 +140,9 @@ func storeObservationMessage(
 	observation string,
 	msgSeq *int,
 ) {
+	if observation == "" {
+		observation = "(empty observation)"
+	}
 	*msgSeq++
 	if _, err := execCtx.Services.Message.CreateMessage(ctx, models.CreateMessageRequest{
 		SessionID:      execCtx.SessionID,

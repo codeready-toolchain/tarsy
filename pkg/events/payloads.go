@@ -106,3 +106,15 @@ type ExecutionProgressPayload struct {
 	Phase       string `json:"phase"`        // ProgressPhase constant
 	Message     string `json:"message"`      // human-readable message
 }
+
+// ExecutionStatusPayload is the payload for execution.status transient events.
+// Published to SessionChannel(sessionID) when an agent execution transitions
+// to a new status. Allows the frontend to update individual agent cards
+// independently of stage completion.
+type ExecutionStatusPayload struct {
+	BasePayload
+	StageID      string `json:"stage_id"`                // stage UUID
+	ExecutionID  string `json:"execution_id"`            // agent execution UUID
+	Status       string `json:"status"`                  // active, completed, failed, timed_out, cancelled
+	ErrorMessage string `json:"error_message,omitempty"` // populated on failure
+}

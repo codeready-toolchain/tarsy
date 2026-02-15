@@ -487,6 +487,9 @@ func (p *noopEventPublisher) PublishSessionProgress(_ context.Context, _ events.
 func (p *noopEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
 	return nil
 }
+func (p *noopEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ events.ExecutionStatusPayload) error {
+	return nil
+}
 
 func TestCallLLMWithReActStreaming_ThoughtAndAction(t *testing.T) {
 	// LLM returns: Thought + Action (across multiple chunks to simulate

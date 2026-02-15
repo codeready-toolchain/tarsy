@@ -13,7 +13,6 @@ import {
   CircularProgress,
   Tooltip,
   alpha,
-  LinearProgress,
 } from '@mui/material';
 import {
   CancelOutlined,
@@ -21,8 +20,9 @@ import {
   CallSplit,
 } from '@mui/icons-material';
 import { StatusBadge } from '../common/StatusBadge';
+import ProgressIndicator from '../common/ProgressIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
-import { formatTimestamp, formatDurationMs } from '../../utils/format';
+import { formatTimestamp } from '../../utils/format';
 import { cancelSession, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
@@ -53,20 +53,17 @@ const breathingGlowSx = {
   animation: 'breathingGlow 2.8s ease-in-out infinite',
 };
 
-// --- Pulse animation for "Live Processing" badge ---
-const pulseAnimationSx = {
-  '@keyframes livePulse': {
-    '0%': { opacity: 1, transform: 'scale(1)' },
-    '50%': { opacity: 0.7, transform: 'scale(1.05)' },
-    '100%': { opacity: 1, transform: 'scale(1)' },
+// --- Pulse animation for "Live Processing" dot ---
+const liveDotPulseSx = {
+  '@keyframes liveDotPulse': {
+    '0%, 100%': { opacity: 0.4 },
+    '50%': { opacity: 1 },
   },
-  animation: 'livePulse 2s ease-in-out infinite',
+  animation: 'liveDotPulse 2s ease-in-out infinite',
 };
 
 interface SessionHeaderProps {
   session: SessionDetailResponse;
-  /** Live duration for active sessions (ticking) */
-  liveDurationMs?: number | null;
 }
 
 /**
@@ -76,7 +73,6 @@ interface SessionHeaderProps {
  */
 export default function SessionHeader({
   session,
-  liveDurationMs,
 }: SessionHeaderProps) {
   const navigate = useNavigate();
   const isActive =
@@ -134,13 +130,6 @@ export default function SessionHeader({
     });
   }, [navigate, session]);
 
-  // Duration display
-  const durationDisplay = (() => {
-    if (liveDurationMs != null) return formatDurationMs(liveDurationMs);
-    if (session.duration_ms != null) return formatDurationMs(session.duration_ms);
-    return '—';
-  })();
-
   // MCP summary
   const mcpServers = session.mcp_selection
     ? Object.keys(session.mcp_selection).length
@@ -187,30 +176,15 @@ export default function SessionHeader({
                 sx={{ fontWeight: 600, wordBreak: 'break-word' }}
               >
                 {session.alert_type || 'Alert Processing'}
-                {session.chain_id && ` - ${session.chain_id}`}
+                {session.chain_id && (
+                  <Typography component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+                    {' - '}{session.chain_id}
+                  </Typography>
+                )}
               </Typography>
               <Box sx={{ transform: 'scale(1.1)' }}>
                 <StatusBadge status={session.status} />
               </Box>
-              {isActive && (
-                <Box
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    bgcolor: 'success.main',
-                    color: 'white',
-                    px: 1.5,
-                    py: 0.25,
-                    borderRadius: 1,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    ...pulseAnimationSx,
-                  }}
-                >
-                  Live Processing
-                </Box>
-              )}
               {session.has_parallel_stages && (
                 <Tooltip
                   title={`Contains ${session.total_stages} stages with parallel agent execution`}
@@ -340,31 +314,11 @@ export default function SessionHeader({
               minWidth: 200,
             }}
           >
-            <Typography
-              variant="caption"
-              sx={{
-                fontWeight: 600,
-                color: isActive ? 'primary.main' : 'success.main',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-              }}
-            >
-              Duration
-            </Typography>
-            {isActive && (
-              <LinearProgress
-                sx={{ width: '100%', borderRadius: 1 }}
-              />
-            )}
-            <Typography
-              sx={{
-                fontSize: '1.4rem',
-                fontWeight: 800,
-                color: isActive ? 'primary.main' : 'success.main',
-              }}
-            >
-              {durationDisplay}
-            </Typography>
+            <ProgressIndicator
+              status={session.status}
+              startedAt={session.started_at}
+              durationMs={session.duration_ms}
+            />
 
             <Box
               sx={{
@@ -456,17 +410,47 @@ export default function SessionHeader({
         </Box>
 
         {/* Session Summary header */}
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            color: 'text.secondary',
-            letterSpacing: 0.3,
-          }}
-        >
-          📊 Session Summary
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              color: 'text.secondary',
+              letterSpacing: 0.3,
+            }}
+          >
+            📊 Session Summary
+          </Typography>
+          {isActive && (
+            <Box
+              sx={(theme) => ({
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.75,
+                bgcolor: alpha(theme.palette.info.main, 0.05),
+                border: '1px solid',
+                borderColor: alpha(theme.palette.info.main, 0.2),
+                borderRadius: '12px',
+                px: 1.25,
+                py: 0.25,
+              })}
+            >
+              <Box
+                sx={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  bgcolor: 'info.main',
+                  ...liveDotPulseSx,
+                }}
+              />
+              <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 600 }}>
+                Live Processing
+              </Typography>
+            </Box>
+          )}
+        </Box>
 
         {/* Summary stats row */}
         <Box
@@ -528,13 +512,24 @@ export default function SessionHeader({
 
           <Tooltip
             title={
-              mcpServers > 0
-                ? `MCP Communications: ${mcpServers} server(s) configured${
-                    session.mcp_selection
-                      ? `. Tools: ${Object.keys(session.mcp_selection).join(', ')}`
-                      : ''
-                  }`
-                : 'Using default MCP servers'
+              mcpServers > 0 ? (
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+                    MCP Communications
+                  </Typography>
+                  {session.mcp_selection && Object.entries(session.mcp_selection).map(([serverName, serverData]) => {
+                    const tools = Array.isArray(serverData) ? serverData : (serverData as Record<string, unknown>)?.tools;
+                    const toolCount = Array.isArray(tools) ? tools.length : 0;
+                    return (
+                      <Typography key={serverName} variant="caption" sx={{ display: 'block' }}>
+                        {serverName}: {toolCount} tool{toolCount !== 1 ? 's' : ''}
+                      </Typography>
+                    );
+                  })}
+                </Box>
+              ) : (
+                'Using default MCP servers'
+              )
             }
           >
             <Box

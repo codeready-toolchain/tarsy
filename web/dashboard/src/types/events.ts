@@ -100,6 +100,17 @@ export interface ExecutionProgressPayload {
   timestamp: string;
 }
 
+/** execution.status transient payload (for per-agent status transitions). */
+export interface ExecutionStatusPayload {
+  type: 'execution.status';
+  session_id: string;
+  stage_id: string;
+  execution_id: string;
+  status: string;
+  error_message?: string;
+  timestamp: string;
+}
+
 /** Union of all possible WebSocket event payloads. */
 export type WebSocketEvent =
   | TimelineCreatedPayload
@@ -110,4 +121,5 @@ export type WebSocketEvent =
   | ChatCreatedPayload
   | InteractionCreatedPayload
   | SessionProgressPayload
-  | ExecutionProgressPayload;
+  | ExecutionProgressPayload
+  | ExecutionStatusPayload;

@@ -101,6 +101,11 @@ const (
 	// Execution-level progress — published to SessionChannel(sessionID).
 	// Used by session detail page for per-agent progress phases.
 	EventTypeExecutionProgress = "execution.progress"
+
+	// Execution-level status — published to SessionChannel(sessionID).
+	// Fired when an agent execution transitions to a new status (active, completed, failed, etc.).
+	// Allows the frontend to update individual agent cards independently of stage completion.
+	EventTypeExecutionStatus = "execution.status"
 )
 
 // ProgressPhase values for execution-level progress events.

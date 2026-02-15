@@ -1,6 +1,5 @@
 import { memo } from 'react';
-import type { FlowItem } from '../../utils/timelineParser';
-import { isReActResponse } from '../../utils/timelineParser';
+import { FLOW_ITEM, isReActResponse, type FlowItem } from '../../utils/timelineParser';
 import ThinkingItem from './ThinkingItem';
 import ResponseItem from './ResponseItem';
 import ToolCallItem from './ToolCallItem';
@@ -28,8 +27,14 @@ function TimelineItem({
   expandAll = false,
   isCollapsible = false,
 }: TimelineItemProps) {
+  // Hide response/executive_summary items with empty content. Defense-in-depth
+  // for truncated WS payloads that may slip through the truncation handler.
+  if ((!item.content || !item.content.trim()) && (item.type === FLOW_ITEM.RESPONSE || item.type === FLOW_ITEM.EXECUTIVE_SUMMARY)) {
+    return null;
+  }
+
   switch (item.type) {
-    case 'thinking':
+    case FLOW_ITEM.THINKING:
       return (
         <ThinkingItem
           item={item}
@@ -40,7 +45,7 @@ function TimelineItem({
         />
       );
 
-    case 'response':
+    case FLOW_ITEM.RESPONSE:
       // Hide raw ReAct-formatted llm_response events — the backend creates
       // properly-typed llm_thinking and final_analysis events for each section.
       if (isReActResponse(item.content)) return null;
@@ -54,8 +59,8 @@ function TimelineItem({
         />
       );
 
-    case 'final_analysis':
-    case 'executive_summary':
+    case FLOW_ITEM.FINAL_ANALYSIS:
+    case FLOW_ITEM.EXECUTIVE_SUMMARY:
       return (
         <ResponseItem
           item={item}
@@ -66,10 +71,10 @@ function TimelineItem({
         />
       );
 
-    case 'tool_call':
+    case FLOW_ITEM.TOOL_CALL:
       return <ToolCallItem item={item} />;
 
-    case 'tool_summary':
+    case FLOW_ITEM.TOOL_SUMMARY:
       return (
         <ToolSummaryItem
           item={item}
@@ -80,18 +85,18 @@ function TimelineItem({
         />
       );
 
-    case 'user_question':
+    case FLOW_ITEM.USER_QUESTION:
       return <UserQuestionItem item={item} />;
 
-    case 'code_execution':
-    case 'search_result':
-    case 'url_context':
+    case FLOW_ITEM.CODE_EXECUTION:
+    case FLOW_ITEM.SEARCH_RESULT:
+    case FLOW_ITEM.URL_CONTEXT:
       return <NativeToolItem item={item} />;
 
-    case 'error':
+    case FLOW_ITEM.ERROR:
       return <ErrorItem item={item} />;
 
-    case 'stage_separator':
+    case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container
       return null;
 
