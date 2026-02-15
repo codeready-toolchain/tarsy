@@ -78,14 +78,12 @@ func (l *NotifyListener) Start(ctx context.Context) error {
 
 // Subscribe sends LISTEN for a channel on the dedicated connection.
 // The command is executed by the receive loop to avoid concurrent pgx access.
+//
+// Always sends LISTEN even if l.channels already marks the channel as active.
+// PostgreSQL handles duplicate LISTEN idempotently. This prevents a race where
+// a concurrent UNLISTEN goroutine (from unsubscribe) drops the LISTEN after
+// this method's early-return check but before the goroutine executes.
 func (l *NotifyListener) Subscribe(ctx context.Context, channel string) error {
-	l.channelsMu.Lock()
-	if l.channels[channel] {
-		l.channelsMu.Unlock()
-		return nil // Already listening
-	}
-	l.channelsMu.Unlock()
-
 	if !l.running.Load() {
 		return fmt.Errorf("LISTEN connection not established")
 	}
