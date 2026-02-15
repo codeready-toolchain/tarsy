@@ -12,7 +12,7 @@ import {
   ExpandMore,
   ExpandLess,
 } from '@mui/icons-material';
-import type { FlowItem, TimelineStats } from '../../utils/timelineParser';
+import type { FlowItem, TimelineStats, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
@@ -22,11 +22,20 @@ import {
   isFlowItemTerminal,
   flowItemsToPlainText,
 } from '../../utils/timelineParser';
+import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import StageSeparator from '../timeline/StageSeparator';
 import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+
+const TERMINAL_STAGE_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
+
+/** Synthesis stages that are terminal should auto-collapse. */
+function shouldAutoCollapseStage(group: StageGroup): boolean {
+  const isSynthesis = group.stageName.toLowerCase().includes('synthesis');
+  return isSynthesis && TERMINAL_STAGE_STATUSES.has(group.stageStatus);
+}
 
 interface ConversationTimelineProps {
   /** Flat list of FlowItems (from parseTimelineToFlow) */
@@ -67,16 +76,8 @@ export default function ConversationTimeline({
   agentProgressStatuses,
   chainId,
 }: ConversationTimelineProps) {
-  // --- Stage collapse ---
-  const [collapsedStages, setCollapsedStages] = useState<Map<string, boolean>>(new Map());
-
-  const toggleStageCollapse = useCallback((stageId: string) => {
-    setCollapsedStages((prev) => {
-      const next = new Map(prev);
-      next.set(stageId, !next.get(stageId));
-      return next;
-    });
-  }, []);
+  // --- Stage collapse (manual overrides + auto-collapse for Synthesis) ---
+  const [stageCollapseOverrides, setStageCollapseOverrides] = useState<Map<string, boolean>>(new Map());
 
   // --- Auto-collapse system ---
   const [expandAllReasoning, setExpandAllReasoning] = useState(false);
@@ -257,7 +258,10 @@ export default function ConversationTimeline({
       {/* Content area */}
       <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
         {stageGroups.map((group, index) => {
-          const isCollapsed = collapsedStages.get(group.stageId) || false;
+          // Manual override takes precedence, otherwise auto-collapse Synthesis stages
+          const isCollapsed = stageCollapseOverrides.has(group.stageId)
+            ? stageCollapseOverrides.get(group.stageId)!
+            : shouldAutoCollapseStage(group);
 
           // Get streaming events for this stage
           const stageStreamingMap = streamingByStage.get(group.stageId);
@@ -281,7 +285,13 @@ export default function ConversationTimeline({
                     sequenceNumber: 0,
                   }}
                   isCollapsed={isCollapsed}
-                  onToggleCollapse={() => toggleStageCollapse(group.stageId)}
+                  onToggleCollapse={() => {
+                    setStageCollapseOverrides((prev) => {
+                      const next = new Map(prev);
+                      next.set(group.stageId, !isCollapsed);
+                      return next;
+                    });
+                  }}
                 />
               )}
 
@@ -302,13 +312,13 @@ export default function ConversationTimeline({
           );
         })}
 
-        {/* Ungrouped streaming events (no stageId) */}
+        {/* Ungrouped streaming events (no stageId), excluding executive_summary */}
         {streamingByStage.get('__ungrouped__') &&
-          Array.from(streamingByStage.get('__ungrouped__')!.entries()).map(
-            ([eventId, streamItem]) => (
+          Array.from(streamingByStage.get('__ungrouped__')!.entries())
+            .filter(([, streamItem]) => streamItem.eventType !== TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY)
+            .map(([eventId, streamItem]) => (
               <StreamingContentRenderer key={eventId} item={streamItem} />
-            ),
-          )}
+            ))}
 
         {/* Processing indicator for active sessions */}
         {isActive && <ProcessingIndicator message={progressStatus || 'Processing...'} />}

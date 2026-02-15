@@ -163,17 +163,23 @@ export function parseTimelineToFlow(
     result.push(eventToFlowItem(event, stageMap));
   }
 
-  return filterResponsesDuplicatedByFinalAnalysis(result);
+  return filterDuplicatedItems(result);
 }
 
 /**
- * Filter out `response` items that are duplicated by a `final_analysis` in the
- * same execution. The backend emits an llm_response during streaming and then a
- * final_analysis with the same content once processing completes. During
- * streaming only the response exists so it renders normally; once the
- * final_analysis arrives the redundant response is hidden.
+ * Remove items from the flow that are rendered elsewhere or are redundant:
+ *
+ * 1. executive_summary — session-level event rendered by FinalAnalysisCard.
+ *    During streaming it flows through StreamingContentRenderer (separate from
+ *    FlowItem[]). Keeping it here would duplicate it inside the last stage.
+ *
+ * 2. response items duplicated by a final_analysis in the same execution.
+ *    The backend emits an llm_response during streaming and then a
+ *    final_analysis with the same content once processing completes. During
+ *    streaming only the response exists so it renders normally; once the
+ *    final_analysis arrives the redundant response is hidden.
  */
-function filterResponsesDuplicatedByFinalAnalysis(items: FlowItem[]): FlowItem[] {
+function filterDuplicatedItems(items: FlowItem[]): FlowItem[] {
   // Collect final_analysis content per execution
   const finalContentByExec = new Map<string, Set<string>>();
   for (const item of items) {
@@ -185,14 +191,17 @@ function filterResponsesDuplicatedByFinalAnalysis(items: FlowItem[]): FlowItem[]
     }
   }
 
-  if (finalContentByExec.size === 0) return items;
-
   return items.filter(item => {
-    if (item.type !== 'response') return true;
-    if (!item.executionId) return true;
-    const finalContents = finalContentByExec.get(item.executionId);
-    if (!finalContents) return true;
-    return !finalContents.has(item.content);
+    // (1) executive_summary is rendered by FinalAnalysisCard, not the timeline
+    if (item.type === 'executive_summary') return false;
+
+    // (2) Hide response when an identical final_analysis exists in the same execution
+    if (item.type === 'response' && item.executionId) {
+      const finalContents = finalContentByExec.get(item.executionId);
+      if (finalContents && finalContents.has(item.content)) return false;
+    }
+
+    return true;
   });
 }
 
