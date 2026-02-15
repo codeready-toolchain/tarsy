@@ -1,5 +1,5 @@
 /**
- * Session and stage status constants and helpers.
+ * Session, stage, and execution status constants and helpers.
  */
 
 export const SESSION_STATUS = {
@@ -11,6 +11,38 @@ export const SESSION_STATUS = {
   CANCELLED: 'cancelled',
   TIMED_OUT: 'timed_out',
 } as const;
+
+/**
+ * Execution / stage status values (shared by both agent_execution and stage
+ * entities on the backend). The frontend also derives a 'started' pseudo-status
+ * when no items have been persisted yet.
+ */
+export const EXECUTION_STATUS = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  STARTED: 'started', // frontend-only, derived when no items yet
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  TIMED_OUT: 'timed_out',
+} as const;
+
+export type ExecutionStatus = (typeof EXECUTION_STATUS)[keyof typeof EXECUTION_STATUS];
+
+/** Terminal execution/stage statuses — execution will not change further. */
+export const TERMINAL_EXECUTION_STATUSES = new Set<string>([
+  EXECUTION_STATUS.COMPLETED,
+  EXECUTION_STATUS.FAILED,
+  EXECUTION_STATUS.CANCELLED,
+  EXECUTION_STATUS.TIMED_OUT,
+]);
+
+/** Failed-family statuses (for error display logic). */
+export const FAILED_EXECUTION_STATUSES = new Set<string>([
+  EXECUTION_STATUS.FAILED,
+  EXECUTION_STATUS.TIMED_OUT,
+  EXECUTION_STATUS.CANCELLED,
+]);
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 

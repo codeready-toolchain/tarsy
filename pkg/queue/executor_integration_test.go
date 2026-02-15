@@ -76,10 +76,11 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
-	mu              sync.Mutex
-	stageStatuses   []events.StageStatusPayload
-	sessionStatuses []events.SessionStatusPayload
-	timelineCreated []events.TimelineCreatedPayload
+	mu                sync.Mutex
+	stageStatuses     []events.StageStatusPayload
+	sessionStatuses   []events.SessionStatusPayload
+	timelineCreated   []events.TimelineCreatedPayload
+	executionStatuses []events.ExecutionStatusPayload
 }
 
 func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
@@ -124,6 +125,12 @@ func (p *testEventPublisher) PublishSessionProgress(_ context.Context, _ events.
 }
 
 func (p *testEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
+}
+func (p *testEventPublisher) PublishExecutionStatus(_ context.Context, _ string, payload events.ExecutionStatusPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.executionStatuses = append(p.executionStatuses, payload)
 	return nil
 }
 
@@ -668,6 +675,18 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	assert.Equal(t, "parallel-investigation - Synthesis", publisher.stageStatuses[2].StageName)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[2].Status)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
+
+	// Verify execution.status events: each agent (2 investigation + 1 synthesis) emits a terminal status
+	publisher.mu.Lock()
+	execStatuses := make([]events.ExecutionStatusPayload, len(publisher.executionStatuses))
+	copy(execStatuses, publisher.executionStatuses)
+	publisher.mu.Unlock()
+	require.Len(t, execStatuses, 3, "expected 3 execution.status events (2 investigation + 1 synthesis)")
+	for _, es := range execStatuses {
+		assert.Equal(t, "completed", es.Status, "all agents should complete successfully")
+		assert.NotEmpty(t, es.ExecutionID, "execution.status should include execution_id")
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type, "event type should be execution.status")
+	}
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
@@ -714,6 +733,23 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, execs, 2)
+
+	// Verify execution.status events: both agents emit terminal status
+	publisher.mu.Lock()
+	execStatuses := make([]events.ExecutionStatusPayload, len(publisher.executionStatuses))
+	copy(execStatuses, publisher.executionStatuses)
+	publisher.mu.Unlock()
+	require.Len(t, execStatuses, 2, "expected 2 execution.status events (one per agent)")
+
+	// Collect statuses — one should be completed, one should be failed
+	statusSet := map[string]int{}
+	for _, es := range execStatuses {
+		statusSet[es.Status]++
+		assert.NotEmpty(t, es.ExecutionID)
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type)
+	}
+	assert.Equal(t, 1, statusSet["completed"], "one agent should have completed")
+	assert.Equal(t, 1, statusSet["failed"], "one agent should have failed")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {

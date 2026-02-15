@@ -28,8 +28,7 @@ import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
-
-const TERMINAL_STAGE_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
+import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 /**
  * Synthesis stages auto-collapse only when the session is no longer active
@@ -41,7 +40,7 @@ function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): b
   const isSynthesis = group.stageName.toLowerCase().includes('synthesis');
   if (!isSynthesis) return false;
   if (isSessionActive) return false;
-  return TERMINAL_STAGE_STATUSES.has(group.stageStatus);
+  return TERMINAL_EXECUTION_STATUSES.has(group.stageStatus);
 }
 
 interface ConversationTimelineProps {
@@ -57,6 +56,8 @@ interface ConversationTimelineProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
+  /** Real-time execution statuses from execution.status WS events (executionId → status) */
+  executionStatuses?: Map<string, string>;
   /** Chain ID for the header display */
   chainId?: string;
 }
@@ -81,6 +82,7 @@ export default function ConversationTimeline({
   progressStatus,
   streamingEvents,
   agentProgressStatuses,
+  executionStatuses,
   chainId,
 }: ConversationTimelineProps) {
   // --- Stage collapse (manual overrides + auto-collapse for Synthesis) ---
@@ -370,6 +372,7 @@ export default function ConversationTimeline({
                   expandAllReasoning={expandAllReasoning}
                   isItemCollapsible={isItemCollapsible}
                   agentProgressStatuses={agentProgressStatuses}
+                  executionStatuses={executionStatuses}
                 />
               </Collapse>
             </Box>

@@ -5,6 +5,7 @@ import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
 import { formatDurationMs } from '../../utils/format';
 import type { FlowItem } from '../../utils/timelineParser';
+import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 
 interface ToolCallItemProps {
   item: FlowItem;
@@ -69,7 +70,7 @@ function ToolCallItem({ item }: ToolCallItemProps) {
   // This is NOT an MCP failure — the tool executed fine and returned a response.
   const isToolResultError = !!item.metadata?.is_error;
   // MCP-level failure: the tool call itself failed (bad args, timeout, unknown tool, etc.)
-  const isMcpFailure = item.status === 'failed' || !!errorMessage;
+  const isMcpFailure = item.status === EXECUTION_STATUS.FAILED || !!errorMessage;
   // Tool result is in item.content (after completion)
   const toolResult = item.content || null;
 

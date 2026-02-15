@@ -425,6 +425,7 @@ func (e *RealSessionExecutor) executeAgent(
 		); updateErr != nil {
 			logger.Error("Failed to update agent execution status to failed", "error", updateErr)
 		}
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), resErr.Error())
 		return agentResult{
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
@@ -523,6 +524,7 @@ func (e *RealSessionExecutor) executeAgent(
 		if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entErrStatus, err.Error()); updateErr != nil {
 			logger.Error("Failed to update agent execution status after error", "error", updateErr)
 		}
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(entErrStatus), err.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            errStatus,
@@ -566,6 +568,7 @@ func (e *RealSessionExecutor) executeAgent(
 			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
+	publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(entStatus), errMsg)
 
 	return agentResult{
 		executionID:       exec.ID,
@@ -854,6 +857,32 @@ func publishExecutionProgressFromExecutor(ctx context.Context, eventPublisher ag
 		slog.Warn("Failed to publish execution progress",
 			"session_id", sessionID,
 			"phase", phase,
+			"error", err,
+		)
+	}
+}
+
+// publishExecutionStatus publishes an execution.status transient event.
+// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
+func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID, status, errMsg string) {
+	if eventPublisher == nil {
+		return
+	}
+	if err := eventPublisher.PublishExecutionStatus(ctx, sessionID, events.ExecutionStatusPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeExecutionStatus,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		StageID:      stageID,
+		ExecutionID:  executionID,
+		Status:       status,
+		ErrorMessage: errMsg,
+	}); err != nil {
+		slog.Warn("Failed to publish execution status",
+			"session_id", sessionID,
+			"execution_id", executionID,
+			"status", status,
 			"error", err,
 		)
 	}

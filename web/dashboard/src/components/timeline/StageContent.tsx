@@ -13,8 +13,11 @@ import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
-
-const TERMINAL_EXECUTION_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
+import {
+  EXECUTION_STATUS,
+  TERMINAL_EXECUTION_STATUSES,
+  FAILED_EXECUTION_STATUSES,
+} from '../../constants/sessionStatus';
 
 interface StageContentProps {
   items: FlowItem[];
@@ -30,6 +33,9 @@ interface StageContentProps {
   isItemCollapsible?: (item: FlowItem) => boolean;
   // Per-agent progress
   agentProgressStatuses?: Map<string, string>;
+  /** Real-time execution statuses from execution.status WS events (executionId → status).
+   *  Higher priority than REST ExecutionOverview for immediate UI updates. */
+  executionStatuses?: Map<string, string>;
   onSelectedAgentChange?: (executionId: string | null) => void;
 }
 
@@ -60,46 +66,45 @@ const getExecutionErrorMessage = (items: FlowItem[]): string => {
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case 'failed':
-    case 'timed_out': return <ErrorIcon fontSize="small" />;
-    case 'completed': return <CheckCircle fontSize="small" />;
-    case 'cancelled': return <CancelOutlined fontSize="small" />;
+    case EXECUTION_STATUS.FAILED:
+    case EXECUTION_STATUS.TIMED_OUT: return <ErrorIcon fontSize="small" />;
+    case EXECUTION_STATUS.COMPLETED: return <CheckCircle fontSize="small" />;
+    case EXECUTION_STATUS.CANCELLED: return <CancelOutlined fontSize="small" />;
     default: return <PlayArrow fontSize="small" />;
   }
 };
 
 const getStatusColor = (status: string): 'default' | 'success' | 'error' | 'warning' | 'info' => {
   switch (status) {
-    case 'completed': return 'success';
-    case 'failed':
-    case 'timed_out': return 'error';
-    case 'cancelled': return 'default';
+    case EXECUTION_STATUS.COMPLETED: return 'success';
+    case EXECUTION_STATUS.FAILED:
+    case EXECUTION_STATUS.TIMED_OUT: return 'error';
+    case EXECUTION_STATUS.CANCELLED: return 'default';
     default: return 'info';
   }
 };
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'completed': return 'Complete';
-    case 'failed': return 'Failed';
-    case 'timed_out': return 'Timed Out';
-    case 'cancelled': return 'Cancelled';
-    case 'started': return 'Running';
+    case EXECUTION_STATUS.COMPLETED: return 'Complete';
+    case EXECUTION_STATUS.FAILED: return 'Failed';
+    case EXECUTION_STATUS.TIMED_OUT: return 'Timed Out';
+    case EXECUTION_STATUS.CANCELLED: return 'Cancelled';
+    case EXECUTION_STATUS.STARTED: return 'Running';
     default: return status;
   }
 };
 
 // Helper: derive execution status from items
 function deriveExecutionStatus(items: FlowItem[]): string {
-  if (items.length === 0) return 'started';
-  const terminalStatuses = ['completed', 'failed', 'timed_out', 'cancelled'];
+  if (items.length === 0) return EXECUTION_STATUS.STARTED;
   const hasError = items.some(
-    i => i.type === 'error' || i.status === 'failed' || i.status === 'timed_out' || i.status === 'cancelled',
+    i => i.type === 'error' || FAILED_EXECUTION_STATUSES.has(i.status || ''),
   );
-  const allTerminal = items.every(i => terminalStatuses.includes(i.status || ''));
-  if (hasError) return 'failed';
-  if (allTerminal && items.length > 0) return 'completed';
-  return 'started';
+  const allTerminal = items.every(i => TERMINAL_EXECUTION_STATUSES.has(i.status || ''));
+  if (hasError) return EXECUTION_STATUS.FAILED;
+  if (allTerminal && items.length > 0) return EXECUTION_STATUS.COMPLETED;
+  return EXECUTION_STATUS.STARTED;
 }
 
 // Helper: derive token data from items metadata
@@ -188,6 +193,7 @@ const StageContent: React.FC<StageContentProps> = ({
   expandAllReasoning = false,
   isItemCollapsible,
   agentProgressStatuses = new Map(),
+  executionStatuses,
   onSelectedAgentChange,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
@@ -244,7 +250,7 @@ const StageContent: React.FC<StageContentProps> = ({
           executionId: execId,
           index: executions.length + streamOnlyGroups.length,
           items: [],
-          status: 'started',
+          status: EXECUTION_STATUS.STARTED,
         });
         allExecIds.add(execId);
       }
@@ -284,11 +290,12 @@ const StageContent: React.FC<StageContentProps> = ({
   const hasOtherActiveAgents = useMemo(() => {
     if (!isMultiAgent) return false;
     return mergedExecutions.some((exec) => {
+      const wsStatus = executionStatuses?.get(exec.executionId);
       const eo = execOverviewMap.get(exec.executionId);
-      const status = eo?.status || exec.status;
+      const status = wsStatus || eo?.status || exec.status;
       return !TERMINAL_EXECUTION_STATUSES.has(status);
     });
-  }, [isMultiAgent, mergedExecutions, execOverviewMap]);
+  }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
 
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
@@ -296,10 +303,11 @@ const StageContent: React.FC<StageContentProps> = ({
     const hasDbItems = execution.items.length > 0;
     const hasStreamingItems = executionStreamingItems.length > 0;
 
-    // Prefer execution overview status/message over item-derived values
+    // Prefer real-time WS status > REST execution overview > item-derived status
     const eo = execOverviewMap.get(execution.executionId);
-    const effectiveStatus = eo?.status || execution.status;
-    const isFailed = effectiveStatus === 'failed' || effectiveStatus === 'timed_out' || effectiveStatus === 'cancelled';
+    const wsStatus = executionStatuses?.get(execution.executionId);
+    const effectiveStatus = wsStatus || eo?.status || execution.status;
+    const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
     // This agent is done but others are still working
@@ -405,11 +413,14 @@ const StageContent: React.FC<StageContentProps> = ({
           {mergedExecutions.map((execution, tabIndex) => {
             const isSelected = selectedTab === tabIndex;
             const eo = execOverviewMap.get(execution.executionId);
-            const statusColor = getStatusColor(eo?.status || execution.status);
-            const statusIcon = getStatusIcon(eo?.status || execution.status);
+            const cardWsStatus = executionStatuses?.get(execution.executionId);
+            const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
+            const statusColor = getStatusColor(cardEffectiveStatus);
+            const statusIcon = getStatusIcon(cardEffectiveStatus);
             const label = eo?.agent_name || `Agent ${tabIndex + 1}`;
             const progressStatus = agentProgressStatuses.get(execution.executionId);
-            const isTerminalProgress = !progressStatus || ['Completed', 'Failed', 'Cancelled'].includes(progressStatus);
+            const isTerminalProgress = !progressStatus
+              || TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus);
             // Prefer API-level token stats, fall back to deriving from item metadata
             const tokenData = eo
               ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
@@ -450,7 +461,7 @@ const StageContent: React.FC<StageContentProps> = ({
                     </Typography>
                   )}
                   <Chip
-                    label={getStatusLabel(eo?.status || execution.status)}
+                    label={getStatusLabel(cardEffectiveStatus)}
                     size="small" color={statusColor}
                     sx={{ height: 18, fontSize: '0.65rem' }}
                   />
@@ -460,7 +471,7 @@ const StageContent: React.FC<StageContentProps> = ({
                       size="small" color="info" variant="outlined"
                       sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
                     />
-                  ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(eo?.status || execution.status) ? (
+                  ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
                     <Chip
                       label="Waiting for other agents..."
                       size="small" color="default" variant="outlined"

@@ -3,6 +3,7 @@ import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/m
 import type { Theme } from '@mui/material/styles';
 import { Flag, ExpandMore, ExpandLess } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
+import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 interface StageSeparatorProps {
   item: FlowItem;
@@ -16,7 +17,7 @@ interface StageSeparatorProps {
  */
 function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
-  const isErrorStatus = stageStatus === 'failed' || stageStatus === 'timed_out' || stageStatus === 'cancelled';
+  const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
   // The backend prefixes stage names with the parent chain name
   // (e.g. "investigation - Synthesis"). Display only the stage-specific part.
   const rawName = item.content;
@@ -94,7 +95,7 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
         <Alert severity="error" sx={{ mt: 2, mx: 2 }}>
           <Typography variant="body2">
             <strong>
-              {stageStatus === 'timed_out' ? 'Stage Timed Out' : stageStatus === 'cancelled' ? 'Stage Cancelled' : 'Stage Failed'}
+              {stageStatus === EXECUTION_STATUS.TIMED_OUT ? 'Stage Timed Out' : stageStatus === EXECUTION_STATUS.CANCELLED ? 'Stage Cancelled' : 'Stage Failed'}
             </strong>
             {errorMessage && `: ${errorMessage}`}
           </Typography>

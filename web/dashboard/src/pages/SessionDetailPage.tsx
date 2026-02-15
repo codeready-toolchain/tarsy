@@ -54,6 +54,7 @@ import type {
   StageStatusPayload,
   SessionProgressPayload,
   ExecutionProgressPayload,
+  ExecutionStatusPayload,
 } from '../types/events.ts';
 
 import {
@@ -64,6 +65,7 @@ import {
   EVENT_STAGE_STATUS,
   EVENT_SESSION_PROGRESS,
   EVENT_EXECUTION_PROGRESS,
+  EVENT_EXECUTION_STATUS,
   EVENT_CATCHUP_OVERFLOW,
   TIMELINE_STATUS,
   PHASE_STATUS_MESSAGE,
@@ -74,6 +76,7 @@ import {
   isTerminalStatus,
   type SessionStatus,
   SESSION_STATUS,
+  EXECUTION_STATUS,
 } from '../constants/sessionStatus.ts';
 
 // ────────────────────────────────────────────────────────────
@@ -169,6 +172,11 @@ export function SessionDetailPage() {
   const [agentProgressStatuses, setAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
+  // Real-time execution status from execution.status WS events (executionId → status).
+  // Higher priority than REST ExecutionOverview for immediate UI updates.
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, string>>(
+    () => new Map(),
+  );
 
   // --- View / navigation ---
   const view = 'reasoning' as const;
@@ -258,6 +266,7 @@ export function SessionDetailPage() {
     streamingMetaRef.current.clear();
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
+    setExecutionStatuses(new Map());
 
     try {
       const [sessionData, timelineData] = await Promise.all([
@@ -463,7 +472,7 @@ export function SessionDetailPage() {
                       ...ev,
                       content: payload.content,
                       status: payload.status,
-                      metadata: ev.metadata || payload.metadata
+                      metadata: (ev.metadata || payload.metadata)
                         ? { ...(ev.metadata || {}), ...(payload.metadata || {}) }
                         : null,
                       updated_at: payload.timestamp,
@@ -476,7 +485,7 @@ export function SessionDetailPage() {
             knownEventIdsRef.current.add(payload.event_id);
             // Merge metadata: created event metadata (tool_name, server_name, etc.)
             // is the base, completed event metadata (is_error, etc.) overrides.
-            const mergedMetadata = meta?.metadata || payload.metadata
+            const mergedMetadata = (meta?.metadata || payload.metadata)
               ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
               : null;
             setTimelineEvents((prev) => [
@@ -567,7 +576,7 @@ export function SessionDetailPage() {
           // (agent names, LLM providers, iteration strategies) for parallel agents.
           // Use a debounced fetch to avoid hammering the API if multiple stage events
           // arrive in quick succession.
-          if (payload.status === 'started') {
+          if (payload.status === EXECUTION_STATUS.STARTED) {
             getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
               console.warn('Failed to re-fetch session on stage start:', err);
             });
@@ -612,6 +621,20 @@ export function SessionDetailPage() {
           if (phaseMessage) {
             setProgressStatus(phaseMessage);
           }
+          return;
+        }
+
+        // --- execution.status ---
+        // Real-time per-agent status transitions (active, completed, failed, etc.).
+        // Updates executionStatuses map so StageContent can reflect individual
+        // agent terminal status without waiting for the entire stage to complete.
+        if (eventType === EVENT_EXECUTION_STATUS) {
+          const payload = data as unknown as ExecutionStatusPayload;
+          setExecutionStatuses((prev) => {
+            const next = new Map(prev);
+            next.set(payload.execution_id, payload.status);
+            return next;
+          });
           return;
         }
       } catch {
@@ -934,6 +957,7 @@ export function SessionDetailPage() {
                   progressStatus={progressStatus}
                   streamingEvents={streamingEvents}
                   agentProgressStatuses={agentProgressStatuses}
+                  executionStatuses={executionStatuses}
                   chainId={session.chain_id}
                 />
               </Suspense>
@@ -944,14 +968,64 @@ export function SessionDetailPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 2,
+                  gap: 3,
                 }}
               >
-                <CircularProgress
-                  size={48}
-                  color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
-                />
-                <Typography variant="body1" color="text.secondary">
+                {/* Pulsing ring spinner */}
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: 64,
+                    height: 64,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CircularProgress
+                    size={56}
+                    thickness={2.5}
+                    color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      border: '2px solid',
+                      borderColor: session.status === SESSION_STATUS.PENDING
+                        ? 'rgba(237, 108, 2, 0.15)'
+                        : 'rgba(25, 118, 210, 0.15)',
+                      animation: 'init-pulse 2s ease-in-out infinite',
+                      '@keyframes init-pulse': {
+                        '0%, 100%': { transform: 'scale(1)', opacity: 0.6 },
+                        '50%': { transform: 'scale(1.15)', opacity: 0 },
+                      },
+                    }}
+                  />
+                </Box>
+                {/* Shimmer text */}
+                <Typography
+                  variant="body1"
+                  sx={{
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
+                    fontStyle: 'italic',
+                    background: session.status === SESSION_STATUS.PENDING
+                      ? 'linear-gradient(90deg, rgba(237,108,2,0.5) 0%, rgba(237,108,2,0.7) 40%, rgba(237,108,2,0.9) 50%, rgba(237,108,2,0.7) 60%, rgba(237,108,2,0.5) 100%)'
+                      : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
+                    backgroundSize: '200% 100%',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    animation: 'init-shimmer 3s linear infinite',
+                    '@keyframes init-shimmer': {
+                      '0%': { backgroundPosition: '200% center' },
+                      '100%': { backgroundPosition: '-200% center' },
+                    },
+                  }}
+                >
                   {session.status === SESSION_STATUS.PENDING
                     ? 'Session queued, waiting to start...'
                     : 'Initializing investigation...'}

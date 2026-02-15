@@ -146,6 +146,9 @@ func (m *mockEventPublisher) PublishSessionProgress(_ context.Context, _ events.
 func (m *mockEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
 	return nil
 }
+func (m *mockEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ events.ExecutionStatusPayload) error {
+	return nil
+}
 
 func TestWorkerStopIdempotent(t *testing.T) {
 	cfg := testQueueConfig()

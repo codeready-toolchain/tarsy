@@ -6,6 +6,7 @@
 
 import type { TimelineEvent, StageOverview } from '../types/session';
 import { TIMELINE_EVENT_TYPES, TIMELINE_STATUS } from '../constants/eventTypes';
+import { EXECUTION_STATUS } from '../constants/sessionStatus';
 
 // --- Types ---
 
@@ -301,8 +302,8 @@ export function groupByExecutionId(items: FlowItem[]): Map<string, FlowItem[]> {
 export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): TimelineStats {
   const stats: TimelineStats = {
     totalStages: stages.length,
-    completedStages: stages.filter(s => s.status === 'completed').length,
-    failedStages: stages.filter(s => s.status === 'failed' || s.status === 'timed_out').length,
+    completedStages: stages.filter(s => s.status === EXECUTION_STATUS.COMPLETED).length,
+    failedStages: stages.filter(s => s.status === EXECUTION_STATUS.FAILED || s.status === EXECUTION_STATUS.TIMED_OUT).length,
     thoughtCount: 0,
     toolCallCount: 0,
     successfulToolCalls: 0,
@@ -320,7 +321,7 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
       case 'thinking': stats.thoughtCount++; break;
       case 'tool_call':
         stats.toolCallCount++;
-        if (item.status === 'completed') stats.successfulToolCalls++;
+        if (item.status === EXECUTION_STATUS.COMPLETED) stats.successfulToolCalls++;
         break;
       case 'tool_summary': stats.toolSummaryCount++; break;
       case 'response': stats.responseCount++; break;
