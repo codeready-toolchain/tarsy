@@ -3,7 +3,7 @@ import { Box, Typography, Collapse, IconButton, Chip, alpha, useTheme } from '@m
 import { ExpandMore, ExpandLess, Code, Search, Link as LinkIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 
 interface CodeBlock {
   type: string;
@@ -21,7 +21,7 @@ interface NativeToolItemProps {
 function getPreviewSummary(item: FlowItem): string {
   try {
     const parsed = JSON.parse(item.content);
-    if (item.type === 'code_execution') {
+    if (item.type === FLOW_ITEM.CODE_EXECUTION) {
       const blocks: string[] = [];
       if (Array.isArray(parsed.blocks)) {
         const codeCount = parsed.blocks.filter((b: CodeBlock) => b.type === 'code').length;
@@ -32,10 +32,10 @@ function getPreviewSummary(item: FlowItem): string {
       }
       if (parsed.code) return '1 code block';
     }
-    if (item.type === 'search_result' && Array.isArray(parsed.queries)) {
+    if (item.type === FLOW_ITEM.SEARCH_RESULT && Array.isArray(parsed.queries)) {
       return `${parsed.queries.length} quer${parsed.queries.length === 1 ? 'y' : 'ies'}`;
     }
-    if (item.type === 'url_context' && Array.isArray(parsed.urls)) {
+    if (item.type === FLOW_ITEM.URL_CONTEXT && Array.isArray(parsed.urls)) {
       return `${parsed.urls.length} URL${parsed.urls.length === 1 ? '' : 's'}`;
     }
   } catch {
@@ -94,7 +94,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
   };
 
   const renderContent = () => {
-    if (item.type === 'code_execution') {
+    if (item.type === FLOW_ITEM.CODE_EXECUTION) {
       // Try to parse code execution content
       try {
         const parsed = JSON.parse(item.content);
@@ -355,7 +355,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
       }
     }
 
-    if (item.type === 'search_result') {
+    if (item.type === FLOW_ITEM.SEARCH_RESULT) {
       try {
         const parsed = JSON.parse(item.content);
         if (Array.isArray(parsed.queries)) {
@@ -402,7 +402,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
       );
     }
 
-    if (item.type === 'url_context') {
+    if (item.type === FLOW_ITEM.URL_CONTEXT) {
       try {
         const parsed = JSON.parse(item.content);
         if (Array.isArray(parsed.urls)) {

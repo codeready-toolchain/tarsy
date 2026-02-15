@@ -76,10 +76,11 @@ func (m *mockLLMClient) Close() error { return nil }
 // ────────────────────────────────────────────────────────────
 
 type testEventPublisher struct {
-	mu              sync.Mutex
-	stageStatuses   []events.StageStatusPayload
-	sessionStatuses []events.SessionStatusPayload
-	timelineCreated []events.TimelineCreatedPayload
+	mu                sync.Mutex
+	stageStatuses     []events.StageStatusPayload
+	sessionStatuses   []events.SessionStatusPayload
+	timelineCreated   []events.TimelineCreatedPayload
+	executionStatuses []events.ExecutionStatusPayload
 }
 
 func (p *testEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
@@ -126,6 +127,12 @@ func (p *testEventPublisher) PublishSessionProgress(_ context.Context, _ events.
 func (p *testEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
 	return nil
 }
+func (p *testEventPublisher) PublishExecutionStatus(_ context.Context, _ string, payload events.ExecutionStatusPayload) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.executionStatuses = append(p.executionStatuses, payload)
+	return nil
+}
 
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
@@ -137,6 +144,27 @@ func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 		}
 	}
 	return false
+}
+
+// getExecutionStatuses returns a thread-safe copy of the captured execution.status events.
+func (p *testEventPublisher) getExecutionStatuses() []events.ExecutionStatusPayload {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]events.ExecutionStatusPayload, len(p.executionStatuses))
+	copy(out, p.executionStatuses)
+	return out
+}
+
+// filterExecutionStatuses returns execution.status events matching the given status.
+func (p *testEventPublisher) filterExecutionStatuses(status string) []events.ExecutionStatusPayload {
+	all := p.getExecutionStatuses()
+	var filtered []events.ExecutionStatusPayload
+	for _, es := range all {
+		if es.Status == status {
+			filtered = append(filtered, es)
+		}
+	}
+	return filtered
 }
 
 // ────────────────────────────────────────────────────────────
@@ -668,6 +696,23 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	assert.Equal(t, "parallel-investigation - Synthesis", publisher.stageStatuses[2].StageName)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[2].Status)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
+
+	// Verify execution.status events: each agent emits active + terminal.
+	// 3 agents (2 investigation + 1 synthesis) × 2 events each = 6 total.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 6, "expected 6 execution.status events (active+completed for each of 3 agents)")
+	for _, es := range execStatuses {
+		assert.NotEmpty(t, es.ExecutionID, "execution.status should include execution_id")
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type, "event type should be execution.status")
+	}
+
+	// 3 "active" events (one per agent at startup)
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 3, "each agent should emit execution.status: active at startup")
+
+	// 3 "completed" events (one per agent at completion)
+	completedEvents := publisher.filterExecutionStatuses("completed")
+	assert.Len(t, completedEvents, 3, "all agents should complete successfully")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
@@ -714,6 +759,26 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, execs, 2)
+
+	// Verify execution.status events: both agents emit active + terminal.
+	// 2 agents × 2 events each = 4 total.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 4, "expected 4 execution.status events (active+terminal for each of 2 agents)")
+
+	for _, es := range execStatuses {
+		assert.NotEmpty(t, es.ExecutionID)
+		assert.Equal(t, events.EventTypeExecutionStatus, es.Type)
+	}
+
+	// 2 "active" events (one per agent at startup)
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 2, "each agent should emit execution.status: active at startup")
+
+	// Terminal events: one completed, one failed
+	completedEvents := publisher.filterExecutionStatuses("completed")
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, completedEvents, 1, "one agent should have completed")
+	assert.Len(t, failedEvents, 1, "one agent should have failed")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
@@ -1897,4 +1962,145 @@ func TestCountExpectedStages(t *testing.T) {
 		// 0 config stages + 0 synthesis + 1 executive summary = 1
 		assert.Equal(t, 1, countExpectedStages(chain))
 	})
+}
+
+// ────────────────────────────────────────────────────────────
+// Post-activation failure tests
+// ────────────────────────────────────────────────────────────
+
+func TestExecutor_MCPSelectionFailureEmitsTerminalStatus(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+			},
+		},
+	}
+
+	// LLM should never be called — execution fails before reaching the agent loop.
+	llm := &mockLLMClient{}
+
+	cfg := testConfig("test-chain", chain)
+	// Registry is non-nil but empty, so any server reference in the override
+	// will fail the Has() check inside resolveMCPSelection.
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+
+	// Create session with an MCP override referencing a non-existent server.
+	sessionID := uuid.New().String()
+	session, err := entClient.AlertSession.Create().
+		SetID(sessionID).
+		SetAlertData("Test alert data").
+		SetAgentType("test").
+		SetAlertType("test-alert").
+		SetChainID("test-chain").
+		SetStatus(alertsession.StatusInProgress).
+		SetAuthor("test").
+		SetMcpSelection(map[string]interface{}{
+			"servers": []interface{}{
+				map[string]interface{}{"name": "nonexistent-server"},
+			},
+		}).
+		Save(context.Background())
+	require.NoError(t, err)
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "nonexistent-server")
+
+	// Verify DB: execution record exists and is failed.
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 1)
+	assert.Equal(t, agentexecution.StatusFailed, execs[0].Status)
+
+	// Verify execution.status events: active → failed.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 2, "expected 2 execution.status events (active + failed)")
+
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 1, "agent should emit execution.status: active at startup")
+
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on MCP error")
+	assert.Contains(t, failedEvents[0].ErrorMessage, "nonexistent-server")
+}
+
+func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "BadAgent"}},
+			},
+		},
+	}
+
+	// LLM should never be called.
+	llm := &mockLLMClient{}
+
+	// Register "BadAgent" with an unsupported iteration strategy so that
+	// ResolveAgentConfig succeeds but CreateAgent (→ CreateController) fails.
+	maxIter := 1
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:       "test-provider",
+			IterationStrategy: config.IterationStrategyReact,
+			MaxIterations:     &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"BadAgent": {
+				IterationStrategy: config.IterationStrategy("unsupported-strategy"),
+				MaxIterations:     &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": chain,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "failed to create agent")
+
+	// Verify DB: execution record exists and is failed.
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 1)
+	assert.Equal(t, agentexecution.StatusFailed, execs[0].Status)
+
+	// Verify execution.status events: active → failed.
+	execStatuses := publisher.getExecutionStatuses()
+	require.Len(t, execStatuses, 2, "expected 2 execution.status events (active + failed)")
+
+	activeEvents := publisher.filterExecutionStatuses("active")
+	assert.Len(t, activeEvents, 1, "agent should emit execution.status: active at startup")
+
+	failedEvents := publisher.filterExecutionStatuses("failed")
+	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on creation error")
+	assert.Contains(t, failedEvents[0].ErrorMessage, "failed to create agent")
 }

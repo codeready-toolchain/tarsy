@@ -115,6 +115,7 @@ type EventPublisher interface {
 	PublishInteractionCreated(ctx context.Context, sessionID string, payload events.InteractionCreatedPayload) error
 	PublishSessionProgress(ctx context.Context, payload events.SessionProgressPayload) error
 	PublishExecutionProgress(ctx context.Context, sessionID string, payload events.ExecutionProgressPayload) error
+	PublishExecutionStatus(ctx context.Context, sessionID string, payload events.ExecutionStatusPayload) error
 }
 
 // ChatContext carries chat-specific data for controllers.

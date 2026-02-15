@@ -7,12 +7,17 @@ import {
   CallSplit,
   CancelOutlined,
 } from '@mui/icons-material';
-import type { FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
+import {
+  EXECUTION_STATUS,
+  TERMINAL_EXECUTION_STATUSES,
+  FAILED_EXECUTION_STATUSES,
+} from '../../constants/sessionStatus';
 
 interface StageContentProps {
   items: FlowItem[];
@@ -28,6 +33,9 @@ interface StageContentProps {
   isItemCollapsible?: (item: FlowItem) => boolean;
   // Per-agent progress
   agentProgressStatuses?: Map<string, string>;
+  /** Real-time execution statuses from execution.status WS events (executionId → status).
+   *  Higher priority than REST ExecutionOverview for immediate UI updates. */
+  executionStatuses?: Map<string, string>;
   onSelectedAgentChange?: (executionId: string | null) => void;
 }
 
@@ -52,52 +60,56 @@ function TabPanel({ children, value, index, ...other }: TabPanelProps) {
 }
 
 const getExecutionErrorMessage = (items: FlowItem[]): string => {
-  const errorItem = items.find(i => i.type === 'error');
+  const errorItem = items.find(i => i.type === FLOW_ITEM.ERROR);
   return errorItem?.content || (items[items.length - 1]?.metadata?.error_message as string) || '';
 };
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case 'failed':
-    case 'timed_out': return <ErrorIcon fontSize="small" />;
-    case 'completed': return <CheckCircle fontSize="small" />;
-    case 'cancelled': return <CancelOutlined fontSize="small" />;
+    case EXECUTION_STATUS.FAILED:
+    case EXECUTION_STATUS.TIMED_OUT: return <ErrorIcon fontSize="small" />;
+    case EXECUTION_STATUS.COMPLETED: return <CheckCircle fontSize="small" />;
+    case EXECUTION_STATUS.CANCELLED: return <CancelOutlined fontSize="small" />;
     default: return <PlayArrow fontSize="small" />;
   }
 };
 
 const getStatusColor = (status: string): 'default' | 'success' | 'error' | 'warning' | 'info' => {
   switch (status) {
-    case 'completed': return 'success';
-    case 'failed':
-    case 'timed_out': return 'error';
-    case 'cancelled': return 'default';
+    case EXECUTION_STATUS.COMPLETED: return 'success';
+    case EXECUTION_STATUS.FAILED:
+    case EXECUTION_STATUS.TIMED_OUT: return 'error';
+    case EXECUTION_STATUS.CANCELLED: return 'default';
     default: return 'info';
   }
 };
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'completed': return 'Complete';
-    case 'failed': return 'Failed';
-    case 'timed_out': return 'Timed Out';
-    case 'cancelled': return 'Cancelled';
-    case 'started': return 'Running';
+    case EXECUTION_STATUS.COMPLETED: return 'Complete';
+    case EXECUTION_STATUS.FAILED: return 'Failed';
+    case EXECUTION_STATUS.TIMED_OUT: return 'Timed Out';
+    case EXECUTION_STATUS.CANCELLED: return 'Cancelled';
+    case EXECUTION_STATUS.STARTED: return 'Running';
     default: return status;
   }
 };
 
-// Helper: derive execution status from items
+// Helper: derive execution status from items.
+// IMPORTANT: Timeline item status "completed" means "streaming finished for this item",
+// NOT "the execution is done". Between LLM iterations all existing items can be
+// "completed" while the agent is still running. Only trust a final_analysis item
+// as a definitive completion signal.
 function deriveExecutionStatus(items: FlowItem[]): string {
-  if (items.length === 0) return 'started';
-  const terminalStatuses = ['completed', 'failed', 'timed_out', 'cancelled'];
+  if (items.length === 0) return EXECUTION_STATUS.STARTED;
   const hasError = items.some(
-    i => i.type === 'error' || i.status === 'failed' || i.status === 'timed_out' || i.status === 'cancelled',
+    i => i.type === FLOW_ITEM.ERROR || FAILED_EXECUTION_STATUSES.has(i.status || ''),
   );
-  const allTerminal = items.every(i => terminalStatuses.includes(i.status || ''));
-  if (hasError) return 'failed';
-  if (allTerminal && items.length > 0) return 'completed';
-  return 'started';
+  if (hasError) return EXECUTION_STATUS.FAILED;
+  // A final_analysis item is the definitive signal that the agent finished.
+  const hasFinalAnalysis = items.some(i => i.type === FLOW_ITEM.FINAL_ANALYSIS);
+  if (hasFinalAnalysis) return EXECUTION_STATUS.COMPLETED;
+  return EXECUTION_STATUS.STARTED;
 }
 
 // Helper: derive token data from items metadata
@@ -139,7 +151,7 @@ function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
   const executionOrder: string[] = [];
 
   for (const item of items) {
-    if (item.type === 'stage_separator') continue;
+    if (item.type === FLOW_ITEM.STAGE_SEPARATOR) continue;
     const execId = item.executionId || '__default__';
     if (!groups.has(execId)) {
       groups.set(execId, []);
@@ -186,6 +198,7 @@ const StageContent: React.FC<StageContentProps> = ({
   expandAllReasoning = false,
   isItemCollapsible,
   agentProgressStatuses = new Map(),
+  executionStatuses,
   onSelectedAgentChange,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
@@ -227,24 +240,62 @@ const StageContent: React.FC<StageContentProps> = ({
     return byExec;
   }, [streamingEvents, executions]);
 
-  // ── Merge completed executions with streaming-only agents ──
+  // ── Merge completed executions with streaming-only agents and overview-only agents ──
   // This ensures the tabbed UI appears immediately when parallel agents start
-  // streaming, rather than waiting for items to complete.
+  // streaming or when the execution overview arrives, rather than waiting for
+  // timeline items to complete.
   const mergedExecutions = useMemo(() => {
-    const completedExecIds = new Set(executions.map(e => e.executionId));
+    const allExecIds = new Set(executions.map(e => e.executionId));
+
+    // Agents that are streaming but have no completed items yet
     const streamOnlyGroups: ExecutionGroup[] = [];
     for (const execId of streamingByExecution.keys()) {
-      if (execId !== '__default__' && !completedExecIds.has(execId)) {
+      if (execId !== '__default__' && !allExecIds.has(execId)) {
         streamOnlyGroups.push({
           executionId: execId,
           index: executions.length + streamOnlyGroups.length,
           items: [],
-          status: 'started',
+          status: EXECUTION_STATUS.STARTED,
         });
+        allExecIds.add(execId);
       }
     }
-    return [...executions, ...streamOnlyGroups];
-  }, [executions, streamingByExecution]);
+
+    // Agents known from execution overviews but not yet in items or streaming
+    const overviewGroups: ExecutionGroup[] = [];
+    if (executionOverviews && executionOverviews.length > 0) {
+      for (const eo of executionOverviews) {
+        if (!allExecIds.has(eo.execution_id)) {
+          overviewGroups.push({
+            executionId: eo.execution_id,
+            index: executions.length + streamOnlyGroups.length + overviewGroups.length,
+            items: [],
+            status: eo.status,
+          });
+          allExecIds.add(eo.execution_id);
+        }
+      }
+    }
+
+    // Agents known only from execution.status WS events (e.g. "active" arrives
+    // before any items, streaming, or REST overview data).
+    const statusOnlyGroups: ExecutionGroup[] = [];
+    if (executionStatuses) {
+      for (const execId of executionStatuses.keys()) {
+        if (!allExecIds.has(execId)) {
+          statusOnlyGroups.push({
+            executionId: execId,
+            index: executions.length + streamOnlyGroups.length + overviewGroups.length + statusOnlyGroups.length,
+            items: [],
+            status: executionStatuses.get(execId) || EXECUTION_STATUS.STARTED,
+          });
+          allExecIds.add(execId);
+        }
+      }
+    }
+
+    return [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups];
+  }, [executions, streamingByExecution, executionOverviews, executionStatuses]);
 
   // Detect multi-agent from BOTH completed items and active streaming events
   // so the tabbed interface appears immediately, not only after items complete.
@@ -257,17 +308,32 @@ const StageContent: React.FC<StageContentProps> = ({
     }
   }, [selectedTab, mergedExecutions, onSelectedAgentChange]);
 
+  // Check if any parallel agent is still running (for "Waiting for other agents...")
+  const hasOtherActiveAgents = useMemo(() => {
+    if (!isMultiAgent) return false;
+    return mergedExecutions.some((exec) => {
+      const wsStatus = executionStatuses?.get(exec.executionId);
+      const eo = execOverviewMap.get(exec.executionId);
+      const status = wsStatus || eo?.status || exec.status;
+      return !TERMINAL_EXECUTION_STATUSES.has(status);
+    });
+  }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
+
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
     const executionStreamingItems = streamingByExecution.get(execution.executionId) || [];
     const hasDbItems = execution.items.length > 0;
     const hasStreamingItems = executionStreamingItems.length > 0;
 
-    // Prefer execution overview status/message over item-derived values
+    // Prefer real-time WS status > REST execution overview > item-derived status
     const eo = execOverviewMap.get(execution.executionId);
-    const effectiveStatus = eo?.status || execution.status;
-    const isFailed = effectiveStatus === 'failed' || effectiveStatus === 'timed_out' || effectiveStatus === 'cancelled';
+    const wsStatus = executionStatuses?.get(execution.executionId);
+    const effectiveStatus = wsStatus || eo?.status || execution.status;
+    const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
+    const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
+    // This agent is done but others are still working
+    const isWaitingForOthers = !isExecutionActive && hasOtherActiveAgents;
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -286,7 +352,7 @@ const StageContent: React.FC<StageContentProps> = ({
           <StreamingContentRenderer key={key} item={streamItem} />
         ))}
 
-        {!hasDbItems && !hasStreamingItems && (
+        {!hasDbItems && !hasStreamingItems && !isExecutionActive && (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
             No reasoning steps available for this agent
           </Typography>
@@ -302,6 +368,21 @@ const StageContent: React.FC<StageContentProps> = ({
             </Alert>
           );
         })()}
+
+        {isWaitingForOthers && !isFailed && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mt: 2,
+              fontStyle: 'italic',
+              textAlign: 'center',
+              opacity: 0.7,
+            }}
+          >
+            Waiting for other agents...
+          </Typography>
+        )}
       </Box>
     );
   };
@@ -354,11 +435,14 @@ const StageContent: React.FC<StageContentProps> = ({
           {mergedExecutions.map((execution, tabIndex) => {
             const isSelected = selectedTab === tabIndex;
             const eo = execOverviewMap.get(execution.executionId);
-            const statusColor = getStatusColor(eo?.status || execution.status);
-            const statusIcon = getStatusIcon(eo?.status || execution.status);
+            const cardWsStatus = executionStatuses?.get(execution.executionId);
+            const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
+            const statusColor = getStatusColor(cardEffectiveStatus);
+            const statusIcon = getStatusIcon(cardEffectiveStatus);
             const label = eo?.agent_name || `Agent ${tabIndex + 1}`;
             const progressStatus = agentProgressStatuses.get(execution.executionId);
-            const isTerminalProgress = !progressStatus || ['Completed', 'Failed', 'Cancelled'].includes(progressStatus);
+            const isTerminalProgress = !progressStatus
+              || TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus);
             // Prefer API-level token stats, fall back to deriving from item metadata
             const tokenData = eo
               ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
@@ -399,18 +483,38 @@ const StageContent: React.FC<StageContentProps> = ({
                     </Typography>
                   )}
                   <Chip
-                    label={getStatusLabel(eo?.status || execution.status)}
+                    label={getStatusLabel(cardEffectiveStatus)}
                     size="small" color={statusColor}
                     sx={{ height: 18, fontSize: '0.65rem' }}
                   />
-                  {progressStatus && !isTerminalProgress && (
+                  {progressStatus && !isTerminalProgress ? (
                     <Chip
                       label={progressStatus}
                       size="small" color="info" variant="outlined"
                       sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
                     />
-                  )}
+                  ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
+                    <Chip
+                      label="Waiting for other agents..."
+                      size="small" color="default" variant="outlined"
+                      sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
+                    />
+                  ) : null}
                 </Box>
+                {/* Show streaming activity count when no execution overview yet */}
+                {!eo && !hasTokens && (() => {
+                  const streamCount = (streamingByExecution.get(execution.executionId) || []).length;
+                  const itemCount = execution.items.length;
+                  const total = streamCount + itemCount;
+                  if (total > 0) {
+                    return (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                        {streamCount > 0 ? `${total} event${total > 1 ? 's' : ''} (${streamCount} streaming)` : `${total} event${total > 1 ? 's' : ''}`}
+                      </Typography>
+                    );
+                  }
+                  return null;
+                })()}
                 {hasTokens && tokenData && (
                   <Box mt={1} display="flex" alignItems="center" gap={0.5}>
                     <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>🪙</Typography>

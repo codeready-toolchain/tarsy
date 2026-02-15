@@ -54,6 +54,7 @@ import type {
   StageStatusPayload,
   SessionProgressPayload,
   ExecutionProgressPayload,
+  ExecutionStatusPayload,
 } from '../types/events.ts';
 
 import {
@@ -64,8 +65,10 @@ import {
   EVENT_STAGE_STATUS,
   EVENT_SESSION_PROGRESS,
   EVENT_EXECUTION_PROGRESS,
+  EVENT_EXECUTION_STATUS,
   EVENT_CATCHUP_OVERFLOW,
   TIMELINE_STATUS,
+  PHASE_STATUS_MESSAGE,
 } from '../constants/eventTypes.ts';
 
 import {
@@ -73,6 +76,7 @@ import {
   isTerminalStatus,
   type SessionStatus,
   SESSION_STATUS,
+  EXECUTION_STATUS,
 } from '../constants/sessionStatus.ts';
 
 // ────────────────────────────────────────────────────────────
@@ -168,6 +172,11 @@ export function SessionDetailPage() {
   const [agentProgressStatuses, setAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
+  // Real-time execution status from execution.status WS events (executionId → status).
+  // Higher priority than REST ExecutionOverview for immediate UI updates.
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, string>>(
+    () => new Map(),
+  );
 
   // --- View / navigation ---
   const view = 'reasoning' as const;
@@ -178,9 +187,6 @@ export function SessionDetailPage() {
   const prevStatusRef = useRef<string | undefined>(undefined);
   const hasPerformedInitialScrollRef = useRef(false);
 
-  // --- Live duration ---
-  const [liveDurationMs, setLiveDurationMs] = useState<number | null>(null);
-
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
   const [collapseCounter, _setCollapseCounter] = useState(0);
@@ -189,17 +195,46 @@ export function SessionDetailPage() {
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
 
+  // --- Truncation re-fetch debounce ---
+  // When truncated WS payloads arrive (content > 8KB), we re-fetch the full
+  // timeline from the REST API. Multiple truncated events can arrive in quick
+  // succession, so we debounce to avoid hammering the API.
+  const truncationRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // --- Streaming metadata ref (synchronous access for completed handler) ---
   // Tracks stageId, executionId, sequenceNumber, and original metadata for
   // streaming events. Unlike streamingEvents state (which updates async via
   // React batching), this ref is read/written synchronously, ensuring correct
   // values in the timeline_event.completed handler.
   const streamingMetaRef = useRef<Map<string, {
+    eventType: string;
     stageId?: string;
     executionId?: string;
     sequenceNumber: number;
     metadata?: Record<string, unknown> | null;
   }>>(new Map());
+
+  // Debounced re-fetch for truncated events. Coalesces multiple truncation
+  // events arriving within 300ms into a single API call.
+  const refetchTimelineDebounced = useCallback(() => {
+    if (!id) return;
+    if (truncationRefetchTimerRef.current) {
+      clearTimeout(truncationRefetchTimerRef.current);
+    }
+    truncationRefetchTimerRef.current = setTimeout(() => {
+      truncationRefetchTimerRef.current = null;
+      getTimeline(id).then((freshTimeline) => {
+        setTimelineEvents(freshTimeline);
+        const ids = new Set<string>();
+        for (const ev of freshTimeline) {
+          ids.add(ev.id);
+        }
+        knownEventIdsRef.current = ids;
+      }).catch((err) => {
+        console.warn('Failed to re-fetch timeline after truncated event:', err);
+      });
+    }, 300);
+  }, [id]);
 
   // --- Derived ---
   const isActive = session
@@ -231,6 +266,7 @@ export function SessionDetailPage() {
     streamingMetaRef.current.clear();
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
+    setExecutionStatuses(new Map());
 
     try {
       const [sessionData, timelineData] = await Promise.all([
@@ -238,13 +274,44 @@ export function SessionDetailPage() {
         getTimeline(id),
       ]);
       setSession(sessionData);
-      setTimelineEvents(timelineData);
 
-      // Populate dedup set
+      // Separate events with status "streaming" from completed events.
+      // Streaming events have empty content in the DB and must be routed to
+      // the streaming system so that:
+      // 1. They're rendered by StreamingContentRenderer (which hides empty content)
+      // 2. stream.chunk WebSocket events update them (chunks only update streamingEvents)
+      // 3. timeline_event.completed properly transitions them to timelineEvents
+      const completedEvents: TimelineEvent[] = [];
+      const restStreamingItems = new Map<string, ExtendedStreamingItem>();
       const ids = new Set<string>();
+
       for (const ev of timelineData) {
         ids.add(ev.id);
+        if (ev.status === TIMELINE_STATUS.STREAMING) {
+          // Route to streaming system
+          restStreamingItems.set(ev.id, {
+            eventType: ev.event_type,
+            content: ev.content || '',
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata || undefined,
+          });
+          // Store metadata for the completed handler
+          streamingMetaRef.current.set(ev.id, {
+            eventType: ev.event_type,
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata,
+          });
+        } else {
+          completedEvents.push(ev);
+        }
       }
+
+      setTimelineEvents(completedEvents);
+      setStreamingEvents(restStreamingItems);
       knownEventIdsRef.current = ids;
     } catch (err) {
       setError(handleAPIError(err));
@@ -283,6 +350,15 @@ export function SessionDetailPage() {
         // --- timeline_event.created ---
         if (eventType === EVENT_TIMELINE_CREATED) {
           const payload = data as unknown as TimelineCreatedPayload;
+          const isTruncated = !!(data as Record<string, unknown>).truncated;
+
+          // Truncated payloads only have type, event_id, session_id — re-fetch.
+          // The backend truncates NOTIFY payloads exceeding PostgreSQL's ~8KB
+          // limit, stripping all fields except routing info and truncated:true.
+          if (isTruncated) {
+            refetchTimelineDebounced();
+            return;
+          }
 
           // Dedup: skip if we already have this event from REST
           if (knownEventIdsRef.current.has(payload.event_id)) {
@@ -290,8 +366,11 @@ export function SessionDetailPage() {
           }
 
           if (payload.status === TIMELINE_STATUS.STREAMING) {
-            // Store metadata in synchronous ref for the completed handler
+            // Store metadata in synchronous ref for the completed handler.
+            // event_type is stored because the completed payload sometimes
+            // arrives without it (observed in runtime logs for fast tool calls).
             streamingMetaRef.current.set(payload.event_id, {
+              eventType: payload.event_type,
               stageId: payload.stage_id,
               executionId: payload.execution_id,
               sequenceNumber: payload.sequence_number,
@@ -306,6 +385,7 @@ export function SessionDetailPage() {
                 stageId: payload.stage_id,
                 executionId: payload.execution_id,
                 sequenceNumber: payload.sequence_number,
+                metadata: payload.metadata || undefined,
               });
               return next;
             });
@@ -351,6 +431,7 @@ export function SessionDetailPage() {
         // --- timeline_event.completed ---
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
+          const isTruncated = !!(data as Record<string, unknown>).truncated;
 
           // Read streaming metadata from synchronous ref (reliable, not
           // subject to React batching). Then clean up both ref and state.
@@ -365,17 +446,35 @@ export function SessionDetailPage() {
             return next;
           });
 
+          // ── Truncated payload handling ──────────────────────────
+          // The backend truncates NOTIFY payloads that exceed PostgreSQL's
+          // ~8KB limit (e.g. tool calls with large results). Truncated
+          // payloads only contain type, event_id, session_id, db_event_id,
+          // and truncated:true — all other fields are stripped.
+          // When detected, re-fetch the full timeline from the REST API.
+          if (isTruncated) {
+            refetchTimelineDebounced();
+            return;
+          }
+
+          // ── Full payload handling ──────────────────────────────
           // Add or update in timeline
           if (knownEventIdsRef.current.has(payload.event_id)) {
-            // Update existing event in-place (content / status may have changed)
+            // Update existing event in-place (content / status may have changed).
+            // Merge metadata: the existing event may have full metadata from
+            // timeline_event.created (e.g. tool_name, server_name, arguments),
+            // while the completed payload may add new fields (e.g. is_error).
+            // Using spread merge preserves both.
             setTimelineEvents((prev) =>
               prev.map((ev) =>
                 ev.id === payload.event_id
-                  ? {
+                    ? {
                       ...ev,
                       content: payload.content,
                       status: payload.status,
-                      metadata: payload.metadata || ev.metadata,
+                      metadata: (ev.metadata || payload.metadata)
+                        ? { ...(ev.metadata || {}), ...(payload.metadata || {}) }
+                        : null,
                       updated_at: payload.timestamp,
                     }
                   : ev,
@@ -386,7 +485,7 @@ export function SessionDetailPage() {
             knownEventIdsRef.current.add(payload.event_id);
             // Merge metadata: created event metadata (tool_name, server_name, etc.)
             // is the base, completed event metadata (is_error, etc.) overrides.
-            const mergedMetadata = meta?.metadata || payload.metadata
+            const mergedMetadata = (meta?.metadata || payload.metadata)
               ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
               : null;
             setTimelineEvents((prev) => [
@@ -417,10 +516,23 @@ export function SessionDetailPage() {
             return { ...prev, status: payload.status };
           });
 
-          // If terminal, re-fetch session for final fields
+          // If terminal, re-fetch session + timeline for final fields and
+          // authoritative metadata (fixes any metadata merge gaps from streaming)
           if (isTerminalStatus(payload.status as SessionStatus)) {
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
-              console.warn('Failed to re-fetch session after terminal status:', err);
+            Promise.all([
+              getSession(id),
+              getTimeline(id),
+            ]).then(([freshSession, freshTimeline]) => {
+              setSession(freshSession);
+              setTimelineEvents(freshTimeline);
+              // Update dedup set with all event IDs
+              const ids = new Set<string>();
+              for (const ev of freshTimeline) {
+                ids.add(ev.id);
+              }
+              knownEventIdsRef.current = ids;
+            }).catch((err) => {
+              console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
           }
           return;
@@ -459,13 +571,29 @@ export function SessionDetailPage() {
             };
             return { ...prev, stages: [...stages, newStage] };
           });
+
+          // Re-fetch session detail when a stage starts to get execution overviews
+          // (agent names, LLM providers, iteration strategies) for parallel agents.
+          // Use a debounced fetch to avoid hammering the API if multiple stage events
+          // arrive in quick succession.
+          if (payload.status === EXECUTION_STATUS.STARTED) {
+            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+              console.warn('Failed to re-fetch session on stage start:', err);
+            });
+          }
           return;
         }
 
         // --- session.progress ---
         if (eventType === EVENT_SESSION_PROGRESS) {
           const payload = data as unknown as SessionProgressPayload;
-          setProgressStatus(payload.status_text || 'Processing...');
+          // Map backend status_text to user-friendly messages
+          const raw = (payload.status_text || '').toLowerCase();
+          let status = payload.status_text || 'Processing...';
+          if (raw.includes('synthesiz')) status = 'Synthesizing...';
+          else if (raw.includes('executive summary')) status = 'Finalizing...';
+          else if (raw.startsWith('starting stage:')) status = 'Investigating...';
+          setProgressStatus(status);
 
           // Also update stage progress counts on the session
           setSession((prev) => {
@@ -485,6 +613,26 @@ export function SessionDetailPage() {
           setAgentProgressStatuses((prev) => {
             const next = new Map(prev);
             next.set(payload.execution_id, payload.message);
+            return next;
+          });
+          // Update main progress status based on phase
+          // (e.g. investigating → "Investigating...", distilling → "Distilling...")
+          const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase];
+          if (phaseMessage) {
+            setProgressStatus(phaseMessage);
+          }
+          return;
+        }
+
+        // --- execution.status ---
+        // Real-time per-agent status transitions (active, completed, failed, etc.).
+        // Updates executionStatuses map so StageContent can reflect individual
+        // agent terminal status without waiting for the entire stage to complete.
+        if (eventType === EVENT_EXECUTION_STATUS) {
+          const payload = data as unknown as ExecutionStatusPayload;
+          setExecutionStatuses((prev) => {
+            const next = new Map(prev);
+            next.set(payload.execution_id, payload.status);
             return next;
           });
           return;
@@ -569,21 +717,6 @@ export function SessionDetailPage() {
   useAdvancedAutoScroll({ enabled: autoScrollEnabled });
 
   // ────────────────────────────────────────────────────────────
-  // Live duration timer
-  // ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!isActive || !session?.started_at) {
-      setLiveDurationMs(null);
-      return;
-    }
-    const start = new Date(session.started_at).getTime();
-    const tick = () => setLiveDurationMs(Date.now() - start);
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [isActive, session?.started_at]);
-
   // ────────────────────────────────────────────────────────────
   // View toggle
   // ────────────────────────────────────────────────────────────
@@ -782,7 +915,6 @@ export function SessionDetailPage() {
             <Suspense fallback={<HeaderSkeleton />}>
               <SessionHeader
                 session={session}
-                liveDurationMs={liveDurationMs}
               />
             </Suspense>
 
@@ -825,6 +957,7 @@ export function SessionDetailPage() {
                   progressStatus={progressStatus}
                   streamingEvents={streamingEvents}
                   agentProgressStatuses={agentProgressStatuses}
+                  executionStatuses={executionStatuses}
                   chainId={session.chain_id}
                 />
               </Suspense>
@@ -835,12 +968,67 @@ export function SessionDetailPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 2,
+                  gap: 3,
                 }}
               >
-                <CircularProgress size={48} />
-                <Typography variant="body1" color="text.secondary">
-                  Initializing investigation...
+                {/* Pulsing ring spinner */}
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: 64,
+                    height: 64,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CircularProgress
+                    size={56}
+                    thickness={2.5}
+                    color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      border: '2px solid',
+                      borderColor: session.status === SESSION_STATUS.PENDING
+                        ? 'rgba(237, 108, 2, 0.15)'
+                        : 'rgba(25, 118, 210, 0.15)',
+                      animation: 'init-pulse 2s ease-in-out infinite',
+                      '@keyframes init-pulse': {
+                        '0%, 100%': { transform: 'scale(1)', opacity: 0.6 },
+                        '50%': { transform: 'scale(1.15)', opacity: 0 },
+                      },
+                    }}
+                  />
+                </Box>
+                {/* Shimmer text */}
+                <Typography
+                  variant="body1"
+                  sx={{
+                    fontSize: '1.1rem',
+                    fontWeight: 500,
+                    fontStyle: 'italic',
+                    background: session.status === SESSION_STATUS.PENDING
+                      ? 'linear-gradient(90deg, rgba(237,108,2,0.5) 0%, rgba(237,108,2,0.7) 40%, rgba(237,108,2,0.9) 50%, rgba(237,108,2,0.7) 60%, rgba(237,108,2,0.5) 100%)'
+                      : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
+                    backgroundSize: '200% 100%',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    animation: 'init-shimmer 3s linear infinite',
+                    '@keyframes init-shimmer': {
+                      '0%': { backgroundPosition: '200% center' },
+                      '100%': { backgroundPosition: '-200% center' },
+                    },
+                  }}
+                >
+                  {session.status === SESSION_STATUS.PENDING
+                    ? 'Session queued, waiting to start...'
+                    : 'Initializing investigation...'}
                 </Typography>
               </Box>
             ) : session.status === SESSION_STATUS.CANCELLED ? (

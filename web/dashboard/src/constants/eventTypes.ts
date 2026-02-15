@@ -14,6 +14,7 @@ export const EVENT_INTERACTION_CREATED = 'interaction.created' as const;
 export const EVENT_STREAM_CHUNK = 'stream.chunk' as const;
 export const EVENT_SESSION_PROGRESS = 'session.progress' as const;
 export const EVENT_EXECUTION_PROGRESS = 'execution.progress' as const;
+export const EVENT_EXECUTION_STATUS = 'execution.status' as const;
 
 // Server → client control events
 export const EVENT_CONNECTION_ESTABLISHED = 'connection.established' as const;
@@ -34,6 +35,19 @@ export const PROGRESS_PHASE_DISTILLING = 'distilling' as const;
 export const PROGRESS_PHASE_CONCLUDING = 'concluding' as const;
 export const PROGRESS_PHASE_SYNTHESIZING = 'synthesizing' as const;
 export const PROGRESS_PHASE_FINALIZING = 'finalizing' as const;
+
+/**
+ * Human-readable status messages for each progress phase.
+ * Matches old tarsy's ProgressStatusMessage mapping.
+ */
+export const PHASE_STATUS_MESSAGE: Record<string, string> = {
+  [PROGRESS_PHASE_INVESTIGATING]: 'Investigating...',
+  [PROGRESS_PHASE_GATHERING_INFO]: 'Gathering information...',
+  [PROGRESS_PHASE_DISTILLING]: 'Distilling...',
+  [PROGRESS_PHASE_CONCLUDING]: 'Concluding...',
+  [PROGRESS_PHASE_SYNTHESIZING]: 'Synthesizing...',
+  [PROGRESS_PHASE_FINALIZING]: 'Finalizing...',
+};
 
 // Timeline event types (for routing to renderers)
 export const TIMELINE_EVENT_TYPES = {

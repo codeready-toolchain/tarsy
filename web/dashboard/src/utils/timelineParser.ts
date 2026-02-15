@@ -6,22 +6,27 @@
 
 import type { TimelineEvent, StageOverview } from '../types/session';
 import { TIMELINE_EVENT_TYPES, TIMELINE_STATUS } from '../constants/eventTypes';
+import { EXECUTION_STATUS } from '../constants/sessionStatus';
 
 // --- Types ---
 
-export type FlowItemType =
-  | 'thinking'
-  | 'response'
-  | 'tool_call'
-  | 'tool_summary'
-  | 'error'
-  | 'final_analysis'
-  | 'executive_summary'
-  | 'user_question'
-  | 'code_execution'
-  | 'search_result'
-  | 'url_context'
-  | 'stage_separator';
+/** Constants for FlowItem.type — the frontend rendering type for each timeline item. */
+export const FLOW_ITEM = {
+  THINKING: 'thinking',
+  RESPONSE: 'response',
+  TOOL_CALL: 'tool_call',
+  TOOL_SUMMARY: 'tool_summary',
+  ERROR: 'error',
+  FINAL_ANALYSIS: 'final_analysis',
+  EXECUTIVE_SUMMARY: 'executive_summary',
+  USER_QUESTION: 'user_question',
+  CODE_EXECUTION: 'code_execution',
+  SEARCH_RESULT: 'search_result',
+  URL_CONTEXT: 'url_context',
+  STAGE_SEPARATOR: 'stage_separator',
+} as const;
+
+export type FlowItemType = (typeof FLOW_ITEM)[keyof typeof FLOW_ITEM];
 
 export interface FlowItem {
   id: string;
@@ -65,18 +70,18 @@ export interface TimelineStats {
 // --- Event type mapping ---
 
 const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
-  [TIMELINE_EVENT_TYPES.LLM_THINKING]: 'thinking',
-  [TIMELINE_EVENT_TYPES.LLM_RESPONSE]: 'response',
-  [TIMELINE_EVENT_TYPES.LLM_TOOL_CALL]: 'tool_call',
-  [TIMELINE_EVENT_TYPES.MCP_TOOL_SUMMARY]: 'tool_summary',
-  [TIMELINE_EVENT_TYPES.FINAL_ANALYSIS]: 'final_analysis',
-  [TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY]: 'executive_summary',
-  [TIMELINE_EVENT_TYPES.USER_QUESTION]: 'user_question',
-  [TIMELINE_EVENT_TYPES.CODE_EXECUTION]: 'code_execution',
-  [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: 'search_result',
-  [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: 'url_context',
-  [TIMELINE_EVENT_TYPES.NATIVE_THINKING]: 'thinking',
-  [TIMELINE_EVENT_TYPES.ERROR]: 'error',
+  [TIMELINE_EVENT_TYPES.LLM_THINKING]: FLOW_ITEM.THINKING,
+  [TIMELINE_EVENT_TYPES.LLM_RESPONSE]: FLOW_ITEM.RESPONSE,
+  [TIMELINE_EVENT_TYPES.LLM_TOOL_CALL]: FLOW_ITEM.TOOL_CALL,
+  [TIMELINE_EVENT_TYPES.MCP_TOOL_SUMMARY]: FLOW_ITEM.TOOL_SUMMARY,
+  [TIMELINE_EVENT_TYPES.FINAL_ANALYSIS]: FLOW_ITEM.FINAL_ANALYSIS,
+  [TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY]: FLOW_ITEM.EXECUTIVE_SUMMARY,
+  [TIMELINE_EVENT_TYPES.USER_QUESTION]: FLOW_ITEM.USER_QUESTION,
+  [TIMELINE_EVENT_TYPES.CODE_EXECUTION]: FLOW_ITEM.CODE_EXECUTION,
+  [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: FLOW_ITEM.SEARCH_RESULT,
+  [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: FLOW_ITEM.URL_CONTEXT,
+  [TIMELINE_EVENT_TYPES.NATIVE_THINKING]: FLOW_ITEM.THINKING,
+  [TIMELINE_EVENT_TYPES.ERROR]: FLOW_ITEM.ERROR,
 };
 
 // --- Core parsing ---
@@ -85,7 +90,7 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
  * Convert a single TimelineEvent into a FlowItem.
  */
 function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOverview>): FlowItem {
-  const type = EVENT_TYPE_MAP[event.event_type] || 'response';
+  const type = EVENT_TYPE_MAP[event.event_type] || FLOW_ITEM.RESPONSE;
   const stage = event.stage_id ? stageMap.get(event.stage_id) : undefined;
   const isParallel = stage?.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none';
 
@@ -141,7 +146,7 @@ export function parseTimelineToFlow(
       if (stage) {
         result.push({
           id: `stage-sep-${stage.id}`,
-          type: 'stage_separator',
+          type: FLOW_ITEM.STAGE_SEPARATOR,
           stageId: stage.id,
           content: stage.stage_name,
           metadata: {
@@ -183,7 +188,7 @@ function filterDuplicatedItems(items: FlowItem[]): FlowItem[] {
   // Collect final_analysis content per execution
   const finalContentByExec = new Map<string, Set<string>>();
   for (const item of items) {
-    if (item.type === 'final_analysis' && item.executionId) {
+    if (item.type === FLOW_ITEM.FINAL_ANALYSIS && item.executionId) {
       if (!finalContentByExec.has(item.executionId)) {
         finalContentByExec.set(item.executionId, new Set());
       }
@@ -193,10 +198,10 @@ function filterDuplicatedItems(items: FlowItem[]): FlowItem[] {
 
   return items.filter(item => {
     // (1) executive_summary is rendered by FinalAnalysisCard, not the timeline
-    if (item.type === 'executive_summary') return false;
+    if (item.type === FLOW_ITEM.EXECUTIVE_SUMMARY) return false;
 
     // (2) Hide response when an identical final_analysis exists in the same execution
-    if (item.type === 'response' && item.executionId) {
+    if (item.type === FLOW_ITEM.RESPONSE && item.executionId) {
       const finalContents = finalContentByExec.get(item.executionId);
       if (finalContents && finalContents.has(item.content)) return false;
     }
@@ -224,7 +229,7 @@ export function groupFlowItemsByStage(
   let currentGroup: StageGroup | null = null;
 
   for (const item of items) {
-    if (item.type === 'stage_separator') {
+    if (item.type === FLOW_ITEM.STAGE_SEPARATOR) {
       // Start a new group
       const stage = item.stageId ? stageMap.get(item.stageId) : undefined;
       currentGroup = {
@@ -301,8 +306,8 @@ export function groupByExecutionId(items: FlowItem[]): Map<string, FlowItem[]> {
 export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): TimelineStats {
   const stats: TimelineStats = {
     totalStages: stages.length,
-    completedStages: stages.filter(s => s.status === 'completed').length,
-    failedStages: stages.filter(s => s.status === 'failed' || s.status === 'timed_out').length,
+    completedStages: stages.filter(s => s.status === EXECUTION_STATUS.COMPLETED).length,
+    failedStages: stages.filter(s => s.status === EXECUTION_STATUS.FAILED || s.status === EXECUTION_STATUS.TIMED_OUT).length,
     thoughtCount: 0,
     toolCallCount: 0,
     successfulToolCalls: 0,
@@ -317,23 +322,23 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
 
   for (const item of items) {
     switch (item.type) {
-      case 'thinking': stats.thoughtCount++; break;
-      case 'tool_call':
+      case FLOW_ITEM.THINKING: stats.thoughtCount++; break;
+      case FLOW_ITEM.TOOL_CALL:
         stats.toolCallCount++;
-        if (item.status === 'completed') stats.successfulToolCalls++;
+        if (item.status === TIMELINE_STATUS.COMPLETED) stats.successfulToolCalls++;
         break;
-      case 'tool_summary': stats.toolSummaryCount++; break;
-      case 'response': stats.responseCount++; break;
-      case 'final_analysis':
+      case FLOW_ITEM.TOOL_SUMMARY: stats.toolSummaryCount++; break;
+      case FLOW_ITEM.RESPONSE: stats.responseCount++; break;
+      case FLOW_ITEM.FINAL_ANALYSIS:
         stats.analysisCount++;
         stats.finalAnswerCount++;
         break;
-      case 'executive_summary': stats.analysisCount++; break;
-      case 'error': stats.errorCount++; break;
-      case 'code_execution':
-      case 'search_result':
-      case 'url_context': stats.nativeToolCount++; break;
-      case 'user_question': stats.userQuestionCount++; break;
+      case FLOW_ITEM.EXECUTIVE_SUMMARY: stats.analysisCount++; break;
+      case FLOW_ITEM.ERROR: stats.errorCount++; break;
+      case FLOW_ITEM.CODE_EXECUTION:
+      case FLOW_ITEM.SEARCH_RESULT:
+      case FLOW_ITEM.URL_CONTEXT: stats.nativeToolCount++; break;
+      case FLOW_ITEM.USER_QUESTION: stats.userQuestionCount++; break;
     }
   }
 
@@ -343,7 +348,7 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
 // --- Collapse helpers ---
 
 /** Types that support auto-collapse (thinking, tool_summary, final_analysis). */
-const COLLAPSIBLE_TYPES: Set<FlowItemType> = new Set(['thinking', 'tool_summary', 'final_analysis']);
+const COLLAPSIBLE_TYPES: Set<FlowItemType> = new Set([FLOW_ITEM.THINKING, FLOW_ITEM.TOOL_SUMMARY, FLOW_ITEM.FINAL_ANALYSIS]);
 
 /**
  * Whether a FlowItem type supports auto-collapse behavior.
@@ -369,43 +374,43 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
 
   for (const item of items) {
     switch (item.type) {
-      case 'stage_separator':
+      case FLOW_ITEM.STAGE_SEPARATOR:
         lines.push(`\n--- Stage: ${item.content} ---\n`);
         break;
-      case 'thinking':
+      case FLOW_ITEM.THINKING:
         lines.push(`[Thought]\n${item.content}\n`);
         break;
-      case 'response':
+      case FLOW_ITEM.RESPONSE:
         lines.push(`[Response]\n${item.content}\n`);
         break;
-      case 'tool_call': {
+      case FLOW_ITEM.TOOL_CALL: {
         const toolName = item.metadata?.tool_name || 'unknown';
         const serverName = item.metadata?.server_name || '';
         lines.push(`[Tool Call: ${serverName ? `${serverName}.` : ''}${toolName}]\n${item.content}\n`);
         break;
       }
-      case 'tool_summary':
+      case FLOW_ITEM.TOOL_SUMMARY:
         lines.push(`[Tool Summary]\n${item.content}\n`);
         break;
-      case 'final_analysis':
+      case FLOW_ITEM.FINAL_ANALYSIS:
         lines.push(`[Final Analysis]\n${item.content}\n`);
         break;
-      case 'executive_summary':
+      case FLOW_ITEM.EXECUTIVE_SUMMARY:
         lines.push(`[Executive Summary]\n${item.content}\n`);
         break;
-      case 'user_question':
+      case FLOW_ITEM.USER_QUESTION:
         lines.push(`[User Question]\n${item.content}\n`);
         break;
-      case 'error':
+      case FLOW_ITEM.ERROR:
         lines.push(`[Error]\n${item.content}\n`);
         break;
-      case 'code_execution':
+      case FLOW_ITEM.CODE_EXECUTION:
         lines.push(`[Code Execution]\n${item.content}\n`);
         break;
-      case 'search_result':
+      case FLOW_ITEM.SEARCH_RESULT:
         lines.push(`[Search Result]\n${item.content}\n`);
         break;
-      case 'url_context':
+      case FLOW_ITEM.URL_CONTEXT:
         lines.push(`[URL Context]\n${item.content}\n`);
         break;
     }

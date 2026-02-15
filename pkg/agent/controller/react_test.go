@@ -743,6 +743,9 @@ func (p *noopReActEventPublisher) PublishSessionProgress(_ context.Context, _ ev
 func (p *noopReActEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
 	return nil
 }
+func (p *noopReActEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ events.ExecutionStatusPayload) error {
+	return nil
+}
 
 // --- Test helpers / mocks ---
 
