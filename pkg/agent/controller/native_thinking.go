@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -51,12 +50,8 @@ func (c *NativeThinkingController) Run(
 		return nil, fmt.Errorf("failed to list tools: %w", err)
 	}
 
-	// Convert "server.tool" → "server__tool" for Gemini function name compatibility.
-	// Gemini function names cannot contain dots. ToolExecutor.NormalizeToolName()
-	// reverses this when the LLM calls tools back.
-	for i := range tools {
-		tools[i].Name = strings.Replace(tools[i].Name, ".", "__", 1)
-	}
+	// Tool names stay in canonical "server.tool" format.
+	// The LLM service handles backend-specific encoding (e.g. "server__tool" for Gemini).
 
 	// Main iteration loop
 	for iteration := 0; iteration < maxIter; iteration++ {
