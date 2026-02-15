@@ -38,11 +38,11 @@ export const PROGRESS_PHASE_FINALIZING = 'finalizing' as const;
 
 /**
  * Human-readable status messages for each progress phase.
- * Matches old tarsy's ProgressStatusMessage mapping.
+ * Used for the session-level progress indicator.
  */
 export const PHASE_STATUS_MESSAGE: Record<string, string> = {
   [PROGRESS_PHASE_INVESTIGATING]: 'Investigating...',
-  [PROGRESS_PHASE_GATHERING_INFO]: 'Gathering information...',
+  [PROGRESS_PHASE_GATHERING_INFO]: 'Gathering...',
   [PROGRESS_PHASE_DISTILLING]: 'Distilling...',
   [PROGRESS_PHASE_CONCLUDING]: 'Concluding...',
   [PROGRESS_PHASE_SYNTHESIZING]: 'Synthesizing...',

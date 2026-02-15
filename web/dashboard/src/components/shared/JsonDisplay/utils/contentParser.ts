@@ -272,6 +272,41 @@ export const parseContent = (value: unknown): ParsedContent => {
       // Not pure JSON
     }
     
+    // Check for YAML content (Kubernetes resources, structured config, etc.)
+    // This mirrors the detection in the object { result: "..." } branch above,
+    // needed because tool results may arrive as plain strings rather than wrapped objects.
+    if (content.includes('apiVersion:') ||
+        content.includes('kind:') ||
+        content.includes('metadata:') ||
+        (content.includes('\n') && (content.includes(':') || content.includes('-')))) {
+      return {
+        type: 'mixed',
+        content: { text: '', sections: [] },
+        sections: [{
+          id: 'mcp-yaml',
+          title: 'MCP Tool Result (YAML)',
+          type: 'yaml' as SectionType,
+          content: content,
+          raw: content,
+        }],
+      };
+    }
+
+    // Check for structured text content (multi-line output, logs, etc.)
+    if (content.length > 50 && (content.includes('\n') || content.includes('\t'))) {
+      return {
+        type: 'mixed',
+        content: { text: '', sections: [] },
+        sections: [{
+          id: 'mcp-text',
+          title: 'MCP Tool Result (Text)',
+          type: 'text' as SectionType,
+          content: content,
+          raw: content,
+        }],
+      };
+    }
+
     const jsonMatches = content.match(/```json\s*([\s\S]*?)\s*```/g);
     const codeMatches = content.match(/```\w*\s*([\s\S]*?)\s*```/g);
     

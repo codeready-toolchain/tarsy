@@ -56,8 +56,8 @@ interface ConversationTimelineProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
-  /** Real-time execution statuses from execution.status WS events (executionId → status) */
-  executionStatuses?: Map<string, string>;
+  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId}) */
+  executionStatuses?: Map<string, { status: string; stageId: string }>;
   /** Chain ID for the header display */
   chainId?: string;
 }
