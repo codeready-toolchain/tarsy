@@ -33,9 +33,10 @@ interface StageContentProps {
   isItemCollapsible?: (item: FlowItem) => boolean;
   // Per-agent progress
   agentProgressStatuses?: Map<string, string>;
-  /** Real-time execution statuses from execution.status WS events (executionId → status).
-   *  Higher priority than REST ExecutionOverview for immediate UI updates. */
-  executionStatuses?: Map<string, string>;
+  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId}).
+   *  Higher priority than REST ExecutionOverview for immediate UI updates.
+   *  stageId is used to filter out executions belonging to other stages. */
+  executionStatuses?: Map<string, { status: string; stageId: string }>;
   onSelectedAgentChange?: (executionId: string | null) => void;
 }
 
@@ -279,15 +280,17 @@ const StageContent: React.FC<StageContentProps> = ({
 
     // Agents known only from execution.status WS events (e.g. "active" arrives
     // before any items, streaming, or REST overview data).
+    // Filter by stageId to avoid creating phantom agents from other stages'
+    // executions (executionStatuses is a global map across all stages).
     const statusOnlyGroups: ExecutionGroup[] = [];
     if (executionStatuses) {
-      for (const execId of executionStatuses.keys()) {
-        if (!allExecIds.has(execId)) {
+      for (const [execId, execStatus] of executionStatuses) {
+        if (!allExecIds.has(execId) && execStatus.stageId === _stageId) {
           statusOnlyGroups.push({
             executionId: execId,
             index: executions.length + streamOnlyGroups.length + overviewGroups.length + statusOnlyGroups.length,
             items: [],
-            status: executionStatuses.get(execId) || EXECUTION_STATUS.STARTED,
+            status: execStatus.status || EXECUTION_STATUS.STARTED,
           });
           allExecIds.add(execId);
         }
@@ -311,12 +314,13 @@ const StageContent: React.FC<StageContentProps> = ({
   // Check if any parallel agent is still running (for "Waiting for other agents...")
   const hasOtherActiveAgents = useMemo(() => {
     if (!isMultiAgent) return false;
-    return mergedExecutions.some((exec) => {
-      const wsStatus = executionStatuses?.get(exec.executionId);
+    const result = mergedExecutions.some((exec) => {
+      const wsStatus = executionStatuses?.get(exec.executionId)?.status;
       const eo = execOverviewMap.get(exec.executionId);
       const status = wsStatus || eo?.status || exec.status;
       return !TERMINAL_EXECUTION_STATUSES.has(status);
     });
+    return result;
   }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
 
   // ── Shared renderer for a single execution's items ──
@@ -327,13 +331,13 @@ const StageContent: React.FC<StageContentProps> = ({
 
     // Prefer real-time WS status > REST execution overview > item-derived status
     const eo = execOverviewMap.get(execution.executionId);
-    const wsStatus = executionStatuses?.get(execution.executionId);
+    const wsStatus = executionStatuses?.get(execution.executionId)?.status;
     const effectiveStatus = wsStatus || eo?.status || execution.status;
     const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
-    // This agent is done but others are still working
-    const isWaitingForOthers = !isExecutionActive && hasOtherActiveAgents;
+
+
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -369,20 +373,6 @@ const StageContent: React.FC<StageContentProps> = ({
           );
         })()}
 
-        {isWaitingForOthers && !isFailed && (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              mt: 2,
-              fontStyle: 'italic',
-              textAlign: 'center',
-              opacity: 0.7,
-            }}
-          >
-            Waiting for other agents...
-          </Typography>
-        )}
       </Box>
     );
   };
@@ -435,7 +425,7 @@ const StageContent: React.FC<StageContentProps> = ({
           {mergedExecutions.map((execution, tabIndex) => {
             const isSelected = selectedTab === tabIndex;
             const eo = execOverviewMap.get(execution.executionId);
-            const cardWsStatus = executionStatuses?.get(execution.executionId);
+            const cardWsStatus = executionStatuses?.get(execution.executionId)?.status;
             const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
             const statusColor = getStatusColor(cardEffectiveStatus);
             const statusIcon = getStatusIcon(cardEffectiveStatus);
@@ -495,7 +485,7 @@ const StageContent: React.FC<StageContentProps> = ({
                     />
                   ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
                     <Chip
-                      label="Waiting for other agents..."
+                      label="Waiting..."
                       size="small" color="default" variant="outlined"
                       sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
                     />

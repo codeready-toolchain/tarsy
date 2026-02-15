@@ -172,9 +172,11 @@ export function SessionDetailPage() {
   const [agentProgressStatuses, setAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
-  // Real-time execution status from execution.status WS events (executionId → status).
+  // Real-time execution status from execution.status WS events (executionId → {status, stageId}).
   // Higher priority than REST ExecutionOverview for immediate UI updates.
-  const [executionStatuses, setExecutionStatuses] = useState<Map<string, string>>(
+  // stageId is included so StageContent can filter out executions from other stages,
+  // preventing phantom agent cards from appearing.
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string }>>(
     () => new Map(),
   );
 
@@ -610,14 +612,16 @@ export function SessionDetailPage() {
         // --- execution.progress ---
         if (eventType === EVENT_EXECUTION_PROGRESS) {
           const payload = data as unknown as ExecutionProgressPayload;
+          // Map phase to clean display message (e.g. "Investigating...", "Distilling...")
+          // matching old tarsy's ProgressStatusMessage. Fall back to raw message if
+          // the phase isn't in the map (shouldn't happen, but defensive).
+          const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase] || payload.message;
           setAgentProgressStatuses((prev) => {
             const next = new Map(prev);
-            next.set(payload.execution_id, payload.message);
+            next.set(payload.execution_id, phaseMessage);
             return next;
           });
-          // Update main progress status based on phase
-          // (e.g. investigating → "Investigating...", distilling → "Distilling...")
-          const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase];
+          // Update main (session-level) progress status too
           if (phaseMessage) {
             setProgressStatus(phaseMessage);
           }
@@ -632,7 +636,7 @@ export function SessionDetailPage() {
           const payload = data as unknown as ExecutionStatusPayload;
           setExecutionStatuses((prev) => {
             const next = new Map(prev);
-            next.set(payload.execution_id, payload.status);
+            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id });
             return next;
           });
           return;

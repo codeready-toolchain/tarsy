@@ -63,7 +63,17 @@ function ToolCallItem({ item }: ToolCallItemProps) {
   // Extract data from FlowItem metadata
   const toolName = (item.metadata?.tool_name as string) || 'unknown';
   const serverName = (item.metadata?.server_name as string) || 'unknown';
-  const toolArguments = (item.metadata?.arguments as Record<string, unknown>) || {};
+  // Arguments may be stored as a parsed object or as a JSON string in metadata.
+  // Parse strings into objects so isSimpleArguments / SimpleArgumentsList work correctly.
+  const toolArguments: Record<string, unknown> = (() => {
+    const raw = item.metadata?.arguments;
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; }
+    }
+    return {};
+  })();
   const errorMessage = (item.metadata?.error_message as string) || '';
   const durationMs = item.metadata?.duration_ms as number | null | undefined;
   // is_error = tool returned an error result (business logic, e.g. "not found")
