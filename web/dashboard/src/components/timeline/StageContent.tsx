@@ -280,6 +280,16 @@ const StageContent: React.FC<StageContentProps> = ({
     }
   }, [selectedTab, mergedExecutions, onSelectedAgentChange]);
 
+  // Check if any parallel agent is still running (for "Waiting for other agents...")
+  const hasOtherActiveAgents = useMemo(() => {
+    if (!isMultiAgent) return false;
+    return mergedExecutions.some((exec) => {
+      const eo = execOverviewMap.get(exec.executionId);
+      const status = eo?.status || exec.status;
+      return !TERMINAL_EXECUTION_STATUSES.has(status);
+    });
+  }, [isMultiAgent, mergedExecutions, execOverviewMap]);
+
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
     const executionStreamingItems = streamingByExecution.get(execution.executionId) || [];
@@ -292,6 +302,8 @@ const StageContent: React.FC<StageContentProps> = ({
     const isFailed = effectiveStatus === 'failed' || effectiveStatus === 'timed_out' || effectiveStatus === 'cancelled';
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
+    // This agent is done but others are still working
+    const isWaitingForOthers = !isExecutionActive && hasOtherActiveAgents;
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -326,6 +338,21 @@ const StageContent: React.FC<StageContentProps> = ({
             </Alert>
           );
         })()}
+
+        {isWaitingForOthers && !isFailed && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mt: 2,
+              fontStyle: 'italic',
+              textAlign: 'center',
+              opacity: 0.7,
+            }}
+          >
+            Waiting for other agents...
+          </Typography>
+        )}
       </Box>
     );
   };
@@ -427,13 +454,19 @@ const StageContent: React.FC<StageContentProps> = ({
                     size="small" color={statusColor}
                     sx={{ height: 18, fontSize: '0.65rem' }}
                   />
-                  {progressStatus && !isTerminalProgress && (
+                  {progressStatus && !isTerminalProgress ? (
                     <Chip
                       label={progressStatus}
                       size="small" color="info" variant="outlined"
                       sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
                     />
-                  )}
+                  ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(eo?.status || execution.status) ? (
+                    <Chip
+                      label="Waiting for other agents..."
+                      size="small" color="default" variant="outlined"
+                      sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
+                    />
+                  ) : null}
                 </Box>
                 {/* Show streaming activity count when no execution overview yet */}
                 {!eo && !hasTokens && (() => {

@@ -66,6 +66,7 @@ import {
   EVENT_EXECUTION_PROGRESS,
   EVENT_CATCHUP_OVERFLOW,
   TIMELINE_STATUS,
+  PHASE_STATUS_MESSAGE,
 } from '../constants/eventTypes.ts';
 
 import {
@@ -577,7 +578,13 @@ export function SessionDetailPage() {
         // --- session.progress ---
         if (eventType === EVENT_SESSION_PROGRESS) {
           const payload = data as unknown as SessionProgressPayload;
-          setProgressStatus(payload.status_text || 'Processing...');
+          // Map backend status_text to user-friendly messages
+          const raw = (payload.status_text || '').toLowerCase();
+          let status = payload.status_text || 'Processing...';
+          if (raw.includes('synthesiz')) status = 'Synthesizing...';
+          else if (raw.includes('executive summary')) status = 'Finalizing...';
+          else if (raw.startsWith('starting stage:')) status = 'Investigating...';
+          setProgressStatus(status);
 
           // Also update stage progress counts on the session
           setSession((prev) => {
@@ -599,6 +606,12 @@ export function SessionDetailPage() {
             next.set(payload.execution_id, payload.message);
             return next;
           });
+          // Update main progress status based on phase
+          // (e.g. investigating → "Investigating...", distilling → "Distilling...")
+          const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase];
+          if (phaseMessage) {
+            setProgressStatus(phaseMessage);
+          }
           return;
         }
       } catch {
@@ -934,9 +947,14 @@ export function SessionDetailPage() {
                   gap: 2,
                 }}
               >
-                <CircularProgress size={48} />
+                <CircularProgress
+                  size={48}
+                  color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
+                />
                 <Typography variant="body1" color="text.secondary">
-                  Initializing investigation...
+                  {session.status === SESSION_STATUS.PENDING
+                    ? 'Session queued, waiting to start...'
+                    : 'Initializing investigation...'}
                 </Typography>
               </Box>
             ) : session.status === SESSION_STATUS.CANCELLED ? (
