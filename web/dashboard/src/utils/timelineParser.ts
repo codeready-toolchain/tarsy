@@ -163,7 +163,37 @@ export function parseTimelineToFlow(
     result.push(eventToFlowItem(event, stageMap));
   }
 
-  return result;
+  return filterResponsesDuplicatedByFinalAnalysis(result);
+}
+
+/**
+ * Filter out `response` items that are duplicated by a `final_analysis` in the
+ * same execution. The backend emits an llm_response during streaming and then a
+ * final_analysis with the same content once processing completes. During
+ * streaming only the response exists so it renders normally; once the
+ * final_analysis arrives the redundant response is hidden.
+ */
+function filterResponsesDuplicatedByFinalAnalysis(items: FlowItem[]): FlowItem[] {
+  // Collect final_analysis content per execution
+  const finalContentByExec = new Map<string, Set<string>>();
+  for (const item of items) {
+    if (item.type === 'final_analysis' && item.executionId) {
+      if (!finalContentByExec.has(item.executionId)) {
+        finalContentByExec.set(item.executionId, new Set());
+      }
+      finalContentByExec.get(item.executionId)!.add(item.content);
+    }
+  }
+
+  if (finalContentByExec.size === 0) return items;
+
+  return items.filter(item => {
+    if (item.type !== 'response') return true;
+    if (!item.executionId) return true;
+    const finalContents = finalContentByExec.get(item.executionId);
+    if (!finalContents) return true;
+    return !finalContents.has(item.content);
+  });
 }
 
 // --- Stage grouping ---
