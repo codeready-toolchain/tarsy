@@ -399,10 +399,11 @@ export function SessionDetailPage() {
           const payload = data as unknown as StageStatusPayload;
           setSession((prev) => {
             if (!prev) return prev;
-            const existing = prev.stages.find((s) => s.id === payload.stage_id);
+            const stages = prev.stages ?? [];
+            const existing = stages.find((s) => s.id === payload.stage_id);
             if (existing) {
               // Update existing stage
-              const updatedStages = prev.stages.map((stage) =>
+              const updatedStages = stages.map((stage) =>
                 stage.id === payload.stage_id
                   ? { ...stage, status: payload.status }
                   : stage,
@@ -424,7 +425,7 @@ export function SessionDetailPage() {
               started_at: payload.timestamp || null,
               completed_at: null,
             };
-            return { ...prev, stages: [...prev.stages, newStage] };
+            return { ...prev, stages: [...stages, newStage] };
           });
           return;
         }
