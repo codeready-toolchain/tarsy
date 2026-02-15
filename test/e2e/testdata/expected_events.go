@@ -97,19 +97,15 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "investigation", Status: "completed"},
 
 	// ── Stage 2: remediation (Remediator, react) ──
-	// ReAct uses text-based tool calling: the full ReAct text (Thought + Action) streams
-	// as llm_response. After parsing, a separate llm_thinking event is created (non-streaming).
+	// ReAct uses text-based tool calling with ReAct-aware streaming. No llm_response events
+	// are created — instead, llm_thinking events are created directly from parsed ReAct text.
 	// Mirrors stage 1: tool call (no summary) → tool call (with summary) → final answer.
 	{Type: "stage.status", StageName: "remediation", Status: "started"},
 
 	// Iteration 1: test-mcp/get_pod_logs — small result, no summarization.
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
-	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Thought: I should check the pod logs to understand the OOM pattern.\n" +
-			"Action: test-mcp.get_pod_logs\n" +
-			`Action Input: {"pod":"pod-1","namespace":"default"}`},
-	// ReAct llm_thinking: completed (fire-and-forget) — parsed from streamed text, not itself streamed.
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "completed",
+	// ReAct llm_thinking: streamed live by callLLMWithReActStreaming.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
 		Content: "I should check the pod logs to understand the OOM pattern."},
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
 		"server_name": "test-mcp",
@@ -120,12 +116,8 @@ var PipelineExpectedEvents = []ExpectedEvent{
 		Content: `{"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}`},
 
 	// Iteration 2: prometheus-mcp/query_alerts — large result, triggers summarization.
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
-	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Thought: Let me check the Prometheus alert history for memory-related alerts.\n" +
-			"Action: prometheus-mcp.query_alerts\n" +
-			`Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`},
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "completed",
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
 		Content: "Let me check the Prometheus alert history for memory-related alerts."},
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
 		"server_name": "prometheus-mcp",
@@ -140,14 +132,12 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "mcp_tool_summary",
 		Content: "OOMKilled alert fired 3 times in the last hour for pod-1."},
 
-	// Iteration 3: final answer.
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
-	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.\n" +
-			"Final Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "completed",
+	// Iteration 3: final answer — both thought and final answer streamed live.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
 		Content: "The logs and alerts confirm repeated OOM kills due to memory pressure."},
-	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "final_analysis",
 		Content: "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
 
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
@@ -158,12 +148,9 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "validation", Status: "started"},
 
 	// --- ConfigValidator (react): iteration 1 — tool call ---
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
-	{Type: "timeline_event.completed", EventType: "llm_response", Group: 10,
-		Content: "Thought: I should verify the pod memory limits are properly configured.\n" +
-			"Action: test-mcp.get_resource_config\n" +
-			`Action Input: {"pod":"pod-1","namespace":"default"}`},
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "completed", Group: 10,
+	// ReAct-aware streaming: thought streamed live, no llm_response events.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
 		Content: "I should verify the pod memory limits are properly configured."},
 	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Group: 10, Metadata: map[string]string{
 		"server_name": "test-mcp",
@@ -172,14 +159,12 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	}},
 	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 10,
 		Content: `{"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}`},
-	// --- ConfigValidator (react): iteration 2 — final answer ---
-	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
-	{Type: "timeline_event.completed", EventType: "llm_response", Group: 10,
-		Content: "Thought: The memory limit of 512Mi matches the alert threshold.\n" +
-			"Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
-	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "completed", Group: 10,
+	// --- ConfigValidator (react): iteration 2 — both thought and final answer streamed ---
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
 		Content: "The memory limit of 512Mi matches the alert threshold."},
-	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 10,
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "streaming", Group: 10},
+	{Type: "timeline_event.completed", EventType: "final_analysis", Group: 10,
 		Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
 
 	// --- MetricsValidator (native-thinking, forced conclusion): iteration 1 — tool call ---

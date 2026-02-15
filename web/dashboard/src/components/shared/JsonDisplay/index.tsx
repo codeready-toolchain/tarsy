@@ -17,7 +17,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useState, useMemo } from 'react';
 
-import type { JsonDisplayProps, ParsedContent } from './types';
+import type { JsonDisplayProps, ParsedContent, ContentSection } from './types';
 import { highlightYaml, parseContent } from './utils';
 
 /**
@@ -147,9 +147,9 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     switch (parsedContent.type) {
       case 'python-objects': return renderPythonObjects(parsedContent);
       case 'mixed': return renderMixedContent(parsedContent);
-      case 'json': return renderJsonContent(parsedContent.content);
-      case 'markdown': return renderMarkdownContent(parsedContent.content);
-      default: return renderPlainText(parsedContent.content);
+      case 'json': return renderJsonContent(parsedContent.content as object | unknown[]);
+      case 'markdown': return renderMarkdownContent(String(parsedContent.content));
+      default: return renderPlainText(String(parsedContent.content));
     }
   };
 
@@ -184,14 +184,14 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
               />
               <Typography variant="subtitle2" sx={{ flex: 1 }}>{section.title}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                {section.content.length.toLocaleString()} chars
+                {String(section.content).length.toLocaleString()} chars
               </Typography>
             </Box>
           </AccordionSummary>
           <AccordionDetails>
             <Box sx={{ position: 'relative' }}>
               {renderPreBlock(
-                section.content,
+                String(section.content),
                 section.type === 'user-prompt' ? 400 : section.type === 'assistant-prompt' ? 600 : 200
               )}
               {renderCopyButton(
@@ -205,7 +205,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     </Box>
   );
 
-  const renderSectionAccordion = (section: any, index: number) => (
+  const renderSectionAccordion = (section: ContentSection, index: number) => (
     <Accordion
       key={section.id ?? index}
       expanded={expandedSections[section.id] ?? !collapsed}
@@ -230,7 +230,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
               border: `1px solid ${theme.palette.divider}`, maxHeight: 600, overflow: 'auto',
               '& .json-view-wrapper': { wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }
             }}>
-              <JsonView data={section.content} shouldExpandNode={collapsed ? collapseAllNested : allExpanded} style={customJsonStyle} />
+              <JsonView data={section.content as object | unknown[]} shouldExpandNode={collapsed ? collapseAllNested : allExpanded} style={customJsonStyle} />
             </Box>
           ) : section.type === 'yaml' ? (
             <Box 
@@ -240,10 +240,10 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
                 m: 0, p: 2, bgcolor: theme.palette.grey[50], borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`, maxHeight: 600, overflow: 'auto', ...scrollbarSx
               }}
-              dangerouslySetInnerHTML={{ __html: highlightYaml(section.content) }}
+              dangerouslySetInnerHTML={{ __html: highlightYaml(String(section.content)) }}
             />
           ) : (
-            renderPreBlock(section.content, 600)
+            renderPreBlock(String(section.content), 600)
           )}
           {renderCopyButton(
             typeof section.raw === 'string' ? section.raw : String(section.content),
@@ -261,8 +261,8 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
       .replace(/\n\n+/g, '\n\n')
       .trim();
 
-    const mainText = typeof parsed.content === 'object' ? parsed.content.text : parsed.content;
-    const cleanedText = cleanMainText(mainText);
+    const mainText = typeof parsed.content === 'object' && parsed.content !== null ? (parsed.content as Record<string, unknown>).text : parsed.content;
+    const cleanedText = cleanMainText(String(mainText));
     const formattedTextSections = parsed.sections?.filter(s => s.type === 'text') || [];
     const rawDataSections = parsed.sections?.filter(s => s.type === 'json' || s.type === 'yaml' || s.type === 'code') || [];
     const shouldShowTabs = formattedTextSections.length > 0;
@@ -313,7 +313,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     );
   };
 
-  const renderJsonContent = (content: any) => (
+  const renderJsonContent = (content: object | unknown[]) => (
     <Box sx={{ 
       maxWidth: '100%', backgroundColor: theme.palette.grey[50],
       border: `1px solid ${theme.palette.divider}`, padding: theme.spacing(2),

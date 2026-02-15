@@ -10,6 +10,7 @@ import {
   alpha,
   Link,
 } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import { ExpandMore, OpenInNew, AccessTime } from '@mui/icons-material';
 import ErrorBoundary from '../shared/ErrorBoundary';
 
@@ -97,7 +98,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           alignItems: 'center',
           gap: 1,
           bgcolor: isRunbook
-            ? (theme: any) => alpha(theme.palette.info.main, 0.05)
+            ? (theme: Theme) => alpha(theme.palette.info.main, 0.05)
             : 'grey.50',
           color: isRunbook ? 'info.main' : 'inherit',
           p: 1.5,
@@ -108,7 +109,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           wordBreak: 'break-word',
           '&:hover': {
             bgcolor: isRunbook
-              ? (theme: any) => alpha(theme.palette.info.main, 0.1)
+              ? (theme: Theme) => alpha(theme.palette.info.main, 0.1)
               : 'grey.100',
             textDecoration: 'underline',
           },

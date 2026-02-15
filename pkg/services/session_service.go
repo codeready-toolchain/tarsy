@@ -488,6 +488,9 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		Where(alertsession.IDEQ(sessionID)).
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
+			q.WithAgentExecutions(func(eq *ent.AgentExecutionQuery) {
+				eq.Order(ent.Asc(agentexecution.FieldAgentIndex))
+			})
 		}).
 		WithChat().
 		Only(ctx)
@@ -504,6 +507,12 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		return nil, err
 	}
 	mcpCount, err := s.countMCPInteractions(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Aggregate per-execution token stats in a single query.
+	execTokens, err := s.aggregateExecutionTokenStats(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -532,6 +541,35 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 			pt = &s
 		}
 
+		// Build execution overviews for this stage.
+		var execOverviews []models.ExecutionOverview
+		if stg.Edges.AgentExecutions != nil {
+			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
+			for _, exec := range stg.Edges.AgentExecutions {
+				tokens := execTokens[exec.ID]
+				var durationMs *int64
+				if exec.DurationMs != nil {
+					v := int64(*exec.DurationMs)
+					durationMs = &v
+				}
+				execOverviews = append(execOverviews, models.ExecutionOverview{
+					ExecutionID:       exec.ID,
+					AgentName:         exec.AgentName,
+					AgentIndex:        exec.AgentIndex,
+					Status:            string(exec.Status),
+					IterationStrategy: exec.IterationStrategy,
+					LLMProvider:       exec.LlmProvider,
+					StartedAt:         exec.StartedAt,
+					CompletedAt:       exec.CompletedAt,
+					DurationMs:        durationMs,
+					ErrorMessage:      exec.ErrorMessage,
+					InputTokens:       tokens.Input,
+					OutputTokens:      tokens.Output,
+					TotalTokens:       tokens.Total,
+				})
+			}
+		}
+
 		stages = append(stages, models.StageOverview{
 			ID:                 stg.ID,
 			StageName:          stg.StageName,
@@ -541,6 +579,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 			ExpectedAgentCount: stg.ExpectedAgentCount,
 			StartedAt:          stg.StartedAt,
 			CompletedAt:        stg.CompletedAt,
+			Executions:         execOverviews,
 		})
 	}
 
@@ -1014,6 +1053,49 @@ func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string
 		return results[0].Count, results[0].InputSum.Int64, results[0].OutputSum.Int64, results[0].TotalSum.Int64, nil
 	}
 	return 0, 0, 0, 0, nil
+}
+
+// executionTokenStats holds per-execution token sums.
+type executionTokenStats struct {
+	Input  int64
+	Output int64
+	Total  int64
+}
+
+// aggregateExecutionTokenStats returns per-execution token sums for a session.
+func (s *SessionService) aggregateExecutionTokenStats(ctx context.Context, sessionID string) (map[string]executionTokenStats, error) {
+	var rows []struct {
+		ExecutionID stdsql.NullString `json:"execution_id"`
+		InputSum    stdsql.NullInt64  `json:"input_sum"`
+		OutputSum   stdsql.NullInt64  `json:"output_sum"`
+		TotalSum    stdsql.NullInt64  `json:"total_sum"`
+	}
+
+	err := s.client.LLMInteraction.Query().
+		Where(llminteraction.SessionIDEQ(sessionID)).
+		GroupBy(llminteraction.FieldExecutionID).
+		Aggregate(
+			ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
+			ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
+			ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
+		).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate execution token stats: %w", err)
+	}
+
+	result := make(map[string]executionTokenStats, len(rows))
+	for _, row := range rows {
+		if !row.ExecutionID.Valid {
+			continue
+		}
+		result[row.ExecutionID.String] = executionTokenStats{
+			Input:  row.InputSum.Int64,
+			Output: row.OutputSum.Int64,
+			Total:  row.TotalSum.Int64,
+		}
+	}
+	return result, nil
 }
 
 // countMCPInteractions returns the MCP interaction count for a session.

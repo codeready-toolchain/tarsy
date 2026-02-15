@@ -136,7 +136,7 @@ export const parseMixedContent = (content: string): ParsedContent => {
 /**
  * Main content parser - intelligently detects and parses different content types
  */
-export const parseContent = (value: any): ParsedContent => {
+export const parseContent = (value: unknown): ParsedContent => {
   if (value === null || value === undefined) {
     return { type: 'plain-text', content: String(value) };
   }
@@ -151,7 +151,7 @@ export const parseContent = (value: any): ParsedContent => {
         if (typeof parsedJson === 'object' && parsedJson !== null) {
           const multiLineFields: Array<{ path: string; fieldName: string; content: string }> = [];
           
-          const findMultiLineFields = (obj: any, path: string[] = []) => {
+          const findMultiLineFields = (obj: unknown, path: string[] = []) => {
             if (typeof obj === 'string' && obj.length > 200 && obj.includes('\n')) {
               const fieldName = path[path.length - 1] || 'content';
               multiLineFields.push({ path: path.join(' → '), fieldName, content: obj });
@@ -252,7 +252,7 @@ export const parseContent = (value: any): ParsedContent => {
     
     const keys = Object.keys(value);
     if (keys.length === 1 && keys[0] === 'result') {
-      return parseContent(value.result);
+      return parseContent((value as Record<string, unknown>).result);
     }
   }
 

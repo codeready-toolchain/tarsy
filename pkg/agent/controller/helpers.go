@@ -168,13 +168,15 @@ func publishInteractionCreated(ctx context.Context, execCtx *agent.ExecutionCont
 		return
 	}
 	if err := execCtx.EventPublisher.PublishInteractionCreated(ctx, execCtx.SessionID, events.InteractionCreatedPayload{
-		Type:            events.EventTypeInteractionCreated,
-		SessionID:       execCtx.SessionID,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeInteractionCreated,
+			SessionID: execCtx.SessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		StageID:         execCtx.StageID,
 		ExecutionID:     execCtx.ExecutionID,
 		InteractionID:   interactionID,
 		InteractionType: interactionType,
-		Timestamp:       time.Now().Format(time.RFC3339Nano),
 	}); err != nil {
 		slog.Warn("Failed to publish interaction created",
 			"session_id", execCtx.SessionID,
@@ -192,13 +194,15 @@ func publishExecutionProgress(ctx context.Context, execCtx *agent.ExecutionConte
 		return
 	}
 	if err := execCtx.EventPublisher.PublishExecutionProgress(ctx, execCtx.SessionID, events.ExecutionProgressPayload{
-		Type:        events.EventTypeExecutionProgress,
-		SessionID:   execCtx.SessionID,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeExecutionProgress,
+			SessionID: execCtx.SessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		StageID:     execCtx.StageID,
 		ExecutionID: execCtx.ExecutionID,
 		Phase:       phase,
 		Message:     message,
-		Timestamp:   time.Now().Format(time.RFC3339Nano),
 	}); err != nil {
 		slog.Warn("Failed to publish execution progress",
 			"session_id", execCtx.SessionID,

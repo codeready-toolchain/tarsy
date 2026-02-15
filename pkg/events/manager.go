@@ -327,12 +327,25 @@ func (m *ConnectionManager) unsubscribe(c *Connection, channel string) {
 		delete(subs, c.ID)
 		if len(subs) == 0 {
 			delete(m.channels, channel)
-			// Last subscriber left — stop LISTEN
+			// Last subscriber left — stop LISTEN.
+			// The goroutine re-checks m.channels before issuing UNLISTEN to
+			// prevent a race where a rapid unsubscribe/resubscribe cycle
+			// (e.g. React StrictMode double-render) would drop the LISTEN:
+			//   subscribe → LISTEN active
+			//   unsubscribe → goroutine: UNLISTEN (deferred)
+			//   resubscribe → channel re-added to m.channels
+			//   goroutine → sees resubscribed → skips UNLISTEN
 			m.listenerMu.RLock()
 			l := m.listener
 			m.listenerMu.RUnlock()
 			if l != nil {
 				go func() {
+					m.channelMu.RLock()
+					_, resubscribed := m.channels[channel]
+					m.channelMu.RUnlock()
+					if resubscribed {
+						return
+					}
 					if err := l.Unsubscribe(context.Background(), channel); err != nil {
 						slog.Error("Failed to UNLISTEN channel", "channel", channel, "error", err)
 					}

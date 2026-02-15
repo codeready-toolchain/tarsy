@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +123,8 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 }
 
 // TestIntegration_NativeThinking_Normalization tests the __ → . normalization through the full pipeline.
+// The LLM service may return tool call names in "server__tool" format (Gemini convention),
+// which the executor normalizes back to "server.tool" for routing.
 func TestIntegration_NativeThinking_Normalization(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
 		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -135,7 +136,8 @@ func TestIntegration_NativeThinking_Normalization(t *testing.T) {
 
 	executor := newTestExecutorFromTransport(t, "kubernetes", ts.clientTransport)
 
-	// Simulate NativeThinking's convention: server__tool
+	// LLM service may return tool calls in "server__tool" format from Gemini;
+	// executor normalizes them back to "server.tool" for routing.
 	result, err := executor.Execute(context.Background(), agent.ToolCall{
 		ID:        "nt-1",
 		Name:      "kubernetes__get_pods",
@@ -147,8 +149,9 @@ func TestIntegration_NativeThinking_Normalization(t *testing.T) {
 	assert.Equal(t, "native thinking works", result.Content)
 }
 
-// TestIntegration_NativeThinking_ListToolsConversion verifies the . → __ conversion for tool listing.
-func TestIntegration_NativeThinking_ListToolsConversion(t *testing.T) {
+// TestIntegration_ListToolsCanonicalFormat verifies tool names stay in canonical "server.tool" format.
+// The LLM service handles backend-specific encoding (e.g. "server__tool" for Gemini).
+func TestIntegration_ListToolsCanonicalFormat(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
 		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
@@ -161,12 +164,6 @@ func TestIntegration_NativeThinking_ListToolsConversion(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
 	assert.Equal(t, "kubernetes.get_pods", tools[0].Name)
-
-	// Simulate NativeThinking controller conversion (. → __)
-	for i := range tools {
-		tools[i].Name = strings.Replace(tools[i].Name, ".", "__", 1)
-	}
-	assert.Equal(t, "kubernetes__get_pods", tools[0].Name)
 }
 
 // TestIntegration_PerSessionIsolation tests that two concurrent executors from the same factory

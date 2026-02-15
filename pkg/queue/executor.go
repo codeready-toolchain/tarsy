@@ -815,14 +815,16 @@ func publishSessionProgress(ctx context.Context, eventPublisher agent.EventPubli
 		currentIndex = totalStages
 	}
 	if err := eventPublisher.PublishSessionProgress(ctx, events.SessionProgressPayload{
-		Type:              events.EventTypeSessionProgress,
-		SessionID:         sessionID,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeSessionProgress,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		CurrentStageName:  stageName,
 		CurrentStageIndex: currentIndex,
 		TotalStages:       totalStages,
 		ActiveExecutions:  activeExecutions,
 		StatusText:        statusText,
-		Timestamp:         time.Now().Format(time.RFC3339Nano),
 	}); err != nil {
 		slog.Warn("Failed to publish session progress",
 			"session_id", sessionID,
@@ -839,13 +841,15 @@ func publishExecutionProgressFromExecutor(ctx context.Context, eventPublisher ag
 		return
 	}
 	if err := eventPublisher.PublishExecutionProgress(ctx, sessionID, events.ExecutionProgressPayload{
-		Type:        events.EventTypeExecutionProgress,
-		SessionID:   sessionID,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeExecutionProgress,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		StageID:     stageID,
 		ExecutionID: executionID,
 		Phase:       phase,
 		Message:     message,
-		Timestamp:   time.Now().Format(time.RFC3339Nano),
 	}); err != nil {
 		slog.Warn("Failed to publish execution progress",
 			"session_id", sessionID,
@@ -862,13 +866,15 @@ func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher
 		return
 	}
 	if err := eventPublisher.PublishStageStatus(ctx, sessionID, events.StageStatusPayload{
-		Type:       events.EventTypeStageStatus,
-		SessionID:  sessionID,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeStageStatus,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		StageID:    stageID,
 		StageName:  stageName,
 		StageIndex: stageIndex + 1, // 1-based for clients
 		Status:     status,
-		Timestamp:  time.Now().Format(time.RFC3339Nano),
 	}); err != nil {
 		slog.Warn("Failed to publish stage status",
 			"session_id", sessionID,
@@ -997,11 +1003,13 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	} else if e.eventPublisher != nil {
 		// Publish interaction.created for trace view live updates.
 		if pubErr := e.eventPublisher.PublishInteractionCreated(ctx, session.ID, events.InteractionCreatedPayload{
-			Type:            events.EventTypeInteractionCreated,
-			SessionID:       session.ID,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeInteractionCreated,
+				SessionID: session.ID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			InteractionID:   interaction.ID,
 			InteractionType: events.InteractionTypeLLM,
-			Timestamp:       time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			logger.Warn("Failed to publish interaction created for executive summary",
 				"error", pubErr)

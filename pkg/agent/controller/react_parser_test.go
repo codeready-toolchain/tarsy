@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseReActResponse_FinalAnswer(t *testing.T) {
@@ -1418,5 +1419,240 @@ func TestParseReActResponse_ThoughtSpaceTier2Exclusion(t *testing.T) {
 			parsed := ParseReActResponse(tt.input)
 			tt.checkFunc(t, parsed)
 		})
+	}
+}
+
+// ============================================================================
+// DetectReActPhase tests — streaming-oriented phase detection
+// ============================================================================
+
+func TestDetectReActPhase(t *testing.T) {
+	tests := []struct {
+		name            string
+		text            string
+		wantPhase       string
+		wantThought     string
+		wantFinalAnswer string
+	}{
+		// --- Basic cases ---
+		{
+			name:      "empty text returns idle",
+			text:      "",
+			wantPhase: reactPhaseIdle,
+		},
+		{
+			name:      "no markers returns idle",
+			text:      "Just some random text without any markers",
+			wantPhase: reactPhaseIdle,
+		},
+		{
+			name:        "thought only",
+			text:        "Thought: I should check the pods",
+			wantPhase:   reactPhaseThought,
+			wantThought: "I should check the pods",
+		},
+		{
+			name:        "thought with action",
+			text:        "Thought: Check pods\nAction: k8s.list\nAction Input: {}",
+			wantPhase:   reactPhaseAction,
+			wantThought: "Check pods",
+		},
+		{
+			name:            "thought with final answer",
+			text:            "Thought: Done analyzing\nFinal Answer: The root cause is OOM",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantThought:     "Done analyzing",
+			wantFinalAnswer: "The root cause is OOM",
+		},
+		{
+			name:            "direct final answer (no thought)",
+			text:            "Final Answer: The pod is OOMKilled.",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantFinalAnswer: "The pod is OOMKilled.",
+		},
+		{
+			name:        "multiline thought content",
+			text:        "Thought: Line one\nLine two\nLine three\nAction: tool\nAction Input: {}",
+			wantPhase:   reactPhaseAction,
+			wantThought: "Line one\nLine two\nLine three",
+		},
+		{
+			name:            "final answer multiline",
+			text:            "Thought: Done.\nFinal Answer: **Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantThought:     "Done.",
+			wantFinalAnswer: "**Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
+		},
+
+		// --- Forgiving: mid-line detection (the key improvement over old streaming code) ---
+		{
+			name:        "mid-line Action after sentence boundary",
+			text:        "Thought: I analyzed everything.Action: k8s.list\nAction Input: {}",
+			wantPhase:   reactPhaseAction,
+			wantThought: "I analyzed everything.",
+		},
+		{
+			name:            "mid-line Final Answer after sentence boundary in thought content",
+			text:            "Thought: I analyzed everything. Final Answer: The root cause is OOM.",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantThought:     "I analyzed everything.",
+			wantFinalAnswer: "The root cause is OOM.",
+		},
+		{
+			name:            "mid-line Final Answer with exclamation mark",
+			text:            "Thought: I found the issue! Final Answer: Increase memory to 1Gi.",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantThought:     "I found the issue!",
+			wantFinalAnswer: "Increase memory to 1Gi.",
+		},
+
+		// --- Forgiving: Thought without colon ---
+		{
+			name:        "Thought exact match (no colon) with content on next line",
+			text:        "Thought\nI need to check the pods.\nAction: tool\nAction Input: {}",
+			wantPhase:   reactPhaseAction,
+			wantThought: "I need to check the pods.",
+		},
+
+		// --- Stop conditions ---
+		{
+			name:        "Observation stops parsing (thought truncated)",
+			text:        "Thought: I see the issue\nObservation: hallucinated content here",
+			wantPhase:   reactPhaseThought,
+			wantThought: "I see the issue",
+		},
+		{
+			name:      "Based-on stops parsing",
+			text:      "Thought: I see the issue\n[Based on the above information, I will continue]",
+			wantPhase: reactPhaseThought,
+			// Thought is truncated at the stop condition.
+			wantThought: "I see the issue",
+		},
+
+		// --- Partial text (simulating streaming accumulation) ---
+		{
+			name:      "partial marker: Thou (not yet Thought:)",
+			text:      "Thou",
+			wantPhase: reactPhaseIdle,
+		},
+		{
+			name:        "partial thought: marker complete, content accumulating",
+			text:        "Thought: I need to ch",
+			wantPhase:   reactPhaseThought,
+			wantThought: "I need to ch",
+		},
+		{
+			name:        "partial: thought complete, action marker partial",
+			text:        "Thought: Check pods\nAct",
+			wantPhase:   reactPhaseThought,
+			wantThought: "Check pods\nAct",
+		},
+		{
+			name:        "partial: thought complete, action marker complete",
+			text:        "Thought: Check pods\nAction: tool\nAction Input: {}",
+			wantPhase:   reactPhaseAction,
+			wantThought: "Check pods",
+		},
+		{
+			name:            "partial: final answer marker complete, content growing",
+			text:            "Thought: Done.\nFinal Answer: Increase mem",
+			wantPhase:       reactPhaseFinalAnswer,
+			wantThought:     "Done.",
+			wantFinalAnswer: "Increase mem",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DetectReActPhase(tt.text)
+			assert.Equal(t, tt.wantPhase, got.Phase, "phase")
+			assert.Equal(t, tt.wantThought, got.ThoughtContent, "thought content")
+			assert.Equal(t, tt.wantFinalAnswer, got.FinalAnswerContent, "final answer content")
+		})
+	}
+}
+
+// TestDetectReActPhase_IncrementalStreaming simulates realistic streaming:
+// text grows chunk by chunk and phase/content evolve correctly.
+func TestDetectReActPhase_IncrementalStreaming(t *testing.T) {
+	// Simulate chunks arriving for: "Thought: I need to check.\nAction: tool\nAction Input: {}"
+	steps := []struct {
+		appendText      string
+		wantPhase       string
+		wantThought     string
+		wantFinalAnswer string
+	}{
+		{"Thou", reactPhaseIdle, "", ""},
+		{"ght: I need", reactPhaseThought, "I need", ""},
+		{" to check.", reactPhaseThought, "I need to check.", ""},
+		{"\nAction: tool", reactPhaseAction, "I need to check.", ""},
+		{"\nAction Input: {}", reactPhaseAction, "I need to check.", ""},
+	}
+
+	var buf strings.Builder
+	for _, step := range steps {
+		buf.WriteString(step.appendText)
+		got := DetectReActPhase(buf.String())
+		assert.Equal(t, step.wantPhase, got.Phase,
+			"after appending %q, full text = %q", step.appendText, buf.String())
+		assert.Equal(t, step.wantThought, got.ThoughtContent,
+			"thought after appending %q", step.appendText)
+		assert.Equal(t, step.wantFinalAnswer, got.FinalAnswerContent,
+			"final answer after appending %q", step.appendText)
+	}
+}
+
+// TestDetectReActPhase_IncrementalFinalAnswer simulates streaming for a
+// thought → final answer response.
+func TestDetectReActPhase_IncrementalFinalAnswer(t *testing.T) {
+	steps := []struct {
+		appendText      string
+		wantPhase       string
+		wantThought     string
+		wantFinalAnswer string
+	}{
+		{"Thought: The pod is OOM", reactPhaseThought, "The pod is OOM", ""},
+		{"Killed.", reactPhaseThought, "The pod is OOMKilled.", ""},
+		{"\nFinal Answer: Increase", reactPhaseFinalAnswer, "The pod is OOMKilled.", "Increase"},
+		{" memory to 1Gi.", reactPhaseFinalAnswer, "The pod is OOMKilled.", "Increase memory to 1Gi."},
+	}
+
+	var buf strings.Builder
+	for _, step := range steps {
+		buf.WriteString(step.appendText)
+		got := DetectReActPhase(buf.String())
+		assert.Equal(t, step.wantPhase, got.Phase,
+			"after appending %q, full text = %q", step.appendText, buf.String())
+		assert.Equal(t, step.wantThought, got.ThoughtContent,
+			"thought after appending %q", step.appendText)
+		assert.Equal(t, step.wantFinalAnswer, got.FinalAnswerContent,
+			"final answer after appending %q", step.appendText)
+	}
+}
+
+// TestDetectReActPhase_MidlineStreamingSimulation simulates streaming where
+// the model emits a mid-line Final Answer (no newline before it).
+func TestDetectReActPhase_MidlineStreamingSimulation(t *testing.T) {
+	steps := []struct {
+		appendText      string
+		wantPhase       string
+		wantThought     string
+		wantFinalAnswer string
+	}{
+		{"Thought: I found the issue", reactPhaseThought, "I found the issue", ""},
+		// The period + " Final Answer:" arrives in a single chunk — mid-line detection kicks in.
+		{". Final Answer: OOM.", reactPhaseFinalAnswer, "I found the issue.", "OOM."},
+	}
+
+	var buf strings.Builder
+	for _, step := range steps {
+		buf.WriteString(step.appendText)
+		got := DetectReActPhase(buf.String())
+		assert.Equal(t, step.wantPhase, got.Phase,
+			"after appending %q, full text = %q", step.appendText, buf.String())
+		assert.Equal(t, step.wantThought, got.ThoughtContent,
+			"thought after appending %q", step.appendText)
+		assert.Equal(t, step.wantFinalAnswer, got.FinalAnswerContent,
+			"final answer after appending %q", step.appendText)
 	}
 }

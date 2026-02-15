@@ -11,8 +11,8 @@ export function TracePage() {
 
   return (
     <>
-      <SharedHeader title="Trace View" showBackButton />
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
+        <SharedHeader title="Trace View" showBackButton />
         <Typography variant="h5" sx={{ mt: 2, mb: 2 }}>
           Trace: {id}
         </Typography>

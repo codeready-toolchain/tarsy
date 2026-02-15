@@ -40,11 +40,14 @@ class ErrorBoundary extends Component<Props, State> {
     console.error(`Error Boundary caught an error in ${this.props.componentName || 'component'}:`, error, errorInfo);
     
     // Report to Google Analytics if available
-    if (typeof window !== 'undefined' && (window as any).gtag) {
-      (window as any).gtag('event', 'exception', {
-        description: `${this.props.componentName || 'unknown'}: ${error.message}`,
-        fatal: false,
-      });
+    if (typeof window !== 'undefined') {
+      const win = window as unknown as Record<string, ((...args: unknown[]) => void) | undefined>;
+      if (win.gtag) {
+        win.gtag('event', 'exception', {
+          description: `${this.props.componentName || 'unknown'}: ${error.message}`,
+          fatal: false,
+        });
+      }
     }
 
     this.setState({

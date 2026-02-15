@@ -25,8 +25,14 @@ import {
   Button,
   Switch,
   FormControlLabel,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
-import { KeyboardDoubleArrowDown } from '@mui/icons-material';
+import {
+  KeyboardDoubleArrowDown,
+  Psychology,
+  AccountTree,
+} from '@mui/icons-material';
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
@@ -38,7 +44,7 @@ import { websocketService } from '../services/websocket.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
-import type { SessionDetailResponse, TimelineEvent } from '../types/session.ts';
+import type { SessionDetailResponse, TimelineEvent, StageOverview } from '../types/session.ts';
 import type { StreamingItem } from '../components/streaming/StreamingContentRenderer.tsx';
 import type {
   TimelineCreatedPayload,
@@ -176,7 +182,6 @@ export function SessionDetailPage() {
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [collapseCounter, _setCollapseCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
@@ -394,12 +399,33 @@ export function SessionDetailPage() {
           const payload = data as unknown as StageStatusPayload;
           setSession((prev) => {
             if (!prev) return prev;
-            const updatedStages = prev.stages.map((stage) =>
-              stage.id === payload.stage_id
-                ? { ...stage, status: payload.status }
-                : stage,
-            );
-            return { ...prev, stages: updatedStages };
+            const stages = prev.stages ?? [];
+            const existing = stages.find((s) => s.id === payload.stage_id);
+            if (existing) {
+              // Update existing stage
+              const updatedStages = stages.map((stage) =>
+                stage.id === payload.stage_id
+                  ? { ...stage, status: payload.status }
+                  : stage,
+              );
+              return { ...prev, stages: updatedStages };
+            }
+            // New stage not yet in REST data — add a minimal entry only if stage_id is present
+            if (!payload.stage_id) {
+              return prev;
+            }
+            const safeIndex = payload.stage_index ?? 0;
+            const newStage: StageOverview = {
+              id: payload.stage_id,
+              stage_name: payload.stage_name || `Stage ${safeIndex + 1}`,
+              stage_index: safeIndex,
+              status: payload.status,
+              parallel_type: null,
+              expected_agent_count: 1,
+              started_at: payload.timestamp || null,
+              completed_at: null,
+            };
+            return { ...prev, stages: [...stages, newStage] };
           });
           return;
         }
@@ -448,16 +474,17 @@ export function SessionDetailPage() {
   // ────────────────────────────────────────────────────────────
 
   // Update auto-scroll enabled state when session transitions between active/inactive
+  const sessionStatus = session?.status;
   useEffect(() => {
-    if (!session) return;
+    if (!sessionStatus) return;
 
     const previousActive = prevStatusRef.current
       ? ACTIVE_STATUSES.has(prevStatusRef.current as SessionStatus) ||
         prevStatusRef.current === SESSION_STATUS.PENDING
       : false;
     const currentActive =
-      ACTIVE_STATUSES.has(session.status as SessionStatus) ||
-      session.status === SESSION_STATUS.PENDING;
+      ACTIVE_STATUSES.has(sessionStatus as SessionStatus) ||
+      sessionStatus === SESSION_STATUS.PENDING;
 
     // Only update on first load or when crossing active↔inactive boundary
     if (prevStatusRef.current === undefined || previousActive !== currentActive) {
@@ -478,9 +505,9 @@ export function SessionDetailPage() {
           disableTimeoutRef.current = null;
         }, 2000);
       }
-      prevStatusRef.current = session.status;
+      prevStatusRef.current = sessionStatus;
     }
-  }, [session?.status]);
+  }, [sessionStatus]);
 
   // Initial scroll to bottom for active sessions
   useEffect(() => {
@@ -582,51 +609,104 @@ export function SessionDetailPage() {
 
   return (
     <>
-      <SharedHeader title={headerTitle} showBackButton>
-        {/* Session info */}
-        {session && !loading && (
-          <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'white' }}>
-            {session.stages?.length || 0} stages &bull; {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
-          </Typography>
-        )}
-
-        {/* Live updates indicator */}
-        {session && isActive && !loading && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
-            <CircularProgress size={14} sx={{ color: 'inherit' }} />
-            <Typography variant="caption" sx={{ color: 'inherit', fontSize: '0.75rem' }}>
-              Live
-            </Typography>
-          </Box>
-        )}
-
-        {/* Auto-scroll toggle — only for active sessions */}
-        {session && isActive && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={autoScrollEnabled}
-                  onChange={handleAutoScrollToggle}
-                  size="small"
-                  color="default"
-                />
-              }
-              label={
-                <Typography variant="caption" sx={{ color: 'inherit' }}>
-                  🔄 Auto-scroll
-                </Typography>
-              }
-              sx={{ m: 0, color: 'inherit' }}
-            />
-          </Box>
-        )}
-
-        {/* Loading spinner */}
-        {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
-      </SharedHeader>
-
       <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
+        <SharedHeader title={headerTitle} showBackButton>
+          {/* Session info */}
+          {session && !loading && (
+            <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'white' }}>
+              {session.stages?.length || 0} stages &bull; {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
+            </Typography>
+          )}
+
+          {/* Reasoning / Trace view toggle */}
+          {session && !loading && (
+            <ToggleButtonGroup
+              value={view}
+              exclusive
+              onChange={(_, newView) => newView && handleViewChange(newView)}
+              size="small"
+              sx={{
+                mr: 2,
+                bgcolor: 'rgba(255,255,255,0.1)',
+                borderRadius: 3,
+                padding: 0.5,
+                border: '1px solid rgba(255,255,255,0.2)',
+                '& .MuiToggleButton-root': {
+                  color: 'rgba(255,255,255,0.8)',
+                  border: 'none',
+                  borderRadius: 2,
+                  px: 2,
+                  py: 1,
+                  minWidth: 100,
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.15)',
+                    color: 'rgba(255,255,255,0.95)',
+                    transform: 'translateY(-1px)',
+                  },
+                  '&.Mui-selected': {
+                    bgcolor: 'rgba(255,255,255,0.25)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.3)',
+                    },
+                  },
+                },
+              }}
+            >
+              <ToggleButton value="reasoning">
+                <Psychology sx={{ mr: 0.5, fontSize: 18 }} />
+                Reasoning
+              </ToggleButton>
+              <ToggleButton value="trace">
+                <AccountTree sx={{ mr: 0.5, fontSize: 18 }} />
+                Trace
+              </ToggleButton>
+            </ToggleButtonGroup>
+          )}
+
+          {/* Live updates indicator */}
+          {session && isActive && !loading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+              <CircularProgress size={14} sx={{ color: 'inherit' }} />
+              <Typography variant="caption" sx={{ color: 'inherit', fontSize: '0.75rem' }}>
+                Live
+              </Typography>
+            </Box>
+          )}
+
+          {/* Auto-scroll toggle — only for active sessions */}
+          {session && isActive && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={autoScrollEnabled}
+                    onChange={handleAutoScrollToggle}
+                    size="small"
+                    color="default"
+                  />
+                }
+                label={
+                  <Typography variant="caption" sx={{ color: 'inherit' }}>
+                    🔄 Auto-scroll
+                  </Typography>
+                }
+                sx={{ m: 0, color: 'inherit' }}
+              />
+            </Box>
+          )}
+
+          {/* Loading spinner */}
+          {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
+        </SharedHeader>
+
+        <Box sx={{ mt: 2 }}>
         {/* Loading state */}
         {loading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -670,8 +750,6 @@ export function SessionDetailPage() {
             <Suspense fallback={<HeaderSkeleton />}>
               <SessionHeader
                 session={session}
-                view={view}
-                onViewChange={handleViewChange}
                 liveDurationMs={liveDurationMs}
               />
             </Suspense>
@@ -706,11 +784,11 @@ export function SessionDetailPage() {
             )}
 
             {/* Conversation Timeline */}
-            {session.stages && session.stages.length > 0 ? (
+            {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
                 <ConversationTimeline
                   items={flowItems}
-                  stages={session.stages}
+                  stages={session.stages || []}
                   isActive={isActive}
                   progressStatus={progressStatus}
                   streamingEvents={streamingEvents}
@@ -767,6 +845,7 @@ export function SessionDetailPage() {
             </Suspense>
           </Box>
         )}
+        </Box>
       </Container>
 
       {/* Version footer */}

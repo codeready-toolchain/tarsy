@@ -74,37 +74,54 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Mirrors stage 1: tool call (no summary) → tool call (with summary) → final answer.
 
 	// Iteration 1: tool call to test-mcp (small result, no summarization).
+	// Split into chunks so ReAct-aware streaming creates live llm_thinking events.
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Thought: I should check the pod logs to understand the OOM pattern.\n" +
-			"Action: test-mcp.get_pod_logs\n" +
-			`Action Input: {"pod":"pod-1","namespace":"default"}`,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: I should check the pod logs to understand the OOM pattern."},
+			&agent.TextChunk{Content: "\nAction: test-mcp.get_pod_logs\n" +
+				`Action Input: {"pod":"pod-1","namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		},
 	})
 	// Iteration 2: tool call to prometheus-mcp (large result, triggers summarization).
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Thought: Let me check the Prometheus alert history for memory-related alerts.\n" +
-			"Action: prometheus-mcp.query_alerts\n" +
-			`Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: Let me check the Prometheus alert history for memory-related alerts."},
+			&agent.TextChunk{Content: "\nAction: prometheus-mcp.query_alerts\n" +
+				`Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		},
 	})
 	// Summarization for query_alerts result (triggered by size_threshold_tokens=100).
 	llm.AddSequential(LLMScriptEntry{Text: "OOMKilled alert fired 3 times in the last hour for pod-1."})
 	// Iteration 3: final answer.
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.\n" +
-			"Final Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure."},
+			&agent.TextChunk{Content: "\nFinal Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		},
 	})
 
 	// ── Stage 3: validation (parallel: ConfigValidator react + MetricsValidator native-thinking) ──
 	// Parallel agents use routed dispatch — LLM calls are matched by agent name.
 
 	// ConfigValidator (react): 2 iterations.
+	// Split into chunks so ReAct-aware streaming creates live llm_thinking events.
 	llm.AddRouted("ConfigValidator", LLMScriptEntry{
-		Text: "Thought: I should verify the pod memory limits are properly configured.\n" +
-			"Action: test-mcp.get_resource_config\n" +
-			`Action Input: {"pod":"pod-1","namespace":"default"}`,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: I should verify the pod memory limits are properly configured."},
+			&agent.TextChunk{Content: "\nAction: test-mcp.get_resource_config\n" +
+				`Action Input: {"pod":"pod-1","namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		},
 	})
 	llm.AddRouted("ConfigValidator", LLMScriptEntry{
-		Text: "Thought: The memory limit of 512Mi matches the alert threshold.\n" +
-			"Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: The memory limit of 512Mi matches the alert threshold."},
+			&agent.TextChunk{Content: "\nFinal Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		},
 	})
 
 	// MetricsValidator (native-thinking): max_iterations=1 → forced conclusion.
@@ -436,7 +453,9 @@ func TestE2E_Pipeline(t *testing.T) {
 
 	// WS event structural assertions (not golden — event ordering is non-deterministic
 	// due to catchup/NOTIFY race, so we verify expected events in relative order).
-	AssertEventsInOrder(t, ws.Events(), testdata.PipelineExpectedEvents)
+	wsEvents := ws.Events()
+	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
+	AssertEventsInOrder(t, wsEvents, testdata.PipelineExpectedEvents)
 
 	// Stages golden.
 	projectedStages := make([]map[string]interface{}, len(stages))

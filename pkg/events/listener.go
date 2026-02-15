@@ -14,8 +14,10 @@ import (
 // listenCmd represents a LISTEN/UNLISTEN command to be executed by the
 // receive loop, which is the sole goroutine that touches the pgx connection.
 type listenCmd struct {
-	sql    string
-	result chan error
+	sql     string
+	channel string // channel name (used for generation checks on UNLISTEN)
+	gen     uint64 // generation at Unsubscribe time; 0 for LISTEN (always execute)
+	result  chan error
 }
 
 // NotifyListener listens for PostgreSQL NOTIFY events and dispatches
@@ -34,6 +36,17 @@ type NotifyListener struct {
 	cmdCh   chan listenCmd
 	running atomic.Bool
 
+	// listenGen tracks per-channel generation counters to prevent stale
+	// UNLISTENs from winning a race against a newer LISTEN. The generation is
+	// incremented by the receive loop (processPendingCmds) when a LISTEN
+	// command is successfully executed on PostgreSQL. Each Unsubscribe captures
+	// the generation at call time and attaches it to the UNLISTEN command.
+	// processPendingCmds compares the captured generation with the current one
+	// and skips the UNLISTEN if they differ — meaning a newer LISTEN has
+	// executed since the UNLISTEN was created.
+	listenGen   map[string]uint64
+	listenGenMu sync.Mutex
+
 	// cancelLoop and loopDone coordinate graceful shutdown of the receive loop.
 	cancelLoop context.CancelFunc
 	loopDone   chan struct{}
@@ -46,6 +59,7 @@ func NewNotifyListener(connString string, manager *ConnectionManager) *NotifyLis
 		manager:    manager,
 		channels:   make(map[string]bool),
 		cmdCh:      make(chan listenCmd, 16),
+		listenGen:  make(map[string]uint64),
 	}
 }
 
@@ -78,22 +92,25 @@ func (l *NotifyListener) Start(ctx context.Context) error {
 
 // Subscribe sends LISTEN for a channel on the dedicated connection.
 // The command is executed by the receive loop to avoid concurrent pgx access.
+//
+// Always sends LISTEN even if l.channels already marks the channel as active.
+// PostgreSQL handles duplicate LISTEN idempotently. This prevents a race where
+// a concurrent UNLISTEN goroutine (from unsubscribe) drops the LISTEN after
+// this method's early-return check but before the goroutine executes.
+//
+// The per-channel generation counter is incremented by the receive loop when
+// this LISTEN is actually executed on PostgreSQL (not here), ensuring any
+// in-flight UNLISTEN from a prior Unsubscribe is detected as stale.
 func (l *NotifyListener) Subscribe(ctx context.Context, channel string) error {
-	l.channelsMu.Lock()
-	if l.channels[channel] {
-		l.channelsMu.Unlock()
-		return nil // Already listening
-	}
-	l.channelsMu.Unlock()
-
 	if !l.running.Load() {
 		return fmt.Errorf("LISTEN connection not established")
 	}
 
 	sanitized := pgx.Identifier{channel}.Sanitize()
 	cmd := listenCmd{
-		sql:    "LISTEN " + sanitized,
-		result: make(chan error, 1),
+		sql:     "LISTEN " + sanitized,
+		channel: channel,
+		result:  make(chan error, 1),
 	}
 
 	select {
@@ -118,6 +135,10 @@ func (l *NotifyListener) Subscribe(ctx context.Context, channel string) error {
 }
 
 // Unsubscribe sends UNLISTEN for a channel.
+//
+// The command carries the current generation counter. If a newer Subscribe has
+// incremented the generation by the time the receive loop processes this command,
+// the UNLISTEN is skipped as stale (see processPendingCmds).
 func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error {
 	l.channelsMu.Lock()
 	if !l.channels[channel] {
@@ -130,10 +151,18 @@ func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error 
 		return nil
 	}
 
+	// Capture the current generation; processPendingCmds will skip this
+	// UNLISTEN if a newer Subscribe has since incremented it.
+	l.listenGenMu.Lock()
+	gen := l.listenGen[channel]
+	l.listenGenMu.Unlock()
+
 	sanitized := pgx.Identifier{channel}.Sanitize()
 	cmd := listenCmd{
-		sql:    "UNLISTEN " + sanitized,
-		result: make(chan error, 1),
+		sql:     "UNLISTEN " + sanitized,
+		channel: channel,
+		gen:     gen,
+		result:  make(chan error, 1),
 	}
 
 	select {
@@ -147,9 +176,18 @@ func (l *NotifyListener) Unsubscribe(ctx context.Context, channel string) error 
 		if err != nil {
 			return fmt.Errorf("UNLISTEN %s failed: %w", sanitized, err)
 		}
-		l.channelsMu.Lock()
-		delete(l.channels, channel)
-		l.channelsMu.Unlock()
+		// Only remove from l.channels if no Subscribe raced us. If the
+		// generation advanced, a newer LISTEN is active (or pending) and
+		// the UNLISTEN was skipped by processPendingCmds — l.channels
+		// must stay true so reconnect re-LISTENs the channel.
+		l.listenGenMu.Lock()
+		stale := l.listenGen[channel] != gen
+		l.listenGenMu.Unlock()
+		if !stale {
+			l.channelsMu.Lock()
+			delete(l.channels, channel)
+			l.channelsMu.Unlock()
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -215,10 +253,32 @@ func (l *NotifyListener) receiveLoop(ctx context.Context) {
 
 // processPendingCmds drains the command channel and executes each
 // LISTEN/UNLISTEN SQL command on the pgx connection.
+//
+// For LISTEN commands (cmd.gen == 0), the per-channel generation counter is
+// incremented after successful execution. This ensures the generation only
+// advances when the LISTEN actually runs on PostgreSQL.
+//
+// For UNLISTEN commands (cmd.gen > 0), the generation counter is compared
+// with the current value. If a LISTEN has executed since the UNLISTEN was
+// created, the generation will have advanced and the UNLISTEN is skipped —
+// preventing a race where the cmdCh order LISTEN, UNLISTEN would leave the
+// channel unlistened after a rapid unsubscribe/resubscribe cycle.
 func (l *NotifyListener) processPendingCmds(ctx context.Context) {
 	for {
 		select {
 		case cmd := <-l.cmdCh:
+			// Drop stale UNLISTENs: if a LISTEN executed after this
+			// Unsubscribe captured its generation, the UNLISTEN is obsolete.
+			if cmd.gen > 0 {
+				l.listenGenMu.Lock()
+				stale := l.listenGen[cmd.channel] != cmd.gen
+				l.listenGenMu.Unlock()
+				if stale {
+					cmd.result <- nil // no-op
+					continue
+				}
+			}
+
 			l.connMu.Lock()
 			conn := l.conn
 			l.connMu.Unlock()
@@ -229,6 +289,15 @@ func (l *NotifyListener) processPendingCmds(ctx context.Context) {
 			}
 
 			_, err := conn.Exec(ctx, cmd.sql)
+
+			// Advance generation after a successful LISTEN so that any
+			// UNLISTEN captured before this point becomes stale.
+			if err == nil && cmd.gen == 0 && cmd.channel != "" {
+				l.listenGenMu.Lock()
+				l.listenGen[cmd.channel]++
+				l.listenGenMu.Unlock()
+			}
+
 			cmd.result <- err
 		default:
 			return

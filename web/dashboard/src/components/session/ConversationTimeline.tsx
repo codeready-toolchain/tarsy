@@ -12,7 +12,7 @@ import {
   ExpandMore,
   ExpandLess,
 } from '@mui/icons-material';
-import type { FlowItem, TimelineStats } from '../../utils/timelineParser';
+import type { FlowItem, TimelineStats, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
@@ -22,12 +22,20 @@ import {
   isFlowItemTerminal,
   flowItemsToPlainText,
 } from '../../utils/timelineParser';
-import TimelineItem from '../timeline/TimelineItem';
+import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import StageSeparator from '../timeline/StageSeparator';
-import ParallelStageTabs from '../timeline/ParallelStageTabs';
+import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+
+const TERMINAL_STAGE_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
+
+/** Synthesis stages that are terminal should auto-collapse. */
+function shouldAutoCollapseStage(group: StageGroup): boolean {
+  const isSynthesis = group.stageName.toLowerCase().includes('synthesis');
+  return isSynthesis && TERMINAL_STAGE_STATUSES.has(group.stageStatus);
+}
 
 interface ConversationTimelineProps {
   /** Flat list of FlowItems (from parseTimelineToFlow) */
@@ -52,7 +60,7 @@ interface ConversationTimelineProps {
  * Responsibilities:
  * - Groups items by stage (via groupFlowItemsByStage)
  * - Renders stage separators with collapse/expand
- * - Handles parallel stage rendering via ParallelStageTabs
+ * - Delegates stage content to StageContent (unified single/parallel rendering)
  * - Manages auto-collapse system (per-item tracking with manual overrides)
  * - Shows stats chips (thoughts, tool calls, errors, etc.)
  * - Supports copy-all-flow
@@ -68,16 +76,8 @@ export default function ConversationTimeline({
   agentProgressStatuses,
   chainId,
 }: ConversationTimelineProps) {
-  // --- Stage collapse ---
-  const [collapsedStages, setCollapsedStages] = useState<Map<string, boolean>>(new Map());
-
-  const toggleStageCollapse = useCallback((stageId: string) => {
-    setCollapsedStages((prev) => {
-      const next = new Map(prev);
-      next.set(stageId, !next.get(stageId));
-      return next;
-    });
-  }, []);
+  // --- Stage collapse (manual overrides + auto-collapse for Synthesis) ---
+  const [stageCollapseOverrides, setStageCollapseOverrides] = useState<Map<string, boolean>>(new Map());
 
   // --- Auto-collapse system ---
   const [expandAllReasoning, setExpandAllReasoning] = useState(false);
@@ -117,6 +117,13 @@ export default function ConversationTimeline({
 
   // --- Copy ---
   const plainText = useMemo(() => flowItemsToPlainText(items), [items]);
+
+  // --- Stage lookup (for execution overviews) ---
+  const stageMap = useMemo(() => {
+    const map = new Map<string, StageOverview>();
+    for (const s of stages) map.set(s.id, s);
+    return map;
+  }, [stages]);
 
   // --- Streaming events grouping ---
   const streamingByStage = useMemo(() => {
@@ -257,14 +264,17 @@ export default function ConversationTimeline({
 
       {/* Content area */}
       <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
-        {stageGroups.map((group) => {
-          const isCollapsed = collapsedStages.get(group.stageId) || false;
+        {stageGroups.map((group, index) => {
+          // Manual override takes precedence, otherwise auto-collapse Synthesis stages
+          const isCollapsed = stageCollapseOverrides.has(group.stageId)
+            ? stageCollapseOverrides.get(group.stageId)!
+            : shouldAutoCollapseStage(group);
 
           // Get streaming events for this stage
           const stageStreamingMap = streamingByStage.get(group.stageId);
 
           return (
-            <Box key={group.stageId || `group-${group.stageIndex}`}>
+            <Box key={group.stageId ? `${group.stageId}-${index}` : `group-${index}`}>
               {/* Stage separator */}
               {group.stageId && (
                 <StageSeparator
@@ -282,58 +292,41 @@ export default function ConversationTimeline({
                     sequenceNumber: 0,
                   }}
                   isCollapsed={isCollapsed}
-                  onToggleCollapse={() => toggleStageCollapse(group.stageId)}
+                  onToggleCollapse={() => {
+                    setStageCollapseOverrides((prev) => {
+                      const next = new Map(prev);
+                      next.set(group.stageId, !isCollapsed);
+                      return next;
+                    });
+                  }}
                 />
               )}
 
               {/* Stage items (collapsible) */}
               <Collapse in={!isCollapsed} timeout={400}>
-                {group.isParallel ? (
-                  <ParallelStageTabs
-                    items={group.items}
-                    stageId={group.stageId}
-                    expectedAgentCount={group.expectedAgentCount}
-                    streamingEvents={stageStreamingMap}
-                    shouldAutoCollapse={shouldAutoCollapse}
-                    onToggleItemExpansion={toggleItemExpansion}
-                    expandAllReasoning={expandAllReasoning}
-                    isItemCollapsible={isItemCollapsible}
-                    agentProgressStatuses={agentProgressStatuses}
-                  />
-                ) : (
-                  <>
-                    {group.items.map((item) => (
-                      <TimelineItem
-                        key={item.id}
-                        item={item}
-                        isAutoCollapsed={shouldAutoCollapse(item)}
-                        onToggleAutoCollapse={() => toggleItemExpansion(item)}
-                        expandAll={expandAllReasoning}
-                        isCollapsible={isItemCollapsible(item)}
-                      />
-                    ))}
-
-                    {/* Streaming events for this stage */}
-                    {stageStreamingMap &&
-                      Array.from(stageStreamingMap.entries()).map(
-                        ([eventId, streamItem]) => (
-                          <StreamingContentRenderer key={eventId} item={streamItem} />
-                        ),
-                      )}
-                  </>
-                )}
+                <StageContent
+                  items={group.items}
+                  stageId={group.stageId}
+                  executionOverviews={stageMap.get(group.stageId)?.executions}
+                  streamingEvents={stageStreamingMap}
+                  shouldAutoCollapse={shouldAutoCollapse}
+                  onToggleItemExpansion={toggleItemExpansion}
+                  expandAllReasoning={expandAllReasoning}
+                  isItemCollapsible={isItemCollapsible}
+                  agentProgressStatuses={agentProgressStatuses}
+                />
               </Collapse>
             </Box>
           );
         })}
 
-        {/* Ungrouped streaming events (no stageId) */}
+        {/* Ungrouped streaming events (no stageId), excluding executive_summary */}
         {streamingByStage.get('__ungrouped__') &&
-          Array.from(streamingByStage.get('__ungrouped__')!.entries()).map(
-            ([eventId, streamItem]) => (
+          Array.from(streamingByStage.get('__ungrouped__')!.entries())
+            .filter(([, streamItem]) => streamItem.eventType !== TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY)
+            .map(([eventId, streamItem]) => (
               <StreamingContentRenderer key={eventId} item={streamItem} />
-            ),
-          )}
+            ))}
 
         {/* Processing indicator for active sessions */}
         {isActive && <ProcessingIndicator message={progressStatus || 'Processing...'} />}

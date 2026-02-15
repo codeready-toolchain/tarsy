@@ -27,6 +27,23 @@
   "stages": [
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "DataCollector",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_1}",
+          "input_tokens": 460,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 115,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 575
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_1}",
       "parallel_type": null,
@@ -37,6 +54,23 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "Remediator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_2}",
+          "input_tokens": 40,
+          "iteration_strategy": "react",
+          "llm_provider": "test-provider",
+          "output_tokens": 20,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 60
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_2}",
       "parallel_type": null,
@@ -47,6 +81,38 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ConfigValidator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_3}",
+          "input_tokens": 20,
+          "iteration_strategy": "react",
+          "llm_provider": "test-provider",
+          "output_tokens": 10,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 30
+        },
+        {
+          "agent_index": 2,
+          "agent_name": "MetricsValidator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_4}",
+          "input_tokens": 180,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 50,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 230
+        }
+      ],
       "expected_agent_count": 2,
       "id": "{STAGE_ID_3}",
       "parallel_type": "multi_agent",
@@ -57,6 +123,23 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "SynthesisAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_5}",
+          "input_tokens": 120,
+          "iteration_strategy": "synthesis-native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 40,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 160
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_4}",
       "parallel_type": null,
@@ -67,6 +150,38 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ScalingReviewer-1",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_6}",
+          "input_tokens": 80,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 25,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 105
+        },
+        {
+          "agent_index": 2,
+          "agent_name": "ScalingReviewer-2",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_7}",
+          "input_tokens": 80,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 25,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 105
+        }
+      ],
       "expected_agent_count": 2,
       "id": "{STAGE_ID_5}",
       "parallel_type": "replica",
@@ -77,6 +192,23 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "SynthesisAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_8}",
+          "input_tokens": 10,
+          "iteration_strategy": "synthesis",
+          "llm_provider": "test-provider-fast",
+          "output_tokens": 5,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 15
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_6}",
       "parallel_type": null,
@@ -87,6 +219,23 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ChatAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_9}",
+          "input_tokens": 460,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 85,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 545
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_7}",
       "parallel_type": null,
@@ -97,6 +246,23 @@
     },
     {
       "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ChatAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_10}",
+          "input_tokens": 650,
+          "iteration_strategy": "native-thinking",
+          "llm_provider": "test-provider",
+          "output_tokens": 65,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 715
+        }
+      ],
       "expected_agent_count": 1,
       "id": "{STAGE_ID_8}",
       "parallel_type": null,

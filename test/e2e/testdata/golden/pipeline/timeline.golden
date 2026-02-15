@@ -136,19 +136,12 @@
   },
   {
     "agent": "ConfigValidator",
-    "content": "Thought: I should verify the pod memory limits are properly configured.\nAction: test-mcp.get_resource_config\nAction Input: {\"pod\":\"pod-1\",\"namespace\":\"default\"}",
-    "event_type": "llm_response",
-    "sequence": 1,
-    "status": "completed"
-  },
-  {
-    "agent": "ConfigValidator",
     "content": "I should verify the pod memory limits are properly configured.",
     "event_type": "llm_thinking",
     "metadata": {
       "source": "react"
     },
-    "sequence": 2,
+    "sequence": 1,
     "status": "completed"
   },
   {
@@ -161,14 +154,7 @@
       "server_name": "test-mcp",
       "tool_name": "get_resource_config"
     },
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "ConfigValidator",
-    "content": "Thought: The memory limit of 512Mi matches the alert threshold.\nFinal Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
-    "event_type": "llm_response",
-    "sequence": 4,
+    "sequence": 2,
     "status": "completed"
   },
   {
@@ -178,14 +164,14 @@
     "metadata": {
       "source": "react"
     },
-    "sequence": 5,
+    "sequence": 3,
     "status": "completed"
   },
   {
     "agent": "ConfigValidator",
     "content": "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
     "event_type": "final_analysis",
-    "sequence": 6,
+    "sequence": 4,
     "status": "completed"
   },
   {
@@ -367,19 +353,12 @@
   },
   {
     "agent": "Remediator",
-    "content": "Thought: I should check the pod logs to understand the OOM pattern.\nAction: test-mcp.get_pod_logs\nAction Input: {\"pod\":\"pod-1\",\"namespace\":\"default\"}",
-    "event_type": "llm_response",
-    "sequence": 1,
-    "status": "completed"
-  },
-  {
-    "agent": "Remediator",
     "content": "I should check the pod logs to understand the OOM pattern.",
     "event_type": "llm_thinking",
     "metadata": {
       "source": "react"
     },
-    "sequence": 2,
+    "sequence": 1,
     "status": "completed"
   },
   {
@@ -392,14 +371,7 @@
       "server_name": "test-mcp",
       "tool_name": "get_pod_logs"
     },
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "Remediator",
-    "content": "Thought: Let me check the Prometheus alert history for memory-related alerts.\nAction: prometheus-mcp.query_alerts\nAction Input: {\"query\":\"ALERTS{alertname=\\\"OOMKilled\\\",pod=\\\"pod-1\\\"}\"}",
-    "event_type": "llm_response",
-    "sequence": 4,
+    "sequence": 2,
     "status": "completed"
   },
   {
@@ -409,7 +381,7 @@
     "metadata": {
       "source": "react"
     },
-    "sequence": 5,
+    "sequence": 3,
     "status": "completed"
   },
   {
@@ -422,7 +394,7 @@
       "server_name": "prometheus-mcp",
       "tool_name": "query_alerts"
     },
-    "sequence": 6,
+    "sequence": 4,
     "status": "completed"
   },
   {
@@ -435,14 +407,7 @@
       "summarization_model": "test-model",
       "tool_name": "query_alerts"
     },
-    "sequence": 7,
-    "status": "completed"
-  },
-  {
-    "agent": "Remediator",
-    "content": "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.\nFinal Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
-    "event_type": "llm_response",
-    "sequence": 8,
+    "sequence": 5,
     "status": "completed"
   },
   {
@@ -452,14 +417,14 @@
     "metadata": {
       "source": "react"
     },
-    "sequence": 9,
+    "sequence": 6,
     "status": "completed"
   },
   {
     "agent": "Remediator",
     "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
     "event_type": "final_analysis",
-    "sequence": 10,
+    "sequence": 7,
     "status": "completed"
   },
   {

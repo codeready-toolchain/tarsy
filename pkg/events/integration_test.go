@@ -161,22 +161,27 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 
 	// Publish first event (timeline created)
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
-		EventID:   "evt-1",
-		SessionID: env.sessionID,
-		Content:   "first event",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-1",
+		Content: "first event",
 	})
 	require.NoError(t, err)
 
 	// Publish second event (timeline completed)
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
-		Type:      EventTypeTimelineCompleted,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCompleted,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   "evt-1",
 		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   "second event",
 		Status:    timelineevent.StatusCompleted,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -205,10 +210,13 @@ func TestIntegration_TransientEventsNotPersisted(t *testing.T) {
 
 	// Publish transient event (stream chunk)
 	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-		Type:      EventTypeStreamChunk,
-		EventID:   "evt-1",
-		Delta:     "token data",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeStreamChunk,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-1",
+		Delta:   "token data",
 	})
 	require.NoError(t, err)
 
@@ -227,11 +235,13 @@ func TestIntegration_EndToEnd_PublishToWebSocket(t *testing.T) {
 
 	// Publish a persistent event via EventPublisher
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
-		EventID:   "evt-ws-1",
-		SessionID: env.sessionID,
-		Content:   "hello from publisher",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-ws-1",
+		Content: "hello from publisher",
 	})
 	require.NoError(t, err)
 
@@ -253,10 +263,13 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 
 	// Publish transient event (no DB persistence)
 	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-		Type:      EventTypeStreamChunk,
-		EventID:   "evt-stream-1",
-		Delta:     "streaming token",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeStreamChunk,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-stream-1",
+		Delta:   "streaming token",
 	})
 	require.NoError(t, err)
 
@@ -286,13 +299,15 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 
 	// 1. Publish timeline_event.created (persistent)
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   eventID,
-		SessionID: env.sessionID,
 		EventType: "llm_response",
 		Status:    timelineevent.StatusStreaming,
 		Content:   "",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -305,10 +320,13 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	deltas := []string{"The pod ", "is in ", "CrashLoopBackOff ", "due to ", "a missing ConfigMap."}
 	for _, delta := range deltas {
 		err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-			Type:      EventTypeStreamChunk,
-			EventID:   eventID,
-			Delta:     delta,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
+			BasePayload: BasePayload{
+				Type:      EventTypeStreamChunk,
+				SessionID: env.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID: eventID,
+			Delta:   delta,
 		})
 		require.NoError(t, err)
 
@@ -328,12 +346,15 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 
 	// 3. Publish timeline_event.completed (persistent, full content)
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
-		Type:      EventTypeTimelineCompleted,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCompleted,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   eventID,
 		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   expectedFull,
 		Status:    timelineevent.StatusCompleted,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -360,11 +381,13 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	// Pre-populate DB with 3 persistent events
 	for i := 1; i <= 3; i++ {
 		err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-			Type:           EventTypeTimelineCreated,
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: env.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			EventID:        uuid.New().String(),
-			SessionID:      env.sessionID,
 			SequenceNumber: i,
-			Timestamp:      time.Now().Format(time.RFC3339Nano),
 		})
 		require.NoError(t, err)
 	}
@@ -416,4 +439,135 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	defer readCancel()
 	_, _, err = conn.Read(readCtx)
 	assert.Error(t, err, "should not receive more messages after catchup")
+}
+
+func TestIntegration_ResubscribeAfterUnsubscribe_KeepsListen(t *testing.T) {
+	// Regression test for the race condition where a rapid unsubscribe/resubscribe
+	// cycle (as caused by React StrictMode double-render) would drop the PG LISTEN.
+	//
+	// The race was:
+	//   1. subscribe → LISTEN active
+	//   2. unsubscribe → async goroutine: UNLISTEN (deferred)
+	//   3. resubscribe → l.Subscribe saw "already listening" → returned early
+	//   4. goroutine fired UNLISTEN → PG dropped the LISTEN
+	//   5. all subsequent NOTIFY events were silently lost
+	//
+	// The fix has two parts:
+	//   - l.Subscribe always sends LISTEN (no early return; PG handles duplicates)
+	//   - the UNLISTEN goroutine re-checks m.channels and skips if resubscribed
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	conn := env.connectWS(t)
+	msg := readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "connection.established", msg["type"])
+
+	// Subscribe
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: env.channel})
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "subscription.confirmed", msg["type"])
+
+	require.Eventually(t, func() bool {
+		return env.listener.isListening(env.channel)
+	}, 2*time.Second, 10*time.Millisecond, "initial LISTEN should propagate")
+
+	// Rapid unsubscribe + resubscribe (mimics React StrictMode cleanup/remount)
+	writeJSON(t, conn, ClientMessage{Action: "unsubscribe", Channel: env.channel})
+	writeJSON(t, conn, ClientMessage{Action: "subscribe", Channel: env.channel})
+
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "subscription.confirmed", msg["type"])
+
+	// Wait for the UNLISTEN goroutine to settle and verify LISTEN is still active.
+	// The goroutine's re-check should see the channel was re-subscribed and skip
+	// the UNLISTEN, OR l.Subscribe should have re-issued LISTEN after the UNLISTEN.
+	// Either way, the channel must remain listened.
+	time.Sleep(200 * time.Millisecond) // Let the async UNLISTEN goroutine run
+	require.True(t, env.listener.isListening(env.channel),
+		"LISTEN must survive a rapid unsubscribe/resubscribe cycle")
+
+	// Publish an event — it must arrive via pg_notify → listener → WebSocket
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-resub-1",
+		Content: "should arrive after resubscribe",
+	})
+	require.NoError(t, err)
+
+	// Drain any catchup events from the resubscribe before checking for the live event
+	for {
+		msg = readJSONTimeout(t, conn, 5*time.Second)
+		if msg["event_id"] == "evt-resub-1" {
+			break
+		}
+	}
+
+	assert.Equal(t, EventTypeTimelineCreated, msg["type"])
+	assert.Equal(t, "should arrive after resubscribe", msg["content"])
+	assert.Equal(t, env.sessionID, msg["session_id"])
+}
+
+func TestIntegration_ListenerGenerationCounter_StaleUnlistenSkipped(t *testing.T) {
+	// Tests the generation counter inside NotifyListener directly, bypassing
+	// the ConnectionManager. This exercises the exact scenario from code review:
+	//
+	//   1. Subscribe → LISTEN, gen=1
+	//   2. Concurrent Unsubscribe → captures gen=1, enqueues UNLISTEN(gen=1)
+	//   3. Subscribe again → gen=2, enqueues LISTEN
+	//   4. cmdCh processes: could be LISTEN then UNLISTEN(gen=1)
+	//   5. processPendingCmds detects gen mismatch → skips stale UNLISTEN
+	//   6. PG stays listened, l.channels stays true
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+	channel := env.channel
+
+	// 1. Initial Subscribe
+	require.NoError(t, env.listener.Subscribe(ctx, channel))
+	require.True(t, env.listener.isListening(channel))
+
+	// 2. Unsubscribe in a goroutine (simulates the async goroutine in manager)
+	unsubDone := make(chan struct{})
+	go func() {
+		defer close(unsubDone)
+		_ = env.listener.Unsubscribe(context.Background(), channel)
+	}()
+
+	// 3. Immediately re-Subscribe (may race with the Unsubscribe above)
+	require.NoError(t, env.listener.Subscribe(ctx, channel))
+
+	// Wait for the async Unsubscribe to complete
+	<-unsubDone
+
+	// Channel must still be listened — the generation counter should have
+	// prevented the stale UNLISTEN from taking effect, OR the re-Subscribe's
+	// LISTEN should have restored it.
+	require.True(t, env.listener.isListening(channel),
+		"l.channels must stay true after stale UNLISTEN is skipped")
+
+	// Verify PG is actually listening by publishing an event and receiving it
+	conn := env.subscribeAndWait(t)
+
+	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-gen-1",
+		Content: "generation counter test",
+	})
+	require.NoError(t, err)
+
+	// Drain catchup events, then expect the live event
+	for {
+		msg := readJSONTimeout(t, conn, 5*time.Second)
+		if msg["event_id"] == "evt-gen-1" {
+			assert.Equal(t, "generation counter test", msg["content"])
+			break
+		}
+	}
 }

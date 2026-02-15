@@ -974,6 +974,139 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, 1, detail.Stages[0].StageIndex)
 		assert.Equal(t, "completed", detail.Stages[0].Status)
 		assert.Equal(t, 1, detail.Stages[0].ExpectedAgentCount)
+
+		// Execution overviews on single-agent stage.
+		require.Len(t, detail.Stages[0].Executions, 1)
+		eo := detail.Stages[0].Executions[0]
+		assert.Equal(t, "TestAgent", eo.AgentName)
+		assert.Equal(t, 1, eo.AgentIndex)
+		assert.Equal(t, "completed", eo.Status)
+		assert.Equal(t, "react", eo.IterationStrategy)
+		assert.Equal(t, int64(100), eo.InputTokens)
+		assert.Equal(t, int64(50), eo.OutputTokens)
+		assert.Equal(t, int64(150), eo.TotalTokens)
+	})
+
+	t.Run("returns execution overviews with parallel agents and per-execution tokens", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("parallel alert").
+			SetAlertType("test").
+			SetChainID("parallel-chain").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Investigation").
+			SetStageIndex(0).
+			SetExpectedAgentCount(2).
+			SetParallelType(stage.ParallelTypeMultiAgent).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		exec1 := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("KubernetesAgent").
+			SetAgentIndex(1).
+			SetIterationStrategy("native_thinking").
+			SetLlmProvider("gemini-2.5-pro").
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		exec2 := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("ArgoCDAgent").
+			SetAgentIndex(2).
+			SetIterationStrategy("react").
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		// Two LLM interactions for exec1 (tokens should be summed).
+		for _, tokens := range [][3]int{{200, 30, 230}, {100, 20, 120}} {
+			client.LLMInteraction.Create().
+				SetID(uuid.New().String()).
+				SetSessionID(sess.ID).
+				SetStageID(stg.ID).
+				SetExecutionID(exec1.ID).
+				SetInteractionType(llminteraction.InteractionTypeIteration).
+				SetModelName("gemini-2.5-pro").
+				SetLlmRequest(map[string]interface{}{}).
+				SetLlmResponse(map[string]interface{}{}).
+				SetInputTokens(tokens[0]).
+				SetOutputTokens(tokens[1]).
+				SetTotalTokens(tokens[2]).
+				SaveX(ctx)
+		}
+
+		// One LLM interaction for exec2.
+		client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec2.ID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("gemini-2.5-flash").
+			SetLlmRequest(map[string]interface{}{}).
+			SetLlmResponse(map[string]interface{}{}).
+			SetInputTokens(50).
+			SetOutputTokens(10).
+			SetTotalTokens(60).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		// Stage should be parallel.
+		require.Len(t, detail.Stages, 1)
+		assert.True(t, detail.HasParallelStages)
+		require.NotNil(t, detail.Stages[0].ParallelType)
+		assert.Equal(t, "multi_agent", *detail.Stages[0].ParallelType)
+
+		// Two execution overviews, ordered by agent_index.
+		require.Len(t, detail.Stages[0].Executions, 2)
+
+		eo1 := detail.Stages[0].Executions[0]
+		assert.Equal(t, exec1.ID, eo1.ExecutionID)
+		assert.Equal(t, "KubernetesAgent", eo1.AgentName)
+		assert.Equal(t, 1, eo1.AgentIndex)
+		assert.Equal(t, "completed", eo1.Status)
+		assert.Equal(t, "native_thinking", eo1.IterationStrategy)
+		require.NotNil(t, eo1.LLMProvider)
+		assert.Equal(t, "gemini-2.5-pro", *eo1.LLMProvider)
+		// Tokens summed across two interactions: 200+100=300, 30+20=50, 230+120=350.
+		assert.Equal(t, int64(300), eo1.InputTokens)
+		assert.Equal(t, int64(50), eo1.OutputTokens)
+		assert.Equal(t, int64(350), eo1.TotalTokens)
+
+		eo2 := detail.Stages[0].Executions[1]
+		assert.Equal(t, exec2.ID, eo2.ExecutionID)
+		assert.Equal(t, "ArgoCDAgent", eo2.AgentName)
+		assert.Equal(t, 2, eo2.AgentIndex)
+		assert.Equal(t, "react", eo2.IterationStrategy)
+		assert.Nil(t, eo2.LLMProvider)
+		assert.Equal(t, int64(50), eo2.InputTokens)
+		assert.Equal(t, int64(10), eo2.OutputTokens)
+		assert.Equal(t, int64(60), eo2.TotalTokens)
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

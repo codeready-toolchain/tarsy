@@ -118,8 +118,17 @@ export function parseTimelineToFlow(
     stageMap.set(stage.id, stage);
   }
 
-  // Sort by sequence number
-  const sorted = [...events].sort((a, b) => a.sequence_number - b.sequence_number);
+  // Sort by stage index first (so all events for a stage stay together),
+  // then by sequence number within each stage.
+  // Events without a stage_id are placed at the end (e.g. executive_summary).
+  const sorted = [...events].sort((a, b) => {
+    const stageA = a.stage_id ? stageMap.get(a.stage_id) : undefined;
+    const stageB = b.stage_id ? stageMap.get(b.stage_id) : undefined;
+    const indexA = stageA?.stage_index ?? Number.MAX_SAFE_INTEGER;
+    const indexB = stageB?.stage_index ?? Number.MAX_SAFE_INTEGER;
+    if (indexA !== indexB) return indexA - indexB;
+    return a.sequence_number - b.sequence_number;
+  });
 
   const result: FlowItem[] = [];
   let currentStageId: string | null = null;
@@ -154,7 +163,46 @@ export function parseTimelineToFlow(
     result.push(eventToFlowItem(event, stageMap));
   }
 
-  return result;
+  return filterDuplicatedItems(result);
+}
+
+/**
+ * Remove items from the flow that are rendered elsewhere or are redundant:
+ *
+ * 1. executive_summary — session-level event rendered by FinalAnalysisCard.
+ *    During streaming it flows through StreamingContentRenderer (separate from
+ *    FlowItem[]). Keeping it here would duplicate it inside the last stage.
+ *
+ * 2. response items duplicated by a final_analysis in the same execution.
+ *    The backend emits an llm_response during streaming and then a
+ *    final_analysis with the same content once processing completes. During
+ *    streaming only the response exists so it renders normally; once the
+ *    final_analysis arrives the redundant response is hidden.
+ */
+function filterDuplicatedItems(items: FlowItem[]): FlowItem[] {
+  // Collect final_analysis content per execution
+  const finalContentByExec = new Map<string, Set<string>>();
+  for (const item of items) {
+    if (item.type === 'final_analysis' && item.executionId) {
+      if (!finalContentByExec.has(item.executionId)) {
+        finalContentByExec.set(item.executionId, new Set());
+      }
+      finalContentByExec.get(item.executionId)!.add(item.content);
+    }
+  }
+
+  return items.filter(item => {
+    // (1) executive_summary is rendered by FinalAnalysisCard, not the timeline
+    if (item.type === 'executive_summary') return false;
+
+    // (2) Hide response when an identical final_analysis exists in the same execution
+    if (item.type === 'response' && item.executionId) {
+      const finalContents = finalContentByExec.get(item.executionId);
+      if (finalContents && finalContents.has(item.content)) return false;
+    }
+
+    return true;
+  });
 }
 
 // --- Stage grouping ---
@@ -364,4 +412,21 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
   }
 
   return lines.join('\n').trim();
+}
+
+/**
+ * isReActResponse checks whether content looks like a raw ReAct-formatted LLM
+ * response (containing Thought:/Action: or Final Answer: markers). These are
+ * redundant when the backend has already created properly-typed events for the
+ * individual sections. Used by TimelineItem to hide such llm_response events.
+ */
+export function isReActResponse(content: string): boolean {
+  if (!content) return false;
+  // Must contain "Thought:" AND either "Action:" or "Final Answer:" to be
+  // considered ReAct format. A single marker is not sufficient — it could be
+  // regular text that happens to contain one of these words.
+  const hasThought = content.includes('Thought:');
+  const hasAction = content.includes('Action:');
+  const hasFinalAnswer = content.includes('Final Answer:');
+  return hasThought && (hasAction || hasFinalAnswer);
 }
