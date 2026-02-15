@@ -121,7 +121,9 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
   }
 
   // Response (llm_response) — intermediate iterations
+  // Don't render empty responses (event created but no content yet, or empty tool-only iteration)
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_RESPONSE) {
+    if (!item.content || !item.content.trim()) return null;
     const hasMarkdown = hasMarkdownSyntax(item.content);
     return (
       <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
@@ -293,6 +295,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
 
   // Executive summary
   if (item.eventType === TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY) {
+    if (!item.content || !item.content.trim()) return null;
     const hasMarkdown = hasMarkdownSyntax(item.content);
     return (
       <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>

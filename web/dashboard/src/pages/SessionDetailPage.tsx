@@ -365,7 +365,11 @@ export function SessionDetailPage() {
 
           // Add or update in timeline
           if (knownEventIdsRef.current.has(payload.event_id)) {
-            // Update existing event in-place (content / status may have changed)
+            // Update existing event in-place (content / status may have changed).
+            // Merge metadata: the existing event may have full metadata from
+            // timeline_event.created (e.g. tool_name, server_name, arguments),
+            // while the completed payload may add new fields (e.g. is_error).
+            // Using spread merge preserves both.
             setTimelineEvents((prev) =>
               prev.map((ev) =>
                 ev.id === payload.event_id
@@ -373,7 +377,9 @@ export function SessionDetailPage() {
                       ...ev,
                       content: payload.content,
                       status: payload.status,
-                      metadata: payload.metadata || ev.metadata,
+                      metadata: ev.metadata || payload.metadata
+                        ? { ...(ev.metadata || {}), ...(payload.metadata || {}) }
+                        : null,
                       updated_at: payload.timestamp,
                     }
                   : ev,
@@ -415,10 +421,23 @@ export function SessionDetailPage() {
             return { ...prev, status: payload.status };
           });
 
-          // If terminal, re-fetch session for final fields
+          // If terminal, re-fetch session + timeline for final fields and
+          // authoritative metadata (fixes any metadata merge gaps from streaming)
           if (isTerminalStatus(payload.status as SessionStatus)) {
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
-              console.warn('Failed to re-fetch session after terminal status:', err);
+            Promise.all([
+              getSession(id),
+              getTimeline(id),
+            ]).then(([freshSession, freshTimeline]) => {
+              setSession(freshSession);
+              setTimelineEvents(freshTimeline);
+              // Update dedup set with all event IDs
+              const ids = new Set<string>();
+              for (const ev of freshTimeline) {
+                ids.add(ev.id);
+              }
+              knownEventIdsRef.current = ids;
+            }).catch((err) => {
+              console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
           }
           return;
@@ -457,6 +476,16 @@ export function SessionDetailPage() {
             };
             return { ...prev, stages: [...stages, newStage] };
           });
+
+          // Re-fetch session detail when a stage starts to get execution overviews
+          // (agent names, LLM providers, iteration strategies) for parallel agents.
+          // Use a debounced fetch to avoid hammering the API if multiple stage events
+          // arrive in quick succession.
+          if (payload.status === 'started') {
+            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+              console.warn('Failed to re-fetch session on stage start:', err);
+            });
+          }
           return;
         }
 

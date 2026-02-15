@@ -442,6 +442,20 @@ const StageContent: React.FC<StageContentProps> = ({
                     />
                   )}
                 </Box>
+                {/* Show streaming activity count when no execution overview yet */}
+                {!eo && !hasTokens && (() => {
+                  const streamCount = (streamingByExecution.get(execution.executionId) || []).length;
+                  const itemCount = execution.items.length;
+                  const total = streamCount + itemCount;
+                  if (total > 0) {
+                    return (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                        {streamCount > 0 ? `${total} event${total > 1 ? 's' : ''} (${streamCount} streaming)` : `${total} event${total > 1 ? 's' : ''}`}
+                      </Typography>
+                    );
+                  }
+                  return null;
+                })()}
                 {hasTokens && tokenData && (
                   <Box mt={1} display="flex" alignItems="center" gap={0.5}>
                     <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>🪙</Typography>
