@@ -482,6 +482,22 @@ func SortTimelineProjection(projected []map[string]interface{}) {
 // WebSocket Structural Assertions
 // ────────────────────────────────────────────────────────────
 
+// AssertAllEventsHaveSessionID verifies that every non-infra WS event carries
+// the correct session_id. This is a contract check: the frontend routes events
+// by data.session_id, so any event missing it would be silently dropped.
+func AssertAllEventsHaveSessionID(t *testing.T, actual []WSEvent, expectedSessionID string) {
+	t.Helper()
+	for i, e := range actual {
+		switch e.Type {
+		case "connection.established", "subscription.confirmed", "pong", "catchup.overflow":
+			continue
+		}
+		sid, _ := e.Parsed["session_id"].(string)
+		assert.Equalf(t, expectedSessionID, sid,
+			"WS event %d (type=%s) has wrong or missing session_id", i, e.Type)
+	}
+}
+
 // AssertEventsInOrder verifies that each expected event appears in the actual
 // WS events in the correct relative order. Extra and duplicate actual events
 // are tolerated — only the expected sequence must be found in order.

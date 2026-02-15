@@ -65,9 +65,12 @@ func publishTimelineCreated(
 		return
 	}
 	publishErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-		Type:           events.EventTypeTimelineCreated,
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeTimelineCreated,
+			SessionID: execCtx.SessionID,
+			Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+		},
 		EventID:        event.ID,
-		SessionID:      execCtx.SessionID,
 		StageID:        execCtx.StageID,
 		ExecutionID:    execCtx.ExecutionID,
 		EventType:      eventType,
@@ -75,7 +78,6 @@ func publishTimelineCreated(
 		Content:        content,
 		Metadata:       metadata,
 		SequenceNumber: seqNum,
-		Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 	})
 	if publishErr != nil {
 		slog.Warn("Failed to publish timeline event",
@@ -101,12 +103,15 @@ func finalizeStreamingEvent(
 		}
 		if execCtx.EventPublisher != nil {
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-				Type:      events.EventTypeTimelineCompleted,
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeTimelineCompleted,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
 				EventID:   eventID,
 				EventType: eventType,
 				Content:   content,
 				Status:    timelineevent.StatusCompleted,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
 				slog.Warn("Failed to publish "+label+" completed",
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -129,12 +134,15 @@ func finalizeStreamingEvent(
 	}
 	if execCtx.EventPublisher != nil {
 		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-			Type:      events.EventTypeTimelineCompleted,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCompleted,
+				SessionID: execCtx.SessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			EventID:   eventID,
 			EventType: eventType,
 			Content:   failContent,
 			Status:    timelineevent.StatusFailed,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish "+label+" failure",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -172,12 +180,15 @@ func markStreamingEventsFailed(
 		// Notify WebSocket clients
 		if execCtx.EventPublisher != nil {
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-				Type:      events.EventTypeTimelineCompleted,
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeTimelineCompleted,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
 				EventID:   eventID,
 				EventType: eventType,
 				Status:    timelineevent.StatusFailed,
 				Content:   failContent,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
 			}); pubErr != nil {
 				slog.Warn("Failed to publish streaming event failure",
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -229,9 +240,12 @@ func createToolCallEvent(
 	// Publish with "streaming" status (not "completed" — tool is still executing)
 	if execCtx.EventPublisher != nil {
 		if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-			Type:           events.EventTypeTimelineCreated,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCreated,
+				SessionID: execCtx.SessionID,
+				Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+			},
 			EventID:        event.ID,
-			SessionID:      execCtx.SessionID,
 			StageID:        execCtx.StageID,
 			ExecutionID:    execCtx.ExecutionID,
 			EventType:      timelineevent.EventTypeLlmToolCall,
@@ -239,7 +253,6 @@ func createToolCallEvent(
 			Content:        "",
 			Metadata:       metadata,
 			SequenceNumber: *eventSeq,
-			Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish tool call created",
 				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -285,13 +298,16 @@ func completeToolCallEvent(
 	// Publish completion to WebSocket
 	if execCtx.EventPublisher != nil {
 		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-			Type:      events.EventTypeTimelineCompleted,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCompleted,
+				SessionID: execCtx.SessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			EventID:   event.ID,
 			EventType: timelineevent.EventTypeLlmToolCall,
 			Content:   content,
 			Status:    timelineevent.StatusCompleted,
 			Metadata:  completionMeta,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish tool call completed",
 				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)

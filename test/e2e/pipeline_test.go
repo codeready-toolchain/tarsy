@@ -453,7 +453,9 @@ func TestE2E_Pipeline(t *testing.T) {
 
 	// WS event structural assertions (not golden — event ordering is non-deterministic
 	// due to catchup/NOTIFY race, so we verify expected events in relative order).
-	AssertEventsInOrder(t, ws.Events(), testdata.PipelineExpectedEvents)
+	wsEvents := ws.Events()
+	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
+	AssertEventsInOrder(t, wsEvents, testdata.PipelineExpectedEvents)
 
 	// Stages golden.
 	projectedStages := make([]map[string]interface{}, len(stages))

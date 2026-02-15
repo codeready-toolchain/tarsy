@@ -11,9 +11,11 @@ import (
 func TestTruncateIfNeeded(t *testing.T) {
 	t.Run("passes through normal payload", func(t *testing.T) {
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:      EventTypeTimelineCreated,
-			SessionID: "abc-123",
-			Content:   "some content",
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: "abc-123",
+			},
+			Content: "some content",
 		})
 
 		result, err := truncateIfNeeded(string(payload))
@@ -28,10 +30,12 @@ func TestTruncateIfNeeded(t *testing.T) {
 			longContent[i] = 'a'
 		}
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:      EventTypeTimelineCreated,
-			EventID:   "evt-123",
-			SessionID: "abc-123",
-			Content:   string(longContent),
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: "abc-123",
+			},
+			EventID: "evt-123",
+			Content: string(longContent),
 		})
 
 		result, err := truncateIfNeeded(string(payload))
@@ -42,7 +46,9 @@ func TestTruncateIfNeeded(t *testing.T) {
 
 	t.Run("does not truncate small payload", func(t *testing.T) {
 		payload, _ := json.Marshal(StreamChunkPayload{
-			Type:  EventTypeStreamChunk,
+			BasePayload: BasePayload{
+				Type: EventTypeStreamChunk,
+			},
 			Delta: "hello",
 		})
 
@@ -57,10 +63,12 @@ func TestTruncateIfNeeded(t *testing.T) {
 			longContent[i] = 'x'
 		}
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:      EventTypeTimelineCreated,
-			EventID:   "evt-456",
-			SessionID: "sess-789",
-			Content:   string(longContent),
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: "sess-789",
+			},
+			EventID: "evt-456",
+			Content: string(longContent),
 		})
 
 		result, err := truncateIfNeeded(string(payload))
@@ -80,15 +88,17 @@ func TestTruncateIfNeeded(t *testing.T) {
 		// accounts for JSON encoding variability: if new fields with non-zero
 		// defaults are added to TimelineCreatedPayload, the base overhead grows
 		// and the margin prevents the test from flipping unexpectedly.
-		base, _ := json.Marshal(TimelineCreatedPayload{Type: "t"})
+		base, _ := json.Marshal(TimelineCreatedPayload{
+			BasePayload: BasePayload{Type: "t"},
+		})
 		contentSize := 7900 - len(base) - 20
 		content := make([]byte, contentSize)
 		for i := range content {
 			content[i] = 'b'
 		}
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:    "t",
-			Content: string(content),
+			BasePayload: BasePayload{Type: "t"},
+			Content:     string(content),
 		})
 		require.LessOrEqual(t, len(payload), 7900, "test payload should be under limit")
 
@@ -107,10 +117,12 @@ func TestTruncateIfNeeded(t *testing.T) {
 func TestInjectDBEventIDAndTruncate(t *testing.T) {
 	t.Run("injects db_event_id into normal payload", func(t *testing.T) {
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:      EventTypeTimelineCreated,
-			EventID:   "evt-1",
-			SessionID: "sess-1",
-			Content:   "hello",
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: "sess-1",
+			},
+			EventID: "evt-1",
+			Content: "hello",
 		})
 
 		result, err := injectDBEventIDAndTruncate(payload, 42)
@@ -125,10 +137,12 @@ func TestInjectDBEventIDAndTruncate(t *testing.T) {
 			longContent[i] = 'x'
 		}
 		payload, _ := json.Marshal(TimelineCreatedPayload{
-			Type:      EventTypeTimelineCreated,
-			EventID:   "evt-456",
-			SessionID: "sess-789",
-			Content:   string(longContent),
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: "sess-789",
+			},
+			EventID: "evt-456",
+			Content: string(longContent),
 		})
 
 		result, err := injectDBEventIDAndTruncate(payload, 42)
@@ -144,7 +158,9 @@ func TestInjectDBEventIDAndTruncate(t *testing.T) {
 			longContent[i] = 'x'
 		}
 		payload, _ := json.Marshal(StreamChunkPayload{
-			Type:    EventTypeStreamChunk,
+			BasePayload: BasePayload{
+				Type: EventTypeStreamChunk,
+			},
 			EventID: "evt-789",
 			Delta:   string(longContent),
 		})
@@ -164,13 +180,15 @@ func TestNewEventPublisher(t *testing.T) {
 
 func TestStageStatusPayload_JSON(t *testing.T) {
 	payload := StageStatusPayload{
-		Type:       EventTypeStageStatus,
-		SessionID:  "sess-123",
+		BasePayload: BasePayload{
+			Type:      EventTypeStageStatus,
+			SessionID: "sess-123",
+			Timestamp: "2026-02-10T12:00:00Z",
+		},
 		StageID:    "stage-456",
 		StageName:  "investigation",
 		StageIndex: 1,
 		Status:     StageStatusStarted,
-		Timestamp:  "2026-02-10T12:00:00Z",
 	}
 
 	data, err := json.Marshal(payload)
@@ -191,12 +209,14 @@ func TestStageStatusPayload_JSON(t *testing.T) {
 func TestStageStatusPayload_EmptyStageID(t *testing.T) {
 	// StageID can be empty on "started" events (stage not yet created in DB)
 	payload := StageStatusPayload{
-		Type:       EventTypeStageStatus,
-		SessionID:  "sess-123",
+		BasePayload: BasePayload{
+			Type:      EventTypeStageStatus,
+			SessionID: "sess-123",
+			Timestamp: "2026-02-10T12:00:00Z",
+		},
 		StageName:  "investigation",
 		StageIndex: 1,
 		Status:     StageStatusStarted,
-		Timestamp:  "2026-02-10T12:00:00Z",
 	}
 
 	data, err := json.Marshal(payload)
@@ -208,14 +228,16 @@ func TestStageStatusPayload_EmptyStageID(t *testing.T) {
 
 func TestSessionProgressPayload_JSON(t *testing.T) {
 	payload := SessionProgressPayload{
-		Type:              EventTypeSessionProgress,
-		SessionID:         "sess-100",
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionProgress,
+			SessionID: "sess-100",
+			Timestamp: "2026-02-13T10:00:00Z",
+		},
 		CurrentStageName:  "analysis",
 		CurrentStageIndex: 2,
 		TotalStages:       3,
 		ActiveExecutions:  1,
 		StatusText:        "Starting stage: analysis",
-		Timestamp:         "2026-02-13T10:00:00Z",
 	}
 
 	data, err := json.Marshal(payload)
@@ -235,13 +257,15 @@ func TestSessionProgressPayload_JSON(t *testing.T) {
 
 func TestExecutionProgressPayload_JSON(t *testing.T) {
 	payload := ExecutionProgressPayload{
-		Type:        EventTypeExecutionProgress,
-		SessionID:   "sess-200",
+		BasePayload: BasePayload{
+			Type:      EventTypeExecutionProgress,
+			SessionID: "sess-200",
+			Timestamp: "2026-02-13T10:00:00Z",
+		},
 		StageID:     "stg-1",
 		ExecutionID: "exec-1",
 		Phase:       ProgressPhaseInvestigating,
 		Message:     "Iteration 1/5",
-		Timestamp:   "2026-02-13T10:00:00Z",
 	}
 
 	data, err := json.Marshal(payload)
@@ -260,13 +284,15 @@ func TestExecutionProgressPayload_JSON(t *testing.T) {
 
 func TestInteractionCreatedPayload_JSON(t *testing.T) {
 	payload := InteractionCreatedPayload{
-		Type:            EventTypeInteractionCreated,
-		SessionID:       "sess-300",
+		BasePayload: BasePayload{
+			Type:      EventTypeInteractionCreated,
+			SessionID: "sess-300",
+			Timestamp: "2026-02-13T10:00:00Z",
+		},
 		StageID:         "stg-2",
 		ExecutionID:     "exec-2",
 		InteractionID:   "int-1",
 		InteractionType: InteractionTypeLLM,
-		Timestamp:       "2026-02-13T10:00:00Z",
 	}
 
 	data, err := json.Marshal(payload)

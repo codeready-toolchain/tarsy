@@ -140,9 +140,12 @@ func TestE2E_ReactStreamingChunkBoundaries(t *testing.T) {
 		"final answer: fragments should assemble correctly")
 
 	// ── WS assertions ──
+	wsEvents := ws.Events()
+	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
+
 	createdTypes := map[string]int{}
 	completedTypes := map[string]int{}
-	for _, e := range ws.Events() {
+	for _, e := range wsEvents {
 		switch e.Type {
 		case "timeline_event.created":
 			if et, ok := e.Parsed["event_type"].(string); ok {

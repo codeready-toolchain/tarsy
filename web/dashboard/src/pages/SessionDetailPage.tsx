@@ -44,7 +44,7 @@ import { websocketService } from '../services/websocket.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
-import type { SessionDetailResponse, TimelineEvent } from '../types/session.ts';
+import type { SessionDetailResponse, TimelineEvent, StageOverview } from '../types/session.ts';
 import type { StreamingItem } from '../components/streaming/StreamingContentRenderer.tsx';
 import type {
   TimelineCreatedPayload,
@@ -400,12 +400,28 @@ export function SessionDetailPage() {
           const payload = data as unknown as StageStatusPayload;
           setSession((prev) => {
             if (!prev) return prev;
-            const updatedStages = prev.stages.map((stage) =>
-              stage.id === payload.stage_id
-                ? { ...stage, status: payload.status }
-                : stage,
-            );
-            return { ...prev, stages: updatedStages };
+            const existing = prev.stages.find((s) => s.id === payload.stage_id);
+            if (existing) {
+              // Update existing stage
+              const updatedStages = prev.stages.map((stage) =>
+                stage.id === payload.stage_id
+                  ? { ...stage, status: payload.status }
+                  : stage,
+              );
+              return { ...prev, stages: updatedStages };
+            }
+            // New stage not yet in REST data — add a minimal entry
+            const newStage: StageOverview = {
+              id: payload.stage_id || '',
+              stage_name: payload.stage_name || `Stage ${payload.stage_index + 1}`,
+              stage_index: payload.stage_index,
+              status: payload.status,
+              parallel_type: null,
+              expected_agent_count: 1,
+              started_at: payload.timestamp || null,
+              completed_at: null,
+            };
+            return { ...prev, stages: [...prev.stages, newStage] };
           });
           return;
         }
@@ -763,11 +779,11 @@ export function SessionDetailPage() {
             )}
 
             {/* Conversation Timeline */}
-            {session.stages && session.stages.length > 0 ? (
+            {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
                 <ConversationTimeline
                   items={flowItems}
-                  stages={session.stages}
+                  stages={session.stages || []}
                   isActive={isActive}
                   progressStatus={progressStatus}
                   streamingEvents={streamingEvents}

@@ -333,10 +333,12 @@ func (w *Worker) publishSessionStatus(ctx context.Context, sessionID string, sta
 		return
 	}
 	if err := w.eventPublisher.PublishSessionStatus(ctx, sessionID, events.SessionStatusPayload{
-		Type:      events.EventTypeSessionStatus,
-		SessionID: sessionID,
-		Status:    status,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeSessionStatus,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		Status: status,
 	}); err != nil {
 		slog.Warn("Failed to publish session status",
 			"session_id", sessionID, "status", status, "error", err)

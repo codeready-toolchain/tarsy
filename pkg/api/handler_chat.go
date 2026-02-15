@@ -82,11 +82,13 @@ func (s *Server) sendChatMessageHandler(c *echo.Context) error {
 	// 7. Publish chat.created event if chat was just created
 	if created && s.eventPublisher != nil {
 		if pubErr := s.eventPublisher.PublishChatCreated(c.Request().Context(), sessionID, events.ChatCreatedPayload{
-			Type:      events.EventTypeChatCreated,
-			SessionID: sessionID,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeChatCreated,
+				SessionID: sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			ChatID:    chatObj.ID,
 			CreatedBy: author,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish chat.created event",
 				"session_id", sessionID, "error", pubErr)

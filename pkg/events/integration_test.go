@@ -161,22 +161,27 @@ func TestIntegration_PublisherPersistsAndNotifies(t *testing.T) {
 
 	// Publish first event (timeline created)
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
-		EventID:   "evt-1",
-		SessionID: env.sessionID,
-		Content:   "first event",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-1",
+		Content: "first event",
 	})
 	require.NoError(t, err)
 
 	// Publish second event (timeline completed)
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
-		Type:      EventTypeTimelineCompleted,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCompleted,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   "evt-1",
 		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   "second event",
 		Status:    timelineevent.StatusCompleted,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -205,10 +210,12 @@ func TestIntegration_TransientEventsNotPersisted(t *testing.T) {
 
 	// Publish transient event (stream chunk)
 	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-		Type:      EventTypeStreamChunk,
-		EventID:   "evt-1",
-		Delta:     "token data",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeStreamChunk,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-1",
+		Delta:   "token data",
 	})
 	require.NoError(t, err)
 
@@ -227,11 +234,13 @@ func TestIntegration_EndToEnd_PublishToWebSocket(t *testing.T) {
 
 	// Publish a persistent event via EventPublisher
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
-		EventID:   "evt-ws-1",
-		SessionID: env.sessionID,
-		Content:   "hello from publisher",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-ws-1",
+		Content: "hello from publisher",
 	})
 	require.NoError(t, err)
 
@@ -253,10 +262,13 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 
 	// Publish transient event (no DB persistence)
 	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-		Type:      EventTypeStreamChunk,
-		EventID:   "evt-stream-1",
-		Delta:     "streaming token",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
+		BasePayload: BasePayload{
+			Type:      EventTypeStreamChunk,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		EventID: "evt-stream-1",
+		Delta:   "streaming token",
 	})
 	require.NoError(t, err)
 
@@ -286,13 +298,15 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 
 	// 1. Publish timeline_event.created (persistent)
 	err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-		Type:      EventTypeTimelineCreated,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCreated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   eventID,
-		SessionID: env.sessionID,
 		EventType: "llm_response",
 		Status:    timelineevent.StatusStreaming,
 		Content:   "",
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -305,10 +319,13 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	deltas := []string{"The pod ", "is in ", "CrashLoopBackOff ", "due to ", "a missing ConfigMap."}
 	for _, delta := range deltas {
 		err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
-			Type:      EventTypeStreamChunk,
-			EventID:   eventID,
-			Delta:     delta,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
+			BasePayload: BasePayload{
+				Type:      EventTypeStreamChunk,
+				SessionID: env.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID: eventID,
+			Delta:   delta,
 		})
 		require.NoError(t, err)
 
@@ -328,12 +345,15 @@ func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 
 	// 3. Publish timeline_event.completed (persistent, full content)
 	err = env.publisher.PublishTimelineCompleted(ctx, env.sessionID, TimelineCompletedPayload{
-		Type:      EventTypeTimelineCompleted,
+		BasePayload: BasePayload{
+			Type:      EventTypeTimelineCompleted,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
 		EventID:   eventID,
 		EventType: timelineevent.EventTypeLlmResponse,
 		Content:   expectedFull,
 		Status:    timelineevent.StatusCompleted,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
 	})
 	require.NoError(t, err)
 
@@ -360,11 +380,13 @@ func TestIntegration_CatchupFromRealDB(t *testing.T) {
 	// Pre-populate DB with 3 persistent events
 	for i := 1; i <= 3; i++ {
 		err := env.publisher.PublishTimelineCreated(ctx, env.sessionID, TimelineCreatedPayload{
-			Type:           EventTypeTimelineCreated,
+			BasePayload: BasePayload{
+				Type:      EventTypeTimelineCreated,
+				SessionID: env.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			EventID:        uuid.New().String(),
-			SessionID:      env.sessionID,
 			SequenceNumber: i,
-			Timestamp:      time.Now().Format(time.RFC3339Nano),
 		})
 		require.NoError(t, err)
 	}

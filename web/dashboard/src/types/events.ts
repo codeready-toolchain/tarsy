@@ -20,6 +20,7 @@ export interface TimelineCreatedPayload {
 /** timeline_event.completed payload. */
 export interface TimelineCompletedPayload {
   type: 'timeline_event.completed';
+  session_id: string;
   event_id: string;
   event_type: string;
   content: string;
@@ -31,6 +32,7 @@ export interface TimelineCompletedPayload {
 /** stream.chunk transient payload. */
 export interface StreamChunkPayload {
   type: 'stream.chunk';
+  session_id: string;
   event_id: string;
   delta: string;
   timestamp: string;

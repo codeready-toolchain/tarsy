@@ -214,9 +214,12 @@ func callLLMWithStreaming(
 				}
 				thinkingEventID = event.ID
 				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-					Type:           events.EventTypeTimelineCreated,
+					BasePayload: events.BasePayload{
+						Type:      events.EventTypeTimelineCreated,
+						SessionID: execCtx.SessionID,
+						Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+					},
 					EventID:        thinkingEventID,
-					SessionID:      execCtx.SessionID,
 					StageID:        execCtx.StageID,
 					ExecutionID:    execCtx.ExecutionID,
 					EventType:      timelineevent.EventTypeLlmThinking,
@@ -224,7 +227,6 @@ func callLLMWithStreaming(
 					Content:        "",
 					Metadata:       thinkingMeta,
 					SequenceNumber: *eventSeq,
-					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming thinking created",
 						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -233,10 +235,13 @@ func callLLMWithStreaming(
 			// Publish only the new delta — clients concatenate locally.
 			// This keeps each pg_notify payload small (avoids 8 KB limit).
 			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-				Type:      events.EventTypeStreamChunk,
-				EventID:   thinkingEventID,
-				Delta:     delta,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID: thinkingEventID,
+				Delta:   delta,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish thinking stream chunk",
 					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -264,9 +269,12 @@ func callLLMWithStreaming(
 				}
 				textEventID = event.ID
 				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-					Type:           events.EventTypeTimelineCreated,
+					BasePayload: events.BasePayload{
+						Type:      events.EventTypeTimelineCreated,
+						SessionID: execCtx.SessionID,
+						Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+					},
 					EventID:        textEventID,
-					SessionID:      execCtx.SessionID,
 					StageID:        execCtx.StageID,
 					ExecutionID:    execCtx.ExecutionID,
 					EventType:      timelineevent.EventTypeLlmResponse,
@@ -274,7 +282,6 @@ func callLLMWithStreaming(
 					Content:        "",
 					Metadata:       extra, // nil when not forced conclusion
 					SequenceNumber: *eventSeq,
-					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming text created",
 						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -282,10 +289,13 @@ func callLLMWithStreaming(
 			}
 			// Publish only the new delta — clients concatenate locally.
 			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-				Type:      events.EventTypeStreamChunk,
-				EventID:   textEventID,
-				Delta:     delta,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID: textEventID,
+				Delta:   delta,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish text stream chunk",
 					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -439,9 +449,12 @@ func callLLMWithReActStreaming(
 				}
 				nativeThinkingEventID = event.ID
 				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-					Type:           events.EventTypeTimelineCreated,
+					BasePayload: events.BasePayload{
+						Type:      events.EventTypeTimelineCreated,
+						SessionID: execCtx.SessionID,
+						Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+					},
 					EventID:        nativeThinkingEventID,
-					SessionID:      execCtx.SessionID,
 					StageID:        execCtx.StageID,
 					ExecutionID:    execCtx.ExecutionID,
 					EventType:      timelineevent.EventTypeLlmThinking,
@@ -449,17 +462,19 @@ func callLLMWithReActStreaming(
 					Content:        "",
 					Metadata:       thinkingMeta,
 					SequenceNumber: *eventSeq,
-					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming thinking created",
 						"event_id", nativeThinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
 				}
 			}
 			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-				Type:      events.EventTypeStreamChunk,
-				EventID:   nativeThinkingEventID,
-				Delta:     delta,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID: nativeThinkingEventID,
+				Delta:   delta,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish thinking stream chunk",
 					"event_id", nativeThinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -500,9 +515,12 @@ func callLLMWithReActStreaming(
 				} else {
 					reactThoughtEventID = event.ID
 					if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-						Type:           events.EventTypeTimelineCreated,
+						BasePayload: events.BasePayload{
+							Type:      events.EventTypeTimelineCreated,
+							SessionID: execCtx.SessionID,
+							Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+						},
 						EventID:        reactThoughtEventID,
-						SessionID:      execCtx.SessionID,
 						StageID:        execCtx.StageID,
 						ExecutionID:    execCtx.ExecutionID,
 						EventType:      timelineevent.EventTypeLlmThinking,
@@ -510,7 +528,6 @@ func callLLMWithReActStreaming(
 						Content:        "",
 						Metadata:       meta,
 						SequenceNumber: *eventSeq,
-						Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 					}); pubErr != nil {
 						slog.Warn("Failed to publish ReAct thought created",
 							"event_id", reactThoughtEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -525,10 +542,13 @@ func callLLMWithReActStreaming(
 					newDelta := content[thoughtContentSent:]
 					thoughtContentSent = len(content)
 					if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-						Type:      events.EventTypeStreamChunk,
-						EventID:   reactThoughtEventID,
-						Delta:     newDelta,
-						Timestamp: time.Now().Format(time.RFC3339Nano),
+						BasePayload: events.BasePayload{
+							Type:      events.EventTypeStreamChunk,
+							SessionID: execCtx.SessionID,
+							Timestamp: time.Now().Format(time.RFC3339Nano),
+						},
+						EventID: reactThoughtEventID,
+						Delta:   newDelta,
 					}); pubErr != nil {
 						slog.Warn("Failed to publish ReAct thought stream chunk",
 							"event_id", reactThoughtEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -567,9 +587,12 @@ func callLLMWithReActStreaming(
 				} else {
 					finalAnswerEventID = event.ID
 					if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
-						Type:           events.EventTypeTimelineCreated,
+						BasePayload: events.BasePayload{
+							Type:      events.EventTypeTimelineCreated,
+							SessionID: execCtx.SessionID,
+							Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
+						},
 						EventID:        finalAnswerEventID,
-						SessionID:      execCtx.SessionID,
 						StageID:        execCtx.StageID,
 						ExecutionID:    execCtx.ExecutionID,
 						EventType:      timelineevent.EventTypeFinalAnalysis,
@@ -577,7 +600,6 @@ func callLLMWithReActStreaming(
 						Content:        "",
 						Metadata:       extra,
 						SequenceNumber: *eventSeq,
-						Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
 					}); pubErr != nil {
 						slog.Warn("Failed to publish final answer created",
 							"event_id", finalAnswerEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -592,10 +614,13 @@ func callLLMWithReActStreaming(
 					newDelta := content[finalContentSent:]
 					finalContentSent = len(content)
 					if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-						Type:      events.EventTypeStreamChunk,
-						EventID:   finalAnswerEventID,
-						Delta:     newDelta,
-						Timestamp: time.Now().Format(time.RFC3339Nano),
+						BasePayload: events.BasePayload{
+							Type:      events.EventTypeStreamChunk,
+							SessionID: execCtx.SessionID,
+							Timestamp: time.Now().Format(time.RFC3339Nano),
+						},
+						EventID: finalAnswerEventID,
+						Delta:   newDelta,
 					}); pubErr != nil {
 						slog.Warn("Failed to publish final answer stream chunk",
 							"event_id", finalAnswerEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -673,12 +698,15 @@ func failOpenStreamingEvent(
 	}
 	if execCtx.EventPublisher != nil {
 		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-			Type:      events.EventTypeTimelineCompleted,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCompleted,
+				SessionID: execCtx.SessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
 			EventID:   eventID,
 			EventType: eventType,
 			Status:    timelineevent.StatusFailed,
 			Content:   failContent,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			slog.Warn("Failed to publish streaming event failure",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)

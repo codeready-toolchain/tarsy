@@ -261,16 +261,18 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	} else if e.eventPublisher != nil {
 		// Publish via WS so the dashboard can render the user question in real time.
 		if pubErr := e.eventPublisher.PublishTimelineCreated(execCtx, input.Session.ID, events.TimelineCreatedPayload{
-			Type:           events.EventTypeTimelineCreated,
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCreated,
+				SessionID: input.Session.ID,
+				Timestamp: userQuestionEvent.CreatedAt.Format(time.RFC3339Nano),
+			},
 			EventID:        userQuestionEvent.ID,
-			SessionID:      input.Session.ID,
 			StageID:        stageID,
 			ExecutionID:    exec.ID,
 			EventType:      timelineevent.EventTypeUserQuestion,
 			Status:         timelineevent.StatusCompleted,
 			Content:        input.Message.Content,
 			SequenceNumber: userQuestionSeq,
-			Timestamp:      userQuestionEvent.CreatedAt.Format(time.RFC3339Nano),
 		}); pubErr != nil {
 			logger.Warn("Failed to publish user_question timeline event", "error", pubErr)
 		}
