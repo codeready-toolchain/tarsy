@@ -256,14 +256,14 @@ export default function ConversationTimeline({
 
       {/* Content area */}
       <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
-        {stageGroups.map((group) => {
+        {stageGroups.map((group, index) => {
           const isCollapsed = collapsedStages.get(group.stageId) || false;
 
           // Get streaming events for this stage
           const stageStreamingMap = streamingByStage.get(group.stageId);
 
           return (
-            <Box key={group.stageId || `group-${group.stageIndex}`}>
+            <Box key={group.stageId ? `${group.stageId}-${index}` : `group-${index}`}>
               {/* Stage separator */}
               {group.stageId && (
                 <StageSeparator
