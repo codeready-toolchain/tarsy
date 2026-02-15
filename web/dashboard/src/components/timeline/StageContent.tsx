@@ -227,14 +227,35 @@ const StageContent: React.FC<StageContentProps> = ({
     return byExec;
   }, [streamingEvents, executions]);
 
-  const isMultiAgent = executions.length > 1;
+  // ── Merge completed executions with streaming-only agents ──
+  // This ensures the tabbed UI appears immediately when parallel agents start
+  // streaming, rather than waiting for items to complete.
+  const mergedExecutions = useMemo(() => {
+    const completedExecIds = new Set(executions.map(e => e.executionId));
+    const streamOnlyGroups: ExecutionGroup[] = [];
+    for (const execId of streamingByExecution.keys()) {
+      if (execId !== '__default__' && !completedExecIds.has(execId)) {
+        streamOnlyGroups.push({
+          executionId: execId,
+          index: executions.length + streamOnlyGroups.length,
+          items: [],
+          status: 'started',
+        });
+      }
+    }
+    return [...executions, ...streamOnlyGroups];
+  }, [executions, streamingByExecution]);
+
+  // Detect multi-agent from BOTH completed items and active streaming events
+  // so the tabbed interface appears immediately, not only after items complete.
+  const isMultiAgent = mergedExecutions.length > 1;
 
   // Notify parent when selected tab changes
   React.useEffect(() => {
-    if (onSelectedAgentChange && executions[selectedTab]) {
-      onSelectedAgentChange(executions[selectedTab].executionId);
+    if (onSelectedAgentChange && mergedExecutions[selectedTab]) {
+      onSelectedAgentChange(mergedExecutions[selectedTab].executionId);
     }
-  }, [selectedTab, executions, onSelectedAgentChange]);
+  }, [selectedTab, mergedExecutions, onSelectedAgentChange]);
 
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
@@ -286,8 +307,8 @@ const StageContent: React.FC<StageContentProps> = ({
   };
 
   // ── Empty state ──
-  if (executions.length === 0) {
-    // Check for streaming-only content (no completed items yet)
+  if (mergedExecutions.length === 0) {
+    // Check for streaming-only content (no completed items yet, single agent)
     const allStreamingItems = Array.from(streamingByExecution.values()).flat();
     if (allStreamingItems.length > 0) {
       return (
@@ -308,7 +329,7 @@ const StageContent: React.FC<StageContentProps> = ({
 
   // ── Single-agent: render items directly, no tabs/cards ──
   if (!isMultiAgent) {
-    return renderExecutionItems(executions[0]);
+    return renderExecutionItems(mergedExecutions[0]);
   }
 
   // ── Multi-agent: full tabbed interface with agent cards ──
@@ -322,7 +343,7 @@ const StageContent: React.FC<StageContentProps> = ({
             PARALLEL EXECUTION
           </Typography>
           <Chip
-            label={`${executions.length} agents`}
+            label={`${mergedExecutions.length} agents`}
             size="small" color="secondary" variant="outlined"
             sx={{ height: 20, fontSize: '0.7rem' }}
           />
@@ -330,7 +351,7 @@ const StageContent: React.FC<StageContentProps> = ({
 
         {/* Agent Cards */}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          {executions.map((execution, tabIndex) => {
+          {mergedExecutions.map((execution, tabIndex) => {
             const isSelected = selectedTab === tabIndex;
             const eo = execOverviewMap.get(execution.executionId);
             const statusColor = getStatusColor(eo?.status || execution.status);
@@ -404,7 +425,7 @@ const StageContent: React.FC<StageContentProps> = ({
       </Box>
 
       {/* Tab panels */}
-      {executions.map((execution, index) => (
+      {mergedExecutions.map((execution, index) => (
         <TabPanel key={execution.executionId} value={selectedTab} index={index}>
           {renderExecutionItems(execution)}
         </TabPanel>
