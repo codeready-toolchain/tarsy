@@ -178,8 +178,31 @@ export const finalAnswerMarkdownComponents = {
     );
   },
   code: (props: MdProps) => {
-    const { node: _node, inline: _inline, className, children, ...safeProps } = props;
-    // Check if this is a fenced code block (has language class like "language-python")
+    const { node: _node, inline, className, children, ...safeProps } = props;
+
+    // Inline code
+    if (inline) {
+      return (
+        <Box
+          component="code"
+          sx={{
+            backgroundColor: 'rgba(0, 0, 0, 0.08)',
+            color: 'error.main',
+            padding: '2px 6px',
+            border: '1px solid',
+            borderColor: 'rgba(0, 0, 0, 0.1)',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+            fontSize: '0.85rem',
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    }
+
+    // Fenced code block with language
     const match = /language-(\w+)/.exec(className || '');
     if (match) {
       const language = match[1];
@@ -222,23 +245,22 @@ export const finalAnswerMarkdownComponents = {
         </Box>
       );
     }
-    // Inline code
+    // Fenced code block without language
     return (
       <Box
-        component="code"
+        component="pre"
         sx={{
-          backgroundColor: 'rgba(0, 0, 0, 0.08)',
-          color: 'error.main',
-          padding: '2px 6px',
-          border: '1px solid',
-          borderColor: 'rgba(0, 0, 0, 0.1)',
+          backgroundColor: 'rgba(0, 0, 0, 0.06)',
+          padding: '12px',
           borderRadius: '4px',
+          overflowX: 'auto',
           fontFamily: 'monospace',
           fontSize: '0.85rem',
+          margin: '8px 0',
         }}
         {...safeProps}
       >
-        {children}
+        <code>{children}</code>
       </Box>
     );
   },
@@ -302,21 +324,44 @@ export const thoughtMarkdownComponents = {
     );
   },
   code: (props: MdProps) => {
-    const { node: _node, inline: _inline, children, ...safeProps } = props;
+    const { node: _node, inline, children, ...safeProps } = props;
+
+    // Inline code
+    if (inline) {
+      return (
+        <Box
+          component="code"
+          sx={{
+            bgcolor: 'grey.100',
+            px: 0.5,
+            py: 0.25,
+            borderRadius: 0.5,
+            fontFamily: 'monospace',
+            fontSize: '0.9em',
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    }
+
+    // Fenced code block (with or without language)
     return (
       <Box
-        component="code"
+        component="pre"
         sx={{
           bgcolor: 'grey.100',
-          px: 0.5,
-          py: 0.25,
-          borderRadius: 0.5,
+          padding: '12px',
+          borderRadius: 1,
+          overflowX: 'auto',
           fontFamily: 'monospace',
           fontSize: '0.9em',
+          margin: '8px 0',
         }}
         {...safeProps}
       >
-        {children}
+        <code>{children}</code>
       </Box>
     );
   },

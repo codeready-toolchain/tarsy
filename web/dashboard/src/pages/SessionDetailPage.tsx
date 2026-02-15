@@ -413,10 +413,11 @@ export function SessionDetailPage() {
             if (!payload.stage_id) {
               return prev;
             }
+            const safeIndex = payload.stage_index ?? 0;
             const newStage: StageOverview = {
               id: payload.stage_id,
-              stage_name: payload.stage_name || `Stage ${payload.stage_index + 1}`,
-              stage_index: payload.stage_index,
+              stage_name: payload.stage_name || `Stage ${safeIndex + 1}`,
+              stage_index: safeIndex,
               status: payload.status,
               parallel_type: null,
               expected_agent_count: 1,

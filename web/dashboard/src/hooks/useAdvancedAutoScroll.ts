@@ -173,29 +173,21 @@ export function useAdvancedAutoScroll(options: AdvancedAutoScrollOptions = {}) {
 
     setupMutationObserver();
 
-    // Copy ref values for cleanup to avoid stale refs in the cleanup function
-    const mutationObserver = mutationObserverRef.current;
-    const scrollTimeout = scrollTimeoutRef.current;
-    const userScrollTimeout = userScrollTimeoutRef.current;
-    const rafId = rafIdRef.current;
-    const autoScrollMonitorRaf = autoScrollMonitorRafRef.current;
-    const clearUserInteractionTimeout = clearUserInteractionTimeoutRef.current;
-
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('wheel', markUserInteraction as EventListener);
       window.removeEventListener('pointerdown', handlePointerDown as EventListener);
       window.removeEventListener('pointerup', handlePointerUp as EventListener);
       window.removeEventListener('keydown', handleKeydown as EventListener);
-      if (mutationObserver) { mutationObserver.disconnect(); mutationObserverRef.current = null; }
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      if (userScrollTimeout) clearTimeout(userScrollTimeout);
-      if (rafId) cancelAnimationFrame(rafId);
-      if (autoScrollMonitorRaf) cancelAnimationFrame(autoScrollMonitorRaf);
-      if (clearUserInteractionTimeout) {
-        clearTimeout(clearUserInteractionTimeout);
-        clearUserInteractionTimeoutRef.current = null;
-      }
+
+      // Read current ref values at cleanup time so dynamically-created
+      // timers/RAFs are properly cleared (not stale copies from setup).
+      if (mutationObserverRef.current) { mutationObserverRef.current.disconnect(); mutationObserverRef.current = null; }
+      if (scrollTimeoutRef.current) { clearTimeout(scrollTimeoutRef.current); scrollTimeoutRef.current = null; }
+      if (userScrollTimeoutRef.current) { clearTimeout(userScrollTimeoutRef.current); userScrollTimeoutRef.current = null; }
+      if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+      if (autoScrollMonitorRafRef.current) { cancelAnimationFrame(autoScrollMonitorRafRef.current); autoScrollMonitorRafRef.current = null; }
+      if (clearUserInteractionTimeoutRef.current) { clearTimeout(clearUserInteractionTimeoutRef.current); clearUserInteractionTimeoutRef.current = null; }
     };
   }, [enabled, handleScroll, markUserInteraction, handlePointerDown, handlePointerUp, handleKeydown, setupMutationObserver, isAtBottom]);
 
