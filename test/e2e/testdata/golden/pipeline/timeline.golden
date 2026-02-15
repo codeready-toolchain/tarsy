@@ -159,18 +159,18 @@
   },
   {
     "agent": "ConfigValidator",
-    "content": "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
-    "event_type": "final_analysis",
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "ConfigValidator",
     "content": "The memory limit of 512Mi matches the alert threshold.",
     "event_type": "llm_thinking",
     "metadata": {
       "source": "react"
     },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "ConfigValidator",
+    "content": "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
+    "event_type": "final_analysis",
     "sequence": 4,
     "status": "completed"
   },
@@ -412,18 +412,18 @@
   },
   {
     "agent": "Remediator",
-    "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
-    "event_type": "final_analysis",
-    "sequence": 6,
-    "status": "completed"
-  },
-  {
-    "agent": "Remediator",
     "content": "The logs and alerts confirm repeated OOM kills due to memory pressure.",
     "event_type": "llm_thinking",
     "metadata": {
       "source": "react"
     },
+    "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "agent": "Remediator",
+    "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
+    "event_type": "final_analysis",
     "sequence": 7,
     "status": "completed"
   },

@@ -174,13 +174,13 @@ Let me check the Prometheus alert history for memory-related alerts.
 
 OOMKilled alert fired 3 times in the last hour for pod-1.
 
-**Final Analysis:**
-
-Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
-
 **Internal Reasoning:**
 
 The logs and alerts confirm repeated OOM kills due to memory pressure.
+
+**Final Analysis:**
+
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 ## Stage 3: validation
 
@@ -200,13 +200,13 @@ I should verify the pod memory limits are properly configured.
 
 {"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}
 
-**Final Analysis:**
-
-Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
-
 **Internal Reasoning:**
 
 The memory limit of 512Mi matches the alert threshold.
+
+**Final Analysis:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 #### Agent 2: MetricsValidator (native-thinking, test-provider)
 **Status**: completed
