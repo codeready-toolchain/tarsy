@@ -471,28 +471,11 @@ func callLLMWithReActStreaming(
 			text := textBuf.String()
 			prevPhase := reactPhase
 
-			// Phase detection — sequential ifs handle multi-step transitions
-			// in a single chunk (e.g., Thought + Action in one large chunk).
-			if reactPhase == reactPhaseIdle {
-				thoughtIdx := strings.Index(text, "Thought:")
-				finalIdx := strings.Index(text, "Final Answer:")
-				if thoughtIdx >= 0 && (finalIdx < 0 || thoughtIdx < finalIdx) {
-					reactPhase = reactPhaseThought
-				} else if finalIdx >= 0 {
-					reactPhase = reactPhaseFinalAnswer
-				}
-			}
-			if reactPhase == reactPhaseThought {
-				thoughtIdx := strings.Index(text, "Thought:")
-				if thoughtIdx >= 0 {
-					afterThought := text[thoughtIdx+len("Thought:"):]
-					if strings.Contains(afterThought, "\nAction:") {
-						reactPhase = reactPhaseAction
-					} else if strings.Contains(afterThought, "\nFinal Answer:") {
-						reactPhase = reactPhaseFinalAnswer
-					}
-				}
-			}
+			// Phase detection — delegates to the forgiving extractSections
+			// parser so mid-line markers, stop conditions, and recovery
+			// logic all apply during streaming (not just post-stream).
+			detected := DetectReActPhase(text)
+			reactPhase = detected.Phase
 
 			// --- Thought event lifecycle ---
 
@@ -537,7 +520,7 @@ func callLLMWithReActStreaming(
 
 			// Stream thought deltas while in thought phase.
 			if reactPhase == reactPhaseThought && reactThoughtEventID != "" {
-				content := extractReActPhaseContent(text, "Thought:", "\nAction:", "\nFinal Answer:")
+				content := detected.ThoughtContent
 				if len(content) > thoughtContentSent {
 					newDelta := content[thoughtContentSent:]
 					thoughtContentSent = len(content)
@@ -556,8 +539,7 @@ func callLLMWithReActStreaming(
 			// Finalize thought when leaving thought phase.
 			if prevPhase == reactPhaseThought && reactPhase != reactPhaseThought &&
 				reactThoughtEventID != "" && !reactThoughtFinalized {
-				content := strings.TrimSpace(
-					extractReActPhaseContent(text, "Thought:", "\nAction:", "\nFinal Answer:"))
+				content := strings.TrimSpace(detected.ThoughtContent)
 				finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
 					timelineevent.EventTypeLlmThinking, content, "react-thought")
 				reactThoughtFinalized = true
@@ -605,7 +587,7 @@ func callLLMWithReActStreaming(
 
 			// Stream final answer deltas while in final_answer phase.
 			if reactPhase == reactPhaseFinalAnswer && finalAnswerEventID != "" {
-				content := extractReActPhaseContent(text, "Final Answer:")
+				content := detected.FinalAnswerContent
 				if len(content) > finalContentSent {
 					newDelta := content[finalContentSent:]
 					finalContentSent = len(content)
@@ -646,14 +628,14 @@ func callLLMWithReActStreaming(
 	// (e.g., thought is the last phase when no Action: follows, or final answer
 	// is still open at end of stream).
 	if reactThoughtEventID != "" && !reactThoughtFinalized {
-		content := strings.TrimSpace(
-			extractReActPhaseContent(resp.Text, "Thought:", "\nAction:", "\nFinal Answer:"))
+		finalPhase := DetectReActPhase(resp.Text)
+		content := strings.TrimSpace(finalPhase.ThoughtContent)
 		finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
 			timelineevent.EventTypeLlmThinking, content, "react-thought")
 	}
 	if finalAnswerEventID != "" && !finalAnswerFinalized {
-		content := strings.TrimSpace(
-			extractReActPhaseContent(resp.Text, "Final Answer:"))
+		finalPhase := DetectReActPhase(resp.Text)
+		content := strings.TrimSpace(finalPhase.FinalAnswerContent)
 		finalizeStreamingEvent(ctx, execCtx, finalAnswerEventID,
 			timelineevent.EventTypeFinalAnalysis, content, "final-answer")
 	}
@@ -704,25 +686,3 @@ func failOpenStreamingEvent(
 	}
 }
 
-// extractReActPhaseContent extracts content between a start marker and the first
-// occurrence of any end marker. Returns content after the marker with the leading
-// space stripped (e.g., "Thought: content" → "content"). If no end marker is found,
-// returns everything after the start marker.
-func extractReActPhaseContent(text, startMarker string, endMarkers ...string) string {
-	idx := strings.Index(text, startMarker)
-	if idx < 0 {
-		return ""
-	}
-	content := text[idx+len(startMarker):]
-	// Skip optional leading space after marker (e.g., "Thought: content")
-	if len(content) > 0 && content[0] == ' ' {
-		content = content[1:]
-	}
-	for _, end := range endMarkers {
-		if ei := strings.Index(content, end); ei >= 0 {
-			content = content[:ei]
-			break
-		}
-	}
-	return content
-}

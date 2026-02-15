@@ -597,3 +597,57 @@ func ExtractForcedConclusionAnswer(parsed *ParsedReActResponse) string {
 	}
 	return ""
 }
+
+// ============================================================================
+// Streaming-oriented phase detection
+// ============================================================================
+
+// StreamingPhase holds the detected ReAct phase and extracted content for use
+// during streaming. Unlike ParsedReActResponse (which also validates actions,
+// detects malformed responses, etc.), StreamingPhase only answers "what phase
+// are we in?" and "what content belongs to thought / final answer?".
+//
+// This reuses extractSections — the same forgiving, multi-tier parser used by
+// ParseReActResponse — so mid-line markers, stop conditions, and all recovery
+// logic apply identically during streaming and post-stream parsing.
+type StreamingPhase struct {
+	// Phase is the current ReAct phase: one of reactPhaseIdle, reactPhaseThought,
+	// reactPhaseAction, or reactPhaseFinalAnswer.
+	Phase string
+
+	// ThoughtContent is the extracted thought text (everything after "Thought:"
+	// until the next section or end of text). May be partial during streaming.
+	ThoughtContent string
+
+	// FinalAnswerContent is the extracted final answer text (everything after
+	// "Final Answer:" until end of text). May be partial during streaming.
+	FinalAnswerContent string
+}
+
+// DetectReActPhase parses text using the forgiving extractSections parser and
+// returns the detected phase with content. Safe to call on partial (still-
+// accumulating) text — returns the best phase/content available so far.
+//
+// Phase precedence: final_answer > action > thought > idle. This matches
+// extractSections' left-to-right parsing: when "Action:" follows "Thought:",
+// both sections are populated, so action wins.
+func DetectReActPhase(text string) StreamingPhase {
+	sections := extractSections(text)
+
+	phase := reactPhaseIdle
+	if sections["thought"] != nil {
+		phase = reactPhaseThought
+	}
+	if sections["action"] != nil {
+		phase = reactPhaseAction
+	}
+	if sections["final_answer"] != nil {
+		phase = reactPhaseFinalAnswer
+	}
+
+	return StreamingPhase{
+		Phase:              phase,
+		ThoughtContent:     deref(sections["thought"]),
+		FinalAnswerContent: deref(sections["final_answer"]),
+	}
+}

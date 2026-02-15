@@ -409,140 +409,6 @@ func TestMergeMetadata(t *testing.T) {
 	})
 }
 
-// ============================================================================
-// extractReActPhaseContent tests
-// ============================================================================
-
-func TestExtractReActPhaseContent(t *testing.T) {
-	tests := []struct {
-		name        string
-		text        string
-		startMarker string
-		endMarkers  []string
-		want        string
-	}{
-		{
-			name:        "basic thought extraction",
-			text:        "Thought: I should check the pods",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
-			want:        "I should check the pods",
-		},
-		{
-			name:        "thought with action end marker",
-			text:        "Thought: Check pods\nAction: k8s.list\nAction Input: {}",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
-			want:        "Check pods",
-		},
-		{
-			name:        "thought with final answer end marker",
-			text:        "Thought: Done analyzing\nFinal Answer: The root cause is OOM",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
-			want:        "Done analyzing",
-		},
-		{
-			name:        "final answer extraction no end marker",
-			text:        "Thought: Done.\nFinal Answer: The namespace is stuck due to finalizers.",
-			startMarker: "Final Answer:",
-			endMarkers:  nil,
-			want:        "The namespace is stuck due to finalizers.",
-		},
-		{
-			name:        "observation before thought",
-			text:        "Observation: {\"pods\": []}\n\nThought: The list is empty",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:"},
-			want:        "The list is empty",
-		},
-		{
-			name:        "missing start marker returns empty",
-			text:        "Just some random text without markers",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:"},
-			want:        "",
-		},
-		{
-			name:        "empty text returns empty",
-			text:        "",
-			startMarker: "Thought:",
-			endMarkers:  nil,
-			want:        "",
-		},
-		{
-			name:        "leading space after marker stripped",
-			text:        "Thought: content here",
-			startMarker: "Thought:",
-			endMarkers:  nil,
-			want:        "content here",
-		},
-		{
-			name:        "no leading space after marker",
-			text:        "Thought:content here",
-			startMarker: "Thought:",
-			endMarkers:  nil,
-			want:        "content here",
-		},
-		{
-			name:        "marker at end with no content",
-			text:        "some text\nThought:",
-			startMarker: "Thought:",
-			endMarkers:  nil,
-			want:        "",
-		},
-		{
-			name:        "marker at end with space only",
-			text:        "some text\nThought: ",
-			startMarker: "Thought:",
-			endMarkers:  nil,
-			want:        "",
-		},
-		{
-			name:        "multiline thought content",
-			text:        "Thought: Line one\nLine two\nLine three\nAction: tool",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:"},
-			want:        "Line one\nLine two\nLine three",
-		},
-		{
-			name:        "first end marker wins",
-			text:        "Thought: content\nAction: tool\nFinal Answer: answer",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
-			want:        "content",
-		},
-		{
-			name:        "end marker not on newline is not matched",
-			text:        "Thought: some Action: embedded text",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:"},
-			want:        "some Action: embedded text",
-		},
-		{
-			name:        "final answer multiline",
-			text:        "Final Answer: **Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
-			startMarker: "Final Answer:",
-			endMarkers:  nil,
-			want:        "**Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
-		},
-		{
-			name:        "thought extraction with observation echo",
-			text:        "Observation: long json data here\n\nThought: I see the issue\nAction: k8s.get_pods\nAction Input: ns: default",
-			startMarker: "Thought:",
-			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
-			want:        "I see the issue",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractReActPhaseContent(tt.text, tt.startMarker, tt.endMarkers...)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// Comprehensive test: all chunk types in one stream
 	var callbacks []string
@@ -831,12 +697,15 @@ func TestCallLLMWithReActStreaming_LLMError(t *testing.T) {
 	assert.Contains(t, err.Error(), "LLM Generate failed")
 }
 
-func TestCallLLMWithReActStreaming_ObservationThenThought(t *testing.T) {
-	// Observation text followed by Thought → idle phase ignores observation, streams thought
+func TestCallLLMWithReActStreaming_PreambleThenThought(t *testing.T) {
+	// Non-ReAct preamble text followed by Thought → idle ignores preamble, streams thought.
+	// Note: "Observation:" in the LLM output would trigger shouldStopParsing (hallucination
+	// detection), so we use generic preamble text instead. Real observations are injected as
+	// separate user messages by react.go, never in the LLM's own text.
 	pub := &noopEventPublisher{}
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{{chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Observation: {\"pods\": [{\"name\": \"web-1\"}]}\n\n"},
+			&agent.TextChunk{Content: "Let me analyze the pod data.\n\n"},
 			&agent.TextChunk{Content: "Thought: The pod list shows web-1.\n"},
 			&agent.TextChunk{Content: "Action: k8s.get_logs\nAction Input: {\"pod\": \"web-1\"}"},
 			&agent.UsageChunk{InputTokens: 20, OutputTokens: 30, TotalTokens: 50},
@@ -853,7 +722,7 @@ func TestCallLLMWithReActStreaming_ObservationThenThought(t *testing.T) {
 
 	assert.True(t, streamed.ReactThoughtStreamed)
 
-	// DB: only the thought event, no event for the observation
+	// DB: only the thought event, no event for the preamble
 	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
 	require.NoError(t, err)
 	require.Len(t, tlEvents, 1)
