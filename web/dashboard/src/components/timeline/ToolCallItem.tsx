@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
-import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined } from '@mui/icons-material';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
 import { formatDurationMs } from '../../utils/format';
@@ -63,10 +63,13 @@ function ToolCallItem({ item }: ToolCallItemProps) {
   const toolName = (item.metadata?.tool_name as string) || 'unknown';
   const serverName = (item.metadata?.server_name as string) || 'unknown';
   const toolArguments = (item.metadata?.arguments as Record<string, unknown>) || {};
-  const isError = !!item.metadata?.is_error;
   const errorMessage = (item.metadata?.error_message as string) || '';
   const durationMs = item.metadata?.duration_ms as number | null | undefined;
-  const success = !isError;
+  // is_error = tool returned an error result (business logic, e.g. "not found")
+  // This is NOT an MCP failure — the tool executed fine and returned a response.
+  const isToolResultError = !!item.metadata?.is_error;
+  // MCP-level failure: the tool call itself failed (bad args, timeout, unknown tool, etc.)
+  const isMcpFailure = item.status === 'failed' || !!errorMessage;
   // Tool result is in item.content (after completion)
   const toolResult = item.content || null;
 
@@ -84,16 +87,18 @@ function ToolCallItem({ item }: ToolCallItemProps) {
     return keys.length > 2 ? `${preview}, ...` : preview;
   };
 
-  const StatusIcon = success ? CheckCircle : ErrorIcon;
+  // Three-tier visual: green (success), amber (tool returned error result), red (MCP failure)
+  const StatusIcon = isMcpFailure ? ErrorIcon : isToolResultError ? InfoOutlined : CheckCircle;
+  const accentKey = isMcpFailure ? 'error' : isToolResultError ? 'warning' : 'primary' as const;
 
   return (
     <Box
       sx={(theme) => ({
         ml: 4, my: 1, mr: 1,
         border: '2px solid',
-        borderColor: success ? alpha(theme.palette.primary.main, 0.5) : alpha(theme.palette.error.main, 0.5),
+        borderColor: alpha(theme.palette[accentKey].main, 0.5),
         borderRadius: 1.5,
-        bgcolor: success ? alpha(theme.palette.primary.main, 0.08) : alpha(theme.palette.error.main, 0.08),
+        bgcolor: alpha(theme.palette[accentKey].main, 0.08),
         boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`
       })}
     >
@@ -101,12 +106,12 @@ function ToolCallItem({ item }: ToolCallItemProps) {
         sx={(theme) => ({
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
           cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
-          '&:hover': { bgcolor: success ? alpha(theme.palette.primary.main, 0.2) : alpha(theme.palette.error.main, 0.2) }
+          '&:hover': { bgcolor: alpha(theme.palette[accentKey].main, 0.2) }
         })}
         onClick={() => setExpanded(!expanded)}
       >
-        <StatusIcon sx={(theme) => ({ fontSize: 18, color: success ? theme.palette.primary.main : theme.palette.error.main })} />
-        <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: success ? theme.palette.primary.main : theme.palette.error.main })}>
+        <StatusIcon sx={(theme) => ({ fontSize: 18, color: theme.palette[accentKey].main })} />
+        <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette[accentKey].main })}>
           {toolName}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
@@ -128,7 +133,7 @@ function ToolCallItem({ item }: ToolCallItemProps) {
             Server: {serverName}
           </Typography>
 
-          {!success && errorMessage && (
+          {isMcpFailure && errorMessage && (
             <Box sx={(theme) => ({ mb: 1, p: 1, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1, border: `1px solid ${alpha(theme.palette.error.main, 0.3)}` })}>
               <Typography variant="caption" sx={(theme) => ({ fontWeight: 600, color: theme.palette.error.dark, fontSize: '0.8rem' })}>
                 Error: {errorMessage}
