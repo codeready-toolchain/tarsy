@@ -89,7 +89,7 @@ function ToolCallItem({ item }: ToolCallItemProps) {
 
   // Three-tier visual: green (success), amber (tool returned error result), red (MCP failure)
   const StatusIcon = isMcpFailure ? ErrorIcon : isToolResultError ? InfoOutlined : CheckCircle;
-  const accentKey = isMcpFailure ? 'error' : isToolResultError ? 'warning' : 'primary' as const;
+  const accentKey: 'error' | 'warning' | 'primary' = isMcpFailure ? 'error' : isToolResultError ? 'warning' : 'primary';
 
   return (
     <Box

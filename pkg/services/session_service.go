@@ -547,6 +547,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
 			for _, exec := range stg.Edges.AgentExecutions {
 				tokens := execTokens[exec.ID]
+				var durationMs *int64
+				if exec.DurationMs != nil {
+					v := int64(*exec.DurationMs)
+					durationMs = &v
+				}
 				execOverviews = append(execOverviews, models.ExecutionOverview{
 					ExecutionID:       exec.ID,
 					AgentName:         exec.AgentName,
@@ -556,7 +561,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 					LLMProvider:       exec.LlmProvider,
 					StartedAt:         exec.StartedAt,
 					CompletedAt:       exec.CompletedAt,
-					DurationMs:        exec.DurationMs,
+					DurationMs:        durationMs,
 					ErrorMessage:      exec.ErrorMessage,
 					InputTokens:       tokens.Input,
 					OutputTokens:      tokens.Output,
@@ -1060,10 +1065,10 @@ type executionTokenStats struct {
 // aggregateExecutionTokenStats returns per-execution token sums for a session.
 func (s *SessionService) aggregateExecutionTokenStats(ctx context.Context, sessionID string) (map[string]executionTokenStats, error) {
 	var rows []struct {
-		ExecutionID string           `json:"execution_id"`
-		InputSum    stdsql.NullInt64 `json:"input_sum"`
-		OutputSum   stdsql.NullInt64 `json:"output_sum"`
-		TotalSum    stdsql.NullInt64 `json:"total_sum"`
+		ExecutionID stdsql.NullString `json:"execution_id"`
+		InputSum    stdsql.NullInt64  `json:"input_sum"`
+		OutputSum   stdsql.NullInt64  `json:"output_sum"`
+		TotalSum    stdsql.NullInt64  `json:"total_sum"`
 	}
 
 	err := s.client.LLMInteraction.Query().
@@ -1081,7 +1086,10 @@ func (s *SessionService) aggregateExecutionTokenStats(ctx context.Context, sessi
 
 	result := make(map[string]executionTokenStats, len(rows))
 	for _, row := range rows {
-		result[row.ExecutionID] = executionTokenStats{
+		if !row.ExecutionID.Valid {
+			continue
+		}
+		result[row.ExecutionID.String] = executionTokenStats{
 			Input:  row.InputSum.Int64,
 			Output: row.OutputSum.Int64,
 			Total:  row.TotalSum.Int64,

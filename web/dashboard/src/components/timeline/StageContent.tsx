@@ -51,6 +51,11 @@ function TabPanel({ children, value, index, ...other }: TabPanelProps) {
   );
 }
 
+const getExecutionErrorMessage = (items: FlowItem[]): string => {
+  const errorItem = items.find(i => i.type === 'error');
+  return errorItem?.content || (items[items.length - 1]?.metadata?.error_message as string) || '';
+};
+
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'failed':
@@ -262,18 +267,17 @@ const StageContent: React.FC<StageContentProps> = ({
           </Typography>
         )}
 
-        {isFailed && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>Execution Failed</strong>
-              {(() => {
-                const errorItem = execution.items.find(i => i.type === 'error');
-                const errMsg = (errorItem?.content) || (execution.items[execution.items.length - 1]?.metadata?.error_message as string);
-                return errMsg ? `: ${errMsg}` : '';
-              })()}
-            </Typography>
-          </Alert>
-        )}
+        {isFailed && (() => {
+          const errMsg = getExecutionErrorMessage(execution.items);
+          return (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Execution Failed</strong>
+                {errMsg ? `: ${errMsg}` : ''}
+              </Typography>
+            </Alert>
+          );
+        })()}
       </Box>
     );
   };

@@ -410,9 +410,12 @@ export function SessionDetailPage() {
               );
               return { ...prev, stages: updatedStages };
             }
-            // New stage not yet in REST data — add a minimal entry
+            // New stage not yet in REST data — add a minimal entry only if stage_id is present
+            if (!payload.stage_id) {
+              return prev;
+            }
             const newStage: StageOverview = {
-              id: payload.stage_id || '',
+              id: payload.stage_id,
               stage_name: payload.stage_name || `Stage ${payload.stage_index + 1}`,
               stage_index: payload.stage_index,
               status: payload.status,

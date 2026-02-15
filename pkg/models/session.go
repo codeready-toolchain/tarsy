@@ -200,7 +200,7 @@ type ExecutionOverview struct {
 	LLMProvider       *string    `json:"llm_provider"`
 	StartedAt         *time.Time `json:"started_at"`
 	CompletedAt       *time.Time `json:"completed_at"`
-	DurationMs        *int       `json:"duration_ms"`
+	DurationMs        *int64     `json:"duration_ms"`
 	ErrorMessage      *string    `json:"error_message"`
 	InputTokens       int64      `json:"input_tokens"`
 	OutputTokens      int64      `json:"output_tokens"`

@@ -652,14 +652,17 @@ func callLLMWithReActStreaming(
 	// Finalize any remaining ReAct events that weren't closed during streaming
 	// (e.g., thought is the last phase when no Action: follows, or final answer
 	// is still open at end of stream).
+	var finalPhase *StreamingPhase
+	if (reactThoughtEventID != "" && !reactThoughtFinalized) || (finalAnswerEventID != "" && !finalAnswerFinalized) {
+		detected := DetectReActPhase(resp.Text)
+		finalPhase = &detected
+	}
 	if reactThoughtEventID != "" && !reactThoughtFinalized {
-		finalPhase := DetectReActPhase(resp.Text)
 		content := strings.TrimSpace(finalPhase.ThoughtContent)
 		finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
 			timelineevent.EventTypeLlmThinking, content, "react-thought")
 	}
 	if finalAnswerEventID != "" && !finalAnswerFinalized {
-		finalPhase := DetectReActPhase(resp.Text)
 		content := strings.TrimSpace(finalPhase.FinalAnswerContent)
 		finalizeStreamingEvent(ctx, execCtx, finalAnswerEventID,
 			timelineevent.EventTypeFinalAnalysis, content, "final-answer")

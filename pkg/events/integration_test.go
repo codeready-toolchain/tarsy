@@ -212,6 +212,7 @@ func TestIntegration_TransientEventsNotPersisted(t *testing.T) {
 	err := env.publisher.PublishStreamChunk(ctx, env.sessionID, StreamChunkPayload{
 		BasePayload: BasePayload{
 			Type:      EventTypeStreamChunk,
+			SessionID: env.sessionID,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
 		},
 		EventID: "evt-1",
