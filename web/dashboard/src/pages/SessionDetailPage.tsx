@@ -141,6 +141,7 @@ function TimelineSkeleton() {
 interface ExtendedStreamingItem extends StreamingItem {
   stageId?: string;
   executionId?: string;
+  sequenceNumber?: number;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -188,6 +189,18 @@ export function SessionDetailPage() {
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
 
+  // --- Streaming metadata ref (synchronous access for completed handler) ---
+  // Tracks stageId, executionId, sequenceNumber, and original metadata for
+  // streaming events. Unlike streamingEvents state (which updates async via
+  // React batching), this ref is read/written synchronously, ensuring correct
+  // values in the timeline_event.completed handler.
+  const streamingMetaRef = useRef<Map<string, {
+    stageId?: string;
+    executionId?: string;
+    sequenceNumber: number;
+    metadata?: Record<string, unknown> | null;
+  }>>(new Map());
+
   // --- Derived ---
   const isActive = session
     ? ACTIVE_STATUSES.has(session.status as SessionStatus) ||
@@ -215,6 +228,7 @@ export function SessionDetailPage() {
 
     // Clear streaming and progress state so stale items don't linger
     setStreamingEvents(new Map());
+    streamingMetaRef.current.clear();
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
 
@@ -271,9 +285,18 @@ export function SessionDetailPage() {
           const payload = data as unknown as TimelineCreatedPayload;
 
           // Dedup: skip if we already have this event from REST
-          if (knownEventIdsRef.current.has(payload.event_id)) return;
+          if (knownEventIdsRef.current.has(payload.event_id)) {
+            return;
+          }
 
           if (payload.status === TIMELINE_STATUS.STREAMING) {
+            // Store metadata in synchronous ref for the completed handler
+            streamingMetaRef.current.set(payload.event_id, {
+              stageId: payload.stage_id,
+              executionId: payload.execution_id,
+              sequenceNumber: payload.sequence_number,
+              metadata: payload.metadata || null,
+            });
             // Add to streaming map
             setStreamingEvents((prev) => {
               const next = new Map(prev);
@@ -282,6 +305,7 @@ export function SessionDetailPage() {
                 content: payload.content || '',
                 stageId: payload.stage_id,
                 executionId: payload.execution_id,
+                sequenceNumber: payload.sequence_number,
               });
               return next;
             });
@@ -328,11 +352,14 @@ export function SessionDetailPage() {
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
 
-          // Capture streaming entry metadata before removing it
-          let existingStream: ExtendedStreamingItem | undefined;
+          // Read streaming metadata from synchronous ref (reliable, not
+          // subject to React batching). Then clean up both ref and state.
+          const meta = streamingMetaRef.current.get(payload.event_id);
+          streamingMetaRef.current.delete(payload.event_id);
+
+          // Remove from streaming state
           setStreamingEvents((prev) => {
-            existingStream = prev.get(payload.event_id);
-            if (!existingStream) return prev;
+            if (!prev.has(payload.event_id)) return prev;
             const next = new Map(prev);
             next.delete(payload.event_id);
             return next;
@@ -357,18 +384,23 @@ export function SessionDetailPage() {
           } else {
             // New completed event (was only streaming, not in REST data)
             knownEventIdsRef.current.add(payload.event_id);
+            // Merge metadata: created event metadata (tool_name, server_name, etc.)
+            // is the base, completed event metadata (is_error, etc.) overrides.
+            const mergedMetadata = meta?.metadata || payload.metadata
+              ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
+              : null;
             setTimelineEvents((prev) => [
               ...prev,
               {
                 id: payload.event_id,
                 session_id: id,
-                stage_id: existingStream?.stageId ?? null,
-                execution_id: existingStream?.executionId ?? null,
-                sequence_number: 0, // Will be sorted by parser
+                stage_id: meta?.stageId ?? null,
+                execution_id: meta?.executionId ?? null,
+                sequence_number: meta?.sequenceNumber ?? 0,
                 event_type: payload.event_type,
                 status: payload.status,
                 content: payload.content,
-                metadata: payload.metadata || null,
+                metadata: mergedMetadata,
                 created_at: payload.timestamp,
                 updated_at: payload.timestamp,
               },
