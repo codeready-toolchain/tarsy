@@ -11,8 +11,11 @@ import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
+import TypingIndicator from '../streaming/TypingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
+
+const TERMINAL_EXECUTION_STATUSES = new Set(['completed', 'failed', 'timed_out', 'cancelled']);
 
 interface StageContentProps {
   items: FlowItem[];
@@ -227,24 +230,45 @@ const StageContent: React.FC<StageContentProps> = ({
     return byExec;
   }, [streamingEvents, executions]);
 
-  // ── Merge completed executions with streaming-only agents ──
+  // ── Merge completed executions with streaming-only agents and overview-only agents ──
   // This ensures the tabbed UI appears immediately when parallel agents start
-  // streaming, rather than waiting for items to complete.
+  // streaming or when the execution overview arrives, rather than waiting for
+  // timeline items to complete.
   const mergedExecutions = useMemo(() => {
-    const completedExecIds = new Set(executions.map(e => e.executionId));
+    const allExecIds = new Set(executions.map(e => e.executionId));
+
+    // Agents that are streaming but have no completed items yet
     const streamOnlyGroups: ExecutionGroup[] = [];
     for (const execId of streamingByExecution.keys()) {
-      if (execId !== '__default__' && !completedExecIds.has(execId)) {
+      if (execId !== '__default__' && !allExecIds.has(execId)) {
         streamOnlyGroups.push({
           executionId: execId,
           index: executions.length + streamOnlyGroups.length,
           items: [],
           status: 'started',
         });
+        allExecIds.add(execId);
       }
     }
-    return [...executions, ...streamOnlyGroups];
-  }, [executions, streamingByExecution]);
+
+    // Agents known from execution overviews but not yet in items or streaming
+    const overviewGroups: ExecutionGroup[] = [];
+    if (executionOverviews && executionOverviews.length > 0) {
+      for (const eo of executionOverviews) {
+        if (!allExecIds.has(eo.execution_id)) {
+          overviewGroups.push({
+            executionId: eo.execution_id,
+            index: executions.length + streamOnlyGroups.length + overviewGroups.length,
+            items: [],
+            status: eo.status,
+          });
+          allExecIds.add(eo.execution_id);
+        }
+      }
+    }
+
+    return [...executions, ...streamOnlyGroups, ...overviewGroups];
+  }, [executions, streamingByExecution, executionOverviews]);
 
   // Detect multi-agent from BOTH completed items and active streaming events
   // so the tabbed interface appears immediately, not only after items complete.
@@ -267,6 +291,7 @@ const StageContent: React.FC<StageContentProps> = ({
     const eo = execOverviewMap.get(execution.executionId);
     const effectiveStatus = eo?.status || execution.status;
     const isFailed = effectiveStatus === 'failed' || effectiveStatus === 'timed_out' || effectiveStatus === 'cancelled';
+    const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
 
     return (
@@ -286,10 +311,16 @@ const StageContent: React.FC<StageContentProps> = ({
           <StreamingContentRenderer key={key} item={streamItem} />
         ))}
 
-        {!hasDbItems && !hasStreamingItems && (
+        {!hasDbItems && !hasStreamingItems && !isExecutionActive && (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
             No reasoning steps available for this agent
           </Typography>
+        )}
+
+        {isExecutionActive && (
+          <Box sx={{ mt: 2 }}>
+            <TypingIndicator dotsOnly size="small" />
+          </Box>
         )}
 
         {isFailed && (() => {

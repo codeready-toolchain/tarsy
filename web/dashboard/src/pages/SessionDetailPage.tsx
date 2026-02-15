@@ -178,9 +178,6 @@ export function SessionDetailPage() {
   const prevStatusRef = useRef<string | undefined>(undefined);
   const hasPerformedInitialScrollRef = useRef(false);
 
-  // --- Live duration ---
-  const [liveDurationMs, setLiveDurationMs] = useState<number | null>(null);
-
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
   const [collapseCounter, _setCollapseCounter] = useState(0);
@@ -306,6 +303,7 @@ export function SessionDetailPage() {
                 stageId: payload.stage_id,
                 executionId: payload.execution_id,
                 sequenceNumber: payload.sequence_number,
+                metadata: payload.metadata || undefined,
               });
               return next;
             });
@@ -569,21 +567,6 @@ export function SessionDetailPage() {
   useAdvancedAutoScroll({ enabled: autoScrollEnabled });
 
   // ────────────────────────────────────────────────────────────
-  // Live duration timer
-  // ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!isActive || !session?.started_at) {
-      setLiveDurationMs(null);
-      return;
-    }
-    const start = new Date(session.started_at).getTime();
-    const tick = () => setLiveDurationMs(Date.now() - start);
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [isActive, session?.started_at]);
-
   // ────────────────────────────────────────────────────────────
   // View toggle
   // ────────────────────────────────────────────────────────────
@@ -782,7 +765,6 @@ export function SessionDetailPage() {
             <Suspense fallback={<HeaderSkeleton />}>
               <SessionHeader
                 session={session}
-                liveDurationMs={liveDurationMs}
               />
             </Suspense>
 

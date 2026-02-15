@@ -15,6 +15,7 @@ import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 export interface StreamingItem {
   eventType: string;
   content: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface StreamingContentRendererProps {
@@ -246,6 +247,45 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               )
             )}
           </TypewriterText>
+        </Box>
+      </Box>
+    );
+  }
+
+  // In-progress tool call
+  if (item.eventType === TIMELINE_EVENT_TYPES.LLM_TOOL_CALL) {
+    const toolName = (item.metadata?.tool_name as string) || 'unknown';
+    return (
+      <Box
+        sx={(theme) => ({
+          ml: 4, my: 1, mr: 1, p: 1.5,
+          border: '2px dashed',
+          borderColor: alpha(theme.palette.primary.main, 0.4),
+          borderRadius: 1,
+          display: 'flex', alignItems: 'center', gap: 1.5,
+        })}
+      >
+        <Box
+          sx={(theme) => ({
+            width: 18, height: 18, borderRadius: '50%',
+            border: '2px solid',
+            borderColor: alpha(theme.palette.primary.main, 0.6),
+            borderTopColor: 'transparent',
+            animation: 'spin 1s linear infinite',
+            flexShrink: 0,
+            '@keyframes spin': {
+              '0%': { transform: 'rotate(0deg)' },
+              '100%': { transform: 'rotate(360deg)' },
+            },
+          })}
+        />
+        <Box>
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+            {toolName}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Executing...
+          </Typography>
         </Box>
       </Box>
     );
