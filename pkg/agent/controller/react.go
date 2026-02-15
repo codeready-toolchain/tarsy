@@ -72,8 +72,9 @@ func (c *ReActController) Run(
 
 		startTime := time.Now()
 
-		// Call LLM with streaming (text only — tools described in system prompt, not bound)
-		streamed, err := callLLMWithStreaming(iterCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+		// Call LLM with ReAct-aware streaming (detects Thought:/Action:/Final Answer:
+		// markers and routes content to correctly-typed timeline events).
+		streamed, err := callLLMWithReActStreaming(iterCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
 			Messages:    messages,
@@ -125,8 +126,8 @@ func (c *ReActController) Run(
 			)
 		}
 
-		// Create timeline event for thinking content
-		if parsed.Thought != "" {
+		// Create timeline event for thinking content (skip if already streamed).
+		if parsed.Thought != "" && !streamed.ReactThoughtStreamed {
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, parsed.Thought, map[string]interface{}{
 				"source": "react",
 			}, &eventSeq)
@@ -134,7 +135,9 @@ func (c *ReActController) Run(
 
 		switch {
 		case parsed.IsFinalAnswer:
-			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, parsed.FinalAnswer, nil, &eventSeq)
+			if !streamed.FinalAnswerStreamed {
+				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, parsed.FinalAnswer, nil, &eventSeq)
+			}
 			iterCancel()
 			return &agent.ExecutionResult{
 				Status:        agent.ExecutionStatusCompleted,
@@ -237,7 +240,7 @@ func (c *ReActController) forceConclusion(
 	conclusionCtx, conclusionCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 	defer conclusionCancel()
 
-	streamed, err := callLLMWithStreaming(conclusionCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+	streamed, err := callLLMWithReActStreaming(conclusionCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
@@ -268,9 +271,9 @@ func (c *ReActController) forceConclusion(
 	}
 	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, &assistantMsg.ID, startTime)
 
-	// Parse forced conclusion — may or may not have ReAct format
+	// Parse forced conclusion — may or may not have ReAct format.
 	parsed := ParseReActResponse(resp.Text)
-	if parsed.Thought != "" {
+	if parsed.Thought != "" && !streamed.ReactThoughtStreamed {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, parsed.Thought,
 			mergeMetadata(map[string]interface{}{"source": "react"}, forcedMeta), eventSeq)
 	}
@@ -280,7 +283,9 @@ func (c *ReActController) forceConclusion(
 		// If the parser couldn't extract anything, use the raw text
 		finalAnswer = resp.Text
 	}
-	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnswer, forcedMeta, eventSeq)
+	if !streamed.FinalAnswerStreamed {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnswer, forcedMeta, eventSeq)
+	}
 
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,

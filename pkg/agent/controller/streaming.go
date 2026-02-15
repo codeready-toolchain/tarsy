@@ -118,7 +118,7 @@ func collectStreamWithCallback(
 
 // StreamedResponse wraps an LLMResponse with information about streaming
 // timeline events that were created during the LLM call. Controllers should
-// check these IDs and skip creating duplicate events.
+// check these flags and skip creating duplicate events.
 type StreamedResponse struct {
 	*LLMResponse
 	// ThinkingEventCreated is true if a streaming llm_thinking timeline event
@@ -127,6 +127,14 @@ type StreamedResponse struct {
 	// TextEventCreated is true if a streaming llm_response timeline event
 	// was created (and completed) during the LLM call.
 	TextEventCreated bool
+	// ReactThoughtStreamed is true if a ReAct "Thought:" section was detected
+	// during streaming and streamed as an llm_thinking (source=react) event.
+	// When true, the controller should skip creating a duplicate thought event.
+	ReactThoughtStreamed bool
+	// FinalAnswerStreamed is true if a "Final Answer:" section was detected
+	// during streaming and streamed as a final_analysis event.
+	// When true, the controller should skip creating a duplicate final_analysis event.
+	FinalAnswerStreamed bool
 }
 
 // callLLMWithStreaming performs an LLM call with real-time streaming of chunks
@@ -330,4 +338,391 @@ func mergeMetadata(base, extra map[string]interface{}) map[string]interface{} {
 		merged[k] = v
 	}
 	return merged
+}
+
+// ============================================================================
+// ReAct-aware streaming
+// ============================================================================
+
+// ReAct streaming phase constants.
+const (
+	reactPhaseIdle        = "idle"
+	reactPhaseThought     = "thought"
+	reactPhaseAction      = "action"
+	reactPhaseFinalAnswer = "final_answer"
+)
+
+// callLLMWithReActStreaming performs an LLM call with ReAct-aware streaming.
+// Unlike callLLMWithStreaming (which streams all text as a single llm_response),
+// this function detects ReAct markers (Thought:, Action:, Final Answer:) in
+// real-time and routes content to correctly-typed timeline events:
+//
+//   - "Thought:" content → llm_thinking (source=react)
+//   - "Final Answer:" content → final_analysis
+//   - "Observation:", "Action:" text → not streamed (redundant/short)
+//
+// Native thinking chunks (from Gemini) are handled identically to callLLMWithStreaming.
+//
+// Controllers should check StreamedResponse.ReactThoughtStreamed and
+// FinalAnswerStreamed to avoid creating duplicate events after parsing.
+func callLLMWithReActStreaming(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	llmClient agent.LLMClient,
+	input *agent.GenerateInput,
+	eventSeq *int,
+	extraMetadata ...map[string]interface{},
+) (*StreamedResponse, error) {
+	llmCtx, llmCancel := context.WithCancel(ctx)
+	defer llmCancel()
+
+	stream, err := llmClient.Generate(llmCtx, input)
+	if err != nil {
+		return nil, fmt.Errorf("LLM Generate failed: %w", err)
+	}
+
+	// If no EventPublisher, use simple collection (no streaming events).
+	if execCtx.EventPublisher == nil {
+		resp, err := collectStream(stream)
+		if err != nil {
+			return nil, err
+		}
+		return &StreamedResponse{LLMResponse: resp}, nil
+	}
+
+	// Resolve optional extra metadata.
+	var extra map[string]interface{}
+	if len(extraMetadata) > 0 {
+		extra = extraMetadata[0]
+	}
+
+	// --- Native thinking state (same as callLLMWithStreaming) ---
+	var nativeThinkingEventID string
+	var nativeThinkingCreateFailed bool
+
+	// --- ReAct text state ---
+	var textBuf strings.Builder
+	reactPhase := reactPhaseIdle
+	var reactThoughtEventID, finalAnswerEventID string
+	var reactThoughtFailed, finalAnswerFailed bool
+	var reactThoughtFinalized, finalAnswerFinalized bool
+	var thoughtContentSent, finalContentSent int
+
+	callback := func(chunkType string, delta string) {
+		if delta == "" {
+			return
+		}
+
+		switch chunkType {
+		case ChunkTypeThinking:
+			// Native thinking handling — identical to callLLMWithStreaming.
+			if nativeThinkingCreateFailed {
+				return
+			}
+			if nativeThinkingEventID == "" {
+				*eventSeq++
+				thinkingMeta := mergeMetadata(map[string]interface{}{"source": "native"}, extra)
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        &execCtx.StageID,
+					ExecutionID:    &execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmThinking,
+					Content:        "",
+					Metadata:       thinkingMeta,
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create streaming thinking event",
+						"session_id", execCtx.SessionID, "error", createErr)
+					nativeThinkingCreateFailed = true
+					return
+				}
+				nativeThinkingEventID = event.ID
+				if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+					Type:           events.EventTypeTimelineCreated,
+					EventID:        nativeThinkingEventID,
+					SessionID:      execCtx.SessionID,
+					StageID:        execCtx.StageID,
+					ExecutionID:    execCtx.ExecutionID,
+					EventType:      timelineevent.EventTypeLlmThinking,
+					Status:         timelineevent.StatusStreaming,
+					Content:        "",
+					Metadata:       thinkingMeta,
+					SequenceNumber: *eventSeq,
+					Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
+				}); pubErr != nil {
+					slog.Warn("Failed to publish streaming thinking created",
+						"event_id", nativeThinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+				}
+			}
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				Type:      events.EventTypeStreamChunk,
+				EventID:   nativeThinkingEventID,
+				Delta:     delta,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			}); pubErr != nil {
+				slog.Warn("Failed to publish thinking stream chunk",
+					"event_id", nativeThinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+
+		case ChunkTypeText:
+			// ReAct-aware text handling.
+			textBuf.WriteString(delta)
+			text := textBuf.String()
+			prevPhase := reactPhase
+
+			// Phase detection — sequential ifs handle multi-step transitions
+			// in a single chunk (e.g., Thought + Action in one large chunk).
+			if reactPhase == reactPhaseIdle {
+				thoughtIdx := strings.Index(text, "Thought:")
+				finalIdx := strings.Index(text, "Final Answer:")
+				if thoughtIdx >= 0 && (finalIdx < 0 || thoughtIdx < finalIdx) {
+					reactPhase = reactPhaseThought
+				} else if finalIdx >= 0 {
+					reactPhase = reactPhaseFinalAnswer
+				}
+			}
+			if reactPhase == reactPhaseThought {
+				thoughtIdx := strings.Index(text, "Thought:")
+				if thoughtIdx >= 0 {
+					afterThought := text[thoughtIdx+len("Thought:"):]
+					if strings.Contains(afterThought, "\nAction:") {
+						reactPhase = reactPhaseAction
+					} else if strings.Contains(afterThought, "\nFinal Answer:") {
+						reactPhase = reactPhaseFinalAnswer
+					}
+				}
+			}
+
+			// --- Thought event lifecycle ---
+
+			// Create thought event on entering thought phase.
+			if reactPhase == reactPhaseThought && prevPhase != reactPhaseThought &&
+				reactThoughtEventID == "" && !reactThoughtFailed {
+				*eventSeq++
+				meta := mergeMetadata(map[string]interface{}{"source": "react"}, extra)
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        &execCtx.StageID,
+					ExecutionID:    &execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeLlmThinking,
+					Content:        "",
+					Metadata:       meta,
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create ReAct thought streaming event",
+						"session_id", execCtx.SessionID, "error", createErr)
+					reactThoughtFailed = true
+				} else {
+					reactThoughtEventID = event.ID
+					if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+						Type:           events.EventTypeTimelineCreated,
+						EventID:        reactThoughtEventID,
+						SessionID:      execCtx.SessionID,
+						StageID:        execCtx.StageID,
+						ExecutionID:    execCtx.ExecutionID,
+						EventType:      timelineevent.EventTypeLlmThinking,
+						Status:         timelineevent.StatusStreaming,
+						Content:        "",
+						Metadata:       meta,
+						SequenceNumber: *eventSeq,
+						Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
+					}); pubErr != nil {
+						slog.Warn("Failed to publish ReAct thought created",
+							"event_id", reactThoughtEventID, "session_id", execCtx.SessionID, "error", pubErr)
+					}
+				}
+			}
+
+			// Stream thought deltas while in thought phase.
+			if reactPhase == reactPhaseThought && reactThoughtEventID != "" {
+				content := extractReActPhaseContent(text, "Thought:", "\nAction:", "\nFinal Answer:")
+				if len(content) > thoughtContentSent {
+					newDelta := content[thoughtContentSent:]
+					thoughtContentSent = len(content)
+					if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+						Type:      events.EventTypeStreamChunk,
+						EventID:   reactThoughtEventID,
+						Delta:     newDelta,
+						Timestamp: time.Now().Format(time.RFC3339Nano),
+					}); pubErr != nil {
+						slog.Warn("Failed to publish ReAct thought stream chunk",
+							"event_id", reactThoughtEventID, "session_id", execCtx.SessionID, "error", pubErr)
+					}
+				}
+			}
+
+			// Finalize thought when leaving thought phase.
+			if prevPhase == reactPhaseThought && reactPhase != reactPhaseThought &&
+				reactThoughtEventID != "" && !reactThoughtFinalized {
+				content := strings.TrimSpace(
+					extractReActPhaseContent(text, "Thought:", "\nAction:", "\nFinal Answer:"))
+				finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
+					timelineevent.EventTypeLlmThinking, content, "react-thought")
+				reactThoughtFinalized = true
+			}
+
+			// --- Final answer event lifecycle ---
+
+			// Create final answer event on entering final_answer phase.
+			if reactPhase == reactPhaseFinalAnswer && prevPhase != reactPhaseFinalAnswer &&
+				finalAnswerEventID == "" && !finalAnswerFailed {
+				*eventSeq++
+				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+					SessionID:      execCtx.SessionID,
+					StageID:        &execCtx.StageID,
+					ExecutionID:    &execCtx.ExecutionID,
+					SequenceNumber: *eventSeq,
+					EventType:      timelineevent.EventTypeFinalAnalysis,
+					Content:        "",
+					Metadata:       extra,
+				})
+				if createErr != nil {
+					slog.Warn("Failed to create final answer streaming event",
+						"session_id", execCtx.SessionID, "error", createErr)
+					finalAnswerFailed = true
+				} else {
+					finalAnswerEventID = event.ID
+					if pubErr := execCtx.EventPublisher.PublishTimelineCreated(ctx, execCtx.SessionID, events.TimelineCreatedPayload{
+						Type:           events.EventTypeTimelineCreated,
+						EventID:        finalAnswerEventID,
+						SessionID:      execCtx.SessionID,
+						StageID:        execCtx.StageID,
+						ExecutionID:    execCtx.ExecutionID,
+						EventType:      timelineevent.EventTypeFinalAnalysis,
+						Status:         timelineevent.StatusStreaming,
+						Content:        "",
+						Metadata:       extra,
+						SequenceNumber: *eventSeq,
+						Timestamp:      event.CreatedAt.Format(time.RFC3339Nano),
+					}); pubErr != nil {
+						slog.Warn("Failed to publish final answer created",
+							"event_id", finalAnswerEventID, "session_id", execCtx.SessionID, "error", pubErr)
+					}
+				}
+			}
+
+			// Stream final answer deltas while in final_answer phase.
+			if reactPhase == reactPhaseFinalAnswer && finalAnswerEventID != "" {
+				content := extractReActPhaseContent(text, "Final Answer:")
+				if len(content) > finalContentSent {
+					newDelta := content[finalContentSent:]
+					finalContentSent = len(content)
+					if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+						Type:      events.EventTypeStreamChunk,
+						EventID:   finalAnswerEventID,
+						Delta:     newDelta,
+						Timestamp: time.Now().Format(time.RFC3339Nano),
+					}); pubErr != nil {
+						slog.Warn("Failed to publish final answer stream chunk",
+							"event_id", finalAnswerEventID, "session_id", execCtx.SessionID, "error", pubErr)
+					}
+				}
+			}
+		}
+	}
+
+	resp, err := collectStreamWithCallback(stream, callback)
+	if err != nil {
+		// Mark all open streaming events as failed.
+		failOpenStreamingEvent(ctx, execCtx, nativeThinkingEventID, timelineevent.EventTypeLlmThinking, err)
+		if !reactThoughtFinalized {
+			failOpenStreamingEvent(ctx, execCtx, reactThoughtEventID, timelineevent.EventTypeLlmThinking, err)
+		}
+		if !finalAnswerFinalized {
+			failOpenStreamingEvent(ctx, execCtx, finalAnswerEventID, timelineevent.EventTypeFinalAnalysis, err)
+		}
+		return nil, err
+	}
+
+	// Finalize native thinking event.
+	if nativeThinkingEventID != "" {
+		finalizeStreamingEvent(ctx, execCtx, nativeThinkingEventID,
+			timelineevent.EventTypeLlmThinking, resp.ThinkingText, "thinking")
+	}
+
+	// Finalize any remaining ReAct events that weren't closed during streaming
+	// (e.g., thought is the last phase when no Action: follows, or final answer
+	// is still open at end of stream).
+	if reactThoughtEventID != "" && !reactThoughtFinalized {
+		content := strings.TrimSpace(
+			extractReActPhaseContent(resp.Text, "Thought:", "\nAction:", "\nFinal Answer:"))
+		finalizeStreamingEvent(ctx, execCtx, reactThoughtEventID,
+			timelineevent.EventTypeLlmThinking, content, "react-thought")
+	}
+	if finalAnswerEventID != "" && !finalAnswerFinalized {
+		content := strings.TrimSpace(
+			extractReActPhaseContent(resp.Text, "Final Answer:"))
+		finalizeStreamingEvent(ctx, execCtx, finalAnswerEventID,
+			timelineevent.EventTypeFinalAnalysis, content, "final-answer")
+	}
+
+	return &StreamedResponse{
+		LLMResponse:          resp,
+		ThinkingEventCreated: nativeThinkingEventID != "",
+		TextEventCreated:     false, // ReAct streaming never creates llm_response
+		ReactThoughtStreamed: reactThoughtEventID != "",
+		FinalAnswerStreamed:  finalAnswerEventID != "",
+	}, nil
+}
+
+// failOpenStreamingEvent marks a single in-flight streaming event as failed.
+// Called when collectStreamWithCallback returns an error so events don't remain
+// stuck at status "streaming" indefinitely.
+func failOpenStreamingEvent(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	eventID string,
+	eventType timelineevent.EventType,
+	streamErr error,
+) {
+	if eventID == "" {
+		return
+	}
+	failContent := "Streaming failed"
+	if streamErr != nil {
+		failContent = fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+	}
+	if updateErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent); updateErr != nil {
+		slog.Warn("Failed to mark streaming event as failed",
+			"event_id", eventID, "session_id", execCtx.SessionID, "error", updateErr)
+		return
+	}
+	if execCtx.EventPublisher != nil {
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			Type:      events.EventTypeTimelineCompleted,
+			EventID:   eventID,
+			EventType: eventType,
+			Status:    timelineevent.StatusFailed,
+			Content:   failContent,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		}); pubErr != nil {
+			slog.Warn("Failed to publish streaming event failure",
+				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+}
+
+// extractReActPhaseContent extracts content between a start marker and the first
+// occurrence of any end marker. Returns content after the marker with the leading
+// space stripped (e.g., "Thought: content" → "content"). If no end marker is found,
+// returns everything after the start marker.
+func extractReActPhaseContent(text, startMarker string, endMarkers ...string) string {
+	idx := strings.Index(text, startMarker)
+	if idx < 0 {
+		return ""
+	}
+	content := text[idx+len(startMarker):]
+	// Skip optional leading space after marker (e.g., "Thought: content")
+	if len(content) > 0 && content[0] == ' ' {
+		content = content[1:]
+	}
+	for _, end := range endMarkers {
+		if ei := strings.Index(content, end); ei >= 0 {
+			content = content[:ei]
+			break
+		}
+	}
+	return content
 }

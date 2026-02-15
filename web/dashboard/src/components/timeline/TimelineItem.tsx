@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { FlowItem } from '../../utils/timelineParser';
+import { isReActResponse } from '../../utils/timelineParser';
 import ThinkingItem from './ThinkingItem';
 import ResponseItem from './ResponseItem';
 import ToolCallItem from './ToolCallItem';
@@ -40,6 +41,19 @@ function TimelineItem({
       );
 
     case 'response':
+      // Hide raw ReAct-formatted llm_response events — the backend creates
+      // properly-typed llm_thinking and final_analysis events for each section.
+      if (isReActResponse(item.content)) return null;
+      return (
+        <ResponseItem
+          item={item}
+          isAutoCollapsed={isAutoCollapsed}
+          onToggleAutoCollapse={onToggleAutoCollapse}
+          expandAll={expandAll}
+          isCollapsible={isCollapsible}
+        />
+      );
+
     case 'final_analysis':
     case 'executive_summary':
       return (
