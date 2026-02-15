@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/codeready-toolchain/tarsy/test/util"
 	"github.com/google/uuid"
@@ -525,6 +526,222 @@ func TestReActController_ForcedConclusionUsesReActFormat(t *testing.T) {
 	require.Contains(t, lastUserMsg, "iteration limit")
 	require.Contains(t, lastUserMsg, "Final Answer:")
 	require.Contains(t, lastUserMsg, "CRITICAL")
+}
+
+// ============================================================================
+// ReAct streaming + controller integration: no duplicate timeline events
+// ============================================================================
+
+func TestReActController_StreamingNoDuplicateEvents(t *testing.T) {
+	// Full controller run with EventPublisher: verify that the combination of
+	// callLLMWithReActStreaming + react.go post-processing produces no duplicate
+	// llm_thinking or final_analysis events.
+	pub := &noopReActEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			// Iteration 1: Thought + Action (split for realistic streaming)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: I need to check pods."},
+				&agent.TextChunk{Content: "\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+			// Iteration 2: Thought + Final Answer
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Pods look good."},
+				&agent.TextChunk{Content: "\nFinal Answer: Everything is healthy."},
+				&agent.UsageChunk{InputTokens: 15, OutputTokens: 25, TotalTokens: 40},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools:   tools,
+		results: map[string]*agent.ToolResult{"k8s.get_pods": {Content: "pod-1 Running"}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.EventPublisher = pub
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Everything is healthy.", result.FinalAnalysis)
+
+	// Verify timeline events
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+
+	// Count event types to detect duplicates
+	eventCounts := map[timelineevent.EventType]int{}
+	for _, ev := range events {
+		eventCounts[ev.EventType]++
+	}
+
+	// Exactly 2 llm_thinking events (one per iteration)
+	require.Equal(t, 2, eventCounts[timelineevent.EventTypeLlmThinking],
+		"expected exactly 2 llm_thinking events (one per iteration), got %d", eventCounts[timelineevent.EventTypeLlmThinking])
+
+	// Exactly 1 final_analysis event
+	require.Equal(t, 1, eventCounts[timelineevent.EventTypeFinalAnalysis],
+		"expected exactly 1 final_analysis event, got %d", eventCounts[timelineevent.EventTypeFinalAnalysis])
+
+	// No llm_response events (ReAct streaming suppresses them)
+	require.Equal(t, 0, eventCounts[timelineevent.EventTypeLlmResponse],
+		"expected 0 llm_response events, got %d", eventCounts[timelineevent.EventTypeLlmResponse])
+
+	// Verify content correctness
+	for _, ev := range events {
+		if ev.EventType == timelineevent.EventTypeLlmThinking {
+			require.Equal(t, timelineevent.StatusCompleted, ev.Status)
+			require.Equal(t, "react", ev.Metadata["source"])
+		}
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
+			require.Equal(t, "Everything is healthy.", ev.Content)
+			require.Equal(t, timelineevent.StatusCompleted, ev.Status)
+		}
+	}
+}
+
+func TestReActController_StreamingForcedConclusionNoDuplicates(t *testing.T) {
+	// Max iterations reached → forced conclusion. Verify no duplicate events.
+	pub := &noopReActEventPublisher{}
+	var responses []mockLLMResponse
+	for i := 0; i < 3; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Check more."},
+				&agent.TextChunk{Content: "\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			},
+		})
+	}
+	// Forced conclusion response
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: Concluded."},
+			&agent.TextChunk{Content: "\nFinal Answer: System healthy."},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 15, TotalTokens: 25},
+		},
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools:   tools,
+		results: map[string]*agent.ToolResult{"k8s.get_pods": {Content: "pod-1 Running"}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.EventPublisher = pub
+	execCtx.Config.MaxIterations = 3
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+
+	eventCounts := map[timelineevent.EventType]int{}
+	for _, ev := range events {
+		eventCounts[ev.EventType]++
+	}
+
+	// 3 loop iterations + 1 forced conclusion = 4 llm_thinking
+	require.Equal(t, 4, eventCounts[timelineevent.EventTypeLlmThinking],
+		"expected 4 llm_thinking events, got %d", eventCounts[timelineevent.EventTypeLlmThinking])
+
+	// Exactly 1 final_analysis
+	require.Equal(t, 1, eventCounts[timelineevent.EventTypeFinalAnalysis])
+
+	// No llm_response events
+	require.Equal(t, 0, eventCounts[timelineevent.EventTypeLlmResponse])
+
+	// Verify forced conclusion metadata
+	for _, ev := range events {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
+			require.Equal(t, true, ev.Metadata["forced_conclusion"])
+		}
+	}
+}
+
+func TestReActController_StreamingMalformedFallbackNoDuplicates(t *testing.T) {
+	// Malformed response (no markers) → no streaming events, controller creates
+	// llm_thinking from parsing. Then recovers with a proper response.
+	pub := &noopReActEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			// Malformed: no markers
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "I'm confused about what to do."},
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+			}},
+			// Recovery: proper Thought + Final Answer
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: Let me try properly."},
+				&agent.TextChunk{Content: "\nFinal Answer: The system is healthy."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{{Name: "k8s.get_pods"}}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.EventPublisher = pub
+	ctrl := NewReActController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+
+	eventCounts := map[timelineevent.EventType]int{}
+	for _, ev := range events {
+		eventCounts[ev.EventType]++
+	}
+
+	// 1 from recovery iteration (streamed), malformed iteration creates no thought
+	// since it has no Thought: marker
+	require.Equal(t, 1, eventCounts[timelineevent.EventTypeLlmThinking])
+	require.Equal(t, 1, eventCounts[timelineevent.EventTypeFinalAnalysis])
+	require.Equal(t, 0, eventCounts[timelineevent.EventTypeLlmResponse])
+}
+
+// noopReActEventPublisher implements agent.EventPublisher with no-ops.
+// Used in integration tests where EventPublisher must not be nil.
+type noopReActEventPublisher struct{}
+
+func (p *noopReActEventPublisher) PublishTimelineCreated(_ context.Context, _ string, _ events.TimelineCreatedPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishTimelineCompleted(_ context.Context, _ string, _ events.TimelineCompletedPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishStreamChunk(_ context.Context, _ string, _ events.StreamChunkPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishSessionStatus(_ context.Context, _ string, _ events.SessionStatusPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishStageStatus(_ context.Context, _ string, _ events.StageStatusPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishChatCreated(_ context.Context, _ string, _ events.ChatCreatedPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishInteractionCreated(_ context.Context, _ string, _ events.InteractionCreatedPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishSessionProgress(_ context.Context, _ events.SessionProgressPayload) error {
+	return nil
+}
+func (p *noopReActEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
 }
 
 // --- Test helpers / mocks ---

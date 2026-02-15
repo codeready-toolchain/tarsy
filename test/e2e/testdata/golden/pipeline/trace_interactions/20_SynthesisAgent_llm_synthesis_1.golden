@@ -136,12 +136,6 @@ Pod OOMKilled
 #### Agent 1: ConfigValidator (react, test-provider)
 **Status**: completed
 
-**Agent Response:**
-
-Thought: I should verify the pod memory limits are properly configured.
-Action: test-mcp.get_resource_config
-Action Input: {"pod":"pod-1","namespace":"default"}
-
 **Internal Reasoning:**
 
 I should verify the pod memory limits are properly configured.
@@ -151,18 +145,13 @@ I should verify the pod memory limits are properly configured.
 
 {"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}
 
-**Agent Response:**
+**Final Analysis:**
 
-Thought: The memory limit of 512Mi matches the alert threshold.
-Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 **Internal Reasoning:**
 
 The memory limit of 512Mi matches the alert threshold.
-
-**Final Analysis:**
-
-Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 #### Agent 2: MetricsValidator (native-thinking, test-provider)
 **Status**: completed

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -407,6 +409,140 @@ func TestMergeMetadata(t *testing.T) {
 	})
 }
 
+// ============================================================================
+// extractReActPhaseContent tests
+// ============================================================================
+
+func TestExtractReActPhaseContent(t *testing.T) {
+	tests := []struct {
+		name        string
+		text        string
+		startMarker string
+		endMarkers  []string
+		want        string
+	}{
+		{
+			name:        "basic thought extraction",
+			text:        "Thought: I should check the pods",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
+			want:        "I should check the pods",
+		},
+		{
+			name:        "thought with action end marker",
+			text:        "Thought: Check pods\nAction: k8s.list\nAction Input: {}",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
+			want:        "Check pods",
+		},
+		{
+			name:        "thought with final answer end marker",
+			text:        "Thought: Done analyzing\nFinal Answer: The root cause is OOM",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
+			want:        "Done analyzing",
+		},
+		{
+			name:        "final answer extraction no end marker",
+			text:        "Thought: Done.\nFinal Answer: The namespace is stuck due to finalizers.",
+			startMarker: "Final Answer:",
+			endMarkers:  nil,
+			want:        "The namespace is stuck due to finalizers.",
+		},
+		{
+			name:        "observation before thought",
+			text:        "Observation: {\"pods\": []}\n\nThought: The list is empty",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:"},
+			want:        "The list is empty",
+		},
+		{
+			name:        "missing start marker returns empty",
+			text:        "Just some random text without markers",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:"},
+			want:        "",
+		},
+		{
+			name:        "empty text returns empty",
+			text:        "",
+			startMarker: "Thought:",
+			endMarkers:  nil,
+			want:        "",
+		},
+		{
+			name:        "leading space after marker stripped",
+			text:        "Thought: content here",
+			startMarker: "Thought:",
+			endMarkers:  nil,
+			want:        "content here",
+		},
+		{
+			name:        "no leading space after marker",
+			text:        "Thought:content here",
+			startMarker: "Thought:",
+			endMarkers:  nil,
+			want:        "content here",
+		},
+		{
+			name:        "marker at end with no content",
+			text:        "some text\nThought:",
+			startMarker: "Thought:",
+			endMarkers:  nil,
+			want:        "",
+		},
+		{
+			name:        "marker at end with space only",
+			text:        "some text\nThought: ",
+			startMarker: "Thought:",
+			endMarkers:  nil,
+			want:        "",
+		},
+		{
+			name:        "multiline thought content",
+			text:        "Thought: Line one\nLine two\nLine three\nAction: tool",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:"},
+			want:        "Line one\nLine two\nLine three",
+		},
+		{
+			name:        "first end marker wins",
+			text:        "Thought: content\nAction: tool\nFinal Answer: answer",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
+			want:        "content",
+		},
+		{
+			name:        "end marker not on newline is not matched",
+			text:        "Thought: some Action: embedded text",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:"},
+			want:        "some Action: embedded text",
+		},
+		{
+			name:        "final answer multiline",
+			text:        "Final Answer: **Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
+			startMarker: "Final Answer:",
+			endMarkers:  nil,
+			want:        "**Root Cause:**\nThe pod is stuck.\n\n**Remediation:**\nRemove the finalizer.",
+		},
+		{
+			name:        "thought extraction with observation echo",
+			text:        "Observation: long json data here\n\nThought: I see the issue\nAction: k8s.get_pods\nAction Input: ns: default",
+			startMarker: "Thought:",
+			endMarkers:  []string{"\nAction:", "\nFinal Answer:"},
+			want:        "I see the issue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractReActPhaseContent(tt.text, tt.startMarker, tt.endMarkers...)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// Comprehensive test: all chunk types in one stream
 	var callbacks []string
@@ -441,4 +577,325 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// Callback should fire for thinking (1) + text (2) = 3 times
 	// (Tool calls, code executions, groundings, usage don't trigger callback)
 	assert.Equal(t, []string{ChunkTypeThinking, ChunkTypeText, ChunkTypeText}, callbacks)
+}
+
+// ============================================================================
+// callLLMWithReActStreaming tests
+// ============================================================================
+
+// noopEventPublisher implements agent.EventPublisher with no-ops.
+// Used to make callLLMWithReActStreaming not short-circuit.
+type noopEventPublisher struct {
+	createdEvents   []events.TimelineCreatedPayload
+	completedEvents []events.TimelineCompletedPayload
+	streamChunks    []events.StreamChunkPayload
+}
+
+func (p *noopEventPublisher) PublishTimelineCreated(_ context.Context, _ string, payload events.TimelineCreatedPayload) error {
+	p.createdEvents = append(p.createdEvents, payload)
+	return nil
+}
+func (p *noopEventPublisher) PublishTimelineCompleted(_ context.Context, _ string, payload events.TimelineCompletedPayload) error {
+	p.completedEvents = append(p.completedEvents, payload)
+	return nil
+}
+func (p *noopEventPublisher) PublishStreamChunk(_ context.Context, _ string, payload events.StreamChunkPayload) error {
+	p.streamChunks = append(p.streamChunks, payload)
+	return nil
+}
+func (p *noopEventPublisher) PublishSessionStatus(_ context.Context, _ string, _ events.SessionStatusPayload) error {
+	return nil
+}
+func (p *noopEventPublisher) PublishStageStatus(_ context.Context, _ string, _ events.StageStatusPayload) error {
+	return nil
+}
+func (p *noopEventPublisher) PublishChatCreated(_ context.Context, _ string, _ events.ChatCreatedPayload) error {
+	return nil
+}
+func (p *noopEventPublisher) PublishInteractionCreated(_ context.Context, _ string, _ events.InteractionCreatedPayload) error {
+	return nil
+}
+func (p *noopEventPublisher) PublishSessionProgress(_ context.Context, _ events.SessionProgressPayload) error {
+	return nil
+}
+func (p *noopEventPublisher) PublishExecutionProgress(_ context.Context, _ string, _ events.ExecutionProgressPayload) error {
+	return nil
+}
+
+func TestCallLLMWithReActStreaming_ThoughtAndAction(t *testing.T) {
+	// LLM returns: Thought + Action (across multiple chunks to simulate
+	// realistic streaming) → should stream thought, flag ReactThoughtStreamed.
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: I should check the pods"},
+			&agent.TextChunk{Content: "\nAction: k8s.list\nAction Input: {}"},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	// Flags
+	assert.True(t, streamed.ReactThoughtStreamed, "thought should be streamed")
+	assert.False(t, streamed.FinalAnswerStreamed, "no final answer in this response")
+	assert.False(t, streamed.TextEventCreated, "ReAct streaming never creates llm_response")
+
+	// Full text still available for parsing
+	assert.Contains(t, streamed.Text, "Thought:")
+	assert.Contains(t, streamed.Text, "Action:")
+
+	// DB: one llm_thinking event should be created and completed
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 1)
+	assert.Equal(t, timelineevent.EventTypeLlmThinking, tlEvents[0].EventType)
+	assert.Equal(t, timelineevent.StatusCompleted, tlEvents[0].Status)
+	assert.Equal(t, "I should check the pods", tlEvents[0].Content)
+	assert.Equal(t, "react", tlEvents[0].Metadata["source"])
+
+	// WS: at least one stream.chunk was published for the thought
+	assert.NotEmpty(t, pub.streamChunks, "should have published stream chunks for thought")
+}
+
+func TestCallLLMWithReActStreaming_ThoughtAndFinalAnswer(t *testing.T) {
+	// LLM returns: Thought + Final Answer (across multiple chunks to simulate
+	// realistic streaming) → both streamed, both flags set.
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: The issue is clear."},
+			&agent.TextChunk{Content: "\nFinal Answer: The pod is OOMKilled."},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.True(t, streamed.ReactThoughtStreamed)
+	assert.True(t, streamed.FinalAnswerStreamed)
+	assert.False(t, streamed.TextEventCreated)
+
+	// DB: llm_thinking (react) + final_analysis
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 2)
+
+	assert.Equal(t, timelineevent.EventTypeLlmThinking, tlEvents[0].EventType)
+	assert.Equal(t, "The issue is clear.", tlEvents[0].Content)
+
+	assert.Equal(t, timelineevent.EventTypeFinalAnalysis, tlEvents[1].EventType)
+	assert.Equal(t, "The pod is OOMKilled.", tlEvents[1].Content)
+}
+
+func TestCallLLMWithReActStreaming_DirectFinalAnswer(t *testing.T) {
+	// LLM returns Final Answer without Thought → only final answer streamed
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Final Answer: Everything is healthy."},
+			&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.False(t, streamed.ReactThoughtStreamed)
+	assert.True(t, streamed.FinalAnswerStreamed)
+
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 1)
+	assert.Equal(t, timelineevent.EventTypeFinalAnalysis, tlEvents[0].EventType)
+	assert.Equal(t, "Everything is healthy.", tlEvents[0].Content)
+}
+
+func TestCallLLMWithReActStreaming_NoMarkers(t *testing.T) {
+	// LLM returns text without ReAct markers → no streaming events, all flags false
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "I'm not sure what to do here."},
+			&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.False(t, streamed.ReactThoughtStreamed)
+	assert.False(t, streamed.FinalAnswerStreamed)
+	assert.False(t, streamed.TextEventCreated)
+	assert.Equal(t, "I'm not sure what to do here.", streamed.Text)
+
+	// No timeline events created
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	assert.Empty(t, tlEvents)
+}
+
+func TestCallLLMWithReActStreaming_NativeThinkingPlusReAct(t *testing.T) {
+	// Hybrid: native thinking chunks + ReAct text (split across chunks to
+	// simulate realistic streaming) → both handled independently.
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Analyzing the namespace issue."},
+			&agent.TextChunk{Content: "Thought: I should check pods."},
+			&agent.TextChunk{Content: "\nAction: k8s.list\nAction Input: {}"},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.True(t, streamed.ThinkingEventCreated, "native thinking should be created")
+	assert.True(t, streamed.ReactThoughtStreamed, "react thought should be streamed")
+	assert.False(t, streamed.FinalAnswerStreamed)
+
+	// DB: 2 llm_thinking events (native + react)
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 2)
+
+	assert.Equal(t, "native", tlEvents[0].Metadata["source"])
+	assert.Equal(t, "react", tlEvents[1].Metadata["source"])
+}
+
+func TestCallLLMWithReActStreaming_NilPublisher(t *testing.T) {
+	// No EventPublisher → falls through to collectStream, all flags false
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: Check.\nFinal Answer: Done."},
+			&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	// EventPublisher intentionally nil (default from newTestExecCtx)
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.False(t, streamed.ReactThoughtStreamed)
+	assert.False(t, streamed.FinalAnswerStreamed)
+	assert.False(t, streamed.ThinkingEventCreated)
+	assert.Contains(t, streamed.Text, "Thought:")
+}
+
+func TestCallLLMWithReActStreaming_LLMError(t *testing.T) {
+	// LLM Generate fails → error returned, no streaming events
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{err: fmt.Errorf("connection refused")}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = &noopEventPublisher{}
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.Error(t, err)
+	assert.Nil(t, streamed)
+	assert.Contains(t, err.Error(), "LLM Generate failed")
+}
+
+func TestCallLLMWithReActStreaming_ObservationThenThought(t *testing.T) {
+	// Observation text followed by Thought → idle phase ignores observation, streams thought
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Observation: {\"pods\": [{\"name\": \"web-1\"}]}\n\n"},
+			&agent.TextChunk{Content: "Thought: The pod list shows web-1.\n"},
+			&agent.TextChunk{Content: "Action: k8s.get_logs\nAction Input: {\"pod\": \"web-1\"}"},
+			&agent.UsageChunk{InputTokens: 20, OutputTokens: 30, TotalTokens: 50},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+
+	assert.True(t, streamed.ReactThoughtStreamed)
+
+	// DB: only the thought event, no event for the observation
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 1)
+	assert.Equal(t, timelineevent.EventTypeLlmThinking, tlEvents[0].EventType)
+	assert.Equal(t, "The pod list shows web-1.", tlEvents[0].Content)
+}
+
+func TestCallLLMWithReActStreaming_StreamChunkDeltas(t *testing.T) {
+	// Verify that stream chunks contain progressive deltas, not full content.
+	// Each chunk before the transition marker should produce a delta.
+	pub := &noopEventPublisher{}
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Thought: first "},
+			&agent.TextChunk{Content: "second "},
+			&agent.TextChunk{Content: "third"},
+			&agent.TextChunk{Content: "\nAction: tool\nAction Input: {}"},
+			&agent.UsageChunk{InputTokens: 10, OutputTokens: 10, TotalTokens: 20},
+		}}},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.EventPublisher = pub
+	eventSeq := 0
+
+	streamed, err := callLLMWithReActStreaming(context.Background(), execCtx, llm,
+		&agent.GenerateInput{}, &eventSeq)
+	require.NoError(t, err)
+	assert.True(t, streamed.ReactThoughtStreamed)
+
+	// Collect all stream chunk deltas for the thought event
+	require.NotEmpty(t, pub.streamChunks)
+	var combinedDelta string
+	for _, sc := range pub.streamChunks {
+		combinedDelta += sc.Delta
+	}
+	// Combined deltas should equal the clean thought content
+	assert.Equal(t, "first second third", combinedDelta)
+
+	// DB: finalized content should also match
+	tlEvents, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	require.Len(t, tlEvents, 1)
+	assert.Equal(t, "first second third", tlEvents[0].Content)
 }

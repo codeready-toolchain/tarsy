@@ -156,12 +156,6 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 **Agent:** Remediator (react, test-provider)
 **Status**: completed
 
-**Agent Response:**
-
-Thought: I should check the pod logs to understand the OOM pattern.
-Action: test-mcp.get_pod_logs
-Action Input: {"pod":"pod-1","namespace":"default"}
-
 **Internal Reasoning:**
 
 I should check the pod logs to understand the OOM pattern.
@@ -170,12 +164,6 @@ I should check the pod logs to understand the OOM pattern.
 **Result:**
 
 {"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
-
-**Agent Response:**
-
-Thought: Let me check the Prometheus alert history for memory-related alerts.
-Action: prometheus-mcp.query_alerts
-Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}
 
 **Internal Reasoning:**
 
@@ -186,18 +174,13 @@ Let me check the Prometheus alert history for memory-related alerts.
 
 OOMKilled alert fired 3 times in the last hour for pod-1.
 
-**Agent Response:**
+**Final Analysis:**
 
-Thought: The logs and alerts confirm repeated OOM kills due to memory pressure.
-Final Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 **Internal Reasoning:**
 
 The logs and alerts confirm repeated OOM kills due to memory pressure.
-
-**Final Analysis:**
-
-Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 ## Stage 3: validation
 
@@ -208,12 +191,6 @@ Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 #### Agent 1: ConfigValidator (react, test-provider)
 **Status**: completed
 
-**Agent Response:**
-
-Thought: I should verify the pod memory limits are properly configured.
-Action: test-mcp.get_resource_config
-Action Input: {"pod":"pod-1","namespace":"default"}
-
 **Internal Reasoning:**
 
 I should verify the pod memory limits are properly configured.
@@ -223,18 +200,13 @@ I should verify the pod memory limits are properly configured.
 
 {"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}
 
-**Agent Response:**
+**Final Analysis:**
 
-Thought: The memory limit of 512Mi matches the alert threshold.
-Final Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 **Internal Reasoning:**
 
 The memory limit of 512Mi matches the alert threshold.
-
-**Final Analysis:**
-
-Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 #### Agent 2: MetricsValidator (native-thinking, test-provider)
 **Status**: completed
