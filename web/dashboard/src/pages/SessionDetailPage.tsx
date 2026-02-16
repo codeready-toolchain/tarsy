@@ -204,17 +204,87 @@ export function SessionDetailPage() {
   const truncationRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Streaming metadata ref (synchronous access for completed handler) ---
-  // Tracks stageId, executionId, sequenceNumber, and original metadata for
-  // streaming events. Unlike streamingEvents state (which updates async via
-  // React batching), this ref is read/written synchronously, ensuring correct
-  // values in the timeline_event.completed handler.
+  // Tracks stageId, executionId, sequenceNumber, createdAt, and original
+  // metadata for streaming events. Unlike streamingEvents state (which updates
+  // async via React batching), this ref is read/written synchronously, ensuring
+  // correct values in the timeline_event.completed handler.
+  // createdAt is the timestamp from the timeline_event.created WS event so that
+  // the completed TimelineEvent has accurate created_at / updated_at for
+  // duration computation (without it, both would be the completion timestamp).
   const streamingMetaRef = useRef<Map<string, {
     eventType: string;
     stageId?: string;
     executionId?: string;
     sequenceNumber: number;
     metadata?: Record<string, unknown> | null;
+    createdAt?: string;
   }>>(new Map());
+
+  // applyFreshTimeline separates streaming events from completed events and
+  // updates both timelineEvents and streamingEvents accordingly. This avoids
+  // placing streaming events (which have empty content in the DB) into
+  // timelineEvents where they would render as duplicate empty "Thought..." items
+  // alongside the real streaming content in streamingEvents.
+  const applyFreshTimeline = useCallback((freshTimeline: TimelineEvent[]) => {
+    const completedEvents: TimelineEvent[] = [];
+    const ids = new Set<string>();
+
+    for (const ev of freshTimeline) {
+      ids.add(ev.id);
+      if (ev.status === TIMELINE_STATUS.STREAMING) {
+        // Keep streaming events in the streaming system, not in timelineEvents.
+        // Ensure metadata ref is populated for the completed handler.
+        if (!streamingMetaRef.current.has(ev.id)) {
+          streamingMetaRef.current.set(ev.id, {
+            eventType: ev.event_type,
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata,
+            createdAt: ev.created_at || undefined,
+          });
+          // Also add to streamingEvents if not already tracked (covers the
+          // case where the REST fetch discovers a streaming event that we
+          // missed the WebSocket timeline_event.created for).
+          setStreamingEvents((prev) => {
+            if (prev.has(ev.id)) return prev;
+            const next = new Map(prev);
+            next.set(ev.id, {
+              eventType: ev.event_type,
+              content: ev.content || '',
+              stageId: ev.stage_id || undefined,
+              executionId: ev.execution_id || undefined,
+              sequenceNumber: ev.sequence_number,
+              metadata: ev.metadata || undefined,
+            });
+            return next;
+          });
+        }
+      } else {
+        completedEvents.push(ev);
+      }
+    }
+
+    setTimelineEvents(completedEvents);
+
+    // Clean up streamingEvents: remove entries that are now completed in REST
+    // (handles the case where the timeline_event.completed WS message was lost).
+    const completedIds = new Set(completedEvents.map(ev => ev.id));
+    setStreamingEvents((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const eventId of prev.keys()) {
+        if (completedIds.has(eventId)) {
+          next.delete(eventId);
+          streamingMetaRef.current.delete(eventId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    knownEventIdsRef.current = ids;
+  }, []);
 
   // Debounced re-fetch for truncated events. Coalesces multiple truncation
   // events arriving within 300ms into a single API call.
@@ -226,17 +296,12 @@ export function SessionDetailPage() {
     truncationRefetchTimerRef.current = setTimeout(() => {
       truncationRefetchTimerRef.current = null;
       getTimeline(id).then((freshTimeline) => {
-        setTimelineEvents(freshTimeline);
-        const ids = new Set<string>();
-        for (const ev of freshTimeline) {
-          ids.add(ev.id);
-        }
-        knownEventIdsRef.current = ids;
+        applyFreshTimeline(freshTimeline);
       }).catch((err) => {
         console.warn('Failed to re-fetch timeline after truncated event:', err);
       });
     }, 300);
-  }, [id]);
+  }, [id, applyFreshTimeline]);
 
   // --- Derived ---
   const isActive = session
@@ -306,6 +371,7 @@ export function SessionDetailPage() {
             executionId: ev.execution_id || undefined,
             sequenceNumber: ev.sequence_number,
             metadata: ev.metadata,
+            createdAt: ev.created_at || undefined,
           });
         } else {
           completedEvents.push(ev);
@@ -371,12 +437,15 @@ export function SessionDetailPage() {
             // Store metadata in synchronous ref for the completed handler.
             // event_type is stored because the completed payload sometimes
             // arrives without it (observed in runtime logs for fast tool calls).
+            // createdAt preserves the original creation timestamp so the
+            // completed TimelineEvent gets accurate created_at for duration.
             streamingMetaRef.current.set(payload.event_id, {
               eventType: payload.event_type,
               stageId: payload.stage_id,
               executionId: payload.execution_id,
               sequenceNumber: payload.sequence_number,
               metadata: payload.metadata || null,
+              createdAt: payload.timestamp,
             });
             // Add to streaming map
             setStreamingEvents((prev) => {
@@ -502,7 +571,7 @@ export function SessionDetailPage() {
                 status: payload.status,
                 content: payload.content,
                 metadata: mergedMetadata,
-                created_at: payload.timestamp,
+                created_at: meta?.createdAt ?? payload.timestamp,
                 updated_at: payload.timestamp,
               },
             ]);
@@ -526,13 +595,7 @@ export function SessionDetailPage() {
               getTimeline(id),
             ]).then(([freshSession, freshTimeline]) => {
               setSession(freshSession);
-              setTimelineEvents(freshTimeline);
-              // Update dedup set with all event IDs
-              const ids = new Set<string>();
-              for (const ev of freshTimeline) {
-                ids.add(ev.id);
-              }
-              knownEventIdsRef.current = ids;
+              applyFreshTimeline(freshTimeline);
             }).catch((err) => {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
