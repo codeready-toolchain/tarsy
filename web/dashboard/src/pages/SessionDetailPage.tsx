@@ -530,37 +530,38 @@ export function SessionDetailPage() {
           }
 
           // ── Full payload handling ──────────────────────────────
-          // Add or update in timeline
-          if (knownEventIdsRef.current.has(payload.event_id)) {
-            // Update existing event in-place (content / status may have changed).
-            // Merge metadata: the existing event may have full metadata from
-            // timeline_event.created (e.g. tool_name, server_name, arguments),
-            // while the completed payload may add new fields (e.g. is_error).
-            // Using spread merge preserves both.
-            setTimelineEvents((prev) =>
-              prev.map((ev) =>
-                ev.id === payload.event_id
-                    ? {
-                      ...ev,
-                      content: payload.content,
-                      status: payload.status,
-                      metadata: (ev.metadata || payload.metadata)
-                        ? { ...(ev.metadata || {}), ...(payload.metadata || {}) }
-                        : null,
-                      updated_at: payload.timestamp,
-                    }
-                  : ev,
-              ),
-            );
-          } else {
-            // New completed event (was only streaming, not in REST data)
-            knownEventIdsRef.current.add(payload.event_id);
-            // Merge metadata: created event metadata (tool_name, server_name, etc.)
-            // is the base, completed event metadata (is_error, etc.) overrides.
+          // Upsert based on actual timelineEvents presence (not knownEventIdsRef)
+          // to handle the case where a streaming event's ID is in knownEventIdsRef
+          // (added by applyFreshTimeline) but was never placed in timelineEvents
+          // (kept in streamingEvents instead). Using findIndex on the real state
+          // ensures the event is appended when missing, not silently dropped.
+          setTimelineEvents((prev) => {
+            const index = prev.findIndex((ev) => ev.id === payload.event_id);
+            if (index >= 0) {
+              // Update existing event in-place. Merge metadata: the existing
+              // event may have full metadata from timeline_event.created
+              // (e.g. tool_name, server_name, arguments), while the completed
+              // payload may add new fields (e.g. is_error).
+              const next = [...prev];
+              next[index] = {
+                ...next[index],
+                content: payload.content,
+                status: payload.status,
+                metadata: (next[index].metadata || payload.metadata)
+                  ? { ...(next[index].metadata || {}), ...(payload.metadata || {}) }
+                  : null,
+                updated_at: payload.timestamp,
+              };
+              return next;
+            }
+            // New completed event — append. Merge metadata from the streaming
+            // meta ref (tool_name, server_name, etc.) with completed payload
+            // metadata (is_error, etc.).
             const mergedMetadata = (meta?.metadata || payload.metadata)
               ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
               : null;
-            setTimelineEvents((prev) => [
+            knownEventIdsRef.current.add(payload.event_id);
+            return [
               ...prev,
               {
                 id: payload.event_id,
@@ -575,8 +576,8 @@ export function SessionDetailPage() {
                 created_at: meta?.createdAt ?? payload.timestamp,
                 updated_at: payload.timestamp,
               },
-            ]);
-          }
+            ];
+          });
           return;
         }
 
