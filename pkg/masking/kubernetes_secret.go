@@ -10,7 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MaskedSecretValue is the replacement string for masked Kubernetes Secret data values.
+// MaskedSecretValue is the replacement string for masked Kubernetes Secret data/stringData sections.
+// The entire section is replaced with this single placeholder to avoid leaking key names.
 const MaskedSecretValue = "[MASKED_SECRET_DATA]"
 
 // Pre-compiled patterns for fast AppliesTo checks.
@@ -211,22 +212,15 @@ func maskSecretFields(resource map[string]any) {
 	maskSecretDataMaps(resource)
 }
 
-// maskSecretDataMaps replaces values in "data" and "stringData" map fields.
+// maskSecretDataMaps replaces entire "data" and "stringData" sections with a single
+// placeholder string. This avoids leaking key names (e.g. "password", "tls.crt")
+// that could reveal the structure of the secret.
 func maskSecretDataMaps(resource map[string]any) {
 	for _, field := range []string{"data", "stringData"} {
-		fieldVal, ok := resource[field]
-		if !ok {
+		if _, ok := resource[field]; !ok {
 			continue
 		}
-
-		dataMap, ok := fieldVal.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		for key := range dataMap {
-			dataMap[key] = MaskedSecretValue
-		}
+		resource[field] = MaskedSecretValue
 	}
 }
 
