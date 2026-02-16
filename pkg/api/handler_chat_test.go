@@ -72,16 +72,16 @@ func TestIsChatAvailable(t *testing.T) {
 			wantContains:  "cancelled sessions",
 		},
 		{
-			name:          "chat disabled in chain",
+			name:          "chat explicitly disabled in chain",
 			sessionStatus: alertsession.StatusCompleted,
 			chain:         disabledChain,
 			wantContains:  "not enabled",
 		},
 		{
-			name:          "no chat config in chain",
+			name:          "no chat config in chain (enabled by default)",
 			sessionStatus: alertsession.StatusCompleted,
 			chain:         noChatChain,
-			wantContains:  "not enabled",
+			wantEmpty:     true,
 		},
 	}
 

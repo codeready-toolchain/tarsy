@@ -962,6 +962,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, 1, detail.CompletedStages)
 		assert.Equal(t, 0, detail.FailedStages)
 		assert.Equal(t, false, detail.HasParallelStages)
+		assert.Equal(t, true, detail.ChatEnabled, "chat should be enabled by default (no Chat config on chain)")
+		assert.Nil(t, detail.ChatID, "no chat created yet")
 		assert.Equal(t, 0, detail.ChatMessageCount)
 
 		// Duration.
@@ -1107,6 +1109,16 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, int64(50), eo2.InputTokens)
 		assert.Equal(t, int64(10), eo2.OutputTokens)
 		assert.Equal(t, int64(60), eo2.TotalTokens)
+	})
+
+	t.Run("chat_enabled false when chain explicitly disables chat", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"chat disabled test", "test-no-chat", "chat-disabled-chain",
+			10, 5, 15, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.Equal(t, false, detail.ChatEnabled, "chat should be disabled when chain sets Chat.Enabled=false")
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

@@ -44,6 +44,18 @@ func setupTestSessionService(_ *testing.T, client *ent.Client) *SessionService {
 				},
 			},
 		},
+		"chat-disabled-chain": {
+			AlertTypes: []string{"test-no-chat"},
+			Chat:       &config.ChatConfig{Enabled: false},
+			Stages: []config.StageConfig{
+				{
+					Name: "stage1",
+					Agents: []config.StageAgentConfig{
+						{Name: "test-agent"},
+					},
+				},
+			},
+		},
 	})
 
 	mcpServerRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
