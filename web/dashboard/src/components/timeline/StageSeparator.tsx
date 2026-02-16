@@ -11,6 +11,9 @@ interface StageSeparatorProps {
   onToggleCollapse?: () => void;
 }
 
+const getStatusThemeColor = (theme: Theme, isError: boolean, isCancelled: boolean) =>
+  isError ? theme.palette.error.main : isCancelled ? theme.palette.text.secondary : theme.palette.primary.main;
+
 /**
  * StageSeparator - renders stage boundary dividers.
  * Clickable chip with expand/collapse, agent name, and error alerts.
@@ -49,10 +52,10 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
             borderRadius: 1, px: 1, py: 0.5,
             transition: 'all 0.2s ease-in-out',
             '&:hover': onToggleCollapse ? {
-              backgroundColor: (theme: Theme) => alpha(isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main, 0.08),
+              backgroundColor: (theme: Theme) => alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.08),
               '& .MuiChip-root': {
-                backgroundColor: (theme: Theme) => alpha(isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main, 0.12),
-                borderColor: (theme: Theme) => isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main,
+                backgroundColor: (theme: Theme) => alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.12),
+                borderColor: (theme: Theme) => getStatusThemeColor(theme, isErrorStatus, isCancelledStatus),
               }
             } : {}
           }}
@@ -72,11 +75,11 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
               onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
               sx={{
                 padding: 0.75,
-                backgroundColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main, 0.1),
+                backgroundColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.1),
                 border: '1px solid',
-                borderColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main, 0.2),
+                borderColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.2),
                 color: isCollapsed ? 'text.secondary' : 'inherit',
-                '&:hover': { backgroundColor: (theme: Theme) => isCollapsed ? theme.palette.text.secondary : (isErrorStatus ? theme.palette.error.main : isCancelledStatus ? theme.palette.text.secondary : theme.palette.primary.main), color: 'white', transform: 'scale(1.1)' },
+                '&:hover': { backgroundColor: (theme: Theme) => isCollapsed ? theme.palette.text.secondary : getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), color: 'white', transform: 'scale(1.1)' },
                 transition: 'all 0.2s ease-in-out',
               }}
             >
