@@ -513,7 +513,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ fontSize: '0.8rem', flex: 1 }}
+            sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}
           >
             {previewSummary}
           </Typography>
@@ -522,7 +522,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ fontSize: '0.8rem', flex: 1 }}
+            sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}
           />
         )}
         <IconButton size="small" sx={{ p: 0.25 }}>
