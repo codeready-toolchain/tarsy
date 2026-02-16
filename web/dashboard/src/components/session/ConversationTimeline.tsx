@@ -28,6 +28,7 @@ import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+import InitializingSpinner from '../common/InitializingSpinner';
 import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 /**
@@ -228,6 +229,13 @@ export default function ConversationTimeline({
   }, [streamingEvents]);
 
   if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
+    // Session is active but no timeline items have arrived yet — show the
+    // same pulsing ring spinner used by SessionDetailPage so there is no
+    // jarring visual gap between "Initializing investigation..." and the
+    // first real data appearing with an "Investigating..." progress status.
+    if (isActive) {
+      return <InitializingSpinner />;
+    }
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography variant="body2" color="text.secondary">

@@ -37,6 +37,7 @@ import {
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
+import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
 
 import { getSession, getTimeline, handleAPIError } from '../services/api.ts';
@@ -1035,75 +1036,14 @@ export function SessionDetailPage() {
                 />
               </Suspense>
             ) : isActive ? (
-              <Box
-                sx={{
-                  py: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 3,
-                }}
-              >
-                {/* Pulsing ring spinner */}
-                <Box
-                  sx={{
-                    position: 'relative',
-                    width: 64,
-                    height: 64,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <CircularProgress
-                    size={56}
-                    thickness={2.5}
-                    color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
-                  />
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      width: 64,
-                      height: 64,
-                      borderRadius: '50%',
-                      border: '2px solid',
-                      borderColor: session.status === SESSION_STATUS.PENDING
-                        ? 'rgba(237, 108, 2, 0.15)'
-                        : 'rgba(25, 118, 210, 0.15)',
-                      animation: 'init-pulse 2s ease-in-out infinite',
-                      '@keyframes init-pulse': {
-                        '0%, 100%': { transform: 'scale(1)', opacity: 0.6 },
-                        '50%': { transform: 'scale(1.15)', opacity: 0 },
-                      },
-                    }}
-                  />
-                </Box>
-                {/* Shimmer text */}
-                <Typography
-                  variant="body1"
-                  sx={{
-                    fontSize: '1.1rem',
-                    fontWeight: 500,
-                    fontStyle: 'italic',
-                    background: session.status === SESSION_STATUS.PENDING
-                      ? 'linear-gradient(90deg, rgba(237,108,2,0.5) 0%, rgba(237,108,2,0.7) 40%, rgba(237,108,2,0.9) 50%, rgba(237,108,2,0.7) 60%, rgba(237,108,2,0.5) 100%)'
-                      : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
-                    backgroundSize: '200% 100%',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    animation: 'init-shimmer 3s linear infinite',
-                    '@keyframes init-shimmer': {
-                      '0%': { backgroundPosition: '200% center' },
-                      '100%': { backgroundPosition: '-200% center' },
-                    },
-                  }}
-                >
-                  {session.status === SESSION_STATUS.PENDING
+              <InitializingSpinner
+                message={
+                  session.status === SESSION_STATUS.PENDING
                     ? 'Session queued, waiting to start...'
-                    : 'Initializing investigation...'}
-                </Typography>
-              </Box>
+                    : 'Initializing investigation...'
+                }
+                color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
+              />
             ) : session.status === SESSION_STATUS.CANCELLED ? (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
