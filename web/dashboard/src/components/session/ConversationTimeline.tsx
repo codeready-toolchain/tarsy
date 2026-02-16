@@ -174,7 +174,32 @@ export default function ConversationTimeline({
   );
 
   // --- Stage grouping ---
-  const stageGroups = useMemo(() => groupFlowItemsByStage(items, stages), [items, stages]);
+  // Group items by stage, then append empty groups for backend stages that
+  // have no items yet (e.g. synthesis stage just started). This ensures stage
+  // separators are visible immediately, and the ProcessingIndicator appears
+  // under the correct stage instead of the previous one.
+  const stageGroups = useMemo(() => {
+    const groupsFromItems = groupFlowItemsByStage(items, stages);
+    const existingStageIds = new Set(groupsFromItems.map(g => g.stageId).filter(Boolean));
+
+    const emptyGroups: StageGroup[] = [];
+    for (const stage of stages) {
+      if (stage.id && !existingStageIds.has(stage.id)) {
+        emptyGroups.push({
+          stageId: stage.id,
+          stageName: stage.stage_name,
+          stageIndex: stage.stage_index,
+          stageStatus: stage.status,
+          isParallel: stage.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none',
+          expectedAgentCount: stage.expected_agent_count || 1,
+          items: [],
+        });
+      }
+    }
+
+    if (emptyGroups.length === 0) return groupsFromItems;
+    return [...groupsFromItems, ...emptyGroups].sort((a, b) => a.stageIndex - b.stageIndex);
+  }, [items, stages]);
 
   // --- Stats ---
   const stats: TimelineStats = useMemo(() => getTimelineStats(items, stages), [items, stages]);
@@ -399,18 +424,44 @@ export default function ConversationTimeline({
           let displayStatus = progressStatus || 'Processing...';
           // When viewing a completed agent's tab while siblings in the same stage are still running,
           // show "Waiting for other agents..." instead of the session-level progress message.
-          if (selectedAgentExecutionId && executionStatuses) {
-            const selectedEntry = executionStatuses.get(selectedAgentExecutionId);
-            if (selectedEntry && TERMINAL_EXECUTION_STATUSES.has(selectedEntry.status)) {
-              // Only check executions in the SAME stage (by stageId), not across all stages
-              const othersRunningInSameStage = Array.from(executionStatuses.entries()).some(
-                ([id, entry]) =>
-                  id !== selectedAgentExecutionId &&
-                  entry.stageId === selectedEntry.stageId &&
-                  !TERMINAL_EXECUTION_STATUSES.has(entry.status),
-              );
-              if (othersRunningInSameStage) {
-                displayStatus = 'Waiting for other agents...';
+          if (selectedAgentExecutionId) {
+            // Check terminal status from multiple sources (WS execution.status + REST overviews)
+            // to handle timing gaps where the WS event hasn't arrived yet.
+            const wsEntry = executionStatuses?.get(selectedAgentExecutionId);
+            const isSelectedTerminal = (() => {
+              if (wsEntry && TERMINAL_EXECUTION_STATUSES.has(wsEntry.status)) return true;
+              // Fall back to execution overviews from REST stage data
+              for (const stage of stages) {
+                const eo = stage.executions?.find(e => e.execution_id === selectedAgentExecutionId);
+                if (eo && TERMINAL_EXECUTION_STATUSES.has(eo.status)) return true;
+              }
+              return false;
+            })();
+
+            if (isSelectedTerminal) {
+              // Find the stage this agent belongs to
+              const stageId = wsEntry?.stageId
+                || stages.find(s => s.executions?.some(e => e.execution_id === selectedAgentExecutionId))?.id;
+
+              if (stageId) {
+                // Check if other executions in the SAME stage are still running
+                const othersRunning =
+                  // From WS execution statuses
+                  (executionStatuses ? Array.from(executionStatuses.entries()).some(
+                    ([id, entry]) =>
+                      id !== selectedAgentExecutionId &&
+                      entry.stageId === stageId &&
+                      !TERMINAL_EXECUTION_STATUSES.has(entry.status),
+                  ) : false) ||
+                  // From REST execution overviews
+                  (stages.find(s => s.id === stageId)?.executions?.some(
+                    e => e.execution_id !== selectedAgentExecutionId &&
+                      !TERMINAL_EXECUTION_STATUSES.has(e.status),
+                  ) ?? false);
+
+                if (othersRunning) {
+                  displayStatus = 'Waiting for other agents...';
+                }
               }
             }
           }

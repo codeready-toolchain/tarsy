@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import TypewriterText from './TypewriterText';
 import { 
   hasMarkdownSyntax, 
@@ -23,14 +24,10 @@ interface StreamingContentRendererProps {
 }
 
 // --- ThinkingBlock ---
+// Renders streaming thought content in italic / text.secondary style
+// (matching completed ThinkingItem).
 
-interface ThinkingBlockProps {
-  content: string;
-  textColor: string;
-  isItalic?: boolean;
-}
-
-const ThinkingBlock = memo(({ content, textColor, isItalic = false }: ThinkingBlockProps) => {
+const ThinkingBlock = memo(({ content }: { content: string }) => {
   const hasMarkdown = hasMarkdownSyntax(content);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
@@ -74,8 +71,14 @@ const ThinkingBlock = memo(({ content, textColor, isItalic = false }: ThinkingBl
           <TypewriterText text={content} speed={3}>
             {(displayText) => (
               hasMarkdown ? (
-                <Box sx={isItalic ? { '& p, & li': { color: textColor, fontStyle: 'italic' } } : undefined}>
-                  <ReactMarkdown components={thoughtMarkdownComponents} skipHtml>
+                <Box
+                  sx={{
+                    '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
+                    color: 'text.secondary',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
                     {displayText}
                   </ReactMarkdown>
                 </Box>
@@ -84,8 +87,8 @@ const ThinkingBlock = memo(({ content, textColor, isItalic = false }: ThinkingBl
                   variant="body1" 
                   sx={{ 
                     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    lineHeight: 1.7, fontSize: '1rem', color: textColor,
-                    fontStyle: isItalic ? 'italic' : 'normal'
+                    lineHeight: 1.7, fontSize: '1rem',
+                    color: 'text.secondary', fontStyle: 'italic',
                   }}
                 >
                   {displayText}
@@ -116,7 +119,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     item.eventType === TIMELINE_EVENT_TYPES.LLM_THINKING ||
     item.eventType === TIMELINE_EVENT_TYPES.NATIVE_THINKING
   ) {
-    return <ThinkingBlock content={item.content} textColor="text.secondary" isItalic />;
+    return <ThinkingBlock content={item.content} />;
   }
 
   // Response (llm_response) — intermediate iterations

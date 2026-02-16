@@ -305,12 +305,18 @@ const StageContent: React.FC<StageContentProps> = ({
   // so the tabbed interface appears immediately, not only after items complete.
   const isMultiAgent = mergedExecutions.length > 1;
 
-  // Notify parent when selected tab changes
+  // Notify parent when selected tab changes (parallel stages only).
+  // Non-parallel stages clear the selection so the "Waiting for other agents..."
+  // logic in ConversationTimeline doesn't use a stale agent ID from a previous
+  // parallel stage.
   React.useEffect(() => {
-    if (onSelectedAgentChange && mergedExecutions[selectedTab]) {
+    if (!onSelectedAgentChange) return;
+    if (isMultiAgent && mergedExecutions[selectedTab]) {
       onSelectedAgentChange(mergedExecutions[selectedTab].executionId);
+    } else if (!isMultiAgent) {
+      onSelectedAgentChange(null);
     }
-  }, [selectedTab, mergedExecutions, onSelectedAgentChange]);
+  }, [selectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
 
   // Check if any parallel agent is still running (for "Waiting for other agents...")
   const hasOtherActiveAgents = useMemo(() => {
