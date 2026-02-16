@@ -28,7 +28,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
-import { formatTimestamp, formatDurationMs, formatTokensCompact } from '../../utils/format.ts';
+import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
+import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -177,12 +178,17 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
 
       {/* Tokens */}
       <TableCell>
-        {session.total_tokens > 0 ? (
-          <Tooltip title={`In: ${(session.input_tokens ?? 0).toLocaleString()} / Out: ${(session.output_tokens ?? 0).toLocaleString()}`}>
-            <Typography variant="body2" color="text.secondary">
-              {formatTokensCompact(session.total_tokens)}
-            </Typography>
-          </Tooltip>
+        {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
+          <TokenUsageDisplay
+            tokenData={{
+              input_tokens: session.input_tokens,
+              output_tokens: session.output_tokens,
+              total_tokens: session.total_tokens,
+            }}
+            variant="inline"
+            size="small"
+            showBreakdown={false}
+          />
         ) : (
           <Typography variant="body2" color="text.secondary">
             —

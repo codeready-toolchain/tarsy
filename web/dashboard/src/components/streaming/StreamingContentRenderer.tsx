@@ -146,7 +146,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} skipHtml>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
                   {displayText}
                 </ReactMarkdown>
               ) : (
@@ -203,7 +203,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               {(displayText) => (
                 hasMarkdown ? (
                   <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' } }}>
-                    <ReactMarkdown components={thoughtMarkdownComponents} skipHtml>
+                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
                       {displayText}
                     </ReactMarkdown>
                   </Box>
@@ -247,7 +247,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             {(displayText) => (
               hasMarkdown ? (
                 <Box sx={{ color: 'text.primary' }}>
-                  <ReactMarkdown urlTransform={defaultUrlTransform} components={thoughtMarkdownComponents}>
+                  <ReactMarkdown urlTransform={defaultUrlTransform} components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]}>
                     {displayText}
                   </ReactMarkdown>
                 </Box>
@@ -332,7 +332,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} skipHtml>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
                   {displayText}
                 </ReactMarkdown>
               ) : (
