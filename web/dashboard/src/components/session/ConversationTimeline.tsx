@@ -422,9 +422,30 @@ export default function ConversationTimeline({
         {/* Processing indicator for active sessions */}
         {isActive && (() => {
           let displayStatus = progressStatus || 'Processing...';
-          // When viewing a completed agent's tab while siblings in the same stage are still running,
-          // show "Waiting for other agents..." instead of the session-level progress message.
+
+          // For single-agent stages (no tab selected), prefer the per-agent
+          // progress message so the UI shows "Investigating...", "Distilling...",
+          // etc. instead of the session-level status which may still be
+          // "Processing...".  Session-level progressStatus is only updated by
+          // session.progress events (stage transitions), while per-agent phases
+          // arrive via execution.progress and feed agentProgressStatuses only.
+          if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
+            const singleAgentStatus = agentProgressStatuses.values().next().value;
+            if (singleAgentStatus) displayStatus = singleAgentStatus;
+          }
+
+          // For parallel stages: show the selected agent's per-agent progress
+          // (e.g. "Investigating...", "Distilling...").  If the agent has
+          // reached a terminal state and siblings are still running, override
+          // with "Waiting for other agents...".  This mirrors old tarsy's
+          // displayStatus logic in SessionDetailPageBase.
           if (selectedAgentExecutionId) {
+            // Show the selected agent's progress phase (active agents)
+            const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);
+            if (agentStatus) {
+              displayStatus = agentStatus;
+            }
+
             // Check terminal status from multiple sources (WS execution.status + REST overviews)
             // to handle timing gaps where the WS event hasn't arrived yet.
             const wsEntry = executionStatuses?.get(selectedAgentExecutionId);

@@ -637,11 +637,17 @@ export function SessionDetailPage() {
             return { ...prev, stages: [...stages, newStage] };
           });
 
-          // Re-fetch session detail when a stage starts to get execution overviews
-          // (agent names, LLM providers, iteration strategies) for parallel agents.
-          // Use a debounced fetch to avoid hammering the API if multiple stage events
-          // arrive in quick succession.
+          // When a new stage starts, clear per-agent progress and execution
+          // status maps from the previous (potentially parallel) stage.  This
+          // mirrors old tarsy's pattern of clearing agentProgressStatuses when
+          // the parallel parent stage completes — by the time the next stage
+          // starts, the previous parallel execution state is no longer relevant.
           if (payload.status === EXECUTION_STATUS.STARTED) {
+            setAgentProgressStatuses(new Map());
+            setExecutionStatuses(new Map());
+
+            // Re-fetch session detail to get execution overviews (agent names,
+            // LLM providers, iteration strategies) for parallel agents.
             getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
               console.warn('Failed to re-fetch session on stage start:', err);
             });
@@ -684,10 +690,10 @@ export function SessionDetailPage() {
             next.set(payload.execution_id, phaseMessage);
             return next;
           });
-          // Update main (session-level) progress status too
-          if (phaseMessage) {
-            setProgressStatus(phaseMessage);
-          }
+          // Do NOT update session-level progressStatus here.
+          // Per-agent progress must stay isolated in agentProgressStatuses so that
+          // the "Waiting for other agents..." check in ConversationTimeline works
+          // correctly. Session-level status is driven by session.progress events.
           return;
         }
 
