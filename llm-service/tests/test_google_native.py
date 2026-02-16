@@ -222,19 +222,58 @@ class TestGoogleNativeProvider:
         assert hasattr(result[0], "function_declarations")
 
     def test_thought_signature_caching(self, provider):
-        """Test thought signature caching and retrieval."""
+        """Test thought signature caching and retrieval per (execution_id, call_id)."""
         execution_id = "exec-123"
-        signature = "thought-sig-abc"
+        call_id = "call-abc"
+        signature = b"thought-sig-bytes"
         
-        provider._cache_thought_signature(execution_id, signature)
-        cached = provider._get_cached_thought_signature(execution_id)
+        provider._cache_thought_signature(execution_id, call_id, signature)
+        cached = provider._get_cached_thought_signature(execution_id, call_id)
         
         assert cached == signature
 
     def test_thought_signature_cache_miss(self, provider):
         """Test that cache miss returns None."""
-        cached = provider._get_cached_thought_signature("nonexistent")
+        cached = provider._get_cached_thought_signature("nonexistent", "no-call")
         assert cached is None
+
+    def test_thought_signature_cache_per_call(self, provider):
+        """Test that different call_ids have independent signatures."""
+        execution_id = "exec-123"
+        provider._cache_thought_signature(execution_id, "call-1", b"sig-1")
+        provider._cache_thought_signature(execution_id, "call-2", b"sig-2")
+        
+        assert provider._get_cached_thought_signature(execution_id, "call-1") == b"sig-1"
+        assert provider._get_cached_thought_signature(execution_id, "call-2") == b"sig-2"
+        assert provider._get_cached_thought_signature(execution_id, "call-3") is None
+
+    def test_convert_messages_applies_cached_thought_signature(self, provider):
+        """Test that cached thought_signatures are applied to function_call Parts."""
+        execution_id = "exec-456"
+        call_id = "call-789"
+        signature = b"cached-thought-sig"
+        
+        provider._cache_thought_signature(execution_id, call_id, signature)
+        
+        tool_call = pb.ToolCall(
+            id=call_id,
+            name="server.tool",
+            arguments='{"arg": "value"}',
+        )
+        messages = [
+            pb.ConversationMessage(
+                role="assistant",
+                content="Let me call a tool",
+                tool_calls=[tool_call],
+            ),
+        ]
+        
+        _, contents = provider._convert_messages(messages, execution_id)
+        
+        assert len(contents) == 1
+        fc_part = contents[0].parts[1]
+        assert fc_part.function_call.name == "server__tool"
+        assert fc_part.thought_signature == signature
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})

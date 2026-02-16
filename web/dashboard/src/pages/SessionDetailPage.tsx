@@ -32,7 +32,6 @@ import {
   KeyboardDoubleArrowDown,
   Psychology,
   AccountTree,
-  ChatBubbleOutline,
 } from '@mui/icons-material';
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
@@ -913,8 +912,13 @@ export function SessionDetailPage() {
   const handleSendMessage = useCallback(async (content: string) => {
     const result = await chatState.sendMessage(content);
     if (result) {
-      // Inject optimistic user_question into timeline
-      setTimelineEvents((prev) => [...prev, result.optimisticEvent]);
+      // Inject optimistic user_question into timeline with a sequence_number
+      // just past the current max so it sorts correctly in parseTimelineToFlow.
+      setTimelineEvents((prev) => {
+        const maxSeq = prev.reduce((max, ev) => Math.max(max, ev.sequence_number), 0);
+        const patched = { ...result.optimisticEvent, sequence_number: maxSeq + 1 };
+        return [...prev, patched];
+      });
       // Update session chat_id if this was the first message
       setSession((prev) => {
         if (!prev || prev.chat_id) return prev;

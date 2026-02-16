@@ -42,7 +42,8 @@ class GoogleNativeProvider(LLMProvider):
 
     def __init__(self):
         self._clients: Dict[str, genai.Client] = {}
-        self._thought_signatures: Dict[str, Tuple[Optional[str], float]] = {}
+        # Cache: composite key "execution_id:call_id" -> (signature_bytes, timestamp)
+        self._thought_signatures: Dict[str, Tuple[Optional[bytes], float]] = {}
 
     def _get_client(self, api_key_env: str) -> genai.Client:
         """Get or create a cached genai client for the given API key env var."""
@@ -81,13 +82,15 @@ class GoogleNativeProvider(LLMProvider):
             )
 
     def _convert_messages(
-        self, messages: List[pb.ConversationMessage]
+        self, messages: List[pb.ConversationMessage], execution_id: str = ""
     ) -> Tuple[Optional[str], List[genai_types.Content]]:
         """Convert proto messages to genai Contents.
 
         Returns (system_instruction, contents).
         System messages are extracted as system_instruction.
         Tool results (role=tool) are converted to FunctionResponse parts.
+        When execution_id is provided, cached thought_signatures are applied
+        to function_call Parts (required by Gemini 3 thinking models).
         """
         system_instruction = None
         contents: List[genai_types.Content] = []
@@ -111,7 +114,7 @@ class GoogleNativeProvider(LLMProvider):
                 parts: List[genai_types.Part] = []
                 if msg.content:
                     parts.append(genai_types.Part(text=msg.content))
-                # Add function calls if present
+                # Add function calls if present, with cached thought_signatures
                 for tc in msg.tool_calls:
                     try:
                         args = json.loads(tc.arguments) if tc.arguments else {}
@@ -121,12 +124,17 @@ class GoogleNativeProvider(LLMProvider):
                             tc.arguments,
                         )
                         args = {}
+                    # Look up cached thought_signature for this tool call
+                    thought_sig = None
+                    if execution_id and tc.id:
+                        thought_sig = self._get_cached_thought_signature(execution_id, tc.id)
                     parts.append(
                         genai_types.Part(
                             function_call=genai_types.FunctionCall(
                                 name=self._tool_name_to_native(tc.name),
                                 args=args,
-                            )
+                            ),
+                            thought_signature=thought_sig,
                         )
                     )
                 contents.append(
@@ -221,20 +229,22 @@ class GoogleNativeProvider(LLMProvider):
         """Convert 'server__tool' back to canonical 'server.tool' format."""
         return name.replace("__", ".")
 
-    def _get_cached_thought_signature(self, execution_id: str) -> Optional[str]:
-        """Retrieve cached thought signature for an execution_id."""
-        entry = self._thought_signatures.get(execution_id)
+    def _get_cached_thought_signature(self, execution_id: str, call_id: str) -> Optional[bytes]:
+        """Retrieve cached thought signature for a specific tool call."""
+        key = f"{execution_id}:{call_id}"
+        entry = self._thought_signatures.get(key)
         if entry is None:
             return None
         sig, ts = entry
         if time.time() - ts > THOUGHT_SIGNATURE_TTL:
-            del self._thought_signatures[execution_id]
+            del self._thought_signatures[key]
             return None
         return sig
 
-    def _cache_thought_signature(self, execution_id: str, signature: Optional[str]) -> None:
-        """Cache thought signature for an execution_id."""
-        self._thought_signatures[execution_id] = (signature, time.time())
+    def _cache_thought_signature(self, execution_id: str, call_id: str, signature: Optional[bytes]) -> None:
+        """Cache thought signature for a specific tool call."""
+        key = f"{execution_id}:{call_id}"
+        self._thought_signatures[key] = (signature, time.time())
         # Evict old entries
         now = time.time()
         expired = [k for k, (_, ts) in self._thought_signatures.items() if now - ts > THOUGHT_SIGNATURE_TTL]
@@ -263,7 +273,9 @@ class GoogleNativeProvider(LLMProvider):
             return
 
         try:
-            system_instruction, contents = self._convert_messages(list(request.messages))
+            system_instruction, contents = self._convert_messages(
+                list(request.messages), request.execution_id
+            )
             native_tools = dict(config.native_tools) if config.native_tools else {}
             tools = self._convert_tools(list(request.tools), native_tools)
         except ValueError as e:
@@ -291,7 +303,8 @@ class GoogleNativeProvider(LLMProvider):
             chunks_yielded = 0
             try:
                 async for chunk in self._stream_with_timeout(
-                    client, config.model, contents, gen_config, request_id
+                    client, config.model, contents, gen_config, request_id,
+                    execution_id=request.execution_id,
                 ):
                     yield chunk
                     chunks_yielded += 1
@@ -350,6 +363,7 @@ class GoogleNativeProvider(LLMProvider):
         gen_config: genai_types.GenerateContentConfig,
         request_id: str,
         timeout_seconds: int = 180,
+        execution_id: str = "",
     ) -> AsyncIterator[pb.GenerateResponse]:
         """Stream from the Gemini API with timeout handling."""
         has_content = False
@@ -417,6 +431,10 @@ class GoogleNativeProvider(LLMProvider):
                             fc = part.function_call
                             args_str = json.dumps(dict(fc.args)) if fc.args else "{}"
                             call_id = str(uuid.uuid4())[:8]
+                            # Cache thought_signature for replay in subsequent requests
+                            thought_sig = getattr(part, "thought_signature", None)
+                            if thought_sig is not None and execution_id:
+                                self._cache_thought_signature(execution_id, call_id, thought_sig)
                             yield pb.GenerateResponse(
                                 tool_call=pb.ToolCallDelta(
                                     call_id=call_id,

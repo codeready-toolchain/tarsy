@@ -86,14 +86,17 @@ export function useChatState(sessionId: string): UseChatStateReturn {
         sendingTimeoutRef.current = null;
       }, SENDING_TIMEOUT_MS);
 
-      // Build optimistic user_question TimelineEvent
+      // Build optimistic user_question TimelineEvent.
+      // sequence_number is set to 0 here — the caller (SessionDetailPage)
+      // patches it to max(existing) + 1 at injection time so the event
+      // sorts correctly in parseTimelineToFlow.
       const now = new Date().toISOString();
       const optimisticEvent: TimelineEvent = {
         id: `temp-${Date.now()}`,
         session_id: sessionId,
         stage_id: response.stage_id,
         execution_id: null,
-        sequence_number: Date.now(),
+        sequence_number: 0,
         event_type: TIMELINE_EVENT_TYPES.USER_QUESTION,
         status: 'completed',
         content,
