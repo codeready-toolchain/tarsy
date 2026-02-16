@@ -30,75 +30,82 @@ interface StreamingContentRendererProps {
 const ThinkingBlock = memo(({ content }: { content: string }) => {
   const hasMarkdown = hasMarkdownSyntax(content);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
+
+  // Auto-scroll the container as new stream chunks arrive.
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [content]);
-  
+
+  // TypewriterText wraps the entire block so that we return null until the
+  // typewriter has produced at least one character — preventing the brief
+  // empty "Thinking..." box flash before the animation starts.
   return (
-    <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
-      <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
-        💭
-      </Typography>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography
-          variant="caption"
-          sx={{
-            fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
-            fontSize: '0.75rem', color: 'info.main', display: 'block', mb: 0.5
-          }}
-        >
-          Thinking...
-        </Typography>
-        <Box 
-          ref={scrollContainerRef}
-          sx={(theme) => ({ 
-            bgcolor: alpha(theme.palette.grey[300], 0.15),
-            border: '1px solid',
-            borderColor: alpha(theme.palette.grey[400], 0.2),
-            borderRadius: 1, p: 1.5,
-            height: '150px', overflowY: 'auto',
-            '&::-webkit-scrollbar': { width: '8px' },
-            '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
-            '&::-webkit-scrollbar-thumb': {
-              bgcolor: alpha(theme.palette.grey[500], 0.3), borderRadius: '4px',
-              '&:hover': { bgcolor: alpha(theme.palette.grey[500], 0.5) }
-            }
-          })}
-        >
-          <TypewriterText text={content} speed={3}>
-            {(displayText) => (
-              hasMarkdown ? (
-                <Box
-                  sx={{
-                    '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
-                    color: 'text.secondary',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+    <TypewriterText text={content} speed={3}>
+      {(displayText) => {
+        if (!displayText) return null;
+        return (
+          <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
+            <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
+              💭
+            </Typography>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
+                  fontSize: '0.75rem', color: 'info.main', display: 'block', mb: 0.5
+                }}
+              >
+                Thinking...
+              </Typography>
+              <Box
+                ref={scrollContainerRef}
+                sx={(theme) => ({
+                  bgcolor: alpha(theme.palette.grey[300], 0.15),
+                  border: '1px solid',
+                  borderColor: alpha(theme.palette.grey[400], 0.2),
+                  borderRadius: 1, p: 1.5,
+                  height: '150px', overflowY: 'auto',
+                  '&::-webkit-scrollbar': { width: '8px' },
+                  '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
+                  '&::-webkit-scrollbar-thumb': {
+                    bgcolor: alpha(theme.palette.grey[500], 0.3), borderRadius: '4px',
+                    '&:hover': { bgcolor: alpha(theme.palette.grey[500], 0.5) }
+                  }
+                })}
+              >
+                {hasMarkdown ? (
+                  <Box
+                    sx={{
+                      '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
+                      color: 'text.secondary',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                      {displayText}
+                    </ReactMarkdown>
+                  </Box>
+                ) : (
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      lineHeight: 1.7, fontSize: '1rem',
+                      color: 'text.secondary', fontStyle: 'italic',
+                    }}
+                  >
                     {displayText}
-                  </ReactMarkdown>
-                </Box>
-              ) : (
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    lineHeight: 1.7, fontSize: '1rem',
-                    color: 'text.secondary', fontStyle: 'italic',
-                  }}
-                >
-                  {displayText}
-                </Typography>
-              )
-            )}
-          </TypewriterText>
-        </Box>
-      </Box>
-    </Box>
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          </Box>
+        );
+      }}
+    </TypewriterText>
   );
 });
 
@@ -115,10 +122,13 @@ ThinkingBlock.displayName = 'ThinkingBlock';
 const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) => {
   // Thinking (llm_thinking / native_thinking) — italic, secondary color
   // All thought types use the same visual treatment (matching ThinkingItem).
+  // Don't render until content arrives (avoids empty "Thinking..." box while
+  // the first stream.chunk is in flight, or for abandoned events on cancelled sessions).
   if (
     item.eventType === TIMELINE_EVENT_TYPES.LLM_THINKING ||
     item.eventType === TIMELINE_EVENT_TYPES.NATIVE_THINKING
   ) {
+    if (!item.content || !item.content.trim()) return null;
     return <ThinkingBlock content={item.content} />;
   }
 
@@ -256,38 +266,52 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     );
   }
 
-  // In-progress tool call
+  // In-progress tool call (matches old tarsy styling)
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_TOOL_CALL) {
     const toolName = (item.metadata?.tool_name as string) || 'unknown';
     return (
-      <Box
-        sx={(theme) => ({
-          ml: 4, my: 1, mr: 1, p: 1.5,
-          border: '2px dashed',
-          borderColor: alpha(theme.palette.primary.main, 0.4),
-          borderRadius: 1,
-          display: 'flex', alignItems: 'center', gap: 1.5,
-        })}
-      >
+      <Box sx={{ ml: 4, my: 1, mr: 1 }}>
         <Box
           sx={(theme) => ({
-            width: 18, height: 18, borderRadius: '50%',
-            border: '2px solid',
-            borderColor: alpha(theme.palette.primary.main, 0.6),
-            borderTopColor: 'transparent',
-            animation: 'spin 1s linear infinite',
-            flexShrink: 0,
-            '@keyframes spin': {
-              '0%': { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' },
-            },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            px: 1.5,
+            py: 0.75,
+            border: '2px dashed',
+            borderColor: alpha(theme.palette.primary.main, 0.4),
+            borderRadius: 1.5,
+            bgcolor: alpha(theme.palette.primary.main, 0.05),
           })}
-        />
-        <Box>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+        >
+          <Box
+            sx={{
+              width: 18,
+              height: 18,
+              border: '2px solid',
+              borderColor: 'primary.main',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              flexShrink: 0,
+              animation: 'spin 1s linear infinite',
+              '@keyframes spin': {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' },
+              },
+            }}
+          />
+          <Typography
+            variant="body2"
+            sx={{
+              fontFamily: 'monospace',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              color: 'primary.main',
+            }}
+          >
             {toolName}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
             Executing...
           </Typography>
         </Box>

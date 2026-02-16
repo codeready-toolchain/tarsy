@@ -226,13 +226,13 @@ export function SessionDetailPage() {
   // placing streaming events (which have empty content in the DB) into
   // timelineEvents where they would render as duplicate empty "Thought..." items
   // alongside the real streaming content in streamingEvents.
-  const applyFreshTimeline = useCallback((freshTimeline: TimelineEvent[]) => {
+  const applyFreshTimeline = useCallback((freshTimeline: TimelineEvent[], skipStreaming = false) => {
     const completedEvents: TimelineEvent[] = [];
     const ids = new Set<string>();
 
     for (const ev of freshTimeline) {
       ids.add(ev.id);
-      if (ev.status === TIMELINE_STATUS.STREAMING) {
+      if (ev.status === TIMELINE_STATUS.STREAMING && !skipStreaming) {
         // Keep streaming events in the streaming system, not in timelineEvents.
         // Ensure metadata ref is populated for the completed handler.
         if (!streamingMetaRef.current.has(ev.id)) {
@@ -343,6 +343,11 @@ export function SessionDetailPage() {
       ]);
       setSession(sessionData);
 
+      // For terminal sessions, streaming events will never complete — treat
+      // everything as completed so abandoned tool calls and thoughts don't
+      // linger with spinners / empty boxes.
+      const sessionIsTerminal = isTerminalStatus(sessionData.status as SessionStatus);
+
       // Separate events with status "streaming" from completed events.
       // Streaming events have empty content in the DB and must be routed to
       // the streaming system so that:
@@ -355,8 +360,8 @@ export function SessionDetailPage() {
 
       for (const ev of timelineData) {
         ids.add(ev.id);
-        if (ev.status === TIMELINE_STATUS.STREAMING) {
-          // Route to streaming system
+        if (ev.status === TIMELINE_STATUS.STREAMING && !sessionIsTerminal) {
+          // Route to streaming system (active sessions only)
           restStreamingItems.set(ev.id, {
             eventType: ev.event_type,
             content: ev.content || '',
@@ -589,15 +594,22 @@ export function SessionDetailPage() {
             return { ...prev, status: payload.status };
           });
 
-          // If terminal, re-fetch session + timeline for final fields and
-          // authoritative metadata (fixes any metadata merge gaps from streaming)
+          // If terminal, clear streaming state (no more updates will arrive)
+          // and re-fetch for authoritative final data. Clearing immediately
+          // removes in-progress tool call spinners that would otherwise linger
+          // when the session is cancelled mid-execution.
           if (isTerminalStatus(payload.status as SessionStatus)) {
+            setStreamingEvents(new Map());
+            streamingMetaRef.current.clear();
+
             Promise.all([
               getSession(id),
               getTimeline(id),
             ]).then(([freshSession, freshTimeline]) => {
               setSession(freshSession);
-              applyFreshTimeline(freshTimeline);
+              // skipStreaming=true: treat all events as completed so abandoned
+              // streaming events (tool calls, thoughts) don't get re-added.
+              applyFreshTimeline(freshTimeline, true);
             }).catch((err) => {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
@@ -722,7 +734,7 @@ export function SessionDetailPage() {
     return () => {
       unsubscribe();
     };
-  }, [id, loadData]);
+  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline]);
 
   // ────────────────────────────────────────────────────────────
   // Auto-scroll lifecycle
