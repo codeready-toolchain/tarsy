@@ -38,28 +38,28 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
     }
   }, [content]);
 
-  // TypewriterText wraps the entire block so that we return null until the
-  // typewriter has produced at least one character — preventing the brief
-  // empty "Thinking..." box flash before the animation starts.
+  // The label (💭 Thinking...) renders immediately for instant feedback.
+  // The gray content box only appears once the typewriter has produced visible
+  // text, avoiding the brief empty box flash.
   return (
-    <TypewriterText text={content} speed={3}>
-      {(displayText) => {
-        if (!displayText) return null;
-        return (
-          <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
-            <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
-              💭
-            </Typography>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
-                  fontSize: '0.75rem', color: 'info.main', display: 'block', mb: 0.5
-                }}
-              >
-                Thinking...
-              </Typography>
+    <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
+      <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
+        💭
+      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
+            fontSize: '0.75rem', color: 'info.main', display: 'block', mb: 0.5
+          }}
+        >
+          Thinking...
+        </Typography>
+        <TypewriterText text={content} speed={3}>
+          {(displayText) => {
+            if (!displayText) return null;
+            return (
               <Box
                 ref={scrollContainerRef}
                 sx={(theme) => ({
@@ -101,11 +101,11 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
                   </Typography>
                 )}
               </Box>
-            </Box>
-          </Box>
-        );
-      }}
-    </TypewriterText>
+            );
+          }}
+        </TypewriterText>
+      </Box>
+    </Box>
   );
 });
 
@@ -122,14 +122,14 @@ ThinkingBlock.displayName = 'ThinkingBlock';
 const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) => {
   // Thinking (llm_thinking / native_thinking) — italic, secondary color
   // All thought types use the same visual treatment (matching ThinkingItem).
-  // Don't render until content arrives (avoids empty "Thinking..." box while
-  // the first stream.chunk is in flight, or for abandoned events on cancelled sessions).
+  // Renders immediately (showing the "Thinking..." label) even before content
+  // arrives — ThinkingBlock internally defers the gray content box until the
+  // typewriter produces visible text.
   if (
     item.eventType === TIMELINE_EVENT_TYPES.LLM_THINKING ||
     item.eventType === TIMELINE_EVENT_TYPES.NATIVE_THINKING
   ) {
-    if (!item.content || !item.content.trim()) return null;
-    return <ThinkingBlock content={item.content} />;
+    return <ThinkingBlock content={item.content || ''} />;
   }
 
   // Response (llm_response) — intermediate iterations

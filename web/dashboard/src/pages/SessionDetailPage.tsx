@@ -574,7 +574,7 @@ export function SessionDetailPage() {
                 stage_id: meta?.stageId ?? null,
                 execution_id: meta?.executionId ?? null,
                 sequence_number: meta?.sequenceNumber ?? 0,
-                event_type: payload.event_type,
+                event_type: meta?.eventType ?? payload.event_type,
                 status: payload.status,
                 content: payload.content,
                 metadata: mergedMetadata,
