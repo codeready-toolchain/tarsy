@@ -21,6 +21,7 @@ interface ThinkingItemProps {
 /**
  * ThinkingItem - renders llm_thinking timeline events.
  * Collapsible grey box with brain emoji and "Thought" header.
+ * Content is rendered in italic / text.secondary style.
  */
 function ThinkingItem({
   item,
@@ -33,9 +34,6 @@ function ThinkingItem({
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
   const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
-
-  // Check for native thinking (via metadata flag)
-  const isNativeThinking = !!item.metadata?.is_native_thinking;
 
   return (
     <Box
@@ -52,7 +50,7 @@ function ThinkingItem({
         opacity={collapsedLeadingIconOpacity}
         showTooltip={shouldShowCollapsed}
         tooltipContent={item.content || ''}
-        tooltipType={isNativeThinking ? 'native_thinking' : 'thought'}
+        tooltipType="thought"
       />
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -81,11 +79,11 @@ function ThinkingItem({
             >
               {hasMarkdown ? (
                 <Box
-                  sx={
-                    isNativeThinking
-                      ? { '& p, & li': { color: 'text.secondary', fontStyle: 'italic' }, color: 'text.secondary', fontStyle: 'italic' }
-                      : { color: 'text.primary' }
-                  }
+                  sx={{
+                    '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
+                    color: 'text.secondary',
+                    fontStyle: 'italic',
+                  }}
                 >
                   <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
                     {item.content || ''}
@@ -99,8 +97,8 @@ function ThinkingItem({
                     wordBreak: 'break-word',
                     lineHeight: 1.7,
                     fontSize: '1rem',
-                    color: isNativeThinking ? 'text.secondary' : 'text.primary',
-                    fontStyle: isNativeThinking ? 'italic' : 'normal',
+                    color: 'text.secondary',
+                    fontStyle: 'italic',
                   }}
                 >
                   {item.content}

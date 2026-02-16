@@ -37,6 +37,7 @@ import {
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
+import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
 
 import { getSession, getTimeline, handleAPIError } from '../services/api.ts';
@@ -204,17 +205,87 @@ export function SessionDetailPage() {
   const truncationRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Streaming metadata ref (synchronous access for completed handler) ---
-  // Tracks stageId, executionId, sequenceNumber, and original metadata for
-  // streaming events. Unlike streamingEvents state (which updates async via
-  // React batching), this ref is read/written synchronously, ensuring correct
-  // values in the timeline_event.completed handler.
+  // Tracks stageId, executionId, sequenceNumber, createdAt, and original
+  // metadata for streaming events. Unlike streamingEvents state (which updates
+  // async via React batching), this ref is read/written synchronously, ensuring
+  // correct values in the timeline_event.completed handler.
+  // createdAt is the timestamp from the timeline_event.created WS event so that
+  // the completed TimelineEvent has accurate created_at / updated_at for
+  // duration computation (without it, both would be the completion timestamp).
   const streamingMetaRef = useRef<Map<string, {
     eventType: string;
     stageId?: string;
     executionId?: string;
     sequenceNumber: number;
     metadata?: Record<string, unknown> | null;
+    createdAt?: string;
   }>>(new Map());
+
+  // applyFreshTimeline separates streaming events from completed events and
+  // updates both timelineEvents and streamingEvents accordingly. This avoids
+  // placing streaming events (which have empty content in the DB) into
+  // timelineEvents where they would render as duplicate empty "Thought..." items
+  // alongside the real streaming content in streamingEvents.
+  const applyFreshTimeline = useCallback((freshTimeline: TimelineEvent[], skipStreaming = false) => {
+    const completedEvents: TimelineEvent[] = [];
+    const ids = new Set<string>();
+
+    for (const ev of freshTimeline) {
+      ids.add(ev.id);
+      if (ev.status === TIMELINE_STATUS.STREAMING && !skipStreaming) {
+        // Keep streaming events in the streaming system, not in timelineEvents.
+        // Ensure metadata ref is populated for the completed handler.
+        if (!streamingMetaRef.current.has(ev.id)) {
+          streamingMetaRef.current.set(ev.id, {
+            eventType: ev.event_type,
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata,
+            createdAt: ev.created_at || undefined,
+          });
+          // Also add to streamingEvents if not already tracked (covers the
+          // case where the REST fetch discovers a streaming event that we
+          // missed the WebSocket timeline_event.created for).
+          setStreamingEvents((prev) => {
+            if (prev.has(ev.id)) return prev;
+            const next = new Map(prev);
+            next.set(ev.id, {
+              eventType: ev.event_type,
+              content: ev.content || '',
+              stageId: ev.stage_id || undefined,
+              executionId: ev.execution_id || undefined,
+              sequenceNumber: ev.sequence_number,
+              metadata: ev.metadata || undefined,
+            });
+            return next;
+          });
+        }
+      } else {
+        completedEvents.push(ev);
+      }
+    }
+
+    setTimelineEvents(completedEvents);
+
+    // Clean up streamingEvents: remove entries that are now completed in REST
+    // (handles the case where the timeline_event.completed WS message was lost).
+    const completedIds = new Set(completedEvents.map(ev => ev.id));
+    setStreamingEvents((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const eventId of prev.keys()) {
+        if (completedIds.has(eventId)) {
+          next.delete(eventId);
+          streamingMetaRef.current.delete(eventId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    knownEventIdsRef.current = ids;
+  }, []);
 
   // Debounced re-fetch for truncated events. Coalesces multiple truncation
   // events arriving within 300ms into a single API call.
@@ -226,17 +297,12 @@ export function SessionDetailPage() {
     truncationRefetchTimerRef.current = setTimeout(() => {
       truncationRefetchTimerRef.current = null;
       getTimeline(id).then((freshTimeline) => {
-        setTimelineEvents(freshTimeline);
-        const ids = new Set<string>();
-        for (const ev of freshTimeline) {
-          ids.add(ev.id);
-        }
-        knownEventIdsRef.current = ids;
+        applyFreshTimeline(freshTimeline);
       }).catch((err) => {
         console.warn('Failed to re-fetch timeline after truncated event:', err);
       });
     }, 300);
-  }, [id]);
+  }, [id, applyFreshTimeline]);
 
   // --- Derived ---
   const isActive = session
@@ -277,6 +343,11 @@ export function SessionDetailPage() {
       ]);
       setSession(sessionData);
 
+      // For terminal sessions, streaming events will never complete — treat
+      // everything as completed so abandoned tool calls and thoughts don't
+      // linger with spinners / empty boxes.
+      const sessionIsTerminal = isTerminalStatus(sessionData.status as SessionStatus);
+
       // Separate events with status "streaming" from completed events.
       // Streaming events have empty content in the DB and must be routed to
       // the streaming system so that:
@@ -289,8 +360,8 @@ export function SessionDetailPage() {
 
       for (const ev of timelineData) {
         ids.add(ev.id);
-        if (ev.status === TIMELINE_STATUS.STREAMING) {
-          // Route to streaming system
+        if (ev.status === TIMELINE_STATUS.STREAMING && !sessionIsTerminal) {
+          // Route to streaming system (active sessions only)
           restStreamingItems.set(ev.id, {
             eventType: ev.event_type,
             content: ev.content || '',
@@ -306,6 +377,7 @@ export function SessionDetailPage() {
             executionId: ev.execution_id || undefined,
             sequenceNumber: ev.sequence_number,
             metadata: ev.metadata,
+            createdAt: ev.created_at || undefined,
           });
         } else {
           completedEvents.push(ev);
@@ -371,12 +443,15 @@ export function SessionDetailPage() {
             // Store metadata in synchronous ref for the completed handler.
             // event_type is stored because the completed payload sometimes
             // arrives without it (observed in runtime logs for fast tool calls).
+            // createdAt preserves the original creation timestamp so the
+            // completed TimelineEvent gets accurate created_at for duration.
             streamingMetaRef.current.set(payload.event_id, {
               eventType: payload.event_type,
               stageId: payload.stage_id,
               executionId: payload.execution_id,
               sequenceNumber: payload.sequence_number,
               metadata: payload.metadata || null,
+              createdAt: payload.timestamp,
             });
             // Add to streaming map
             setStreamingEvents((prev) => {
@@ -460,37 +535,38 @@ export function SessionDetailPage() {
           }
 
           // ── Full payload handling ──────────────────────────────
-          // Add or update in timeline
-          if (knownEventIdsRef.current.has(payload.event_id)) {
-            // Update existing event in-place (content / status may have changed).
-            // Merge metadata: the existing event may have full metadata from
-            // timeline_event.created (e.g. tool_name, server_name, arguments),
-            // while the completed payload may add new fields (e.g. is_error).
-            // Using spread merge preserves both.
-            setTimelineEvents((prev) =>
-              prev.map((ev) =>
-                ev.id === payload.event_id
-                    ? {
-                      ...ev,
-                      content: payload.content,
-                      status: payload.status,
-                      metadata: (ev.metadata || payload.metadata)
-                        ? { ...(ev.metadata || {}), ...(payload.metadata || {}) }
-                        : null,
-                      updated_at: payload.timestamp,
-                    }
-                  : ev,
-              ),
-            );
-          } else {
-            // New completed event (was only streaming, not in REST data)
-            knownEventIdsRef.current.add(payload.event_id);
-            // Merge metadata: created event metadata (tool_name, server_name, etc.)
-            // is the base, completed event metadata (is_error, etc.) overrides.
+          // Upsert based on actual timelineEvents presence (not knownEventIdsRef)
+          // to handle the case where a streaming event's ID is in knownEventIdsRef
+          // (added by applyFreshTimeline) but was never placed in timelineEvents
+          // (kept in streamingEvents instead). Using findIndex on the real state
+          // ensures the event is appended when missing, not silently dropped.
+          setTimelineEvents((prev) => {
+            const index = prev.findIndex((ev) => ev.id === payload.event_id);
+            if (index >= 0) {
+              // Update existing event in-place. Merge metadata: the existing
+              // event may have full metadata from timeline_event.created
+              // (e.g. tool_name, server_name, arguments), while the completed
+              // payload may add new fields (e.g. is_error).
+              const next = [...prev];
+              next[index] = {
+                ...next[index],
+                content: payload.content,
+                status: payload.status,
+                metadata: (next[index].metadata || payload.metadata)
+                  ? { ...(next[index].metadata || {}), ...(payload.metadata || {}) }
+                  : null,
+                updated_at: payload.timestamp,
+              };
+              return next;
+            }
+            // New completed event — append. Merge metadata from the streaming
+            // meta ref (tool_name, server_name, etc.) with completed payload
+            // metadata (is_error, etc.).
             const mergedMetadata = (meta?.metadata || payload.metadata)
               ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
               : null;
-            setTimelineEvents((prev) => [
+            knownEventIdsRef.current.add(payload.event_id);
+            return [
               ...prev,
               {
                 id: payload.event_id,
@@ -498,15 +574,15 @@ export function SessionDetailPage() {
                 stage_id: meta?.stageId ?? null,
                 execution_id: meta?.executionId ?? null,
                 sequence_number: meta?.sequenceNumber ?? 0,
-                event_type: payload.event_type,
+                event_type: meta?.eventType ?? payload.event_type,
                 status: payload.status,
                 content: payload.content,
                 metadata: mergedMetadata,
-                created_at: payload.timestamp,
+                created_at: meta?.createdAt ?? payload.timestamp,
                 updated_at: payload.timestamp,
               },
-            ]);
-          }
+            ];
+          });
           return;
         }
 
@@ -518,21 +594,22 @@ export function SessionDetailPage() {
             return { ...prev, status: payload.status };
           });
 
-          // If terminal, re-fetch session + timeline for final fields and
-          // authoritative metadata (fixes any metadata merge gaps from streaming)
+          // If terminal, clear streaming state (no more updates will arrive)
+          // and re-fetch for authoritative final data. Clearing immediately
+          // removes in-progress tool call spinners that would otherwise linger
+          // when the session is cancelled mid-execution.
           if (isTerminalStatus(payload.status as SessionStatus)) {
+            setStreamingEvents(new Map());
+            streamingMetaRef.current.clear();
+
             Promise.all([
               getSession(id),
               getTimeline(id),
             ]).then(([freshSession, freshTimeline]) => {
               setSession(freshSession);
-              setTimelineEvents(freshTimeline);
-              // Update dedup set with all event IDs
-              const ids = new Set<string>();
-              for (const ev of freshTimeline) {
-                ids.add(ev.id);
-              }
-              knownEventIdsRef.current = ids;
+              // skipStreaming=true: treat all events as completed so abandoned
+              // streaming events (tool calls, thoughts) don't get re-added.
+              applyFreshTimeline(freshTimeline, true);
             }).catch((err) => {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
@@ -574,11 +651,17 @@ export function SessionDetailPage() {
             return { ...prev, stages: [...stages, newStage] };
           });
 
-          // Re-fetch session detail when a stage starts to get execution overviews
-          // (agent names, LLM providers, iteration strategies) for parallel agents.
-          // Use a debounced fetch to avoid hammering the API if multiple stage events
-          // arrive in quick succession.
+          // When a new stage starts, clear per-agent progress and execution
+          // status maps from the previous (potentially parallel) stage.  This
+          // mirrors old tarsy's pattern of clearing agentProgressStatuses when
+          // the parallel parent stage completes — by the time the next stage
+          // starts, the previous parallel execution state is no longer relevant.
           if (payload.status === EXECUTION_STATUS.STARTED) {
+            setAgentProgressStatuses(new Map());
+            setExecutionStatuses(new Map());
+
+            // Re-fetch session detail to get execution overviews (agent names,
+            // LLM providers, iteration strategies) for parallel agents.
             getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
               console.warn('Failed to re-fetch session on stage start:', err);
             });
@@ -621,10 +704,10 @@ export function SessionDetailPage() {
             next.set(payload.execution_id, phaseMessage);
             return next;
           });
-          // Update main (session-level) progress status too
-          if (phaseMessage) {
-            setProgressStatus(phaseMessage);
-          }
+          // Do NOT update session-level progressStatus here.
+          // Per-agent progress must stay isolated in agentProgressStatuses so that
+          // the "Waiting for other agents..." check in ConversationTimeline works
+          // correctly. Session-level status is driven by session.progress events.
           return;
         }
 
@@ -651,7 +734,7 @@ export function SessionDetailPage() {
     return () => {
       unsubscribe();
     };
-  }, [id, loadData]);
+  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline]);
 
   // ────────────────────────────────────────────────────────────
   // Auto-scroll lifecycle
@@ -966,75 +1049,14 @@ export function SessionDetailPage() {
                 />
               </Suspense>
             ) : isActive ? (
-              <Box
-                sx={{
-                  py: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 3,
-                }}
-              >
-                {/* Pulsing ring spinner */}
-                <Box
-                  sx={{
-                    position: 'relative',
-                    width: 64,
-                    height: 64,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <CircularProgress
-                    size={56}
-                    thickness={2.5}
-                    color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
-                  />
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      width: 64,
-                      height: 64,
-                      borderRadius: '50%',
-                      border: '2px solid',
-                      borderColor: session.status === SESSION_STATUS.PENDING
-                        ? 'rgba(237, 108, 2, 0.15)'
-                        : 'rgba(25, 118, 210, 0.15)',
-                      animation: 'init-pulse 2s ease-in-out infinite',
-                      '@keyframes init-pulse': {
-                        '0%, 100%': { transform: 'scale(1)', opacity: 0.6 },
-                        '50%': { transform: 'scale(1.15)', opacity: 0 },
-                      },
-                    }}
-                  />
-                </Box>
-                {/* Shimmer text */}
-                <Typography
-                  variant="body1"
-                  sx={{
-                    fontSize: '1.1rem',
-                    fontWeight: 500,
-                    fontStyle: 'italic',
-                    background: session.status === SESSION_STATUS.PENDING
-                      ? 'linear-gradient(90deg, rgba(237,108,2,0.5) 0%, rgba(237,108,2,0.7) 40%, rgba(237,108,2,0.9) 50%, rgba(237,108,2,0.7) 60%, rgba(237,108,2,0.5) 100%)'
-                      : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
-                    backgroundSize: '200% 100%',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    animation: 'init-shimmer 3s linear infinite',
-                    '@keyframes init-shimmer': {
-                      '0%': { backgroundPosition: '200% center' },
-                      '100%': { backgroundPosition: '-200% center' },
-                    },
-                  }}
-                >
-                  {session.status === SESSION_STATUS.PENDING
+              <InitializingSpinner
+                message={
+                  session.status === SESSION_STATUS.PENDING
                     ? 'Session queued, waiting to start...'
-                    : 'Initializing investigation...'}
-                </Typography>
-              </Box>
+                    : 'Initializing investigation...'
+                }
+                color={session.status === SESSION_STATUS.PENDING ? 'warning' : 'primary'}
+              />
             ) : session.status === SESSION_STATUS.CANCELLED ? (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">

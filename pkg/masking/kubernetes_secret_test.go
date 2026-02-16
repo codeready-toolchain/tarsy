@@ -155,14 +155,11 @@ func TestKubernetesSecretMasker_JSON_List(t *testing.T) {
 	require.True(t, ok, "items should be an array")
 	require.Len(t, rawItems, 3)
 
-	// First item: Secret — should be masked
+	// First item: Secret — should be masked (entire data section replaced)
 	secret1, ok := rawItems[0].(map[string]any)
 	require.True(t, ok, "item 0 should be a map")
 	assert.Equal(t, "Secret", secret1["kind"])
-	data1, ok := secret1["data"].(map[string]any)
-	require.True(t, ok, "item 0 data should be a map")
-	assert.Equal(t, MaskedSecretValue, data1["API_KEY"])
-	assert.Equal(t, MaskedSecretValue, data1["API_SECRET"])
+	assert.Equal(t, MaskedSecretValue, secret1["data"])
 
 	// Second item: ConfigMap — should NOT be masked
 	configMap, ok := rawItems[1].(map[string]any)
@@ -173,14 +170,11 @@ func TestKubernetesSecretMasker_JSON_List(t *testing.T) {
 	assert.Equal(t, "staging", cmData["ENVIRONMENT"])
 	assert.Equal(t, "false", cmData["DEBUG"])
 
-	// Third item: Secret — should be masked
+	// Third item: Secret — should be masked (entire data section replaced)
 	secret2, ok := rawItems[2].(map[string]any)
 	require.True(t, ok, "item 2 should be a map")
 	assert.Equal(t, "Secret", secret2["kind"])
-	data2, ok := secret2["data"].(map[string]any)
-	require.True(t, ok, "item 2 data should be a map")
-	assert.Equal(t, MaskedSecretValue, data2["tls.crt"])
-	assert.Equal(t, MaskedSecretValue, data2["tls.key"])
+	assert.Equal(t, MaskedSecretValue, secret2["data"])
 }
 
 func TestKubernetesSecretMasker_MalformedYAML(t *testing.T) {
@@ -209,9 +203,9 @@ data: {}
 `
 	result := m.Mask(input)
 
-	// Should still process (no error), but nothing to mask
+	// Even empty data section should be replaced with placeholder
 	assert.Contains(t, result, "kind: Secret")
-	assert.NotEqual(t, input, result) // YAML re-serialization may differ
+	assert.Contains(t, result, MaskedSecretValue)
 }
 
 func TestKubernetesSecretMasker_StringDataField(t *testing.T) {
@@ -305,11 +299,7 @@ func TestKubernetesSecretMasker_JSONSecretList(t *testing.T) {
 	for i, item := range rawItems {
 		itemMap, ok := item.(map[string]any)
 		require.True(t, ok, "item %d should be a map", i)
-		data, ok := itemMap["data"].(map[string]any)
-		require.True(t, ok, "item %d data should be a map", i)
-		for _, v := range data {
-			assert.Equal(t, MaskedSecretValue, v)
-		}
+		assert.Equal(t, MaskedSecretValue, itemMap["data"], "item %d data should be fully masked", i)
 	}
 }
 
@@ -505,12 +495,9 @@ func TestMaskSecretFields(t *testing.T) {
 
 	maskSecretFields(resource)
 
-	data := resource["data"].(map[string]any)
-	assert.Equal(t, MaskedSecretValue, data["username"])
-	assert.Equal(t, MaskedSecretValue, data["password"])
-
-	stringData := resource["stringData"].(map[string]any)
-	assert.Equal(t, MaskedSecretValue, stringData["api-key"])
+	// Entire data and stringData sections should be replaced with the placeholder
+	assert.Equal(t, MaskedSecretValue, resource["data"])
+	assert.Equal(t, MaskedSecretValue, resource["stringData"])
 }
 
 func TestMaskAnnotationSecrets(t *testing.T) {

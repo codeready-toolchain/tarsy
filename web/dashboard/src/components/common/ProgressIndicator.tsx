@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Box, LinearProgress, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { formatDurationMs } from '../../utils/format';
 import { SESSION_STATUS } from '../../constants/sessionStatus';
 
@@ -18,7 +18,7 @@ interface ProgressIndicatorProps {
  * ProgressIndicator — self-contained component that manages its own
  * live-ticking timer for active sessions and displays a formatted duration.
  *
- * For active sessions: shows an indeterminate LinearProgress bar + ticking duration.
+ * For active sessions: shows a ticking duration, colored by status.
  * For terminal sessions: shows the final duration text only, colored by status.
  */
 export default function ProgressIndicator({
@@ -54,14 +54,14 @@ export default function ProgressIndicator({
     return () => clearInterval(interval);
   }, [isActive, durationMs, computeLive]);
 
-  // --- Active: indeterminate progress bar + ticking duration ---
+  // --- Active: ticking duration (no progress bar) ---
   if (isActive) {
-    const progressColor =
+    const color =
       status === SESSION_STATUS.CANCELLING
-        ? 'warning'
+        ? 'warning.main'
         : status === SESSION_STATUS.PENDING
-          ? 'warning'
-          : 'primary';
+          ? 'warning.main'
+          : 'primary.main';
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%' }}>
@@ -69,7 +69,7 @@ export default function ProgressIndicator({
           variant="caption"
           sx={{
             fontWeight: 600,
-            color: `${progressColor}.main`,
+            color,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
             textAlign: 'right',
@@ -77,17 +77,12 @@ export default function ProgressIndicator({
         >
           Duration
         </Typography>
-        <LinearProgress
-          variant="indeterminate"
-          color={progressColor as 'primary' | 'warning'}
-          sx={{ width: '100%', borderRadius: 1 }}
-        />
         {showDuration && liveDurationMs != null && (
           <Typography
             sx={{
               fontSize: '1.4rem',
               fontWeight: 800,
-              color: `${progressColor}.main`,
+              color,
               textAlign: 'right',
             }}
           >

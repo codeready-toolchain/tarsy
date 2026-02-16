@@ -28,6 +28,7 @@ import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+import InitializingSpinner from '../common/InitializingSpinner';
 import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 /**
@@ -174,7 +175,32 @@ export default function ConversationTimeline({
   );
 
   // --- Stage grouping ---
-  const stageGroups = useMemo(() => groupFlowItemsByStage(items, stages), [items, stages]);
+  // Group items by stage, then append empty groups for backend stages that
+  // have no items yet (e.g. synthesis stage just started). This ensures stage
+  // separators are visible immediately, and the ProcessingIndicator appears
+  // under the correct stage instead of the previous one.
+  const stageGroups = useMemo(() => {
+    const groupsFromItems = groupFlowItemsByStage(items, stages);
+    const existingStageIds = new Set(groupsFromItems.map(g => g.stageId).filter(Boolean));
+
+    const emptyGroups: StageGroup[] = [];
+    for (const stage of stages) {
+      if (stage.id && !existingStageIds.has(stage.id)) {
+        emptyGroups.push({
+          stageId: stage.id,
+          stageName: stage.stage_name,
+          stageIndex: stage.stage_index,
+          stageStatus: stage.status,
+          isParallel: stage.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none',
+          expectedAgentCount: stage.expected_agent_count || 1,
+          items: [],
+        });
+      }
+    }
+
+    if (emptyGroups.length === 0) return groupsFromItems;
+    return [...groupsFromItems, ...emptyGroups].sort((a, b) => a.stageIndex - b.stageIndex);
+  }, [items, stages]);
 
   // --- Stats ---
   const stats: TimelineStats = useMemo(() => getTimelineStats(items, stages), [items, stages]);
@@ -203,6 +229,13 @@ export default function ConversationTimeline({
   }, [streamingEvents]);
 
   if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
+    // Session is active but no timeline items have arrived yet — show the
+    // same pulsing ring spinner used by SessionDetailPage so there is no
+    // jarring visual gap between "Initializing investigation..." and the
+    // first real data appearing with an "Investigating..." progress status.
+    if (isActive) {
+      return <InitializingSpinner />;
+    }
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography variant="body2" color="text.secondary">
@@ -397,20 +430,67 @@ export default function ConversationTimeline({
         {/* Processing indicator for active sessions */}
         {isActive && (() => {
           let displayStatus = progressStatus || 'Processing...';
-          // When viewing a completed agent's tab while siblings in the same stage are still running,
-          // show "Waiting for other agents..." instead of the session-level progress message.
-          if (selectedAgentExecutionId && executionStatuses) {
-            const selectedEntry = executionStatuses.get(selectedAgentExecutionId);
-            if (selectedEntry && TERMINAL_EXECUTION_STATUSES.has(selectedEntry.status)) {
-              // Only check executions in the SAME stage (by stageId), not across all stages
-              const othersRunningInSameStage = Array.from(executionStatuses.entries()).some(
-                ([id, entry]) =>
-                  id !== selectedAgentExecutionId &&
-                  entry.stageId === selectedEntry.stageId &&
-                  !TERMINAL_EXECUTION_STATUSES.has(entry.status),
-              );
-              if (othersRunningInSameStage) {
-                displayStatus = 'Waiting for other agents...';
+
+          // For single-agent stages (no tab selected), prefer the per-agent
+          // progress message so the UI shows "Investigating...", "Distilling...",
+          // etc. instead of the session-level status which may still be
+          // "Processing...".  Session-level progressStatus is only updated by
+          // session.progress events (stage transitions), while per-agent phases
+          // arrive via execution.progress and feed agentProgressStatuses only.
+          if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
+            const singleAgentStatus = agentProgressStatuses.values().next().value;
+            if (singleAgentStatus) displayStatus = singleAgentStatus;
+          }
+
+          // For parallel stages: show the selected agent's per-agent progress
+          // (e.g. "Investigating...", "Distilling...").  If the agent has
+          // reached a terminal state and siblings are still running, override
+          // with "Waiting for other agents...".  This mirrors old tarsy's
+          // displayStatus logic in SessionDetailPageBase.
+          if (selectedAgentExecutionId) {
+            // Show the selected agent's progress phase (active agents)
+            const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);
+            if (agentStatus) {
+              displayStatus = agentStatus;
+            }
+
+            // Check terminal status from multiple sources (WS execution.status + REST overviews)
+            // to handle timing gaps where the WS event hasn't arrived yet.
+            const wsEntry = executionStatuses?.get(selectedAgentExecutionId);
+            const isSelectedTerminal = (() => {
+              if (wsEntry && TERMINAL_EXECUTION_STATUSES.has(wsEntry.status)) return true;
+              // Fall back to execution overviews from REST stage data
+              for (const stage of stages) {
+                const eo = stage.executions?.find(e => e.execution_id === selectedAgentExecutionId);
+                if (eo && TERMINAL_EXECUTION_STATUSES.has(eo.status)) return true;
+              }
+              return false;
+            })();
+
+            if (isSelectedTerminal) {
+              // Find the stage this agent belongs to
+              const stageId = wsEntry?.stageId
+                || stages.find(s => s.executions?.some(e => e.execution_id === selectedAgentExecutionId))?.id;
+
+              if (stageId) {
+                // Check if other executions in the SAME stage are still running
+                const othersRunning =
+                  // From WS execution statuses
+                  (executionStatuses ? Array.from(executionStatuses.entries()).some(
+                    ([id, entry]) =>
+                      id !== selectedAgentExecutionId &&
+                      entry.stageId === stageId &&
+                      !TERMINAL_EXECUTION_STATUSES.has(entry.status),
+                  ) : false) ||
+                  // From REST execution overviews
+                  (stages.find(s => s.id === stageId)?.executions?.some(
+                    e => e.execution_id !== selectedAgentExecutionId &&
+                      !TERMINAL_EXECUTION_STATUSES.has(e.status),
+                  ) ?? false);
+
+                if (othersRunning) {
+                  displayStatus = 'Waiting for other agents...';
+                }
               }
             }
           }

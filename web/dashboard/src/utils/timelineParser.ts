@@ -87,6 +87,19 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
 // --- Core parsing ---
 
 /**
+ * Compute duration_ms from created_at/updated_at for completed streaming events.
+ * Returns a positive integer (ms) or null if not applicable.
+ */
+function computeEventDurationMs(event: TimelineEvent): number | null {
+  if (event.status !== TIMELINE_STATUS.COMPLETED) return null;
+  if (!event.created_at || !event.updated_at) return null;
+  const start = new Date(event.created_at).getTime();
+  const end = new Date(event.updated_at).getTime();
+  const ms = end - start;
+  return ms > 0 ? ms : null;
+}
+
+/**
  * Convert a single TimelineEvent into a FlowItem.
  */
 function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOverview>): FlowItem {
@@ -94,13 +107,22 @@ function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOvervi
   const stage = event.stage_id ? stageMap.get(event.stage_id) : undefined;
   const isParallel = stage?.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none';
 
+  // Enrich metadata with computed duration_ms for thinking events
+  let metadata = event.metadata || undefined;
+  if (type === FLOW_ITEM.THINKING && metadata?.duration_ms == null) {
+    const durationMs = computeEventDurationMs(event);
+    if (durationMs != null) {
+      metadata = { ...metadata, duration_ms: durationMs };
+    }
+  }
+
   return {
     id: event.id,
     type,
     stageId: event.stage_id || undefined,
     executionId: event.execution_id || undefined,
     content: event.content,
-    metadata: event.metadata || undefined,
+    metadata,
     status: event.status,
     timestamp: event.created_at,
     sequenceNumber: event.sequence_number,
