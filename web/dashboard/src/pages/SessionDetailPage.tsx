@@ -492,16 +492,24 @@ export function SessionDetailPage() {
             // arrives without it (observed in runtime logs for fast tool calls).
             // createdAt preserves the original creation timestamp so the
             // completed TimelineEvent gets accurate created_at for duration.
-            streamingMetaRef.current.set(payload.event_id, {
-              eventType: payload.event_type,
-              stageId: payload.stage_id,
-              executionId: payload.execution_id,
-              sequenceNumber: payload.sequence_number,
-              metadata: payload.metadata || null,
-              createdAt: payload.timestamp,
-            });
-            // Add to streaming map
+            //
+            // Skip if already tracking: duplicate created events can arrive
+            // via auto-catchup + NOTIFY race (e.g. reconnection during active
+            // streaming). Overwriting would reset accumulated chunk content.
+            if (!streamingMetaRef.current.has(payload.event_id)) {
+              streamingMetaRef.current.set(payload.event_id, {
+                eventType: payload.event_type,
+                stageId: payload.stage_id,
+                executionId: payload.execution_id,
+                sequenceNumber: payload.sequence_number,
+                metadata: payload.metadata || null,
+                createdAt: payload.timestamp,
+              });
+            }
+            // Add to streaming map (skip if already present to preserve
+            // accumulated content from stream.chunk deltas).
             setStreamingEvents((prev) => {
+              if (prev.has(payload.event_id)) return prev;
               const next = new Map(prev);
               next.set(payload.event_id, {
                 eventType: payload.event_type,
