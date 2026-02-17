@@ -148,14 +148,20 @@ export function parseTimelineToFlow(
   // Sort by stage index first (so all events for a stage stay together),
   // then by sequence number within each stage.
   // Events without a stage_id are placed at the end (e.g. executive_summary).
+  // user_question events sort first within their stage (seq -1) because they
+  // trigger the stage and the backend assigns them a session-global seq that
+  // can be much higher than the per-execution AI event seqs.
   const sorted = [...events].sort((a, b) => {
     const stageA = a.stage_id ? stageMap.get(a.stage_id) : undefined;
     const stageB = b.stage_id ? stageMap.get(b.stage_id) : undefined;
     const indexA = stageA?.stage_index ?? Number.MAX_SAFE_INTEGER;
     const indexB = stageB?.stage_index ?? Number.MAX_SAFE_INTEGER;
     if (indexA !== indexB) return indexA - indexB;
-    return a.sequence_number - b.sequence_number;
+    const seqA = a.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION ? -1 : a.sequence_number;
+    const seqB = b.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION ? -1 : b.sequence_number;
+    return seqA - seqB;
   });
+
 
   const result: FlowItem[] = [];
   let currentStageId: string | null = null;

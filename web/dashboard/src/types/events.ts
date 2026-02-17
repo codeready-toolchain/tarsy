@@ -106,6 +106,7 @@ export interface ExecutionStatusPayload {
   session_id: string;
   stage_id: string;
   execution_id: string;
+  agent_index: number;
   status: string;
   error_message?: string;
   timestamp: string;

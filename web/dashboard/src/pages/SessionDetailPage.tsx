@@ -39,6 +39,7 @@ import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
+import { useChatState } from '../hooks/useChatState.ts';
 
 import { getSession, getTimeline, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
@@ -56,6 +57,7 @@ import type {
   SessionProgressPayload,
   ExecutionProgressPayload,
   ExecutionStatusPayload,
+  ChatCreatedPayload,
 } from '../types/events.ts';
 
 import {
@@ -68,13 +70,16 @@ import {
   EVENT_EXECUTION_PROGRESS,
   EVENT_EXECUTION_STATUS,
   EVENT_CATCHUP_OVERFLOW,
+  EVENT_CHAT_CREATED,
   TIMELINE_STATUS,
+  TIMELINE_EVENT_TYPES,
   PHASE_STATUS_MESSAGE,
 } from '../constants/eventTypes.ts';
 
 import {
   ACTIVE_STATUSES,
   isTerminalStatus,
+  TERMINAL_EXECUTION_STATUSES,
   type SessionStatus,
   SESSION_STATUS,
   EXECUTION_STATUS,
@@ -88,6 +93,7 @@ const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx
 const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlertCard.tsx'));
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
+const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
 
 // ────────────────────────────────────────────────────────────
 // Skeleton placeholders
@@ -173,11 +179,12 @@ export function SessionDetailPage() {
   const [agentProgressStatuses, setAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
-  // Real-time execution status from execution.status WS events (executionId → {status, stageId}).
+  // Real-time execution status from execution.status WS events (executionId → {status, stageId, agentIndex}).
   // Higher priority than REST ExecutionOverview for immediate UI updates.
   // stageId is included so StageContent can filter out executions from other stages,
   // preventing phantom agent cards from appearing.
-  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string }>>(
+  // agentIndex (1-based) preserves chain config ordering for deterministic tab order.
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string; agentIndex: number }>>(
     () => new Map(),
   );
 
@@ -190,9 +197,30 @@ export function SessionDetailPage() {
   const prevStatusRef = useRef<string | undefined>(undefined);
   const hasPerformedInitialScrollRef = useRef(false);
 
+  // --- Chat state ---
+  const chatState = useChatState(id!);
+  const chatStageIdRef = useRef<string | null>(null);
+  // Track all chat stage IDs we've seen (persists across chat turns).
+  // Used to suppress auto-collapse of final_analysis in chat stages.
+  const [chatStageIds, setChatStageIds] = useState<Set<string>>(() => new Set());
+
+  // Keep ref in sync for use in WS handler closure
+  useEffect(() => {
+    chatStageIdRef.current = chatState.chatStageId;
+    if (chatState.chatStageId) {
+      setChatStageIds((prev) => {
+        if (prev.has(chatState.chatStageId!)) return prev;
+        const next = new Set(prev);
+        next.add(chatState.chatStageId!);
+        return next;
+      });
+    }
+  }, [chatState.chatStageId]);
+
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
-  const [collapseCounter, _setCollapseCounter] = useState(0);
+  const [collapseCounter, setCollapseCounter] = useState(0);
+  const [chatExpandCounter, setChatExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
   // --- Dedup tracking ---
@@ -329,12 +357,14 @@ export function SessionDetailPage() {
     setLoading(true);
     setError(null);
 
-    // Clear streaming and progress state so stale items don't linger
+    // Clear streaming, progress, and chat state so stale items don't linger
     setStreamingEvents(new Map());
     streamingMetaRef.current.clear();
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
     setExecutionStatuses(new Map());
+    chatStageIdRef.current = null;
+    setChatStageIds(new Set());
 
     try {
       const [sessionData, timelineData] = await Promise.all([
@@ -387,6 +417,23 @@ export function SessionDetailPage() {
       setTimelineEvents(completedEvents);
       setStreamingEvents(restStreamingItems);
       knownEventIdsRef.current = ids;
+
+      // Identify chat stages from REST data: any stage containing a
+      // user_question event is a chat stage. Populates chatStageIds so
+      // chat final_analysis items don't get auto-collapsed on page load.
+      const restChatStageIds = new Set<string>();
+      for (const ev of timelineData) {
+        if (ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION && ev.stage_id) {
+          restChatStageIds.add(ev.stage_id);
+        }
+      }
+      if (restChatStageIds.size > 0) {
+        setChatStageIds((prev) => {
+          const merged = new Set(prev);
+          for (const id of restChatStageIds) merged.add(id);
+          return merged.size === prev.size ? prev : merged;
+        });
+      }
     } catch (err) {
       setError(handleAPIError(err));
     } finally {
@@ -467,24 +514,53 @@ export function SessionDetailPage() {
               return next;
             });
           } else {
-            // Completed event → add directly to timeline
+            // Completed event → add directly to timeline.
+            // For user_question events from chat, replace optimistic temp events.
             knownEventIdsRef.current.add(payload.event_id);
-            setTimelineEvents((prev) => [
-              ...prev,
-              {
-                id: payload.event_id,
-                session_id: payload.session_id,
-                stage_id: payload.stage_id || null,
-                execution_id: payload.execution_id || null,
-                sequence_number: payload.sequence_number,
-                event_type: payload.event_type,
-                status: payload.status,
-                content: payload.content,
-                metadata: payload.metadata || null,
-                created_at: payload.timestamp,
-                updated_at: payload.timestamp,
-              },
-            ]);
+            const realEvent: TimelineEvent = {
+              id: payload.event_id,
+              session_id: payload.session_id,
+              stage_id: payload.stage_id || null,
+              execution_id: payload.execution_id || null,
+              sequence_number: payload.sequence_number,
+              event_type: payload.event_type,
+              status: payload.status,
+              content: payload.content,
+              metadata: payload.metadata || null,
+              created_at: payload.timestamp,
+              updated_at: payload.timestamp,
+            };
+            setTimelineEvents((prev) => {
+              // Dedup optimistic chat user messages: find a temp-prefixed
+              // user_question and replace it. Prefer matching by stage_id
+              // (deterministic) and fall back to content match for cases
+              // where stage_id is missing on either side.
+              if (payload.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION) {
+                let tempIdx = -1;
+                if (payload.stage_id) {
+                  tempIdx = prev.findIndex(
+                    (ev) =>
+                      ev.id.startsWith('temp-') &&
+                      ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION &&
+                      ev.stage_id === payload.stage_id,
+                  );
+                }
+                if (tempIdx < 0) {
+                  tempIdx = prev.findIndex(
+                    (ev) =>
+                      ev.id.startsWith('temp-') &&
+                      ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION &&
+                      ev.content === payload.content,
+                  );
+                }
+                if (tempIdx >= 0) {
+                  const next = [...prev];
+                  next[tempIdx] = realEvent;
+                  return next;
+                }
+              }
+              return [...prev, realEvent];
+            });
           }
           return;
         }
@@ -651,6 +727,19 @@ export function SessionDetailPage() {
             return { ...prev, stages: [...stages, newStage] };
           });
 
+          // Chat stage identification: forward stage events matching the
+          // current chat stage to useChatState for UI state transitions.
+          if (chatStageIdRef.current && payload.stage_id === chatStageIdRef.current) {
+            if (payload.status === EXECUTION_STATUS.STARTED || payload.status === EXECUTION_STATUS.ACTIVE) {
+              chatState.onStageStarted(payload.stage_id);
+            } else if (TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
+              chatState.onStageTerminal();
+              // Re-expand FinalAnalysisCard after the chat completes.
+              // It was auto-collapsed when the user opened the chat panel.
+              setExpandCounter((prev) => prev + 1);
+            }
+          }
+
           // When a new stage starts, clear per-agent progress and execution
           // status maps from the previous (potentially parallel) stage.  This
           // mirrors old tarsy's pattern of clearing agentProgressStatuses when
@@ -719,8 +808,19 @@ export function SessionDetailPage() {
           const payload = data as unknown as ExecutionStatusPayload;
           setExecutionStatuses((prev) => {
             const next = new Map(prev);
-            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id });
+            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id, agentIndex: payload.agent_index });
             return next;
+          });
+          return;
+        }
+
+        // --- chat.created ---
+        // Update session with the new chat_id so ChatPanel knows a chat exists.
+        if (eventType === EVENT_CHAT_CREATED) {
+          const payload = data as unknown as ChatCreatedPayload;
+          setSession((prev) => {
+            if (!prev) return prev;
+            return { ...prev, chat_id: payload.chat_id };
           });
           return;
         }
@@ -844,6 +944,64 @@ export function SessionDetailPage() {
     },
     [],
   );
+
+  // ────────────────────────────────────────────────────────────
+  // Chat handlers
+  // ────────────────────────────────────────────────────────────
+
+  // Chat is available when the backend reports it enabled (from chain config)
+  // and the session has reached a terminal state.
+  const isChatAvailable = session
+    ? session.chat_enabled && isTerminalStatus(session.status as SessionStatus)
+    : false;
+  const chatStageInProgress = !!chatState.chatStageId && !chatState.sendingMessage;
+
+  const handleSendMessage = useCallback(async (content: string) => {
+    const result = await chatState.sendMessage(content);
+    if (result) {
+      // Sync ref immediately so the WS handler can match fast stage.status
+      // events arriving before React re-renders the effect that syncs it.
+      chatStageIdRef.current = result.stageId;
+
+      // Inject optimistic user_question into timeline with a sequence_number
+      // just past the current max so it sorts correctly in parseTimelineToFlow.
+      setTimelineEvents((prev) => {
+        const maxSeq = prev.reduce((max, ev) => Math.max(max, ev.sequence_number), 0);
+        const patched = { ...result.optimisticEvent, sequence_number: maxSeq + 1 };
+        return [...prev, patched];
+      });
+      // Update session chat_id if this was the first message
+      setSession((prev) => {
+        if (!prev || prev.chat_id) return prev;
+        return { ...prev, chat_id: result.chatId };
+      });
+      // Enable auto-scroll for chat response
+      setAutoScrollEnabled(true);
+    }
+  }, [chatState]);
+
+  const handleCancelChat = useCallback(() => {
+    chatState.cancelExecution();
+  }, [chatState]);
+
+  const handleCollapseAnalysis = useCallback(() => {
+    setCollapseCounter((prev) => prev + 1);
+  }, []);
+
+  const handleJumpToChat = useCallback(() => {
+    setChatExpandCounter((prev) => prev + 1);
+  }, []);
+
+  // Auto-scroll for chat: enable when chat stage starts, disable after completion
+  useEffect(() => {
+    if (chatStageInProgress) {
+      setAutoScrollEnabled(true);
+    } else if (chatState.chatStageId === null && !chatState.sendingMessage) {
+      // Chat stage just completed — disable with delay (same pattern as investigation)
+      const timer = setTimeout(() => setAutoScrollEnabled(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [chatStageInProgress, chatState.chatStageId, chatState.sendingMessage]);
 
   // ────────────────────────────────────────────────────────────
   // Retry
@@ -1046,6 +1204,8 @@ export function SessionDetailPage() {
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
                   chainId={session.chain_id}
+                  chatStageInProgress={chatStageInProgress}
+                  chatStageIds={chatStageIds}
                 />
               </Suspense>
             ) : isActive ? (
@@ -1077,6 +1237,26 @@ export function SessionDetailPage() {
               </Alert>
             )}
 
+            {/* Chat Panel — between timeline and Final Analysis */}
+            {isChatAvailable && (
+              <Suspense fallback={null}>
+                <ChatPanel
+                  isAvailable={isChatAvailable}
+                  chatExists={!!session.chat_id}
+                  onSendMessage={handleSendMessage}
+                  onCancelExecution={handleCancelChat}
+                  sendingMessage={chatState.sendingMessage}
+                  chatStageInProgress={chatStageInProgress}
+                  canCancel={!!chatState.chatStageId}
+                  canceling={chatState.canceling}
+                  error={chatState.error}
+                  onClearError={chatState.clearError}
+                  forceExpand={chatExpandCounter}
+                  onCollapseAnalysis={handleCollapseAnalysis}
+                />
+              </Suspense>
+            )}
+
             {/* Final AI Analysis */}
             <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
               <FinalAnalysisCard
@@ -1089,6 +1269,30 @@ export function SessionDetailPage() {
                 collapseCounter={collapseCounter}
               />
             </Suspense>
+
+            {/* Jump to Chat button — after Final Analysis, at the bottom */}
+            {isChatAvailable && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Button
+                  variant="text"
+                  size="medium"
+                  onClick={handleJumpToChat}
+                  startIcon={<KeyboardDoubleArrowDown sx={{ transform: 'rotate(180deg)' }} />}
+                  endIcon={<KeyboardDoubleArrowDown sx={{ transform: 'rotate(180deg)' }} />}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.95rem',
+                    py: 1,
+                    px: 3,
+                    color: 'primary.main',
+                    '&:hover': { backgroundColor: 'action.hover' },
+                  }}
+                >
+                  Jump to Follow-up Chat
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
         </Box>

@@ -16,6 +16,7 @@ import type { FlowItem, TimelineStats, StageGroup } from '../../utils/timelinePa
 import type { StageOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
+  FLOW_ITEM,
   groupFlowItemsByStage,
   getTimelineStats,
   isFlowItemCollapsible,
@@ -57,10 +58,14 @@ interface ConversationTimelineProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
-  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId}) */
-  executionStatuses?: Map<string, { status: string; stageId: string }>;
+  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId, agentIndex}) */
+  executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
   /** Chain ID for the header display */
   chainId?: string;
+  /** Whether a chat stage is currently in progress (session may be terminal) */
+  chatStageInProgress?: boolean;
+  /** Set of stage IDs that are chat stages (for suppressing auto-collapse) */
+  chatStageIds?: Set<string>;
 }
 
 /**
@@ -85,6 +90,8 @@ export default function ConversationTimeline({
   agentProgressStatuses,
   executionStatuses,
   chainId,
+  chatStageInProgress,
+  chatStageIds,
 }: ConversationTimelineProps) {
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
@@ -152,9 +159,12 @@ export default function ConversationTimeline({
     (item: FlowItem): boolean => {
       if (manualOverrides.has(item.id)) return false; // user expanded it
       if (animatingCollapseIds.has(item.id)) return false; // grace period for animation
+      // Don't auto-collapse final_analysis in chat stages — it's the answer
+      // the user asked for and should always be visible.
+      if (item.type === FLOW_ITEM.FINAL_ANALYSIS && item.stageId && chatStageIds?.has(item.stageId)) return false;
       return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
     },
-    [manualOverrides, animatingCollapseIds],
+    [manualOverrides, animatingCollapseIds, chatStageIds],
   );
 
   const toggleItemExpansion = useCallback((item: FlowItem) => {
@@ -427,9 +437,15 @@ export default function ConversationTimeline({
               <StreamingContentRenderer key={eventId} item={streamItem} />
             ))}
 
-        {/* Processing indicator for active sessions */}
-        {isActive && (() => {
+        {/* Processing indicator for active sessions and chat stages */}
+        {(isActive || chatStageInProgress) && (() => {
           let displayStatus = progressStatus || 'Processing...';
+
+          // For chat stages, default to "Processing..." since session-level
+          // progressStatus may be stale from the original investigation.
+          if (chatStageInProgress && !isActive) {
+            displayStatus = 'Processing...';
+          }
 
           // For single-agent stages (no tab selected), prefer the per-agent
           // progress message so the UI shows "Investigating...", "Distilling...",

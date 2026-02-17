@@ -583,12 +583,16 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		})
 	}
 
-	// Compute chat info.
-	chatEnabled := false
+	// Compute chat info — enabled by default unless explicitly disabled in chain config.
+	chatEnabled := true
+	if chain, chainErr := s.chainRegistry.Get(session.ChainID); chainErr == nil {
+		if chain.Chat != nil && !chain.Chat.Enabled {
+			chatEnabled = false
+		}
+	}
 	var chatID *string
 	chatMessageCount := 0
 	if session.Edges.Chat != nil {
-		chatEnabled = true
 		chatID = &session.Edges.Chat.ID
 		count, countErr := session.Edges.Chat.QueryUserMessages().Count(ctx)
 		if countErr != nil {

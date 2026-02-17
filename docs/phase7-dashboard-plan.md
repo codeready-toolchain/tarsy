@@ -319,7 +319,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.5: Chat Interface
+### Phase 7.5: Chat Interface ✅ DONE
 
 **Goal**: Follow-up chat UI for completed sessions.
 

@@ -21,8 +21,9 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2  # seconds
 EMPTY_RESPONSE_RETRY_DELAY = 3  # seconds
 
-# Thought signature cache TTL
-THOUGHT_SIGNATURE_TTL = 3600  # 1 hour
+# Model Content cache TTL — entries expire after this period.
+# Executions typically complete in minutes; 1 hour is generous headroom.
+MODEL_CONTENT_CACHE_TTL = 3600  # 1 hour
 
 
 class GoogleNativeProvider(LLMProvider):
@@ -31,7 +32,7 @@ class GoogleNativeProvider(LLMProvider):
     Features:
     - Cached SDK client (initialized once per API key)
     - Per-model thinking configuration
-    - Thought signature caching per execution_id
+    - Model Content caching per execution for thought signature preservation
     - Tool definition -> FunctionDeclaration conversion
     - Tool name conversion: server.tool <-> server__tool
     - Native tools (google_search, code_execution, url_context)
@@ -42,7 +43,15 @@ class GoogleNativeProvider(LLMProvider):
 
     def __init__(self):
         self._clients: Dict[str, genai.Client] = {}
-        self._thought_signatures: Dict[str, Tuple[Optional[str], float]] = {}
+        # Cache original model Content objects per execution.
+        # Each Generate call appends one turn (a list of Content objects
+        # collected from streaming chunks, exactly like the official SDK's
+        # Chat class does). On subsequent calls, these are replayed verbatim
+        # instead of reconstructing from proto fields — preserving all
+        # thought_signatures, thinking Parts, and any other fields.
+        # Key: execution_id -> (list of turns, timestamp)
+        # Each turn is a list of Content objects from streaming chunks.
+        self._model_contents: Dict[str, Tuple[List[List[genai_types.Content]], float]] = {}
 
     def _get_client(self, api_key_env: str) -> genai.Client:
         """Get or create a cached genai client for the given API key env var."""
@@ -81,16 +90,25 @@ class GoogleNativeProvider(LLMProvider):
             )
 
     def _convert_messages(
-        self, messages: List[pb.ConversationMessage]
+        self, messages: List[pb.ConversationMessage], execution_id: str = ""
     ) -> Tuple[Optional[str], List[genai_types.Content]]:
         """Convert proto messages to genai Contents.
 
         Returns (system_instruction, contents).
         System messages are extracted as system_instruction.
         Tool results (role=tool) are converted to FunctionResponse parts.
+
+        For assistant (model) messages, cached Content objects from previous
+        Generate calls are used when available. This preserves the original
+        Gemini response verbatim — including thought_signatures on all Parts,
+        thinking Parts, and any other fields the API returned. This follows
+        the same pattern as the official google-genai SDK's Chat class.
+        Falls back to reconstruction from proto fields on cache miss.
         """
         system_instruction = None
         contents: List[genai_types.Content] = []
+        cached_turns = self._get_cached_model_turns(execution_id) if execution_id else []
+        model_turn_idx = 0
 
         for idx, msg in enumerate(messages):
             if msg.role == "system":
@@ -108,30 +126,38 @@ class GoogleNativeProvider(LLMProvider):
                     )
                 )
             elif msg.role == "assistant":
-                parts: List[genai_types.Part] = []
-                if msg.content:
-                    parts.append(genai_types.Part(text=msg.content))
-                # Add function calls if present
-                for tc in msg.tool_calls:
-                    try:
-                        args = json.loads(tc.arguments) if tc.arguments else {}
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "Failed to parse tool call arguments as JSON, using empty args: %s",
-                            tc.arguments,
-                        )
-                        args = {}
-                    parts.append(
-                        genai_types.Part(
-                            function_call=genai_types.FunctionCall(
-                                name=self._tool_name_to_native(tc.name),
-                                args=args,
+                if model_turn_idx < len(cached_turns):
+                    # Use cached Content objects — preserves all thought_signatures
+                    # and thinking Parts exactly as Gemini returned them.
+                    contents.extend(cached_turns[model_turn_idx])
+                else:
+                    # Cache miss fallback: reconstruct from proto fields.
+                    # This path is hit on first call (no history) or if the
+                    # Python service restarted mid-execution.
+                    parts: List[genai_types.Part] = []
+                    if msg.content:
+                        parts.append(genai_types.Part(text=msg.content))
+                    for tc in msg.tool_calls:
+                        try:
+                            args = json.loads(tc.arguments) if tc.arguments else {}
+                        except json.JSONDecodeError:
+                            logger.warning(
+                                "Failed to parse tool call arguments as JSON, using empty args: %s",
+                                tc.arguments,
+                            )
+                            args = {}
+                        parts.append(
+                            genai_types.Part(
+                                function_call=genai_types.FunctionCall(
+                                    name=self._tool_name_to_native(tc.name),
+                                    args=args,
+                                )
                             )
                         )
+                    contents.append(
+                        genai_types.Content(role="model", parts=parts)
                     )
-                contents.append(
-                    genai_types.Content(role="model", parts=parts)
-                )
+                model_turn_idx += 1
             elif msg.role == "tool":
                 # Tool result -> FunctionResponse
                 try:
@@ -221,25 +247,31 @@ class GoogleNativeProvider(LLMProvider):
         """Convert 'server__tool' back to canonical 'server.tool' format."""
         return name.replace("__", ".")
 
-    def _get_cached_thought_signature(self, execution_id: str) -> Optional[str]:
-        """Retrieve cached thought signature for an execution_id."""
-        entry = self._thought_signatures.get(execution_id)
+    def _get_cached_model_turns(self, execution_id: str) -> List[List[genai_types.Content]]:
+        """Retrieve cached model Content turns for an execution."""
+        entry = self._model_contents.get(execution_id)
         if entry is None:
-            return None
-        sig, ts = entry
-        if time.time() - ts > THOUGHT_SIGNATURE_TTL:
-            del self._thought_signatures[execution_id]
-            return None
-        return sig
+            return []
+        turns, ts = entry
+        if time.time() - ts > MODEL_CONTENT_CACHE_TTL:
+            del self._model_contents[execution_id]
+            return []
+        return turns
 
-    def _cache_thought_signature(self, execution_id: str, signature: Optional[str]) -> None:
-        """Cache thought signature for an execution_id."""
-        self._thought_signatures[execution_id] = (signature, time.time())
-        # Evict old entries
+    def _cache_model_turn(self, execution_id: str, turn_contents: List[genai_types.Content]) -> None:
+        """Append a model turn's Content objects to the execution cache."""
+        entry = self._model_contents.get(execution_id)
+        if entry is None:
+            turns: List[List[genai_types.Content]] = []
+        else:
+            turns = entry[0]
+        turns.append(turn_contents)
+        self._model_contents[execution_id] = (turns, time.time())
+        # Evict expired executions
         now = time.time()
-        expired = [k for k, (_, ts) in self._thought_signatures.items() if now - ts > THOUGHT_SIGNATURE_TTL]
+        expired = [k for k, (_, ts) in self._model_contents.items() if now - ts > MODEL_CONTENT_CACHE_TTL]
         for k in expired:
-            del self._thought_signatures[k]
+            del self._model_contents[k]
 
     async def generate(
         self,
@@ -263,7 +295,9 @@ class GoogleNativeProvider(LLMProvider):
             return
 
         try:
-            system_instruction, contents = self._convert_messages(list(request.messages))
+            system_instruction, contents = self._convert_messages(
+                list(request.messages), request.execution_id
+            )
             native_tools = dict(config.native_tools) if config.native_tools else {}
             tools = self._convert_tools(list(request.tools), native_tools)
         except ValueError as e:
@@ -291,7 +325,8 @@ class GoogleNativeProvider(LLMProvider):
             chunks_yielded = 0
             try:
                 async for chunk in self._stream_with_timeout(
-                    client, config.model, contents, gen_config, request_id
+                    client, config.model, contents, gen_config, request_id,
+                    execution_id=request.execution_id,
                 ):
                     yield chunk
                     chunks_yielded += 1
@@ -350,8 +385,16 @@ class GoogleNativeProvider(LLMProvider):
         gen_config: genai_types.GenerateContentConfig,
         request_id: str,
         timeout_seconds: int = 180,
+        execution_id: str = "",
     ) -> AsyncIterator[pb.GenerateResponse]:
-        """Stream from the Gemini API with timeout handling."""
+        """Stream from the Gemini API with timeout handling.
+
+        While streaming, collects the original Content objects from each chunk
+        (same pattern as the official SDK's Chat class). On successful
+        completion, these are cached per execution_id so that subsequent
+        Generate calls can replay them verbatim — preserving thought_signatures,
+        thinking Parts, and all other fields.
+        """
         has_content = False
         # Buffer usage info instead of yielding immediately. Usage-only
         # chunks are metadata, not content — yielding them would increment
@@ -360,6 +403,8 @@ class GoogleNativeProvider(LLMProvider):
         # Buffer grounding metadata (available on the candidate level,
         # typically on the last chunk of a streaming response).
         last_grounding_metadata = None
+        # Collect original Content objects for caching (SDK Chat pattern).
+        turn_contents: List[genai_types.Content] = []
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -402,6 +447,9 @@ class GoogleNativeProvider(LLMProvider):
                                 )
                             )
                         continue
+
+                    # Cache the original Content for replay in subsequent calls.
+                    turn_contents.append(candidate.content)
 
                     for part in candidate.content.parts:
                         # Thinking content
@@ -466,6 +514,10 @@ class GoogleNativeProvider(LLMProvider):
 
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
+
+        # Cache model Content for this turn (only on success).
+        if turn_contents and execution_id:
+            self._cache_model_turn(execution_id, turn_contents)
 
         # Yield grounding metadata after content (before usage)
         if last_grounding_metadata is not None:
