@@ -106,6 +106,27 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  test-dashboard:
+    name: Test Dashboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '23'
+          cache-dependency-path: web/dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web/dashboard
+        run: npm ci
+
+      - name: Run dashboard tests and type check
+        run: make test-dashboard
+
   test-python:
     name: Test Python LLM Service
     runs-on: ubuntu-latest

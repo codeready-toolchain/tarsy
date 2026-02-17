@@ -61,7 +61,7 @@ build: ## Build Go application
 # =============================================================================
 
 .PHONY: test
-test: test-go test-python ## Run all tests (Go + Python)
+test: test-go test-python test-dashboard ## Run all tests (Go + Python + Dashboard)
 	@echo ""
 	@echo -e "$(GREEN)✅ All tests passed!$(NC)"
 
@@ -151,6 +151,21 @@ dashboard-test: ## Run dashboard tests
 	@echo -e "$(YELLOW)Running dashboard tests...$(NC)"
 	@cd web/dashboard && npm run test:run
 	@echo -e "$(GREEN)✅ Dashboard tests passed$(NC)"
+
+.PHONY: dashboard-test-watch
+dashboard-test-watch: ## Run dashboard tests in watch mode
+	@echo -e "$(YELLOW)Starting dashboard tests in watch mode...$(NC)"
+	@cd web/dashboard && npm run test
+
+.PHONY: dashboard-test-build
+dashboard-test-build: ## TypeScript check for dashboard
+	@echo -e "$(YELLOW)Checking dashboard TypeScript...$(NC)"
+	@cd web/dashboard && npx tsc -b --noEmit
+	@echo -e "$(GREEN)✅ Dashboard TypeScript check passed$(NC)"
+
+.PHONY: test-dashboard
+test-dashboard: dashboard-test dashboard-test-build ## Run dashboard tests + TypeScript check
+	@echo -e "$(GREEN)✅ All dashboard checks passed$(NC)"
 
 .PHONY: dashboard-lint
 dashboard-lint: ## Lint dashboard code
