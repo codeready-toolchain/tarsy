@@ -512,14 +512,27 @@ export function SessionDetailPage() {
             };
             setTimelineEvents((prev) => {
               // Dedup optimistic chat user messages: find a temp-prefixed
-              // user_question with matching content and replace it.
+              // user_question and replace it. Prefer matching by stage_id
+              // (deterministic) and fall back to content match for cases
+              // where stage_id is missing on either side.
               if (payload.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION) {
-                const tempIdx = prev.findIndex(
-                  (ev) =>
-                    ev.id.startsWith('temp-') &&
-                    ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION &&
-                    ev.content === payload.content,
-                );
+                let tempIdx = -1;
+                if (payload.stage_id) {
+                  tempIdx = prev.findIndex(
+                    (ev) =>
+                      ev.id.startsWith('temp-') &&
+                      ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION &&
+                      ev.stage_id === payload.stage_id,
+                  );
+                }
+                if (tempIdx < 0) {
+                  tempIdx = prev.findIndex(
+                    (ev) =>
+                      ev.id.startsWith('temp-') &&
+                      ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION &&
+                      ev.content === payload.content,
+                  );
+                }
                 if (tempIdx >= 0) {
                   const next = [...prev];
                   next[tempIdx] = realEvent;

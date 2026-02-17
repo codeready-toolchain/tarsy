@@ -15,6 +15,9 @@ import type { TimelineEvent } from '../types/session.ts';
 /** Safety timeout (ms) to clear sendingMessage if WS event never arrives. */
 const SENDING_TIMEOUT_MS = 30_000;
 
+/** Safety timeout (ms) to clear canceling if WS terminal event never arrives. */
+const CANCEL_TIMEOUT_MS = 30_000;
+
 export interface ChatState {
   sendingMessage: boolean;
   canceling: boolean;
@@ -43,6 +46,7 @@ export function useChatState(sessionId: string): UseChatStateReturn {
   const [error, setError] = useState<string | null>(null);
 
   const sendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Ref to track the current chatStageId for use in the safety timeout
   // callback, avoiding stale closure issues.
   const chatStageIdRef = useRef<string | null>(null);
@@ -52,11 +56,14 @@ export function useChatState(sessionId: string): UseChatStateReturn {
     chatStageIdRef.current = chatStageId;
   }, [chatStageId]);
 
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (sendingTimeoutRef.current) {
         clearTimeout(sendingTimeoutRef.current);
+      }
+      if (cancelTimeoutRef.current) {
+        clearTimeout(cancelTimeoutRef.current);
       }
     };
   }, []);
@@ -65,6 +72,13 @@ export function useChatState(sessionId: string): UseChatStateReturn {
     if (sendingTimeoutRef.current) {
       clearTimeout(sendingTimeoutRef.current);
       sendingTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCancelTimeout = useCallback(() => {
+    if (cancelTimeoutRef.current) {
+      clearTimeout(cancelTimeoutRef.current);
+      cancelTimeoutRef.current = null;
     }
   }, []);
 
@@ -119,13 +133,21 @@ export function useChatState(sessionId: string): UseChatStateReturn {
 
   const cancelExecution = useCallback(async () => {
     setCanceling(true);
+    clearCancelTimeout();
+    cancelTimeoutRef.current = setTimeout(() => {
+      console.warn('Chat cancel timeout — clearing canceling indicator');
+      setCanceling(false);
+      cancelTimeoutRef.current = null;
+    }, CANCEL_TIMEOUT_MS);
+
     try {
       await cancelSession(sessionId);
     } catch (err) {
       setCanceling(false);
+      clearCancelTimeout();
       setError(handleAPIError(err));
     }
-  }, [sessionId]);
+  }, [sessionId, clearCancelTimeout]);
 
   // Called by SessionDetailPage WS handler when stage.status started arrives
   // for the chat stage.
@@ -144,7 +166,8 @@ export function useChatState(sessionId: string): UseChatStateReturn {
     setSendingMessage(false);
     setCanceling(false);
     clearSendingTimeout();
-  }, [clearSendingTimeout]);
+    clearCancelTimeout();
+  }, [clearSendingTimeout, clearCancelTimeout]);
 
   const clearError = useCallback(() => {
     setError(null);

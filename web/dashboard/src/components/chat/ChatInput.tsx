@@ -14,8 +14,6 @@ import {
   CircularProgress,
   Tooltip,
   Typography,
-  Snackbar,
-  Alert,
 } from '@mui/material';
 import { Send, Stop, Warning } from '@mui/icons-material';
 import { MAX_MESSAGE_LENGTH, WARNING_THRESHOLD } from '../../constants/chat.ts';
@@ -38,7 +36,6 @@ export default function ChatInput({
   canceling = false,
 }: ChatInputProps) {
   const [content, setContent] = useState('');
-  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const isDisabled = disabled || sendingMessage;
   const isOverLimit = content.length > MAX_MESSAGE_LENGTH;
@@ -195,18 +192,6 @@ export default function ChatInput({
           </Typography>
         </Box>
       )}
-
-      {/* Error notification for cancel failures */}
-      <Snackbar
-        open={!!cancelError}
-        autoHideDuration={6000}
-        onClose={() => setCancelError(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setCancelError(null)} severity="error" sx={{ width: '100%' }}>
-          {cancelError}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }
