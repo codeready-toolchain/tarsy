@@ -9,6 +9,7 @@
 import { Box, Typography, Chip } from '@mui/material';
 
 import type { MCPInteractionListItem } from '../../types/trace';
+import { MCP_INTERACTION_TYPE, MCP_LIST_TOOLS_NAME } from '../../constants/interactionTypes';
 import { getInteractionTypeLabel } from './traceHelpers';
 
 interface MCPInteractionPreviewProps {
@@ -17,8 +18,8 @@ interface MCPInteractionPreviewProps {
 
 export default function MCPInteractionPreview({ interaction }: MCPInteractionPreviewProps) {
   const isToolList =
-    interaction.interaction_type === 'tool_list' ||
-    (interaction.interaction_type === 'tool_call' && interaction.tool_name === 'list_tools');
+    interaction.interaction_type === MCP_INTERACTION_TYPE.TOOL_LIST ||
+    (interaction.interaction_type === MCP_INTERACTION_TYPE.TOOL_CALL && interaction.tool_name === MCP_LIST_TOOLS_NAME);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -45,7 +46,7 @@ export default function MCPInteractionPreview({ interaction }: MCPInteractionPre
         )}
         {isToolList && (
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-            {getInteractionTypeLabel(interaction.interaction_type)}
+            {getInteractionTypeLabel(MCP_INTERACTION_TYPE.TOOL_LIST)}
           </Typography>
         )}
       </Box>

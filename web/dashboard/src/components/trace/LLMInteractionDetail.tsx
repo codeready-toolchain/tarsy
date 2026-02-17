@@ -24,7 +24,7 @@ import type { LLMInteractionDetailResponse, ConversationMessage } from '../../ty
 import CopyButton from '../shared/CopyButton';
 import JsonDisplay from '../shared/JsonDisplay';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
-import { getInteractionTypeLabel, formatLLMDetailForCopy } from './traceHelpers';
+import { getInteractionTypeLabel, formatLLMDetailForCopy, serializeMessageContent } from './traceHelpers';
 
 interface LLMInteractionDetailProps {
   detail: LLMInteractionDetailResponse;
@@ -53,12 +53,7 @@ function getMessageStyle(role: string) {
 /** Render a single conversation message. */
 function ConversationMessageView({ message, index }: { message: ConversationMessage; index: number }) {
   const style = getMessageStyle(message.role);
-  const content =
-    typeof message.content === 'string'
-      ? message.content
-      : message.content == null || message.content === ''
-        ? ''
-        : JSON.stringify(message.content);
+  const content = serializeMessageContent(message.content);
 
   const maxHeight = message.role === 'system' ? 200 : message.role === 'assistant' ? 300 : 200;
 
@@ -146,7 +141,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
   const rawCopyText = (() => {
     let text = '';
     for (const msg of detail.conversation) {
-      text += `${msg.role.toUpperCase()}:\n${msg.content || ''}\n\n`;
+      text += `${msg.role.toUpperCase()}:\n${serializeMessageContent(msg.content)}\n\n`;
     }
     text += `MODEL: ${detail.model_name}`;
     if (detail.total_tokens != null) text += ` | TOKENS: ${detail.total_tokens}`;

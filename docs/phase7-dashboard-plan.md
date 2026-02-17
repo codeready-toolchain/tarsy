@@ -353,7 +353,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.6: Trace View
+### Phase 7.6: Trace View ✅ DONE
 
 **Goal**: Dedicated trace page for observability information, replacing the old technical/debug tab. Available for all sessions (active and terminated) with live updates for active sessions.
 

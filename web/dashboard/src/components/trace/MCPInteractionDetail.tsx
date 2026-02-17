@@ -12,6 +12,7 @@ import { memo } from 'react';
 import { Box, Typography, Stack, Divider } from '@mui/material';
 
 import type { MCPInteractionDetailResponse } from '../../types/trace';
+import { MCP_INTERACTION_TYPE, MCP_LIST_TOOLS_NAME } from '../../constants/interactionTypes';
 import CopyButton from '../shared/CopyButton';
 import JsonDisplay from '../shared/JsonDisplay';
 import { formatMCPDetailForCopy } from './traceHelpers';
@@ -22,8 +23,8 @@ interface MCPInteractionDetailProps {
 
 function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
   const isToolList =
-    detail.interaction_type === 'tool_list' ||
-    (detail.interaction_type === 'tool_call' && detail.tool_name === 'list_tools');
+    detail.interaction_type === MCP_INTERACTION_TYPE.TOOL_LIST ||
+    (detail.interaction_type === MCP_INTERACTION_TYPE.TOOL_CALL && detail.tool_name === MCP_LIST_TOOLS_NAME);
 
   const rawCopyText = (() => {
     if (isToolList) {

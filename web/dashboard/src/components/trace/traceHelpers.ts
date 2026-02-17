@@ -27,7 +27,25 @@ import type {
 } from '../../types/trace';
 import type { SessionDetailResponse, StageOverview, ExecutionOverview } from '../../types/session';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
+import { LLM_INTERACTION_TYPE, MCP_INTERACTION_TYPE, MCP_LIST_TOOLS_NAME } from '../../constants/interactionTypes';
 import { formatDurationMs, formatTimestamp, formatTokensCompact } from '../../utils/format';
+
+// ────────────────────────────────────────────────────────────
+// Content serialization
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Serialize message content to a display-safe string.
+ *
+ * The TypeScript type says `content: string`, but the API may return
+ * structured content (objects/arrays) for certain LLM responses.
+ * This prevents `[object Object]` in display and copy operations.
+ */
+export function serializeMessageContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (content == null || content === '') return '';
+  return JSON.stringify(content);
+}
 
 // ────────────────────────────────────────────────────────────
 // Interaction type labels and colors
@@ -36,19 +54,19 @@ import { formatDurationMs, formatTimestamp, formatTokensCompact } from '../../ut
 /** Map backend interaction_type to human-readable label. */
 export function getInteractionTypeLabel(type: string): string {
   switch (type) {
-    case 'iteration':
+    case LLM_INTERACTION_TYPE.ITERATION:
       return 'Investigation';
-    case 'summarization':
+    case LLM_INTERACTION_TYPE.SUMMARIZATION:
       return 'Summarization';
-    case 'final_analysis':
+    case LLM_INTERACTION_TYPE.FINAL_ANALYSIS:
       return 'Final Analysis';
-    case 'executive_summary':
+    case LLM_INTERACTION_TYPE.EXECUTIVE_SUMMARY:
       return 'Executive Summary';
-    case 'chat_response':
+    case LLM_INTERACTION_TYPE.CHAT_RESPONSE:
       return 'Chat Response';
-    case 'tool_call':
+    case MCP_INTERACTION_TYPE.TOOL_CALL:
       return 'Tool Call';
-    case 'tool_list':
+    case MCP_INTERACTION_TYPE.TOOL_LIST:
       return 'Tool List';
     default:
       return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
@@ -60,19 +78,19 @@ export function getInteractionTypeColor(
   type: string,
 ): 'primary' | 'warning' | 'success' | 'info' | 'secondary' | 'error' | 'default' {
   switch (type) {
-    case 'iteration':
+    case LLM_INTERACTION_TYPE.ITERATION:
       return 'primary';
-    case 'summarization':
+    case LLM_INTERACTION_TYPE.SUMMARIZATION:
       return 'warning';
-    case 'final_analysis':
+    case LLM_INTERACTION_TYPE.FINAL_ANALYSIS:
       return 'success';
-    case 'executive_summary':
+    case LLM_INTERACTION_TYPE.EXECUTIVE_SUMMARY:
       return 'info';
-    case 'chat_response':
+    case LLM_INTERACTION_TYPE.CHAT_RESPONSE:
       return 'primary';
-    case 'tool_call':
+    case MCP_INTERACTION_TYPE.TOOL_CALL:
       return 'secondary';
-    case 'tool_list':
+    case MCP_INTERACTION_TYPE.TOOL_LIST:
       return 'secondary';
     default:
       return 'default';
@@ -172,7 +190,7 @@ export function computeLLMStepDescription(interaction: LLMInteractionListItem): 
 
 /** Build a human-readable step description for an MCP interaction. */
 export function computeMCPStepDescription(interaction: MCPInteractionListItem): string {
-  if (interaction.interaction_type === 'tool_list') {
+  if (interaction.interaction_type === MCP_INTERACTION_TYPE.TOOL_LIST) {
     return `Tool List — ${interaction.server_name}`;
   }
   if (interaction.tool_name) {
@@ -329,19 +347,6 @@ export function getExecutionStatusCounts(executions: ExecutionOverview[]): {
   };
 }
 
-/** Get aggregate interaction counts across parallel executions. */
-export function getAggregateInteractionCounts(
-  stage: TraceStageGroup,
-): { llm: number; mcp: number; total: number } {
-  let llm = 0;
-  let mcp = 0;
-  for (const exec of stage.executions) {
-    llm += exec.llm_interactions.length;
-    mcp += exec.mcp_interactions.length;
-  }
-  return { llm, mcp, total: llm + mcp };
-}
-
 /** Aggregate token usage across parallel executions (from session detail). */
 export function getAggregateTotalTokens(
   executions: ExecutionOverview[],
@@ -482,7 +487,7 @@ export function formatLLMDetailForCopy(detail: LLMInteractionDetailResponse): st
 
   for (const msg of detail.conversation) {
     content += `${msg.role.toUpperCase()}:\n`;
-    content += `${msg.content || ''}\n`;
+    content += `${serializeMessageContent(msg.content)}\n`;
     if (msg.tool_calls?.length) {
       for (const tc of msg.tool_calls) {
         content += `  [Tool Call] ${tc.name}(${tc.arguments})\n`;
@@ -503,8 +508,8 @@ export function formatLLMDetailForCopy(detail: LLMInteractionDetailResponse): st
 /** Format MCP detail for "Copy All Details". */
 export function formatMCPDetailForCopy(detail: MCPInteractionDetailResponse): string {
   const isToolList =
-    detail.interaction_type === 'tool_list' ||
-    (detail.interaction_type === 'tool_call' && detail.tool_name === 'list_tools');
+    detail.interaction_type === MCP_INTERACTION_TYPE.TOOL_LIST ||
+    (detail.interaction_type === MCP_INTERACTION_TYPE.TOOL_CALL && detail.tool_name === MCP_LIST_TOOLS_NAME);
 
   let content = isToolList ? '=== MCP TOOL LIST ===\n\n' : '=== MCP TOOL CALL ===\n\n';
 
