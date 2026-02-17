@@ -1,16 +1,25 @@
+/**
+ * Footer displaying version information with live backend version updates.
+ *
+ * Shows single "Version: X" when dashboard and agent match, separate versions
+ * when they differ, and loading/unavailable states. Tooltip shows agent status.
+ *
+ * Visual layer ported from old TARSy VersionFooter.tsx.
+ */
+
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
 import { DASHBOARD_VERSION } from '../../config/env.ts';
+import { useVersion } from '../../contexts/VersionContext.tsx';
 
-/**
- * Footer displaying dashboard version.
- * Backend version comparison, tooltip, and mismatch display wired in Phase 7.7.
- *
- * Layout matches old TARSy footer: centered text, divider top, "Powered by AI" branding.
- */
 export function VersionFooter() {
-  // Phase 7.7: VersionContext will provide backendVersion and backendStatus
-  // for separate version display, tooltip, and loading/unavailable states.
+  const { backendVersion: agentVersion, backendStatus } = useVersion();
+
+  const showSingleVersion = agentVersion && agentVersion === DASHBOARD_VERSION;
+  const showSeparateVersions =
+    agentVersion && agentVersion !== DASHBOARD_VERSION && agentVersion !== 'unavailable';
+
   return (
     <Box
       component="footer"
@@ -23,9 +32,41 @@ export function VersionFooter() {
         borderColor: 'divider',
       }}
     >
-      <Typography variant="body2" color="text.secondary">
-        TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION}
-      </Typography>
+      {showSingleVersion && (
+        <Tooltip title={`Agent status: ${backendStatus}`} arrow>
+          <Typography variant="body2" color="text.secondary" sx={{ cursor: 'help' }}>
+            TARSy - Powered by AI &bull; Version: {DASHBOARD_VERSION}
+          </Typography>
+        </Tooltip>
+      )}
+
+      {showSeparateVersions && (
+        <Tooltip title={`Agent status: ${backendStatus}`} arrow>
+          <Typography variant="body2" color="text.secondary" sx={{ cursor: 'help' }}>
+            TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION} &bull; Agent:{' '}
+            {agentVersion}
+          </Typography>
+        </Tooltip>
+      )}
+
+      {!agentVersion && backendStatus === 'checking' && (
+        <Typography variant="body2" color="text.secondary">
+          TARSy - Powered by AI &bull; Loading version info...
+        </Typography>
+      )}
+
+      {agentVersion === 'unavailable' && (
+        <Typography variant="body2" color="text.secondary">
+          TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION} &bull; Agent: unavailable
+        </Typography>
+      )}
+
+      {/* Fallback when backendStatus is 'error' and no agentVersion set yet */}
+      {!agentVersion && backendStatus === 'error' && (
+        <Typography variant="body2" color="text.secondary">
+          TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION}
+        </Typography>
+      )}
     </Box>
   );
 }

@@ -3,12 +3,14 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from './theme/index.ts';
 import { AuthProvider } from './contexts/AuthContext.tsx';
+import { VersionProvider } from './contexts/VersionContext.tsx';
 import { SystemWarningBanner } from './components/layout/SystemWarningBanner.tsx';
 import { VersionUpdateBanner } from './components/layout/VersionUpdateBanner.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { SessionDetailPage } from './pages/SessionDetailPage.tsx';
 import { TracePage } from './pages/TracePage.tsx';
 import { SubmitAlertPage } from './pages/SubmitAlertPage.tsx';
+import { SystemStatusPage } from './pages/SystemStatusPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 
 const router = createBrowserRouter([
@@ -29,6 +31,10 @@ const router = createBrowserRouter([
     element: <SubmitAlertPage />,
   },
   {
+    path: '/system',
+    element: <SystemStatusPage />,
+  },
+  {
     path: '*',
     element: <NotFoundPage />,
   },
@@ -38,11 +44,13 @@ export function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthProvider>
-        <SystemWarningBanner />
-        <VersionUpdateBanner />
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <VersionProvider>
+        <AuthProvider>
+          <VersionUpdateBanner />
+          <SystemWarningBanner />
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </VersionProvider>
     </ThemeProvider>
   );
 }
