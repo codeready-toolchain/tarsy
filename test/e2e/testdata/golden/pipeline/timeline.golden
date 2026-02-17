@@ -139,7 +139,7 @@
     "content": "I should verify the pod memory limits are properly configured.",
     "event_type": "llm_thinking",
     "metadata": {
-      "source": "react"
+      "source": "native"
     },
     "sequence": 1,
     "status": "completed"
@@ -162,7 +162,7 @@
     "content": "The memory limit of 512Mi matches the alert threshold.",
     "event_type": "llm_thinking",
     "metadata": {
-      "source": "react"
+      "source": "native"
     },
     "sequence": 3,
     "status": "completed"
@@ -170,8 +170,15 @@
   {
     "agent": "ConfigValidator",
     "content": "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
-    "event_type": "final_analysis",
+    "event_type": "llm_response",
     "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "ConfigValidator",
+    "content": "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.",
+    "event_type": "final_analysis",
+    "sequence": 5,
     "status": "completed"
   },
   {
@@ -356,7 +363,7 @@
     "content": "I should check the pod logs to understand the OOM pattern.",
     "event_type": "llm_thinking",
     "metadata": {
-      "source": "react"
+      "source": "native"
     },
     "sequence": 1,
     "status": "completed"
@@ -379,7 +386,7 @@
     "content": "Let me check the Prometheus alert history for memory-related alerts.",
     "event_type": "llm_thinking",
     "metadata": {
-      "source": "react"
+      "source": "native"
     },
     "sequence": 3,
     "status": "completed"
@@ -415,7 +422,7 @@
     "content": "The logs and alerts confirm repeated OOM kills due to memory pressure.",
     "event_type": "llm_thinking",
     "metadata": {
-      "source": "react"
+      "source": "native"
     },
     "sequence": 6,
     "status": "completed"
@@ -423,8 +430,15 @@
   {
     "agent": "Remediator",
     "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
-    "event_type": "final_analysis",
+    "event_type": "llm_response",
     "sequence": 7,
+    "status": "completed"
+  },
+  {
+    "agent": "Remediator",
+    "content": "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.",
+    "event_type": "final_analysis",
+    "sequence": 8,
     "status": "completed"
   },
   {

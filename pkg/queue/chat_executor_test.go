@@ -312,7 +312,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		SessionID:         session.ID,
 		AgentName:         "agent-1",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: "langchain",
 	})
 	require.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		SessionID:         session.ID,
 		AgentName:         "agent-1",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: "langchain",
 	})
 	require.NoError(t, err)
 
@@ -331,7 +331,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		SessionID:         session.ID,
 		AgentName:         "synthesizer",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: "langchain",
 	})
 	require.NoError(t, err)
 
@@ -340,7 +340,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		SessionID:         session.ID,
 		AgentName:         "synthesizer",
 		AgentIndex:        1,
-		IterationStrategy: "react",
+		IterationStrategy: "langchain",
 	})
 	require.NoError(t, err)
 
@@ -523,7 +523,7 @@ func stubConfig() *config.Config {
 	return &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:       "test",
-			IterationStrategy: "react",
+			IterationStrategy: "langchain",
 		},
 		ChainRegistry:       config.NewChainRegistry(nil),
 		AgentRegistry:       config.NewAgentRegistry(nil),

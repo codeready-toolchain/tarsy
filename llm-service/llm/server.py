@@ -8,7 +8,7 @@ from pathlib import Path
 import grpc
 from dotenv import load_dotenv
 
-from proto import llm_service_pb2_grpc as pb_grpc
+from llm_proto import llm_service_pb2_grpc as pb_grpc
 from llm.servicer import LLMServicer
 
 # Configure logging

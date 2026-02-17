@@ -7,7 +7,7 @@ interface EmojiIconProps {
   opacity: number;
   showTooltip?: boolean;
   tooltipContent?: string;
-  tooltipType?: 'thought' | 'native_thinking' | 'final_answer' | 'forced_conclusion' | 'summarization';
+  tooltipType?: 'thought' | 'final_answer' | 'forced_conclusion' | 'summarization';
 }
 
 /**

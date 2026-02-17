@@ -4,10 +4,10 @@ package config
 type IterationStrategy string
 
 const (
-	// IterationStrategyReact uses standard ReAct pattern with tool calls
-	IterationStrategyReact IterationStrategy = "react"
-	// IterationStrategyNativeThinking uses LLM native thinking/reasoning
+	// IterationStrategyNativeThinking uses LLM native thinking/reasoning via Google SDK
 	IterationStrategyNativeThinking IterationStrategy = "native-thinking"
+	// IterationStrategyLangChain uses LangChain for multi-provider function calling
+	IterationStrategyLangChain IterationStrategy = "langchain"
 	// IterationStrategySynthesis synthesizes parallel investigation results
 	IterationStrategySynthesis IterationStrategy = "synthesis"
 	// IterationStrategySynthesisNativeThinking is synthesis with native thinking
@@ -17,8 +17,8 @@ const (
 // IsValid checks if the iteration strategy is valid
 func (s IterationStrategy) IsValid() bool {
 	switch s {
-	case IterationStrategyReact,
-		IterationStrategyNativeThinking,
+	case IterationStrategyNativeThinking,
+		IterationStrategyLangChain,
 		IterationStrategySynthesis,
 		IterationStrategySynthesisNativeThinking:
 		return true

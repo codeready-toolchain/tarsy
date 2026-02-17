@@ -11,8 +11,8 @@ import (
 func intPtr(i int) *int { return &i }
 
 func TestResolveBackend(t *testing.T) {
-	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategyReact))
 	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategyNativeThinking))
+	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategyLangChain))
 	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategySynthesis))
 	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategySynthesisNativeThinking))
 	// Unknown strategy defaults to langchain
@@ -25,7 +25,7 @@ func TestResolveAgentConfig(t *testing.T) {
 	defaults := &config.Defaults{
 		LLMProvider:       "google-default",
 		MaxIterations:     &maxIter25,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -87,7 +87,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		}
 		agentConfig := config.StageAgentConfig{
 			Name:              "KubernetesAgent",
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 			LLMProvider:       "openai-default",
 			MaxIterations:     intPtr(5),
 			MCPServers:        []string{"custom-server"},
@@ -99,7 +99,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, config.IterationStrategyReact, resolved.IterationStrategy)
+		assert.Equal(t, config.IterationStrategyLangChain, resolved.IterationStrategy)
 		assert.Equal(t, openaiProvider, resolved.LLMProvider)
 		assert.Equal(t, 5, resolved.MaxIterations)
 		assert.Equal(t, []string{"custom-server"}, resolved.MCPServers)
@@ -108,7 +108,7 @@ func TestResolveAgentConfig(t *testing.T) {
 
 	t.Run("chain-level strategy overrides agent-def", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		}
 		stageConfig := config.StageConfig{}
 		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
@@ -116,8 +116,8 @@ func TestResolveAgentConfig(t *testing.T) {
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		// Chain-level react overrides agent-def's native-thinking
-		assert.Equal(t, config.IterationStrategyReact, resolved.IterationStrategy)
+		// Chain-level langchain overrides agent-def's native-thinking
+		assert.Equal(t, config.IterationStrategyLangChain, resolved.IterationStrategy)
 		assert.Equal(t, BackendLangChain, resolved.Backend)
 	})
 
@@ -225,7 +225,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 	defaults := &config.Defaults{
 		LLMProvider:       "google-default",
 		MaxIterations:     &maxIter25,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -280,7 +280,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 
 	t.Run("chatCfg overrides chain for strategy and provider", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 			LLMProvider:       "google-default",
 			MaxIterations:     intPtr(10),
 		}

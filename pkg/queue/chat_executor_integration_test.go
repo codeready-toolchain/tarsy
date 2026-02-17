@@ -31,16 +31,16 @@ func chatTestConfig(chainID string, chain *config.ChainConfig) *config.Config {
 	return &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 			MaxIterations:     &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent": {
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 				MaxIterations:     &maxIter,
 			},
 			"ChatAgent": {
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 				MaxIterations:     &maxIter,
 			},
 			"SynthesisAgent": {

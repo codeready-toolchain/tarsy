@@ -132,15 +132,6 @@ func generateCallID() string {
 	return uuid.New().String()
 }
 
-// buildToolNameSet creates a set of available tool names for quick lookup.
-func buildToolNameSet(tools []agent.ToolDefinition) map[string]bool {
-	set := make(map[string]bool, len(tools))
-	for _, t := range tools {
-		set[t.Name] = true
-	}
-	return set
-}
-
 // failedResult creates a failed ExecutionResult from iteration state.
 // state must not be nil — callers always pass the locally-created IterationState
 // from the top of their Run() method.

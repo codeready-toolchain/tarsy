@@ -27,22 +27,22 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.Contains(t, err.Error(), "iteration strategy is required")
 	})
 
-	t.Run("react strategy returns ReActController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.IterationStrategyReact, execCtx)
-		require.NoError(t, err)
-		require.NotNil(t, controller)
-
-		_, ok := controller.(*ReActController)
-		assert.True(t, ok, "expected ReActController")
-	})
-
-	t.Run("native-thinking strategy returns NativeThinkingController", func(t *testing.T) {
+	t.Run("native-thinking strategy returns FunctionCallingController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.IterationStrategyNativeThinking, execCtx)
 		require.NoError(t, err)
 		require.NotNil(t, controller)
 
-		_, ok := controller.(*NativeThinkingController)
-		assert.True(t, ok, "expected NativeThinkingController")
+		_, ok := controller.(*FunctionCallingController)
+		assert.True(t, ok, "expected FunctionCallingController")
+	})
+
+	t.Run("langchain strategy returns FunctionCallingController", func(t *testing.T) {
+		controller, err := factory.CreateController(config.IterationStrategyLangChain, execCtx)
+		require.NoError(t, err)
+		require.NotNil(t, controller)
+
+		_, ok := controller.(*FunctionCallingController)
+		assert.True(t, ok, "expected FunctionCallingController")
 	})
 
 	t.Run("synthesis strategy returns SynthesisController", func(t *testing.T) {
@@ -74,12 +74,12 @@ func TestFactory_CreateController(t *testing.T) {
 	})
 
 	t.Run("typo in strategy returns error", func(t *testing.T) {
-		typoStrategy := config.IterationStrategy("raect") // typo of "react"
+		typoStrategy := config.IterationStrategy("langcahin") // typo of "langchain"
 		controller, err := factory.CreateController(typoStrategy, execCtx)
 
 		require.Error(t, err)
 		assert.Nil(t, controller)
 		assert.Contains(t, err.Error(), "unknown iteration strategy")
-		assert.Contains(t, err.Error(), "raect")
+		assert.Contains(t, err.Error(), "langcahin")
 	})
 }

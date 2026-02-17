@@ -4,11 +4,11 @@ from typing import AsyncIterator
 
 import grpc
 
-from proto import llm_service_pb2 as pb
-from proto import llm_service_pb2_grpc as pb_grpc
+from llm_proto import llm_service_pb2 as pb
+from llm_proto import llm_service_pb2_grpc as pb_grpc
 from llm.providers.registry import ProviderRegistry
 from llm.providers.google_native import GoogleNativeProvider
-from llm.providers.langchain_stub import LangChainStubProvider
+from llm.providers.langchain_provider import LangChainProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class LLMServicer(pb_grpc.LLMServiceServicer):
         # Register providers
         google = GoogleNativeProvider()
         self._registry.register("google-native", google)
-        self._registry.register("langchain", LangChainStubProvider(google))
+        self._registry.register("langchain", LangChainProvider())
 
         logger.info("LLM Servicer initialized with providers: google-native, langchain")
 

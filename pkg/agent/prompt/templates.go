@@ -6,87 +6,6 @@ package prompt
 // separator is a visual delimiter for prompt sections (matches old TARSy).
 const separator = "═══════════════════════════════════════════════════════════════════════════════"
 
-// reactFormatOpener is the investigation-specific opening for ReAct instructions.
-const reactFormatOpener = `You are an SRE agent using the ReAct framework to analyze incidents. Reason step by step, act with tools, observe results, and repeat until you identify root cause and resolution steps.`
-
-// chatReActFormatOpener is the chat-specific opening for ReAct instructions.
-// Avoids contradicting the chat persona ("helping with follow-up questions")
-// with an investigation persona ("analyze incidents").
-const chatReActFormatOpener = `Use the ReAct framework to answer follow-up questions. Reason step by step, use tools when fresh data is needed, observe results, and repeat until you have a complete answer.`
-
-// reactFormatBody is the shared ReAct format specification (rules, examples).
-// Prefixed with either reactFormatOpener or chatReActFormatOpener.
-const reactFormatBody = `REQUIRED FORMAT:
-
-Question: [the incident question]
-Thought: [your step-by-step reasoning]
-Action: [tool name from available tools]
-Action Input: [parameters as key: value pairs]
-
-⚠️ STOP immediately after Action Input. The system provides Observations.
-
-Continue the cycle. Conclude when you have sufficient information:
-
-Thought: [final reasoning]
-Final Answer: [complete structured response]
-
-CRITICAL RULES:
-1. Always use colons after headers: "Thought:", "Action:", "Action Input:"
-2. Start each section on a NEW LINE (never continue on same line as previous text)
-3. Stop after Action Input—never generate fake Observations
-4. Parameters: one per line for multiple values, or inline for single value
-5. Conclude when you have actionable insights (perfect information not required)
-
-PARAMETER FORMATS:
-
-Multiple parameters:
-Action Input: apiVersion: v1
-kind: Namespace
-name: superman-dev
-
-Single parameter:
-Action Input: namespace: default
-
-EXAMPLE CYCLE:
-
-Question: Why is namespace 'superman-dev' stuck in terminating state?
-
-Thought: I need to check the namespace status first to identify any blocking resources or finalizers.
-
-Action: kubernetes-server.resources_get
-Action Input: apiVersion: v1
-kind: Namespace
-name: superman-dev
-
-[System provides: Observation: {"status": {"phase": "Terminating", "finalizers": ["kubernetes"]}}]
-
-Thought: A finalizer is blocking deletion. I should check for any remaining resources in the namespace.
-
-Action: kubernetes-server.resources_list
-Action Input: apiVersion: v1
-kind: Pod
-namespace: superman-dev
-
-[System provides: Observation: No pods found]
-
-Thought: No pods remain, but the finalizer persists. This is an orphaned finalizer that needs manual removal.
-
-Final Answer:
-**Root Cause:** Orphaned 'kubernetes' finalizer blocking namespace deletion after all resources were cleaned up.
-
-**Resolution Steps:**
-1. Remove the finalizer: ` + "`" + `kubectl patch namespace superman-dev -p '{"spec":{"finalizers":null}}' --type=merge` + "`" + `
-2. Verify deletion: ` + "`" + `kubectl get namespace superman-dev` + "`" + `
-3. If still stuck, check for remaining resources: ` + "`" + `kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get -n superman-dev` + "`" + `
-
-**Preventive Measures:** Ensure cleanup scripts remove finalizers when deleting namespaces programmatically.`
-
-// reactFormatInstructions is the full ReAct format guide for investigation mode.
-var reactFormatInstructions = reactFormatOpener + "\n\n" + reactFormatBody
-
-// chatReActFormatInstructions is the full ReAct format guide for chat mode.
-var chatReActFormatInstructions = chatReActFormatOpener + "\n\n" + reactFormatBody
-
 // analysisTask is the investigation task instruction appended to the user message.
 const analysisTask = `## Your Task
 Use the available tools to investigate this alert and provide:
@@ -101,7 +20,7 @@ Be thorough in your investigation before providing the final answer.`
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 
 // forcedConclusionTemplate is the base template for forced conclusion prompts.
-// %d = iteration count, %s = strategy-specific format instructions.
+// %d = iteration count, %s = format instructions.
 const forcedConclusionTemplate = `You have reached the investigation iteration limit (%d iterations).
 
 Please conclude your investigation by answering the original question based on what you've discovered.
@@ -114,16 +33,8 @@ Please conclude your investigation by answering the original question based on w
 
 %s`
 
-// reactForcedConclusionFormat is the ReAct-specific forced conclusion format instruction.
-const reactForcedConclusionFormat = `**CRITICAL:** You MUST format your response using the ReAct format:
-
-Thought: [your final reasoning about what you've discovered]
-Final Answer: [your complete structured conclusion]
-
-The "Final Answer:" marker is required for proper parsing. Begin your conclusion now.`
-
-// nativeThinkingForcedConclusionFormat is the native thinking forced conclusion format.
-const nativeThinkingForcedConclusionFormat = `Provide a clear, structured conclusion that directly addresses the investigation question.`
+// forcedConclusionFormat is the forced conclusion format instruction.
+const forcedConclusionFormat = `Provide a clear, structured conclusion that directly addresses the investigation question.`
 
 // mcpSummarizationSystemTemplate is the system prompt for MCP result summarization.
 // %s = server name, %s = tool name, %d = max summary tokens.

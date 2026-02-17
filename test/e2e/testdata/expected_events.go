@@ -26,8 +26,8 @@ type ExpectedEvent struct {
 // Scenario: Pipeline
 // Four stages + two synthesis stages + two chat messages:
 //   1. investigation  (DataCollector, NativeThinking)
-//   2. remediation    (Remediator, ReAct)
-//   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
+//   2. remediation    (Remediator, langchain)
+//   3. validation     (ConfigValidator langchain ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (synthesis-native-thinking)
 //   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
 //      → scaling-review - Synthesis (plain synthesis)
@@ -96,14 +96,12 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "investigation", Status: "completed"},
 
-	// ── Stage 2: remediation (Remediator, react) ──
-	// ReAct uses text-based tool calling with ReAct-aware streaming. No llm_response events
-	// are created — instead, llm_thinking events are created directly from parsed ReAct text.
-	// Mirrors stage 1: tool call (no summary) → tool call (with summary) → final answer.
+	// ── Stage 2: remediation (Remediator, langchain) ──
+	// Function calling uses ThinkingChunk + ToolCallChunk. Mirrors stage 1:
+	// tool call (no summary) → tool call (with summary) → final answer.
 	{Type: "stage.status", StageName: "remediation", Status: "started"},
 
 	// Iteration 1: test-mcp/get_pod_logs — small result, no summarization.
-	// ReAct llm_thinking: streamed live by callLLMWithReActStreaming.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
 	{Type: "timeline_event.completed", EventType: "llm_thinking",
 		Content: "I should check the pod logs to understand the OOM pattern."},
@@ -132,23 +130,25 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "mcp_tool_summary",
 		Content: "OOMKilled alert fired 3 times in the last hour for pod-1."},
 
-	// Iteration 3: final answer — both thought and final answer streamed live.
+	// Iteration 3: final answer — thinking + response + final_analysis (function calling).
+	// final_analysis is created as completed (no streaming phase) via createTimelineEvent.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
 	{Type: "timeline_event.completed", EventType: "llm_thinking",
-		Content: "The logs and alerts confirm repeated OOM kills due to memory pressure."},
-	{Type: "timeline_event.created", EventType: "final_analysis", Status: "streaming"},
-	{Type: "timeline_event.completed", EventType: "final_analysis",
+		Content: "The logs and alerts confirm repeated OOM kills due to memory pressure.", Group: 5},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.", Group: 5},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
 
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
 
-	// ── Stage 3: validation (ConfigValidator react ∥ MetricsValidator native-thinking) ──
+	// ── Stage 3: validation (ConfigValidator langchain ∥ MetricsValidator native-thinking) ──
 	// Two agents run in parallel. Events from both agents interleave non-deterministically,
 	// so all timeline events are in a single Group (matched in any order).
 	{Type: "stage.status", StageName: "validation", Status: "started"},
 
-	// --- ConfigValidator (react): iteration 1 — tool call ---
-	// ReAct-aware streaming: thought streamed live, no llm_response events.
+	// --- ConfigValidator (function calling): iteration 1 — tool call ---
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
 		Content: "I should verify the pod memory limits are properly configured."},
@@ -159,12 +159,15 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	}},
 	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 10,
 		Content: `{"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}`},
-	// --- ConfigValidator (react): iteration 2 — both thought and final answer streamed ---
+	// --- ConfigValidator (function calling): iteration 2 — thought + response + final_analysis ---
+	// final_analysis is created as completed (no streaming phase) via createTimelineEvent.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
 		Content: "The memory limit of 512Mi matches the alert threshold."},
-	{Type: "timeline_event.created", EventType: "final_analysis", Status: "streaming", Group: 10},
-	{Type: "timeline_event.completed", EventType: "final_analysis", Group: 10,
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 10,
+		Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 10,
 		Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
 
 	// --- MetricsValidator (native-thinking, forced conclusion): iteration 1 — tool call ---

@@ -28,7 +28,7 @@ type StageInvestigation struct {
 type AgentInvestigation struct {
 	AgentName    string
 	AgentIndex   int
-	Strategy     string               // e.g., "native-thinking", "react"
+	Strategy     string               // e.g., "native-thinking", "langchain"
 	LLMProvider  string               // e.g., "gemini-2.5-pro"
 	Status       alertsession.Status  // terminal status (completed, failed, etc.)
 	Events       []*ent.TimelineEvent // full investigation (from GetAgentTimeline)

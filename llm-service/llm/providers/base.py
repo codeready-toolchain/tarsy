@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import AsyncIterator
 
-from proto import llm_service_pb2 as pb
+from llm_proto import llm_service_pb2 as pb
 
 
 class LLMProvider(ABC):

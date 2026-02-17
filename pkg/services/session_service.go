@@ -146,7 +146,7 @@ func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessi
 		SetAgentName(req.AgentType). // Use agent_type as initial agent name
 		SetAgentIndex(1).
 		SetStatus(agentexecution.StatusPending).
-		SetIterationStrategy("react"). // Default strategy
+		SetIterationStrategy(string(config.IterationStrategyLangChain)). // Default strategy
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create initial agent execution: %w", err)

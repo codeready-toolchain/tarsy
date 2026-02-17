@@ -37,7 +37,7 @@ Key design: **no stored output fields** on Stage or AgentExecution. Context is b
 pkg/
 ├── api/              # HTTP handlers (session, timeline, trace, chat, health), requests, responses, error mapping
 ├── agent/            # Agent interface, lifecycle, LLM client, tool executor
-│   ├── controller/   # Iteration controllers (ReAct, NativeThinking, Synthesis), ReAct parser, tool execution, summarization
+│   ├── controller/   # Iteration controllers (FunctionCalling, Synthesis), tool execution, summarization
 │   ├── context/      # Context formatter, investigation formatter, stage context builder
 │   └── prompt/       # Prompt builder, templates, instructions, components
 ├── config/           # Loader, registries, builtin config, enums, validator
@@ -56,7 +56,7 @@ deploy/
 proto/
 └── llm_service.proto
 llm-service/
-└── llm/providers/    # Python LLM providers (GoogleNativeProvider, LangChainProvider stub)
+└── llm/providers/    # Python LLM providers (GoogleNativeProvider, LangChainProvider)
 test/
 ├── e2e/              # End-to-end tests (harness, mocks, helpers, scenarios, golden files)
 │   └── testdata/     # YAML configs per scenario, golden files, expected event definitions
@@ -115,7 +115,7 @@ The end-to-end happy path from alert submission to completion:
 
 Follow-up chat allows users to ask questions about completed investigations. Chat is a 1:1 extension of an `AlertSession` — after an investigation reaches a terminal state, users send messages that each trigger a single-agent execution with access to the same MCP tools.
 
-**Design principle**: Chat is a prompt concern, not a controller concern. The same controllers (ReAct, NativeThinking) handle both investigation and chat — the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers. Same iteration limits, same `forceConclusion()` at `MaxIterations`, same per-iteration timeout.
+**Design principle**: Chat is a prompt concern, not a controller concern. The same controllers (FunctionCalling, Synthesis) handle both investigation and chat — the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers. Same iteration limits, same `forceConclusion()` at `MaxIterations`, same per-iteration timeout.
 
 ### End-to-End Chat Flow
 
@@ -154,26 +154,14 @@ All context — original investigation AND previous chat exchanges — comes fro
 
 ## Iteration Loop Flows
 
-### ReAct Controller (`pkg/agent/controller/react.go`)
+### FunctionCallingController (`pkg/agent/controller/function_calling.go`)
 
-1. `ToolExecutor.ListTools()` → get available tools
-2. `PromptBuilder.BuildReActMessages()` → system + user messages (tools described in prompt text, NOT bound to LLM)
-3. Store initial messages in DB
-4. **Loop** (up to `MaxIterations`):
-   - Call LLM with streaming (no tool bindings — ReAct uses text-based tool calling)
-   - Parse response via `ParseReActResponse()` → extracts Thought, Action, ActionInput, or FinalAnswer
-   - Store assistant message + record LLM interaction
-   - If **final answer**: create `final_analysis` timeline event → return completed
-   - If **tool call**: create `llm_tool_call` event → `ToolExecutor.Execute(toolCall)` → create `tool_result` event → append observation as user message → continue loop
-   - If **malformed**: append format feedback as user message → continue
-5. If max iterations reached: `forceConclusion()` — one more LLM call without tools
+Handles both `native-thinking` and `langchain` strategies.
 
-### NativeThinking Controller (`pkg/agent/controller/native_thinking.go`)
-
-1. `PromptBuilder.BuildNativeThinkingMessages()` → system + user messages
+1. `PromptBuilder.BuildFunctionCallingMessages()` → system + user messages
 2. Store initial messages, list tools
 3. **Loop** (up to `MaxIterations`):
-   - Call LLM with streaming AND tool bindings (Gemini structured function calling)
+   - Call LLM with streaming AND tool bindings (structured function calling)
    - Create native tool events (code execution, grounding) if present
    - If **tool calls in response**: store assistant message with tool calls → execute each tool → append tool result messages (role=`tool` with `tool_call_id`) → continue
    - If **no tool calls**: this IS the final answer → create `final_analysis` event → return completed
@@ -181,8 +169,8 @@ All context — original investigation AND previous chat exchanges — comes fro
 
 ### Key difference
 
-ReAct: tools described in system prompt text, LLM outputs text like `Action: server.tool`, parsed by Go. Works with any LLM provider.
-NativeThinking: tools bound as structured definitions, LLM returns `ToolCallChunk` objects. Gemini-specific.
+FunctionCalling: tools bound as structured definitions, LLM returns `ToolCallChunk` objects. Works with any provider (Gemini via google-native backend, others via langchain backend).
+Synthesis: tool-less single LLM call for synthesizing multi-agent investigation results.
 
 ---
 
@@ -242,11 +230,11 @@ type Controller interface {
 }
 ```
 
-Implementations: `ReActController`, `NativeThinkingController`, `SynthesisController`, `SingleCallController`.
+Implementations: `FunctionCallingController`, `SynthesisController`, `SingleCallController`.
 
 Strategy-to-controller mapping:
-- `react` → `ReActController` (text-parsed tools, any LLM via `langchain` backend)
-- `native-thinking` → `NativeThinkingController` (Gemini structured function calling, `google-native` backend)
+- `native-thinking` → `FunctionCallingController` (Gemini structured function calling, `google-native` backend)
+- `langchain` → `FunctionCallingController` (multi-provider function calling via LangChain backend)
 - `synthesis` / `synthesis-native-thinking` → `SynthesisController` (tool-less single call; backend from config)
 
 Chat is handled by the same controllers — chat is a prompt concern, not a controller concern.
@@ -348,7 +336,7 @@ Formats completed stage results into a context string for the next stage's agent
 type AgentInvestigation struct {
     AgentName    string
     AgentIndex   int
-    Strategy     string                  // e.g., "native-thinking", "react"
+    Strategy     string                  // e.g., "native-thinking", "langchain"
     LLMProvider  string                  // e.g., "gemini-2.5-pro"
     Status       alertsession.Status     // completed, failed, etc.
     Events       []*ent.TimelineEvent    // full investigation from GetAgentTimeline
@@ -365,10 +353,9 @@ Formats multi-agent full investigation histories for the synthesis agent. Uses t
 ### PromptBuilder (`pkg/agent/prompt/builder.go`)
 
 ```go
-func (b *PromptBuilder) BuildReActMessages(execCtx, prevStageContext, tools) []ConversationMessage
-func (b *PromptBuilder) BuildNativeThinkingMessages(execCtx, prevStageContext) []ConversationMessage
+func (b *PromptBuilder) BuildFunctionCallingMessages(execCtx, prevStageContext) []ConversationMessage
 func (b *PromptBuilder) BuildSynthesisMessages(execCtx, prevStageContext) []ConversationMessage
-func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration, strategy) string
+func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration) string
 func (b *PromptBuilder) ComposeInstructions(execCtx) string
 func (b *PromptBuilder) ComposeChatInstructions(execCtx) string
 func (b *PromptBuilder) BuildMCPSummarizationSystemPrompt(serverName, toolName, maxTokens) string
@@ -485,9 +472,9 @@ pkg/mcp/
 ### Tool Lifecycle During Execution
 
 ```
-Controller (ReAct: "server.tool" + raw text | NativeThinking: "server__tool" + JSON)
+Controller (FunctionCalling: "server__tool" + JSON via ToolCallDelta)
   → ToolExecutor.Execute(ToolCall)
-    → NormalizeToolName: server__tool → server.tool (NativeThinking reverse mapping)
+    → NormalizeToolName: server__tool → server.tool (function calling reverse mapping)
     → SplitToolName: "server" + "tool"
     → resolveToolCall: validate server in allowed list, check tool filter
     → ParseActionInput: JSON → YAML → key-value → raw string cascade
@@ -673,7 +660,7 @@ Replacement format: `[MASKED_X]` (not `__X__` to avoid Markdown bold rendering).
 
 ### Architecture Decision: Controller-Level Summarization
 
-Summarization is an LLM orchestration concern, not an MCP infrastructure concern. The `ToolExecutor` lacks LLMClient, conversation context, EventPublisher, and services — all required for summarization. Instead, summarization happens in the controller after `ToolExecutor.Execute()` returns, via a shared `maybeSummarize()` function called from both ReAct and NativeThinking controllers through the common `executeToolCall()` path (`pkg/agent/controller/tool_execution.go`).
+Summarization is an LLM orchestration concern, not an MCP infrastructure concern. The `ToolExecutor` lacks LLMClient, conversation context, EventPublisher, and services — all required for summarization. Instead, summarization happens in the controller after `ToolExecutor.Execute()` returns, via a shared `maybeSummarize()` function called from the FunctionCallingController through the common `executeToolCall()` path (`pkg/agent/controller/tool_execution.go`).
 
 ### Summarization Flow
 
@@ -777,7 +764,7 @@ func completeToolCallEvent(ctx, execCtx, event, content, isError)
 
 ### Shared Tool Execution (`pkg/agent/controller/tool_execution.go`)
 
-Both ReAct and NativeThinking controllers share tool execution logic through `executeToolCall()`, which handles: tool call event creation → `ToolExecutor.Execute()` → event completion → summarization check → MCPInteraction recording.
+The FunctionCallingController uses shared tool execution logic through `executeToolCall()`, which handles: tool call event creation → `ToolExecutor.Execute()` → event completion → summarization check → MCPInteraction recording.
 
 ---
 
@@ -836,8 +823,8 @@ Backend (Python provider routing) is resolved from iteration strategy, not from 
 
 | Strategy | Backend | Reason |
 |----------|---------|--------|
-| `react` | `"langchain"` | Text-based tool calling, any provider via LangChain |
 | `native-thinking` | `"google-native"` | Requires Google SDK for native thinking/tool calling |
+| `langchain` | `"langchain"` | Multi-provider function calling via LangChain |
 | `synthesis` | `"langchain"` | Multi-provider synthesis |
 | `synthesis-native-thinking` | `"google-native"` | Gemini thinking for synthesis |
 
@@ -962,7 +949,7 @@ Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, backe
 ### gRPC Protocol
 
 `LLMConfig.backend` field routes to Python provider:
-- `"langchain"` → `LangChainProvider` (multi-provider, currently a stub delegating to GoogleNative)
+- `"langchain"` → `LangChainProvider` (multi-provider: OpenAI, Anthropic, xAI, Google, VertexAI)
 - `"google-native"` → `GoogleNativeProvider` (Gemini-specific thinking features)
 
 ---

@@ -46,7 +46,7 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -147,7 +147,7 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -220,7 +220,7 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -292,7 +292,7 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -376,7 +376,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -457,7 +457,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent2",
 			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -499,7 +499,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent3",
 			AgentIndex:        3,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -556,7 +556,7 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent4",
 			AgentIndex:        4,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 

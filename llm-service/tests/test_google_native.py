@@ -4,8 +4,9 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from google.genai import types as genai_types
 
-from proto import llm_service_pb2 as pb
+from llm_proto import llm_service_pb2 as pb
 from llm.providers.google_native import GoogleNativeProvider
+from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 pytestmark = pytest.mark.unit
 
@@ -28,24 +29,24 @@ def mock_genai_client():
 class TestGoogleNativeProvider:
     """Test GoogleNativeProvider functionality."""
 
-    def test_tool_name_conversion_to_native(self):
-        """Test conversion from server.tool to server__tool format."""
-        assert GoogleNativeProvider._tool_name_to_native("server.tool") == "server__tool"
-        assert GoogleNativeProvider._tool_name_to_native("my.server.tool") == "my__server__tool"
-        assert GoogleNativeProvider._tool_name_to_native("notool") == "notool"
+    def test_tool_name_conversion_to_api(self):
+        """Test conversion from server.tool to server__tool format (shared utility)."""
+        assert tool_name_to_api("server.tool") == "server__tool"
+        assert tool_name_to_api("my.server.tool") == "my__server__tool"
+        assert tool_name_to_api("notool") == "notool"
 
-    def test_tool_name_to_native_rejects_double_underscore(self):
+    def test_tool_name_to_api_rejects_double_underscore(self):
         """Test that tool names with __ in segments are rejected."""
         with pytest.raises(ValueError, match="contains '__'"):
-            GoogleNativeProvider._tool_name_to_native("server.my__helper")
+            tool_name_to_api("server.my__helper")
         with pytest.raises(ValueError, match="contains '__'"):
-            GoogleNativeProvider._tool_name_to_native("my__server.tool")
+            tool_name_to_api("my__server.tool")
 
-    def test_tool_name_conversion_from_native(self):
-        """Test conversion from server__tool back to server.tool format."""
-        assert GoogleNativeProvider._tool_name_from_native("server__tool") == "server.tool"
-        assert GoogleNativeProvider._tool_name_from_native("my__server__tool") == "my.server.tool"
-        assert GoogleNativeProvider._tool_name_from_native("notool") == "notool"
+    def test_tool_name_conversion_from_api(self):
+        """Test conversion from server__tool back to server.tool format (shared utility)."""
+        assert tool_name_from_api("server__tool") == "server.tool"
+        assert tool_name_from_api("my__server__tool") == "my.server.tool"
+        assert tool_name_from_api("notool") == "notool"
 
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")

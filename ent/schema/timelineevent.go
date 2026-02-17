@@ -54,7 +54,7 @@ func (TimelineEvent) Fields() []ent.Field {
 		// Event types and their semantics:
 		//   llm_thinking       — LLM reasoning/thought content. Covers both:
 		//                        (a) Native model thinking (Gemini thinking feature) — metadata.source = "native"
-		//                        (b) ReAct parsed thoughts ("Thought: ...") — metadata.source = "react"
+		//                        (b) parsed thoughts from text format ("Thought: ...") — metadata.source = "langchain"
 		//                        Streamed to frontend (rendered differently per source).
 		//                        NOT included in cross-stage context for sequential stages;
 		//                        included for synthesis strategies.

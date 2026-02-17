@@ -58,12 +58,12 @@ agent_chains:
       - name: remediation
         agents:
           - name: Remediator
-            iteration_strategy: "react"
+            iteration_strategy: "langchain"
       - name: validation
         success_policy: all
         agents:
           - name: ConfigValidator
-            iteration_strategy: "react"
+            iteration_strategy: "langchain"
           - name: MetricsValidator
         synthesis:
           llm_provider: "test-provider"

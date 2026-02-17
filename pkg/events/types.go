@@ -20,7 +20,7 @@
 //	concatenate deltas locally for a live typing effect.
 //
 //	Event types using this pattern:
-//	  - llm_thinking  (NativeThinking strategy — thinking text streams)
+//	  - llm_thinking  (all strategies — thinking text streams)
 //	  - llm_response  (all strategies — assistant text streams)
 //	  - llm_tool_call (tool execution in progress → completed with result)
 //	  - mcp_tool_summary (summarization LLM call streams)
@@ -35,13 +35,10 @@
 //
 //	Event types using this pattern:
 //	  - final_analysis   (all strategies — the agent's conclusion)
-//	  - llm_thinking     (ReAct strategy only — thought is parsed from
-//	                      the llm_response text after the stream ends,
-//	                      not itself streamed)
-//
-// Note: the same event_type (llm_thinking) follows different patterns
-// depending on the iteration strategy. The "status" field is the only
-// reliable discriminator.
+//	  - llm_thinking     (when EventPublisher is nil — the controller
+//	                      creates the event directly with full content;
+//	                      when streaming is active, llm_thinking uses
+//	                      Pattern 1 instead)
 //
 // Note: executive_summary is a DB-only timeline event. It is NOT
 // published via WebSocket. See pkg/queue/executor.go for details.

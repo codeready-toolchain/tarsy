@@ -562,7 +562,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
 					Type:                LLMProviderTypeOpenAI,
-					Model:               "gpt-4",
+					Model:               "o4-mini",
 					APIKeyEnv:           "USED_API_KEY",
 					MaxToolResultTokens: 100000,
 				},
@@ -596,7 +596,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
 					Type:                LLMProviderTypeOpenAI,
-					Model:               "gpt-4",
+					Model:               "o4-mini",
 					APIKeyEnv:           "USED_API_KEY",
 					MaxToolResultTokens: 100000,
 				},
@@ -635,7 +635,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			providers: map[string]*LLMProviderConfig{
 				"chat-provider": {
 					Type:                LLMProviderTypeAnthropic,
-					Model:               "claude-3",
+					Model:               "claude-sonnet-4-5-20250929",
 					APIKeyEnv:           "CHAT_API_KEY",
 					MaxToolResultTokens: 100000,
 				},
@@ -729,7 +729,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
 					Type:                LLMProviderTypeOpenAI,
-					Model:               "gpt-4",
+					Model:               "o4-mini",
 					APIKeyEnv:           "USED_API_KEY",
 					MaxToolResultTokens: 100000,
 				},
@@ -741,7 +741,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 				},
 				"unused-provider-2": {
 					Type:                LLMProviderTypeAnthropic,
-					Model:               "claude-3",
+					Model:               "claude-sonnet-4-5-20250929",
 					APIKeyEnv:           "UNUSED_API_KEY_2",
 					MaxToolResultTokens: 100000,
 				},

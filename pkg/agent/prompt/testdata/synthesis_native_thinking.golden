@@ -64,7 +64,7 @@ This is a test runbook for integration testing.
 
 Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
 
-#### Agent 2: LogAgent (anthropic-default, react)
+#### Agent 2: LogAgent (anthropic-default, langchain)
 **Status**: completed
 
 Log analysis reveals database connection timeout errors to db.example.com:5432.

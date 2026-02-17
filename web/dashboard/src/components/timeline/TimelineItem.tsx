@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FLOW_ITEM, isReActResponse, type FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import ThinkingItem from './ThinkingItem';
 import ResponseItem from './ResponseItem';
 import ToolCallItem from './ToolCallItem';
@@ -46,9 +46,6 @@ function TimelineItem({
       );
 
     case FLOW_ITEM.RESPONSE:
-      // Hide raw ReAct-formatted llm_response events — the backend creates
-      // properly-typed llm_thinking and final_analysis events for each section.
-      if (isReActResponse(item.content)) return null;
       return (
         <ResponseItem
           item={item}

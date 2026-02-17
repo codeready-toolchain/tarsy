@@ -200,20 +200,20 @@ proto-generate: ## Generate Go and Python code from proto files
 	@echo -e "$(BLUE)  -> Generating Python code...$(NC)"
 	@cd llm-service && uv run python -m grpc_tools.protoc \
 		-I../proto \
-		--python_out=proto \
-		--grpc_python_out=proto \
-		--pyi_out=proto \
+		--python_out=llm_proto \
+		--grpc_python_out=llm_proto \
+		--pyi_out=llm_proto \
 		../proto/llm_service.proto
-	@sed -i 's/^import llm_service_pb2/from . import llm_service_pb2/' llm-service/proto/llm_service_pb2_grpc.py
+	@sed -i 's/^import llm_service_pb2/from . import llm_service_pb2/' llm-service/llm_proto/llm_service_pb2_grpc.py
 	@echo -e "$(GREEN)✅ Proto files generated successfully!$(NC)"
 
 .PHONY: proto-clean
 proto-clean: ## Clean generated proto files
 	@echo -e "$(YELLOW)Cleaning generated proto files...$(NC)"
 	@rm -f proto/*.pb.go
-	@rm -f llm-service/proto/llm_service_pb2.py
-	@rm -f llm-service/proto/llm_service_pb2_grpc.py
-	@rm -f llm-service/proto/llm_service_pb2.pyi
+	@rm -f llm-service/llm_proto/llm_service_pb2.py
+	@rm -f llm-service/llm_proto/llm_service_pb2_grpc.py
+	@rm -f llm-service/llm_proto/llm_service_pb2.pyi
 	@echo -e "$(GREEN)✅ Proto files cleaned!$(NC)"
 
 # =============================================================================

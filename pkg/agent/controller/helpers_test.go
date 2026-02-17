@@ -131,30 +131,6 @@ func TestIsTimeoutError(t *testing.T) {
 }
 
 // ============================================================================
-// buildToolNameSet tests
-// ============================================================================
-
-func TestBuildToolNameSet(t *testing.T) {
-	t.Run("builds set from tools", func(t *testing.T) {
-		tools := []agent.ToolDefinition{
-			{Name: "k8s.get_pods"},
-			{Name: "k8s.get_logs"},
-			{Name: "prom.query"},
-		}
-		set := buildToolNameSet(tools)
-		assert.True(t, set["k8s.get_pods"])
-		assert.True(t, set["k8s.get_logs"])
-		assert.True(t, set["prom.query"])
-		assert.False(t, set["nonexistent"])
-	})
-
-	t.Run("empty tools returns empty set", func(t *testing.T) {
-		set := buildToolNameSet(nil)
-		assert.Empty(t, set)
-	})
-}
-
-// ============================================================================
 // tokenUsageFromResp tests
 // ============================================================================
 

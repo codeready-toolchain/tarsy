@@ -5,7 +5,7 @@ package agent
 const MaxConsecutiveTimeouts = 2
 
 // IterationState tracks loop state across iterations.
-// Shared by ReActController and NativeThinkingController.
+// Shared by FunctionCallingController.
 type IterationState struct {
 	CurrentIteration           int
 	MaxIterations              int

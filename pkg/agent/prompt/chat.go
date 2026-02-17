@@ -10,7 +10,6 @@ import (
 // buildChatUserMessage builds the user message for a chat follow-up session.
 func (b *PromptBuilder) buildChatUserMessage(
 	execCtx *agent.ExecutionContext,
-	tools []agent.ToolDefinition,
 ) string {
 	chat := execCtx.ChatContext
 	if chat == nil {
@@ -18,14 +17,6 @@ func (b *PromptBuilder) buildChatUserMessage(
 	}
 
 	var sb strings.Builder
-
-	// Available tools (ReAct only)
-	if len(tools) > 0 {
-		sb.WriteString("Answer the following question using the available tools.\n\n")
-		sb.WriteString("Available tools:\n\n")
-		sb.WriteString(FormatToolDescriptions(tools))
-		sb.WriteString("\n\n")
-	}
 
 	// Alert data + runbook — same components used by investigation agents.
 	// The chat agent needs the original alert context to answer follow-up questions.

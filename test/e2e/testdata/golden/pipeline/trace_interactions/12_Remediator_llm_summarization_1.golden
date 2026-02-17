@@ -45,33 +45,7 @@ Below is the ongoing investigation conversation that provides context for what t
 
 ## Investigation Context:
 === CONVERSATION START ===
-[user]: Answer the following question using the available tools.
-
-Available tools:
-
-1. **test-mcp.get_nodes**: test tool: get_nodes
-    **Parameters**: None
-
-2. **test-mcp.get_pod_logs**: test tool: get_pod_logs
-    **Parameters**: None
-
-3. **test-mcp.get_pods**: test tool: get_pods
-    **Parameters**: None
-
-4. **test-mcp.get_resource_config**: test tool: get_resource_config
-    **Parameters**: None
-
-5. **prometheus-mcp.query_alerts**: test tool: query_alerts
-    **Parameters**: None
-
-6. **prometheus-mcp.query_metrics**: test tool: query_metrics
-    **Parameters**: None
-
-7. **prometheus-mcp.query_slo**: test tool: query_slo
-    **Parameters**: None
-
-
-## Alert Details
+[user]: ## Alert Details
 
 ### Alert Metadata
 **Alert Type:** test-alert
@@ -143,15 +117,11 @@ Use the available tools to investigate this alert and provide:
 
 Be thorough in your investigation before providing the final answer.
 
-[assistant]: Thought: I should check the pod logs to understand the OOM pattern.
-Action: test-mcp.get_pod_logs
-Action Input: {"pod":"pod-1","namespace":"default"}
+[assistant]: 
 
-[user]: Observation: {"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
+[tool]: {"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
 
-[assistant]: Thought: Let me check the Prometheus alert history for memory-related alerts.
-Action: prometheus-mcp.query_alerts
-Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}
+[assistant]: 
 
 
 === CONVERSATION END ===

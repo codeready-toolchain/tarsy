@@ -177,12 +177,12 @@ func testConfig(chainID string, chain *config.ChainConfig) *config.Config {
 	return &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 			MaxIterations:     &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent": {
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 				MaxIterations:     &maxIter,
 			},
 			"SynthesisAgent": {
@@ -243,7 +243,7 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: I know the answer.\nFinal Answer: Everything is healthy."},
+				&agent.TextChunk{Content: "Everything is healthy."},
 			}},
 		},
 	}
@@ -301,11 +301,11 @@ func TestExecutor_MultiStageChain(t *testing.T) {
 		responses: []mockLLMResponse{
 			// Stage 1: data-collection
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Collected data.\nFinal Answer: Metrics show OOM on pod-1."},
+				&agent.TextChunk{Content: "Metrics show OOM on pod-1."},
 			}},
 			// Stage 2: diagnosis
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Using previous context.\nFinal Answer: Root cause is memory leak in app container."},
+				&agent.TextChunk{Content: "Root cause is memory leak in app container."},
 			}},
 		},
 	}
@@ -443,7 +443,7 @@ func TestExecutor_CancellationBetweenStages(t *testing.T) {
 				responses: []mockLLMResponse{
 					// Stage 1 agent final answer
 					{chunks: []agent.Chunk{
-						&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Stage 1 complete."},
+						&agent.TextChunk{Content: "Stage 1 complete."},
 					}},
 					// Stage 2 fallback if the cancel isn't detected before the LLM call
 					{err: tc.stage2MockErr},
@@ -519,7 +519,7 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: OOM killed pod-1 due to memory leak."},
+				&agent.TextChunk{Content: "OOM killed pod-1 due to memory leak."},
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Executive summary: Pod-1 OOM killed."},
@@ -601,7 +601,7 @@ func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: OOM killed pod-1."},
+				&agent.TextChunk{Content: "OOM killed pod-1."},
 			}},
 			{err: fmt.Errorf("executive summary LLM timeout")},
 		},
@@ -641,10 +641,10 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Agent 1 done.\nFinal Answer: Agent 1 found OOM."},
+				&agent.TextChunk{Content: "Agent 1 found OOM."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Agent 2 done.\nFinal Answer: Agent 2 found memory leak."},
+				&agent.TextChunk{Content: "Agent 2 found memory leak."},
 			}},
 			// Synthesis agent
 			{chunks: []agent.Chunk{
@@ -751,7 +751,7 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Agent 1 OK."},
+				&agent.TextChunk{Content: "Agent 1 OK."},
 			}},
 			{err: fmt.Errorf("LLM timeout")},
 		},
@@ -821,7 +821,7 @@ func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Agent 1 found the issue."},
+				&agent.TextChunk{Content: "Agent 1 found the issue."},
 			}},
 			{err: fmt.Errorf("LLM timeout")},
 			// Synthesis agent (runs because stage succeeded with >1 agent)
@@ -866,7 +866,7 @@ func TestExecutor_NilEventPublisher(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: All good."},
+				&agent.TextChunk{Content: "All good."},
 			}},
 		},
 	}
@@ -902,13 +902,13 @@ func TestExecutor_ReplicaAllSucceed(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: R1.\nFinal Answer: Replica 1 result."},
+				&agent.TextChunk{Content: "Replica 1 result."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: R2.\nFinal Answer: Replica 2 result."},
+				&agent.TextChunk{Content: "Replica 2 result."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: R3.\nFinal Answer: Replica 3 result."},
+				&agent.TextChunk{Content: "Replica 3 result."},
 			}},
 			// Synthesis
 			{chunks: []agent.Chunk{
@@ -1004,11 +1004,11 @@ func TestExecutor_ContextPassedBetweenStages(t *testing.T) {
 		responses: []mockLLMResponse{
 			// Stage 1
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Data collected.\nFinal Answer: Pod-1 has OOM errors."},
+				&agent.TextChunk{Content: "Pod-1 has OOM errors."},
 			}},
 			// Stage 2
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Diagnosis done.\nFinal Answer: Memory leak in app."},
+				&agent.TextChunk{Content: "Memory leak in app."},
 			}},
 		},
 	}
@@ -1078,10 +1078,10 @@ func TestExecutor_StageEventsHaveCorrectIndex(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: A.\nFinal Answer: Done A."},
+				&agent.TextChunk{Content: "Done A."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: B.\nFinal Answer: Done B."},
+				&agent.TextChunk{Content: "Done B."},
 			}},
 		},
 	}
@@ -1142,7 +1142,7 @@ func TestExecutor_SynthesisSkippedForSingleAgent(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Single agent analysis."},
+				&agent.TextChunk{Content: "Single agent analysis."},
 			}},
 		},
 	}
@@ -1189,10 +1189,10 @@ func TestExecutor_SynthesisFailure(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: A.\nFinal Answer: Result A."},
+				&agent.TextChunk{Content: "Result A."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: B.\nFinal Answer: Result B."},
+				&agent.TextChunk{Content: "Result B."},
 			}},
 			// Synthesis LLM call fails
 			{err: fmt.Errorf("synthesis LLM timeout")},
@@ -1245,10 +1245,10 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: A.\nFinal Answer: Result A."},
+				&agent.TextChunk{Content: "Result A."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: B.\nFinal Answer: Result B."},
+				&agent.TextChunk{Content: "Result B."},
 			}},
 			// Synthesis (SynthesisAgent uses synthesis strategy — single call, no tools)
 			{chunks: []agent.Chunk{
@@ -1297,8 +1297,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 			{
 				Name: "investigation",
 				Agents: []config.StageAgentConfig{
-					{Name: "NativeAgent"}, // no strategy override at stage level
-					{Name: "ReactAgent"},  // no strategy override at stage level
+					{Name: "NativeAgent"},    // no strategy override at stage level
+					{Name: "LangChainAgent"}, // no strategy override at stage level
 				},
 			},
 		},
@@ -1309,10 +1309,10 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 		capture: true,
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Native result."},
+				&agent.TextChunk{Content: "Native result."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: React result."},
+				&agent.TextChunk{Content: "LangChain result."},
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesis done."},
@@ -1324,7 +1324,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyReact, // system default
+			IterationStrategy: config.IterationStrategyLangChain, // system default
 			MaxIterations:     &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
@@ -1332,8 +1332,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 				IterationStrategy: config.IterationStrategyNativeThinking,
 				MaxIterations:     &maxIter,
 			},
-			"ReactAgent": {
-				IterationStrategy: config.IterationStrategyReact,
+			"LangChainAgent": {
+				IterationStrategy: config.IterationStrategyLangChain,
 				MaxIterations:     &maxIter,
 			},
 			"SynthesisAgent": {
@@ -1359,7 +1359,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	// Verify execution records store the resolved strategy from agent registry
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, execs, 3) // NativeAgent, ReactAgent, SynthesisAgent
+	require.Len(t, execs, 3) // NativeAgent, LangChainAgent, SynthesisAgent
 
 	execByName := make(map[string]*ent.AgentExecution)
 	for _, e := range execs {
@@ -1370,9 +1370,9 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	assert.Equal(t, "native-thinking", execByName["NativeAgent"].IterationStrategy,
 		"NativeAgent should have resolved strategy from agent registry, not default")
 
-	require.Contains(t, execByName, "ReactAgent")
-	assert.Equal(t, "react", execByName["ReactAgent"].IterationStrategy,
-		"ReactAgent should have resolved strategy from agent registry")
+	require.Contains(t, execByName, "LangChainAgent")
+	assert.Equal(t, "langchain", execByName["LangChainAgent"].IterationStrategy,
+		"LangChainAgent should have resolved strategy from agent registry")
 
 	require.Contains(t, execByName, "SynthesisAgent")
 	assert.Equal(t, "synthesis", execByName["SynthesisAgent"].IterationStrategy)
@@ -1390,8 +1390,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	}
 	assert.Contains(t, synthUserMsg, "NativeAgent (native-thinking, test-provider)",
 		"synthesis prompt should show resolved strategy for NativeAgent")
-	assert.Contains(t, synthUserMsg, "ReactAgent (react, test-provider)",
-		"synthesis prompt should show resolved strategy for ReactAgent")
+	assert.Contains(t, synthUserMsg, "LangChainAgent (langchain, test-provider)",
+		"synthesis prompt should show resolved strategy for LangChainAgent")
 }
 
 func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
@@ -1421,11 +1421,11 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 		responses: []mockLLMResponse{
 			// Agent 1
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: A.\nFinal Answer: Finding A."},
+				&agent.TextChunk{Content: "Finding A."},
 			}},
 			// Agent 2
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: B.\nFinal Answer: Finding B."},
+				&agent.TextChunk{Content: "Finding B."},
 			}},
 			// Synthesis
 			{chunks: []agent.Chunk{
@@ -1433,7 +1433,7 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 			}},
 			// Final single-agent stage
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Based on synthesis.\nFinal Answer: Final diagnosis."},
+				&agent.TextChunk{Content: "Final diagnosis."},
 			}},
 		},
 	}
@@ -1618,7 +1618,7 @@ func TestExecutor_SuccessPolicyDefaulting(t *testing.T) {
 						SuccessPolicy:     tc.defaultPolicy,
 						MaxIterations:     &maxIter,
 						LLMProvider:       "test",
-						IterationStrategy: config.IterationStrategyReact,
+						IterationStrategy: config.IterationStrategyLangChain,
 					},
 				},
 			}
@@ -1654,7 +1654,7 @@ func TestExecutor_ReplicaMixedResultsPolicyAny(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: R1.\nFinal Answer: Replica 1 OK."},
+				&agent.TextChunk{Content: "Replica 1 OK."},
 			}},
 			{err: fmt.Errorf("Replica 2 LLM error")},
 			// Synthesis (stage completed because policy=any)
@@ -1696,10 +1696,10 @@ func TestExecutor_ContextIsolation(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Agent A.\nFinal Answer: A done."},
+				&agent.TextChunk{Content: "A done."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Agent B.\nFinal Answer: B done."},
+				&agent.TextChunk{Content: "B done."},
 			}},
 			// Synthesis
 			{chunks: []agent.Chunk{
@@ -2075,7 +2075,7 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 			MaxIterations:     &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{

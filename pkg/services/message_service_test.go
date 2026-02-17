@@ -42,7 +42,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -253,7 +253,7 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "TestAgent2",
 			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 

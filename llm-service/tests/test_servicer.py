@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from proto import llm_service_pb2 as pb
+from llm_proto import llm_service_pb2 as pb
 from llm.servicer import LLMServicer
 
 pytestmark = pytest.mark.unit
