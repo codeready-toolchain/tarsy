@@ -84,14 +84,14 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 11: Deployment, DevOps & CI/CD
 
-**Containerization (Phase 12.1)**
+**Containerization (Phase 11.1)**
 - [ ] Multi-stage Docker builds
 - [ ] Container orchestration (podman-compose)
 - [ ] Build & push images
 - [ ] Service health checks
 - [ ] Volume management
 
-**Kubernetes/OpenShift (Phase 12.2)**
+**Kubernetes/OpenShift (Phase 11.2)**
 - [ ] Kustomize manifests
 - [ ] Service deployments
 - [ ] ConfigMaps & secrets

@@ -160,7 +160,7 @@ dashboard-test-watch: ## Run dashboard tests in watch mode
 .PHONY: dashboard-test-build
 dashboard-test-build: ## TypeScript check for dashboard
 	@echo -e "$(YELLOW)Checking dashboard TypeScript...$(NC)"
-	@cd web/dashboard && npx tsc -b --noEmit
+	@cd web/dashboard && npx tsc -b
 	@echo -e "$(GREEN)✅ Dashboard TypeScript check passed$(NC)"
 
 .PHONY: test-dashboard
