@@ -414,6 +414,23 @@ export function SessionDetailPage() {
       setTimelineEvents(completedEvents);
       setStreamingEvents(restStreamingItems);
       knownEventIdsRef.current = ids;
+
+      // Identify chat stages from REST data: any stage containing a
+      // user_question event is a chat stage. Populates chatStageIds so
+      // chat final_analysis items don't get auto-collapsed on page load.
+      const restChatStageIds = new Set<string>();
+      for (const ev of timelineData) {
+        if (ev.event_type === TIMELINE_EVENT_TYPES.USER_QUESTION && ev.stage_id) {
+          restChatStageIds.add(ev.stage_id);
+        }
+      }
+      if (restChatStageIds.size > 0) {
+        setChatStageIds((prev) => {
+          const merged = new Set(prev);
+          for (const id of restChatStageIds) merged.add(id);
+          return merged.size === prev.size ? prev : merged;
+        });
+      }
     } catch (err) {
       setError(handleAPIError(err));
     } finally {
@@ -714,6 +731,9 @@ export function SessionDetailPage() {
               chatState.onStageStarted(payload.stage_id);
             } else if (TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
               chatState.onStageTerminal();
+              // Re-expand FinalAnalysisCard after the chat completes.
+              // It was auto-collapsed when the user opened the chat panel.
+              setExpandCounter((prev) => prev + 1);
             }
           }
 
@@ -936,6 +956,10 @@ export function SessionDetailPage() {
   const handleSendMessage = useCallback(async (content: string) => {
     const result = await chatState.sendMessage(content);
     if (result) {
+      // Sync ref immediately so the WS handler can match fast stage.status
+      // events arriving before React re-renders the effect that syncs it.
+      chatStageIdRef.current = result.stageId;
+
       // Inject optimistic user_question into timeline with a sequence_number
       // just past the current max so it sorts correctly in parseTimelineToFlow.
       setTimelineEvents((prev) => {

@@ -90,6 +90,9 @@ export function useChatState(sessionId: string): UseChatStateReturn {
       const response = await sendChatMessage(sessionId, content);
 
       setChatStageId(response.stage_id);
+      // Sync ref immediately so a fast WS stage.status event (arriving
+      // before React re-renders) can match the chat stage id.
+      chatStageIdRef.current = response.stage_id;
 
       // Start safety timeout — if WS stage.status never arrives, clear
       // sendingMessage to avoid permanently stuck UI.
