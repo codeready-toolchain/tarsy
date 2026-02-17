@@ -20,7 +20,7 @@
 //	concatenate deltas locally for a live typing effect.
 //
 //	Event types using this pattern:
-//	  - llm_thinking  (NativeThinking strategy — thinking text streams)
+//	  - llm_thinking  (all strategies — thinking text streams)
 //	  - llm_response  (all strategies — assistant text streams)
 //	  - llm_tool_call (tool execution in progress → completed with result)
 //	  - mcp_tool_summary (summarization LLM call streams)

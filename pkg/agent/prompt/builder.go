@@ -104,8 +104,8 @@ func (b *PromptBuilder) BuildSynthesisMessages(
 
 // BuildForcedConclusionPrompt returns a prompt to force an LLM conclusion
 // at the iteration limit.
-func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string {
-	return fmt.Sprintf(forcedConclusionTemplate, iteration, nativeThinkingForcedConclusionFormat)
+func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int) string {
+	return fmt.Sprintf(forcedConclusionTemplate, iteration, forcedConclusionFormat)
 }
 
 // BuildMCPSummarizationSystemPrompt builds the system prompt for MCP result summarization.

@@ -343,18 +343,11 @@ func TestIntegration_FunctionCallingInvestigationWithFailedServers(t *testing.T)
 // Forced conclusion tests
 // ===========================================================================
 
-func TestIntegration_ForcedConclusionNativeThinking(t *testing.T) {
+func TestIntegration_ForcedConclusion(t *testing.T) {
 	builder := newIntegrationBuilder()
-	result := builder.BuildForcedConclusionPrompt(3, config.IterationStrategyNativeThinking)
+	result := builder.BuildForcedConclusionPrompt(3)
 
-	assertGolden(t, "forced_conclusion_native_thinking", result)
-}
-
-func TestIntegration_ForcedConclusionLangChain(t *testing.T) {
-	builder := newIntegrationBuilder()
-	result := builder.BuildForcedConclusionPrompt(5, config.IterationStrategyLangChain)
-
-	assertGolden(t, "forced_conclusion_langchain", result)
+	assertGolden(t, "forced_conclusion", result)
 }
 
 // ===========================================================================

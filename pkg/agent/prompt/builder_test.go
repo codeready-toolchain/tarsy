@@ -111,19 +111,11 @@ func TestBuildSynthesisMessages_UserContent(t *testing.T) {
 
 func TestBuildForcedConclusionPrompt(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildForcedConclusionPrompt(3, config.IterationStrategyNativeThinking)
+	result := builder.BuildForcedConclusionPrompt(3)
 
 	assert.Contains(t, result, "3 iterations")
 	assert.Contains(t, result, "structured conclusion")
 	assert.NotContains(t, result, "Final Answer:")
-}
-
-func TestBuildForcedConclusionPrompt_LangChain(t *testing.T) {
-	builder := newBuilderForTest()
-	result := builder.BuildForcedConclusionPrompt(5, config.IterationStrategyLangChain)
-
-	assert.Contains(t, result, "5 iterations")
-	assert.Contains(t, result, "structured conclusion")
 }
 
 func TestBuildMCPSummarizationPrompts(t *testing.T) {

@@ -112,11 +112,12 @@ class LangChainProvider(LLMProvider):
         }
 
     @staticmethod
-    def _get_anthropic_thinking_kwargs(model: str) -> dict:
+    def _get_anthropic_thinking_kwargs(_model: str) -> dict:
         """Return kwargs to enable extended thinking for Claude models.
 
         Extended thinking is enabled by default. budget_tokens must be
-        less than max_tokens.
+        less than max_tokens.  _model is accepted (but currently unused)
+        to match the signature of the other _get_*_kwargs helpers.
         """
         return {
             "thinking": {"type": "enabled", "budget_tokens": 16000},
@@ -141,12 +142,12 @@ class LangChainProvider(LLMProvider):
         """Create a LangChain BaseChatModel for the given provider config."""
         try:
             provider = ProviderType(config.provider)
-        except ValueError:
+        except ValueError as err:
             supported = ", ".join(p.value for p in ProviderType)
             raise ValueError(
                 f"Unsupported provider '{config.provider}'. "
                 f"Supported: {supported}."
-            )
+            ) from err
 
         api_key = os.getenv(config.api_key_env) if config.api_key_env else None
 
@@ -484,10 +485,14 @@ class LangChainProvider(LLMProvider):
                     # output_tokens incrementally on subsequent chunks.
                     if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
                         um = chunk.usage_metadata
-                        _get = (lambda k, d=0: um.get(k, d)) if isinstance(um, dict) else (lambda k, d=0: getattr(um, k, d))
-                        accumulated_input_tokens += _get("input_tokens", 0)
-                        accumulated_output_tokens += _get("output_tokens", 0)
-                        accumulated_total_tokens += _get("total_tokens", 0)
+                        if isinstance(um, dict):
+                            accumulated_input_tokens += um.get("input_tokens", 0)
+                            accumulated_output_tokens += um.get("output_tokens", 0)
+                            accumulated_total_tokens += um.get("total_tokens", 0)
+                        else:
+                            accumulated_input_tokens += getattr(um, "input_tokens", 0)
+                            accumulated_output_tokens += getattr(um, "output_tokens", 0)
+                            accumulated_total_tokens += getattr(um, "total_tokens", 0)
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc

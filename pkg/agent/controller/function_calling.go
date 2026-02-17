@@ -7,7 +7,6 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
-	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
@@ -195,7 +194,7 @@ func (c *FunctionCallingController) forceConclusion(
 		fmt.Sprintf("Forcing conclusion after %d iterations", state.CurrentIteration))
 
 	// Append forced conclusion prompt
-	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, config.IterationStrategyNativeThinking)
+	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration)
 	messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 

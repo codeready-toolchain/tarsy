@@ -355,7 +355,7 @@ Formats multi-agent full investigation histories for the synthesis agent. Uses t
 ```go
 func (b *PromptBuilder) BuildFunctionCallingMessages(execCtx, prevStageContext) []ConversationMessage
 func (b *PromptBuilder) BuildSynthesisMessages(execCtx, prevStageContext) []ConversationMessage
-func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration, strategy) string
+func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration) string
 func (b *PromptBuilder) ComposeInstructions(execCtx) string
 func (b *PromptBuilder) ComposeChatInstructions(execCtx) string
 func (b *PromptBuilder) BuildMCPSummarizationSystemPrompt(serverName, toolName, maxTokens) string

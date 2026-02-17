@@ -90,7 +90,7 @@ type ResolvedAgentConfig struct {
 type PromptBuilder interface {
 	BuildFunctionCallingMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
 	BuildSynthesisMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
-	BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string
+	BuildForcedConclusionPrompt(iteration int) string
 	BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string

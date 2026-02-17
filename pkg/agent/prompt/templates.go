@@ -20,7 +20,7 @@ Be thorough in your investigation before providing the final answer.`
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 
 // forcedConclusionTemplate is the base template for forced conclusion prompts.
-// %d = iteration count, %s = strategy-specific format instructions.
+// %d = iteration count, %s = format instructions.
 const forcedConclusionTemplate = `You have reached the investigation iteration limit (%d iterations).
 
 Please conclude your investigation by answering the original question based on what you've discovered.
@@ -33,8 +33,8 @@ Please conclude your investigation by answering the original question based on w
 
 %s`
 
-// nativeThinkingForcedConclusionFormat is the forced conclusion format.
-const nativeThinkingForcedConclusionFormat = `Provide a clear, structured conclusion that directly addresses the investigation question.`
+// forcedConclusionFormat is the forced conclusion format instruction.
+const forcedConclusionFormat = `Provide a clear, structured conclusion that directly addresses the investigation question.`
 
 // mcpSummarizationSystemTemplate is the system prompt for MCP result summarization.
 // %s = server name, %s = tool name, %d = max summary tokens.
