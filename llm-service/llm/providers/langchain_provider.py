@@ -76,6 +76,21 @@ class LangChainProvider(LLMProvider):
             model = self._bind_tools(model, list(tools))
         return model
 
+    @staticmethod
+    def _get_google_thinking_kwargs(model: str) -> dict:
+        """Return kwargs to enable thinking/reasoning for Google models.
+
+        Mirrors the thinking configuration from GoogleNativeProvider._get_thinking_config
+        but using the LangChain ChatGoogleGenerativeAI parameter names.
+        """
+        model_lower = model.lower()
+        if "gemini-2.5-pro" in model_lower:
+            return {"include_thoughts": True, "thinking_budget": 32768}
+        elif "gemini-2.5-flash" in model_lower:
+            return {"include_thoughts": True, "thinking_budget": 24576}
+        else:
+            return {"include_thoughts": True, "thinking_level": "high"}
+
     def _create_chat_model(self, config: pb.LLMConfig):
         """Create a LangChain BaseChatModel for the given provider config."""
         try:
@@ -126,10 +141,12 @@ class LangChainProvider(LLMProvider):
 
         elif provider is ProviderType.GOOGLE:
             from langchain_google_genai import ChatGoogleGenerativeAI
+            thinking_kwargs = self._get_google_thinking_kwargs(config.model)
             return ChatGoogleGenerativeAI(
                 model=config.model,
                 google_api_key=_require_api_key(),
                 streaming=True,
+                **thinking_kwargs,
             )
 
         elif provider is ProviderType.VERTEXAI:
@@ -144,11 +161,13 @@ class LangChainProvider(LLMProvider):
                 )
             else:
                 from langchain_google_genai import ChatGoogleGenerativeAI
+                thinking_kwargs = self._get_google_thinking_kwargs(config.model)
                 return ChatGoogleGenerativeAI(
                     model=config.model,
                     project=config.project,
                     location=config.location,
                     streaming=True,
+                    **thinking_kwargs,
                 )
 
     def _convert_messages(self, messages: List[pb.ConversationMessage]) -> List[BaseMessage]:
@@ -311,7 +330,9 @@ class LangChainProvider(LLMProvider):
         and tool_call_chunks for progressive tool call accumulation.
         """
         has_content = False
-        last_usage: Optional[pb.GenerateResponse] = None
+        accumulated_input_tokens = 0
+        accumulated_output_tokens = 0
+        accumulated_total_tokens = 0
 
         # Accumulate tool call chunks by index.
         # LangChain may split tool calls across multiple chunks.
@@ -370,16 +391,15 @@ class LangChainProvider(LLMProvider):
                             if args := tc_chunk.get("args"):
                                 entry["args"] += args
 
-                    # Buffer usage metadata (yield after content)
+                    # Accumulate usage metadata across streaming chunks.
+                    # Google models report input_tokens on the first chunk and
+                    # output_tokens incrementally on subsequent chunks.
                     if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
                         um = chunk.usage_metadata
-                        last_usage = pb.GenerateResponse(
-                            usage=pb.UsageInfo(
-                                input_tokens=um.get("input_tokens", 0) if isinstance(um, dict) else getattr(um, "input_tokens", 0),
-                                output_tokens=um.get("output_tokens", 0) if isinstance(um, dict) else getattr(um, "output_tokens", 0),
-                                total_tokens=um.get("total_tokens", 0) if isinstance(um, dict) else getattr(um, "total_tokens", 0),
-                            )
-                        )
+                        _get = (lambda k, d=0: um.get(k, d)) if isinstance(um, dict) else (lambda k, d=0: getattr(um, k, d))
+                        accumulated_input_tokens += _get("input_tokens", 0)
+                        accumulated_output_tokens += _get("output_tokens", 0)
+                        accumulated_total_tokens += _get("total_tokens", 0)
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
@@ -399,9 +419,15 @@ class LangChainProvider(LLMProvider):
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
-        # Yield buffered usage info after confirming content was produced
-        if last_usage is not None:
-            yield last_usage
+        # Yield accumulated usage info after confirming content was produced
+        if accumulated_input_tokens or accumulated_output_tokens:
+            yield pb.GenerateResponse(
+                usage=pb.UsageInfo(
+                    input_tokens=accumulated_input_tokens,
+                    output_tokens=accumulated_output_tokens,
+                    total_tokens=accumulated_total_tokens,
+                )
+            )
 
         # Final chunk
         yield pb.GenerateResponse(is_final=True)
