@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 6 (E2E Testing)
+**Last updated after**: Phase 7 (Dashboard) + Phase 8.2 (Multi-LLM Support)
 
 ---
 
@@ -12,7 +12,7 @@ Cumulative architectural knowledge from all completed phases. Read this alongsid
 
 **Go Orchestrator** owns all orchestration: agent lifecycle, iteration control loops, MCP tool execution, prompt building, conversation management, chain execution, state persistence, WebSocket streaming.
 
-**Python LLM Service** is a thin, stateless LLM API proxy: receives messages + config via gRPC, calls LLM provider API, streams response chunks back (text, thinking, tool calls, grounding). Zero state, zero orchestration, zero MCP. Exists solely because LLM provider SDKs have best support in Python.
+**Python LLM Service** is a stateless LLM API proxy with two provider backends: `GoogleNativeProvider` (Gemini via `google-genai` SDK, native thinking features) and `LangChainProvider` (multi-provider: OpenAI, Anthropic, xAI, Google, VertexAI via LangChain). Receives messages + config via gRPC, calls LLM provider API, streams response chunks back (text, thinking, tool calls, grounding). Per-provider model caching. Zero orchestration state, zero MCP. Exists solely because LLM provider SDKs have best support in Python.
 
 Communication: gRPC with insecure credentials (same pod). RPC: `Generate(GenerateRequest) returns (stream GenerateResponse)`.
 
@@ -34,34 +34,56 @@ Key design: **no stored output fields** on Stage or AgentExecution. Context is b
 ### Package Layout
 
 ```
+cmd/tarsy/
+└── main.go               # Application entry point, flag parsing, wiring
 pkg/
-├── api/              # HTTP handlers (session, timeline, trace, chat, health), requests, responses, error mapping
-├── agent/            # Agent interface, lifecycle, LLM client, tool executor
-│   ├── controller/   # Iteration controllers (FunctionCalling, Synthesis), tool execution, summarization
-│   ├── context/      # Context formatter, investigation formatter, stage context builder
-│   └── prompt/       # Prompt builder, templates, instructions, components
-├── config/           # Loader, registries, builtin config, enums, validator
-├── database/         # Client, migrations
-├── events/           # EventPublisher, ConnectionManager, NotifyListener
-├── masking/          # Data masking service (regex patterns, code maskers, K8s Secret masker)
-├── mcp/              # MCP client infrastructure (client, executor, transport, health, testing helpers)
-├── models/           # MCP selection, trace API response types, shared types
-├── queue/            # Worker, WorkerPool, orphan detection, session executor, chat executor
-└── services/         # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
+├── api/                  # HTTP handlers (session, timeline, trace, chat, system, health), dashboard serving
+│   ├── handler_*.go      # Per-concern handlers (alert, session, chat, timeline, trace, filter, system, ws)
+│   └── server.go         # Echo v5 setup, routes, middleware, dashboard SPA serving
+├── agent/                # Agent interface, lifecycle, LLM client, tool executor
+│   ├── controller/       # Iteration controllers (FunctionCalling, Synthesis), tool execution, summarization
+│   ├── context/          # Context formatter, investigation formatter, stage context builder
+│   └── prompt/           # Prompt builder, templates, instructions, components
+├── config/               # Loader, registries, builtin config, enums, validator
+├── database/             # Client, migrations
+├── events/               # EventPublisher, ConnectionManager, NotifyListener
+├── masking/              # Data masking service (regex patterns, code maskers, K8s Secret masker)
+├── mcp/                  # MCP client infrastructure (client, executor, transport, health, testing helpers)
+├── models/               # MCP selection, trace API response types, shared types
+├── queue/                # Worker, WorkerPool, orphan detection, session executor, chat executor
+└── services/             # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
-├── schema/           # Ent schema definitions
+├── schema/               # Ent schema definitions (10 entities)
 deploy/
-├── config/           # tarsy.yaml.example, llm-providers.yaml.example, .env.example
+├── config/               # tarsy.yaml.example, llm-providers.yaml.example, .env.example
 ├── podman-compose.yml
 proto/
 └── llm_service.proto
 llm-service/
-└── llm/providers/    # Python LLM providers (GoogleNativeProvider, LangChainProvider)
+├── llm/
+│   ├── server.py         # gRPC server entry point
+│   ├── servicer.py       # gRPC servicer, routes to provider by backend field
+│   └── providers/        # GoogleNativeProvider, LangChainProvider, registry, tool_names
+├── llm_proto/            # Generated protobuf/gRPC stubs
+└── tests/                # Provider + servicer tests
+web/dashboard/            # React 19 + TypeScript + Vite 7 + MUI 7 SPA
+├── src/
+│   ├── pages/            # DashboardPage, SessionDetailPage, TracePage, SubmitAlertPage, SystemStatusPage
+│   ├── components/       # UI components (dashboard, session, timeline, trace, chat, system, alert, layout)
+│   ├── services/         # API client (axios), WebSocket service, auth service
+│   ├── hooks/            # useChatState, useVersionMonitor, useAdvancedAutoScroll
+│   ├── contexts/         # AuthContext, VersionContext
+│   ├── types/            # TypeScript types (api, session, events, trace, system)
+│   └── utils/            # Timeline parsing, formatting, filter persistence, markdown
+├── vite.config.ts        # Dev proxy to Go backend, build config
+└── package.json          # Dependencies, scripts
 test/
-├── e2e/              # End-to-end tests (harness, mocks, helpers, scenarios, golden files)
-│   └── testdata/     # YAML configs per scenario, golden files, expected event definitions
-├── database/         # SharedTestDB, NewTestClient (test DB helpers)
-└── util/             # SetupTestDatabase, schema helpers, connection string utilities
+├── e2e/                  # End-to-end tests (harness, mocks, helpers, scenarios, golden files)
+│   └── testdata/         # YAML configs per scenario, golden files, expected event definitions
+├── database/             # SharedTestDB, NewTestClient (test DB helpers)
+└── util/                 # SetupTestDatabase, schema helpers, connection string utilities
+make/
+├── dev.mk, db.mk, help.mk  # Makefile includes
 ```
 
 ---
@@ -197,15 +219,23 @@ Synthesis: tool-less single LLM call for synthesizing multi-agent investigation 
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (DB, worker pool, MCP, warnings) |
 | POST | `/api/v1/alerts` | Submit alert → creates pending session |
+| GET | `/api/v1/sessions` | List sessions with pagination, sort, filters (status, alert_type, chain_id, search, date range) |
+| GET | `/api/v1/sessions/active` | Active + queued sessions for dashboard |
+| GET | `/api/v1/sessions/filter-options` | Distinct alert types and chain IDs for filter dropdowns |
 | GET | `/api/v1/sessions/:id` | Get session status and details |
+| GET | `/api/v1/sessions/:id/summary` | Session summary (final analysis, executive summary) |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or active chat execution |
 | POST | `/api/v1/sessions/:id/chat/messages` | Send chat message (auto-creates chat on first message, 202 Accepted) |
 | GET | `/api/v1/sessions/:id/timeline` | Get session timeline events ordered by sequence |
 | GET | `/api/v1/sessions/:id/trace` | Trace interaction list grouped by stage → execution |
 | GET | `/api/v1/sessions/:id/trace/llm/:interaction_id` | Full LLM interaction detail with reconstructed conversation |
 | GET | `/api/v1/sessions/:id/trace/mcp/:interaction_id` | Full MCP interaction detail (arguments, result, available tools) |
+| GET | `/api/v1/system/warnings` | Active system warnings (MCP health, etc.) |
+| GET | `/api/v1/system/mcp-servers` | MCP server health status and cached tools |
+| GET | `/api/v1/system/default-tools` | Default MCP tool configuration |
+| GET | `/api/v1/alert-types` | Available alert types from chain configurations |
 | GET | `/api/v1/ws` | WebSocket connection for real-time streaming |
 
 ---
@@ -230,7 +260,7 @@ type Controller interface {
 }
 ```
 
-Implementations: `FunctionCallingController`, `SynthesisController`, `SingleCallController`.
+Implementations: `FunctionCallingController`, `SynthesisController`.
 
 Strategy-to-controller mapping:
 - `native-thinking` → `FunctionCallingController` (Gemini structured function calling, `google-native` backend)
@@ -314,6 +344,7 @@ Shared package-level helpers in `pkg/queue/executor.go` (used by both `RealSessi
 - `createToolExecutor(ctx, mcpFactory, serverIDs, toolFilter, logger)` — MCP-backed executor or stub fallback
 - `resolveMCPSelection(session, resolvedConfig, mcpRegistry)` — MCP server/tool filter resolution from session override or config
 - `publishStageStatus(eventPublisher, sessionID, stageID, stageName, stageIndex, status)` — stage lifecycle event publishing
+- `publishExecutionStatus(ctx, eventPublisher, sessionID, stageID, executionID, agentIndex, status, errMsg)` — agent execution status publishing
 
 ### Stage Context Builder (`pkg/agent/context/stage_context.go`)
 
@@ -940,17 +971,48 @@ Shared iteration tracking: `CurrentIteration`, `MaxIterations`, `LastInteraction
 | Registry | Lookup | Key Types |
 |----------|--------|-----------|
 | `AgentRegistry` | `Get(name)` | `AgentConfig`: MCPServers, CustomInstructions, IterationStrategy, MaxIterations |
-| `ChainRegistry` | `Get(chainID)`, `GetByAlertType(alertType)` | `ChainConfig`: AlertTypes, Stages[], Chat, LLMProvider, MaxIterations, IterationStrategy, ExecutiveSummaryProvider |
+| `ChainRegistry` | `Get(chainID)`, `GetByAlertType(alertType)` | `ChainConfig`: AlertTypes, Stages[], Chat, LLMProvider, MaxIterations, IterationStrategy, ExecutiveSummaryProvider, MCPServers |
 | `MCPServerRegistry` | `Get(id)` | `MCPServerConfig`: Transport, Instructions, DataMasking, Summarization |
-| `LLMProviderRegistry` | `Get(name)` | `LLMProviderConfig`: Type, Model, APIKeyEnv, MaxToolResultTokens, NativeTools |
+| `LLMProviderRegistry` | `Get(name)`, `GetAll()`, `Has(name)` | `LLMProviderConfig`: Type, Model, APIKeyEnv, CredentialsEnv, ProjectEnv, LocationEnv, BaseURL, MaxToolResultTokens, NativeTools |
 
-Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, backend, native_tools, etc.). Python does not read files or env directly.
+Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, credentials_env, project, location, base_url, backend, native_tools, max_tool_result_tokens). Python does not read YAML files; it reads env vars for API keys/credentials based on the `*_env` field values received via gRPC.
 
 ### gRPC Protocol
 
+`GenerateRequest` carries `session_id`, `execution_id`, full `messages` conversation, `llm_config`, and `tools` (empty = no tool calling). `execution_id` enables per-execution thought signature caching in GoogleNativeProvider.
+
+`LLMConfig` fields: `backend` (routing), `provider` (e.g. `"openai"`, `"anthropic"` — used by LangChainProvider), `model`, `api_key_env`, `credentials_env`, `base_url`, `max_tool_result_tokens`, `native_tools` (map), `project`, `location` (VertexAI/GCP).
+
 `LLMConfig.backend` field routes to Python provider:
 - `"langchain"` → `LangChainProvider` (multi-provider: OpenAI, Anthropic, xAI, Google, VertexAI)
-- `"google-native"` → `GoogleNativeProvider` (Gemini-specific thinking features)
+- `"google-native"` → `GoogleNativeProvider` (Gemini-specific thinking features, content caching)
+- Default (empty): `"google-native"` in Python
+
+`GenerateResponse` streams chunks via `content` oneof: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`. Final chunk has `is_final=true`.
+
+### Config Enums
+
+- **IterationStrategy**: `native-thinking`, `langchain`, `synthesis`, `synthesis-native-thinking`
+- **LLMProviderType**: `google`, `openai`, `anthropic`, `xai`, `vertexai`
+- **SuccessPolicy**: `all`, `any`
+- **TransportType**: `stdio`, `http`, `sse`
+- **GoogleNativeTool**: `google_search`, `code_execution`, `url_context`
+
+### Built-in LLM Providers
+
+| Name | Type | Model | Context |
+|------|------|-------|---------|
+| `google-default` | google | gemini-3-flash-preview | 1M |
+| `gemini-3-flash` | google | gemini-3-flash-preview | 1M |
+| `gemini-3-pro` | google | gemini-3-pro-preview | 1M |
+| `gemini-2.5-flash` | google | gemini-2.5-flash | 1M |
+| `gemini-2.5-pro` | google | gemini-2.5-pro | 1M |
+| `openai-default` | openai | o3 | 272K |
+| `anthropic-default` | anthropic | claude-sonnet-4-5-20250929 | 200K |
+| `xai-default` | xai | grok-4-1-fast-reasoning | 2M |
+| `vertexai-default` | vertexai | claude-sonnet-4-5@20250929 | 200K |
+
+Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Non-Google providers have no native tools.
 
 ---
 
@@ -1043,6 +1105,145 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 
 ---
 
+## Dashboard Architecture (`web/dashboard/`)
+
+### Overview
+
+React 19 SPA ported from old TARSy with a hybrid approach: old visual layer adapted to new data layer. Served statically by the Go backend via `-dashboard-dir` flag (or `DASHBOARD_DIR` env var). In development, Vite's dev server proxies `/api` and `/health` to the Go backend.
+
+### Pages & Routing
+
+| Route | Page | Purpose |
+|-------|------|---------|
+| `/` | DashboardPage | Session list with active/queued/historical panels, filters, pagination |
+| `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat |
+| `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
+| `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
+| `/system` | SystemStatusPage | MCP server health, tools, system warnings |
+| `*` | NotFoundPage | 404 |
+
+### Data Flow
+
+- **REST + WebSocket**: REST for initial load and paginated data; WebSocket for live updates.
+- **WebSocket channels**: `sessions` (global session status updates), `session:{id}` (per-session events including chat).
+- **Streaming pattern**: `timeline_event.created` → `stream.chunk` (token deltas) → `timeline_event.completed`.
+- **Event-notification pattern**: Trace page debounces WebSocket events and re-fetches via REST (avoids building complex state from events).
+- **Optimistic UI**: Chat injects temporary `user_question` items before server confirmation.
+
+### State Management
+
+No global state library (Redux/Zustand). State is local `useState` per page + two React Contexts:
+- **AuthContext**: User identity, auth availability (hides auth UI when no OAuth proxy).
+- **VersionContext**: Polls `/health` and `index.html` meta tag for version mismatch detection; triggers update banner.
+
+Filter state, pagination, and sort preferences persist in `localStorage` via `filterPersistence.ts`.
+
+### WebSocket Service (`services/websocket.ts`)
+
+Singleton `WebSocketService` with:
+- Reconnect with exponential backoff (200ms → 3s)
+- Keepalive ping/pong (20s interval, 10s pong timeout)
+- Auto-catchup on subscribe and reconnect
+- `catchup.overflow` triggers full REST reload
+- URL: dev `ws://localhost:8080`, prod from `VITE_WS_BASE_URL` or same-origin
+
+### API Client (`services/api.ts`)
+
+Axios-based with:
+- Retry on 502/503/504 and network errors (exponential backoff)
+- 401 → `authService.handleAuthError()` (redirect to login)
+- `withCredentials: true` for cookies
+- Base URL from env config (empty in dev for Vite proxy)
+
+### Static Serving from Go
+
+- **`SetDashboardDir(dir)`** on the HTTP server registers dashboard routes after API routes.
+- `/assets/*` — `Cache-Control: public, max-age=31536000, immutable` (Vite content-hashed filenames).
+- All other non-API routes — SPA fallback to `index.html` with `Cache-Control: no-cache`.
+- API routes (`/api/*`, `/health`) registered first and take priority over the SPA fallback.
+
+### Key Components
+
+- **DashboardView**: Orchestrates active + historical session lists, filters, pagination, WebSocket subscription.
+- **ConversationTimeline**: Groups timeline items by stage, renders streaming content with auto-scroll.
+- **ChatPanel/ChatInput/useChatState**: Follow-up chat UI with send, cancel, optimistic updates.
+- **TraceTimeline/StageAccordion/InteractionCard**: Hierarchical trace view (stage → execution → interactions).
+- **MCPServerStatusView**: MCP server health and available tools display.
+- **SharedHeader/VersionFooter/SystemWarningBanner**: Layout components with version monitoring.
+- **Lazy loading**: `React.lazy()` + `Suspense` for SessionHeader, ConversationTimeline, ChatPanel, TraceTimeline.
+
+### Build
+
+- `make dashboard-build` → `cd web/dashboard && npm run build` → `web/dashboard/dist`
+- `make dashboard-dev` → Vite dev server with API proxy
+- `make dev` → starts DB, Go backend, LLM service, and Vite dev server in parallel
+- Production: `./bin/tarsy -dashboard-dir web/dashboard/dist`
+
+---
+
+## Python LLM Service (`llm-service/`)
+
+### Overview
+
+Stateless gRPC service with a single `Generate(GenerateRequest) returns (stream GenerateResponse)` RPC. Routes to provider backends based on `llm_config.backend` field. Full conversation history sent each request (no server-side state).
+
+### Provider Routing (`servicer.py`)
+
+```
+Generate(request) → backend = request.llm_config.backend || "google-native"
+  → registry.get(backend) → provider.generate(request) → stream chunks
+```
+
+### GoogleNativeProvider (`providers/google_native.py`)
+
+Uses `google-genai` SDK with `client.aio.models.generate_content_stream()`.
+
+- **Model caching**: SDK clients keyed by `api_key_env`; content objects (raw `Content` lists) cached per `execution_id` with 1-hour TTL for thought signature preservation across iterations.
+- **Thinking config**: Model-specific budgets (`gemini-2.5-pro`: 32768, `gemini-2.5-flash`: 24576, others: `thinking_level=HIGH`).
+- **Tool binding**: Converts proto `ToolDefinition` → `genai_types.FunctionDeclaration` with `tool_name_to_api()`. MCP tools and native tools (google_search, code_execution, url_context) are mutually exclusive.
+- **Streaming**: Maps SDK parts to response deltas: `part.thought` → `ThinkingDelta`, `part.function_call` → `ToolCallDelta`, `part.executable_code`/`part.code_execution_result` → `CodeExecutionDelta`, `part.text` → `TextDelta`. Yields `UsageInfo` and `GroundingDelta` after content.
+
+### LangChainProvider (`providers/langchain_provider.py`)
+
+Multi-provider support via LangChain ecosystem.
+
+- **Supported providers**: OpenAI (`ChatOpenAI`), Anthropic (`ChatAnthropic`), xAI (`ChatXAI`), Google (`ChatGoogleGenerativeAI`), VertexAI (`ChatAnthropicVertex` for Claude, `ChatGoogleGenerativeAI` for Gemini).
+- **Model caching**: `BaseChatModel` instances cached by `(provider, model, api_key_env)` tuple; tools rebound per request via `model.bind_tools()`.
+- **Tool binding**: Builds tools as `{"type": "function", "function": {"name", "description", "parameters"}}` with `tool_name_to_api()` for names.
+- **Streaming**: Uses `model.astream(messages)` processing `AIMessageChunk`:
+  - `content_blocks` with `type="reasoning"` → `ThinkingDelta` (Anthropic)
+  - `content_blocks` with `type="non_standard"` + `value.type="thinking"` → `ThinkingDelta`
+  - `additional_kwargs["reasoning_summary_chunk"]` → `ThinkingDelta` (OpenAI Responses API)
+  - `chunk.content` list with `type="thinking"` → `ThinkingDelta` (Gemini via LangChain)
+  - Text content → `TextDelta`
+  - Tool call chunks accumulated by index, emitted as full `ToolCallDelta` at end.
+- **Retry**: Exponential backoff built into LangChain chat model configuration.
+
+### Tool Name Encoding (`providers/tool_names.py`)
+
+Shared utility for canonical ↔ API name conversion:
+- **Canonical**: `server.tool` (dot-separated, used by Go backend)
+- **API**: `server__tool` (double-underscore, used by LLM APIs — dots invalid in function names)
+- `tool_name_to_api()`: `server.tool` → `server__tool`
+- `tool_name_from_api()`: `server__tool` → `server.tool`
+- Both providers use these for tool names in requests and responses.
+
+### Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `grpcio` | gRPC runtime |
+| `google-genai` | Google Gemini SDK (GoogleNativeProvider) |
+| `langchain-core` | LangChain core abstractions |
+| `langchain-openai` | OpenAI provider |
+| `langchain-anthropic` | Anthropic provider |
+| `langchain-xai` | xAI provider |
+| `langchain-google-genai` | Google GenAI via LangChain |
+| `langchain-google-vertexai` | Vertex AI provider |
+| `pydantic` | Data validation |
+
+---
+
 ## Cross-Cutting Patterns
 
 | Pattern | Description |
@@ -1090,7 +1291,7 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 | **Chat is a prompt concern** | Same controllers handle investigation and chat — `ChatContext` on `ExecutionContext` triggers chat-specific prompting. No separate chat controllers, same iteration limits, same `forceConclusion()` |
 | **Unified timeline context for chat** | Chat context built from `GetSessionTimeline()` + `FormatInvestigationContext()` — no separate chat history builder. Each chat message creates `user_question` timeline event before agent runs; subsequent messages see full history |
 | **No concurrency pool for chat** | Each chat message spawns a goroutine directly — no pool, no semaphore. One-at-a-time per chat (enforced) naturally limits load. If needed, a semaphore is a one-line addition |
-| **Shared executor helpers** | `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()` refactored from `RealSessionExecutor` methods to package-level functions in `pkg/queue/executor.go` — shared by both investigation and chat executors |
+| **Shared executor helpers** | `createToolExecutor()`, `resolveMCPSelection()`, `publishStageStatus()`, `publishExecutionStatus()` refactored from `RealSessionExecutor` methods to package-level functions in `pkg/queue/executor.go` — shared by both investigation and chat executors |
 | **Chat message cleanup on rejection** | If `Submit` rejects (active execution or shutting down), handler deletes the created `ChatUserMessage` to prevent orphaned records |
 | **Chat shutdown ordering** | Chat executor stops before worker pool. Marks `stopped` (rejects new submissions with 503), cancels all active contexts, waits for goroutines to drain |
 | **Cancel succeeds if either session or chat cancelled** | Cancel handler attempts both worker pool and chat cancellation; returns success if either succeeded. Prevents 409 errors when cancelling a chat on an already-completed session |
@@ -1102,6 +1303,13 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 | **Dual-dispatch LLM mock** | `ScriptedLLMClient` uses sequential fallback + agent-routed dispatch. Parallel agents get deterministic responses via route matching on agent name from system prompt |
 | **Real MCP stack in e2e tests** | E2e tests exercise the full `mcp.Client` → `mcp.ToolExecutor` pipeline backed by in-memory MCP SDK servers, not a custom mock — validates tool routing, name mangling, masking in every test |
 | **Golden file verification** | Pipeline test asserts all 4 data layers via golden files (session, stages, timeline, 31 interaction details). Other tests use targeted assertions. `-update` flag regenerates goldens |
+| **Dashboard SPA fallback** | Go serves dashboard via `SetDashboardDir()`: `/assets/*` with immutable cache (Vite hashes), all other non-API routes fall back to `index.html` with `no-cache`. API routes registered first take priority |
+| **REST + WebSocket data flow** | Dashboard uses REST for initial/paginated data, WebSocket for live updates. Trace view uses event-notification pattern (debounce WS events, re-fetch via REST) |
+| **Multi-provider LLM routing** | `LLMConfig.backend` routes to Python provider: `"google-native"` → GoogleNativeProvider, `"langchain"` → LangChainProvider. Provider type within LangChain selected by `LLMConfig.provider` field |
+| **Canonical tool name encoding** | Dot-separated `server.tool` (Go backend) ↔ double-underscore `server__tool` (LLM APIs). Go does `NormalizeToolName()`; Python uses shared `tool_names.py`. Dots are invalid in LLM function names |
+| **Per-provider model caching** | GoogleNativeProvider: SDK clients by `api_key_env` + content objects by `execution_id` (1h TTL). LangChainProvider: `BaseChatModel` by `(provider, model, api_key_env)` tuple, tools rebound per request |
+| **Filter persistence** | Dashboard persists filter state, pagination, and sort preferences in `localStorage` via `filterPersistence.ts` |
+| **Version monitoring** | Dashboard polls `/health` and `index.html` meta tag for version mismatch; triggers update banner via `VersionContext` |
 
 ---
 
@@ -1111,17 +1319,24 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 |------|--------|
 | Language (orchestrator) | Go |
 | Language (LLM service) | Python |
+| Language (dashboard) | TypeScript |
 | Database | PostgreSQL |
 | ORM | Ent (type-safe, generated) |
 | Migrations | golang-migrate + Atlas CLI |
 | HTTP framework | Echo v5 (labstack/echo) |
-| WebSocket | coder/websocket (RFC 6455) |
+| WebSocket (server) | coder/websocket (RFC 6455) |
 | Inter-service | gRPC (protobuf) |
 | Config format | YAML with `{{.VAR}}` env interpolation |
 | Local dev | Podman Compose |
-| Testing | testcontainers-go for integration tests |
+| Testing (Go) | testcontainers-go for integration tests |
+| Testing (dashboard) | Vitest + @testing-library/react |
 | MCP client | MCP Go SDK v1.3.0 (`github.com/modelcontextprotocol/go-sdk`) |
-| Python LLM | google-genai (Gemini native), LangChain (multi-provider) |
+| Python LLM | google-genai (Gemini native), LangChain (OpenAI, Anthropic, xAI, Google, VertexAI) |
+| Dashboard framework | React 19 + Vite 7 |
+| Dashboard UI | MUI 7 (Material UI) + Emotion |
+| Dashboard routing | react-router-dom v7 |
+| Dashboard HTTP | axios (retry, auth intercept) |
+| Dashboard content | react-markdown, react-syntax-highlighter |
 
 ---
 
@@ -1129,9 +1344,7 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 
 ### Deferred to Phase 8+
 
-- **Real LangChainProvider**: Currently stubs to GoogleNativeProvider. Phase 8.2 adds real multi-provider support.
 - **Runbook fetching**: `RunbookContent` uses builtin default. Phase 8.1 adds GitHub integration.
-- **Per-provider code execution mapping**: Documented but not implemented until multi-LLM.
 
 ### Deferred (No Phase Specified)
 
@@ -1140,6 +1353,7 @@ See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrast
 - Prometheus metrics
 - Hard delete support (schema ready, not implemented)
 - WebSocket origin validation (currently `InsecureSkipVerify: true`)
+- OAuth2-proxy integration (Phase 9)
 
 ---
 

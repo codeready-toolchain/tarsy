@@ -63,7 +63,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 9: Security
 
-**Authentication & Authorization (Phase 9.1)**
+**Authentication & Authorization**
 - [ ] OAuth2-proxy integration
 - [ ] Token validation
 - [ ] GitHub OAuth flow
@@ -72,36 +72,17 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 10: History
+### Phase 10: Monitoring & Operations
 
-**History System (Phase 10.1)**
-- [ ] History repository
-- [ ] Timeline reconstruction
-- [ ] Conversation retrieval
-- [ ] Session querying & filtering
-
----
-
-### Phase 11: Monitoring & Operations
-
-**System Health (Phase 11.1)**
 - [ ] Health check endpoint enhancements
-- [ ] Queue metrics
-
-**Observability (Phase 11.2)**
 - [ ] Structured logging
-- [ ] Metrics collection (Prometheus)
-- [ ] Error tracking
-- [ ] Performance monitoring
-
-**History Cleanup (Phase 11.3)**
 - [ ] Retention policies
 - [ ] Cleanup service
 - [ ] Cascade deletes
 
 ---
 
-### Phase 12: Deployment, DevOps & CI/CD
+### Phase 11: Deployment, DevOps & CI/CD
 
 **Containerization (Phase 12.1)**
 - [ ] Multi-stage Docker builds
