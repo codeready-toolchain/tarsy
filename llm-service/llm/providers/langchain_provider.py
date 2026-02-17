@@ -462,6 +462,34 @@ class LangChainProvider(LLMProvider):
                             text=pb.TextDelta(content=chunk.content)
                         )
 
+                    # Fallback: list content (Google/Gemini native format).
+                    # When content_blocks is empty but chunk.content is a list of
+                    # content-part dicts, extract thinking/text from the parts directly.
+                    # This handles Gemini's native list format:
+                    #   {'type': 'thinking', 'thinking': '...'} → ThinkingDelta
+                    #   {'type': 'text', 'text': '...'}         → TextDelta
+                    elif not content_handled and isinstance(chunk.content, list) and chunk.content:
+                        for part in chunk.content:
+                            if not isinstance(part, dict):
+                                continue
+                            part_type = part.get("type")
+                            if part_type == "thinking":
+                                thinking_text = part.get("thinking", "")
+                                if thinking_text:
+                                    has_content = True
+                                    content_handled = True
+                                    yield pb.GenerateResponse(
+                                        thinking=pb.ThinkingDelta(content=thinking_text)
+                                    )
+                            elif part_type == "text":
+                                text = part.get("text", "")
+                                if text:
+                                    has_content = True
+                                    content_handled = True
+                                    yield pb.GenerateResponse(
+                                        text=pb.TextDelta(content=text)
+                                    )
+
                     # Process tool call chunks (progressive accumulation)
                     if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                         for tc_chunk in chunk.tool_call_chunks:

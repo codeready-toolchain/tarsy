@@ -299,7 +299,12 @@ func callLLMWithStreaming(
 	if err != nil {
 		// Mark any streaming timeline events as failed so they don't stay
 		// stuck at status "streaming" indefinitely.
-		markStreamingEventsFailed(ctx, execCtx, thinkingEventID, textEventID, err)
+		// Use a detached context with timeout: the caller's context (iterCtx)
+		// is likely already cancelled/expired (e.g. DeadlineExceeded), but
+		// the DB cleanup must still complete.
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		markStreamingEventsFailed(cleanupCtx, execCtx, thinkingEventID, textEventID, err)
 		return nil, err
 	}
 
