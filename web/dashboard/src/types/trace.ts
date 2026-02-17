@@ -81,6 +81,12 @@ export interface MessageToolCall {
   arguments: string;
 }
 
+/** Tool entry in a tool_list interaction. */
+export interface ToolListEntry {
+  name: string;
+  description: string;
+}
+
 /** Full MCP interaction detail. */
 export interface MCPInteractionDetailResponse {
   id: string;
@@ -89,7 +95,7 @@ export interface MCPInteractionDetailResponse {
   tool_name?: string;
   tool_arguments?: Record<string, unknown>;
   tool_result?: Record<string, unknown>;
-  available_tools?: unknown[];
+  available_tools?: ToolListEntry[];
   duration_ms?: number;
   error_message?: string;
   created_at: string;

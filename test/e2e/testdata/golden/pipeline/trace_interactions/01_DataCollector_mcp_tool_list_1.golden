@@ -7,9 +7,16 @@
 
 === AVAILABLE_TOOLS ===
 [
-  [
-    "query_alerts",
-    "query_metrics",
-    "query_slo"
-  ]
+  {
+    "description": "test tool: query_alerts",
+    "name": "query_alerts"
+  },
+  {
+    "description": "test tool: query_metrics",
+    "name": "query_metrics"
+  },
+  {
+    "description": "test tool: query_slo",
+    "name": "query_slo"
+  }
 ]

@@ -520,8 +520,16 @@ export function formatMCPDetailForCopy(detail: MCPInteractionDetailResponse): st
     if (detail.duration_ms != null) content += `Duration: ${formatDurationMs(detail.duration_ms)}\n`;
     content += `\nPARAMETERS:\n${JSON.stringify(detail.tool_arguments, null, 2)}\n\n`;
     content += `RESULT:\n${JSON.stringify(detail.tool_result, null, 2)}`;
-  } else {
-    content += `\nAVAILABLE TOOLS:\n${JSON.stringify(detail.available_tools, null, 2)}`;
+  } else if (detail.available_tools) {
+    content += `\nAVAILABLE TOOLS (${detail.available_tools.length}):\n`;
+    for (const t of detail.available_tools) {
+      if (typeof t === 'object' && t !== null && 'name' in t) {
+        const entry = t as { name: string; description?: string };
+        content += `  - ${entry.name}: ${entry.description || '(no description)'}\n`;
+      } else {
+        content += `  - ${String(t)}\n`;
+      }
+    }
   }
 
   if (detail.error_message) {

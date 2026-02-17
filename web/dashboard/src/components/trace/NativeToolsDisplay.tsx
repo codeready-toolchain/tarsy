@@ -36,6 +36,13 @@ const TOOL_KEYS = {
 
 type ToolKey = (typeof TOOL_KEYS)[keyof typeof TOOL_KEYS];
 
+const KNOWN_TOOL_KEYS: ReadonlySet<string> = new Set<string>(Object.values(TOOL_KEYS));
+
+/** Type guard: returns true (and narrows to ToolKey) only for recognised tool keys. */
+function isKnownToolKey(key: string): key is ToolKey {
+  return KNOWN_TOOL_KEYS.has(key);
+}
+
 /* ── Tool metadata helpers ───────────────────────────────────────────── */
 
 function getToolDisplayName(key: ToolKey): string {
@@ -157,7 +164,7 @@ function NativeToolsDisplay({ detail, variant }: NativeToolsDisplayProps) {
 
     if (nativeToolsConfig) {
       for (const [key, enabled] of Object.entries(nativeToolsConfig)) {
-        if (enabled) toolSet.add(key as ToolKey);
+        if (enabled && isKnownToolKey(key)) toolSet.add(key);
       }
     }
 

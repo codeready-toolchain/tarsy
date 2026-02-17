@@ -100,8 +100,15 @@ func executeToolCall(
 	return toolCallResult{Content: content, IsError: result.IsError, Usage: usage}
 }
 
+// toolListEntry is the per-tool object stored in available_tools.
+type toolListEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // recordToolListInteractions records one tool_list MCP interaction per server,
 // capturing the tools that were available to the agent at execution start.
+// Each tool entry includes its name and description for the trace view.
 // Best-effort: logs on failure but never aborts the investigation.
 func recordToolListInteractions(
 	ctx context.Context,
@@ -112,14 +119,17 @@ func recordToolListInteractions(
 		return
 	}
 
-	// Group tool names by server.
-	byServer := make(map[string][]string)
+	// Group tools by server, preserving name + description.
+	byServer := make(map[string][]toolListEntry)
 	for _, t := range tools {
 		serverID, toolName, err := mcp.SplitToolName(t.Name)
 		if err != nil {
 			continue
 		}
-		byServer[serverID] = append(byServer[serverID], toolName)
+		byServer[serverID] = append(byServer[serverID], toolListEntry{
+			Name:        toolName,
+			Description: t.Description,
+		})
 	}
 
 	// Sort server IDs for deterministic creation order
@@ -131,10 +141,15 @@ func recordToolListInteractions(
 	sort.Strings(serverIDs)
 
 	for _, serverID := range serverIDs {
-		toolNames := byServer[serverID]
-		sort.Strings(toolNames)
-		availableTools := make(map[string]any, 1)
-		availableTools["tools"] = toolNames
+		entries := byServer[serverID]
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Name < entries[j].Name
+		})
+
+		availableTools := make([]any, len(entries))
+		for i, e := range entries {
+			availableTools[i] = e
+		}
 
 		interaction, err := execCtx.Services.Interaction.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
 			SessionID:       execCtx.SessionID,

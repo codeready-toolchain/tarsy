@@ -29,7 +29,7 @@ type CreateMCPInteractionRequest struct {
 	ToolName        *string        `json:"tool_name,omitempty"`
 	ToolArguments   map[string]any `json:"tool_arguments,omitempty"`
 	ToolResult      map[string]any `json:"tool_result,omitempty"`
-	AvailableTools  map[string]any `json:"available_tools,omitempty"`
+	AvailableTools  []any          `json:"available_tools,omitempty"`
 	DurationMs      *int           `json:"duration_ms,omitempty"`
 	ErrorMessage    *string        `json:"error_message,omitempty"`
 }

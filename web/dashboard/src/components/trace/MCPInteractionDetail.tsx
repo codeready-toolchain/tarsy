@@ -11,11 +11,68 @@
 import { memo } from 'react';
 import { Box, Typography, Stack, Divider } from '@mui/material';
 
-import type { MCPInteractionDetailResponse } from '../../types/trace';
+import type { MCPInteractionDetailResponse, ToolListEntry } from '../../types/trace';
 import { MCP_INTERACTION_TYPE, MCP_LIST_TOOLS_NAME } from '../../constants/interactionTypes';
 import CopyButton from '../shared/CopyButton';
 import JsonDisplay from '../shared/JsonDisplay';
 import { formatMCPDetailForCopy } from './traceHelpers';
+
+/** Renders the available tools list with name + description for each tool. */
+function ToolListDisplay({ tools }: { tools: ToolListEntry[] }) {
+  // Handle both structured entries ({name, description}) and legacy plain strings.
+  const hasDescriptions = tools.length > 0 && typeof tools[0] === 'object' && 'name' in tools[0];
+
+  if (!hasDescriptions) {
+    // Fallback for legacy data (plain string arrays).
+    return <JsonDisplay data={tools} maxHeight={800} />;
+  }
+
+  return (
+    <Box
+      sx={{
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        maxHeight: 600,
+        overflow: 'auto',
+      }}
+    >
+      {tools.map((tool, idx) => (
+        <Box
+          key={tool.name}
+          sx={{
+            px: 2,
+            py: 1.5,
+            borderBottom: idx < tools.length - 1 ? 1 : 0,
+            borderColor: 'divider',
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
+          <Typography
+            variant="body2"
+            sx={{
+              fontFamily: 'monospace',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              color: 'primary.main',
+            }}
+          >
+            {tool.name}
+          </Typography>
+          {tool.description && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.25, fontSize: '0.8rem' }}
+            >
+              {tool.description}
+            </Typography>
+          )}
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 interface MCPInteractionDetailProps {
   detail: MCPInteractionDetailResponse;
@@ -27,8 +84,13 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
     (detail.interaction_type === MCP_INTERACTION_TYPE.TOOL_CALL && detail.tool_name === MCP_LIST_TOOLS_NAME);
 
   const rawCopyText = (() => {
-    if (isToolList) {
-      return `Tool List from ${detail.server_name}\n\n---\n\n${JSON.stringify(detail.available_tools, null, 2)}`;
+    if (isToolList && detail.available_tools) {
+      const toolLines = detail.available_tools.map((t) =>
+        typeof t === 'object' && 'name' in t
+          ? `- ${t.name}: ${t.description || '(no description)'}`
+          : `- ${String(t)}`,
+      );
+      return `Tool List from ${detail.server_name} (${detail.available_tools.length} tools)\n\n${toolLines.join('\n')}`;
     }
     return `${detail.tool_name}(${JSON.stringify(detail.tool_arguments, null, 2)})\n\n---\n\n${JSON.stringify(detail.tool_result, null, 2)}`;
   })();
@@ -153,10 +215,14 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
               tooltip={isToolList ? 'Copy available tools' : 'Copy result'}
             />
           </Box>
-          <JsonDisplay
-            data={isToolList ? detail.available_tools : detail.tool_result}
-            maxHeight={800}
-          />
+          {isToolList && detail.available_tools ? (
+            <ToolListDisplay tools={detail.available_tools} />
+          ) : (
+            <JsonDisplay
+              data={detail.tool_result}
+              maxHeight={800}
+            />
+          )}
         </Box>
 
         {/* Tool metadata */}

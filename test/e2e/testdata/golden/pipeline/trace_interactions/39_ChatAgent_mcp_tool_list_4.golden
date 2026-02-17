@@ -7,10 +7,20 @@
 
 === AVAILABLE_TOOLS ===
 [
-  [
-    "get_nodes",
-    "get_pod_logs",
-    "get_pods",
-    "get_resource_config"
-  ]
+  {
+    "description": "test tool: get_nodes",
+    "name": "get_nodes"
+  },
+  {
+    "description": "test tool: get_pod_logs",
+    "name": "get_pod_logs"
+  },
+  {
+    "description": "test tool: get_pods",
+    "name": "get_pods"
+  },
+  {
+    "description": "test tool: get_resource_config",
+    "name": "get_resource_config"
+  }
 ]
