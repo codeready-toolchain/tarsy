@@ -78,12 +78,14 @@ func TestSessionService_CreateSession(t *testing.T) {
 		assert.Equal(t, 0, stages[0].StageIndex)
 		assert.Equal(t, 1, stages[0].ExpectedAgentCount)
 
-		// Verify agent execution created
+		// Verify agent execution created with correct defaults
 		executions, err := client.AgentExecution.Query().All(ctx)
 		require.NoError(t, err)
 		assert.Len(t, executions, 1)
 		assert.Equal(t, stages[0].ID, executions[0].StageID)
 		assert.Equal(t, 1, executions[0].AgentIndex)
+		assert.Equal(t, "langchain", executions[0].IterationStrategy)
+		assert.Equal(t, req.AgentType, executions[0].AgentName)
 	})
 
 	t.Run("validates required fields", func(t *testing.T) {
