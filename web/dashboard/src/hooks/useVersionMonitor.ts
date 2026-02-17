@@ -31,7 +31,7 @@ export function useVersionMonitor(): VersionInfo {
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<string>('checking');
 
-  const [consecutiveMismatches, setConsecutiveMismatches] = useState(0);
+  const [, setConsecutiveMismatches] = useState(0);
   const [dashboardVersionChanged, setDashboardVersionChanged] = useState(false);
 
   const isInitialMount = useRef(true);
@@ -76,14 +76,12 @@ export function useVersionMonitor(): VersionInfo {
           return newCount;
         });
       } else {
-        if (consecutiveMismatches > 0) {
-          setConsecutiveMismatches(0);
-        }
+        setConsecutiveMismatches((prev) => (prev > 0 ? 0 : prev));
       }
     } catch {
       // Silently fail — optional monitoring
     }
-  }, [consecutiveMismatches]);
+  }, []);
 
   const refresh = useCallback(async () => {
     await Promise.all([fetchBackendVersion(), checkDashboardVersion()]);
@@ -99,8 +97,7 @@ export function useVersionMonitor(): VersionInfo {
     }, 1000);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   // Polling interval
   useEffect(() => {
