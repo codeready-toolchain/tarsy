@@ -120,15 +120,12 @@ ThinkingBlock.displayName = 'ThinkingBlock';
  * Routes to appropriate visual treatment based on event_type.
  */
 const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) => {
-  // Thinking (llm_thinking / native_thinking) — italic, secondary color
+  // Thinking (llm_thinking) — italic, secondary color
   // All thought types use the same visual treatment (matching ThinkingItem).
   // Renders immediately (showing the "Thinking..." label) even before content
   // arrives — ThinkingBlock internally defers the gray content box until the
   // typewriter produces visible text.
-  if (
-    item.eventType === TIMELINE_EVENT_TYPES.LLM_THINKING ||
-    item.eventType === TIMELINE_EVENT_TYPES.NATIVE_THINKING
-  ) {
+  if (item.eventType === TIMELINE_EVENT_TYPES.LLM_THINKING) {
     return <ThinkingBlock content={item.content || ''} />;
   }
 

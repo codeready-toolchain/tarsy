@@ -885,7 +885,7 @@ func seedDashboardSession(
 		SetStageID(stg.ID).
 		SetAgentName("TestAgent").
 		SetAgentIndex(1).
-		SetIterationStrategy("react").
+		SetIterationStrategy("langchain").
 		SetStartedAt(started).
 		SetStatus("completed").
 		SaveX(ctx)
@@ -983,7 +983,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, "TestAgent", eo.AgentName)
 		assert.Equal(t, 1, eo.AgentIndex)
 		assert.Equal(t, "completed", eo.Status)
-		assert.Equal(t, "react", eo.IterationStrategy)
+		assert.Equal(t, "langchain", eo.IterationStrategy)
 		assert.Equal(t, int64(100), eo.InputTokens)
 		assert.Equal(t, int64(50), eo.OutputTokens)
 		assert.Equal(t, int64(150), eo.TotalTokens)
@@ -1037,7 +1037,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetStageID(stg.ID).
 			SetAgentName("ArgoCDAgent").
 			SetAgentIndex(2).
-			SetIterationStrategy("react").
+			SetIterationStrategy("langchain").
 			SetStatus("completed").
 			SetStartedAt(started).
 			SetCompletedAt(completed).
@@ -1104,7 +1104,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, exec2.ID, eo2.ExecutionID)
 		assert.Equal(t, "ArgoCDAgent", eo2.AgentName)
 		assert.Equal(t, 2, eo2.AgentIndex)
-		assert.Equal(t, "react", eo2.IterationStrategy)
+		assert.Equal(t, "langchain", eo2.IterationStrategy)
 		assert.Nil(t, eo2.LLMProvider)
 		assert.Equal(t, int64(50), eo2.InputTokens)
 		assert.Equal(t, int64(10), eo2.OutputTokens)

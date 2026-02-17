@@ -9,6 +9,13 @@ dependencies = [
     "google-genai>=1.62.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
+    # LangChain multi-provider support
+    "langchain-core>=1.2.13",
+    "langchain-openai>=1.1.9",
+    "langchain-anthropic>=1.3.3",
+    "langchain-xai>=1.2.2",
+    "langchain-google-genai>=4.2.0",
+    "langchain-google-vertexai>=3.2.2",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +38,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["llm"]
-omit = ["*/tests/*", "*/proto/*"]
+omit = ["*/tests/*", "*/llm_proto/*"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -45,6 +52,13 @@ exclude_lines = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["llm"]
+
+[tool.uv]
+# langchain-google-vertexai pulls in langchain-tests as a runtime dep,
+# which caps pytest<9. Override to allow our pytest>=9 requirement.
+override-dependencies = [
+    "pytest>=9.0.2",
+]
 
 [build-system]
 requires = ["hatchling"]

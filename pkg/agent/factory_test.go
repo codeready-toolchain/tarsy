@@ -33,7 +33,7 @@ func TestAgentFactory_CreateAgent(t *testing.T) {
 		factory := NewAgentFactory(&mockControllerFactory{})
 		execCtx := &ExecutionContext{
 			Config: &ResolvedAgentConfig{
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 			},
 		}
 

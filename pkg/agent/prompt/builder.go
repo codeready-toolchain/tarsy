@@ -2,7 +2,6 @@ package prompt
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -37,55 +36,15 @@ func (b *PromptBuilder) MCPServerRegistry() *config.MCPServerRegistry {
 const taskFocus = "Focus on investigation and providing recommendations for human operators to execute."
 const chatTaskFocus = "Focus on answering follow-up questions about a completed investigation for human operators to execute."
 
-// BuildReActMessages builds the initial conversation for a ReAct investigation.
-func (b *PromptBuilder) BuildReActMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-	tools []agent.ToolDefinition,
-) []agent.ConversationMessage {
-	isChat := execCtx.ChatContext != nil
-
-	// System message: use chat-specific variants when in chat mode
-	var composed, formatInstr, focus string
-	if isChat {
-		composed = b.ComposeChatInstructions(execCtx)
-		formatInstr = chatReActFormatInstructions
-		focus = chatTaskFocus
-	} else {
-		composed = b.ComposeInstructions(execCtx)
-		formatInstr = reactFormatInstructions
-		focus = taskFocus
-	}
-	systemContent := composed + "\n\n" + formatInstr + "\n\n" + focus
-
-	messages := []agent.ConversationMessage{
-		{Role: agent.RoleSystem, Content: systemContent},
-	}
-
-	// User message
-	var userContent string
-	if isChat {
-		userContent = b.buildChatUserMessage(execCtx, tools)
-	} else {
-		userContent = b.buildInvestigationUserMessage(execCtx, prevStageContext, tools)
-	}
-
-	messages = append(messages, agent.ConversationMessage{
-		Role:    agent.RoleUser,
-		Content: userContent,
-	})
-
-	return messages
-}
-
-// BuildNativeThinkingMessages builds the initial conversation for a native thinking investigation.
-func (b *PromptBuilder) BuildNativeThinkingMessages(
+// BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
+// Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
+func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
 	isChat := execCtx.ChatContext != nil
 
-	// System message (no ReAct format instructions, no tool descriptions in text)
+	// System message (tools are bound natively, not described in text)
 	var composed, focus string
 	if isChat {
 		composed = b.ComposeChatInstructions(execCtx)
@@ -100,12 +59,12 @@ func (b *PromptBuilder) BuildNativeThinkingMessages(
 		{Role: agent.RoleSystem, Content: systemContent},
 	}
 
-	// User message (no tool descriptions — tools are native function declarations)
+	// User message (no tool descriptions — tools are bound natively via function calling)
 	var userContent string
 	if isChat {
-		userContent = b.buildChatUserMessage(execCtx, nil)
+		userContent = b.buildChatUserMessage(execCtx)
 	} else {
-		userContent = b.buildInvestigationUserMessage(execCtx, prevStageContext, nil)
+		userContent = b.buildInvestigationUserMessage(execCtx, prevStageContext)
 	}
 
 	messages = append(messages, agent.ConversationMessage{
@@ -144,20 +103,9 @@ func (b *PromptBuilder) BuildSynthesisMessages(
 }
 
 // BuildForcedConclusionPrompt returns a prompt to force an LLM conclusion
-// at the iteration limit. The format depends on the iteration strategy.
+// at the iteration limit.
 func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string {
-	var formatInstructions string
-	switch strategy {
-	case config.IterationStrategyReact:
-		formatInstructions = reactForcedConclusionFormat
-	case config.IterationStrategyNativeThinking:
-		formatInstructions = nativeThinkingForcedConclusionFormat
-	default:
-		slog.Warn("unknown iteration strategy for forced conclusion, using native-thinking format",
-			"strategy", strategy)
-		formatInstructions = nativeThinkingForcedConclusionFormat
-	}
-	return fmt.Sprintf(forcedConclusionTemplate, iteration, formatInstructions)
+	return fmt.Sprintf(forcedConclusionTemplate, iteration, nativeThinkingForcedConclusionFormat)
 }
 
 // BuildMCPSummarizationSystemPrompt builds the system prompt for MCP result summarization.
@@ -184,17 +132,8 @@ func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string) st
 func (b *PromptBuilder) buildInvestigationUserMessage(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
-	tools []agent.ToolDefinition,
 ) string {
 	var sb strings.Builder
-
-	// Available tools (ReAct only)
-	if len(tools) > 0 {
-		sb.WriteString("Answer the following question using the available tools.\n\n")
-		sb.WriteString("Available tools:\n\n")
-		sb.WriteString(FormatToolDescriptions(tools))
-		sb.WriteString("\n\n")
-	}
 
 	// Alert section
 	sb.WriteString(FormatAlertSection(execCtx.AlertType, execCtx.AlertData))

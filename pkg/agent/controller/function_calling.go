@@ -11,18 +11,19 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
-// NativeThinkingController implements the Gemini native function calling loop.
+// FunctionCallingController implements the native function calling loop.
+// Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
 // Tool calls come as structured ToolCallChunk values (not parsed from text).
 // Completion signal: a response without any ToolCalls.
-type NativeThinkingController struct{}
+type FunctionCallingController struct{}
 
-// NewNativeThinkingController creates a new native thinking controller.
-func NewNativeThinkingController() *NativeThinkingController {
-	return &NativeThinkingController{}
+// NewFunctionCallingController creates a new function calling controller.
+func NewFunctionCallingController() *FunctionCallingController {
+	return &FunctionCallingController{}
 }
 
 // Run executes the native thinking iteration loop.
-func (c *NativeThinkingController) Run(
+func (c *FunctionCallingController) Run(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
@@ -35,9 +36,9 @@ func (c *NativeThinkingController) Run(
 
 	// 1. Build initial conversation via prompt builder
 	if execCtx.PromptBuilder == nil {
-		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildNativeThinkingMessages")
+		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildFunctionCallingMessages")
 	}
-	messages := execCtx.PromptBuilder.BuildNativeThinkingMessages(execCtx, prevStageContext)
+	messages := execCtx.PromptBuilder.BuildFunctionCallingMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages in DB
 	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
@@ -171,7 +172,7 @@ func (c *NativeThinkingController) Run(
 }
 
 // forceConclusion forces the LLM to produce a final answer by calling without tools.
-func (c *NativeThinkingController) forceConclusion(
+func (c *FunctionCallingController) forceConclusion(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	messages []agent.ConversationMessage,

@@ -104,7 +104,7 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 	systemMsg := llm.lastInput.Messages[0]
 	userMsg := llm.lastInput.Messages[1]
 
-	// System message: SRE instructions + custom instructions (no ReAct format, no taskFocus)
+	// System message: SRE instructions + custom instructions (no taskFocus)
 	require.Equal(t, agent.RoleSystem, systemMsg.Role)
 	require.Contains(t, systemMsg.Content, "General SRE Analysis Instructions")
 	require.Contains(t, systemMsg.Content, "Custom synthesis instructions.")

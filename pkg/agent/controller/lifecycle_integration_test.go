@@ -13,17 +13,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReActController_ToolCallLifecycleEvents verifies that the new
-// streaming tool call lifecycle creates proper timeline events in the DB.
-func TestReActController_ToolCallLifecycleEvents(t *testing.T) {
+// TestFunctionCallingController_ToolCallLifecycleEvents verifies that the
+// streaming tool call lifecycle creates proper timeline events in the DB
+// when using the langchain strategy.
+func TestFunctionCallingController_ToolCallLifecycleEvents(t *testing.T) {
 	// LLM calls: 1) tool call 2) final answer
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: I need to check pods.\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.TextChunk{Content: "I'll check the pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Pods look good.\nFinal Answer: Everything is healthy."},
+				&agent.TextChunk{Content: "Everything is healthy."},
 			}},
 		},
 	}
@@ -37,7 +39,7 @@ func TestReActController_ToolCallLifecycleEvents(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -68,16 +70,17 @@ func TestReActController_ToolCallLifecycleEvents(t *testing.T) {
 	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
-// TestReActController_ToolCallErrorLifecycle verifies that tool errors
+// TestFunctionCallingController_ToolCallErrorLifecycle verifies that tool errors
 // are properly reflected in the completed llm_tool_call event.
-func TestReActController_ToolCallErrorLifecycle(t *testing.T) {
+func TestFunctionCallingController_ToolCallErrorLifecycle(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Check pods.\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.TextChunk{Content: "Let me check pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: Could not reach cluster."},
+				&agent.TextChunk{Content: "Could not reach cluster."},
 			}},
 		},
 	}
@@ -91,7 +94,7 @@ func TestReActController_ToolCallErrorLifecycle(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -145,7 +148,7 @@ func TestNativeThinkingController_ToolCallLifecycleEvents(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -168,16 +171,17 @@ func TestNativeThinkingController_ToolCallLifecycleEvents(t *testing.T) {
 	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
-// TestReActController_SummarizationIntegration verifies that the summarization
+// TestFunctionCallingController_SummarizationIntegration verifies that the summarization
 // path is exercised when a tool result exceeds the configured threshold.
-func TestReActController_SummarizationIntegration(t *testing.T) {
+func TestFunctionCallingController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
 	// The mock LLM receives 3 calls: iteration, summarization, iteration
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			// Iteration 1: tool call
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: I need to check pods.\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.TextChunk{Content: "I need to check pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
 			}},
 			// Summarization LLM call (triggered internally by maybeSummarize)
 			{chunks: []agent.Chunk{
@@ -185,7 +189,7 @@ func TestReActController_SummarizationIntegration(t *testing.T) {
 			}},
 			// Iteration 2: final answer (uses summarized content)
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: The summary shows issues.\nFinal Answer: Two pods are crashing."},
+				&agent.TextChunk{Content: "Two pods are crashing."},
 			}},
 		},
 	}
@@ -216,7 +220,7 @@ func TestReActController_SummarizationIntegration(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -227,22 +231,23 @@ func TestReActController_SummarizationIntegration(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, summarization, iteration")
 }
 
-// TestReActController_SummarizationFailOpen verifies that when summarization
+// TestFunctionCallingController_SummarizationFailOpen verifies that when summarization
 // fails, the raw tool result is used (fail-open behavior).
-func TestReActController_SummarizationFailOpen(t *testing.T) {
+func TestFunctionCallingController_SummarizationFailOpen(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (fails), 3) final answer
 	callCount := 0
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			// Iteration 1: tool call
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Check pods.\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.TextChunk{Content: "Check pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
 			}},
 			// Summarization call fails
 			{err: assert.AnError},
 			// Iteration 2: final answer (uses raw content since summarization failed)
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Got data.\nFinal Answer: Pods are fine."},
+				&agent.TextChunk{Content: "Pods are fine."},
 			}},
 		},
 	}
@@ -270,7 +275,7 @@ func TestReActController_SummarizationFailOpen(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -282,23 +287,24 @@ func TestReActController_SummarizationFailOpen(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
-// TestReActController_NonStreamingEventStatus verifies that events created via
+// TestFunctionCallingController_NonStreamingEventStatus verifies that events created via
 // createTimelineEvent (non-streaming: llm_thinking, final_analysis) are stored
 // with StatusCompleted in the DB, not StatusStreaming.
 // Note: llm_response is only created in the streaming path (requires EventPublisher),
 // so it is not present in these unit tests which use no EventPublisher.
-func TestReActController_NonStreamingEventStatus(t *testing.T) {
+func TestFunctionCallingController_NonStreamingEventStatus(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Pods need checking.\nFinal Answer: All pods are healthy."},
+				&agent.ThinkingChunk{Content: "Pods need checking."},
+				&agent.TextChunk{Content: "All pods are healthy."},
 			}},
 		},
 	}
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -348,7 +354,7 @@ func TestNativeThinkingController_NonStreamingEventStatus(t *testing.T) {
 		tools: []agent.ToolDefinition{{Name: "k8s__get_pods", Description: "Get pods"}},
 	}
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -373,16 +379,17 @@ func TestNativeThinkingController_NonStreamingEventStatus(t *testing.T) {
 	assert.True(t, typeSet[timelineevent.EventTypeFinalAnalysis], "expected final_analysis")
 }
 
-// TestReActController_StorageTruncation verifies that very large tool
+// TestFunctionCallingController_StorageTruncation verifies that very large tool
 // results are truncated for storage in the timeline event.
-func TestReActController_StorageTruncation(t *testing.T) {
+func TestFunctionCallingController_StorageTruncation(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Check.\nAction: k8s.get_pods\nAction Input: {}"},
+				&agent.TextChunk{Content: "Checking pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Thought: Done.\nFinal Answer: All good."},
+				&agent.TextChunk{Content: "All good."},
 			}},
 		},
 	}
@@ -400,7 +407,7 @@ func TestReActController_StorageTruncation(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewReActController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -425,9 +432,8 @@ func TestReActController_StorageTruncation(t *testing.T) {
 }
 
 // TestNativeThinkingController_SummarizationIntegration verifies that
-// summarization works in the NativeThinking controller. This exercises a
-// different code path than ReAct: tool results are appended as role=tool
-// messages with ToolCallID, not as "Observation:" user messages.
+// summarization works in the FunctionCallingController. Tool results are
+// appended as role=tool messages with ToolCallID.
 func TestNativeThinkingController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
 	llm := &mockLLMClient{
@@ -475,7 +481,7 @@ func TestNativeThinkingController_SummarizationIntegration(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
 	execCtx.PromptBuilder = pb
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -532,7 +538,7 @@ func TestNativeThinkingController_SummarizationFailOpen(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
 	execCtx.PromptBuilder = pb
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -573,7 +579,7 @@ func TestNativeThinkingController_StorageTruncation(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)

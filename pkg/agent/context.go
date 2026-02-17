@@ -88,8 +88,7 @@ type ResolvedAgentConfig struct {
 // Implemented by prompt.PromptBuilder; defined as interface here to
 // avoid a circular import between pkg/agent and pkg/agent/prompt.
 type PromptBuilder interface {
-	BuildReActMessages(execCtx *ExecutionContext, prevStageContext string, tools []ToolDefinition) []ConversationMessage
-	BuildNativeThinkingMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
+	BuildFunctionCallingMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
 	BuildSynthesisMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
 	BuildForcedConclusionPrompt(iteration int, strategy config.IterationStrategy) string
 	BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string

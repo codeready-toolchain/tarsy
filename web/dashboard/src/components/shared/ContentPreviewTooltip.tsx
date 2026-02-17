@@ -15,7 +15,7 @@ interface ContentPreviewTooltipProps {
   /** Full content to display in tooltip */
   content: string;
   /** Type of content (determines markdown rendering style) */
-  type: 'thought' | 'final_answer' | 'forced_conclusion' | 'summarization' | 'native_thinking';
+  type: 'thought' | 'final_answer' | 'forced_conclusion' | 'summarization';
   /** Child element that triggers the tooltip */
   children: React.ReactElement;
 }

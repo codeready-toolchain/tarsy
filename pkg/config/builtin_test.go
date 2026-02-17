@@ -56,8 +56,8 @@ func TestBuiltinAgents(t *testing.T) {
 		{
 			name:      "KubernetesAgent",
 			agentID:   "KubernetesAgent",
-			wantDesc:  "Kubernetes-specialized agent using ReAct pattern",
-			wantStrat: IterationStrategyReact,
+			wantDesc:  "Kubernetes-specialized agent",
+			wantStrat: "", // No explicit strategy — inherits from defaults.
 		},
 		{
 			name:      "ChatAgent",

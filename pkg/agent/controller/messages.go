@@ -131,7 +131,7 @@ func storeToolResultMessage(
 	}
 }
 
-// storeObservationMessage persists a ReAct observation as a user message.
+// storeObservationMessage persists a tool observation as a user message.
 // Logs slog.Error on failure but does not abort the investigation loop —
 // the in-memory messages slice is authoritative during execution.
 func storeObservationMessage(

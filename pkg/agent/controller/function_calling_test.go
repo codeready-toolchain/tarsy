@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNativeThinkingController_HappyPath(t *testing.T) {
+func TestFunctionCallingController_HappyPath(t *testing.T) {
 	// LLM calls: 1) tool call 2) final answer (no tools)
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -41,7 +41,7 @@ func TestNativeThinkingController_HappyPath(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestNativeThinkingController_HappyPath(t *testing.T) {
 	require.Equal(t, 2, llm.callCount)
 }
 
-func TestNativeThinkingController_MultipleToolCalls(t *testing.T) {
+func TestFunctionCallingController_MultipleToolCalls(t *testing.T) {
 	// Single LLM response with multiple tool calls
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -80,7 +80,7 @@ func TestNativeThinkingController_MultipleToolCalls(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestNativeThinkingController_MultipleToolCalls(t *testing.T) {
 	require.Equal(t, "The web-1 pod has OOM issues.", result.FinalAnalysis)
 }
 
-func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
+func TestFunctionCallingController_ForcedConclusion(t *testing.T) {
 	// LLM keeps calling tools, never produces text-only response
 	var responses []mockLLMResponse
 	for i := 0; i < 3; i++ {
@@ -117,7 +117,7 @@ func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestNativeThinkingController_ForcedConclusion(t *testing.T) {
 	require.True(t, found, "expected final_analysis timeline event")
 }
 
-func TestNativeThinkingController_ThinkingContent(t *testing.T) {
+func TestFunctionCallingController_ThinkingContent(t *testing.T) {
 	// Verify thinking content is processed without error and the LLM receives
 	// the thinking chunk. Timeline event verification would require querying the
 	// DB for the event (the mock executor doesn't expose recorded events), so we
@@ -157,7 +157,7 @@ func TestNativeThinkingController_ThinkingContent(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestNativeThinkingController_ThinkingContent(t *testing.T) {
 	require.True(t, foundThinking, "thinking content should be recorded as a timeline event")
 }
 
-func TestNativeThinkingController_ToolExecutionError(t *testing.T) {
+func TestFunctionCallingController_ToolExecutionError(t *testing.T) {
 	// Tool fails, LLM recovers
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -200,14 +200,14 @@ func TestNativeThinkingController_ToolExecutionError(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 }
 
-func TestNativeThinkingController_ConsecutiveTimeouts(t *testing.T) {
+func TestFunctionCallingController_ConsecutiveTimeouts(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{err: context.DeadlineExceeded},
@@ -218,14 +218,14 @@ func TestNativeThinkingController_ConsecutiveTimeouts(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusFailed, result.Status)
 }
 
-func TestNativeThinkingController_PrevStageContext(t *testing.T) {
+func TestFunctionCallingController_PrevStageContext(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -237,7 +237,7 @@ func TestNativeThinkingController_PrevStageContext(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found high CPU usage on node-3.")
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestNativeThinkingController_PrevStageContext(t *testing.T) {
 	require.True(t, found, "previous stage context not found in LLM messages")
 }
 
-func TestNativeThinkingController_ForcedConclusionWithFailedLast(t *testing.T) {
+func TestFunctionCallingController_ForcedConclusionWithFailedLast(t *testing.T) {
 	// Tool calls succeed but last LLM call errors — forced conclusion should fail
 	var responses []mockLLMResponse
 	for i := 0; i < 2; i++ {
@@ -282,7 +282,7 @@ func TestNativeThinkingController_ForcedConclusionWithFailedLast(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -291,7 +291,7 @@ func TestNativeThinkingController_ForcedConclusionWithFailedLast(t *testing.T) {
 	require.Contains(t, result.Error.Error(), "max iterations")
 }
 
-func TestNativeThinkingController_LLMErrorRecovery(t *testing.T) {
+func TestFunctionCallingController_LLMErrorRecovery(t *testing.T) {
 	// First call errors, second succeeds with a final answer
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -305,7 +305,7 @@ func TestNativeThinkingController_LLMErrorRecovery(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -313,7 +313,7 @@ func TestNativeThinkingController_LLMErrorRecovery(t *testing.T) {
 	require.Equal(t, "All systems operational.", result.FinalAnalysis)
 }
 
-func TestNativeThinkingController_TextAlongsideToolCalls(t *testing.T) {
+func TestFunctionCallingController_TextAlongsideToolCalls(t *testing.T) {
 	// LLM returns text AND tool calls — text should be recorded as llm_response
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -337,7 +337,7 @@ func TestNativeThinkingController_TextAlongsideToolCalls(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -345,7 +345,7 @@ func TestNativeThinkingController_TextAlongsideToolCalls(t *testing.T) {
 	require.Equal(t, "Everything is running fine.", result.FinalAnalysis)
 }
 
-func TestNativeThinkingController_CodeExecution(t *testing.T) {
+func TestFunctionCallingController_CodeExecution(t *testing.T) {
 	// LLM returns code execution chunks alongside text — should create code_execution events
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -360,7 +360,7 @@ func TestNativeThinkingController_CodeExecution(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -381,7 +381,7 @@ func TestNativeThinkingController_CodeExecution(t *testing.T) {
 	require.True(t, foundCodeExec, "code_execution event should be recorded")
 }
 
-func TestNativeThinkingController_GoogleSearch(t *testing.T) {
+func TestFunctionCallingController_GoogleSearch(t *testing.T) {
 	// LLM returns grounding with search queries — should create google_search_result event
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -398,7 +398,7 @@ func TestNativeThinkingController_GoogleSearch(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -419,7 +419,7 @@ func TestNativeThinkingController_GoogleSearch(t *testing.T) {
 	require.True(t, foundSearch, "google_search_result event should be recorded")
 }
 
-func TestNativeThinkingController_UrlContext(t *testing.T) {
+func TestFunctionCallingController_UrlContext(t *testing.T) {
 	// LLM returns grounding WITHOUT search queries — should create url_context_result event
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -435,7 +435,7 @@ func TestNativeThinkingController_UrlContext(t *testing.T) {
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -454,9 +454,9 @@ func TestNativeThinkingController_UrlContext(t *testing.T) {
 	require.True(t, foundURL, "url_context_result event should be recorded")
 }
 
-func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
-	// Verify the prompt builder produces the expected message structure for native thinking:
-	// system msg with three-tier instructions (NO ReAct format), user msg WITHOUT tool descriptions.
+func TestFunctionCallingController_PromptBuilderIntegration(t *testing.T) {
+	// Verify the prompt builder produces the expected message structure for function calling:
+	// system msg with three-tier instructions, user msg WITHOUT tool descriptions (tools are bound natively).
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -475,7 +475,7 @@ func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
 	execCtx.RunbookContent = "# Test Runbook\nStep 1: Check pods"
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
 	execCtx.Config.CustomInstructions = "Custom native thinking instructions."
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Previous stage data.")
 	require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
 	systemMsg := llm.lastInput.Messages[0]
 	userMsg := llm.lastInput.Messages[1]
 
-	// System message should have SRE instructions and task focus, but NO ReAct format
+	// System message should have SRE instructions and task focus
 	require.Equal(t, "system", systemMsg.Role)
 	require.Contains(t, systemMsg.Content, "General SRE Agent Instructions")
 	require.Contains(t, systemMsg.Content, "Focus on investigation")
@@ -512,7 +512,7 @@ func TestNativeThinkingController_PromptBuilderIntegration(t *testing.T) {
 	require.Equal(t, "k8s.get_pods", llm.lastInput.Tools[0].Name)
 }
 
-func TestNativeThinkingController_ForcedConclusionUsesNativeFormat(t *testing.T) {
+func TestFunctionCallingController_ForcedConclusionUsesNativeFormat(t *testing.T) {
 	// Verify the forced conclusion prompt uses native thinking format (no "Final Answer:" marker)
 	var responses []mockLLMResponse
 	for i := 0; i < 3; i++ {
@@ -538,13 +538,13 @@ func TestNativeThinkingController_ForcedConclusionUsesNativeFormat(t *testing.T)
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 
-	// The forced conclusion prompt should use native thinking format (not ReAct)
+	// The forced conclusion prompt should use function calling format
 	require.NotNil(t, llm.lastInput)
 	lastUserMsg := ""
 	for i := len(llm.lastInput.Messages) - 1; i >= 0; i-- {
@@ -558,7 +558,7 @@ func TestNativeThinkingController_ForcedConclusionUsesNativeFormat(t *testing.T)
 	require.NotContains(t, lastUserMsg, "Final Answer:")
 }
 
-func TestNativeThinkingController_ForcedConclusionWithGrounding(t *testing.T) {
+func TestFunctionCallingController_ForcedConclusionWithGrounding(t *testing.T) {
 	// Verify grounding events are created during forced conclusion too
 	var responses []mockLLMResponse
 	for i := 0; i < 3; i++ {
@@ -591,7 +591,7 @@ func TestNativeThinkingController_ForcedConclusionWithGrounding(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
 	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-	ctrl := NewNativeThinkingController()
+	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)

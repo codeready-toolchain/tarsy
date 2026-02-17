@@ -133,7 +133,7 @@ Pod OOMKilled
 
 ### Parallel Investigation: "validation" — 2/2 agents succeeded
 
-#### Agent 1: ConfigValidator (react, test-provider)
+#### Agent 1: ConfigValidator (langchain, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -148,6 +148,10 @@ I should verify the pod memory limits are properly configured.
 **Internal Reasoning:**
 
 The memory limit of 512Mi matches the alert threshold.
+
+**Agent Response:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 **Final Analysis:**
 

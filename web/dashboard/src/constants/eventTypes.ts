@@ -52,7 +52,6 @@ export const PHASE_STATUS_MESSAGE: Record<string, string> = {
 // Timeline event types (for routing to renderers)
 export const TIMELINE_EVENT_TYPES = {
   LLM_THINKING: 'llm_thinking',
-  NATIVE_THINKING: 'native_thinking',
   LLM_RESPONSE: 'llm_response',
   LLM_TOOL_CALL: 'llm_tool_call',
   MCP_TOOL_SUMMARY: 'mcp_tool_summary',

@@ -42,7 +42,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -257,7 +257,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -374,7 +374,7 @@ func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -479,7 +479,7 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -552,7 +552,7 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 
@@ -638,7 +638,7 @@ func TestTimelineService_GetMaxSequenceNumber(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	})
 	require.NoError(t, err)
 

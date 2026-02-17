@@ -22,8 +22,8 @@ import (
 // Pipeline test — grows incrementally into the full pipeline test.
 // Four stages + two synthesis stages + two chat messages:
 //   1. investigation  (DataCollector, NativeThinking)
-//   2. remediation    (Remediator, ReAct)
-//   3. validation     (ConfigValidator react ∥ MetricsValidator native-thinking, forced conclusion)
+//   2. remediation    (Remediator, langchain/function calling)
+//   3. validation     (ConfigValidator langchain ∥ MetricsValidator native-thinking, forced conclusion)
 //      → validation - Synthesis (synthesis-native-thinking)
 //   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
 //      → scaling-review - Synthesis (plain synthesis)
@@ -69,26 +69,23 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Stage 2: remediation (Remediator, react) ──
-	// ReAct uses text-based tool calling (Action/Action Input with dot notation).
+	// ── Stage 2: remediation (Remediator, langchain) ──
+	// Function calling uses ThinkingChunk + ToolCallChunk.
 	// Mirrors stage 1: tool call (no summary) → tool call (with summary) → final answer.
 
 	// Iteration 1: tool call to test-mcp (small result, no summarization).
-	// Split into chunks so ReAct-aware streaming creates live llm_thinking events.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thought: I should check the pod logs to understand the OOM pattern."},
-			&agent.TextChunk{Content: "\nAction: test-mcp.get_pod_logs\n" +
-				`Action Input: {"pod":"pod-1","namespace":"default"}`},
+			&agent.ThinkingChunk{Content: "I should check the pod logs to understand the OOM pattern."},
+			&agent.ToolCallChunk{CallID: "call-r1", Name: "test-mcp__get_pod_logs", Arguments: `{"pod":"pod-1","namespace":"default"}`},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		},
 	})
 	// Iteration 2: tool call to prometheus-mcp (large result, triggers summarization).
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thought: Let me check the Prometheus alert history for memory-related alerts."},
-			&agent.TextChunk{Content: "\nAction: prometheus-mcp.query_alerts\n" +
-				`Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`},
+			&agent.ThinkingChunk{Content: "Let me check the Prometheus alert history for memory-related alerts."},
+			&agent.ToolCallChunk{CallID: "call-r2", Name: "prometheus-mcp__query_alerts", Arguments: `{"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}`},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		},
 	})
@@ -97,29 +94,27 @@ func TestE2E_Pipeline(t *testing.T) {
 	// Iteration 3: final answer.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thought: The logs and alerts confirm repeated OOM kills due to memory pressure."},
-			&agent.TextChunk{Content: "\nFinal Answer: Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
+			&agent.ThinkingChunk{Content: "The logs and alerts confirm repeated OOM kills due to memory pressure."},
+			&agent.TextChunk{Content: "Recommend increasing memory limit to 1Gi and adding a HPA for pod-1."},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		},
 	})
 
-	// ── Stage 3: validation (parallel: ConfigValidator react + MetricsValidator native-thinking) ──
+	// ── Stage 3: validation (parallel: ConfigValidator langchain + MetricsValidator native-thinking) ──
 	// Parallel agents use routed dispatch — LLM calls are matched by agent name.
 
-	// ConfigValidator (react): 2 iterations.
-	// Split into chunks so ReAct-aware streaming creates live llm_thinking events.
+	// ConfigValidator (function calling): 2 iterations.
 	llm.AddRouted("ConfigValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thought: I should verify the pod memory limits are properly configured."},
-			&agent.TextChunk{Content: "\nAction: test-mcp.get_resource_config\n" +
-				`Action Input: {"pod":"pod-1","namespace":"default"}`},
+			&agent.ThinkingChunk{Content: "I should verify the pod memory limits are properly configured."},
+			&agent.ToolCallChunk{CallID: "call-c1", Name: "test-mcp__get_resource_config", Arguments: `{"pod":"pod-1","namespace":"default"}`},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		},
 	})
 	llm.AddRouted("ConfigValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Thought: The memory limit of 512Mi matches the alert threshold."},
-			&agent.TextChunk{Content: "\nFinal Answer: Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
+			&agent.ThinkingChunk{Content: "The memory limit of 512Mi matches the alert threshold."},
+			&agent.TextChunk{Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		},
 	})

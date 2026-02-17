@@ -53,7 +53,7 @@ func (AgentExecution) Fields() []ent.Field {
 
 		// Agent Configuration
 		field.String("iteration_strategy").
-			Comment("e.g., 'react', 'native_thinking' (for observability)"),
+			Comment("e.g., 'langchain', 'native_thinking' (for observability)"),
 		field.String("llm_provider").
 			Optional().
 			Nillable().

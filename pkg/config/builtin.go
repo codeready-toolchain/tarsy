@@ -55,9 +55,8 @@ func initBuiltinConfig() {
 func initBuiltinAgents() map[string]BuiltinAgentConfig {
 	return map[string]BuiltinAgentConfig{
 		"KubernetesAgent": {
-			Description:       "Kubernetes-specialized agent using ReAct pattern",
-			IterationStrategy: IterationStrategyReact,
-			MCPServers:        []string{"kubernetes-server"},
+			Description: "Kubernetes-specialized agent",
+			MCPServers:  []string{"kubernetes-server"},
 		},
 		"ChatAgent": {
 			Description: "Built-in agent for follow-up conversations",

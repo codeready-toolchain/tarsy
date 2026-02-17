@@ -12,11 +12,10 @@ import (
 var toolNameRegex = regexp.MustCompile(`^([\w][\w-]*)\.([\w][\w-]*)$`)
 
 // NormalizeToolName converts tool names between controller formats.
-// NativeThinking uses "server__tool" (Gemini function name restriction).
-// ReAct uses "server.tool" (text-based).
-// Normalizes both to "server.tool" for routing.
+// FunctionCalling uses "server__tool" (API name restriction for Gemini/LangChain).
+// Normalizes to "server.tool" for routing.
 func NormalizeToolName(name string) string {
-	// Convert double-underscore to dot (NativeThinking → canonical)
+	// Convert double-underscore to dot (FunctionCalling API format → canonical)
 	if strings.Contains(name, "__") && !strings.Contains(name, ".") {
 		return strings.Replace(name, "__", ".", 1)
 	}

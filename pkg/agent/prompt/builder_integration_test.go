@@ -152,7 +152,7 @@ func newIntegrationExecCtx() *agent.ExecutionContext {
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "KubernetesAgent",
-			IterationStrategy:  config.IterationStrategyReact,
+			IterationStrategy:  config.IterationStrategyLangChain,
 			MCPServers:         []string{"kubernetes-server"},
 			CustomInstructions: "Be thorough.",
 		},
@@ -201,8 +201,6 @@ func newSynthesisNativeThinkingExecCtx() *agent.ExecutionContext {
 
 // realisticInvestigationContext is a brief but structurally realistic
 // investigation context matching what FormatStructuredInvestigation produces.
-// It includes all key sections: header, initial request, agent responses,
-// tool observations, and final analysis.
 const realisticInvestigationContext = `═══════════════════════════════════════════════════════════════════════════════
 📋 INVESTIGATION HISTORY
 ═══════════════════════════════════════════════════════════════════════════════
@@ -222,10 +220,7 @@ Investigate this alert using the available tools.
 
 **Agent Response:**
 
-Thought: I should check the pod status first.
-
-Action: kubernetes-server.pods_list
-Action Input: namespace: test-namespace
+I need to check the pod status first.
 
 **Observation:**
 
@@ -234,9 +229,9 @@ Tool Result: kubernetes-server.pods_list:
 
 **Agent Response:**
 
-Thought: Pod-1 is in CrashLoopBackOff. Let me check the logs.
+Pod-1 is in CrashLoopBackOff. Let me check the logs.
 
-Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
+Final analysis: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
 `
 
 // synthesisStageContext is a sample prevStageContext for synthesis tests,
@@ -250,7 +245,7 @@ const synthesisStageContext = `### Results from parallel stage 'investigation':
 
 Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
 
-#### Agent 2: LogAgent (anthropic-default, react)
+#### Agent 2: LogAgent (anthropic-default, langchain)
 **Status**: completed
 
 Log analysis reveals database connection timeout errors to db.example.com:5432.`
@@ -264,57 +259,29 @@ func newChatExecCtx() *agent.ExecutionContext {
 	return ctx
 }
 
-func integrationTools() []agent.ToolDefinition {
-	return []agent.ToolDefinition{
-		{
-			Name:             "kubernetes-server.pods_list",
-			Description:      "List pods in a namespace",
-			ParametersSchema: `{"properties":{"namespace":{"type":"string","description":"Target namespace"}},"required":["namespace"]}`,
-		},
-		{
-			Name:             "kubernetes-server.resources_get",
-			Description:      "Get a Kubernetes resource",
-			ParametersSchema: `{"properties":{"apiVersion":{"type":"string"},"kind":{"type":"string"},"name":{"type":"string"},"namespace":{"type":"string"}},"required":["apiVersion","kind","name"]}`,
-		},
-	}
-}
-
 // ===========================================================================
 // Investigation mode tests
 // ===========================================================================
 
-func TestIntegration_ReActInvestigation(t *testing.T) {
+func TestIntegration_FunctionCallingInvestigation(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newIntegrationExecCtx()
-	tools := integrationTools()
 
-	messages := builder.BuildReActMessages(execCtx, "", tools)
-
-	require.Len(t, messages, 2)
-	assertGolden(t, "react_investigation", serializeMessages(messages))
-}
-
-func TestIntegration_ReActInvestigationWithContext(t *testing.T) {
-	builder := newIntegrationBuilder()
-	execCtx := newIntegrationExecCtx()
-	tools := integrationTools()
-	prevStageContext := "Agent found OOM issues in pod-1. Memory usage exceeded 512Mi limit."
-
-	messages := builder.BuildReActMessages(execCtx, prevStageContext, tools)
-
-	require.Len(t, messages, 2)
-	assertGolden(t, "react_investigation_with_context", serializeMessages(messages))
-}
-
-func TestIntegration_NativeThinkingInvestigation(t *testing.T) {
-	builder := newIntegrationBuilder()
-	execCtx := newIntegrationExecCtx()
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-
-	messages := builder.BuildNativeThinkingMessages(execCtx, "")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "native_thinking_investigation", serializeMessages(messages))
+}
+
+func TestIntegration_FunctionCallingInvestigationWithContext(t *testing.T) {
+	builder := newIntegrationBuilder()
+	execCtx := newIntegrationExecCtx()
+	prevStageContext := "Agent found OOM issues in pod-1. Memory usage exceeded 512Mi limit."
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, prevStageContext)
+
+	require.Len(t, messages, 2)
+	assertGolden(t, "function_calling_investigation_with_context", serializeMessages(messages))
 }
 
 // ===========================================================================
@@ -345,23 +312,11 @@ func TestIntegration_SynthesisNativeThinking(t *testing.T) {
 // Chat mode tests
 // ===========================================================================
 
-func TestIntegration_ReActChat(t *testing.T) {
+func TestIntegration_FunctionCallingChat(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newChatExecCtx()
-	tools := integrationTools()
 
-	messages := builder.BuildReActMessages(execCtx, "", tools)
-
-	require.Len(t, messages, 2)
-	assertGolden(t, "react_chat", serializeMessages(messages))
-}
-
-func TestIntegration_NativeThinkingChat(t *testing.T) {
-	builder := newIntegrationBuilder()
-	execCtx := newChatExecCtx()
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
-
-	messages := builder.BuildNativeThinkingMessages(execCtx, "")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
 	assertGolden(t, "native_thinking_chat", serializeMessages(messages))
@@ -371,36 +326,35 @@ func TestIntegration_NativeThinkingChat(t *testing.T) {
 // Failed MCP servers test
 // ===========================================================================
 
-func TestIntegration_ReActInvestigationWithFailedServers(t *testing.T) {
+func TestIntegration_FunctionCallingInvestigationWithFailedServers(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newIntegrationExecCtx()
 	execCtx.FailedServers = map[string]string{
 		"github-server": "connection refused",
 	}
-	tools := integrationTools()
 
-	messages := builder.BuildReActMessages(execCtx, "", tools)
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "react_investigation_failed_servers", serializeMessages(messages))
+	assertGolden(t, "function_calling_investigation_failed_servers", serializeMessages(messages))
 }
 
 // ===========================================================================
 // Forced conclusion tests
 // ===========================================================================
 
-func TestIntegration_ForcedConclusionReAct(t *testing.T) {
-	builder := newIntegrationBuilder()
-	result := builder.BuildForcedConclusionPrompt(5, config.IterationStrategyReact)
-
-	assertGolden(t, "forced_conclusion_react", result)
-}
-
 func TestIntegration_ForcedConclusionNativeThinking(t *testing.T) {
 	builder := newIntegrationBuilder()
 	result := builder.BuildForcedConclusionPrompt(3, config.IterationStrategyNativeThinking)
 
 	assertGolden(t, "forced_conclusion_native_thinking", result)
+}
+
+func TestIntegration_ForcedConclusionLangChain(t *testing.T) {
+	builder := newIntegrationBuilder()
+	result := builder.BuildForcedConclusionPrompt(5, config.IterationStrategyLangChain)
+
+	assertGolden(t, "forced_conclusion_langchain", result)
 }
 
 // ===========================================================================
@@ -493,8 +447,8 @@ func TestIntegration_ChatSystemUsesCorrectTier1(t *testing.T) {
 	builder := newIntegrationBuilder()
 	execCtx := newChatExecCtx()
 
-	messages := builder.BuildReActMessages(execCtx, "", nil)
-	require.NotEmpty(t, messages, "BuildReActMessages returned empty slice")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
+	require.NotEmpty(t, messages, "BuildFunctionCallingMessages returned empty slice")
 	systemMsg := messages[0].Content
 
 	// Chat mode should use chat instructions, not investigation

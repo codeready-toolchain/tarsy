@@ -220,7 +220,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:   "ConfigValidator",
 						AgentIndex:  1,
-						Strategy:    "react",
+						Strategy:    "langchain",
 						LLMProvider: "gemini-2.5-pro",
 						Status:      alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
@@ -230,7 +230,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:   "MetricsValidator",
 						AgentIndex:  2,
-						Strategy:    "react",
+						Strategy:    "langchain",
 						LLMProvider: "claude-sonnet",
 						Status:      alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
@@ -247,8 +247,8 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		assert.Contains(t, result, "<!-- PARALLEL_RESULTS_START -->")
 		assert.Contains(t, result, "<!-- PARALLEL_RESULTS_END -->")
 		assert.Contains(t, result, `"validation" — 2/2 agents succeeded`)
-		assert.Contains(t, result, "#### Agent 1: ConfigValidator (react, gemini-2.5-pro)")
-		assert.Contains(t, result, "#### Agent 2: MetricsValidator (react, claude-sonnet)")
+		assert.Contains(t, result, "#### Agent 1: ConfigValidator (langchain, gemini-2.5-pro)")
+		assert.Contains(t, result, "#### Agent 2: MetricsValidator (langchain, claude-sonnet)")
 		assert.Contains(t, result, "**Final Analysis:**\n\nConfig OK.")
 		assert.Contains(t, result, "**Final Analysis:**\n\nMetrics OK.")
 	})
@@ -288,7 +288,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:   "Agent",
 						AgentIndex:  1,
-						Strategy:    "react",
+						Strategy:    "langchain",
 						LLMProvider: "gemini",
 						Status:      alertsession.StatusCompleted,
 					},
@@ -299,7 +299,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 
 		result := FormatStructuredInvestigation(stages, "")
 
-		assert.Contains(t, result, "**Agent:** Agent (react, gemini)")
+		assert.Contains(t, result, "**Agent:** Agent (langchain, gemini)")
 		assert.Contains(t, result, "### Synthesis Result")
 		assert.Contains(t, result, "Both agents agree: no issues found.")
 	})
@@ -335,7 +335,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:   "AgentA",
 						AgentIndex:  1,
-						Strategy:    "react",
+						Strategy:    "langchain",
 						LLMProvider: "gemini",
 						Status:      alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
@@ -345,7 +345,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:    "AgentB",
 						AgentIndex:   2,
-						Strategy:     "react",
+						Strategy:     "langchain",
 						LLMProvider:  "gemini",
 						Status:       alertsession.StatusFailed,
 						ErrorMessage: "timeout",
@@ -364,7 +364,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		// Stage 2: parallel with synthesis
 		assert.Contains(t, result, "## Stage 2: validation")
 		assert.Contains(t, result, `"validation" — 1/2 agents succeeded`)
-		assert.Contains(t, result, "#### Agent 2: AgentB (react, gemini)")
+		assert.Contains(t, result, "#### Agent 2: AgentB (langchain, gemini)")
 		assert.Contains(t, result, "**Error**: timeout")
 		assert.Contains(t, result, "(No investigation history available)")
 		assert.Contains(t, result, "### Synthesis Result")
@@ -381,10 +381,10 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 	t.Run("sequential stage numbering ignores StageIndex", func(t *testing.T) {
 		stages := []StageInvestigation{
 			{StageName: "first", StageIndex: 0, Agents: []AgentInvestigation{
-				{AgentName: "A", AgentIndex: 1, Strategy: "react", Status: alertsession.StatusCompleted},
+				{AgentName: "A", AgentIndex: 1, Strategy: "langchain", Status: alertsession.StatusCompleted},
 			}},
 			{StageName: "third", StageIndex: 5, Agents: []AgentInvestigation{
-				{AgentName: "B", AgentIndex: 1, Strategy: "react", Status: alertsession.StatusCompleted},
+				{AgentName: "B", AgentIndex: 1, Strategy: "langchain", Status: alertsession.StatusCompleted},
 			}},
 		}
 
@@ -417,7 +417,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:    "Analyzer",
 						AgentIndex:   1,
-						Strategy:     "react",
+						Strategy:     "langchain",
 						Status:       alertsession.StatusFailed,
 						ErrorMessage: "LLM provider unreachable",
 					},
@@ -427,7 +427,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 
 		result := FormatStructuredInvestigation(stages, "")
 
-		assert.Contains(t, result, "**Agent:** Analyzer (react)")
+		assert.Contains(t, result, "**Agent:** Analyzer (langchain)")
 		assert.Contains(t, result, "**Status**: failed")
 		assert.Contains(t, result, "**Error**: LLM provider unreachable")
 		assert.Contains(t, result, "(No investigation history available)")
@@ -442,7 +442,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 					{
 						AgentName:   "AgentA",
 						AgentIndex:  1,
-						Strategy:    "react",
+						Strategy:    "langchain",
 						LLMProvider: "gemini-2.5-pro",
 						Status:      alertsession.StatusCompleted,
 						Events: []*ent.TimelineEvent{
@@ -466,7 +466,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		result := FormatStructuredInvestigation(stages, "")
 
 		// Agent with provider shows "(strategy, provider)"
-		assert.Contains(t, result, "#### Agent 1: AgentA (react, gemini-2.5-pro)")
+		assert.Contains(t, result, "#### Agent 1: AgentA (langchain, gemini-2.5-pro)")
 		// Agent without provider shows "(strategy)" only — no trailing comma/space
 		assert.Contains(t, result, "#### Agent 2: AgentB (native-thinking)")
 		assert.NotContains(t, result, "AgentB (native-thinking, )")
@@ -478,7 +478,7 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini-2.5-pro",
 				Status:      alertsession.StatusCompleted,
 				Events: []*ent.TimelineEvent{
@@ -532,7 +532,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini-2.5-pro",
 				Status:      alertsession.StatusCompleted,
 				Events: []*ent.TimelineEvent{
@@ -556,7 +556,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 		assert.True(t, strings.HasPrefix(result, "<!-- PARALLEL_RESULTS_START -->"))
 		assert.True(t, strings.HasSuffix(result, "<!-- PARALLEL_RESULTS_END -->\n"))
 		assert.Contains(t, result, `"investigation" — 2/2 agents succeeded`)
-		assert.Contains(t, result, "#### Agent 1: AgentA (react, gemini-2.5-pro)\n**Status**: completed")
+		assert.Contains(t, result, "#### Agent 1: AgentA (langchain, gemini-2.5-pro)\n**Status**: completed")
 		assert.Contains(t, result, "#### Agent 2: AgentB (native-thinking, claude-sonnet)\n**Status**: completed")
 		assert.Contains(t, result, "**Final Analysis:**\n\nFinding A.")
 		assert.Contains(t, result, "**Final Analysis:**\n\nFinding B.")
@@ -569,7 +569,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini",
 				Status:      alertsession.StatusCompleted,
 				Events: []*ent.TimelineEvent{
@@ -579,7 +579,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:    "AgentB",
 				AgentIndex:   2,
-				Strategy:     "react",
+				Strategy:     "langchain",
 				LLMProvider:  "gemini",
 				Status:       alertsession.StatusFailed,
 				ErrorMessage: "LLM timeout",
@@ -600,7 +600,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini",
 				Status:      alertsession.StatusFailed,
 				// No ErrorMessage, no Events
@@ -620,7 +620,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:   "AgentA",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini",
 				Status:      alertsession.StatusCompleted,
 				// No events — but completed, so no placeholder
@@ -638,7 +638,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:  "AgentA",
 				AgentIndex: 1,
-				Strategy:   "react",
+				Strategy:   "langchain",
 				// LLMProvider intentionally empty
 				Status: alertsession.StatusCompleted,
 				Events: []*ent.TimelineEvent{
@@ -649,8 +649,8 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 
 		result := FormatInvestigationForSynthesis(agents, "stage-1")
 
-		assert.Contains(t, result, "#### Agent 1: AgentA (react)\n**Status**: completed")
-		assert.NotContains(t, result, "AgentA (react, )")
+		assert.Contains(t, result, "#### Agent 1: AgentA (langchain)\n**Status**: completed")
+		assert.NotContains(t, result, "AgentA (langchain, )")
 	})
 
 	t.Run("events are formatted through shared formatter", func(t *testing.T) {
@@ -658,7 +658,7 @@ func TestFormatInvestigationForSynthesis(t *testing.T) {
 			{
 				AgentName:   "Agent",
 				AgentIndex:  1,
-				Strategy:    "react",
+				Strategy:    "langchain",
 				LLMProvider: "gemini",
 				Status:      alertsession.StatusCompleted,
 				Events: []*ent.TimelineEvent{

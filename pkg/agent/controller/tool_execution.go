@@ -14,7 +14,7 @@ import (
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
-// integrate into its conversation format (ReAct observation vs NativeThinking
+// integrate into its conversation format (FunctionCallingController
 // tool message).
 type toolCallResult struct {
 	// Content is the tool result content to feed back to the LLM.

@@ -153,7 +153,7 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 ## Stage 2: remediation
 
-**Agent:** Remediator (react, test-provider)
+**Agent:** Remediator (langchain, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -178,6 +178,10 @@ OOMKilled alert fired 3 times in the last hour for pod-1.
 
 The logs and alerts confirm repeated OOM kills due to memory pressure.
 
+**Agent Response:**
+
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
+
 **Final Analysis:**
 
 Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
@@ -188,7 +192,7 @@ Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 ### Parallel Investigation: "validation" — 2/2 agents succeeded
 
-#### Agent 1: ConfigValidator (react, test-provider)
+#### Agent 1: ConfigValidator (langchain, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -203,6 +207,10 @@ I should verify the pod memory limits are properly configured.
 **Internal Reasoning:**
 
 The memory limit of 512Mi matches the alert threshold.
+
+**Agent Response:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 **Final Analysis:**
 

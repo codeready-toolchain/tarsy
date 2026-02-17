@@ -8,9 +8,4 @@ Please conclude your investigation by answering the original question based on w
 - If gaps remain, clearly state what you couldn't determine and why
 - Focus on practical next steps based on current knowledge
 
-**CRITICAL:** You MUST format your response using the ReAct format:
-
-Thought: [your final reasoning about what you've discovered]
-Final Answer: [your complete structured conclusion]
-
-The "Final Answer:" marker is required for proper parsing. Begin your conclusion now.
+Provide a clear, structured conclusion that directly addresses the investigation question.

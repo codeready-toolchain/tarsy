@@ -76,10 +76,7 @@ Investigate this alert using the available tools.
 
 **Agent Response:**
 
-Thought: I should check the pod status first.
-
-Action: kubernetes-server.pods_list
-Action Input: namespace: test-namespace
+I need to check the pod status first.
 
 **Observation:**
 
@@ -88,9 +85,9 @@ Tool Result: kubernetes-server.pods_list:
 
 **Agent Response:**
 
-Thought: Pod-1 is in CrashLoopBackOff. Let me check the logs.
+Pod-1 is in CrashLoopBackOff. Let me check the logs.
 
-Final Answer: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
+Final analysis: Pod-1 in test-namespace is in CrashLoopBackOff due to database connection timeout to db.example.com:5432.
 
 ═══════════════════════════════════════════════════════════════════════════════
 🎯 CURRENT TASK

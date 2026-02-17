@@ -80,7 +80,6 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
   [TIMELINE_EVENT_TYPES.CODE_EXECUTION]: FLOW_ITEM.CODE_EXECUTION,
   [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: FLOW_ITEM.SEARCH_RESULT,
   [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: FLOW_ITEM.URL_CONTEXT,
-  [TIMELINE_EVENT_TYPES.NATIVE_THINKING]: FLOW_ITEM.THINKING,
   [TIMELINE_EVENT_TYPES.ERROR]: FLOW_ITEM.ERROR,
 };
 
@@ -445,21 +444,4 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
   }
 
   return lines.join('\n').trim();
-}
-
-/**
- * isReActResponse checks whether content looks like a raw ReAct-formatted LLM
- * response (containing Thought:/Action: or Final Answer: markers). These are
- * redundant when the backend has already created properly-typed events for the
- * individual sections. Used by TimelineItem to hide such llm_response events.
- */
-export function isReActResponse(content: string): boolean {
-  if (!content) return false;
-  // Must contain "Thought:" AND either "Action:" or "Final Answer:" to be
-  // considered ReAct format. A single marker is not sufficient — it could be
-  // regular text that happens to contain one of these words.
-  const hasThought = content.includes('Thought:');
-  const hasAction = content.includes('Action:');
-  const hasFinalAnswer = content.includes('Final Answer:');
-  return hasThought && (hasAction || hasFinalAnswer);
 }

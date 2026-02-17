@@ -11,8 +11,9 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
-from proto import llm_service_pb2 as pb
+from llm_proto import llm_service_pb2 as pb
 from llm.providers.base import LLMProvider
+from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class GoogleNativeProvider(LLMProvider):
     - Per-model thinking configuration
     - Model Content caching per execution for thought signature preservation
     - Tool definition -> FunctionDeclaration conversion
-    - Tool name conversion: server.tool <-> server__tool
+    - Tool name encoding via shared tool_names utility
     - Native tools (google_search, code_execution, url_context)
     - UsageInfo streaming
     - Transient retry logic
@@ -149,7 +150,7 @@ class GoogleNativeProvider(LLMProvider):
                         parts.append(
                             genai_types.Part(
                                 function_call=genai_types.FunctionCall(
-                                    name=self._tool_name_to_native(tc.name),
+                                    name=tool_name_to_api(tc.name),
                                     args=args,
                                 )
                             )
@@ -170,7 +171,7 @@ class GoogleNativeProvider(LLMProvider):
                         parts=[
                             genai_types.Part(
                                 function_response=genai_types.FunctionResponse(
-                                    name=self._tool_name_to_native(msg.tool_name),
+                                    name=tool_name_to_api(msg.tool_name),
                                     response=result_data,
                                 )
                             )
@@ -207,7 +208,7 @@ class GoogleNativeProvider(LLMProvider):
                     params = {}
                 declarations.append(
                     genai_types.FunctionDeclaration(
-                        name=self._tool_name_to_native(tool.name),
+                        name=tool_name_to_api(tool.name),
                         description=tool.description,
                         parameters=params if params else None,
                     )
@@ -224,28 +225,6 @@ class GoogleNativeProvider(LLMProvider):
                 result_tools.append(genai_types.Tool(url_context=genai_types.UrlContext()))
 
         return result_tools if result_tools else None
-
-    @staticmethod
-    def _tool_name_to_native(name: str) -> str:
-        """Convert canonical 'server.tool' format to 'server__tool' for Gemini API.
-
-        The mapping uses '__' as the dot replacement. Tool name segments
-        (the parts between dots) must not contain '__' themselves, or the
-        round-trip would be lossy. We validate and reject such names early.
-        """
-        for segment in name.split("."):
-            if "__" in segment:
-                raise ValueError(
-                    f"Tool name segment '{segment}' in '{name}' contains '__' "
-                    f"which conflicts with the dot separator encoding. "
-                    f"Rename the tool to avoid double underscores."
-                )
-        return name.replace(".", "__")
-
-    @staticmethod
-    def _tool_name_from_native(name: str) -> str:
-        """Convert 'server__tool' back to canonical 'server.tool' format."""
-        return name.replace("__", ".")
 
     def _get_cached_model_turns(self, execution_id: str) -> List[List[genai_types.Content]]:
         """Retrieve cached model Content turns for an execution."""
@@ -468,7 +447,7 @@ class GoogleNativeProvider(LLMProvider):
                             yield pb.GenerateResponse(
                                 tool_call=pb.ToolCallDelta(
                                     call_id=call_id,
-                                    name=self._tool_name_from_native(fc.name),
+                                    name=tool_name_from_api(fc.name),
                                     arguments=args_str,
                                 )
                             )

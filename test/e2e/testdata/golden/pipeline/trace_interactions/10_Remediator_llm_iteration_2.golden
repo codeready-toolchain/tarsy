@@ -9,11 +9,12 @@
     "messages_count": 4
   },
   "llm_response": {
-    "text_length": 185,
-    "tool_calls_count": 0
+    "text_length": 0,
+    "tool_calls_count": 1
   },
   "model_name": "test-model",
   "output_tokens": 5,
+  "thinking_content": "Let me check the Prometheus alert history for memory-related alerts.",
   "total_tokens": 15
 }
 
@@ -39,102 +40,9 @@ Focus on root cause analysis and sustainable solutions.
 
 You are Remediator, analyzing logs and recommending fixes.
 
-You are an SRE agent using the ReAct framework to analyze incidents. Reason step by step, act with tools, observe results, and repeat until you identify root cause and resolution steps.
-
-REQUIRED FORMAT:
-
-Question: [the incident question]
-Thought: [your step-by-step reasoning]
-Action: [tool name from available tools]
-Action Input: [parameters as key: value pairs]
-
-⚠️ STOP immediately after Action Input. The system provides Observations.
-
-Continue the cycle. Conclude when you have sufficient information:
-
-Thought: [final reasoning]
-Final Answer: [complete structured response]
-
-CRITICAL RULES:
-1. Always use colons after headers: "Thought:", "Action:", "Action Input:"
-2. Start each section on a NEW LINE (never continue on same line as previous text)
-3. Stop after Action Input—never generate fake Observations
-4. Parameters: one per line for multiple values, or inline for single value
-5. Conclude when you have actionable insights (perfect information not required)
-
-PARAMETER FORMATS:
-
-Multiple parameters:
-Action Input: apiVersion: v1
-kind: Namespace
-name: superman-dev
-
-Single parameter:
-Action Input: namespace: default
-
-EXAMPLE CYCLE:
-
-Question: Why is namespace 'superman-dev' stuck in terminating state?
-
-Thought: I need to check the namespace status first to identify any blocking resources or finalizers.
-
-Action: kubernetes-server.resources_get
-Action Input: apiVersion: v1
-kind: Namespace
-name: superman-dev
-
-[System provides: Observation: {"status": {"phase": "Terminating", "finalizers": ["kubernetes"]}}]
-
-Thought: A finalizer is blocking deletion. I should check for any remaining resources in the namespace.
-
-Action: kubernetes-server.resources_list
-Action Input: apiVersion: v1
-kind: Pod
-namespace: superman-dev
-
-[System provides: Observation: No pods found]
-
-Thought: No pods remain, but the finalizer persists. This is an orphaned finalizer that needs manual removal.
-
-Final Answer:
-**Root Cause:** Orphaned 'kubernetes' finalizer blocking namespace deletion after all resources were cleaned up.
-
-**Resolution Steps:**
-1. Remove the finalizer: `kubectl patch namespace superman-dev -p '{"spec":{"finalizers":null}}' --type=merge`
-2. Verify deletion: `kubectl get namespace superman-dev`
-3. If still stuck, check for remaining resources: `kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get -n superman-dev`
-
-**Preventive Measures:** Ensure cleanup scripts remove finalizers when deleting namespaces programmatically.
-
 Focus on investigation and providing recommendations for human operators to execute.
 
 === MESSAGE: user ===
-Answer the following question using the available tools.
-
-Available tools:
-
-1. **test-mcp.get_nodes**: test tool: get_nodes
-    **Parameters**: None
-
-2. **test-mcp.get_pod_logs**: test tool: get_pod_logs
-    **Parameters**: None
-
-3. **test-mcp.get_pods**: test tool: get_pods
-    **Parameters**: None
-
-4. **test-mcp.get_resource_config**: test tool: get_resource_config
-    **Parameters**: None
-
-5. **prometheus-mcp.query_alerts**: test tool: query_alerts
-    **Parameters**: None
-
-6. **prometheus-mcp.query_metrics**: test tool: query_metrics
-    **Parameters**: None
-
-7. **prometheus-mcp.query_slo**: test tool: query_slo
-    **Parameters**: None
-
-
 ## Alert Details
 
 ### Alert Metadata
@@ -208,15 +116,15 @@ Use the available tools to investigate this alert and provide:
 Be thorough in your investigation before providing the final answer.
 
 === MESSAGE: assistant ===
-Thought: I should check the pod logs to understand the OOM pattern.
-Action: test-mcp.get_pod_logs
-Action Input: {"pod":"pod-1","namespace":"default"}
+(tool calls only)
+--- TOOL_CALLS ---
+[call-r1] test-mcp__get_pod_logs({"pod":"pod-1","namespace":"default"})
 
-=== MESSAGE: user ===
-Observation: {"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
+=== MESSAGE: tool (call-r1, test-mcp__get_pod_logs) ===
+{"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
 
 === MESSAGE: assistant ===
-Thought: Let me check the Prometheus alert history for memory-related alerts.
-Action: prometheus-mcp.query_alerts
-Action Input: {"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"}
+(tool calls only)
+--- TOOL_CALLS ---
+[call-r2] prometheus-mcp__query_alerts({"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"})
 

@@ -24,6 +24,9 @@ func ResolveBackend(strategy config.IterationStrategy) string {
 	case config.IterationStrategyNativeThinking,
 		config.IterationStrategySynthesisNativeThinking:
 		return BackendGoogleNative
+	case config.IterationStrategyLangChain,
+		config.IterationStrategySynthesis:
+		return BackendLangChain
 	default:
 		return BackendLangChain
 	}

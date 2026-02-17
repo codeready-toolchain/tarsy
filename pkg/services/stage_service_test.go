@@ -145,7 +145,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "KubernetesAgent",
 			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		}
 
 		exec, err := stageService.CreateAgentExecution(ctx, req)
@@ -248,7 +248,7 @@ func TestStageService_UpdateAgentExecutionStatus(t *testing.T) {
 		SessionID:         session.ID,
 		AgentName:         "TestAgent",
 		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyReact,
+		IterationStrategy: config.IterationStrategyLangChain,
 	}
 	exec, err := stageService.CreateAgentExecution(ctx, execReq)
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -370,7 +370,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -431,7 +431,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 				SessionID:         session.ID,
 				AgentName:         "TestAgent",
 				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyReact,
+				IterationStrategy: config.IterationStrategyLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -490,7 +490,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent1",
 			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -499,7 +499,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent2",
 			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -550,7 +550,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent1",
 			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -559,7 +559,7 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         "Agent2",
 			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 
@@ -751,7 +751,7 @@ func TestStageService_GetAgentExecutions(t *testing.T) {
 			SessionID:         session.ID,
 			AgentName:         fmt.Sprintf("TestAgent%d", i),
 			AgentIndex:        i,
-			IterationStrategy: config.IterationStrategyReact,
+			IterationStrategy: config.IterationStrategyLangChain,
 		})
 		require.NoError(t, err)
 		execIDs = append(execIDs, exec.ID)
