@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -441,4 +444,132 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// Callback should fire for thinking (1) + text (2) = 3 times
 	// (Tool calls, code executions, groundings, usage don't trigger callback)
 	assert.Equal(t, []string{ChunkTypeThinking, ChunkTypeText, ChunkTypeText}, callbacks)
+}
+
+// ============================================================================
+// noopEventPublisher — satisfies agent.EventPublisher for streaming-path tests
+// ============================================================================
+
+type noopEventPublisher struct{}
+
+func (noopEventPublisher) PublishTimelineCreated(context.Context, string, events.TimelineCreatedPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishTimelineCompleted(context.Context, string, events.TimelineCompletedPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishStreamChunk(context.Context, string, events.StreamChunkPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishSessionStatus(context.Context, string, events.SessionStatusPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishStageStatus(context.Context, string, events.StageStatusPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishChatCreated(context.Context, string, events.ChatCreatedPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishInteractionCreated(context.Context, string, events.InteractionCreatedPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishSessionProgress(context.Context, events.SessionProgressPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishExecutionProgress(context.Context, string, events.ExecutionProgressPayload) error {
+	return nil
+}
+func (noopEventPublisher) PublishExecutionStatus(context.Context, string, events.ExecutionStatusPayload) error {
+	return nil
+}
+
+// contextExpiryErrorLLMClient sends initial chunks immediately, then waits
+// for the caller's context to expire before sending an error chunk. This
+// deterministically simulates a stream that outlives its parent context
+// deadline — no timing margins or sleeps needed.
+type contextExpiryErrorLLMClient struct {
+	initialChunks []agent.Chunk
+	errorMessage  string
+}
+
+func (m *contextExpiryErrorLLMClient) Generate(ctx context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {
+	ch := make(chan agent.Chunk, len(m.initialChunks)+1)
+
+	// Send initial chunks immediately (buffered — no blocking).
+	for _, c := range m.initialChunks {
+		ch <- c
+	}
+
+	// Wait for the caller's context to expire, then send the error.
+	// This guarantees the error always arrives AFTER context cancellation,
+	// regardless of CI speed — fully deterministic.
+	go func() {
+		<-ctx.Done()
+		ch <- &agent.ErrorChunk{Message: m.errorMessage, Code: "timeout", Retryable: false}
+		close(ch)
+	}()
+
+	return ch, nil
+}
+
+func (m *contextExpiryErrorLLMClient) Close() error { return nil }
+
+// ============================================================================
+// callLLMWithStreaming — expired-context cleanup test
+// ============================================================================
+
+// TestCallLLMWithStreaming_ExpiredContextCleanup verifies the context-detachment
+// fix: when the parent context expires and the LLM stream returns an error,
+// streaming timeline events must be marked as failed (not stuck at "streaming").
+//
+// Reproduces the bug fixed in streaming.go where markStreamingEventsFailed
+// used the caller's (expired) context for DB cleanup, causing silent failures.
+func TestCallLLMWithStreaming_ExpiredContextCleanup(t *testing.T) {
+	execCtx := newTestExecCtx(t, nil, nil)
+	execCtx.EventPublisher = noopEventPublisher{}
+
+	// Context expires in 500ms — generous margin for the callback to create
+	// timeline events in the DB (involves real PostgreSQL queries) even on
+	// slow CI. The mock waits on ctx.Done() before sending the error, so the
+	// actual test duration equals this timeout, not a separate sleep.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	llm := &contextExpiryErrorLLMClient{
+		initialChunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "analyzing the problem..."},
+			&agent.TextChunk{Content: "here is my analysis"},
+		},
+		errorMessage: "stream deadline exceeded",
+	}
+
+	eventSeq := 0
+	resp, err := callLLMWithStreaming(ctx, execCtx, llm, &agent.GenerateInput{}, &eventSeq)
+
+	// Stream must return an error.
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "stream deadline exceeded")
+
+	// Parent context must be expired by now (sanity check).
+	require.Error(t, ctx.Err(), "parent context should be expired")
+
+	// Query DB with a fresh context — events must NOT be stuck at "streaming".
+	dbEvents, dbErr := execCtx.Services.Timeline.GetAgentTimeline(
+		context.Background(), execCtx.ExecutionID,
+	)
+	require.NoError(t, dbErr)
+
+	// The callback should have created at least one streaming event
+	// (thinking or text) before the error arrived.
+	require.NotEmpty(t, dbEvents, "expected at least one timeline event to be created")
+
+	for _, evt := range dbEvents {
+		assert.NotEqual(t, timelineevent.StatusStreaming, evt.Status,
+			"event %s (type=%s) should not be stuck at streaming status", evt.ID, evt.EventType)
+		assert.Equal(t, timelineevent.StatusFailed, evt.Status,
+			"event %s (type=%s) should be marked as failed", evt.ID, evt.EventType)
+		assert.Contains(t, evt.Content, "Streaming failed",
+			"event %s content should indicate streaming failure", evt.ID)
+	}
 }
