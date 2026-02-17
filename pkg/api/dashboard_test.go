@@ -93,6 +93,8 @@ func TestSetupDashboardRoutes(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Contains(t, rec.Body.String(), "dashboard")
+				assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"),
+					"SPA fallback should set no-cache so browsers pick up new asset hashes after deployments")
 			})
 		}
 	})
@@ -123,24 +125,42 @@ func TestSetupDashboardRoutes(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Contains(t, rec.Body.String(), tt.contains)
+				assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"),
+					"unhashed root files should use no-cache")
 			})
 		}
 	})
 
-	t.Run("serves Vite assets from /assets/", func(t *testing.T) {
+	t.Run("serves Vite assets from /assets/ with immutable cache", func(t *testing.T) {
 		dir := writeDashboardFiles(t, map[string]string{
-			"index.html":        "<html>index</html>",
-			"assets/app-abc.js": "console.log('app')",
+			"index.html":              "<html>index</html>",
+			"assets/app-abc.js":       "console.log('app')",
+			"assets/style-def123.css": "body { color: red }",
 		})
 		s := newDashboardTestServer(t)
 		s.dashboardDir = dir
 		s.setupDashboardRoutes()
 
-		rec := httptest.NewRecorder()
-		s.echo.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/assets/app-abc.js", nil))
+		tests := []struct {
+			name     string
+			path     string
+			contains string
+		}{
+			{name: "JS bundle", path: "/assets/app-abc.js", contains: "console.log"},
+			{name: "CSS bundle", path: "/assets/style-def123.css", contains: "body"},
+		}
 
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Contains(t, rec.Body.String(), "console.log")
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				s.echo.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+
+				assert.Equal(t, http.StatusOK, rec.Code)
+				assert.Contains(t, rec.Body.String(), tt.contains)
+				assert.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"),
+					"hashed Vite assets should have aggressive cache headers")
+			})
+		}
 	})
 
 	t.Run("API routes take priority over SPA fallback", func(t *testing.T) {
