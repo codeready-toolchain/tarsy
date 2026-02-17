@@ -124,20 +124,6 @@ class LangChainProvider(LLMProvider):
             "max_tokens": 32000,
         }
 
-    @staticmethod
-    def _get_xai_reasoning_kwargs(model: str) -> dict:
-        """Return kwargs to enable reasoning for xAI Grok models.
-
-        Reasoning is enabled by default; only explicitly non-reasoning
-        or non-text models (code, image generation) are excluded.
-        """
-        model_lower = model.lower()
-        if "non-reasoning" in model_lower:
-            return {}
-        if any(tag in model_lower for tag in ("code", "imagine")):
-            return {}
-        return {"reasoning_effort": "high"}
-
     def _create_chat_model(self, config: pb.LLMConfig):
         """Create a LangChain BaseChatModel for the given provider config."""
         try:
@@ -186,12 +172,10 @@ class LangChainProvider(LLMProvider):
 
         elif provider is ProviderType.XAI:
             from langchain_xai import ChatXAI
-            reasoning_kwargs = self._get_xai_reasoning_kwargs(config.model)
             return ChatXAI(
                 model=config.model,
                 api_key=_require_api_key(),
                 streaming=True,
-                **reasoning_kwargs,
             )
 
         elif provider is ProviderType.GOOGLE:

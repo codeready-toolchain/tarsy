@@ -173,19 +173,6 @@ class TestLangChainProviderReasoningConfig:
         assert result["thinking"]["budget_tokens"] == 16000
         assert result["max_tokens"] == 32000
 
-    # --- xAI: reasoning enabled by default ---
-    @pytest.mark.parametrize("model", [
-        "grok-4-0709", "grok-4-1-fast-reasoning", "grok-5",
-    ])
-    def test_xai_reasoning(self, model):
-        assert LangChainProvider._get_xai_reasoning_kwargs(model) == {"reasoning_effort": "high"}
-
-    # --- xAI: non-reasoning / non-text models ---
-    @pytest.mark.parametrize("model", [
-        "grok-4-1-fast-non-reasoning", "grok-code-fast-1", "grok-imagine-2",
-    ])
-    def test_xai_no_reasoning(self, model):
-        assert LangChainProvider._get_xai_reasoning_kwargs(model) == {}
 
 
 class TestLangChainProviderModelCreation:
