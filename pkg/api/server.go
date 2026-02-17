@@ -213,6 +213,12 @@ func (s *Server) setupRoutes() {
 // assets are served from /assets/* and all other non-API paths fall back to
 // index.html (SPA routing).
 //
+// Cache headers:
+//   - /assets/* — immutable (1 year): Vite-built files include content hashes
+//     in their filenames, so aggressive caching is safe.
+//   - index.html and other root files — no-cache: forces browser revalidation
+//     on every visit so new asset hashes are picked up after deployments.
+//
 // Uses os.DirFS to create an fs.FS rooted at the dashboard directory, because
 // Echo v5's c.File() resolves paths against its internal Filesystem (os.DirFS("."))
 // and cannot handle absolute paths. c.FileFS() with an explicit filesystem works
@@ -233,14 +239,19 @@ func (s *Server) setupDashboardRoutes() {
 
 	dashFS := os.DirFS(s.dashboardDir)
 
-	// Serve hashed Vite assets (JS, CSS, images) from /assets/.
+	// Serve hashed Vite assets (JS, CSS, images) from /assets/ with immutable
+	// caching. Filenames include content hashes so aggressive caching is safe.
 	assetsFS, err := fs.Sub(dashFS, "assets")
 	if err == nil {
-		s.echo.StaticFS("/assets", assetsFS)
+		s.echo.GET("/assets/*", func(c *echo.Context) error {
+			c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			return c.FileFS(c.Param("*"), assetsFS)
+		})
 	}
 
 	// SPA fallback: all other non-API, non-health, non-ws paths serve index.html.
 	// This allows React Router to handle client-side routing.
+	// All responses use no-cache so browsers revalidate after deployments.
 	s.echo.GET("/*", func(c *echo.Context) error {
 		path := c.Request().URL.Path
 
@@ -249,6 +260,8 @@ func (s *Server) setupDashboardRoutes() {
 		if strings.HasPrefix(path, "/api/") || path == "/health" {
 			return echo.NewHTTPError(http.StatusNotFound, "not found")
 		}
+
+		c.Response().Header().Set("Cache-Control", "no-cache")
 
 		// Try to serve the exact file first (e.g., /favicon.ico, /robots.txt)
 		relPath := strings.TrimPrefix(path, "/")

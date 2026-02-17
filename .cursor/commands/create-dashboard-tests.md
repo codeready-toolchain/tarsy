@@ -36,37 +36,38 @@ Write tests that prevent real bugs and give confidence during refactoring. Focus
 **Always use `make` commands** - consistent for humans and CI:
 
 ```bash
-make test-dashboard         # CI mode (run once)
-make test-dashboard-watch   # Development (auto-rerun)
-make test-dashboard-ui      # Interactive debugging
-make test-dashboard-build   # TypeScript check
-make test-dashboard-all     # Build + tests
-make test                   # All project tests
+make test-dashboard         # Full check: tests + TypeScript (CI)
+make dashboard-test         # Vitest only (run once)
+make dashboard-test-watch   # Development (auto-rerun)
+make dashboard-test-build   # TypeScript check only
+make dashboard-lint         # Lint dashboard code
+make test                   # All project tests (Go + dashboard)
 ```
 
 ## Test Organization
 
-Place tests in `dashboard/src/test/`:
-- `utils/` - Utility function tests
-- `services/` - API service tests
-- `components/` - Component tests (sparingly!)
+Place tests in `web/dashboard/src/test/`:
+- `utils/` - Utility function tests (parsers, formatters, persistence)
+- `services/` - API and auth service tests
 - `hooks/` - Custom hook tests
+- `components/` - Component tests (sparingly!)
 
 ## Priority Guide
 
 1. **Complex Business Logic** ⭐⭐⭐ - Most valuable
-   - Parsers: `conversationParser.ts`, `chatFlowParser.ts`
-   - Filters and search logic
-   - Data transformations
+   - Parsers: `timelineParser.ts`, `contentParser.ts`, `traceHelpers.ts`
+   - Filters and search logic: `search.ts`, `filterPersistence.ts`
+   - Data formatting: `format.ts`, `yamlHighlighter.ts`
 
 2. **State Management** ⭐⭐
    - Custom hooks with complex async logic (e.g., `useVersionMonitor.ts`)
    - Context providers with non-trivial state
-   - Skip simple useState wrappers
+   - Skip simple useState wrappers (e.g., `useAdvancedAutoScroll`)
 
 3. **API Services** ⭐⭐
-   - Only if logic beyond fetch (retry, transformation, error handling)
-   - Skip thin wrappers
+   - Error handling and retry logic in `api.ts`
+   - Auth flow in `auth.ts`
+   - Skip thin wrappers that just call endpoints
 
 4. **Components** ⭐
    - Only if complex conditional rendering or intricate interactions
@@ -92,8 +93,8 @@ Place tests in `dashboard/src/test/`:
 ## Checklist
 
 - ✅ Complex logic tested
-- ✅ All tests pass: `make test-dashboard`
-- ✅ TypeScript builds: `make test-dashboard-build`
+- ✅ All tests pass: `make dashboard-test`
+- ✅ TypeScript builds: `make dashboard-test-build`
 - ✅ No linter errors in test files
 - ✅ Tests add real value
 - ✅ No brittle/implementation tests
@@ -102,6 +103,14 @@ Place tests in `dashboard/src/test/`:
 
 ## Examples in Codebase
 
-- `dashboard/src/test/utils/conversationParser.test.ts` - Complex parsing
-- `dashboard/src/test/services/api.test.ts` - API services
-- `dashboard/src/test/components/` - Selective component testing
+- `web/dashboard/src/test/utils/timelineParser.test.ts` - Complex event-to-FlowItem parsing
+- `web/dashboard/src/test/utils/contentParser.test.ts` - Content type detection and parsing
+- `web/dashboard/src/test/utils/traceHelpers.test.ts` - Trace data helpers and copy formatting
+- `web/dashboard/src/test/services/api.test.ts` - API error handling and endpoint wiring
+- `web/dashboard/src/test/services/auth.test.ts` - OAuth2 auth flow
+- `web/dashboard/src/test/hooks/useVersionMonitor.test.ts` - Async hook with polling
+- `web/dashboard/src/test/utils/filterPersistence.test.ts` - localStorage persistence
+- `web/dashboard/src/test/utils/format.test.ts` - Timestamp/duration/token formatting
+- `web/dashboard/src/test/utils/search.test.ts` - Search highlighting and filter detection
+- `web/dashboard/src/test/utils/markdownComponents.test.ts` - Markdown syntax detection
+- `web/dashboard/src/test/utils/yamlHighlighter.test.ts` - YAML highlighting with XSS prevention

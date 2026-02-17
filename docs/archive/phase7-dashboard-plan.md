@@ -438,23 +438,23 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.8: Polish & Integration
+### Phase 7.8: Polish & Integration ✅ DONE
 
 **Goal**: Final polish, cross-cutting concerns, production readiness.
 
 **Deliverables**:
 
-1. **Error handling** — Global error boundaries, API error display, network error recovery
+1. **Error handling** — Global error boundaries (`ErrorBoundary` component), `handleAPIError` helper, `retryOnTemporaryError` with exponential backoff, 401 interceptor, WebSocket reconnect, component-level error Alerts — all implemented during Phases 7.1–7.7
 
-2. **Loading states** — Skeleton screens, loading spinners, progress indicators
+2. **Loading states** — Skeleton screens (Header, AlertCard, Timeline, TraceTimeline), `CircularProgress` spinners, `InitializingSpinner`, `ProcessingIndicator`, `ProgressIndicator`, `TypingIndicator`, `Suspense`/`lazy()` code splitting — all implemented during Phases 7.2–7.6
 
-3. **Auto-scroll** — Smart auto-scroll during streaming (user scroll detection, bottom-following)
+3. **Auto-scroll** — `useAdvancedAutoScroll` hook (MutationObserver, user scroll detection, threshold, debounce, characterData throttle), SessionDetailPage integration with toggle — implemented during Phase 7.4
 
-4. **Responsive design** — Mobile-friendly layouts (following old dashboard's responsive patterns)
+4. **Responsive design** — Container padding breakpoints, responsive form layouts, responsive chat input, `prefers-reduced-motion` — implemented during Phases 7.3–7.5. Matches old dashboard's level (both are desktop-first SRE tools)
 
-5. **localStorage persistence** — Filters, pagination, sort preferences, panel states
+5. **localStorage persistence** — `filterPersistence.ts` (filters, pagination, sort with save/load/clear/clearAll), DashboardView integration — implemented during Phase 7.2
 
-6. **Production build** — Optimized Vite build, asset hashing
+6. **Production build** — Vite build with defaults (asset hashing, tree-shaking, minification, code splitting), Go static serving with SPA fallback, Makefile targets (`dashboard-build`, `dashboard-test`, `dashboard-lint`), **cache headers on Go static serving** (immutable for `/assets/*`, no-cache for `index.html` and root files) — setup in Phase 7.1, cache headers added in Phase 7.8
 
 **Dependencies**: All previous Phase 7 sub-phases
 
