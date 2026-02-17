@@ -409,21 +409,30 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.7: System Views & Queue Metrics
+### Phase 7.7: System Views & Version/Warning Wiring ✅ DONE
 
-**Goal**: System status pages and queue metrics enrichment.
+**Goal**: System status page, version monitoring, and system warning wiring. Moved version monitoring and system warnings from Phase 7.8 so that 7.8 is purely polish.
 
 **Deliverables**:
 
-1. **MCP server status page** — Dedicated system status view:
-   - MCP server health, tool counts, error details
-   - Data from `GET /api/v1/system/mcp-servers`
-   - Note: Per-session MCP summary in the session header is built in Phase 7.4
+1. **Fix `HealthResponse` type** — Corrected frontend type to match Go backend (`PoolHealth`, `DatabaseHealthStatus`, `MCPHealthStatus`, `WorkerHealth`)
 
-2. **Queue metrics enrichment** — Additional queue/pool stats not covered by Phase 7.2:
-   - Worker pool info (capacity, active workers from `GET /health`)
-   - Queue depth and wait time estimates
-   - Note: Active/queued panels with cards and real-time updates are built in Phase 7.2
+2. **Version monitoring** — `useVersionMonitor` hook + `VersionContext`
+   - Polls `/health` every 30s for backend version + status
+   - Checks `index.html` meta tag for dashboard version changes (2 consecutive mismatches before banner)
+
+3. **VersionFooter wiring** — Shows single/separate versions, tooltip with agent status, loading/unavailable states
+
+4. **VersionUpdateBanner wiring** — Sticky banner with pulse animation, "Refresh Now" button, reads from VersionContext
+
+5. **SystemWarningBanner wiring** — Polls `/api/v1/system/warnings` every 10s, expandable warning alerts
+
+6. **MCP server status page** — New dedicated page at `/system`
+   - MCP server health, tool counts, error details, expandable tool lists
+   - Data from `GET /api/v1/system/mcp-servers`
+   - Hamburger menu navigation from DashboardView
+
+7. **App layout update** — `VersionProvider` wrapping `AuthProvider`, proper banner ordering, `/system` route
 
 **Dependencies**: Phase 7.1, Phase 7.0 (system endpoints)
 
@@ -443,18 +452,9 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 4. **Responsive design** — Mobile-friendly layouts (following old dashboard's responsive patterns)
 
-5. **Version monitoring** — Wire `VersionUpdateBanner` and `VersionFooter` (components from 7.1)
-   - `useVersionMonitor` hook: polls health endpoint, compares `version` to build-time UI version
-   - `VersionUpdateBanner` on mismatch → prompts refresh
-   - `VersionFooter` shows both UI and backend versions (useful during rolling updates)
+5. **localStorage persistence** — Filters, pagination, sort preferences, panel states
 
-6. **System warning banner** — Wire `SystemWarningBanner` (component from 7.1)
-   - Polls `/api/v1/system/warnings` periodically
-   - Displays active warnings, dismissible per-session
-
-7. **localStorage persistence** — Filters, pagination, sort preferences, panel states
-
-8. **Production build** — Optimized Vite build, asset hashing
+6. **Production build** — Optimized Vite build, asset hashing
 
 **Dependencies**: All previous Phase 7 sub-phases
 
@@ -477,7 +477,7 @@ Phase 7.0 (Backend APIs)
     │       │
     │       ├─→ Phase 7.6 (Trace View)
     │       │
-    │       └─→ Phase 7.7 (System + Queue Metrics)
+    │       └─→ Phase 7.7 (System Views + Version/Warning Wiring)
     │
     └─→ Phase 7.8 (Polish) — after all above
 ```
