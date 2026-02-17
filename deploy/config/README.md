@@ -145,8 +145,8 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 ### Built-in Agents
 
-- **KubernetesAgent** - Kubernetes troubleshooting (ReAct)
-- **ChatAgent** - Follow-up conversations (ReAct)
+- **KubernetesAgent** - Kubernetes troubleshooting
+- **ChatAgent** - Follow-up conversations
 - **SynthesisAgent** - Synthesizes parallel investigations
 
 ### Built-in MCP Servers

@@ -131,6 +131,63 @@ class TestLangChainProviderToolBinding:
         assert result is mock_model
 
 
+class TestLangChainProviderReasoningConfig:
+    """Test reasoning/thinking configuration helpers."""
+
+    def test_google_thinking_gemini_2_5_pro(self):
+        result = LangChainProvider._get_google_thinking_kwargs("gemini-2.5-pro-preview")
+        assert result == {"include_thoughts": True, "thinking_budget": 32768}
+
+    def test_google_thinking_gemini_2_5_flash(self):
+        result = LangChainProvider._get_google_thinking_kwargs("gemini-2.5-flash")
+        assert result == {"include_thoughts": True, "thinking_budget": 24576}
+
+    def test_google_thinking_gemini_3(self):
+        result = LangChainProvider._get_google_thinking_kwargs("gemini-3-flash-preview")
+        assert result == {"include_thoughts": True, "thinking_level": "high"}
+
+    # --- OpenAI: reasoning enabled by default ---
+    @pytest.mark.parametrize("model", [
+        "o3", "o4-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano",
+        "gpt-5-thinking", "gpt-6-turbo",
+    ])
+    def test_openai_reasoning(self, model):
+        result = LangChainProvider._get_openai_reasoning_kwargs(model)
+        assert result["use_responses_api"] is True
+        assert result["reasoning"]["effort"] == "high"
+        assert result["reasoning"]["summary"] == "auto"
+
+    # --- OpenAI: non-reasoning GPT-5 variants ---
+    @pytest.mark.parametrize("model", ["gpt-5-chat-latest", "gpt-5-main-mini"])
+    def test_openai_no_reasoning(self, model):
+        assert LangChainProvider._get_openai_reasoning_kwargs(model) == {}
+
+    # --- Anthropic: thinking enabled for all models ---
+    @pytest.mark.parametrize("model", [
+        "claude-sonnet-4-5-20250929", "claude-opus-4-6",
+        "claude-haiku-4-5-20251001", "claude-sonnet-5-20260101",
+    ])
+    def test_anthropic_thinking(self, model):
+        result = LangChainProvider._get_anthropic_thinking_kwargs(model)
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 16000
+        assert result["max_tokens"] == 32000
+
+    # --- xAI: reasoning enabled by default ---
+    @pytest.mark.parametrize("model", [
+        "grok-4-0709", "grok-4-1-fast-reasoning", "grok-5",
+    ])
+    def test_xai_reasoning(self, model):
+        assert LangChainProvider._get_xai_reasoning_kwargs(model) == {"reasoning_effort": "high"}
+
+    # --- xAI: non-reasoning / non-text models ---
+    @pytest.mark.parametrize("model", [
+        "grok-4-1-fast-non-reasoning", "grok-code-fast-1", "grok-imagine-2",
+    ])
+    def test_xai_no_reasoning(self, model):
+        assert LangChainProvider._get_xai_reasoning_kwargs(model) == {}
+
+
 class TestLangChainProviderModelCreation:
     """Test model creation for different providers."""
 
@@ -139,7 +196,7 @@ class TestLangChainProviderModelCreation:
     def test_get_or_create_model_caches(self, mock_create, provider):
         mock_model = MagicMock()
         mock_create.return_value = mock_model
-        config = pb.LLMConfig(provider="openai", model="gpt-4", api_key_env="OPENAI_API_KEY")
+        config = pb.LLMConfig(provider="openai", model="o4-mini", api_key_env="OPENAI_API_KEY")
 
         model1 = provider._get_or_create_model(config, [])
         model2 = provider._get_or_create_model(config, [])
@@ -150,13 +207,13 @@ class TestLangChainProviderModelCreation:
     def test_create_openai_model(self, provider):
         with patch("llm.providers.langchain_provider.ChatOpenAI", create=True) as MockChat:
             from langchain_openai import ChatOpenAI
-            config = pb.LLMConfig(provider="openai", model="gpt-4", api_key_env="OPENAI_API_KEY")
+            config = pb.LLMConfig(provider="openai", model="o4-mini", api_key_env="OPENAI_API_KEY")
             model = provider._create_chat_model(config)
             assert model is not None
 
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
     def test_create_anthropic_model(self, provider):
-        config = pb.LLMConfig(provider="anthropic", model="claude-3-opus", api_key_env="ANTHROPIC_API_KEY")
+        config = pb.LLMConfig(provider="anthropic", model="claude-sonnet-4-5-20250929", api_key_env="ANTHROPIC_API_KEY")
         model = provider._create_chat_model(config)
         assert model is not None
 
@@ -169,7 +226,7 @@ class TestLangChainProviderModelCreation:
 
     @patch.dict(os.environ, {}, clear=True)
     def test_create_model_missing_api_key(self, provider):
-        config = pb.LLMConfig(provider="openai", model="gpt-4", api_key_env="MISSING_KEY")
+        config = pb.LLMConfig(provider="openai", model="o4-mini", api_key_env="MISSING_KEY")
         with pytest.raises(ValueError, match="not set"):
             provider._create_chat_model(config)
 
@@ -280,6 +337,102 @@ class TestLangChainProviderStreaming:
         assert text_responses[0].text.content == "The answer is 42."
 
     @pytest.mark.asyncio
+    async def test_stream_anthropic_thinking_blocks(self, provider):
+        """Test streaming Anthropic thinking (type='thinking' wrapped as non_standard)."""
+        mock_chunk = MagicMock(spec=AIMessageChunk)
+        mock_chunk.content_blocks = [
+            {"type": "non_standard", "value": {"type": "thinking", "thinking": "Let me reason..."}},
+            {"type": "text", "text": "The answer is 42."},
+        ]
+        mock_chunk.content = ""
+        mock_chunk.tool_call_chunks = []
+        mock_chunk.usage_metadata = None
+        mock_chunk.additional_kwargs = {}
+        mock_chunk.__class__ = AIMessageChunk
+
+        async def mock_astream(messages):
+            yield mock_chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        thinking_responses = [r for r in responses if r.HasField("thinking")]
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert len(thinking_responses) == 1
+        assert thinking_responses[0].thinking.content == "Let me reason..."
+        assert len(text_responses) == 1
+        assert text_responses[0].text.content == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_stream_openai_reasoning_summary_chunk(self, provider):
+        """Test streaming OpenAI reasoning via additional_kwargs (Responses API)."""
+        mock_chunk = MagicMock(spec=AIMessageChunk)
+        mock_chunk.content_blocks = []
+        mock_chunk.content = ""
+        mock_chunk.tool_call_chunks = []
+        mock_chunk.usage_metadata = None
+        mock_chunk.additional_kwargs = {"reasoning_summary_chunk": "Step 1: analyze the problem..."}
+        mock_chunk.__class__ = AIMessageChunk
+
+        text_chunk = AIMessageChunk(content="The answer is 42.")
+        text_chunk.usage_metadata = None
+
+        async def mock_astream(messages):
+            yield mock_chunk
+            yield text_chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        thinking_responses = [r for r in responses if r.HasField("thinking")]
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert len(thinking_responses) == 1
+        assert thinking_responses[0].thinking.content == "Step 1: analyze the problem..."
+        assert len(text_responses) == 1
+        assert text_responses[0].text.content == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_stream_usage_accumulates_across_chunks(self, provider):
+        """Test that usage metadata is accumulated across multiple streaming chunks."""
+        chunk1 = AIMessageChunk(content="Hello")
+        chunk1.usage_metadata = {"input_tokens": 100, "output_tokens": 0, "total_tokens": 100}
+
+        chunk2 = AIMessageChunk(content=" world")
+        chunk2.usage_metadata = {"input_tokens": 0, "output_tokens": 50, "total_tokens": 50}
+
+        chunk3 = AIMessageChunk(content="")
+        chunk3.usage_metadata = {"input_tokens": 0, "output_tokens": 30, "total_tokens": 30}
+
+        async def mock_astream(messages):
+            yield chunk1
+            yield chunk2
+            yield chunk3
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage_responses = [r for r in responses if r.HasField("usage")]
+        assert len(usage_responses) == 1
+        assert usage_responses[0].usage.input_tokens == 100
+        assert usage_responses[0].usage.output_tokens == 80
+        assert usage_responses[0].usage.total_tokens == 180
+
+    @pytest.mark.asyncio
     async def test_stream_usage_metadata(self, provider):
         """Test that usage metadata is buffered and yielded after content."""
         chunk = AIMessageChunk(content="Response text")
@@ -339,7 +492,7 @@ class TestLangChainProviderGenerate:
                 llm_config=pb.LLMConfig(
                     backend="langchain",
                     provider="openai",
-                    model="gpt-4",
+                    model="o4-mini",
                     api_key_env="MISSING_KEY",
                 ),
                 messages=[],
@@ -377,7 +530,7 @@ class TestLangChainProviderGenerate:
                 llm_config=pb.LLMConfig(
                     backend="langchain",
                     provider="openai",
-                    model="gpt-4",
+                    model="o4-mini",
                     api_key_env="TEST_KEY",
                 ),
                 messages=[pb.ConversationMessage(role="user", content="Hi")],
@@ -428,7 +581,7 @@ class TestLangChainProviderGenerate:
                 llm_config=pb.LLMConfig(
                     backend="langchain",
                     provider="openai",
-                    model="gpt-4",
+                    model="o4-mini",
                     api_key_env="TEST_KEY",
                 ),
                 messages=[pb.ConversationMessage(role="user", content="Hi")],
@@ -468,7 +621,7 @@ class TestLangChainProviderGenerate:
                 llm_config=pb.LLMConfig(
                     backend="langchain",
                     provider="openai",
-                    model="gpt-4",
+                    model="o4-mini",
                     api_key_env="TEST_KEY",
                 ),
                 messages=[pb.ConversationMessage(role="user", content="Hi")],

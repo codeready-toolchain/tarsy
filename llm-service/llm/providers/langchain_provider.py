@@ -76,6 +76,8 @@ class LangChainProvider(LLMProvider):
             model = self._bind_tools(model, list(tools))
         return model
 
+    # ── Reasoning/thinking configuration per provider ──────────────────
+
     @staticmethod
     def _get_google_thinking_kwargs(model: str) -> dict:
         """Return kwargs to enable thinking/reasoning for Google models.
@@ -90,6 +92,50 @@ class LangChainProvider(LLMProvider):
             return {"include_thoughts": True, "thinking_budget": 24576}
         else:
             return {"include_thoughts": True, "thinking_level": "high"}
+
+    @staticmethod
+    def _get_openai_reasoning_kwargs(model: str) -> dict:
+        """Return kwargs to enable reasoning for OpenAI models.
+
+        Uses the Responses API which properly streams reasoning summaries.
+        Reasoning is enabled by default; only non-reasoning GPT-5 variants
+        (chat, main) are excluded.
+        """
+        model_lower = model.lower()
+        if model_lower.startswith("gpt-5") and any(
+            tag in model_lower for tag in ("-chat", "-main")
+        ):
+            return {}
+        return {
+            "use_responses_api": True,
+            "reasoning": {"effort": "high", "summary": "auto"},
+        }
+
+    @staticmethod
+    def _get_anthropic_thinking_kwargs(model: str) -> dict:
+        """Return kwargs to enable extended thinking for Claude models.
+
+        Extended thinking is enabled by default. budget_tokens must be
+        less than max_tokens.
+        """
+        return {
+            "thinking": {"type": "enabled", "budget_tokens": 16000},
+            "max_tokens": 32000,
+        }
+
+    @staticmethod
+    def _get_xai_reasoning_kwargs(model: str) -> dict:
+        """Return kwargs to enable reasoning for xAI Grok models.
+
+        Reasoning is enabled by default; only explicitly non-reasoning
+        or non-text models (code, image generation) are excluded.
+        """
+        model_lower = model.lower()
+        if "non-reasoning" in model_lower:
+            return {}
+        if any(tag in model_lower for tag in ("code", "imagine")):
+            return {}
+        return {"reasoning_effort": "high"}
 
     def _create_chat_model(self, config: pb.LLMConfig):
         """Create a LangChain BaseChatModel for the given provider config."""
@@ -115,28 +161,36 @@ class LangChainProvider(LLMProvider):
 
         if provider is ProviderType.OPENAI:
             from langchain_openai import ChatOpenAI
+            reasoning_kwargs = self._get_openai_reasoning_kwargs(config.model)
             return ChatOpenAI(
                 model=config.model,
                 api_key=_require_api_key(),
                 streaming=True,
                 stream_usage=True,
+                **reasoning_kwargs,
             )
 
         elif provider is ProviderType.ANTHROPIC:
             from langchain_anthropic import ChatAnthropic
-            return ChatAnthropic(
-                model=config.model,
-                api_key=_require_api_key(),
-                streaming=True,
-                max_tokens=32000,
-            )
+            thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
+            base_kwargs = {
+                "model": config.model,
+                "api_key": _require_api_key(),
+                "streaming": True,
+                "max_tokens": 32000,
+            }
+            # thinking_kwargs may override max_tokens to ensure budget_tokens < max_tokens
+            base_kwargs.update(thinking_kwargs)
+            return ChatAnthropic(**base_kwargs)
 
         elif provider is ProviderType.XAI:
             from langchain_xai import ChatXAI
+            reasoning_kwargs = self._get_xai_reasoning_kwargs(config.model)
             return ChatXAI(
                 model=config.model,
                 api_key=_require_api_key(),
                 streaming=True,
+                **reasoning_kwargs,
             )
 
         elif provider is ProviderType.GOOGLE:
@@ -153,12 +207,15 @@ class LangChainProvider(LLMProvider):
             model_lower = config.model.lower()
             if "claude" in model_lower or "anthropic" in model_lower:
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
-                return ChatAnthropicVertex(
-                    model=config.model,
-                    project=config.project,
-                    location=config.location,
-                    max_tokens=32000,
-                )
+                thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
+                base_kwargs = {
+                    "model": config.model,
+                    "project": config.project,
+                    "location": config.location,
+                    "max_tokens": 32000,
+                }
+                base_kwargs.update(thinking_kwargs)
+                return ChatAnthropicVertex(**base_kwargs)
             else:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 thinking_kwargs = self._get_google_thinking_kwargs(config.model)
@@ -345,7 +402,14 @@ class LangChainProvider(LLMProvider):
                     if not isinstance(chunk, AIMessageChunk):
                         continue
 
-                    # Process unified content_blocks (reasoning/text)
+                    # ── Extract reasoning/thinking and text from chunk ──
+                    # Different providers surface reasoning differently:
+                    #   Google:    content_blocks type="reasoning"
+                    #   Anthropic: content list type="thinking"
+                    #   OpenAI:    content_blocks type="reasoning" (Responses API)
+                    #              OR additional_kwargs["reasoning_summary_chunk"]
+                    content_handled = False
+
                     if hasattr(chunk, "content_blocks") and chunk.content_blocks:
                         for block in chunk.content_blocks:
                             block_type = block.get("type") if isinstance(block, dict) else None
@@ -354,20 +418,44 @@ class LangChainProvider(LLMProvider):
                                 reasoning = block.get("reasoning", "")
                                 if reasoning:
                                     has_content = True
+                                    content_handled = True
                                     yield pb.GenerateResponse(
                                         thinking=pb.ThinkingDelta(content=reasoning)
                                     )
+
+                            elif block_type == "non_standard":
+                                # Anthropic thinking blocks are wrapped as non_standard
+                                value = block.get("value", {})
+                                if isinstance(value, dict) and value.get("type") == "thinking":
+                                    thinking_text = value.get("thinking", "")
+                                    if thinking_text:
+                                        has_content = True
+                                        content_handled = True
+                                        yield pb.GenerateResponse(
+                                            thinking=pb.ThinkingDelta(content=thinking_text)
+                                        )
 
                             elif block_type == "text":
                                 text = block.get("text", "")
                                 if text:
                                     has_content = True
+                                    content_handled = True
                                     yield pb.GenerateResponse(
                                         text=pb.TextDelta(content=text)
                                     )
 
+                    # OpenAI Responses API streaming: reasoning arrives via additional_kwargs
+                    if hasattr(chunk, "additional_kwargs") and chunk.additional_kwargs:
+                        reasoning_chunk = chunk.additional_kwargs.get("reasoning_summary_chunk")
+                        if reasoning_chunk:
+                            has_content = True
+                            content_handled = True
+                            yield pb.GenerateResponse(
+                                thinking=pb.ThinkingDelta(content=reasoning_chunk)
+                            )
+
                     # Fallback: plain string content (some providers don't use content_blocks)
-                    elif isinstance(chunk.content, str) and chunk.content:
+                    if not content_handled and isinstance(chunk.content, str) and chunk.content:
                         has_content = True
                         yield pb.GenerateResponse(
                             text=pb.TextDelta(content=chunk.content)

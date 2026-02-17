@@ -37,7 +37,7 @@ type AgentExecution struct {
 	DurationMs *int `json:"duration_ms,omitempty"`
 	// Error details if failed
 	ErrorMessage *string `json:"error_message,omitempty"`
-	// e.g., 'react', 'native_thinking' (for observability)
+	// e.g., 'langchain', 'native_thinking' (for observability)
 	IterationStrategy string `json:"iteration_strategy,omitempty"`
 	// Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')
 	LlmProvider *string `json:"llm_provider,omitempty"`

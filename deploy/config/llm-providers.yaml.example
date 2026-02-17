@@ -58,31 +58,24 @@ llm_providers:
 # OPENAI PROVIDERS
 # =============================================================================
 
-  # GPT-4o for general use
-  gpt-4o:
+  # o3 for advanced reasoning
+  o3:
     type: openai
-    model: gpt-4o
-    api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 100000  # Conservative for 128K context
-
-  # GPT-4o-mini for cost-effective operations
-  gpt-4o-mini:
-    type: openai
-    model: gpt-4o-mini
+    model: o3
     api_key_env: OPENAI_API_KEY
     max_tool_result_tokens: 100000
 
-  # o1 for advanced reasoning
-  o1:
+  # o4-mini for fast reasoning
+  o4-mini:
     type: openai
-    model: o1
+    model: o4-mini
     api_key_env: OPENAI_API_KEY
     max_tool_result_tokens: 100000
 
-  # o1-mini for faster reasoning
-  o1-mini:
+  # GPT-5 for general use
+  gpt-5:
     type: openai
-    model: o1-mini
+    model: gpt-5
     api_key_env: OPENAI_API_KEY
     max_tool_result_tokens: 100000
 
@@ -115,19 +108,12 @@ llm_providers:
 # X.AI / GROK PROVIDERS
 # =============================================================================
 
-  # Grok for X.AI
-  grok:
+  # Grok 4 for X.AI
+  grok-4:
     type: xai
-    model: grok-4-beta
+    model: grok-4
     api_key_env: XAI_API_KEY
     max_tool_result_tokens: 200000  # Conservative for 256K context
-
-  # Grok 2 (if available)
-  grok-2:
-    type: xai
-    model: grok-2
-    api_key_env: XAI_API_KEY
-    max_tool_result_tokens: 200000
 
 # =============================================================================
 # VERTEX AI PROVIDERS (GCP)
@@ -162,9 +148,9 @@ llm_providers:
     max_tool_result_tokens: 100000
 
   # Example: Azure OpenAI
-  azure-gpt4:
+  azure-o4-mini:
     type: openai
-    model: gpt-4
+    model: o4-mini
     api_key_env: AZURE_OPENAI_KEY
     base_url: https://your-resource.openai.azure.com/openai/deployments/your-deployment
     max_tool_result_tokens: 100000

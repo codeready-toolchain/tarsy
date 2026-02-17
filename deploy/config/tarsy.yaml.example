@@ -50,7 +50,7 @@ defaults:
   max_iterations: 20
   
   # Default iteration strategy
-  iteration_strategy: "react"
+  iteration_strategy: "langchain"
   
   # Default success policy for parallel stages ("all" or "any")
   success_policy: "any"
@@ -192,7 +192,7 @@ agents:
     mcp_servers:
       - "kubernetes-server"
       - "argocd-server"
-    iteration_strategy: "react"
+    iteration_strategy: "langchain"
     max_iterations: 25
     custom_instructions: |
       You are a security-focused SRE agent specializing in cybersecurity incidents.
@@ -213,7 +213,7 @@ agents:
     mcp_servers:
       - "monitoring-server"
       - "kubernetes-server"
-    iteration_strategy: "react"
+    iteration_strategy: "langchain"
     custom_instructions: |
       You are a performance-focused SRE agent specializing in system optimization.
       
@@ -264,7 +264,7 @@ agent_chains:
       - name: "system-data-collection"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "react"
+            iteration_strategy: "langchain"
         max_iterations: 10
       
       - name: "final-diagnosis"
@@ -288,7 +288,7 @@ agent_chains:
             max_iterations: 10
           
           - name: "KubernetesAgent"
-            iteration_strategy: "react"
+            iteration_strategy: "langchain"
             llm_provider: "gemini-2.5-flash"
             max_iterations: 3
           
@@ -320,7 +320,7 @@ agent_chains:
       - name: "triage"
         agents:
           - name: "security-agent"
-            iteration_strategy: "react"
+            iteration_strategy: "langchain"
             max_iterations: 30
     chat:
       enabled: true

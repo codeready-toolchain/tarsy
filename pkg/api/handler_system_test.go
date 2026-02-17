@@ -85,7 +85,7 @@ func TestDefaultToolsHandler(t *testing.T) {
 				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 					"openai-prov": {
 						Type:  config.LLMProviderTypeOpenAI,
-						Model: "gpt-4",
+						Model: "o4-mini",
 					},
 					"google-prov": {
 						Type:  config.LLMProviderTypeGoogle,
