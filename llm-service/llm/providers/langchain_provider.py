@@ -197,6 +197,7 @@ class LangChainProvider(LLMProvider):
                     "model": config.model,
                     "project": config.project,
                     "location": config.location,
+                    "streaming": True,
                     "max_tokens": 32000,
                 }
                 base_kwargs.update(thinking_kwargs)
