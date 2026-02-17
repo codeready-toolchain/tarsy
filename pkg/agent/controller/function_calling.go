@@ -53,6 +53,9 @@ func (c *FunctionCallingController) Run(
 	// Tool names stay in canonical "server.tool" format.
 	// The LLM service handles backend-specific encoding (e.g. "server__tool" for Gemini).
 
+	// Record tool_list interactions for the trace view (one per MCP server).
+	recordToolListInteractions(ctx, execCtx, tools)
+
 	// Main iteration loop
 	for iteration := 0; iteration < maxIter; iteration++ {
 		state.CurrentIteration = iteration + 1

@@ -1,0 +1,15 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_5}",
+  "interaction_type": "tool_list",
+  "server_name": "prometheus-mcp"
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  [
+    "query_alerts",
+    "query_metrics",
+    "query_slo"
+  ]
+]

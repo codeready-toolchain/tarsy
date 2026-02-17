@@ -1,0 +1,16 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_30}",
+  "interaction_type": "tool_list",
+  "server_name": "test-mcp"
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  [
+    "get_nodes",
+    "get_pod_logs",
+    "get_pods",
+    "get_resource_config"
+  ]
+]

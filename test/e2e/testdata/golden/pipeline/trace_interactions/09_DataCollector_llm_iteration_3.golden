@@ -1,0 +1,139 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_4}",
+  "input_tokens": 150,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 3,
+    "messages_count": 7,
+    "native_tools": {
+      "google_search": true
+    }
+  },
+  "llm_response": {
+    "text_length": 59,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 50,
+  "thinking_content": "The pod is clearly OOMKilled.",
+  "total_tokens": 200
+}
+
+=== MESSAGE: system ===
+## General SRE Agent Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze alerts thoroughly and provide actionable insights based on:
+1. Alert information and context
+2. Associated runbook procedures
+3. Real-time system data from available tools
+
+Always be specific, reference actual data, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Agent-Specific Instructions
+
+You are DataCollector, gathering system metrics and pod status.
+
+Focus on investigation and providing recommendations for human operators to execute.
+
+=== MESSAGE: user ===
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-alert
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Pod OOMKilled
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+<!-- RUNBOOK END -->
+````
+
+## Previous Stage Data
+No previous stage data is available for this alert. This is the first stage of analysis.
+
+## Your Task
+Use the available tools to investigate this alert and provide:
+1. Root cause analysis
+2. Current system state assessment
+3. Specific remediation steps for human operators
+4. Prevention recommendations
+
+Be thorough in your investigation before providing the final answer.
+
+=== MESSAGE: assistant ===
+I'll look up the nodes and pods.
+--- TOOL_CALLS ---
+[call-1] test-mcp__get_nodes({})
+[call-2] test-mcp__get_pods({"namespace":"default"})
+
+=== MESSAGE: tool (call-1, test-mcp__get_nodes) ===
+[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]
+
+=== MESSAGE: tool (call-2, test-mcp__get_pods) ===
+[NOTE: The output from test-mcp.get_pods was 156 tokens (estimated) and has been summarized to preserve context window. The full output is available in the tool call event above.]
+
+Pod pod-1 is OOMKilled with 5 restarts.
+
+=== MESSAGE: assistant ===
+Querying Prometheus for memory usage.
+--- TOOL_CALLS ---
+[call-3] prometheus-mcp__query_metrics({"query":"container_memory_usage_bytes{pod=\"pod-1\"}"})
+
+=== MESSAGE: tool (call-3, prometheus-mcp__query_metrics) ===
+[{"metric":"container_memory_usage_bytes","pod":"pod-1","value":"524288000","timestamp":"{TIMESTAMP}"}]
+
+=== MESSAGE: assistant ===
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+

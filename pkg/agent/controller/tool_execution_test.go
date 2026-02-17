@@ -199,6 +199,53 @@ func TestExecuteToolCall_Success(t *testing.T) {
 	assert.Nil(t, interactions[0].ErrorMessage)
 }
 
+// ============================================================================
+// recordToolListInteractions tests
+// ============================================================================
+
+func TestRecordToolListInteractions(t *testing.T) {
+	t.Run("records one interaction per server", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		ctx := context.Background()
+
+		tools := []agent.ToolDefinition{
+			{Name: "kubernetes.get_pods", Description: "Get pods"},
+			{Name: "kubernetes.get_logs", Description: "Get logs"},
+			{Name: "argocd.list_apps", Description: "List apps"},
+		}
+
+		recordToolListInteractions(ctx, execCtx, tools)
+
+		interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 2)
+
+		// Build a map for order-independent assertions.
+		byServer := make(map[string]mcpinteraction.InteractionType)
+		for _, rec := range interactions {
+			byServer[rec.ServerName] = rec.InteractionType
+		}
+
+		assert.Equal(t, mcpinteraction.InteractionTypeToolList, byServer["kubernetes"])
+		assert.Equal(t, mcpinteraction.InteractionTypeToolList, byServer["argocd"])
+	})
+
+	t.Run("no-op when tools is nil", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		ctx := context.Background()
+
+		recordToolListInteractions(ctx, execCtx, nil)
+
+		interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		assert.Empty(t, interactions)
+	})
+}
+
+// ============================================================================
+// executeToolCall tests
+// ============================================================================
+
 func TestExecuteToolCall_ToolError(t *testing.T) {
 	// Tool execution fails: returns error content, records MCP interaction with error.
 	toolExec := &mockToolExecutorFunc{

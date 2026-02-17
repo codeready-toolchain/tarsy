@@ -1,0 +1,336 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_33}",
+  "input_tokens": 10,
+  "interaction_type": "summarization",
+  "llm_request": {
+    "iteration": 0,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 60,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 5,
+  "total_tokens": 15
+}
+
+=== MESSAGE: system ===
+You are an expert at summarizing technical output from system administration and monitoring tools for ongoing incident investigation.
+
+Your specific task is to summarize output from **test-mcp.get_pods** in a way that:
+
+1. **Preserves Critical Information**: Keep all details essential for troubleshooting and investigation
+2. **Maintains Investigation Context**: Focus on information relevant to what the investigator was looking for
+3. **Reduces Verbosity**: Remove redundant details while preserving technical accuracy
+4. **Highlights Key Findings**: Emphasize errors, warnings, unusual patterns, and actionable insights
+5. **Stays Concise**: Keep summary under 1000 tokens while preserving meaning
+
+## Summarization Guidelines:
+
+- **Always Preserve**: Error messages, warnings, status indicators, resource metrics, timestamps
+- **Intelligently Summarize**: Large lists by showing patterns, counts, and notable exceptions
+- **Focus On**: Non-default configurations, problematic settings, resource utilization issues
+- **Maintain**: Technical accuracy and context about what the data represents
+- **Format**: Clean, structured text suitable for continued technical investigation
+- **Be Conclusive**: Explicitly state what was found AND what was NOT found to prevent re-queries
+- **Answer Questions**: If the investigation context suggests the investigator was looking for something specific, explicitly confirm whether it was present or absent
+
+Your summary will be inserted as an observation in the ongoing investigation conversation.
+
+=== MESSAGE: user ===
+Below is the ongoing investigation conversation that provides context for what the investigator has been looking for:
+
+## Investigation Context:
+=== CONVERSATION START ===
+[user]: ## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-alert
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Pod OOMKilled
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+<!-- RUNBOOK END -->
+````
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+**Agent:** DataCollector (native-thinking, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me check the cluster nodes and pod status.
+
+**Agent Response:**
+
+I'll look up the nodes and pods.
+
+**Tool Call:** test-mcp.get_nodes({})
+**Result:**
+
+[{"name":"worker-1","status":"Ready","cpu":"4","memory":"16Gi"}]
+
+**Tool Call:** test-mcp.get_pods({"namespace":"default"})
+**Result (summarized):**
+
+Pod pod-1 is OOMKilled with 5 restarts.
+
+**Internal Reasoning:**
+
+Let me check the memory metrics for pod-1.
+
+**Agent Response:**
+
+Querying Prometheus for memory usage.
+
+**Tool Call:** prometheus-mcp.query_metrics({"query":"container_memory_usage_bytes{pod=\"pod-1\"}"})
+**Result:**
+
+[{"metric":"container_memory_usage_bytes","pod":"pod-1","value":"524288000","timestamp":"{TIMESTAMP}"}]
+
+**Internal Reasoning:**
+
+The pod is clearly OOMKilled.
+
+**Agent Response:**
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+**Final Analysis:**
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+## Stage 2: remediation
+
+**Agent:** Remediator (langchain, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+I should check the pod logs to understand the OOM pattern.
+
+**Tool Call:** test-mcp.get_pod_logs({"pod":"pod-1","namespace":"default"})
+**Result:**
+
+{"pod":"pod-1","logs":"OOMKilled at 14:30:00 - memory usage exceeded 512Mi limit"}
+
+**Internal Reasoning:**
+
+Let me check the Prometheus alert history for memory-related alerts.
+
+**Tool Call:** prometheus-mcp.query_alerts({"query":"ALERTS{alertname=\"OOMKilled\",pod=\"pod-1\"}"})
+**Result (summarized):**
+
+OOMKilled alert fired 3 times in the last hour for pod-1.
+
+**Internal Reasoning:**
+
+The logs and alerts confirm repeated OOM kills due to memory pressure.
+
+**Agent Response:**
+
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
+
+**Final Analysis:**
+
+Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
+
+## Stage 3: validation
+
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "validation" — 2/2 agents succeeded
+
+#### Agent 1: ConfigValidator (langchain, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+I should verify the pod memory limits are properly configured.
+
+**Tool Call:** test-mcp.get_resource_config({"pod":"pod-1","namespace":"default"})
+**Result:**
+
+{"pod":"pod-1","limits":{"memory":"512Mi","cpu":"250m"},"requests":{"memory":"256Mi","cpu":"100m"}}
+
+**Internal Reasoning:**
+
+The memory limit of 512Mi matches the alert threshold.
+
+**Agent Response:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+
+**Final Analysis:**
+
+Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
+
+#### Agent 2: MetricsValidator (native-thinking, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me verify the SLO metrics for pod-1.
+
+**Agent Response:**
+
+Checking SLO compliance.
+
+**Tool Call:** prometheus-mcp.query_slo({"pod":"pod-1"})
+**Result:**
+
+[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]
+
+**Internal Reasoning:**
+
+SLO is being violated.
+
+**Agent Response:**
+
+Metrics confirm SLO violation for pod-1 availability.
+
+**Final Analysis:**
+
+Metrics confirm SLO violation for pod-1 availability.
+
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
+
+Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.
+
+## Stage 4: scaling-review
+
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "scaling-review" — 2/2 agents succeeded
+
+#### Agent 1: ScalingReviewer-1 (native-thinking, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Evaluating horizontal scaling needs for pod-1.
+
+**Agent Response:**
+
+Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
+
+**Final Analysis:**
+
+Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
+
+#### Agent 2: ScalingReviewer-2 (native-thinking, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Evaluating horizontal scaling needs for pod-1.
+
+**Agent Response:**
+
+Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
+
+**Final Analysis:**
+
+Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
+
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
+
+Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
+
+## Executive Summary
+
+Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 CURRENT TASK
+═══════════════════════════════════════════════════════════════════════════════
+
+**Question:** What caused the OOM kill for pod-1?
+
+**Your Task:**
+Answer the user's question based on the investigation context above.
+- Reference investigation history when relevant
+- Use tools to get fresh data if needed
+- Provide clear, actionable responses
+
+Begin your response:
+
+
+[assistant]: Let me check the current pod status to explain the OOM kill.
+
+
+=== CONVERSATION END ===
+
+## Tool Result to Summarize:
+The investigator just executed `test-mcp.get_pods` and got the following output:
+
+=== TOOL OUTPUT START ===
+[{"name":"pod-1","namespace":"default","status":"OOMKilled","restarts":5,"cpu":"250m","memory":"512Mi","node":"worker-1","image":"app:v1.2.3","started":"{TIMESTAMP}","lastRestart":"{TIMESTAMP}"},{"name":"pod-2","namespace":"default","status":"Running","restarts":0,"cpu":"100m","memory":"256Mi","node":"worker-2","image":"app:v1.2.3","started":"{TIMESTAMP}","lastRestart":""},{"name":"pod-3","namespace":"default","status":"CrashLoopBackOff","restarts":12,"cpu":"500m","memory":"1Gi","node":"worker-1","image":"app:v1.2.3","started":"{TIMESTAMP}","lastRestart":"{TIMESTAMP}"}]
+=== TOOL OUTPUT END ===
+
+## Your Task:
+Based on the investigation context above, provide a concise summary of the tool result that:
+- Preserves information most relevant to what the investigator was looking for
+- Removes verbose or redundant details that don't impact the investigation
+- Maintains technical accuracy and actionable insights
+- Fits naturally as the next observation in the investigation conversation
+
+CRITICAL INSTRUCTION: Return ONLY the summary text. Do NOT include "Final Answer:", "Thought:", "Action:", or any other formatting.
+
+=== MESSAGE: assistant ===
+Pod pod-1 is OOMKilled with 5 restarts in default namespace.
+

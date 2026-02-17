@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -97,6 +98,59 @@ func executeToolCall(
 	}
 
 	return toolCallResult{Content: content, IsError: result.IsError, Usage: usage}
+}
+
+// recordToolListInteractions records one tool_list MCP interaction per server,
+// capturing the tools that were available to the agent at execution start.
+// Best-effort: logs on failure but never aborts the investigation.
+func recordToolListInteractions(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	tools []agent.ToolDefinition,
+) {
+	if len(tools) == 0 {
+		return
+	}
+
+	// Group tool names by server.
+	byServer := make(map[string][]string)
+	for _, t := range tools {
+		serverID, toolName, err := mcp.SplitToolName(t.Name)
+		if err != nil {
+			continue
+		}
+		byServer[serverID] = append(byServer[serverID], toolName)
+	}
+
+	// Sort server IDs for deterministic creation order
+	// (matters for created_at-based ordering in trace view).
+	serverIDs := make([]string, 0, len(byServer))
+	for id := range byServer {
+		serverIDs = append(serverIDs, id)
+	}
+	sort.Strings(serverIDs)
+
+	for _, serverID := range serverIDs {
+		toolNames := byServer[serverID]
+		sort.Strings(toolNames)
+		availableTools := make(map[string]any, 1)
+		availableTools["tools"] = toolNames
+
+		interaction, err := execCtx.Services.Interaction.CreateMCPInteraction(ctx, models.CreateMCPInteractionRequest{
+			SessionID:       execCtx.SessionID,
+			StageID:         execCtx.StageID,
+			ExecutionID:     execCtx.ExecutionID,
+			InteractionType: "tool_list",
+			ServerName:      serverID,
+			AvailableTools:  availableTools,
+		})
+		if err != nil {
+			slog.Error("Failed to record tool_list interaction",
+				"session_id", execCtx.SessionID, "server", serverID, "error", err)
+			continue
+		}
+		publishInteractionCreated(ctx, execCtx, interaction.ID, events.InteractionTypeMCP)
+	}
 }
 
 // recordMCPInteraction creates an MCPInteraction record in the database.
