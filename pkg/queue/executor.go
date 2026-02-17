@@ -1099,10 +1099,11 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 // If the session has an MCP override (mcp_selection JSON), it replaces the chain
 // config entirely (replace semantics, not merge).
 //
-// Side effect: when the override includes NativeTools, this method mutates
-// resolvedConfig.NativeToolsOverride so the downstream LLM call picks up the
-// override. This coupling keeps MCP selection logic in one place rather than
-// splitting it across the executor flow.
+// Side effects when the override includes NativeTools:
+//  1. Sets resolvedConfig.NativeToolsOverride (used by recordLLMInteraction metadata).
+//  2. Clones resolvedConfig.LLMProvider and merges the override into the clone's
+//     NativeTools map, so the gRPC layer (toProtoLLMConfig) sends the correct
+//     config to the Python LLM service.
 //
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
 // Returns (serverIDs, toolFilter, error).
@@ -1148,12 +1149,45 @@ func resolveMCPSelection(
 		toolFilter = nil
 	}
 
-	// Apply native tools override to the resolved config
+	// Apply native tools override to the resolved config.
+	// Store the override struct for recordLLMInteraction metadata, and merge
+	// individual overrides into a cloned LLMProvider so the gRPC call path
+	// sends the correct native tools to the Python LLM service.
 	if override.NativeTools != nil {
 		resolvedConfig.NativeToolsOverride = override.NativeTools
+		applyNativeToolsOverride(resolvedConfig, override.NativeTools)
 	}
 
 	return serverIDs, toolFilter, nil
+}
+
+// applyNativeToolsOverride clones resolvedConfig.LLMProvider and merges the
+// per-alert native tools override into the clone's NativeTools map.
+// The clone avoids mutating the shared config-registry pointer.
+func applyNativeToolsOverride(resolvedConfig *agent.ResolvedAgentConfig, nt *models.NativeToolsConfig) {
+	orig := resolvedConfig.LLMProvider
+	if orig == nil || len(orig.NativeTools) == 0 {
+		return
+	}
+
+	// Shallow copy the provider config; only NativeTools map differs.
+	cloned := *orig
+	cloned.NativeTools = make(map[config.GoogleNativeTool]bool, len(orig.NativeTools))
+	for k, v := range orig.NativeTools {
+		cloned.NativeTools[k] = v
+	}
+
+	if nt.GoogleSearch != nil {
+		cloned.NativeTools[config.GoogleNativeToolGoogleSearch] = *nt.GoogleSearch
+	}
+	if nt.CodeExecution != nil {
+		cloned.NativeTools[config.GoogleNativeToolCodeExecution] = *nt.CodeExecution
+	}
+	if nt.URLContext != nil {
+		cloned.NativeTools[config.GoogleNativeToolURLContext] = *nt.URLContext
+	}
+
+	resolvedConfig.LLMProvider = &cloned
 }
 
 // countExpectedStages computes the total number of progress steps for the chain,

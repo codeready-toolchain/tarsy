@@ -24,6 +24,7 @@ import type { LLMInteractionDetailResponse, ConversationMessage } from '../../ty
 import CopyButton from '../shared/CopyButton';
 import JsonDisplay from '../shared/JsonDisplay';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import NativeToolsDisplay from './NativeToolsDisplay';
 import { getInteractionTypeLabel, formatLLMDetailForCopy, serializeMessageContent } from './traceHelpers';
 
 interface LLMInteractionDetailProps {
@@ -296,13 +297,16 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
           )}
         </Box>
 
-        {/* Raw Response Metadata */}
+        {/* Native Tools (enabled config + usage) */}
+        <NativeToolsDisplay detail={detail} variant="detailed" />
+
+        {/* Response Metadata (grounding details etc.) */}
         {detail.response_metadata && Object.keys(detail.response_metadata).length > 0 && (
           <Box>
             <Accordion sx={{ boxShadow: 'none', border: 1, borderColor: 'divider' }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
-                  Raw Response Metadata
+                  Response Metadata
                 </Typography>
               </AccordionSummary>
               <AccordionDetails>
@@ -312,13 +316,13 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
           </Box>
         )}
 
-        {/* Raw LLM Request/Response */}
+        {/* Request / Response Metadata (summary counts, not full payloads) */}
         {detail.llm_request && Object.keys(detail.llm_request).length > 0 && (
           <Box>
             <Accordion sx={{ boxShadow: 'none', border: 1, borderColor: 'divider' }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
-                  Raw LLM Request
+                  Request Metadata
                 </Typography>
               </AccordionSummary>
               <AccordionDetails>
@@ -333,7 +337,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
             <Accordion sx={{ boxShadow: 'none', border: 1, borderColor: 'divider' }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
-                  Raw LLM Response
+                  Response Summary
                 </Typography>
               </AccordionSummary>
               <AccordionDetails>

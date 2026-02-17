@@ -137,6 +137,46 @@ func TestResolveMCPSelection(t *testing.T) {
 		assert.False(t, *resolved.NativeToolsOverride.GoogleSearch)
 	})
 
+	t.Run("native tools override is merged into LLMProvider clone", func(t *testing.T) {
+		origProvider := &config.LLMProviderConfig{
+			NativeTools: map[config.GoogleNativeTool]bool{
+				config.GoogleNativeToolGoogleSearch:  true,
+				config.GoogleNativeToolCodeExecution: false,
+				config.GoogleNativeToolURLContext:    true,
+			},
+		}
+		session := &ent.AlertSession{
+			McpSelection: map[string]interface{}{
+				"servers": []interface{}{
+					map[string]interface{}{"name": "kubernetes-server"},
+				},
+				"native_tools": map[string]interface{}{
+					"google_search":  false,
+					"code_execution": true,
+				},
+			},
+		}
+		resolved := &agent.ResolvedAgentConfig{
+			MCPServers:  []string{"argocd-server"},
+			LLMProvider: origProvider,
+		}
+
+		_, _, err := resolveMCPSelection(session, resolved, registry)
+		require.NoError(t, err)
+
+		// LLMProvider should be a different pointer (cloned, not shared).
+		assert.NotSame(t, origProvider, resolved.LLMProvider)
+
+		// The clone should have merged native tools.
+		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolCodeExecution])
+		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolURLContext]) // unchanged
+
+		// Original provider should NOT be mutated.
+		assert.True(t, origProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+		assert.False(t, origProvider.NativeTools[config.GoogleNativeToolCodeExecution])
+	})
+
 	t.Run("empty servers in override returns error", func(t *testing.T) {
 		session := &ent.AlertSession{
 			McpSelection: map[string]interface{}{
