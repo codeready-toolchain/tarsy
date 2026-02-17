@@ -199,10 +199,21 @@ export function SessionDetailPage() {
   // --- Chat state ---
   const chatState = useChatState(id!);
   const chatStageIdRef = useRef<string | null>(null);
+  // Track all chat stage IDs we've seen (persists across chat turns).
+  // Used to suppress auto-collapse of final_analysis in chat stages.
+  const [chatStageIds, setChatStageIds] = useState<Set<string>>(() => new Set());
 
   // Keep ref in sync for use in WS handler closure
   useEffect(() => {
     chatStageIdRef.current = chatState.chatStageId;
+    if (chatState.chatStageId) {
+      setChatStageIds((prev) => {
+        if (prev.has(chatState.chatStageId!)) return prev;
+        const next = new Set(prev);
+        next.add(chatState.chatStageId!);
+        return next;
+      });
+    }
   }, [chatState.chatStageId]);
 
   // --- Jump navigation ---
@@ -1153,6 +1164,8 @@ export function SessionDetailPage() {
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
                   chainId={session.chain_id}
+                  chatStageInProgress={chatStageInProgress}
+                  chatStageIds={chatStageIds}
                 />
               </Suspense>
             ) : isActive ? (
