@@ -221,59 +221,95 @@ class TestGoogleNativeProvider:
         assert len(result) == 1
         assert hasattr(result[0], "function_declarations")
 
-    def test_thought_signature_caching(self, provider):
-        """Test thought signature caching and retrieval per (execution_id, call_id)."""
+    def test_model_content_caching(self, provider):
+        """Test model Content caching and retrieval per execution."""
         execution_id = "exec-123"
-        call_id = "call-abc"
-        signature = b"thought-sig-bytes"
-        
-        provider._cache_thought_signature(execution_id, call_id, signature)
-        cached = provider._get_cached_thought_signature(execution_id, call_id)
-        
-        assert cached == signature
-
-    def test_thought_signature_cache_miss(self, provider):
-        """Test that cache miss returns None."""
-        cached = provider._get_cached_thought_signature("nonexistent", "no-call")
-        assert cached is None
-
-    def test_thought_signature_cache_per_call(self, provider):
-        """Test that different call_ids have independent signatures."""
-        execution_id = "exec-123"
-        provider._cache_thought_signature(execution_id, "call-1", b"sig-1")
-        provider._cache_thought_signature(execution_id, "call-2", b"sig-2")
-        
-        assert provider._get_cached_thought_signature(execution_id, "call-1") == b"sig-1"
-        assert provider._get_cached_thought_signature(execution_id, "call-2") == b"sig-2"
-        assert provider._get_cached_thought_signature(execution_id, "call-3") is None
-
-    def test_convert_messages_applies_cached_thought_signature(self, provider):
-        """Test that cached thought_signatures are applied to function_call Parts."""
-        execution_id = "exec-456"
-        call_id = "call-789"
-        signature = b"cached-thought-sig"
-        
-        provider._cache_thought_signature(execution_id, call_id, signature)
-        
-        tool_call = pb.ToolCall(
-            id=call_id,
-            name="server.tool",
-            arguments='{"arg": "value"}',
+        content = genai_types.Content(
+            role="model",
+            parts=[genai_types.Part(text="Hello", thought_signature=b"sig-abc")],
         )
+
+        provider._cache_model_turn(execution_id, [content])
+        turns = provider._get_cached_model_turns(execution_id)
+
+        assert len(turns) == 1
+        assert len(turns[0]) == 1
+        assert turns[0][0].parts[0].text == "Hello"
+        assert turns[0][0].parts[0].thought_signature == b"sig-abc"
+
+    def test_model_content_cache_miss(self, provider):
+        """Test that cache miss returns empty list."""
+        turns = provider._get_cached_model_turns("nonexistent")
+        assert turns == []
+
+    def test_model_content_cache_accumulates_turns(self, provider):
+        """Test that multiple turns accumulate in order."""
+        execution_id = "exec-123"
+        turn1 = [genai_types.Content(role="model", parts=[genai_types.Part(text="Turn 1")])]
+        turn2 = [genai_types.Content(role="model", parts=[genai_types.Part(text="Turn 2")])]
+
+        provider._cache_model_turn(execution_id, turn1)
+        provider._cache_model_turn(execution_id, turn2)
+        turns = provider._get_cached_model_turns(execution_id)
+
+        assert len(turns) == 2
+        assert turns[0][0].parts[0].text == "Turn 1"
+        assert turns[1][0].parts[0].text == "Turn 2"
+
+    def test_convert_messages_uses_cached_content(self, provider):
+        """Test that cached Content objects are used for assistant messages."""
+        execution_id = "exec-456"
+        cached_content = genai_types.Content(
+            role="model",
+            parts=[
+                genai_types.Part(text="thinking...", thought=True, thought_signature=b"think-sig"),
+                genai_types.Part(text="I'll check"),
+                genai_types.Part(
+                    function_call=genai_types.FunctionCall(
+                        name="server__tool", args={"arg": "value"}
+                    ),
+                    thought_signature=b"fc-sig",
+                ),
+            ],
+        )
+        provider._cache_model_turn(execution_id, [cached_content])
+
         messages = [
             pb.ConversationMessage(
                 role="assistant",
-                content="Let me call a tool",
-                tool_calls=[tool_call],
+                content="I'll check",
+                tool_calls=[pb.ToolCall(id="tc1", name="server.tool", arguments='{"arg": "value"}')],
             ),
         ]
-        
+
         _, contents = provider._convert_messages(messages, execution_id)
-        
+
+        # Should use cached Content, preserving all Parts and thought_signatures
         assert len(contents) == 1
-        fc_part = contents[0].parts[1]
-        assert fc_part.function_call.name == "server__tool"
-        assert fc_part.thought_signature == signature
+        assert len(contents[0].parts) == 3
+        assert contents[0].parts[0].thought is True
+        assert contents[0].parts[0].thought_signature == b"think-sig"
+        assert contents[0].parts[2].function_call.name == "server__tool"
+        assert contents[0].parts[2].thought_signature == b"fc-sig"
+
+    def test_convert_messages_fallback_on_cache_miss(self, provider):
+        """Test that proto reconstruction is used when cache is empty."""
+        messages = [
+            pb.ConversationMessage(
+                role="assistant",
+                content="response text",
+                tool_calls=[pb.ToolCall(id="tc1", name="server.tool", arguments='{"a": 1}')],
+            ),
+        ]
+
+        _, contents = provider._convert_messages(messages, "no-cache-exec")
+
+        # Fallback reconstruction: text Part + function_call Part (no thought_signature)
+        assert len(contents) == 1
+        assert contents[0].role == "model"
+        assert len(contents[0].parts) == 2
+        assert contents[0].parts[0].text == "response text"
+        assert contents[0].parts[1].function_call.name == "server__tool"
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
