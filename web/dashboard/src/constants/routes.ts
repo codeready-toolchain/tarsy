@@ -7,6 +7,7 @@ export const ROUTES = {
   SESSION_DETAIL: '/sessions/:id',
   SESSION_TRACE: '/sessions/:id/trace',
   SUBMIT_ALERT: '/submit-alert',
+  SYSTEM_STATUS: '/system',
 } as const;
 
 /** Build a session detail path. */

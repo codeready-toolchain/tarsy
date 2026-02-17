@@ -88,14 +88,59 @@ export interface FilterOptionsResponse {
   statuses: string[];
 }
 
-/** Health response. */
+// ── Health endpoint types (matches pkg/api/responses.go, pkg/database/health.go, pkg/queue/types.go) ──
+
+/** Database health and connection pool statistics. */
+export interface DatabaseHealthStatus {
+  status: string;
+  response_time_ms: number;
+  open_connections: number;
+  in_use: number;
+  idle: number;
+  wait_count: number;
+  wait_duration_ms: number;
+  max_open_conns: number;
+}
+
+/** Single worker health info. */
+export interface WorkerHealth {
+  id: string;
+  status: 'idle' | 'working';
+  current_session_id?: string;
+  sessions_processed: number;
+  last_activity: string;
+}
+
+/** Worker pool health. */
+export interface PoolHealth {
+  is_healthy: boolean;
+  db_reachable: boolean;
+  db_error?: string;
+  pod_id: string;
+  active_workers: number;
+  total_workers: number;
+  active_sessions: number;
+  max_concurrent: number;
+  queue_depth: number;
+  worker_stats: WorkerHealth[];
+  last_orphan_scan: string;
+  orphans_recovered: number;
+}
+
+/** MCP server health status from HealthMonitor. */
+export interface MCPHealthStatus {
+  server_id: string;
+  healthy: boolean;
+  last_check: string;
+  error?: string;
+  tool_count: number;
+}
+
+/** Health response (GET /health). */
 export interface HealthResponse {
   status: string;
   version: string;
-  database: {
-    status: string;
-    latency_ms: number;
-  };
+  database: DatabaseHealthStatus;
   phase: string;
   configuration: {
     agents: number;
@@ -103,15 +148,7 @@ export interface HealthResponse {
     mcp_servers: number;
     llm_providers: number;
   };
-  worker_pool?: {
-    max_workers: number;
-    active_workers: number;
-    pending_sessions: number;
-  };
-  mcp_health?: Record<string, {
-    healthy: boolean;
-    last_check: string;
-    error?: string;
-  }>;
+  worker_pool?: PoolHealth;
+  mcp_health?: Record<string, MCPHealthStatus>;
   warnings?: SystemWarning[];
 }

@@ -29,7 +29,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { Refresh, Menu as MenuIcon, Send as SendIcon } from '@mui/icons-material';
+import { Refresh, Menu as MenuIcon, Send as SendIcon, Dns as DnsIcon } from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
@@ -120,6 +120,10 @@ export function DashboardView() {
   };
   const handleManualAlertSubmission = () => {
     window.open('/submit-alert', '_blank', 'noopener,noreferrer');
+    handleMenuClose();
+  };
+  const handleSystemStatus = () => {
+    window.open('/system', '_blank', 'noopener,noreferrer');
     handleMenuClose();
   };
 
@@ -697,6 +701,12 @@ export function DashboardView() {
             <SendIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Manual Alert Submission</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleSystemStatus}>
+          <ListItemIcon>
+            <DnsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>System Status</ListItemText>
         </MenuItem>
       </Menu>
 
