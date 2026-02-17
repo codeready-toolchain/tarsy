@@ -179,11 +179,12 @@ export function SessionDetailPage() {
   const [agentProgressStatuses, setAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
-  // Real-time execution status from execution.status WS events (executionId → {status, stageId}).
+  // Real-time execution status from execution.status WS events (executionId → {status, stageId, agentIndex}).
   // Higher priority than REST ExecutionOverview for immediate UI updates.
   // stageId is included so StageContent can filter out executions from other stages,
   // preventing phantom agent cards from appearing.
-  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string }>>(
+  // agentIndex (1-based) preserves chain config ordering for deterministic tab order.
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string; agentIndex: number }>>(
     () => new Map(),
   );
 
@@ -356,12 +357,14 @@ export function SessionDetailPage() {
     setLoading(true);
     setError(null);
 
-    // Clear streaming and progress state so stale items don't linger
+    // Clear streaming, progress, and chat state so stale items don't linger
     setStreamingEvents(new Map());
     streamingMetaRef.current.clear();
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
     setExecutionStatuses(new Map());
+    chatStageIdRef.current = null;
+    setChatStageIds(new Set());
 
     try {
       const [sessionData, timelineData] = await Promise.all([
@@ -805,7 +808,7 @@ export function SessionDetailPage() {
           const payload = data as unknown as ExecutionStatusPayload;
           setExecutionStatuses((prev) => {
             const next = new Map(prev);
-            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id });
+            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id, agentIndex: payload.agent_index });
             return next;
           });
           return;

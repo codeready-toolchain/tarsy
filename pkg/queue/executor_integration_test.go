@@ -713,6 +713,21 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	// 3 "completed" events (one per agent at completion)
 	completedEvents := publisher.filterExecutionStatuses("completed")
 	assert.Len(t, completedEvents, 3, "all agents should complete successfully")
+
+	// Verify AgentIndex preserves chain config ordering (1-based).
+	// Investigation stage has 2 agents → AgentIndex 1 and 2.
+	// Synthesis stage has 1 agent → AgentIndex 1.
+	// Collect indices from "active" events (one per agent, covers all code paths).
+	activeIndices := make([]int, len(activeEvents))
+	for i, ae := range activeEvents {
+		activeIndices[i] = ae.AgentIndex
+	}
+	assert.Contains(t, activeIndices, 1, "should have agent_index=1")
+	assert.Contains(t, activeIndices, 2, "should have agent_index=2 for second parallel agent")
+	// All events should have non-zero AgentIndex.
+	for _, es := range execStatuses {
+		assert.Greater(t, es.AgentIndex, 0, "execution.status events must have positive agent_index")
+	}
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
@@ -779,6 +794,10 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 	failedEvents := publisher.filterExecutionStatuses("failed")
 	assert.Len(t, completedEvents, 1, "one agent should have completed")
 	assert.Len(t, failedEvents, 1, "one agent should have failed")
+
+	// Verify AgentIndex: parallel agents should have distinct indices 1 and 2.
+	activeIndices := []int{activeEvents[0].AgentIndex, activeEvents[1].AgentIndex}
+	assert.ElementsMatch(t, []int{1, 2}, activeIndices, "parallel agents should have agent_index 1 and 2")
 }
 
 func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
@@ -2031,6 +2050,7 @@ func TestExecutor_MCPSelectionFailureEmitsTerminalStatus(t *testing.T) {
 	failedEvents := publisher.filterExecutionStatuses("failed")
 	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on MCP error")
 	assert.Contains(t, failedEvents[0].ErrorMessage, "nonexistent-server")
+	assert.Equal(t, 1, failedEvents[0].AgentIndex, "single agent should have agent_index=1")
 }
 
 func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
@@ -2103,4 +2123,5 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	failedEvents := publisher.filterExecutionStatuses("failed")
 	assert.Len(t, failedEvents, 1, "agent should emit execution.status: failed on creation error")
 	assert.Contains(t, failedEvents[0].ErrorMessage, "failed to create agent")
+	assert.Equal(t, 1, failedEvents[0].AgentIndex, "single agent should have agent_index=1")
 }

@@ -115,6 +115,7 @@ type ExecutionStatusPayload struct {
 	BasePayload
 	StageID      string `json:"stage_id"`                // stage UUID
 	ExecutionID  string `json:"execution_id"`            // agent execution UUID
+	AgentIndex   int    `json:"agent_index"`             // 1-based index preserving chain config order
 	Status       string `json:"status"`                  // active, completed, failed, timed_out, cancelled
 	ErrorMessage string `json:"error_message,omitempty"` // populated on failure
 }

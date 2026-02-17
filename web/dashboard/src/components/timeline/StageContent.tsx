@@ -36,8 +36,9 @@ interface StageContentProps {
   agentProgressStatuses?: Map<string, string>;
   /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId}).
    *  Higher priority than REST ExecutionOverview for immediate UI updates.
-   *  stageId is used to filter out executions belonging to other stages. */
-  executionStatuses?: Map<string, { status: string; stageId: string }>;
+   *  stageId is used to filter out executions belonging to other stages.
+   *  agentIndex (1-based) preserves chain config ordering for deterministic tab order. */
+  executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
   onSelectedAgentChange?: (executionId: string | null) => void;
 }
 
@@ -298,8 +299,22 @@ const StageContent: React.FC<StageContentProps> = ({
       }
     }
 
-    return [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups];
-  }, [executions, streamingByExecution, executionOverviews, executionStatuses]);
+    const merged = [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups];
+
+    // Sort by agent_index (1-based, from chain config) for deterministic tab order.
+    // Resolve agent_index from REST execution overviews or real-time WS statuses.
+    merged.sort((a, b) => {
+      const indexA = execOverviewMap.get(a.executionId)?.agent_index
+        ?? executionStatuses?.get(a.executionId)?.agentIndex
+        ?? Number.MAX_SAFE_INTEGER;
+      const indexB = execOverviewMap.get(b.executionId)?.agent_index
+        ?? executionStatuses?.get(b.executionId)?.agentIndex
+        ?? Number.MAX_SAFE_INTEGER;
+      return indexA - indexB;
+    });
+
+    return merged;
+  }, [executions, streamingByExecution, executionOverviews, executionStatuses, execOverviewMap]);
 
   // Detect multi-agent from BOTH completed items and active streaming events
   // so the tabbed interface appears immediately, not only after items complete.

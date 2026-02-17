@@ -425,7 +425,7 @@ func (e *RealSessionExecutor) executeAgent(
 		); updateErr != nil {
 			logger.Error("Failed to update agent execution status to failed", "error", updateErr)
 		}
-		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), resErr.Error())
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), resErr.Error())
 		return agentResult{
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
@@ -456,7 +456,7 @@ func (e *RealSessionExecutor) executeAgent(
 	if updateErr := input.stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, ""); updateErr != nil {
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
-	publishExecutionStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusActive), "")
+	publishExecutionStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusActive), "")
 
 	// Metadata carried on all agentResult returns below (for synthesis context).
 	resolvedStrategy := string(resolvedConfig.IterationStrategy)
@@ -471,7 +471,7 @@ func (e *RealSessionExecutor) executeAgent(
 		); updateErr != nil {
 			logger.Error("Failed to update agent execution status after MCP error", "error", updateErr)
 		}
-		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), failErr.Error())
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            agent.ExecutionStatusFailed,
@@ -518,7 +518,7 @@ func (e *RealSessionExecutor) executeAgent(
 		); updateErr != nil {
 			logger.Error("Failed to update agent execution status after agent creation error", "error", updateErr)
 		}
-		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(agentexecution.StatusFailed), failErr.Error())
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            agent.ExecutionStatusFailed,
@@ -545,7 +545,7 @@ func (e *RealSessionExecutor) executeAgent(
 		if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entErrStatus, err.Error()); updateErr != nil {
 			logger.Error("Failed to update agent execution status after error", "error", updateErr)
 		}
-		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(entErrStatus), err.Error())
+		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(entErrStatus), err.Error())
 		return agentResult{
 			executionID:       exec.ID,
 			status:            errStatus,
@@ -589,7 +589,7 @@ func (e *RealSessionExecutor) executeAgent(
 			llmProviderName:   resolvedConfig.LLMProviderName,
 		}
 	}
-	publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, string(entStatus), errMsg)
+	publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(entStatus), errMsg)
 
 	return agentResult{
 		executionID:       exec.ID,
@@ -885,7 +885,8 @@ func publishExecutionProgressFromExecutor(ctx context.Context, eventPublisher ag
 
 // publishExecutionStatus publishes an execution.status transient event.
 // Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
-func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID, status, errMsg string) {
+// agentIndex is 1-based and preserves the chain config ordering.
+func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID string, agentIndex int, status, errMsg string) {
 	if eventPublisher == nil {
 		return
 	}
@@ -897,6 +898,7 @@ func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPubli
 		},
 		StageID:      stageID,
 		ExecutionID:  executionID,
+		AgentIndex:   agentIndex,
 		Status:       status,
 		ErrorMessage: errMsg,
 	}); err != nil {

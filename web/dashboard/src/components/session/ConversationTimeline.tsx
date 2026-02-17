@@ -58,8 +58,8 @@ interface ConversationTimelineProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
-  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId}) */
-  executionStatuses?: Map<string, { status: string; stageId: string }>;
+  /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId, agentIndex}) */
+  executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
   /** Chain ID for the header display */
   chainId?: string;
   /** Whether a chat stage is currently in progress (session may be terminal) */
