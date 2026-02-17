@@ -125,7 +125,7 @@ func readJSONTimeout(t *testing.T, conn *websocket.Conn, timeout time.Duration) 
 
 // subscribeAndWait connects a WebSocket, reads connection.established,
 // subscribes to the env's channel, reads subscription.confirmed, and
-// waits for the LISTEN to propagate.
+// waits for the LISTEN to propagate and auto-catchup to complete.
 func (env *streamingTestEnv) subscribeAndWait(t *testing.T) *websocket.Conn {
 	t.Helper()
 	conn := env.connectWS(t)
@@ -149,6 +149,21 @@ func (env *streamingTestEnv) subscribeAndWait(t *testing.T) *websocket.Conn {
 	require.Eventually(t, func() bool {
 		return env.listener.isListening(env.channel)
 	}, 2*time.Second, 10*time.Millisecond, "LISTEN did not propagate for channel %s", env.channel)
+
+	// Send a ping and wait for pong to ensure the server's read loop has
+	// finished handleCatchup. The read loop processes messages sequentially:
+	// subscribe → subscription.confirmed → handleCatchup → (back to conn.Read).
+	// The pong is only sent after the read loop returns to conn.Read, which
+	// guarantees handleCatchup has completed. Without this, there is a race
+	// where the test publishes events before handleCatchup's DB query executes,
+	// causing catchup to deliver duplicates of events also delivered via NOTIFY.
+	pingMsg, _ := json.Marshal(ClientMessage{Action: "ping"})
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	require.NoError(t, conn.Write(pingCtx, websocket.MessageText, pingMsg))
+
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	require.Equal(t, "pong", msg["type"])
 
 	return conn
 }

@@ -232,8 +232,12 @@ class WebSocketService {
       return;
     }
 
-    // Track last event ID for catchup on reconnect
-    const eventId = data.id as number | undefined;
+    // Track last event ID for catchup on reconnect.
+    // The backend injects db_event_id into persisted event payloads (both
+    // NOTIFY and catchup). Transient events (stream.chunk, etc.) don't have
+    // db_event_id, which is correct — they're not in the DB and can't be
+    // caught up on.
+    const eventId = data.db_event_id as number | undefined;
     if (eventId && sessionId) {
       const sessionChannel = this.channels.get(`session:${sessionId}`);
       if (sessionChannel) {
