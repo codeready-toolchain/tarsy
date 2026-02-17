@@ -483,16 +483,16 @@ func (noopEventPublisher) PublishExecutionStatus(context.Context, string, events
 	return nil
 }
 
-// delayedErrorLLMClient sends initial chunks immediately, waits for a
-// configurable delay, then sends an error chunk. This lets tests simulate
-// a stream that outlives its parent context deadline.
-type delayedErrorLLMClient struct {
-	initialChunks    []agent.Chunk
-	delayBeforeError time.Duration
-	errorMessage     string
+// contextExpiryErrorLLMClient sends initial chunks immediately, then waits
+// for the caller's context to expire before sending an error chunk. This
+// deterministically simulates a stream that outlives its parent context
+// deadline — no timing margins or sleeps needed.
+type contextExpiryErrorLLMClient struct {
+	initialChunks []agent.Chunk
+	errorMessage  string
 }
 
-func (m *delayedErrorLLMClient) Generate(_ context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {
+func (m *contextExpiryErrorLLMClient) Generate(ctx context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {
 	ch := make(chan agent.Chunk, len(m.initialChunks)+1)
 
 	// Send initial chunks immediately (buffered — no blocking).
@@ -500,10 +500,11 @@ func (m *delayedErrorLLMClient) Generate(_ context.Context, _ *agent.GenerateInp
 		ch <- c
 	}
 
-	// Send error chunk after delay in a goroutine so the channel stays open
-	// until the delay elapses, letting the caller's context expire first.
+	// Wait for the caller's context to expire, then send the error.
+	// This guarantees the error always arrives AFTER context cancellation,
+	// regardless of CI speed — fully deterministic.
 	go func() {
-		time.Sleep(m.delayBeforeError)
+		<-ctx.Done()
 		ch <- &agent.ErrorChunk{Message: m.errorMessage, Code: "timeout", Retryable: false}
 		close(ch)
 	}()
@@ -511,7 +512,7 @@ func (m *delayedErrorLLMClient) Generate(_ context.Context, _ *agent.GenerateInp
 	return ch, nil
 }
 
-func (m *delayedErrorLLMClient) Close() error { return nil }
+func (m *contextExpiryErrorLLMClient) Close() error { return nil }
 
 // ============================================================================
 // callLLMWithStreaming — expired-context cleanup test
@@ -527,19 +528,19 @@ func TestCallLLMWithStreaming_ExpiredContextCleanup(t *testing.T) {
 	execCtx := newTestExecCtx(t, nil, nil)
 	execCtx.EventPublisher = noopEventPublisher{}
 
-	// Context expires in 50ms — long enough for the callback to create
-	// timeline events from the buffered chunks, but short enough to be
-	// expired by the time the delayed error chunk arrives.
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// Context expires in 500ms — generous margin for the callback to create
+	// timeline events in the DB (involves real PostgreSQL queries) even on
+	// slow CI. The mock waits on ctx.Done() before sending the error, so the
+	// actual test duration equals this timeout, not a separate sleep.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	llm := &delayedErrorLLMClient{
+	llm := &contextExpiryErrorLLMClient{
 		initialChunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "analyzing the problem..."},
 			&agent.TextChunk{Content: "here is my analysis"},
 		},
-		delayBeforeError: 150 * time.Millisecond,
-		errorMessage:     "stream deadline exceeded",
+		errorMessage: "stream deadline exceeded",
 	}
 
 	eventSeq := 0
