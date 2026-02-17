@@ -341,4 +341,3 @@ func mergeMetadata(base, extra map[string]interface{}) map[string]interface{} {
 	}
 	return merged
 }
-

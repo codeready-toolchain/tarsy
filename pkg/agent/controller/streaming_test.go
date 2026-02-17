@@ -442,4 +442,3 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	// (Tool calls, code executions, groundings, usage don't trigger callback)
 	assert.Equal(t, []string{ChunkTypeThinking, ChunkTypeText, ChunkTypeText}, callbacks)
 }
-
