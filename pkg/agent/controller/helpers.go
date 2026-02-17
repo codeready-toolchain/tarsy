@@ -90,6 +90,14 @@ func recordLLMInteraction(
 	// Build response_metadata with full grounding details for dashboard rendering.
 	responseMeta := buildResponseMetadata(resp)
 
+	llmRequestMeta := map[string]any{"messages_count": messagesCount, "iteration": iteration}
+
+	// Include resolved native tools config so the dashboard can display
+	// which native tools were enabled for this LLM call.
+	if nativeTools := resolveEffectiveNativeTools(execCtx); len(nativeTools) > 0 {
+		llmRequestMeta["native_tools"] = nativeTools
+	}
+
 	interaction, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 		SessionID:        execCtx.SessionID,
 		StageID:          &execCtx.StageID,
@@ -97,7 +105,7 @@ func recordLLMInteraction(
 		InteractionType:  interactionType,
 		ModelName:        execCtx.Config.LLMProvider.Model,
 		LastMessageID:    lastMessageID,
-		LLMRequest:       map[string]any{"messages_count": messagesCount, "iteration": iteration},
+		LLMRequest:       llmRequestMeta,
 		LLMResponse:      llmResponseMeta,
 		ResponseMetadata: responseMeta,
 		ThinkingContent:  thinkingPtr,
@@ -201,6 +209,36 @@ func publishExecutionProgress(ctx context.Context, execCtx *agent.ExecutionConte
 			"error", err,
 		)
 	}
+}
+
+// resolveEffectiveNativeTools computes the native tools map that was sent to the
+// LLM for this execution. Starts from the provider defaults and applies the
+// per-alert override (if any). Returns nil when the provider has no native tools.
+func resolveEffectiveNativeTools(execCtx *agent.ExecutionContext) map[string]bool {
+	providerTools := execCtx.Config.LLMProvider.NativeTools
+	if len(providerTools) == 0 {
+		return nil
+	}
+
+	result := make(map[string]bool, len(providerTools))
+	for tool, enabled := range providerTools {
+		result[string(tool)] = enabled
+	}
+
+	// Apply per-alert override (nil fields = keep provider default).
+	if override := execCtx.Config.NativeToolsOverride; override != nil {
+		if override.GoogleSearch != nil {
+			result["google_search"] = *override.GoogleSearch
+		}
+		if override.CodeExecution != nil {
+			result["code_execution"] = *override.CodeExecution
+		}
+		if override.URLContext != nil {
+			result["url_context"] = *override.URLContext
+		}
+	}
+
+	return result
 }
 
 // buildResponseMetadata constructs the response_metadata map from grounding

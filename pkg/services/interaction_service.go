@@ -101,12 +101,7 @@ func (s *InteractionService) CreateMCPInteraction(httpCtx context.Context, req m
 		builder = builder.SetToolResult(req.ToolResult)
 	}
 	if req.AvailableTools != nil {
-		// Convert map[string]any to []interface{} by iterating over the map
-		tools := make([]interface{}, 0, len(req.AvailableTools))
-		for _, tool := range req.AvailableTools {
-			tools = append(tools, tool)
-		}
-		builder = builder.SetAvailableTools(tools)
+		builder = builder.SetAvailableTools(req.AvailableTools)
 	}
 	if req.DurationMs != nil {
 		builder = builder.SetDurationMs(*req.DurationMs)

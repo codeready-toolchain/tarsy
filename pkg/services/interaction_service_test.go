@@ -181,7 +181,7 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 			ExecutionID:     exec.ID,
 			InteractionType: "tool_list",
 			ServerName:      "kubernetes-server",
-			AvailableTools:  map[string]any{"tools": []string{"get", "describe"}},
+			AvailableTools:  []any{map[string]string{"name": "get", "description": "Get resources"}, map[string]string{"name": "describe", "description": "Describe resources"}},
 		}
 
 		interaction, err := interactionService.CreateMCPInteraction(ctx, req)

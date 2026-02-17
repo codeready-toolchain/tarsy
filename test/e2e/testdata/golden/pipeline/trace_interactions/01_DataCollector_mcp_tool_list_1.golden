@@ -1,0 +1,22 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_5}",
+  "interaction_type": "tool_list",
+  "server_name": "prometheus-mcp"
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  {
+    "description": "test tool: query_alerts",
+    "name": "query_alerts"
+  },
+  {
+    "description": "test tool: query_metrics",
+    "name": "query_metrics"
+  },
+  {
+    "description": "test tool: query_slo",
+    "name": "query_slo"
+  }
+]

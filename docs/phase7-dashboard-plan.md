@@ -353,7 +353,7 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
 
 ---
 
-### Phase 7.6: Trace View
+### Phase 7.6: Trace View ✅ DONE
 
 **Goal**: Dedicated trace page for observability information, replacing the old technical/debug tab. Available for all sessions (active and terminated) with live updates for active sessions.
 
@@ -374,11 +374,13 @@ The new TARSy backend (Phases 1–6) is complete. The dashboard needs additional
    - Within each execution: chronological interactions (LLM + MCP)
    - Parallel stages: tabs for each agent execution
 
-3. **Live updates** — Event-notification + REST re-fetch pattern:
+3. **Live updates** — Event-notification + debounced REST re-fetch pattern:
    - Subscribe to `session:{id}` channel (already subscribed from page load)
-   - On `stage.status` event → re-fetch `GET /sessions/:id/trace` (stage hierarchy changed)
-   - On `interaction.created` event → re-fetch `GET /sessions/:id/trace` (new interaction appeared)
-   - No streaming or complex state — just re-fetch the full trace tree on each event
+   - On `stage.status` event → debounced re-fetch `GET /sessions/:id/trace` (stage hierarchy changed)
+   - On `interaction.created` event → debounced re-fetch `GET /sessions/:id/trace` (new interaction appeared)
+   - **Debouncing**: Multiple rapid events within a 300ms window coalesce into a single re-fetch. Each new event resets the timer, so only one `GET /sessions/:id/trace` fires per burst. The debounce timer is cleaned up on unmount.
+   - On `session.status` (terminal) → immediate full re-fetch of both session and trace (authoritative final state, not debounced)
+   - No streaming or complex state — just re-fetch the full trace tree
    - Works for both active and terminated sessions (terminated sessions simply receive no events)
 
 4. **Interaction cards** — `InteractionCard`

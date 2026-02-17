@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -315,5 +317,82 @@ func TestBuildResponseMetadata(t *testing.T) {
 		assert.Equal(t, []string{"query with no sources yet"}, entry["queries"])
 		assert.Nil(t, entry["sources"])  // no sources key when empty
 		assert.Nil(t, entry["supports"]) // no supports key when empty
+	})
+}
+
+// ============================================================================
+// resolveEffectiveNativeTools tests
+// ============================================================================
+
+func TestResolveEffectiveNativeTools(t *testing.T) {
+	t.Run("returns nil when provider has no native tools", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config: &agent.ResolvedAgentConfig{
+				LLMProvider: &config.LLMProviderConfig{},
+			},
+		}
+		result := resolveEffectiveNativeTools(execCtx)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns provider defaults when no override", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config: &agent.ResolvedAgentConfig{
+				LLMProvider: &config.LLMProviderConfig{
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch:  true,
+						config.GoogleNativeToolCodeExecution: false,
+						config.GoogleNativeToolURLContext:    true,
+					},
+				},
+			},
+		}
+		result := resolveEffectiveNativeTools(execCtx)
+		assert.Equal(t, map[string]bool{
+			"google_search":  true,
+			"code_execution": false,
+			"url_context":    true,
+		}, result)
+	})
+
+	t.Run("override replaces specific tools", func(t *testing.T) {
+		boolFalse := false
+		boolTrue := true
+		execCtx := &agent.ExecutionContext{
+			Config: &agent.ResolvedAgentConfig{
+				LLMProvider: &config.LLMProviderConfig{
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch:  true,
+						config.GoogleNativeToolCodeExecution: false,
+						config.GoogleNativeToolURLContext:    true,
+					},
+				},
+				NativeToolsOverride: &models.NativeToolsConfig{
+					GoogleSearch:  &boolFalse,
+					CodeExecution: &boolTrue,
+				},
+			},
+		}
+		result := resolveEffectiveNativeTools(execCtx)
+		assert.Equal(t, map[string]bool{
+			"google_search":  false, // overridden
+			"code_execution": true,  // overridden
+			"url_context":    true,  // kept default
+		}, result)
+	})
+
+	t.Run("nil override fields keep defaults", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config: &agent.ResolvedAgentConfig{
+				LLMProvider: &config.LLMProviderConfig{
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch: true,
+					},
+				},
+				NativeToolsOverride: &models.NativeToolsConfig{},
+			},
+		}
+		result := resolveEffectiveNativeTools(execCtx)
+		assert.Equal(t, map[string]bool{"google_search": true}, result)
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/stretchr/testify/assert"
@@ -198,6 +199,71 @@ func TestExecuteToolCall_Success(t *testing.T) {
 	assert.Equal(t, "get_pods", *interactions[0].ToolName)
 	assert.Nil(t, interactions[0].ErrorMessage)
 }
+
+// ============================================================================
+// recordToolListInteractions tests
+// ============================================================================
+
+func TestRecordToolListInteractions(t *testing.T) {
+	t.Run("records one interaction per server with descriptions", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		ctx := context.Background()
+
+		tools := []agent.ToolDefinition{
+			{Name: "kubernetes.get_pods", Description: "Get pods in a namespace"},
+			{Name: "kubernetes.get_logs", Description: "Get pod logs"},
+			{Name: "argocd.list_apps", Description: "List Argo CD applications"},
+		}
+
+		recordToolListInteractions(ctx, execCtx, tools)
+
+		interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 2)
+
+		// Build a map for order-independent assertions.
+		byServer := make(map[string]*ent.MCPInteraction)
+		for _, rec := range interactions {
+			byServer[rec.ServerName] = rec
+		}
+
+		// Verify both servers recorded as tool_list.
+		require.Contains(t, byServer, "kubernetes")
+		require.Contains(t, byServer, "argocd")
+		assert.Equal(t, mcpinteraction.InteractionTypeToolList, byServer["kubernetes"].InteractionType)
+		assert.Equal(t, mcpinteraction.InteractionTypeToolList, byServer["argocd"].InteractionType)
+
+		// Verify kubernetes tools include name + description, sorted by name.
+		k8sTools := byServer["kubernetes"].AvailableTools
+		require.Len(t, k8sTools, 2)
+		tool0, ok := k8sTools[0].(map[string]interface{})
+		require.True(t, ok, "tool entry should be a map")
+		assert.Equal(t, "get_logs", tool0["name"])
+		assert.Equal(t, "Get pod logs", tool0["description"])
+		tool1, ok := k8sTools[1].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "get_pods", tool1["name"])
+		assert.Equal(t, "Get pods in a namespace", tool1["description"])
+
+		// Verify argocd has 1 tool.
+		assert.Len(t, byServer["argocd"].AvailableTools, 1)
+	})
+
+	t.Run("no-op when tools is nil", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		ctx := context.Background()
+
+		recordToolListInteractions(ctx, execCtx, nil)
+
+		interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		assert.Empty(t, interactions)
+	})
+}
+
+// ============================================================================
+// executeToolCall tests
+// ============================================================================
 
 func TestExecuteToolCall_ToolError(t *testing.T) {
 	// Tool execution fails: returns error content, records MCP interaction with error.

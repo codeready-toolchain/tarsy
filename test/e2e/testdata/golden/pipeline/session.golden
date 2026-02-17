@@ -21,7 +21,7 @@
   "id": "{SESSION_ID}",
   "input_tokens": 2100,
   "llm_interaction_count": 22,
-  "mcp_interaction_count": 9,
+  "mcp_interaction_count": 21,
   "output_tokens": 440,
   "runbook_url": null,
   "stages": [

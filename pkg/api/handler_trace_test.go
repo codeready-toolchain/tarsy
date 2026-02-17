@@ -485,7 +485,7 @@ func TestToMCPDetailResponse_NilOptionalFields(t *testing.T) {
 		ID:              "mcp-2",
 		InteractionType: mcpinteraction.InteractionTypeToolList,
 		ServerName:      "argocd",
-		AvailableTools:  []any{"deploy", "rollback"},
+		AvailableTools:  []any{map[string]any{"name": "deploy", "description": "Deploy app"}, map[string]any{"name": "rollback", "description": "Rollback app"}},
 		CreatedAt:       time.Now(),
 	}
 

@@ -1,0 +1,19 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_37}",
+  "interaction_type": "tool_call",
+  "server_name": "test-mcp",
+  "tool_name": "get_pods"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "namespace": "default"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "[{\"name\":\"pod-1\",\"namespace\":\"default\",\"status\":\"OOMKilled\",\"restarts\":5,\"cpu\":\"250m\",\"memory\":\"512Mi\",\"node\":\"worker-1\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"{TIMESTAMP}\"},{\"name\":\"pod-2\",\"namespace\":\"default\",\"status\":\"Running\",\"restarts\":0,\"cpu\":\"100m\",\"memory\":\"256Mi\",\"node\":\"worker-2\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"\"},{\"name\":\"pod-3\",\"namespace\":\"default\",\"status\":\"CrashLoopBackOff\",\"restarts\":12,\"cpu\":\"500m\",\"memory\":\"1Gi\",\"node\":\"worker-1\",\"image\":\"app:v1.2.3\",\"started\":\"{TIMESTAMP}\",\"lastRestart\":\"{TIMESTAMP}\"}]",
+  "is_error": false
+}

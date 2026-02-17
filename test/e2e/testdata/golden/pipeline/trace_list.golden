@@ -3,7 +3,7 @@
     {
       "created_at": "{TIMESTAMP}",
       "duration_ms": {DURATION_MS},
-      "id": "{INTERACTION_ID_31}",
+      "id": "{INTERACTION_ID_43}",
       "interaction_type": "executive_summary",
       "model_name": "test-model-fast"
     }
@@ -59,8 +59,20 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
-              "duration_ms": {DURATION_MS},
               "id": "{INTERACTION_ID_5}",
+              "interaction_type": "tool_list",
+              "server_name": "prometheus-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_6}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_7}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_nodes"
@@ -68,7 +80,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_6}",
+              "id": "{INTERACTION_ID_8}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_pods"
@@ -76,7 +88,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_7}",
+              "id": "{INTERACTION_ID_9}",
               "interaction_type": "tool_call",
               "server_name": "prometheus-mcp",
               "tool_name": "query_metrics"
@@ -96,29 +108,9 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_8}",
-              "input_tokens": 10,
-              "interaction_type": "iteration",
-              "model_name": "test-model",
-              "output_tokens": 5,
-              "total_tokens": 15
-            },
-            {
-              "created_at": "{TIMESTAMP}",
-              "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_9}",
-              "input_tokens": 10,
-              "interaction_type": "iteration",
-              "model_name": "test-model",
-              "output_tokens": 5,
-              "total_tokens": 15
-            },
-            {
-              "created_at": "{TIMESTAMP}",
-              "duration_ms": {DURATION_MS},
               "id": "{INTERACTION_ID_10}",
               "input_tokens": 10,
-              "interaction_type": "summarization",
+              "interaction_type": "iteration",
               "model_name": "test-model",
               "output_tokens": 5,
               "total_tokens": 15
@@ -132,13 +124,45 @@
               "model_name": "test-model",
               "output_tokens": 5,
               "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_12}",
+              "input_tokens": 10,
+              "interaction_type": "summarization",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_13}",
+              "input_tokens": 10,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
             }
           ],
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_14}",
+              "interaction_type": "tool_list",
+              "server_name": "prometheus-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_15}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_12}",
+              "id": "{INTERACTION_ID_16}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_pod_logs"
@@ -146,7 +170,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_13}",
+              "id": "{INTERACTION_ID_17}",
               "interaction_type": "tool_call",
               "server_name": "prometheus-mcp",
               "tool_name": "query_alerts"
@@ -166,7 +190,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_14}",
+              "id": "{INTERACTION_ID_18}",
               "input_tokens": 10,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -176,7 +200,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_15}",
+              "id": "{INTERACTION_ID_19}",
               "input_tokens": 10,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -187,8 +211,14 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_20}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_16}",
+              "id": "{INTERACTION_ID_21}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_resource_config"
@@ -202,7 +232,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_17}",
+              "id": "{INTERACTION_ID_22}",
               "input_tokens": 80,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -212,7 +242,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_18}",
+              "id": "{INTERACTION_ID_23}",
               "input_tokens": 100,
               "interaction_type": "forced_conclusion",
               "model_name": "test-model",
@@ -223,8 +253,14 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_24}",
+              "interaction_type": "tool_list",
+              "server_name": "prometheus-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_19}",
+              "id": "{INTERACTION_ID_25}",
               "interaction_type": "tool_call",
               "server_name": "prometheus-mcp",
               "tool_name": "query_slo"
@@ -244,7 +280,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_20}",
+              "id": "{INTERACTION_ID_26}",
               "input_tokens": 120,
               "interaction_type": "synthesis",
               "model_name": "test-model",
@@ -267,7 +303,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_21}",
+              "id": "{INTERACTION_ID_27}",
               "input_tokens": 80,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -275,7 +311,14 @@
               "total_tokens": 105
             }
           ],
-          "mcp_interactions": []
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_28}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            }
+          ]
         },
         {
           "agent_name": "ScalingReviewer-2",
@@ -284,7 +327,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_22}",
+              "id": "{INTERACTION_ID_29}",
               "input_tokens": 80,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -292,7 +335,14 @@
               "total_tokens": 105
             }
           ],
-          "mcp_interactions": []
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_30}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            }
+          ]
         }
       ],
       "stage_id": "{STAGE_ID_5}",
@@ -307,7 +357,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_23}",
+              "id": "{INTERACTION_ID_31}",
               "input_tokens": 10,
               "interaction_type": "synthesis",
               "model_name": "test-model-fast",
@@ -330,7 +380,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_24}",
+              "id": "{INTERACTION_ID_32}",
               "input_tokens": 200,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -340,7 +390,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_25}",
+              "id": "{INTERACTION_ID_33}",
               "input_tokens": 10,
               "interaction_type": "summarization",
               "model_name": "test-model",
@@ -350,7 +400,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_26}",
+              "id": "{INTERACTION_ID_34}",
               "input_tokens": 250,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -361,8 +411,20 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_35}",
+              "interaction_type": "tool_list",
+              "server_name": "prometheus-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_36}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_27}",
+              "id": "{INTERACTION_ID_37}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_pods"
@@ -382,7 +444,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_28}",
+              "id": "{INTERACTION_ID_38}",
               "input_tokens": 300,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -392,7 +454,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_29}",
+              "id": "{INTERACTION_ID_39}",
               "input_tokens": 350,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -403,8 +465,20 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_40}",
+              "interaction_type": "tool_list",
+              "server_name": "prometheus-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_41}",
+              "interaction_type": "tool_list",
+              "server_name": "test-mcp"
+            },
+            {
+              "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_30}",
+              "id": "{INTERACTION_ID_42}",
               "interaction_type": "tool_call",
               "server_name": "prometheus-mcp",
               "tool_name": "query_slo"

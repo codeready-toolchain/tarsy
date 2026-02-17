@@ -1,0 +1,20 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_21}",
+  "interaction_type": "tool_call",
+  "server_name": "test-mcp",
+  "tool_name": "get_resource_config"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "namespace": "default",
+  "pod": "pod-1"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "{\"pod\":\"pod-1\",\"limits\":{\"memory\":\"512Mi\",\"cpu\":\"250m\"},\"requests\":{\"memory\":\"256Mi\",\"cpu\":\"100m\"}}",
+  "is_error": false
+}
