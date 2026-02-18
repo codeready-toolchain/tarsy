@@ -37,6 +37,23 @@ func (app *TestApp) SubmitAlert(t *testing.T, alertType, data string) map[string
 	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
 }
 
+// SubmitAlertWithRunbook posts an alert with a runbook URL and returns the parsed response.
+func (app *TestApp) SubmitAlertWithRunbook(t *testing.T, alertType, data, runbookURL string) map[string]interface{} {
+	t.Helper()
+	body := map[string]interface{}{
+		"alert_type": alertType,
+		"data":       data,
+		"runbook":    runbookURL,
+	}
+	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
+}
+
+// GetRunbooks calls GET /api/v1/runbooks and returns the parsed JSON array.
+func (app *TestApp) GetRunbooks(t *testing.T) []interface{} {
+	t.Helper()
+	return app.getJSONArray(t, "/api/v1/runbooks", http.StatusOK)
+}
+
 // GetSession retrieves a session by ID.
 func (app *TestApp) GetSession(t *testing.T, sessionID string) map[string]interface{} {
 	t.Helper()

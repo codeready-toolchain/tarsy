@@ -38,7 +38,7 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 **Phase 6: End-to-End Testing** -- Comprehensive in-process e2e test suite (`test/e2e/`) exercising the full pipeline from HTTP API through chain execution to WebSocket delivery. Real PostgreSQL (testcontainers, per-test schema), real event streaming, real WebSocket — only LLM (ScriptedLLMClient with dual dispatch) and MCP servers (in-memory SDK) are mocked, while the full `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised. 7 test scenarios: Pipeline (4 stages, synthesis, FunctionCalling + NativeThinking, 2 MCP servers, summarization, forced conclusion, replicas, chat — with 31 golden-file interaction details), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation (investigation + chat), Timeout (session + chat), Concurrency (MaxConcurrentSessions enforcement), MultiReplica (cross-replica WS via NOTIFY/LISTEN). Bug fixes during testing: cancel handler for completed sessions with active chats, post-cancellation DB updates using `context.Background()`, agent status mapping from `ctx.Err()`, API startup wiring validation. New APIs: timeline endpoint (`GET /sessions/:id/timeline`), trace/observability endpoints (interaction list, LLM detail with conversation reconstruction, MCP detail). Infrastructure: `pkg/mcp/testing.go` (InjectSession, NewTestClientFactory), `test/database/` (SharedTestDB), auto-catchup on WebSocket subscribe, `AgentExecution.llm_provider` field, Makefile targets (test-unit, test-e2e, test-go, test-go-coverage).
 
-**Phase 7: Dashboard** -- ✅ DONE. React 19 + TypeScript + Vite 7 + MUI 7 dashboard ported from old TARSy with hybrid approach (old visual layer, new data layer). Backend API extensions (7.0), foundation with auth/WebSocket/routing/Go static serving (7.1), session list with filters/pagination/localStorage persistence (7.2), alert submission with MCP override (7.3), session detail with conversation timeline/streaming/auto-scroll (7.4), follow-up chat (7.5), trace view with LLM/MCP interaction details (7.6), system status page with version/warning wiring (7.7), polish with cache headers (7.8). See `docs/archive/phase7-dashboard-plan.md` for detailed design.
+**Phase 7: Dashboard** -- React 19 + TypeScript + Vite 7 + MUI 7 dashboard ported from old TARSy with hybrid approach (old visual layer, new data layer). Backend API extensions (7.0), foundation with auth/WebSocket/routing/Go static serving (7.1), session list with filters/pagination/localStorage persistence (7.2), alert submission with MCP override (7.3), session detail with conversation timeline/streaming/auto-scroll (7.4), follow-up chat (7.5), trace view with LLM/MCP interaction details (7.6), system status page with version/warning wiring (7.7), polish with cache headers (7.8). See `docs/archive/phase7-dashboard-plan.md` for detailed design.
 
 Full design docs for completed phases are in `docs/archive/`.
 
@@ -46,7 +46,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 8: Integrations
 
-**Runbook System (Phase 8.1)**
+**Runbook System (Phase 8.1)** -- ✅ DONE
 - [ ] GitHub integration
 - [ ] Runbook fetching & caching
 - [ ] Per-chain runbook configuration
