@@ -27,7 +27,7 @@ db-start: ## Start PostgreSQL container
 		echo -e "$(GREEN)PostgreSQL container already running$(NC)"; \
 	else \
 		echo -e "$(YELLOW)Starting PostgreSQL container...$(NC)"; \
-		podman-compose -f $(COMPOSE_FILE) up -d; \
+		podman-compose -f $(COMPOSE_FILE) up -d postgres; \
 	fi
 	@echo -e "$(BLUE)Waiting for PostgreSQL to be ready...$(NC)"
 	@until podman exec $(CONTAINER_NAME) pg_isready -U $(DB_USER) > /dev/null 2>&1; do \

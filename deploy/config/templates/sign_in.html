@@ -1,0 +1,56 @@
+{{define "sign_in.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TARSy — Sign In</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 48px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+        }
+        .logo { width: 80px; height: 80px; margin-bottom: 24px; }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        p { color: #94a3b8; margin-bottom: 32px; font-size: 14px; }
+        .btn {
+            display: inline-block;
+            background: #3b82f6;
+            color: #fff;
+            padding: 12px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {{if .CustomLogin.Logo}}
+        <img class="logo" src="{{.CustomLogin.Logo}}" alt="TARSy">
+        {{end}}
+        <h1>TARSy</h1>
+        <p>Alert investigation and response platform</p>
+        <a class="btn" href="{{.ProxyPrefix}}/start?rd={{.Redirect}}">Sign in with GitHub</a>
+    </div>
+</body>
+</html>
+{{end}}

@@ -24,6 +24,9 @@ type Config struct {
 	// Base URL for dashboard links (default: "http://localhost:5173")
 	DashboardURL string
 
+	// Additional WebSocket origin patterns beyond DashboardURL and localhost defaults
+	AllowedWSOrigins []string
+
 	// Component registries
 	AgentRegistry       *AgentRegistry
 	ChainRegistry       *ChainRegistry

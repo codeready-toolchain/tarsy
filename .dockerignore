@@ -1,0 +1,28 @@
+.git
+bin/
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+web/dashboard/node_modules/
+web/dashboard/dist/
+
+# Config with secrets
+*.env
+deploy/config/tarsy.yaml
+deploy/config/llm-providers.yaml
+deploy/config/oauth2-proxy.cfg
+
+# Test and dev
+coverage.*
+.cursor/
+docs/
+test/
+.pytest_cache/
+
+# LLM service (separate image)
+llm-service/

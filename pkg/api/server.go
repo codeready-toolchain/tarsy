@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	echo "github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
@@ -25,7 +25,6 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
-	"github.com/codeready-toolchain/tarsy/pkg/version"
 )
 
 // Server is the HTTP API server.
@@ -48,6 +47,7 @@ type Server struct {
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 	runbookService     *runbook.Service                // nil until set (runbook endpoint)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
+	wsOriginPatterns   []string                        // allowed WebSocket origin patterns
 }
 
 // NewServer creates a new API server with Echo v5.
@@ -71,6 +71,7 @@ func NewServer(
 		connManager:    connManager,
 	}
 
+	s.wsOriginPatterns = s.resolveWSOriginPatterns()
 	s.setupRoutes()
 	return s
 }
@@ -165,13 +166,37 @@ func (s *Server) ValidateWiring() error {
 	return nil
 }
 
+// corsAllowOrigins builds the CORS allowed origin list from config.
+func (s *Server) corsAllowOrigins() []string {
+	allowed := []string{
+		"http://localhost:5173",
+		"http://localhost:8080",
+		"http://127.0.0.1:5173",
+		"http://127.0.0.1:8080",
+	}
+	if s.cfg.DashboardURL != "" {
+		allowed = append(allowed, s.cfg.DashboardURL)
+	}
+	return allowed
+}
+
 // setupRoutes registers all API routes.
 func (s *Server) setupRoutes() {
+	s.echo.Use(securityHeaders())
+
 	// Server-wide body size limit (2 MB) — set slightly above MaxAlertDataSize
 	// (1 MB) to account for JSON envelope overhead. Rejects multi-MB/GB payloads
 	// at the HTTP read level before deserialization, complementing the
 	// application-level MaxAlertDataSize check in submitAlertHandler.
 	s.echo.Use(middleware.BodyLimit(2 * 1024 * 1024))
+
+	s.echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     s.corsAllowOrigins(),
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		AllowHeaders:     []string{"Content-Type", "Accept", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           3600,
+	}))
 
 	// Health check
 	s.echo.GET("/health", s.healthHandler)
@@ -214,6 +239,21 @@ func (s *Server) setupRoutes() {
 	// Dashboard static file serving is registered via SetDashboardDir(),
 	// called after NewServer. This ensures API routes (registered above)
 	// take priority over the wildcard SPA fallback.
+}
+
+// resolveWSOriginPatterns computes the WebSocket origin allowlist from config.
+func (s *Server) resolveWSOriginPatterns() []string {
+	var patterns []string
+
+	if s.cfg.DashboardURL != "" {
+		if u, err := url.Parse(s.cfg.DashboardURL); err == nil && u.Host != "" {
+			patterns = append(patterns, u.Host)
+		}
+	}
+
+	patterns = append(patterns, "localhost:*", "127.0.0.1:*")
+	patterns = append(patterns, s.cfg.AllowedWSOrigins...)
+	return patterns
 }
 
 // setupDashboardRoutes registers static file serving for the dashboard build
@@ -308,53 +348,3 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-// healthHandler handles GET /health.
-func (s *Server) healthHandler(c *echo.Context) error {
-	reqCtx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
-	defer cancel()
-
-	dbHealth, err := database.Health(reqCtx, s.dbClient.DB())
-	if err != nil {
-		return c.JSON(http.StatusServiceUnavailable, &HealthResponse{
-			Status:   "unhealthy",
-			Database: dbHealth,
-		})
-	}
-
-	stats := s.cfg.Stats()
-	response := &HealthResponse{
-		Status:   "healthy",
-		Version:  version.Full(),
-		Database: dbHealth,
-		Phase:    "2.3 - Queue & Worker System",
-		Configuration: ConfigurationStats{
-			Agents:       stats.Agents,
-			Chains:       stats.Chains,
-			MCPServers:   stats.MCPServers,
-			LLMProviders: stats.LLMProviders,
-		},
-	}
-
-	if s.workerPool != nil {
-		poolHealth := s.workerPool.Health()
-		response.WorkerPool = poolHealth
-	}
-
-	// MCP health statuses
-	if s.healthMonitor != nil {
-		response.MCPHealth = s.healthMonitor.GetStatuses()
-		if !s.healthMonitor.IsHealthy() {
-			response.Status = "degraded"
-		}
-	}
-
-	// System warnings
-	if s.warningService != nil {
-		warnings := s.warningService.GetWarnings()
-		if len(warnings) > 0 {
-			response.Warnings = warnings
-		}
-	}
-
-	return c.JSON(http.StatusOK, response)
-}

@@ -209,17 +209,33 @@ KUBECONFIG=/home/user/.kube/config
 go run cmd/tarsy/main.go
 ```
 
-### Podman-Compose
+### Podman-Compose (Container Mode with OAuth2)
+
+Runs all 4 containers: postgres, llm-service, tarsy, and oauth2-proxy.
 
 ```bash
-# In .env
-DB_HOST=postgres  # Service name
-DB_PORT=5432
-KUBECONFIG=/kubeconfig  # Mounted from host
+# 1. Set up OAuth2 credentials
+cp deploy/config/oauth.env.example deploy/config/oauth.env
+# Edit oauth.env with your GitHub OAuth App credentials
 
-# Start with podman-compose
-podman-compose up
+# 2. Deploy all containers
+make containers-deploy
+
+# Dashboard: http://localhost:8080 (through oauth2-proxy)
+# Health:    http://localhost:8080/health (unauthenticated)
 ```
+
+Other container commands:
+- `make containers-status` — show running containers
+- `make containers-logs` — follow all container logs
+- `make containers-logs-tarsy` — follow tarsy logs only
+- `make containers-redeploy` — rebuild and restart tarsy only
+- `make containers-stop` — stop all containers
+- `make containers-clean` — stop and remove volumes
+- `make containers-db-reset` — reset database only
+
+The existing `make dev` workflow (host-based, no containers) continues to work
+unchanged for development without OAuth2.
 
 ### Kubernetes / OpenShift
 

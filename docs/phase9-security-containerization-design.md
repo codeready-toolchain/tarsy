@@ -21,8 +21,8 @@ The key architectural simplification over old TARSy: since new TARSy's Go backen
 ### Non-Goals
 
 - Kubernetes/OpenShift deployment (Phase 10)
-- RBAC kube-proxy for API clients (Phase 10)
-- JWT bearer token validation (replaced by rbac-kube-proxy in Phase 10)
+- kube-rbac-proxy for API clients (Phase 10)
+- JWT bearer token validation (replaced by kube-rbac-proxy in Phase 10)
 - Prometheus metrics (Phase 11)
 - mTLS between containers (overkill for dev; OpenShift handles in-pod TLS)
 
@@ -219,7 +219,7 @@ standard_logging = true
 **Key differences from old TARSy:**
 
 1. **Single upstream** — `http://tarsy:8080/` instead of `http://backend:8000/` — oauth2-proxy proxies everything (dashboard + API) to one service
-2. **No JWT skip** — removed `skip_jwt_bearer_tokens`, `oidc_jwks_url`, `extra_jwt_issuers` — JWT-based API auth will be handled by rbac-kube-proxy in Phase 10, not by oauth2-proxy
+2. **No JWT skip** — removed `skip_jwt_bearer_tokens`, `oidc_jwks_url`, `extra_jwt_issuers` — JWT-based API auth will be handled by kube-rbac-proxy in Phase 10, not by oauth2-proxy
 3. **`OPTIONS=.*` removed from `skip_auth_routes`** — replaced by `--skip-auth-preflight=true` command-line flag (cleaner separation)
 4. **Cookie name** — `_tarsy_oauth2` instead of `_oauth2_proxy` (more descriptive, avoids collisions if multiple oauth2-proxy instances share a domain)
 
