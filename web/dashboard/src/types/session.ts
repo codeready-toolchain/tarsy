@@ -66,6 +66,7 @@ export interface SessionDetailResponse {
   executive_summary: string | null;
   executive_summary_error: string | null;
   runbook_url: string | null;
+  slack_message_fingerprint?: string | null;
   mcp_selection?: Record<string, unknown>;
 
   // Timestamps

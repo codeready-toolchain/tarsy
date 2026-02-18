@@ -156,11 +156,16 @@ func TestE2E_SlackNotifications(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Verify fingerprint stored on session.
+	// Verify fingerprint stored on session (DB level).
 	session, err := app.EntClient.AlertSession.Get(context.Background(), sessionID)
 	require.NoError(t, err)
 	require.NotNil(t, session.SlackMessageFingerprint, "fingerprint should be stored on session")
 	assert.Equal(t, fingerprint, *session.SlackMessageFingerprint)
+
+	// Verify fingerprint returned in session detail API (for frontend resubmit).
+	detail := app.GetSession(t, sessionID)
+	assert.Equal(t, fingerprint, detail["slack_message_fingerprint"],
+		"GET /sessions/:id should return slack_message_fingerprint")
 
 	// Verify exactly 2 Slack messages were sent: start + terminal.
 	calls := mock.getCalls()
