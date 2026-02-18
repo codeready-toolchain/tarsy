@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
@@ -33,12 +34,14 @@ type RealSessionExecutor struct {
 	agentFactory   *agent.AgentFactory
 	promptBuilder  *prompt.PromptBuilder
 	mcpFactory     *mcp.ClientFactory
+	runbookService *runbook.Service
 }
 
 // NewRealSessionExecutor creates a new session executor.
 // eventPublisher may be nil (streaming disabled).
 // mcpFactory may be nil (MCP disabled — uses stub tool executor).
-func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory) *RealSessionExecutor {
+// runbookService may be nil (uses config default runbook content).
+func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
 		cfg:            cfg,
@@ -48,7 +51,35 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 		agentFactory:   agent.NewAgentFactory(controllerFactory),
 		promptBuilder:  prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 		mcpFactory:     mcpFactory,
+		runbookService: runbookService,
 	}
+}
+
+// resolveRunbook resolves runbook content for a session using the RunbookService.
+// Falls back to config defaults on error or when the service is nil.
+func (e *RealSessionExecutor) resolveRunbook(ctx context.Context, session *ent.AlertSession) string {
+	configDefault := ""
+	if e.cfg.Defaults != nil {
+		configDefault = e.cfg.Defaults.Runbook
+	}
+
+	if e.runbookService == nil {
+		return configDefault
+	}
+
+	alertURL := ""
+	if session.RunbookURL != nil {
+		alertURL = *session.RunbookURL
+	}
+
+	content, err := e.runbookService.Resolve(ctx, alertURL)
+	if err != nil {
+		slog.Warn("Runbook resolution failed, using default",
+			"session_id", session.ID,
+			"error", err)
+		return configDefault
+	}
+	return content
 }
 
 // ────────────────────────────────────────────────────────────
@@ -494,7 +525,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
-		RunbookContent: config.GetBuiltinConfig().DefaultRunbook,
+		RunbookContent: e.resolveRunbook(ctx, input.session),
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		ToolExecutor:   toolExecutor,

@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 7 (Dashboard) + Phase 8.2 (Multi-LLM Support)
+**Last updated after**: Phase 7 (Dashboard) + Phase 8.1 (Runbook System) + Phase 8.2 (Multi-LLM Support)
 
 ---
 
@@ -51,6 +51,7 @@ pkg/
 ├── mcp/                  # MCP client infrastructure (client, executor, transport, health, testing helpers)
 ├── models/               # MCP selection, trace API response types, shared types
 ├── queue/                # Worker, WorkerPool, orphan detection, session executor, chat executor
+├── runbook/              # Service, GitHubClient, Cache, URL validation/conversion
 └── services/             # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
 ├── schema/               # Ent schema definitions (10 entities)
@@ -96,6 +97,7 @@ The end-to-end happy path from alert submission to completion:
 2. **Worker pool** polls for pending sessions → `SessionService.ClaimNextPendingSession()` uses `FOR UPDATE SKIP LOCKED` → sets status=`in_progress`, assigns `pod_id`
 3. **SessionExecutor.Execute()** (`pkg/queue/executor.go`):
    - Resolves chain config from `ChainRegistry`
+   - Resolves runbook content via `runbook.Service.Resolve()` (per-alert URL → fetch with cache → inject into `ExecutionContext.RunbookContent`; empty URL → default content from config; fetch failure → fail-open to default)
    - Initializes shared services (StageService, MessageService, TimelineService, InteractionService)
    - **Chain loop**: iterates over `chain.Stages` sequentially, tracking `dbStageIndex` (which may differ from config index when synthesis stages are inserted)
      - Checks context cancellation before starting each stage
@@ -236,6 +238,7 @@ Synthesis: tool-less single LLM call for synthesizing multi-agent investigation 
 | GET | `/api/v1/system/mcp-servers` | MCP server health status and cached tools |
 | GET | `/api/v1/system/default-tools` | Default MCP tool configuration |
 | GET | `/api/v1/alert-types` | Available alert types from chain configurations |
+| GET | `/api/v1/runbooks` | Available runbook URLs from configured GitHub repo (empty array if no repo) |
 | GET | `/api/v1/ws` | WebSocket connection for real-time streaming |
 
 ---
@@ -687,6 +690,107 @@ Replacement format: `[MASKED_X]` (not `__X__` to avoid Markdown bold rendering).
 
 ---
 
+## Runbook System (`pkg/runbook/`)
+
+### Overview
+
+The runbook system provides per-alert runbook content injection into LLM prompts. Runbooks are markdown documents fetched from GitHub (or any HTTP source) and cached in-memory. The system integrates at three levels: API validation, executor resolution, and dashboard selection.
+
+### Package Layout
+
+```
+pkg/runbook/
+├── service.go    # Service — orchestrator (Resolve, ListRunbooks, fetchWithCache)
+├── github.go     # GitHubClient — HTTP client for raw content download and Contents API listing
+├── cache.go      # Cache — thread-safe in-memory TTL cache (lazy eviction)
+└── url.go        # URL utilities (ConvertToRawURL, ParseRepoURL, ValidateRunbookURL)
+```
+
+### Resolution Hierarchy
+
+```
+Service.Resolve(ctx, alertRunbookURL):
+  1. If alertRunbookURL is non-empty → fetchWithCache(url) → return content
+  2. If empty → return default content (from config Defaults.Runbook)
+```
+
+Executor fail-open: if `Resolve()` returns an error, the executor logs a warning and falls back to `cfg.Defaults.Runbook`. The investigation continues with default runbook content.
+
+### Data Flow
+
+```
+Alert Submission:
+  POST /api/v1/alerts with "runbook" field
+    → ValidateRunbookURL(url, allowedDomains) — reject disallowed schemes/domains (400)
+    → AlertService.SubmitAlert() → stores AlertSession.runbook_url
+
+Session Execution:
+  RealSessionExecutor.Execute()
+    → resolveRunbook(ctx, session)
+      → runbook.Service.Resolve(ctx, session.RunbookURL)
+        → fetchWithCache(url) → ValidateRunbookURL → ConvertToRawURL → cache check → GitHubClient.DownloadContent → cache set
+    → ExecutionContext.RunbookContent = resolved content
+
+Chat Execution:
+  ChatMessageExecutor.execute()
+    → resolveRunbook(ctx, session)  (same flow as above)
+
+Runbook Listing:
+  GET /api/v1/runbooks
+    → runbook.Service.ListRunbooks(ctx)
+      → GitHubClient.ListMarkdownFiles(ctx, repoURL) — recursive via Contents API
+      → Returns html_url for each .md file
+```
+
+### GitHubClient (`pkg/runbook/github.go`)
+
+```go
+type GitHubClient struct { httpClient, token, logger }
+
+func (c *GitHubClient) DownloadContent(ctx, rawURL) (string, error)      // Fetch raw content
+func (c *GitHubClient) ListMarkdownFiles(ctx, repoURL) ([]string, error) // Recursive directory listing
+```
+
+- **DownloadContent**: Converts blob URLs to `raw.githubusercontent.com` via `ConvertToRawURL()`, adds `Authorization: Bearer <token>` if configured, does HTTP GET.
+- **ListMarkdownFiles**: Parses repo URL via `ParseRepoURL()`, calls GitHub Contents API (`api.github.com/repos/{owner}/{repo}/contents/{path}?ref={ref}`) recursively, filters for `.md` files (case-insensitive), returns `html_url` values.
+
+### URL Utilities (`pkg/runbook/url.go`)
+
+- **`ConvertToRawURL(url)`**: `github.com/{owner}/{repo}/blob/{ref}/{path}` → `raw.githubusercontent.com/{owner}/{repo}/refs/heads/{ref}/{path}`. Non-GitHub URLs pass through unchanged.
+- **`ParseRepoURL(url)`**: Extracts `Owner`, `Repo`, `Ref`, `Path` from GitHub tree/blob URLs.
+- **`ValidateRunbookURL(url, allowedDomains)`**: Checks scheme (http/https only) and domain allowlist. Empty allowlist permits any domain.
+
+### Cache (`pkg/runbook/cache.go`)
+
+Thread-safe in-memory cache with TTL expiration. Lazy eviction on `Get()` — no background goroutine. Used for both content caching (URL → content) and listing caching (repoURL → joined file list).
+
+### Configuration
+
+```yaml
+system:
+  github:
+    token_env: "GITHUB_TOKEN"           # Env var name (default: GITHUB_TOKEN)
+  runbooks:
+    repo_url: "https://github.com/org/repo/tree/main/runbooks"  # For listing endpoint
+    cache_ttl: "5m"                     # Default: 1m
+    allowed_domains:                    # Default: [github.com, raw.githubusercontent.com]
+      - "github.com"
+      - "raw.githubusercontent.com"
+```
+
+Config types in `pkg/config/system.go`: `GitHubConfig` (`TokenEnv`), `RunbookConfig` (`RepoURL`, `CacheTTL`, `AllowedDomains`). Resolved in `pkg/config/loader.go` via `resolveGitHubConfig()` and `resolveRunbooksConfig()`. Validated in `pkg/config/validator.go` (`validateRunbooks`).
+
+### Integration Points
+
+- **API handler** (`pkg/api/handler_alert.go`): Validates runbook URL before alert submission (400 for disallowed domains).
+- **API handler** (`pkg/api/handler_runbook.go`): `GET /api/v1/runbooks` lists available runbooks (fail-open: empty array on error).
+- **Session executor** (`pkg/queue/executor.go`): `resolveRunbook()` method resolves content before building `ExecutionContext`.
+- **Chat executor** (`pkg/queue/chat_executor.go`): Same `resolveRunbook()` pattern for chat messages.
+- **Dashboard** (`ManualAlertForm.tsx`): Autocomplete dropdown populated from `GET /api/v1/runbooks` with "Default Runbook" sentinel.
+- **Startup wiring** (`cmd/tarsy/main.go`): Creates `runbook.Service`, passes to executors and API server. Adds system warning if `repo_url` configured without GitHub token.
+
+---
+
 ## Tool Result Summarization (`pkg/agent/controller/summarize.go`)
 
 ### Architecture Decision: Controller-Level Summarization
@@ -975,6 +1079,15 @@ Shared iteration tracking: `CurrentIteration`, `MaxIterations`, `LastInteraction
 | `MCPServerRegistry` | `Get(id)` | `MCPServerConfig`: Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `Get(name)`, `GetAll()`, `Has(name)` | `LLMProviderConfig`: Type, Model, APIKeyEnv, CredentialsEnv, ProjectEnv, LocationEnv, BaseURL, MaxToolResultTokens, NativeTools |
 
+### System Config (`pkg/config/system.go`)
+
+Non-registry configuration resolved at startup from the `system` YAML section:
+
+| Config | Fields | Purpose |
+|--------|--------|---------|
+| `GitHubConfig` | `TokenEnv` (default: `"GITHUB_TOKEN"`) | GitHub API authentication for runbook fetching |
+| `RunbookConfig` | `RepoURL`, `CacheTTL` (default: 1m), `AllowedDomains` (default: `[github.com, raw.githubusercontent.com]`) | Runbook listing, caching, and URL validation |
+
 Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, credentials_env, project, location, base_url, backend, native_tools, max_tool_result_tokens). Python does not read YAML files; it reads env vars for API keys/credentials based on the `*_env` field values received via gRPC.
 
 ### gRPC Protocol
@@ -1097,7 +1210,7 @@ Full MCP interaction: tool arguments, tool result, available tools, timing, erro
 
 In-process e2e tests boot a full TARSy instance per test (`TestApp`) with real PostgreSQL (testcontainers, per-test schema), real event streaming, real WebSocket — only LLM (`ScriptedLLMClient` with dual sequential/agent-routed dispatch) and MCP servers (in-memory SDK via `mcpsdk.InMemoryTransport`) are mocked. The real `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised. MCP test support via `pkg/mcp/testing.go` (`InjectSession`, `NewTestClientFactory`).
 
-7 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN).
+8 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN), Runbook (URL fetch via mock server, invalid domain rejection, listing endpoint, default fallback).
 
 Makefile: `test-unit` (pkg only), `test-e2e` (e2e only), `test-go` (all Go + coverage), `test` (Go + Python).
 
@@ -1310,6 +1423,10 @@ Shared utility for canonical ↔ API name conversion:
 | **Per-provider model caching** | GoogleNativeProvider: SDK clients by `api_key_env` + content objects by `execution_id` (1h TTL). LangChainProvider: `BaseChatModel` by `(provider, model, api_key_env)` tuple, tools rebound per request |
 | **Filter persistence** | Dashboard persists filter state, pagination, and sort preferences in `localStorage` via `filterPersistence.ts` |
 | **Version monitoring** | Dashboard polls `/health` and `index.html` meta tag for version mismatch; triggers update banner via `VersionContext` |
+| **Fail-open runbook resolution** | Runbook fetch failure → fall back to default runbook content from config; investigation continues. Logged as warning, not fatal |
+| **URL validation at two levels** | Runbook URLs validated at API handler (400 rejection) AND inside `Service.fetchWithCache()` (defense in depth). Both use same `ValidateRunbookURL()` function |
+| **Lazy runbook cache eviction** | `runbook.Cache` evicts expired entries on `Get()` — no background goroutine. Simple, no cleanup coordination needed |
+| **Blob→raw URL conversion** | `ConvertToRawURL()` transparently converts `github.com/blob/` URLs to `raw.githubusercontent.com` for direct content download. Non-GitHub URLs pass through unchanged |
 
 ---
 
@@ -1341,10 +1458,6 @@ Shared utility for canonical ↔ API name conversion:
 ---
 
 ## Deferred Items Tracker
-
-### Deferred to Phase 8+
-
-- **Runbook fetching**: `RunbookContent` uses builtin default. Phase 8.1 adds GitHub integration.
 
 ### Deferred (No Phase Specified)
 

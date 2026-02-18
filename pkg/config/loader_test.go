@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -566,4 +567,135 @@ llm_providers: {}
 	require.NoError(t, err)
 
 	return dir
+}
+
+func TestResolveGitHubConfig(t *testing.T) {
+	t.Run("nil system config uses defaults", func(t *testing.T) {
+		cfg := resolveGitHubConfig(nil)
+		assert.Equal(t, "GITHUB_TOKEN", cfg.TokenEnv)
+	})
+
+	t.Run("nil github section uses defaults", func(t *testing.T) {
+		sys := &SystemYAMLConfig{}
+		cfg := resolveGitHubConfig(sys)
+		assert.Equal(t, "GITHUB_TOKEN", cfg.TokenEnv)
+	})
+
+	t.Run("custom token_env is used", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			GitHub: &GitHubYAMLConfig{TokenEnv: "MY_GH_TOKEN"},
+		}
+		cfg := resolveGitHubConfig(sys)
+		assert.Equal(t, "MY_GH_TOKEN", cfg.TokenEnv)
+	})
+
+	t.Run("empty token_env falls back to default", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			GitHub: &GitHubYAMLConfig{TokenEnv: ""},
+		}
+		cfg := resolveGitHubConfig(sys)
+		assert.Equal(t, "GITHUB_TOKEN", cfg.TokenEnv)
+	})
+}
+
+func TestResolveRunbooksConfig(t *testing.T) {
+	t.Run("nil system config uses defaults", func(t *testing.T) {
+		cfg := resolveRunbooksConfig(nil)
+		assert.Equal(t, "", cfg.RepoURL)
+		assert.Equal(t, 1*time.Minute, cfg.CacheTTL)
+		assert.Equal(t, []string{"github.com", "raw.githubusercontent.com"}, cfg.AllowedDomains)
+	})
+
+	t.Run("nil runbooks section uses defaults", func(t *testing.T) {
+		sys := &SystemYAMLConfig{}
+		cfg := resolveRunbooksConfig(sys)
+		assert.Equal(t, "", cfg.RepoURL)
+		assert.Equal(t, 1*time.Minute, cfg.CacheTTL)
+	})
+
+	t.Run("full config overrides defaults", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			Runbooks: &RunbooksYAMLConfig{
+				RepoURL:        "https://github.com/org/repo/tree/main/runbooks",
+				CacheTTL:       "5m",
+				AllowedDomains: []string{"github.com"},
+			},
+		}
+		cfg := resolveRunbooksConfig(sys)
+		assert.Equal(t, "https://github.com/org/repo/tree/main/runbooks", cfg.RepoURL)
+		assert.Equal(t, 5*time.Minute, cfg.CacheTTL)
+		assert.Equal(t, []string{"github.com"}, cfg.AllowedDomains)
+	})
+
+	t.Run("partial config keeps defaults for unset fields", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			Runbooks: &RunbooksYAMLConfig{
+				RepoURL: "https://github.com/org/repo/tree/main/runbooks",
+			},
+		}
+		cfg := resolveRunbooksConfig(sys)
+		assert.Equal(t, "https://github.com/org/repo/tree/main/runbooks", cfg.RepoURL)
+		assert.Equal(t, 1*time.Minute, cfg.CacheTTL)
+		assert.Equal(t, []string{"github.com", "raw.githubusercontent.com"}, cfg.AllowedDomains)
+	})
+
+	t.Run("invalid cache_ttl keeps default", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			Runbooks: &RunbooksYAMLConfig{
+				CacheTTL: "not-a-duration",
+			},
+		}
+		cfg := resolveRunbooksConfig(sys)
+		assert.Equal(t, 1*time.Minute, cfg.CacheTTL)
+	})
+}
+
+func TestSystemConfigYAMLLoading(t *testing.T) {
+	t.Run("system section parsed from YAML", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  github:
+    token_env: "CUSTOM_TOKEN"
+  runbooks:
+    repo_url: "https://github.com/org/repo/tree/main/runbooks"
+    cache_ttl: "2m"
+    allowed_domains:
+      - "github.com"
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.GitHub)
+		assert.Equal(t, "CUSTOM_TOKEN", cfg.GitHub.TokenEnv)
+
+		require.NotNil(t, cfg.Runbooks)
+		assert.Equal(t, "https://github.com/org/repo/tree/main/runbooks", cfg.Runbooks.RepoURL)
+		assert.Equal(t, 2*time.Minute, cfg.Runbooks.CacheTTL)
+		assert.Equal(t, []string{"github.com"}, cfg.Runbooks.AllowedDomains)
+	})
+
+	t.Run("no system section uses defaults", func(t *testing.T) {
+		dir := setupTestConfigDir(t)
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.GitHub)
+		assert.Equal(t, "GITHUB_TOKEN", cfg.GitHub.TokenEnv)
+
+		require.NotNil(t, cfg.Runbooks)
+		assert.Equal(t, "", cfg.Runbooks.RepoURL)
+		assert.Equal(t, 1*time.Minute, cfg.Runbooks.CacheTTL)
+	})
 }

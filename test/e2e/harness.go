@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/codeready-toolchain/tarsy/test/util"
@@ -193,10 +194,13 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	sessionService := services.NewSessionService(entClient, tc.cfg.ChainRegistry, tc.cfg.MCPServerRegistry)
 	chatService := services.NewChatService(entClient)
 
-	// 7. Session executor.
-	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory)
+	// 7. RunbookService (nil config/token → uses defaults).
+	runbookService := runbook.NewService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
 
-	// 8. Worker pool.
+	// 8. Session executor.
+	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService)
+
+	// 9. Worker pool.
 	podID := tc.podID
 	if podID == "" {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
@@ -204,16 +208,17 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher)
 	require.NoError(t, workerPool.Start(ctx))
 
-	// 9. Chat executor.
+	// 10. Chat executor.
 	chatExecutor := queue.NewChatMessageExecutor(
 		tc.cfg, entClient, tc.llmClient, mcpFactory, eventPublisher,
 		queue.ChatMessageExecutorConfig{
 			SessionTimeout:    tc.chatTimeout,
 			HeartbeatInterval: tc.cfg.Queue.HeartbeatInterval,
 		},
+		runbookService,
 	)
 
-	// 10. HTTP server on random port.
+	// 11. HTTP server on random port.
 	server := api.NewServer(tc.cfg, dbClient, alertService, sessionService, workerPool, connManager)
 	server.SetChatService(chatService)
 	server.SetChatExecutor(chatExecutor)

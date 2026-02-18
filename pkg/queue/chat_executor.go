@@ -22,6 +22,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
@@ -59,6 +60,7 @@ type ChatMessageExecutor struct {
 	eventPublisher agent.EventPublisher
 	promptBuilder  *prompt.PromptBuilder
 	execConfig     ChatMessageExecutorConfig
+	runbookService *runbook.Service
 
 	// Services
 	timelineService    *services.TimelineService
@@ -75,6 +77,7 @@ type ChatMessageExecutor struct {
 }
 
 // NewChatMessageExecutor creates a new ChatMessageExecutor.
+// runbookService may be nil (uses config default runbook content).
 func NewChatMessageExecutor(
 	cfg *config.Config,
 	dbClient *ent.Client,
@@ -82,6 +85,7 @@ func NewChatMessageExecutor(
 	mcpFactory *mcp.ClientFactory,
 	eventPublisher agent.EventPublisher,
 	execConfig ChatMessageExecutorConfig,
+	runbookService *runbook.Service,
 ) *ChatMessageExecutor {
 	controllerFactory := controller.NewFactory()
 	msgService := services.NewMessageService(dbClient)
@@ -94,6 +98,7 @@ func NewChatMessageExecutor(
 		eventPublisher:     eventPublisher,
 		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 		execConfig:         execConfig,
+		runbookService:     runbookService,
 		timelineService:    services.NewTimelineService(dbClient),
 		stageService:       services.NewStageService(dbClient),
 		chatService:        services.NewChatService(dbClient),
@@ -101,6 +106,33 @@ func NewChatMessageExecutor(
 		interactionService: services.NewInteractionService(dbClient, msgService),
 		activeExecs:        make(map[string]context.CancelFunc),
 	}
+}
+
+// resolveRunbook resolves runbook content for a session using the RunbookService.
+// Falls back to config defaults on error or when the service is nil.
+func (e *ChatMessageExecutor) resolveRunbook(ctx context.Context, session *ent.AlertSession) string {
+	configDefault := ""
+	if e.cfg.Defaults != nil {
+		configDefault = e.cfg.Defaults.Runbook
+	}
+
+	if e.runbookService == nil {
+		return configDefault
+	}
+
+	alertURL := ""
+	if session.RunbookURL != nil {
+		alertURL = *session.RunbookURL
+	}
+
+	content, err := e.runbookService.Resolve(ctx, alertURL)
+	if err != nil {
+		slog.Warn("Chat runbook resolution failed, using default",
+			"session_id", session.ID,
+			"error", err)
+		return configDefault
+	}
+	return content
 }
 
 // ────────────────────────────────────────────────────────────
@@ -305,7 +337,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		AgentIndex:     1,
 		AlertData:      input.Session.AlertData,
 		AlertType:      input.Session.AlertType,
-		RunbookContent: config.GetBuiltinConfig().DefaultRunbook,
+		RunbookContent: e.resolveRunbook(execCtx, input.Session),
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		ToolExecutor:   toolExecutor,

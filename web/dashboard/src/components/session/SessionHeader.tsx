@@ -125,6 +125,7 @@ export default function SessionHeader({
         alertType: session.alert_type,
         alertData: session.alert_data,
         sessionId: session.id,
+        runbook: session.runbook_url || null,
         mcpSelection: session.mcp_selection || null,
       },
     });
