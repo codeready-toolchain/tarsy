@@ -283,7 +283,8 @@ spec:
       labels:
         component: tarsy
     spec:
-      terminationGracePeriodSeconds: 60
+      # alert_processing_timeout (900s) + 60s buffer (15s preStop + 45s cleanup)
+      terminationGracePeriodSeconds: 960
       serviceAccountName: tarsy
       containers:
 
@@ -555,7 +556,7 @@ spec:
 ```
 
 **Design notes:**
-- `terminationGracePeriodSeconds: 60` — Go backend needs time for graceful shutdown (in-flight sessions, WebSocket connections)
+- `terminationGracePeriodSeconds: 960` — must exceed the longest possible in-flight operation. Formula: `alert_processing_timeout` (default 900s) + 60s buffer (15s preStop delay + 45s for cleanup/drain). If the alert processing timeout setting changes, this value must be updated accordingly
 - `serviceAccountName: tarsy` — required for kube-rbac-proxy's TokenReview/SubjectAccessReview API calls
 - `startupProbe` on tarsy and llm-service — separate from liveness to allow slow startup without premature restarts. Tarsy: 5s + 12×5s = 65s window. LLM service: 5s + 24×5s = 125s window (model loading can be slow)
 - `emptyDir` for data volumes — writable scratch space for OpenShift's arbitrary UID (HOME=/app/data)
@@ -1047,7 +1048,7 @@ name: Build & Push TARSy Image
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'cmd/**'
       - 'pkg/**'
@@ -1107,7 +1108,7 @@ name: Build & Push LLM Service Image
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'llm-service/**'
       - '.github/workflows/build-and-push-llm-service.yml'
