@@ -67,12 +67,13 @@ func (m *mockSlackServer) handlePostMessage(w http.ResponseWriter, r *http.Reque
 
 	m.mu.Lock()
 	m.calls = append(m.calls, call)
+	n := len(m.calls)
 	m.mu.Unlock()
 
 	resp := map[string]interface{}{
 		"ok":      true,
 		"channel": call.Channel,
-		"ts":      fmt.Sprintf("1234567890.%06d", len(m.calls)),
+		"ts":      fmt.Sprintf("1234567890.%06d", n),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
