@@ -56,6 +56,26 @@ func TestRunbookService_Resolve(t *testing.T) {
 		assert.Contains(t, err.Error(), "not in allowed list")
 	})
 
+	t.Run("github blob URL works when only github.com is in allowed domains", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("# GitHub Runbook"))
+		}))
+		defer server.Close()
+
+		cfg := &config.RunbookConfig{
+			CacheTTL:       1 * time.Minute,
+			AllowedDomains: []string{"github.com"},
+		}
+		svc := newTestServiceWithConfig(t, server, cfg, "default")
+
+		// A github.com blob URL is normalized to raw.githubusercontent.com
+		// internally. Validation must check the original URL so this works
+		// even when raw.githubusercontent.com is not in allowed_domains.
+		content, err := svc.Resolve(context.Background(), "https://github.com/org/repo/blob/main/runbook.md")
+		require.NoError(t, err)
+		assert.Equal(t, "# GitHub Runbook", content)
+	})
+
 	t.Run("caches fetched content", func(t *testing.T) {
 		callCount := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
