@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 7 (Dashboard) + Phase 8.1 (Runbook System) + Phase 8.2 (Multi-LLM Support)
+**Last updated after**: Phase 8.3 (Slack Notifications)
 
 ---
 
@@ -52,6 +52,7 @@ pkg/
 ├── models/               # MCP selection, trace API response types, shared types
 ├── queue/                # Worker, WorkerPool, orphan detection, session executor, chat executor
 ├── runbook/              # Service, GitHubClient, Cache, URL validation/conversion
+├── slack/                # SlackService, SlackClient, Block Kit message builders, fingerprint threading
 └── services/             # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
 ├── schema/               # Ent schema definitions (10 entities)
@@ -791,6 +792,116 @@ Config types in `pkg/config/system.go`: `GitHubConfig` (`TokenEnv`), `RunbookCon
 
 ---
 
+## Slack Notifications (`pkg/slack/`)
+
+### Overview
+
+Delivers Slack notifications at two lifecycle points: when a session starts (only for Slack-originated alerts with a fingerprint) and when it reaches a terminal status (completed, failed, timed_out, cancelled). Notifications use Block Kit instead of legacy attachments. Threading is preserved: when a `slack_message_fingerprint` is provided with an alert, all notifications reply in the original alert's Slack thread.
+
+### Package Layout
+
+```
+pkg/slack/
+├── service.go      # SlackService — orchestrator, nil-safe, fail-open
+├── client.go       # SlackClient — thin wrapper around slack-go SDK
+├── message.go      # Block Kit message builders (BuildStartedMessage, BuildTerminalMessage)
+└── config.go       # (Config types live in pkg/config/system.go)
+```
+
+### SlackService (`pkg/slack/service.go`)
+
+```go
+type Service struct {
+    client       *Client
+    cfg          *Config
+    dashboardURL string
+    logger       *slog.Logger
+}
+
+// NewService returns nil if Slack is not configured (enabled=false or missing token/channel).
+func NewService(cfg *Config) *Service
+
+// NotifySessionStarted sends a "processing started" notification.
+// Only sends if fingerprint is present (Slack-originated alerts).
+// Returns resolved threadTS for reuse by terminal notification. Fail-open.
+func (s *Service) NotifySessionStarted(ctx context.Context, input SessionStartedInput) string
+
+// NotifySessionCompleted sends a terminal status notification. Fail-open.
+func (s *Service) NotifySessionCompleted(ctx context.Context, input SessionCompletedInput)
+```
+
+Nil-receiver safety: all methods are no-ops when `s == nil` — same pattern as `MaskingService`.
+
+### Input Types
+
+```go
+type SessionStartedInput struct {
+    SessionID               string
+    AlertType               string
+    SlackMessageFingerprint string
+}
+
+type SessionCompletedInput struct {
+    SessionID               string
+    AlertType               string
+    Status                  string  // completed, failed, timed_out, cancelled
+    ExecutiveSummary        string  // preferred content for completed sessions
+    FinalAnalysis           string  // fallback if executive summary empty
+    ErrorMessage            string  // for failed/timed_out sessions
+    SlackMessageFingerprint string
+    ThreadTS                string  // cached from start notification (avoids duplicate lookup)
+}
+```
+
+### Integration Point (`pkg/queue/worker.go`)
+
+Notifications trigger from `Worker.pollAndProcess()` — the single chokepoint where all session outcomes converge:
+
+- **Start**: After claiming session and publishing `in_progress` status, `notifySlackStart()` is called only when fingerprint is present. Returns `slackThreadTS` cached for reuse.
+- **Terminal**: After publishing final session status (using `context.Background()`), `notifySlackTerminal()` passes the cached `slackThreadTS` to avoid a redundant `conversations.history` lookup.
+
+### Message Formatting (`pkg/slack/message.go`)
+
+Block Kit templates; status conveyed via emoji:
+
+| Status | Emoji | Label |
+|--------|-------|-------|
+| `completed` | `:white_check_mark:` | Analysis Complete |
+| `failed` | `:x:` | Analysis Failed |
+| `timed_out` | `:hourglass:` | Analysis Timed Out |
+| `cancelled` | `:no_entry_sign:` | Analysis Cancelled |
+
+Content selection for completed sessions: `ExecutiveSummary` (preferred) → `FinalAnalysis` (fallback) → status + dashboard link only.
+
+Text blocks truncated at 2900 characters (`truncateForSlack()`). Every notification includes a dashboard link to the session detail page.
+
+### Fingerprint-Based Threading (`pkg/slack/client.go`)
+
+`FindMessageByFingerprint()` searches the last 24h of channel history (up to 50 messages) for a message containing the fingerprint. Case-insensitive, whitespace-normalized comparison against message text and attachment fields. Returns the message `ts` for use as `thread_ts` in `PostMessage()`. Not found → posts to channel directly (no error).
+
+### Configuration
+
+```yaml
+system:
+  dashboard_url: "https://tarsy.example.com"   # Default: http://localhost:8080
+  slack:
+    enabled: true
+    token_env: "SLACK_BOT_TOKEN"               # Env var name (default: SLACK_BOT_TOKEN)
+    channel: "C12345678"                        # Channel ID
+```
+
+Validation (startup, eager): `channel` required when enabled; `token_env` env var must be set. Fails hard — prevents running without a working Slack setup when enabled.
+
+### Design Decisions
+
+- **Nil-safe service**: `NewService` returns nil when unconfigured; callers need no nil checks (methods are nil-receiver safe).
+- **Fail-open**: Slack API failures are logged but never block session processing or propagate errors to callers.
+- **ThreadTS caching**: Start notification resolves and caches `thread_ts`; terminal notification reuses it — avoids two `conversations.history` calls per session.
+- **No alert schema changes**: `slack_message_fingerprint` field already existed on `AlertSession` from old TARSy.
+- **`dashboard_url` on `Config`**: Shared top-level field (not nested under Slack) for use across Slack, CORS, future OAuth redirects.
+
+---
+
 ## Tool Result Summarization (`pkg/agent/controller/summarize.go`)
 
 ### Architecture Decision: Controller-Level Summarization
@@ -1087,6 +1198,8 @@ Non-registry configuration resolved at startup from the `system` YAML section:
 |--------|--------|---------|
 | `GitHubConfig` | `TokenEnv` (default: `"GITHUB_TOKEN"`) | GitHub API authentication for runbook fetching |
 | `RunbookConfig` | `RepoURL`, `CacheTTL` (default: 1m), `AllowedDomains` (default: `[github.com, raw.githubusercontent.com]`) | Runbook listing, caching, and URL validation |
+| `SlackConfig` | `Enabled` (default: false), `TokenEnv` (default: `"SLACK_BOT_TOKEN"`), `Channel` (channel ID) | Slack notification delivery |
+| `DashboardURL` | string (default: `"http://localhost:8080"`) | Base URL for dashboard links in notifications; lives on `Config` directly (shared across Slack, CORS, future OAuth) |
 
 Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, credentials_env, project, location, base_url, backend, native_tools, max_tool_result_tokens). Python does not read YAML files; it reads env vars for API keys/credentials based on the `*_env` field values received via gRPC.
 
@@ -1210,7 +1323,7 @@ Full MCP interaction: tool arguments, tool result, available tools, timing, erro
 
 In-process e2e tests boot a full TARSy instance per test (`TestApp`) with real PostgreSQL (testcontainers, per-test schema), real event streaming, real WebSocket — only LLM (`ScriptedLLMClient` with dual sequential/agent-routed dispatch) and MCP servers (in-memory SDK via `mcpsdk.InMemoryTransport`) are mocked. The real `mcp.Client` → `mcp.ToolExecutor` pipeline is exercised. MCP test support via `pkg/mcp/testing.go` (`InjectSession`, `NewTestClientFactory`).
 
-8 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN), Runbook (URL fetch via mock server, invalid domain rejection, listing endpoint, default fallback).
+9 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN), Runbook (URL fetch via mock server, invalid domain rejection, listing endpoint, default fallback), Slack (mock Slack HTTP server captures `chat.postMessage` calls; verifies start + terminal notifications, fingerprint-based threading, disabled notifications, fail-open on API errors).
 
 Makefile: `test-unit` (pkg only), `test-e2e` (e2e only), `test-go` (all Go + coverage), `test` (Go + Python).
 
@@ -1427,6 +1540,11 @@ Shared utility for canonical ↔ API name conversion:
 | **URL validation at two levels** | Runbook URLs validated at API handler (400 rejection) AND inside `Service.fetchWithCache()` (defense in depth). Both use same `ValidateRunbookURL()` function |
 | **Lazy runbook cache eviction** | `runbook.Cache` evicts expired entries on `Get()` — no background goroutine. Simple, no cleanup coordination needed |
 | **Blob→raw URL conversion** | `ConvertToRawURL()` transparently converts `github.com/blob/` URLs to `raw.githubusercontent.com` for direct content download. Non-GitHub URLs pass through unchanged |
+| **Nil-safe Slack service** | `slack.NewService` returns nil when Slack is unconfigured; all methods are nil-receiver safe — callers never need nil checks. Same pattern as `MaskingService` |
+| **Fail-open Slack notifications** | Slack API errors are logged but never block session processing or returned to callers. Slack is best-effort enrichment |
+| **ThreadTS caching across lifecycle** | Start notification resolves fingerprint → `thread_ts` and returns it; worker caches it in a local variable and passes it to the terminal notification, avoiding a redundant `conversations.history` call |
+| **Fingerprint-based threading** | `FindMessageByFingerprint()` searches last 24h channel history for the fingerprint, case-insensitive + whitespace-normalized. Not found → posts to channel directly. Fingerprint field already existed on `AlertSession` — no schema migration needed |
+| **`dashboard_url` as shared config** | `Config.DashboardURL` lives at the top level (not under Slack) — used by Slack notifications, and available for CORS and future OAuth redirects without refactoring |
 
 ---
 
@@ -1448,6 +1566,7 @@ Shared utility for canonical ↔ API name conversion:
 | Testing (Go) | testcontainers-go for integration tests |
 | Testing (dashboard) | Vitest + @testing-library/react |
 | MCP client | MCP Go SDK v1.3.0 (`github.com/modelcontextprotocol/go-sdk`) |
+| Slack client | slack-go (`github.com/slack-go/slack`) — Block Kit, `chat.postMessage`, `conversations.history` |
 | Python LLM | google-genai (Gemini native), LangChain (OpenAI, Anthropic, xAI, Google, VertexAI) |
 | Dashboard framework | React 19 + Vite 7 |
 | Dashboard UI | MUI 7 (Material UI) + Emotion |

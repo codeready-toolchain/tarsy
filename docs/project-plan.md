@@ -42,23 +42,15 @@ See `docs/architecture-context.md` for comprehensive architectural details, inte
 
 Full design docs for completed phases are in `docs/archive/`.
 
----
-
-### Phase 8: Integrations
-
 **Runbook System (Phase 8.1)** -- ✅ DONE. GitHub integration for fetching runbook content from repositories. `runbook.Service` (`pkg/runbook/`) orchestrates resolution, caching, and listing. Per-alert runbook URL (submitted via API `runbook` field, stored on `AlertSession.runbook_url`) fetched via `GitHubClient` with blob→raw URL conversion and bearer token auth. In-memory TTL cache (`runbook.Cache`). URL validation (scheme + domain allowlist) at both API handler and service level. Resolution hierarchy: per-alert URL → default content (from config). Fail-open in executors: fetch failure falls back to default runbook. Config: `system.github.token_env` (env var name for GitHub token), `system.runbooks.repo_url` (GitHub tree URL for listing), `system.runbooks.cache_ttl`, `system.runbooks.allowed_domains`. `GET /api/v1/runbooks` endpoint lists available `.md` files from configured repo (recursive, via GitHub Contents API). Dashboard: Autocomplete dropdown for runbook URLs in ManualAlertForm. System warning when repo URL configured without GitHub token. E2E tests: runbook URL flow, invalid domain rejection, listing endpoint, default fallback.
 
 **Multi-LLM Support (Phase 8.2)** -- ✅ DONE. Replaced LangChain stub with real `LangChainProvider` supporting OpenAI, Anthropic, xAI, Google (via LangChain), and VertexAI. Completely removed ReAct iteration strategy and `ReActController`; renamed `NativeThinkingController` → `FunctionCallingController` (shared by `native-thinking` and new `langchain` strategies). Both use native/structured tool calling. Deleted all text-based ReAct parsing (`react_parser.go`, `tools.go`), ReAct streaming code, ReAct prompt templates. Added shared `tool_names.py` utility for canonical↔API name encoding. LangChain provider features: streaming via `astream()`, `content_blocks` for thinking/reasoning, `bind_tools()` for function calling, model caching, retry with exponential backoff. Dashboard cleanup: removed dead `isReActResponse()`, `NATIVE_THINKING` constant. Four strategies remain: `native-thinking`, `langchain`, `synthesis`, `synthesis-native-thinking`.
 
-**Slack Notifications (Phase 8.3)**
-- [ ] Slack client
-- [ ] Notification templates
-- [ ] Message threading/fingerprinting
-- [ ] Configurable notifications
+**Slack Notifications (Phase 8.3)** -- ✅ DONE. Session lifecycle notifications via Slack using Block Kit. `slack.Service` (`pkg/slack/`) orchestrates delivery at two lifecycle points: session start (only for Slack-originated alerts with a `slack_message_fingerprint`) and terminal status (completed, failed, timed_out, cancelled). `slack.Client` wraps the `slack-go` SDK for `chat.postMessage` and `conversations.history`. Message templates in `message.go` use Block Kit with emoji status indicators and dashboard links; content truncated at 2900 chars. Fingerprint-based threading: `FindMessageByFingerprint()` searches last 24h channel history (case-insensitive, whitespace-normalized) and returns `thread_ts` for reply threading; `thread_ts` cached across worker lifecycle to avoid redundant lookups. `slack.NewService` returns nil when unconfigured (fail-closed creation); nil-receiver safe methods make caller code nil-check-free (same pattern as `MaskingService`). Fail-open delivery: Slack API errors are logged, never propagate. Config: `system.dashboard_url` (shared, default `http://localhost:8080`) + `system.slack.{enabled, token_env, channel}` with eager startup validation. E2E test: mock Slack HTTP server captures `chat.postMessage` calls; verifies start + terminal notifications, threading, disabled notifications, fail-open on API errors.
 
 ---
 
-### Phase 9: Security
+### Phase 9: Security and Containerization
 
 **Authentication & Authorization**
 - [ ] OAuth2-proxy integration
@@ -67,9 +59,24 @@ Full design docs for completed phases are in `docs/archive/`.
 - [ ] Session/user tracking
 - [ ] WebSocket origin validation (replace InsecureSkipVerify)
 
+**Containerization**
+- [ ] Multi-stage Podman builds
+- [ ] Container orchestration (podman-compose)
+- [ ] Build & push images
+- [ ] Service health checks
+
 ---
 
-### Phase 10: Monitoring & Operations
+### Phase 10: Kubernetes Deployment
+
+**Kubernetes/OpenShift (Phase 11.2)**
+- [ ] Kustomize manifests
+- [ ] Service deployments
+- [ ] ConfigMaps & secrets
+- [ ] Routes/ingress
+- [ ] ImageStreams
+
+### Phase 11: Monitoring & Operations
 
 - [ ] Health check endpoint enhancements
 - [ ] Structured logging
@@ -78,22 +85,6 @@ Full design docs for completed phases are in `docs/archive/`.
 - [ ] Cascade deletes
 
 ---
-
-### Phase 11: Deployment, DevOps & CI/CD
-
-**Containerization (Phase 11.1)**
-- [ ] Multi-stage Docker builds
-- [ ] Container orchestration (podman-compose)
-- [ ] Build & push images
-- [ ] Service health checks
-- [ ] Volume management
-
-**Kubernetes/OpenShift (Phase 11.2)**
-- [ ] Kustomize manifests
-- [ ] Service deployments
-- [ ] ConfigMaps & secrets
-- [ ] Routes/ingress
-- [ ] ImageStreams
 
 **Note on testing**: Each phase includes its own test suite (unit + integration). There is no separate testing phase.
 
@@ -108,4 +99,3 @@ Full design docs for completed phases are in `docs/archive/`.
 | `docs/phase{N}-*-design.md` | Current/upcoming phase detailed design |
 | `docs/phase{N}-*-questions.md` | Current/upcoming phase open questions |
 | `docs/archive/` | Completed phase design & question docs (reference only) |
-| `docs/ai-prompt-templates.md` | Prompt templates for the AI-assisted development workflow |
