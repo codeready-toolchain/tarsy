@@ -43,7 +43,7 @@ Old TARSy had custom JWT infrastructure (RS256 keys, JWKS endpoint, token genera
 
 **DECIDED: A — Skip auth for /health, but strip MCP info from the response.**
 
-Health endpoint remains unauthenticated (`skip_auth_routes = ["^/health$"]`) — standard practice for container health checks and K8s probes. However, MCP server names, MCP health details, and system warnings are removed from the `/health` response since server names can be sensitive (warning messages may also reference MCP server names). The `/health` response will only include: `status` (healthy/degraded/unhealthy), `version`, `database`, and `worker_pool`. MCP-specific health data stays behind the authenticated `GET /api/v1/system/mcp-servers` endpoint, which the dashboard already uses.
+Health endpoint remains unauthenticated (`skip_auth_routes = ["GET=^/health$"]`) — standard practice for container health checks and K8s probes. The response is stripped down to `status`, `version`, and a `checks` map (database, worker_pool only) with human-friendly messages. External dependencies (MCP servers, LLM service) are excluded — they have their own health checks and restart policies; tarsy shouldn't be restarted because an MCP server is down. Full details stay behind authenticated endpoints (`/api/v1/system/mcp-servers`, `/api/v1/system/warnings`).
 
 ---
 
@@ -57,7 +57,7 @@ With separate `tarsy` and `llm-service` containers, each has exactly one process
 
 ## Q7: OAuth2-Proxy `api_routes` Configuration
 
-**DECIDED: A — `api_routes = ["^/api/", "^/ws"]`.**
+**DECIDED: A — `api_routes = ["^/api/"]`.**
 
 When a user's OAuth cookie expires while the dashboard SPA is still open in the browser, subsequent fetch/XHR calls need a clean 401 (not a 302 redirect to GitHub that fetch follows silently, returning unparseable HTML). With `api_routes`, the dashboard's `AuthService` catches the 401 and automatically redirects the user to re-authenticate — no confusing errors or manual refresh needed. Page-level navigation (initial load, static assets) still gets the standard redirect-to-GitHub flow.
 

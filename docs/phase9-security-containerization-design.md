@@ -34,25 +34,25 @@ The key architectural simplification over old TARSy: since new TARSy's Go backen
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    User (Browser)                         │
+│                    User (Browser)                        │
 └──────────────────────┬───────────────────────────────────┘
                        │ HTTP :8080
                        ▼
 ┌──────────────────────────────────────────────────────────┐
-│              oauth2-proxy (:4180 internal)                │
+│              oauth2-proxy (:4180 internal)               │
 │                                                          │
 │  - GitHub OAuth provider                                 │
 │  - Passes X-Forwarded-User/Email/Groups/Access-Token     │
 │  - Skips auth for /health                                │
-│  - Returns 401 (not redirect) for /api/* and /ws*        │
+│  - Returns 401 (not redirect) for /api/* (includes /ws)  │
 │  - WebSocket passthrough (Upgrade + Connection headers)  │
 │                                                          │
-│  Upstream: http://tarsy:8080                              │
+│  Upstream: http://tarsy:8080                             │
 └──────────────────────┬───────────────────────────────────┘
                        │
                        ▼
 ┌──────────────────────────────────────────────────────────┐
-│                   tarsy (:8080)                           │
+│                   tarsy (:8080)                          │
 │                                                          │
 │  Go Backend (single process)                             │
 │  - Dashboard static serving (/assets/*, SPA fallback)    │
@@ -67,16 +67,16 @@ The key architectural simplification over old TARSy: since new TARSy's Go backen
           │ gRPC :50051 (container network)
           ▼
 ┌──────────────────────────────────────────────────────────┐
-│               llm-service (:50051)                        │
+│               llm-service (:50051)                       │
 │                                                          │
 │  Python gRPC Server (single process)                     │
 │  - Stateless LLM proxy                                   │
-│  - GoogleNativeProvider, LangChainProvider                │
+│  - GoogleNativeProvider, LangChainProvider               │
 │  - Health: gRPC reflection or TCP port check             │
 └──────────────────────────────────────────────────────────┘
           │
 ┌─────────▼────────────────────────────────────────────────┐
-│                   postgres (:5432)                        │
+│                   postgres (:5432)                       │
 │  - PostgreSQL 17 Alpine                                  │
 │  - Persistent volume                                     │
 │  - Health: pg_isready                                    │
@@ -150,15 +150,15 @@ provider = "github"
 client_id = "{{OAUTH2_CLIENT_ID}}"
 client_secret = "{{OAUTH2_CLIENT_SECRET}}"
 
-# Cookie Configuration
-cookie_secret = "{{OAUTH2_COOKIE_SECRET}}"
-cookie_secure = {{COOKIE_SECURE}}
-cookie_httponly = true
-cookie_samesite = "lax"
-cookie_name = "_tarsy_oauth2"
+# GitHub Organization/Team Restriction
+github_org = "{{GITHUB_ORG}}"
+github_team = "{{GITHUB_TEAM}}"
 
-# Session Configuration
-session_cookie_minimal = true
+# Scopes — read:org needed for GitHub org/team membership checks
+scope = "user:email read:org"
+
+# Email Domain Restriction — "*" allows any email; restrict if org/team is not set
+email_domains = ["*"]
 
 # Network
 http_address = "0.0.0.0:4180"
@@ -169,47 +169,69 @@ upstreams = ["http://tarsy:8080/"]
 # Redirect URL (replaced by Makefile from env)
 redirect_url = "{{OAUTH2_PROXY_REDIRECT_URL}}"
 
-# Email Domain Restriction
-# email_domains = ["*"]
-
-# GitHub Organization/Team Restriction (optional)
-# github_org = "{{GITHUB_ORG}}"
-# github_team = "{{GITHUB_TEAM}}"
-
-# Scopes
-scope = "user:email read:org"
+# Restrict post-auth redirects to trusted domains
+whitelist_domains = ["{{ROUTE_HOST}}"]
 
 # Headers — pass user identity to upstream
-set_xauthrequest = true
 pass_user_headers = true
-pass_access_token = true
-pass_authorization_header = true
+set_xauthrequest = true
+set_authorization_header = true
+prefer_email_to_user = false
+pass_host_header = true
 
 # Prefix
 proxy_prefix = "/oauth2"
+
+# Session Configuration — full session in cookie to reduce GitHub API calls (matches prod)
+session_cookie_minimal = false
+
+# Cookie Configuration
+cookie_name = "_tarsy_oauth2"
+cookie_secret = "{{OAUTH2_COOKIE_SECRET}}"
+cookie_domains = ["{{ROUTE_HOST}}"]
+cookie_secure = {{COOKIE_SECURE}}
+cookie_httponly = true
+cookie_samesite = "lax"
+cookie_expire = "168h"
+cookie_refresh = "0"
+
+# Skip auth for health endpoint (GET only)
+skip_auth_routes = [
+    "GET=^/health$"
+]
+
+# API routes return 401 instead of redirect (for XHR/fetch clients)
+# WebSocket is at /api/v1/ws, so "^/api/" covers it
+api_routes = [
+    "^/api/"
+]
+
+# Custom sign-in page (ported from old TARSy)
+custom_templates_dir = "/templates"
+custom_sign_in_logo = "/templates/tarsy-logo.png"
 
 # Logging
 request_logging = true
 auth_logging = true
 standard_logging = true
-
-# Skip auth for health endpoint
-skip_auth_routes = [
-    "^/health$"
-]
-
-# API routes return 401 instead of redirect (for XHR/fetch clients)
-api_routes = [
-    "^/api/",
-    "^/ws"
-]
 ```
 
 **Key differences from old TARSy:**
 
 1. **Single upstream** — `http://tarsy:8080/` instead of `http://backend:8000/` — oauth2-proxy proxies everything (dashboard + API) to one service
 2. **No JWT skip** — removed `skip_jwt_bearer_tokens`, `oidc_jwks_url`, `extra_jwt_issuers` — JWT-based API auth will be handled by rbac-kube-proxy in Phase 10, not by oauth2-proxy
-3. **`api_routes` added** — ensures `/api/*` and `/ws*` get 401 responses instead of HTML redirects, enabling proper frontend error handling
+3. **`OPTIONS=.*` removed from `skip_auth_routes`** — replaced by `--skip-auth-preflight=true` command-line flag (cleaner separation)
+4. **Cookie name** — `_tarsy_oauth2` instead of `_oauth2_proxy` (more descriptive, avoids collisions if multiple oauth2-proxy instances share a domain)
+
+**Preserved from old TARSy:**
+- `prefer_email_to_user = false` — GitHub username (not email) in X-Forwarded-User
+- `pass_host_header = true` — original Host header forwarded to upstream
+- `whitelist_domains` — redirect domain restriction
+- `cookie_domains`, `cookie_expire = "168h"`, `cookie_refresh = "0"` — same cookie policy
+- `custom_templates_dir` + `custom_sign_in_logo` — branded sign-in page
+- `email_domains = ["*"]` — allow any email (restrict via `github_org`/`github_team` if needed)
+- `set_authorization_header = true` — sets Authorization header from OAuth token
+- `session_cookie_minimal = false` — full session in cookie, fewer GitHub API calls (matches prod)
 
 ### Config Generation (Makefile)
 
@@ -218,7 +240,7 @@ Add a `deploy/config/oauth2-proxy.cfg` generation target that substitutes placeh
 ```makefile
 # deploy/config/oauth.env — sourced for variable substitution
 # Contents: OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET, OAUTH2_COOKIE_SECRET,
-#           OAUTH2_PROXY_REDIRECT_URL, COOKIE_SECURE, GITHUB_ORG, GITHUB_TEAM
+#           OAUTH2_PROXY_REDIRECT_URL, ROUTE_HOST, COOKIE_SECURE, GITHUB_ORG, GITHUB_TEAM
 
 .PHONY: oauth2-config
 oauth2-config: ## Generate oauth2-proxy.cfg from template
@@ -231,7 +253,10 @@ oauth2-config: ## Generate oauth2-proxy.cfg from template
 		    -e "s|{{OAUTH2_CLIENT_SECRET}}|$${OAUTH2_CLIENT_SECRET}|g" \
 		    -e "s|{{OAUTH2_COOKIE_SECRET}}|$${OAUTH2_COOKIE_SECRET}|g" \
 		    -e "s|{{OAUTH2_PROXY_REDIRECT_URL}}|$${OAUTH2_PROXY_REDIRECT_URL}|g" \
+		    -e "s|{{ROUTE_HOST}}|$${ROUTE_HOST:-localhost:8080}|g" \
 		    -e "s|{{COOKIE_SECURE}}|$${COOKIE_SECURE:-false}|g" \
+		    -e "s|{{GITHUB_ORG}}|$${GITHUB_ORG}|g" \
+		    -e "s|{{GITHUB_TEAM}}|$${GITHUB_TEAM}|g" \
 		    deploy/config/oauth2-proxy.cfg.template > deploy/config/oauth2-proxy.cfg
 	@echo "Generated deploy/config/oauth2-proxy.cfg"
 ```
@@ -250,12 +275,15 @@ OAUTH2_CLIENT_SECRET=your-github-oauth-app-client-secret
 OAUTH2_COOKIE_SECRET=generate-a-32-char-random-string
 OAUTH2_PROXY_REDIRECT_URL=http://localhost:8080/oauth2/callback
 
+# Route host — used for redirect_url, whitelist_domains, and cookie_domains
+ROUTE_HOST=localhost:8080
+
 # Set to "true" for HTTPS deployments, "false" for local dev
 COOKIE_SECURE=false
 
-# Optional: restrict to GitHub org/team
-# GITHUB_ORG=your-org
-# GITHUB_TEAM=your-team
+# GitHub org/team restriction — only members of this org+team can access TARSy
+GITHUB_ORG=your-org
+GITHUB_TEAM=your-team
 ```
 
 ### Author Extraction (Already Implemented)
@@ -446,7 +474,15 @@ s.echo.Use(middleware.CORSWithConfig(...))
 
 ## 9.4: Dockerfiles
 
-Two separate Dockerfiles — one per container image. Each container runs a single process.
+Two separate Dockerfiles — one per container image. Each container runs a single process. Both images are **universal** — the same image runs in podman-compose (Phase 9) and production OpenShift (Phase 10) with no modifications.
+
+**OpenShift compatibility requirements (applied to both Dockerfiles):**
+- **Non-root user** (UID 65532) — no `--privileged` or `SYS_ADMIN` capabilities needed
+- **GID 0 (root group) permissions** — OpenShift's `restricted` SCC assigns a random UID with GID 0; `chgrp -R 0 /app && chmod -R g=u /app` ensures the arbitrary UID can access all files
+- **HOME set to writable directory** — OpenShift's random UID has no home dir entry in `/etc/passwd`; explicit `HOME` prevents write failures from tools that assume a writable home
+- **Non-privileged ports** (8080, 50051) — no ports below 1024
+- **No VOLUME declarations** — OpenShift manages volumes externally; `VOLUME` in Dockerfile causes issues with some SCCs
+- **Registry**: `mirror.gcr.io` (mirrors Docker Hub; matches old TARSy convention for reliability in restricted environments)
 
 ### Tarsy Dockerfile (Go backend + dashboard)
 
@@ -456,7 +492,7 @@ Two separate Dockerfiles — one per container image. Each container runs a sing
 # ─────────────────────────────────────────────────────────
 # Stage 1: Build Go binary
 # ─────────────────────────────────────────────────────────
-FROM docker.io/library/golang:1.25-alpine AS go-builder
+FROM mirror.gcr.io/library/golang:1.25-alpine AS go-builder
 
 RUN apk add --no-cache git
 
@@ -478,7 +514,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ─────────────────────────────────────────────────────────
 # Stage 2: Build dashboard
 # ─────────────────────────────────────────────────────────
-FROM docker.io/library/node:24-alpine AS dashboard-builder
+FROM mirror.gcr.io/library/node:24-alpine AS dashboard-builder
 
 WORKDIR /build
 
@@ -495,7 +531,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────
 # Stage 3: Runtime image
 # ─────────────────────────────────────────────────────────
-FROM docker.io/library/alpine:3.21 AS runtime
+FROM mirror.gcr.io/library/alpine:3.21 AS runtime
 
 RUN apk add --no-cache ca-certificates tzdata
 
@@ -507,12 +543,14 @@ WORKDIR /app
 COPY --from=go-builder /tarsy /app/bin/tarsy
 COPY --from=dashboard-builder /build/dist /app/dashboard
 
-RUN mkdir -p /app/config \
-    && chown -R tarsy:tarsy /app
+RUN mkdir -p /app/config /app/data \
+    && chown -R tarsy:tarsy /app \
+    && chgrp -R 0 /app && chmod -R g=u /app
 
 USER 65532:65532
 
-ENV HTTP_PORT=8080 \
+ENV HOME=/app/data \
+    HTTP_PORT=8080 \
     DASHBOARD_DIR=/app/dashboard \
     CONFIG_DIR=/app/config \
     LLM_SERVICE_ADDR=llm-service:50051
@@ -525,14 +563,16 @@ CMD ["/app/bin/tarsy", "--config-dir=/app/config", "--dashboard-dir=/app/dashboa
 **Design notes:**
 - Alpine runtime (not Python) — the Go binary is statically linked, keeping the image small (~30MB)
 - No `tini` needed — single process, Go handles signals natively
-- `LLM_SERVICE_ADDR` defaults to `llm-service:50051` (compose service name)
+- `LLM_SERVICE_ADDR` defaults to `llm-service:50051` (compose service name); overridden to `localhost:50051` in OpenShift (same pod)
+- `HOME=/app/data` — writable directory for any tools that assume a writable home (following old TARSy pattern)
+- `chgrp -R 0 /app && chmod -R g=u /app` — OpenShift arbitrary UID support
 
 ### LLM Service Dockerfile (Python gRPC)
 
 `llm-service/Dockerfile`:
 
 ```dockerfile
-FROM docker.io/library/python:3.13-slim
+FROM mirror.gcr.io/library/python:3.13-slim
 
 RUN pip install --no-cache-dir uv
 
@@ -546,7 +586,13 @@ COPY . .
 RUN groupadd --gid 65532 llm \
     && useradd --uid 65532 --gid 65532 --no-create-home --shell /bin/false llm
 
+RUN mkdir -p /app/data \
+    && chown -R llm:llm /app \
+    && chgrp -R 0 /app && chmod -R g=u /app
+
 USER 65532:65532
+
+ENV HOME=/app/data
 
 EXPOSE 50051
 
@@ -557,6 +603,8 @@ CMD ["/app/.venv/bin/python", "-m", "llm.server"]
 - Single-stage — Python needs the runtime (no compile step to separate)
 - Same non-root UID (65532) as tarsy for consistency
 - Dependencies cached via `uv sync` layer before copying source
+- `HOME=/app/data` — Python tools (pip cache, etc.) need a writable home; matches old TARSy pattern
+- `chgrp -R 0 /app && chmod -R g=u /app` — OpenShift arbitrary UID support
 
 ---
 
@@ -567,7 +615,7 @@ CMD ["/app/.venv/bin/python", "-m", "llm.server"]
 ```yaml
 services:
   postgres:
-    image: docker.io/library/postgres:17-alpine
+    image: mirror.gcr.io/library/postgres:17-alpine
     container_name: tarsy-postgres
     environment:
       POSTGRES_USER: tarsy
@@ -596,7 +644,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 30s
     restart: on-failure:3
 
   tarsy:
@@ -780,42 +828,50 @@ OAuth2-proxy exposes `/ping` for its own health. The existing `/health` endpoint
 
 ### Tarsy Container Health
 
-The container health check hits `/health` on the Go backend. This endpoint already checks database connectivity, worker pool status, MCP health, and system warnings.
+The container health check hits `/health` on the Go backend. This endpoint currently returns detailed internals (MCP server names, config counts, connection details). 
 
-**Change required:** Remove MCP server names and MCP health details from the `/health` response — server names can be sensitive and the endpoint is unauthenticated. The `status` field still reflects MCP health (`degraded` when MCP is unhealthy), but without exposing which servers or their names. MCP-specific details remain behind the authenticated `GET /api/v1/system/mcp-servers` endpoint. System warnings also need to be stripped of MCP server IDs (the `server_id` field on `SystemWarning`).
+**Change required:** Replace the detailed health response with a minimal, human-friendly version. The current response leaks sensitive details (MCP server names, config counts, database internals). The new response provides `status`, `version`, and a list of human-readable `checks` — enough for operators to know *what* is wrong without exposing *how* the system is configured.
 
-Before (current):
+Before (current — leaks internals):
 ```json
 {
   "status": "degraded",
   "version": "tarsy/a3f8c2d1",
-  "database": { ... },
-  "worker_pool": { ... },
+  "database": { "healthy": true, "latency_ms": 2, ... },
+  "phase": "phase8",
+  "configuration": { "agents": 3, "chains": 5, "mcp_servers": 2, "llm_providers": 1 },
+  "worker_pool": { "running": 4, "capacity": 10, ... },
   "mcp_health": { "kubernetes-server": { "healthy": false, ... } },
   "warnings": [{ "category": "mcp_health", "server_id": "kubernetes-server", ... }]
 }
 ```
 
-After:
+After (minimal, safe for unauthenticated access):
 ```json
 {
-  "status": "degraded",
+  "status": "healthy",
   "version": "tarsy/a3f8c2d1",
-  "database": { ... },
-  "worker_pool": { ... }
+  "checks": {
+    "database": { "status": "healthy" },
+    "worker_pool": { "status": "healthy" }
+  }
 }
 ```
+
+Only tarsy's own components are included — database and worker pool. External dependencies (MCP servers, LLM service) are **excluded** from `/health` to prevent OpenShift from restarting tarsy when an external service is unhealthy. MCP servers and LLM service have their own independent health checks and restart policies. Their status is available behind authenticated endpoints (`GET /api/v1/system/mcp-servers`, `GET /api/v1/system/warnings`).
+
+Each check reports only its status (`healthy`/`unhealthy`) and an optional human-friendly `message` (e.g. "database unreachable") without revealing connection strings or internal details.
 
 The dashboard's `useVersionMonitor` hook only reads `version` and `status` from `/health` — unaffected by this change.
 
 ### LLM Service Health
 
-The llm-service container health check uses a TCP port check on 50051 (gRPC). The `start_period: 15s` covers Python startup + dependency loading.
+The llm-service container health check uses a TCP port check on 50051 (gRPC). `start_period: 30s` covers Python startup + heavy dependency imports (google-cloud, langchain, grpc). Failures during `start_period` don't count toward `retries`. Total window before marked unhealthy: 30s + 5 × 10s = 80s.
 
 ### Startup Probe Equivalent
 
 The compose `start_period` values allow each container time to become ready:
-- llm-service: 15s (Python startup + import time)
+- llm-service: 30s (Python startup + heavy AI/ML dependency imports)
 - tarsy: 30s (Go startup + MCP server validation)
 - oauth2-proxy: no start_period needed (fast startup, depends on tarsy being healthy)
 
@@ -873,6 +929,7 @@ The compose `start_period` values allow each container time to become ready:
 | `llm-service/Dockerfile` | Python LLM service container |
 | `deploy/config/oauth.env.example` | OAuth2 env var template |
 | `deploy/config/templates/sign_in.html` | Custom OAuth2 sign-in page (ported from old TARSy) |
+| `deploy/config/templates/tarsy-logo.png` | Sign-in page logo (ported from old TARSy) |
 | `make/containers.mk` | Container orchestration Makefile targets |
 | `pkg/api/middleware.go` | Security headers middleware |
 
@@ -885,7 +942,7 @@ The compose `start_period` values allow each container time to become ready:
 | `pkg/api/server.go` | Add CORS, security headers middleware; WebSocket origin patterns |
 | `pkg/api/handler_ws.go` | Replace `InsecureSkipVerify` with `OriginPatterns` |
 | `pkg/config/system.go` | Add `AllowedWSOrigins` field |
-| `pkg/api/handler_health.go` | Strip MCP details and server IDs from unauthenticated response |
+| `pkg/api/handler_health.go` | Minimal health response (status, version, checks for db+worker_pool only) |
 | `pkg/config/loader.go` | Load `AllowedWSOrigins` |
 | `Makefile` | Include `make/containers.mk` |
 | `.gitignore` | Add `oauth2-proxy.cfg`, `oauth.env` |
