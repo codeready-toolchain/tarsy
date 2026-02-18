@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1511,6 +1512,114 @@ func TestValidateDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateRunbooks(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *RunbookConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "nil config passes",
+			cfg:     nil,
+			wantErr: false,
+		},
+		{
+			name: "valid config with repo URL",
+			cfg: &RunbookConfig{
+				RepoURL:        "https://github.com/org/repo/tree/main/runbooks",
+				CacheTTL:       1 * time.Minute,
+				AllowedDomains: []string{"github.com", "raw.githubusercontent.com"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config without repo URL",
+			cfg: &RunbookConfig{
+				CacheTTL:       5 * time.Minute,
+				AllowedDomains: []string{"github.com"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "zero cache TTL fails",
+			cfg: &RunbookConfig{
+				CacheTTL:       0,
+				AllowedDomains: []string{"github.com"},
+			},
+			wantErr: true,
+			errMsg:  "cache_ttl must be positive",
+		},
+		{
+			name: "negative cache TTL fails",
+			cfg: &RunbookConfig{
+				CacheTTL:       -1 * time.Minute,
+				AllowedDomains: []string{"github.com"},
+			},
+			wantErr: true,
+			errMsg:  "cache_ttl must be positive",
+		},
+		{
+			name: "empty allowed domain entry fails",
+			cfg: &RunbookConfig{
+				CacheTTL:       1 * time.Minute,
+				AllowedDomains: []string{"github.com", ""},
+			},
+			wantErr: true,
+			errMsg:  "allowed_domains[1] is empty",
+		},
+		{
+			name: "invalid repo URL fails",
+			cfg: &RunbookConfig{
+				RepoURL:        "://broken",
+				CacheTTL:       1 * time.Minute,
+				AllowedDomains: []string{"github.com"},
+			},
+			wantErr: true,
+			errMsg:  "repo_url is not a valid URL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Runbooks: tt.cfg,
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateRunbooks()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateRunbooks_IntegrationWithValidateAll(t *testing.T) {
+	cfg := &Config{
+		Queue:               DefaultQueueConfig(),
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{}),
+		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+		ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{}),
+		Runbooks: &RunbookConfig{
+			CacheTTL:       0, // Invalid
+			AllowedDomains: []string{"github.com"},
+		},
+	}
+
+	validator := NewValidator(cfg)
+	err := validator.ValidateAll()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "runbooks validation failed")
+	assert.Contains(t, err.Error(), "cache_ttl must be positive")
 }
 
 func TestValidateDefaults_IntegrationWithValidateAll(t *testing.T) {
