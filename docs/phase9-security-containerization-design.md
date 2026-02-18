@@ -644,7 +644,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 10s
     restart: on-failure:3
 
   tarsy:
@@ -866,12 +866,52 @@ The dashboard's `useVersionMonitor` hook only reads `version` and `status` from 
 
 ### LLM Service Health
 
-The llm-service container health check uses a TCP port check on 50051 (gRPC). `start_period: 30s` covers Python startup + heavy dependency imports (google-cloud, langchain, grpc). Failures during `start_period` don't count toward `retries`. Total window before marked unhealthy: 30s + 5 × 10s = 80s.
+**Phase 9 (podman-compose):** TCP port check on 50051. Simple, sufficient for dev. `start_period: 10s`, total window: 10s + 5 × 10s = 60s.
+
+**Phase 10 (OpenShift):** Proper gRPC Health Checking Protocol (`grpc.health.v1.Health`). The llm-service currently has no health service — it needs one added. The server sets status to `SERVING` only after initialization is complete. Kubernetes 1.24+ supports native gRPC probes (`grpc` field in probe spec), so no sidecar or external binary needed.
+
+**Change required (llm-service):** Add gRPC health service to `llm/server.py`:
+
+```python
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
+
+async def serve(port: int = 50051):
+    server = grpc.aio.server()
+
+    # Register LLM servicer
+    servicer = LLMServicer()
+    pb_grpc.add_LLMServiceServicer_to_server(servicer, server)
+
+    # Register gRPC health service
+    health_servicer = health.aio.HealthServicer()
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+
+    server.add_insecure_port(f"[::]:{port}")
+    await server.start()
+
+    # Mark as serving only after server is fully started
+    await health_servicer.set(
+        "", health_pb2.HealthCheckResponse.SERVING
+    )
+    logger.info("LLM gRPC server listening on port %d (health: SERVING)", port)
+
+    await server.wait_for_termination()
+```
+
+The `grpcio-health-checking` package is a standard gRPC dependency (`pip install grpcio-health-checking`). The empty string `""` as service name is the convention for overall server health. In Phase 10, the K8s readiness probe uses:
+
+```yaml
+readinessProbe:
+  grpc:
+    port: 50051
+  initialDelaySeconds: 10
+  periodSeconds: 5
+```
 
 ### Startup Probe Equivalent
 
 The compose `start_period` values allow each container time to become ready:
-- llm-service: 30s (Python startup + heavy AI/ML dependency imports)
+- llm-service: 10s (dev env, relaxed)
 - tarsy: 30s (Go startup + MCP server validation)
 - oauth2-proxy: no start_period needed (fast startup, depends on tarsy being healthy)
 
@@ -943,6 +983,8 @@ The compose `start_period` values allow each container time to become ready:
 | `pkg/api/handler_ws.go` | Replace `InsecureSkipVerify` with `OriginPatterns` |
 | `pkg/config/system.go` | Add `AllowedWSOrigins` field |
 | `pkg/api/handler_health.go` | Minimal health response (status, version, checks for db+worker_pool only) |
+| `llm-service/llm/server.py` | Add gRPC health checking service (SERVING after init) |
+| `llm-service/pyproject.toml` | Add `grpcio-health-checking` dependency |
 | `pkg/config/loader.go` | Load `AllowedWSOrigins` |
 | `Makefile` | Include `make/containers.mk` |
 | `.gitignore` | Add `oauth2-proxy.cfg`, `oauth.env` |

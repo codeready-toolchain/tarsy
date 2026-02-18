@@ -108,6 +108,6 @@ The following will be fully designed when Phase 10 begins:
 - **Routes/Ingress** — TLS edge termination, path-based routing
 - **ImageStreams** — for OpenShift internal registry
 - **kube-rbac-proxy configuration** — RBAC rules, SA token validation
-- **Health probes** — liveness, readiness, startup per container
+- **Health probes** — liveness, readiness, startup per container (llm-service uses gRPC health protocol added in Phase 9; tarsy uses HTTP `/health`)
 - **Build pipeline** — GitHub Actions for image build + push
 - **Rollout strategy** — rolling update with health gate
