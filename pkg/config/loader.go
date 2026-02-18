@@ -24,8 +24,17 @@ type TarsyYAMLConfig struct {
 
 // SystemYAMLConfig groups system-wide infrastructure settings.
 type SystemYAMLConfig struct {
-	GitHub   *GitHubYAMLConfig   `yaml:"github"`
-	Runbooks *RunbooksYAMLConfig `yaml:"runbooks"`
+	DashboardURL string              `yaml:"dashboard_url"`
+	GitHub       *GitHubYAMLConfig   `yaml:"github"`
+	Runbooks     *RunbooksYAMLConfig `yaml:"runbooks"`
+	Slack        *SlackYAMLConfig    `yaml:"slack"`
+}
+
+// SlackYAMLConfig holds Slack notification settings from YAML.
+type SlackYAMLConfig struct {
+	Enabled  *bool  `yaml:"enabled,omitempty"`
+	TokenEnv string `yaml:"token_env,omitempty"`
+	Channel  string `yaml:"channel,omitempty"`
 }
 
 // GitHubYAMLConfig holds GitHub integration settings from YAML.
@@ -145,9 +154,11 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks)
+	// Resolve system config (GitHub + Runbooks + Slack + DashboardURL)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
+	slackCfg := resolveSlackConfig(tarsyConfig.System)
+	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 
 	return &Config{
 		configDir:           configDir,
@@ -155,6 +166,8 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		Queue:               queueConfig,
 		GitHub:              githubCfg,
 		Runbooks:            runbooksCfg,
+		Slack:               slackCfg,
+		DashboardURL:        dashboardURL,
 		AgentRegistry:       agentRegistry,
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,
@@ -268,4 +281,37 @@ func resolveRunbooksConfig(sys *SystemYAMLConfig) *RunbookConfig {
 	}
 
 	return cfg
+}
+
+// resolveSlackConfig resolves Slack configuration from system YAML, applying defaults.
+func resolveSlackConfig(sys *SystemYAMLConfig) *SlackConfig {
+	cfg := &SlackConfig{
+		Enabled:  false,
+		TokenEnv: "SLACK_BOT_TOKEN",
+	}
+
+	if sys == nil || sys.Slack == nil {
+		return cfg
+	}
+
+	s := sys.Slack
+	if s.Enabled != nil {
+		cfg.Enabled = *s.Enabled
+	}
+	if s.TokenEnv != "" {
+		cfg.TokenEnv = s.TokenEnv
+	}
+	if s.Channel != "" {
+		cfg.Channel = s.Channel
+	}
+
+	return cfg
+}
+
+// resolveDashboardURL resolves the dashboard base URL from system YAML, applying defaults.
+func resolveDashboardURL(sys *SystemYAMLConfig) string {
+	if sys != nil && sys.DashboardURL != "" {
+		return sys.DashboardURL
+	}
+	return "http://localhost:8080"
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
+	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 	"github.com/joho/godotenv"
 )
 
@@ -197,10 +198,29 @@ func main() {
 			"Set "+tokenEnv+" to access private repos. URL-based runbooks will fall back to default.", "")
 	}
 
+	// 5d. Create Slack notification service (optional)
+	var slackService *tarsyslack.Service
+	if cfg.Slack != nil && cfg.Slack.Enabled {
+		slackToken := os.Getenv(cfg.Slack.TokenEnv)
+		slackService = tarsyslack.NewService(tarsyslack.ServiceConfig{
+			Token:        slackToken,
+			Channel:      cfg.Slack.Channel,
+			DashboardURL: cfg.DashboardURL,
+		})
+		if slackToken == "" {
+			warningsService.AddWarning("slack", "Slack bot token not configured",
+				"Set "+cfg.Slack.TokenEnv+" to enable Slack notifications.", "")
+		} else {
+			slog.Info("Slack notifications enabled", "channel", cfg.Slack.Channel)
+		}
+	} else {
+		slog.Info("Slack notifications disabled")
+	}
+
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
 
 	// 6. Start worker pool (before HTTP server)
-	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher)
+	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher, slackService)
 	if err := workerPool.Start(ctx); err != nil {
 		slog.Error("Failed to start worker pool", "error", err)
 		os.Exit(1)

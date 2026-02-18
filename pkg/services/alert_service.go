@@ -16,11 +16,12 @@ import (
 // SubmitAlertInput contains the domain-level data needed to create a session.
 // Transformed from the HTTP request + headers by the handler.
 type SubmitAlertInput struct {
-	AlertType string
-	Runbook   string
-	Data      string                     // Alert payload (opaque text, may be masked before storage)
-	MCP       *models.MCPSelectionConfig // MCP selection config (optional)
-	Author    string                     // From oauth2-proxy headers
+	AlertType               string
+	Runbook                 string
+	Data                    string                     // Alert payload (opaque text, may be masked before storage)
+	MCP                     *models.MCPSelectionConfig // MCP selection config (optional)
+	Author                  string                     // From oauth2-proxy headers
+	SlackMessageFingerprint string                     // For Slack threading (optional)
 }
 
 // AlertService handles alert submission and session creation.
@@ -110,6 +111,9 @@ func (s *AlertService) SubmitAlert(ctx context.Context, input SubmitAlertInput) 
 	}
 	if mcpSelectionJSON != nil {
 		builder.SetMcpSelection(mcpSelectionJSON)
+	}
+	if input.SlackMessageFingerprint != "" {
+		builder.SetSlackMessageFingerprint(input.SlackMessageFingerprint)
 	}
 
 	session, err := builder.Save(ctx)

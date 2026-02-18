@@ -198,6 +198,38 @@ func TestAlertService_SubmitAlert(t *testing.T) {
 		assert.Nil(t, session.Author)
 		assert.Nil(t, session.RunbookURL)
 	})
+
+	t.Run("stores slack message fingerprint", func(t *testing.T) {
+		input := SubmitAlertInput{
+			Data:                    "Alert with fingerprint",
+			AlertType:               "pod-crash",
+			SlackMessageFingerprint: "Pod nginx crashed OOMKilled",
+		}
+
+		session, err := service.SubmitAlert(ctx, input)
+		require.NoError(t, err)
+		require.NotNil(t, session)
+
+		stored, err := client.AlertSession.Get(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, stored.SlackMessageFingerprint)
+		assert.Equal(t, "Pod nginx crashed OOMKilled", *stored.SlackMessageFingerprint)
+	})
+
+	t.Run("omits slack message fingerprint when empty", func(t *testing.T) {
+		input := SubmitAlertInput{
+			Data:      "Alert without fingerprint",
+			AlertType: "pod-crash",
+		}
+
+		session, err := service.SubmitAlert(ctx, input)
+		require.NoError(t, err)
+		require.NotNil(t, session)
+
+		stored, err := client.AlertSession.Get(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Nil(t, stored.SlackMessageFingerprint)
+	})
 }
 
 // --- Alert masking tests ---

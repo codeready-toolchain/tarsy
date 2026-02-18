@@ -13,6 +13,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Autocomplete,
   Box,
   Card,
@@ -34,6 +37,7 @@ import {
   Description as DescriptionIcon,
   TableChart as TableChartIcon,
   InfoOutlined as InfoIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 
 import type { MCPSelectionConfig, MCPServerSelection } from '../../types/system.ts';
@@ -105,6 +109,7 @@ export function ManualAlertForm() {
   const [alertType, setAlertType] = useState('');
   const [runbookUrl, setRunbookUrl] = useState('');
   const [mcpSelection, setMcpSelection] = useState<MCPSelectionConfig | undefined>(undefined);
+  const [slackFingerprint, setSlackFingerprint] = useState('');
 
   // Mode selection (0 = Structured, 1 = Text) - Default to Text
   const [mode, setMode] = useState(1);
@@ -288,7 +293,13 @@ export function ManualAlertForm() {
       }
 
       // Build request payload matching Go SubmitAlertRequest JSON tags
-      const payload: { data: string; alert_type?: string; runbook?: string; mcp?: MCPSelectionConfig } = {
+      const payload: {
+        data: string;
+        alert_type?: string;
+        runbook?: string;
+        mcp?: MCPSelectionConfig;
+        slack_message_fingerprint?: string;
+      } = {
         data,
       };
 
@@ -306,6 +317,11 @@ export function ManualAlertForm() {
       const filteredMCP = filterMCPSelection(mcpSelection);
       if (filteredMCP !== undefined) {
         payload.mcp = filteredMCP;
+      }
+
+      // Add Slack message fingerprint if provided
+      if (slackFingerprint.trim()) {
+        payload.slack_message_fingerprint = slackFingerprint.trim();
       }
 
       const response = await submitAlert(payload);
@@ -497,6 +513,43 @@ export function ManualAlertForm() {
             disabled={loading}
             alertType={alertType}
           />
+
+          {/* Advanced Options */}
+          <Box sx={{ px: 4, pb: 1 }}>
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: '8px !important',
+                '&:before': { display: 'none' },
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                  Advanced Options
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Slack Message Fingerprint"
+                  value={slackFingerprint}
+                  onChange={(e) => setSlackFingerprint(e.target.value)}
+                  placeholder="e.g., Pod nginx-xyz OOMKilled in namespace production"
+                  helperText="Text to match against recent Slack messages for threading replies. Leave empty if not using Slack threading."
+                  variant="filled"
+                  sx={{
+                    '& .MuiFilledInput-root': {
+                      borderRadius: 2,
+                      '&:before, &:after': { display: 'none' },
+                    },
+                  }}
+                />
+              </AccordionDetails>
+            </Accordion>
+          </Box>
 
           {/* Input Method Tabs */}
           <Box sx={{ px: 4, py: 2, bgcolor: 'rgba(25, 118, 210, 0.04)' }}>

@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
+	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/codeready-toolchain/tarsy/test/util"
 )
@@ -60,8 +61,9 @@ type testAppConfig struct {
 	maxConcurrentSessions int
 	sessionTimeout        time.Duration
 	chatTimeout           time.Duration
-	dbClient              *database.Client // injected DB client (for multi-replica tests)
-	podID                 string           // custom pod ID (for multi-replica tests)
+	dbClient              *database.Client      // injected DB client (for multi-replica tests)
+	podID                 string                // custom pod ID (for multi-replica tests)
+	slackService          *tarsyslack.Service   // optional Slack service (for Slack notification tests)
 }
 
 // TestAppOption configures the test app.
@@ -115,6 +117,12 @@ func WithDBClient(client *database.Client) TestAppOption {
 // orphan detection.
 func WithPodID(id string) TestAppOption {
 	return func(c *testAppConfig) { c.podID = id }
+}
+
+// WithSlackService injects a Slack notification service into the worker pool.
+// Used for testing Slack integration with a mock API server.
+func WithSlackService(svc *tarsyslack.Service) TestAppOption {
+	return func(c *testAppConfig) { c.slackService = svc }
 }
 
 // NewTestApp creates and starts a full TARSy test instance.
@@ -205,7 +213,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	if podID == "" {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
 	}
-	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher)
+	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher, tc.slackService)
 	require.NoError(t, workerPool.Start(ctx))
 
 	// 10. Chat executor.

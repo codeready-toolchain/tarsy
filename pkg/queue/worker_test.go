@@ -28,7 +28,7 @@ func testQueueConfig() *config.QueueConfig {
 
 func TestWorkerPollInterval(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil, nil)
 
 	// Poll interval should be within [base - jitter, base + jitter]
 	for i := 0; i < 100; i++ {
@@ -41,7 +41,7 @@ func TestWorkerPollInterval(t *testing.T) {
 func TestWorkerPollIntervalNoJitter(t *testing.T) {
 	cfg := testQueueConfig()
 	cfg.PollIntervalJitter = 0
-	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil, nil)
 
 	for i := 0; i < 10; i++ {
 		d := w.pollInterval()
@@ -51,7 +51,7 @@ func TestWorkerPollIntervalNoJitter(t *testing.T) {
 
 func TestWorkerHealth(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil)
 
 	h := w.Health()
 	assert.Equal(t, "worker-1", h.ID)
@@ -74,7 +74,7 @@ func TestWorkerHealth(t *testing.T) {
 
 func TestWorker_PublishSessionStatusNilPublisher(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil)
 
 	// Should not panic with nil eventPublisher
 	assert.NotPanics(t, func() {
@@ -88,7 +88,7 @@ func TestWorker_PublishSessionStatusNilPublisher(t *testing.T) {
 func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 	cfg := testQueueConfig()
 	pub := &mockEventPublisher{}
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, pub)
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, pub, nil)
 
 	w.publishSessionStatus(t.Context(), "session-abc", alertsession.StatusInProgress)
 
@@ -152,7 +152,7 @@ func (m *mockEventPublisher) PublishExecutionStatus(_ context.Context, _ string,
 
 func TestWorkerStopIdempotent(t *testing.T) {
 	cfg := testQueueConfig()
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil)
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil)
 
 	// First stop should succeed
 	assert.NotPanics(t, func() { w.Stop() })
@@ -165,7 +165,7 @@ func TestWorkerPollIntervalWithNegativeJitter(t *testing.T) {
 	cfg := testQueueConfig()
 	cfg.PollInterval = 1 * time.Second
 	cfg.PollIntervalJitter = -100 * time.Millisecond
-	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil)
+	w := NewWorker("test-worker", "test-pod", nil, cfg, nil, nil, nil, nil)
 
 	// Negative jitter should be treated as zero
 	for i := 0; i < 10; i++ {

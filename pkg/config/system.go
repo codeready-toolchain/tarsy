@@ -13,3 +13,10 @@ type RunbookConfig struct {
 	CacheTTL       time.Duration // Cache duration (default: 1m)
 	AllowedDomains []string      // Allowed URL domains (default: ["github.com", "raw.githubusercontent.com"])
 }
+
+// SlackConfig holds resolved Slack notification configuration.
+type SlackConfig struct {
+	Enabled  bool
+	TokenEnv string // Env var name for Slack bot token (default: "SLACK_BOT_TOKEN")
+	Channel  string // Slack channel ID (e.g., "C12345678")
+}

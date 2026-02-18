@@ -49,6 +49,10 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("runbooks validation failed: %w", err)
 	}
 
+	if err := v.validateSlack(); err != nil {
+		return fmt.Errorf("slack validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -480,6 +484,23 @@ func (v *Validator) validateRunbooks() error {
 		if domain == "" {
 			return fmt.Errorf("system.runbooks.allowed_domains[%d] is empty", i)
 		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateSlack() error {
+	s := v.cfg.Slack
+	if s == nil || !s.Enabled {
+		return nil
+	}
+
+	if s.Channel == "" {
+		return fmt.Errorf("system.slack.channel is required when Slack is enabled")
+	}
+
+	if token := os.Getenv(s.TokenEnv); token == "" {
+		return fmt.Errorf("system.slack.token_env: environment variable %s is not set", s.TokenEnv)
 	}
 
 	return nil
