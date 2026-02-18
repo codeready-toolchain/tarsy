@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -237,10 +238,11 @@ type testTransport struct {
 }
 
 func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Redirect api.github.com requests to test server
-	if req.URL.Host == "api.github.com" {
-		req.URL.Scheme = "http"
-		req.URL.Host = t.server.URL[7:] // Strip "http://"
+	// Redirect GitHub API and raw content requests to test server
+	if req.URL.Host == "api.github.com" || req.URL.Host == "raw.githubusercontent.com" {
+		parsed, _ := url.Parse(t.server.URL)
+		req.URL.Scheme = parsed.Scheme
+		req.URL.Host = parsed.Host
 	}
 	return t.delegate.RoundTrip(req)
 }
