@@ -88,23 +88,25 @@ func (s *Service) OverrideHTTPClientForTest(httpClient *http.Client) {
 }
 
 func (s *Service) fetchWithCache(ctx context.Context, rawURL string) (string, error) {
-	// Validate URL
+	// Normalize first so we validate and fetch the same URL.
+	normalizedURL := ConvertToRawURL(rawURL)
+
 	var allowedDomains []string
 	if s.cfg != nil {
 		allowedDomains = s.cfg.AllowedDomains
 	}
-	if err := ValidateRunbookURL(rawURL, allowedDomains); err != nil {
+	if err := ValidateRunbookURL(normalizedURL, allowedDomains); err != nil {
 		return "", err
 	}
 
-	// Check cache (key: normalized URL)
-	normalizedURL := ConvertToRawURL(rawURL)
+	// Check cache
 	if content, ok := s.cache.Get(normalizedURL); ok {
 		return content, nil
 	}
 
-	// Fetch from GitHub
-	content, err := s.github.DownloadContent(ctx, rawURL)
+	// Fetch from GitHub (DownloadContent also calls ConvertToRawURL,
+	// which is a no-op on an already-normalized URL).
+	content, err := s.github.DownloadContent(ctx, normalizedURL)
 	if err != nil {
 		return "", err
 	}

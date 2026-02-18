@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -105,7 +106,11 @@ type redirectTransport struct {
 }
 
 func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Scheme = "http"
-	req.URL.Host = t.target[7:] // Strip "http://"
+	parsed, err := url.Parse(t.target)
+	if err != nil {
+		return nil, err
+	}
+	req.URL.Scheme = parsed.Scheme
+	req.URL.Host = parsed.Host
 	return http.DefaultTransport.RoundTrip(req)
 }
