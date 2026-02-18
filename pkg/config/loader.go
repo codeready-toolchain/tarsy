@@ -313,5 +313,5 @@ func resolveDashboardURL(sys *SystemYAMLConfig) string {
 	if sys != nil && sys.DashboardURL != "" {
 		return sys.DashboardURL
 	}
-	return "http://localhost:8080"
+	return "http://localhost:5173"
 }

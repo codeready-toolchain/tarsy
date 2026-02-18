@@ -44,7 +44,7 @@ queue:
 
 system:
   # Base URL for dashboard links (used in Slack notifications, etc.)
-  dashboard_url: "https://tarsy.example.com"  # Default: http://localhost:8080
+  dashboard_url: "https://tarsy.example.com"  # Default: http://localhost:5173
 
   # GitHub integration for fetching runbooks from private repos
   github:
@@ -63,6 +63,8 @@ system:
   # Requires a Slack Bot Token with scopes: channels:history, groups:history, chat:write
   # To enable: set enabled: true, provide a valid channel ID, and ensure the
   # token env var (default: SLACK_BOT_TOKEN) is set in your environment.
+  # NOTE: For local dev, set enabled: true and configure SLACK_BOT_TOKEN in .env
+  # to receive Slack notifications out of the box.
   slack:
     enabled: false
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
