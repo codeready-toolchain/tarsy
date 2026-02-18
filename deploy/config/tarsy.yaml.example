@@ -38,6 +38,39 @@ queue:
   orphan_threshold: 5m
 
 # =============================================================================
+# SYSTEM-WIDE INFRASTRUCTURE SETTINGS
+# =============================================================================
+# GitHub integration, runbooks, Slack notifications, and shared URLs.
+
+system:
+  # Base URL for dashboard links (used in Slack notifications, etc.)
+  dashboard_url: "https://tarsy.example.com"  # Default: http://localhost:5173
+
+  # GitHub integration for fetching runbooks from private repos
+  github:
+    token_env: "GITHUB_TOKEN"  # Env var containing GitHub PAT (default: GITHUB_TOKEN)
+
+  # Runbook system configuration
+  runbooks:
+    repo_url: "https://github.com/org/repo/tree/main/runbooks"
+    cache_ttl: "1m"                 # Cache duration (default: 1m)
+    allowed_domains:                # URL domain allowlist (default below)
+      - "github.com"
+      - "raw.githubusercontent.com"
+
+  # Slack notification configuration
+  # Sends notifications when sessions start, complete, fail, or time out.
+  # Requires a Slack Bot Token with scopes: channels:history, groups:history, chat:write
+  # To enable: set enabled: true, provide a valid channel ID, and ensure the
+  # token env var (default: SLACK_BOT_TOKEN) is set in your environment.
+  # NOTE: For local dev, set enabled: true and configure SLACK_BOT_TOKEN in .env
+  # to receive Slack notifications out of the box.
+  slack:
+    enabled: false
+    token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
+    channel: "C12345678"           # Slack channel ID (required when enabled)
+
+# =============================================================================
 # SYSTEM-WIDE DEFAULTS
 # =============================================================================
 # These values are used when components don't specify their own values

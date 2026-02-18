@@ -127,6 +127,7 @@ export default function SessionHeader({
         sessionId: session.id,
         runbook: session.runbook_url || null,
         mcpSelection: session.mcp_selection || null,
+        slackFingerprint: session.slack_message_fingerprint || null,
       },
     });
   }, [navigate, session]);

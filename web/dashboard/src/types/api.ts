@@ -47,6 +47,7 @@ export interface SubmitAlertRequest {
   alert_type?: string;
   runbook?: string;
   mcp?: MCPSelectionConfig;
+  slack_message_fingerprint?: string;
 }
 
 /** Alert submission response. */

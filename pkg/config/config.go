@@ -18,6 +18,12 @@ type Config struct {
 	// Runbook system configuration (resolved from system.runbooks)
 	Runbooks *RunbookConfig
 
+	// Slack notification configuration (resolved from system.slack)
+	Slack *SlackConfig
+
+	// Base URL for dashboard links (default: "http://localhost:5173")
+	DashboardURL string
+
 	// Component registries
 	AgentRegistry       *AgentRegistry
 	ChainRegistry       *ChainRegistry

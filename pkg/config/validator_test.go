@@ -1645,3 +1645,107 @@ func TestValidateDefaults_IntegrationWithValidateAll(t *testing.T) {
 	assert.Contains(t, err.Error(), "defaults validation failed")
 	assert.Contains(t, err.Error(), "pattern group 'nonexistent-group' not found")
 }
+
+func TestValidateSlack(t *testing.T) {
+	tests := []struct {
+		name    string
+		slack   *SlackConfig
+		env     map[string]string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "nil slack config passes",
+			slack:   nil,
+			wantErr: false,
+		},
+		{
+			name:    "disabled slack passes",
+			slack:   &SlackConfig{Enabled: false},
+			wantErr: false,
+		},
+		{
+			name: "enabled with channel and token passes",
+			slack: &SlackConfig{
+				Enabled:  true,
+				TokenEnv: "TEST_SLACK_TOKEN",
+				Channel:  "C12345678",
+			},
+			env:     map[string]string{"TEST_SLACK_TOKEN": "xoxb-test"},
+			wantErr: false,
+		},
+		{
+			name: "enabled without channel fails",
+			slack: &SlackConfig{
+				Enabled:  true,
+				TokenEnv: "TEST_SLACK_TOKEN",
+				Channel:  "",
+			},
+			env:     map[string]string{"TEST_SLACK_TOKEN": "xoxb-test"},
+			wantErr: true,
+			errMsg:  "system.slack.channel is required when Slack is enabled",
+		},
+		{
+			name: "enabled with empty token_env fails",
+			slack: &SlackConfig{
+				Enabled:  true,
+				TokenEnv: "",
+				Channel:  "C12345678",
+			},
+			wantErr: true,
+			errMsg:  "system.slack.token_env is required when Slack is enabled",
+		},
+		{
+			name: "enabled with missing token env var fails",
+			slack: &SlackConfig{
+				Enabled:  true,
+				TokenEnv: "MISSING_SLACK_TOKEN",
+				Channel:  "C12345678",
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable MISSING_SLACK_TOKEN is not set",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			cfg := &Config{Slack: tt.slack}
+			validator := NewValidator(cfg)
+			err := validator.validateSlack()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateSlack_IntegrationWithValidateAll(t *testing.T) {
+	cfg := &Config{
+		Queue:               DefaultQueueConfig(),
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{}),
+		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+		ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{}),
+		Slack: &SlackConfig{
+			Enabled:  true,
+			TokenEnv: "SLACK_BOT_TOKEN",
+			Channel:  "",
+		},
+	}
+
+	validator := NewValidator(cfg)
+	err := validator.ValidateAll()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slack validation failed")
+	assert.Contains(t, err.Error(), "system.slack.channel is required")
+}

@@ -17,6 +17,7 @@ import {
   Box,
   Card,
   CardContent,
+  Collapse,
   Typography,
   TextField,
   MenuItem,
@@ -83,6 +84,7 @@ interface ResubmitState {
   alertData?: string;
   sessionId?: string;
   mcpSelection?: MCPSelectionConfig | null;
+  slackFingerprint?: string | null;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -105,6 +107,8 @@ export function ManualAlertForm() {
   const [alertType, setAlertType] = useState('');
   const [runbookUrl, setRunbookUrl] = useState('');
   const [mcpSelection, setMcpSelection] = useState<MCPSelectionConfig | undefined>(undefined);
+  const [slackFingerprint, setSlackFingerprint] = useState('');
+  const [slackExpanded, setSlackExpanded] = useState(false);
 
   // Mode selection (0 = Structured, 1 = Text) - Default to Text
   const [mode, setMode] = useState(1);
@@ -150,6 +154,11 @@ export function ManualAlertForm() {
 
       if (state.mcpSelection) {
         setMcpSelection(state.mcpSelection);
+      }
+
+      if (state.slackFingerprint) {
+        setSlackFingerprint(state.slackFingerprint);
+        setSlackExpanded(true);
       }
 
       // Always use text mode for re-submissions
@@ -288,7 +297,13 @@ export function ManualAlertForm() {
       }
 
       // Build request payload matching Go SubmitAlertRequest JSON tags
-      const payload: { data: string; alert_type?: string; runbook?: string; mcp?: MCPSelectionConfig } = {
+      const payload: {
+        data: string;
+        alert_type?: string;
+        runbook?: string;
+        mcp?: MCPSelectionConfig;
+        slack_message_fingerprint?: string;
+      } = {
         data,
       };
 
@@ -306,6 +321,11 @@ export function ManualAlertForm() {
       const filteredMCP = filterMCPSelection(mcpSelection);
       if (filteredMCP !== undefined) {
         payload.mcp = filteredMCP;
+      }
+
+      // Add Slack message fingerprint if provided
+      if (slackFingerprint.trim()) {
+        payload.slack_message_fingerprint = slackFingerprint.trim();
       }
 
       const response = await submitAlert(payload);
@@ -488,6 +508,47 @@ export function ManualAlertForm() {
                 )}
               />
             </Stack>
+          </Box>
+
+          {/* Advanced: Slack Threading */}
+          <Box sx={{ px: 4, pb: 2 }}>
+            <Box
+              onClick={() => setSlackExpanded((v) => !v)}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover .slack-toggle-label': { color: 'primary.main' },
+              }}
+            >
+              <Typography
+                component="span"
+                className="slack-toggle-label"
+                sx={{ color: 'text.secondary', fontSize: '0.82rem', transition: 'color 0.15s' }}
+              >
+                {slackExpanded ? '▼' : '▶'} Advanced: Slack Threading
+              </Typography>
+            </Box>
+
+            <Collapse in={slackExpanded} timeout={200}>
+              <Box sx={{ mt: 1, pl: 2, borderLeft: '3px solid #009688' }}>
+                <TextField
+                  fullWidth
+                  label="Slack Message Fingerprint"
+                  value={slackFingerprint}
+                  onChange={(e) => setSlackFingerprint(e.target.value)}
+                  helperText="Links this analysis to a specific Slack message thread"
+                  variant="filled"
+                  sx={{
+                    '& .MuiFilledInput-root': {
+                      borderRadius: 1,
+                      '&:before, &:after': { display: 'none' },
+                    },
+                  }}
+                />
+              </Box>
+            </Collapse>
           </Box>
 
           {/* MCP Server Configuration */}

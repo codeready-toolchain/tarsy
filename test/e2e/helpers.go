@@ -48,6 +48,17 @@ func (app *TestApp) SubmitAlertWithRunbook(t *testing.T, alertType, data, runboo
 	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
 }
 
+// SubmitAlertWithFingerprint posts an alert with a Slack message fingerprint and returns the parsed response.
+func (app *TestApp) SubmitAlertWithFingerprint(t *testing.T, alertType, data, fingerprint string) map[string]interface{} {
+	t.Helper()
+	body := map[string]interface{}{
+		"alert_type":                alertType,
+		"data":                      data,
+		"slack_message_fingerprint": fingerprint,
+	}
+	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)
+}
+
 // GetRunbooks calls GET /api/v1/runbooks and returns the parsed JSON array.
 func (app *TestApp) GetRunbooks(t *testing.T) []interface{} {
 	t.Helper()

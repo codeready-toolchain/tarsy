@@ -16,6 +16,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 )
 
 // WorkerStatus represents the current state of a worker.
@@ -35,6 +36,7 @@ type Worker struct {
 	config          *config.QueueConfig
 	sessionExecutor SessionExecutor
 	eventPublisher  agent.EventPublisher
+	slackService    *tarsyslack.Service
 	pool            SessionRegistry
 	stopCh          chan struct{}
 	stopOnce        sync.Once
@@ -56,7 +58,8 @@ type SessionRegistry interface {
 
 // NewWorker creates a new queue worker.
 // eventPublisher may be nil (streaming disabled).
-func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, pool SessionRegistry, eventPublisher agent.EventPublisher) *Worker {
+// slackService may be nil (Slack notifications disabled).
+func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, pool SessionRegistry, eventPublisher agent.EventPublisher, slackService *tarsyslack.Service) *Worker {
 	return &Worker{
 		id:              id,
 		podID:           podID,
@@ -64,6 +67,7 @@ func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, ex
 		config:          cfg,
 		sessionExecutor: executor,
 		eventPublisher:  eventPublisher,
+		slackService:    slackService,
 		pool:            pool,
 		stopCh:          make(chan struct{}),
 		status:          WorkerStatusIdle,
@@ -159,6 +163,9 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	// Publish session status "in_progress" to both session and global channels
 	w.publishSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
 
+	// Send Slack start notification (only if fingerprint present, resolves threadTS)
+	slackThreadTS := w.notifySlackStart(ctx, session)
+
 	w.setStatus(WorkerStatusWorking, session.ID)
 	defer w.setStatus(WorkerStatusIdle, "")
 
@@ -226,6 +233,9 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 
 	// 10a. Publish terminal session status event
 	w.publishSessionStatus(context.Background(), session.ID, result.Status)
+
+	// 10b. Send Slack terminal notification
+	w.notifySlackTerminal(context.Background(), session, result, slackThreadTS)
 
 	// 11. Cleanup transient events after grace period (60s) to allow clients
 	// to receive final events before they are deleted.
@@ -362,6 +372,53 @@ func (w *Worker) cleanupSessionEvents(ctx context.Context, sessionID string) err
 		Where(event.SessionIDEQ(sessionID)).
 		Exec(ctx)
 	return err
+}
+
+// notifySlackStart sends a Slack start notification if the session has a fingerprint.
+// Returns the resolved threadTS for reuse by terminal notification.
+func (w *Worker) notifySlackStart(ctx context.Context, session *ent.AlertSession) string {
+	if w.slackService == nil {
+		return ""
+	}
+
+	var fingerprint string
+	if session.SlackMessageFingerprint != nil {
+		fingerprint = *session.SlackMessageFingerprint
+	}
+
+	return w.slackService.NotifySessionStarted(ctx, tarsyslack.SessionStartedInput{
+		SessionID:               session.ID,
+		AlertType:               session.AlertType,
+		SlackMessageFingerprint: fingerprint,
+	})
+}
+
+// notifySlackTerminal sends a Slack terminal status notification.
+func (w *Worker) notifySlackTerminal(ctx context.Context, session *ent.AlertSession, result *ExecutionResult, threadTS string) {
+	if w.slackService == nil {
+		return
+	}
+
+	var fingerprint string
+	if session.SlackMessageFingerprint != nil {
+		fingerprint = *session.SlackMessageFingerprint
+	}
+
+	var errMsg string
+	if result.Error != nil {
+		errMsg = result.Error.Error()
+	}
+
+	w.slackService.NotifySessionCompleted(ctx, tarsyslack.SessionCompletedInput{
+		SessionID:               session.ID,
+		AlertType:               session.AlertType,
+		Status:                  string(result.Status),
+		ExecutiveSummary:        result.ExecutiveSummary,
+		FinalAnalysis:           result.FinalAnalysis,
+		ErrorMessage:            errMsg,
+		SlackMessageFingerprint: fingerprint,
+		ThreadTS:                threadTS,
+	})
 }
 
 // pollInterval returns the poll duration with jitter.

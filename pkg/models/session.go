@@ -138,18 +138,19 @@ type QueuedSessionItem struct {
 // SessionDetailResponse is the enriched session detail DTO.
 type SessionDetailResponse struct {
 	// Core fields (from AlertSession)
-	ID                    string         `json:"id"`
-	AlertData             string         `json:"alert_data"`
-	AlertType             *string        `json:"alert_type"`
-	Status                string         `json:"status"`
-	ChainID               string         `json:"chain_id"`
-	Author                *string        `json:"author"`
-	ErrorMessage          *string        `json:"error_message"`
-	FinalAnalysis         *string        `json:"final_analysis"`
-	ExecutiveSummary      *string        `json:"executive_summary"`
-	ExecutiveSummaryError *string        `json:"executive_summary_error"`
-	RunbookURL            *string        `json:"runbook_url"`
-	MCPSelection          map[string]any `json:"mcp_selection,omitempty"`
+	ID                      string         `json:"id"`
+	AlertData               string         `json:"alert_data"`
+	AlertType               *string        `json:"alert_type"`
+	Status                  string         `json:"status"`
+	ChainID                 string         `json:"chain_id"`
+	Author                  *string        `json:"author"`
+	ErrorMessage            *string        `json:"error_message"`
+	FinalAnalysis           *string        `json:"final_analysis"`
+	ExecutiveSummary        *string        `json:"executive_summary"`
+	ExecutiveSummaryError   *string        `json:"executive_summary_error"`
+	RunbookURL              *string        `json:"runbook_url"`
+	SlackMessageFingerprint *string        `json:"slack_message_fingerprint,omitempty"`
+	MCPSelection            map[string]any `json:"mcp_selection,omitempty"`
 
 	// Timestamps
 	CreatedAt   time.Time  `json:"created_at"`

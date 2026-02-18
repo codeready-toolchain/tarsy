@@ -51,11 +51,12 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 
 	// 6. Transform to service input
 	input := services.SubmitAlertInput{
-		AlertType: req.AlertType,
-		Runbook:   req.Runbook,
-		Data:      req.Data,
-		MCP:       req.MCP,
-		Author:    extractAuthor(c),
+		AlertType:               req.AlertType,
+		Runbook:                 req.Runbook,
+		Data:                    req.Data,
+		MCP:                     req.MCP,
+		Author:                  extractAuthor(c),
+		SlackMessageFingerprint: req.SlackMessageFingerprint,
 	}
 
 	// 7. Call service
