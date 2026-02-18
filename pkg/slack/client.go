@@ -1,3 +1,4 @@
+// Package slack provides a Slack API client and notification service.
 package slack
 
 import (

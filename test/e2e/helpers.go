@@ -52,8 +52,8 @@ func (app *TestApp) SubmitAlertWithRunbook(t *testing.T, alertType, data, runboo
 func (app *TestApp) SubmitAlertWithFingerprint(t *testing.T, alertType, data, fingerprint string) map[string]interface{} {
 	t.Helper()
 	body := map[string]interface{}{
-		"alert_type":               alertType,
-		"data":                     data,
+		"alert_type":                alertType,
+		"data":                      data,
 		"slack_message_fingerprint": fingerprint,
 	}
 	return app.postJSON(t, "/api/v1/alerts", body, http.StatusAccepted)

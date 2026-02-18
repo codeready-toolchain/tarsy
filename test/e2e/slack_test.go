@@ -34,8 +34,8 @@ type mockSlackServer struct {
 
 	server      *httptest.Server
 	channelID   string
-	fingerprint string       // fingerprint text to match in conversations.history
-	matchTS     string       // timestamp returned for matching message
+	fingerprint string // fingerprint text to match in conversations.history
+	matchTS     string // timestamp returned for matching message
 }
 
 func newMockSlackServer(channelID, fingerprint, matchTS string) *mockSlackServer {
@@ -78,7 +78,7 @@ func (m *mockSlackServer) handlePostMessage(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (m *mockSlackServer) handleConversationsHistory(w http.ResponseWriter, r *http.Request) {
+func (m *mockSlackServer) handleConversationsHistory(w http.ResponseWriter, _ *http.Request) {
 	var messages []map[string]interface{}
 	if m.fingerprint != "" {
 		messages = append(messages, map[string]interface{}{

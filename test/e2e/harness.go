@@ -61,9 +61,9 @@ type testAppConfig struct {
 	maxConcurrentSessions int
 	sessionTimeout        time.Duration
 	chatTimeout           time.Duration
-	dbClient              *database.Client      // injected DB client (for multi-replica tests)
-	podID                 string                // custom pod ID (for multi-replica tests)
-	slackService          *tarsyslack.Service   // optional Slack service (for Slack notification tests)
+	dbClient              *database.Client    // injected DB client (for multi-replica tests)
+	podID                 string              // custom pod ID (for multi-replica tests)
+	slackService          *tarsyslack.Service // optional Slack service (for Slack notification tests)
 }
 
 // TestAppOption configures the test app.

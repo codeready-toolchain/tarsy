@@ -18,7 +18,7 @@ func TestService_NilReceiver(t *testing.T) {
 		assert.Empty(t, result)
 	})
 
-	t.Run("NotifySessionCompleted is no-op", func(t *testing.T) {
+	t.Run("NotifySessionCompleted is no-op", func(_ *testing.T) {
 		// Should not panic
 		s.NotifySessionCompleted(context.Background(), SessionCompletedInput{
 			SessionID: "sess-1",
