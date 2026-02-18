@@ -58,9 +58,13 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 // resolveRunbook resolves runbook content for a session using the RunbookService.
 // Falls back to config defaults on error or when the service is nil.
 func (e *RealSessionExecutor) resolveRunbook(ctx context.Context, session *ent.AlertSession) string {
-	// Nil-safe: fall back to config default
+	configDefault := ""
+	if e.cfg.Defaults != nil {
+		configDefault = e.cfg.Defaults.Runbook
+	}
+
 	if e.runbookService == nil {
-		return e.cfg.Defaults.Runbook
+		return configDefault
 	}
 
 	alertURL := ""
@@ -73,7 +77,7 @@ func (e *RealSessionExecutor) resolveRunbook(ctx context.Context, session *ent.A
 		slog.Warn("Runbook resolution failed, using default",
 			"session_id", session.ID,
 			"error", err)
-		return e.cfg.Defaults.Runbook
+		return configDefault
 	}
 	return content
 }

@@ -16,22 +16,32 @@ func TestConvertToRawURL(t *testing.T) {
 		{
 			name:     "blob URL converts to raw",
 			input:    "https://github.com/org/repo/blob/main/runbooks/k8s.md",
-			expected: "https://raw.githubusercontent.com/org/repo/refs/heads/main/runbooks/k8s.md",
+			expected: "https://raw.githubusercontent.com/org/repo/main/runbooks/k8s.md",
 		},
 		{
 			name:     "tree URL converts to raw",
 			input:    "https://github.com/org/repo/tree/main/runbooks/k8s.md",
-			expected: "https://raw.githubusercontent.com/org/repo/refs/heads/main/runbooks/k8s.md",
+			expected: "https://raw.githubusercontent.com/org/repo/main/runbooks/k8s.md",
 		},
 		{
 			name:     "nested path converts correctly",
 			input:    "https://github.com/myorg/docs/blob/develop/sre/runbooks/network.md",
-			expected: "https://raw.githubusercontent.com/myorg/docs/refs/heads/develop/sre/runbooks/network.md",
+			expected: "https://raw.githubusercontent.com/myorg/docs/develop/sre/runbooks/network.md",
+		},
+		{
+			name:     "tag ref converts correctly",
+			input:    "https://github.com/org/repo/blob/v1.0.0/runbooks/k8s.md",
+			expected: "https://raw.githubusercontent.com/org/repo/v1.0.0/runbooks/k8s.md",
+		},
+		{
+			name:     "commit SHA ref converts correctly",
+			input:    "https://github.com/org/repo/blob/abc123def456/runbooks/k8s.md",
+			expected: "https://raw.githubusercontent.com/org/repo/abc123def456/runbooks/k8s.md",
 		},
 		{
 			name:     "already raw URL passes through",
-			input:    "https://raw.githubusercontent.com/org/repo/refs/heads/main/runbooks/k8s.md",
-			expected: "https://raw.githubusercontent.com/org/repo/refs/heads/main/runbooks/k8s.md",
+			input:    "https://raw.githubusercontent.com/org/repo/main/runbooks/k8s.md",
+			expected: "https://raw.githubusercontent.com/org/repo/main/runbooks/k8s.md",
 		},
 		{
 			name:     "non-GitHub URL passes through",
@@ -46,7 +56,7 @@ func TestConvertToRawURL(t *testing.T) {
 		{
 			name:     "www.github.com blob URL converts",
 			input:    "https://www.github.com/org/repo/blob/main/runbook.md",
-			expected: "https://raw.githubusercontent.com/org/repo/refs/heads/main/runbook.md",
+			expected: "https://raw.githubusercontent.com/org/repo/main/runbook.md",
 		},
 		{
 			name:     "invalid URL passes through",
@@ -205,6 +215,18 @@ func TestValidateRunbookURL(t *testing.T) {
 			name:           "nil allowlist allows any domain",
 			url:            "https://any-domain.com/path",
 			allowedDomains: nil,
+			wantErr:        false,
+		},
+		{
+			name:           "case-insensitive domain match",
+			url:            "https://github.com/org/repo/blob/main/runbook.md",
+			allowedDomains: []string{"GitHub.COM"},
+			wantErr:        false,
+		},
+		{
+			name:           "case-insensitive www domain match",
+			url:            "https://www.github.com/org/repo/blob/main/runbook.md",
+			allowedDomains: []string{"GitHub.COM"},
 			wantErr:        false,
 		},
 		{

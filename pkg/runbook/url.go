@@ -48,8 +48,9 @@ func ConvertToRawURL(githubURL string) string {
 	ref := matches[4]
 	path := matches[5]
 
-	// Build raw URL: https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/{ref}/{path}
-	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/refs/heads/%s/%s", owner, repo, ref, path)
+	// Build raw URL: https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
+	// Using the bare ref works for branches, tags, and commit SHAs alike.
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, path)
 	return rawURL
 }
 
@@ -95,7 +96,8 @@ func ValidateRunbookURL(rawURL string, allowedDomains []string) error {
 		host := strings.ToLower(parsed.Hostname())
 		allowed := false
 		for _, domain := range allowedDomains {
-			if host == domain || host == "www."+domain {
+			d := strings.ToLower(domain)
+			if host == d || host == "www."+d {
 				allowed = true
 				break
 			}

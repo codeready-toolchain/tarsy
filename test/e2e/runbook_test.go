@@ -118,12 +118,9 @@ func TestE2E_RunbookURL_InvalidDomain(t *testing.T) {
 	}
 
 	// Expect 400 Bad Request.
-	req, err := http.NewRequest(http.MethodPost, app.BaseURL+"/api/v1/alerts", nil)
-	require.NoError(t, err)
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
-	req.Body = http.NoBody
-	req, err = http.NewRequestWithContext(context.Background(), http.MethodPost, app.BaseURL+"/api/v1/alerts", bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, app.BaseURL+"/api/v1/alerts", bytes.NewReader(data))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

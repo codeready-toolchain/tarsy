@@ -51,7 +51,7 @@ pkg/
 ├── mcp/                  # MCP client infrastructure (client, executor, transport, health, testing helpers)
 ├── models/               # MCP selection, trace API response types, shared types
 ├── queue/                # Worker, WorkerPool, orphan detection, session executor, chat executor
-├── runbook/              # RunbookService, GitHubClient, RunbookCache, URL validation/conversion
+├── runbook/              # Service, GitHubClient, Cache, URL validation/conversion
 └── services/             # Session, Stage, Timeline, Message, Interaction, Chat, Event, Alert, SystemWarnings
 ent/
 ├── schema/               # Ent schema definitions (10 entities)
@@ -97,7 +97,7 @@ The end-to-end happy path from alert submission to completion:
 2. **Worker pool** polls for pending sessions → `SessionService.ClaimNextPendingSession()` uses `FOR UPDATE SKIP LOCKED` → sets status=`in_progress`, assigns `pod_id`
 3. **SessionExecutor.Execute()** (`pkg/queue/executor.go`):
    - Resolves chain config from `ChainRegistry`
-   - Resolves runbook content via `RunbookService.Resolve()` (per-alert URL → fetch with cache → inject into `ExecutionContext.RunbookContent`; empty URL → default content from config; fetch failure → fail-open to default)
+   - Resolves runbook content via `runbook.Service.Resolve()` (per-alert URL → fetch with cache → inject into `ExecutionContext.RunbookContent`; empty URL → default content from config; fetch failure → fail-open to default)
    - Initializes shared services (StageService, MessageService, TimelineService, InteractionService)
    - **Chain loop**: iterates over `chain.Stages` sequentially, tracking `dbStageIndex` (which may differ from config index when synthesis stages are inserted)
      - Checks context cancellation before starting each stage
@@ -700,16 +700,16 @@ The runbook system provides per-alert runbook content injection into LLM prompts
 
 ```
 pkg/runbook/
-├── service.go    # RunbookService — orchestrator (Resolve, ListRunbooks, fetchWithCache)
+├── service.go    # Service — orchestrator (Resolve, ListRunbooks, fetchWithCache)
 ├── github.go     # GitHubClient — HTTP client for raw content download and Contents API listing
-├── cache.go      # RunbookCache — thread-safe in-memory TTL cache (lazy eviction)
+├── cache.go      # Cache — thread-safe in-memory TTL cache (lazy eviction)
 └── url.go        # URL utilities (ConvertToRawURL, ParseRepoURL, ValidateRunbookURL)
 ```
 
 ### Resolution Hierarchy
 
 ```
-RunbookService.Resolve(ctx, alertRunbookURL):
+Service.Resolve(ctx, alertRunbookURL):
   1. If alertRunbookURL is non-empty → fetchWithCache(url) → return content
   2. If empty → return default content (from config Defaults.Runbook)
 ```
@@ -727,7 +727,7 @@ Alert Submission:
 Session Execution:
   RealSessionExecutor.Execute()
     → resolveRunbook(ctx, session)
-      → RunbookService.Resolve(ctx, session.RunbookURL)
+      → runbook.Service.Resolve(ctx, session.RunbookURL)
         → fetchWithCache(url) → ValidateRunbookURL → ConvertToRawURL → cache check → GitHubClient.DownloadContent → cache set
     → ExecutionContext.RunbookContent = resolved content
 
@@ -737,7 +737,7 @@ Chat Execution:
 
 Runbook Listing:
   GET /api/v1/runbooks
-    → RunbookService.ListRunbooks(ctx)
+    → runbook.Service.ListRunbooks(ctx)
       → GitHubClient.ListMarkdownFiles(ctx, repoURL) — recursive via Contents API
       → Returns html_url for each .md file
 ```
@@ -760,7 +760,7 @@ func (c *GitHubClient) ListMarkdownFiles(ctx, repoURL) ([]string, error) // Recu
 - **`ParseRepoURL(url)`**: Extracts `Owner`, `Repo`, `Ref`, `Path` from GitHub tree/blob URLs.
 - **`ValidateRunbookURL(url, allowedDomains)`**: Checks scheme (http/https only) and domain allowlist. Empty allowlist permits any domain.
 
-### RunbookCache (`pkg/runbook/cache.go`)
+### Cache (`pkg/runbook/cache.go`)
 
 Thread-safe in-memory cache with TTL expiration. Lazy eviction on `Get()` — no background goroutine. Used for both content caching (URL → content) and listing caching (repoURL → joined file list).
 
@@ -787,7 +787,7 @@ Config types in `pkg/config/system.go`: `GitHubConfig` (`TokenEnv`), `RunbookCon
 - **Session executor** (`pkg/queue/executor.go`): `resolveRunbook()` method resolves content before building `ExecutionContext`.
 - **Chat executor** (`pkg/queue/chat_executor.go`): Same `resolveRunbook()` pattern for chat messages.
 - **Dashboard** (`ManualAlertForm.tsx`): Autocomplete dropdown populated from `GET /api/v1/runbooks` with "Default Runbook" sentinel.
-- **Startup wiring** (`cmd/tarsy/main.go`): Creates `RunbookService`, passes to executors and API server. Adds system warning if `repo_url` configured without GitHub token.
+- **Startup wiring** (`cmd/tarsy/main.go`): Creates `runbook.Service`, passes to executors and API server. Adds system warning if `repo_url` configured without GitHub token.
 
 ---
 
@@ -1424,8 +1424,8 @@ Shared utility for canonical ↔ API name conversion:
 | **Filter persistence** | Dashboard persists filter state, pagination, and sort preferences in `localStorage` via `filterPersistence.ts` |
 | **Version monitoring** | Dashboard polls `/health` and `index.html` meta tag for version mismatch; triggers update banner via `VersionContext` |
 | **Fail-open runbook resolution** | Runbook fetch failure → fall back to default runbook content from config; investigation continues. Logged as warning, not fatal |
-| **URL validation at two levels** | Runbook URLs validated at API handler (400 rejection) AND inside `RunbookService.fetchWithCache()` (defense in depth). Both use same `ValidateRunbookURL()` function |
-| **Lazy runbook cache eviction** | `RunbookCache` evicts expired entries on `Get()` — no background goroutine. Simple, no cleanup coordination needed |
+| **URL validation at two levels** | Runbook URLs validated at API handler (400 rejection) AND inside `Service.fetchWithCache()` (defense in depth). Both use same `ValidateRunbookURL()` function |
+| **Lazy runbook cache eviction** | `runbook.Cache` evicts expired entries on `Get()` — no background goroutine. Simple, no cleanup coordination needed |
 | **Blob→raw URL conversion** | `ConvertToRawURL()` transparently converts `github.com/blob/` URLs to `raw.githubusercontent.com` for direct content download. Non-GitHub URLs pass through unchanged |
 
 ---

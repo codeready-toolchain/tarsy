@@ -39,9 +39,13 @@ func (c *Cache) Get(url string) (string, bool) {
 	}
 
 	if time.Since(entry.fetchedAt) > c.ttl {
-		// Expired — clean up lazily
+		// Expired — clean up lazily.
+		// Re-check under write lock: a concurrent Set() may have replaced
+		// the entry with a fresh one between RUnlock and Lock.
 		c.mu.Lock()
-		delete(c.entries, url)
+		if current, ok := c.entries[url]; ok && time.Since(current.fetchedAt) > c.ttl {
+			delete(c.entries, url)
+		}
 		c.mu.Unlock()
 		return "", false
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -113,18 +114,17 @@ func (s *Service) fetchWithCache(ctx context.Context, rawURL string) (string, er
 	return content, nil
 }
 
-// joinForCache and splitCachedList use a separator that won't appear in URLs.
-const listCacheSeparator = "\x00"
-
 func joinForCache(items []string) string {
 	if len(items) == 0 {
 		return ""
 	}
-	result := items[0]
+	var sb strings.Builder
+	sb.WriteString(items[0])
 	for _, item := range items[1:] {
-		result += listCacheSeparator + item
+		sb.WriteByte('\x00')
+		sb.WriteString(item)
 	}
-	return result
+	return sb.String()
 }
 
 func splitCachedList(cached string) []string {

@@ -58,13 +58,13 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 		Author:    extractAuthor(c),
 	}
 
-	// 6. Call service
+	// 7. Call service
 	session, err := s.alertService.SubmitAlert(c.Request().Context(), input)
 	if err != nil {
 		return mapServiceError(err)
 	}
 
-	// 7. Return response
+	// 8. Return response
 	return c.JSON(http.StatusAccepted, &AlertResponse{
 		SessionID: session.ID,
 		Status:    "queued",

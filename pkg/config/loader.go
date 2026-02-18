@@ -256,6 +256,11 @@ func resolveRunbooksConfig(sys *SystemYAMLConfig) *RunbookConfig {
 	if rb.CacheTTL != "" {
 		if d, err := time.ParseDuration(rb.CacheTTL); err == nil {
 			cfg.CacheTTL = d
+		} else {
+			slog.Warn("Invalid cache_ttl in runbooks config, using default",
+				"value", rb.CacheTTL,
+				"default", cfg.CacheTTL,
+				"error", err)
 		}
 	}
 	if len(rb.AllowedDomains) > 0 {

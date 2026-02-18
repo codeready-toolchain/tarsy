@@ -218,7 +218,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		runbookService,
 	)
 
-	// 10. HTTP server on random port.
+	// 11. HTTP server on random port.
 	server := api.NewServer(tc.cfg, dbClient, alertService, sessionService, workerPool, connManager)
 	server.SetChatService(chatService)
 	server.SetChatExecutor(chatExecutor)
