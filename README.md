@@ -7,7 +7,7 @@
 
 **TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through sequential agent chains, retrieves runbooks, and uses MCP (Model Context Protocol) servers to gather system information for comprehensive multi-stage incident analysis.
 
-Built on a hybrid Go + Python architecture for performance and flexibility.
+This is the Go-based hybrid rewrite of TARSy, replacing the [original Python implementation](https://github.com/codeready-toolchain/tarsy-bot) (now deprecated). The new architecture splits responsibilities between a Go orchestrator and a stateless Python LLM service for better performance, type safety, and scalability.
 
 [tarsy-gh-demo.webm](https://github.com/user-attachments/assets/dae0e409-ef7f-46a6-b390-dbf287497963)
 
