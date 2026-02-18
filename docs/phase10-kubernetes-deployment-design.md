@@ -11,7 +11,7 @@ Old TARSy used 3 separate Deployments (backend + oauth2-proxy sidecar, dashboard
 1. **Kustomize manifests** — base + development overlay (matching old TARSy's pattern)
 2. **Single-pod Deployment** — 4 containers sharing localhost network
 3. **kube-rbac-proxy** — API client authentication via Kubernetes ServiceAccount tokens (replaces old TARSy's JWT)
-4. **Routes** — TLS edge termination for browser access, passthrough TLS for API access
+4. **Routes** — TLS edge termination for browser access; API is internal-only (ClusterIP Service)
 5. **ConfigMaps & Secrets** — application config, OAuth, LLM API keys, DB credentials
 6. **ImageStreams** — OpenShift internal registry integration
 7. **Health probes** — per-container liveness, readiness, startup probes
@@ -136,7 +136,7 @@ tarsy → tarsy-database Service :5432 (K8s DNS)
 | Dashboard | Separate Deployment (nginx) | Built into tarsy container |
 | LLM service | Part of backend (Python monolith) | Separate container in pod (gRPC) |
 | API auth | JWT (RS256 keys, JWKS endpoint) | kube-rbac-proxy (SA tokens, K8s RBAC) |
-| Routes | 5 (health, dashboard, api, oauth, websocket) | 2 (browser via oauth2-proxy, API via kube-rbac-proxy) |
+| Routes | 5 (health, dashboard, api, oauth, websocket) | 1 (browser via oauth2-proxy; API is internal ClusterIP only) |
 | Services | 3 (database, backend, dashboard) | 3 (database, tarsy-web, tarsy-api) |
 | ImageStreams | 2 (backend, dashboard) | 2 (tarsy, tarsy-llm) |
 | Registry | quay.io (CI) + OpenShift internal (dev) | Same pattern |
@@ -156,13 +156,14 @@ deploy/kustomize/
 │   ├── database-deployment.yaml       # PostgreSQL with PVC
 │   ├── persistentvolumeclaims.yaml
 │   ├── services.yaml                  # tarsy-web, tarsy-api, tarsy-database
-│   ├── routes.yaml                    # browser + API routes
+│   ├── routes.yaml                    # browser Route (edge TLS)
 │   ├── imagestreams.yaml              # tarsy, tarsy-llm
 │   ├── rbac.yaml                      # kube-rbac-proxy RBAC resources
 │   └── secrets-template.yaml          # OpenShift Template for secrets
 └── overlays/
     └── development/
         ├── kustomization.yaml         # Overlay with configMapGenerator
+        ├── tarsy.yaml                 # Main tarsy config (system, MCP servers)
         ├── oauth2-proxy.cfg           # Environment-specific oauth2-proxy config
         ├── agents.yaml                # Agent definitions
         ├── llm_providers.yaml         # LLM provider config
@@ -212,17 +213,19 @@ images:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: tarsy-dev
+namespace: tarsy
 
 resources:
   - ../../base
-
-namePrefix: dev-
 
 commonLabels:
   environment: development
 
 configMapGenerator:
+  - name: tarsy-app-config
+    behavior: create
+    files:
+      - tarsy.yaml
   - name: agents-config
     behavior: create
     files:
@@ -247,15 +250,15 @@ configMapGenerator:
       - LLM_SERVICE_ADDR=localhost:50051
       - DASHBOARD_DIR=/app/dashboard
       - CONFIG_DIR=/app/config
-      - DB_HOST=dev-tarsy-database
+      - DB_HOST=tarsy-database
       - DB_NAME=tarsy
 
 images:
   - name: tarsy
-    newName: image-registry.openshift-image-registry.svc:5000/tarsy-dev/tarsy
+    newName: image-registry.openshift-image-registry.svc:5000/tarsy/tarsy
     newTag: dev
   - name: tarsy-llm
-    newName: image-registry.openshift-image-registry.svc:5000/tarsy-dev/tarsy-llm
+    newName: image-registry.openshift-image-registry.svc:5000/tarsy/tarsy-llm
     newTag: dev
 ```
 
@@ -275,6 +278,11 @@ metadata:
   namespace: tarsy
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       component: tarsy
@@ -296,8 +304,6 @@ spec:
           env:
             - name: HOME
               value: /app/data
-            - name: LLM_SERVICE_ADDR
-              value: "localhost:50051"
             - name: DB_PORT
               value: "5432"
             - name: DB_SSLMODE
@@ -323,31 +329,27 @@ spec:
                 secretKeyRef:
                   name: tarsy-secrets
                   key: github-token
-            - name: SLACK_TOKEN
+            - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: tarsy-secrets
-                  key: slack-token
+                  key: slack-bot-token
                   optional: true
-            - name: MCP_KUBECONFIG
-              value: /app/.kube/mcp-config
-            - name: KUBECONFIG
-              value: /app/.kube/mcp-config
           envFrom:
             - configMapRef:
                 name: tarsy-config
           volumeMounts:
             - name: data
               mountPath: /app/data
+            - name: tarsy-app-config
+              mountPath: /app/config/tarsy.yaml
+              subPath: tarsy.yaml
             - name: agents-config
               mountPath: /app/config/agents.yaml
               subPath: agents.yaml
             - name: llm-providers-config
               mountPath: /app/config/llm_providers.yaml
               subPath: llm_providers.yaml
-            - name: mcp-kubeconfig
-              mountPath: /app/.kube/mcp-config
-              subPath: config
           livenessProbe:
             httpGet:
               path: /health
@@ -373,8 +375,8 @@ spec:
             failureThreshold: 12
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
               memory: "1Gi"
               cpu: "1000m"
@@ -448,8 +450,8 @@ spec:
             failureThreshold: 24
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
               memory: "2Gi"
               cpu: "1000m"
@@ -500,8 +502,8 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "64Mi"
+              cpu: "50m"
             limits:
               memory: "512Mi"
               cpu: "500m"
@@ -534,8 +536,8 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "50m"
+              memory: "32Mi"
+              cpu: "25m"
             limits:
               memory: "128Mi"
               cpu: "200m"
@@ -545,6 +547,9 @@ spec:
           emptyDir: {}
         - name: llm-data
           emptyDir: {}
+        - name: tarsy-app-config
+          configMap:
+            name: tarsy-app-config
         - name: agents-config
           configMap:
             name: agents-config
@@ -557,10 +562,6 @@ spec:
         - name: oauth2-templates
           configMap:
             name: oauth2-templates
-        - name: mcp-kubeconfig
-          secret:
-            secretName: mcp-kubeconfig-secret
-            optional: true
         - name: gcp-service-account
           secret:
             secretName: gcp-service-account-secret
@@ -575,6 +576,7 @@ spec:
 - `serviceAccountName: tarsy` — required for kube-rbac-proxy's TokenReview/SubjectAccessReview API calls
 - `startupProbe` on tarsy and llm-service — separate from liveness to allow slow startup without premature restarts. Tarsy: 5s + 12×5s = 65s window. LLM service: 5s + 24×5s = 125s window (model loading can be slow)
 - `emptyDir` for data volumes — writable scratch space for OpenShift's arbitrary UID (HOME=/app/data)
+- `tarsy-app-config` — main `tarsy.yaml` config file (system settings, MCP servers). Generated by Makefile from `deploy/config/tarsy.yaml` with environment-specific transforms (dashboard URL). MCP servers use remote HTTP transport per Q6 — the config file's MCP server definitions point to HTTP endpoints, not stdio
 - `serving-cert` — TLS certificate for kube-rbac-proxy, provisioned via OpenShift's service serving certificate feature (annotation on Service)
 - All containers use the universal images from Phase 9 (non-root, GID 0 permissions, non-privileged ports)
 
@@ -727,31 +729,13 @@ spec:
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
-
----
-# API client access — through kube-rbac-proxy (TLS passthrough)
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: tarsy-api
-  namespace: tarsy
-spec:
-  host: {{ROUTE_HOST_API}}
-  to:
-    kind: Service
-    name: tarsy-api
-    weight: 100
-  port:
-    targetPort: kube-rbac-proxy
-  tls:
-    termination: passthrough
 ```
 
 **Design notes:**
-- **Browser route** — single Route for all browser traffic (dashboard, API, WebSocket, OAuth callbacks, health). Edge TLS: OpenShift terminates TLS and forwards plain HTTP to oauth2-proxy on :4180. Old TARSy had 5 separate path-based routes; new TARSy needs only one because oauth2-proxy handles all path-based routing internally (`skip_auth_routes`, `api_routes`)
-- **API route** — separate host for programmatic access. Passthrough TLS: the Route forwards raw TLS to kube-rbac-proxy which terminates TLS using its serving certificate. Separate host needed because the same Route cannot mix edge and passthrough TLS
-- `{{ROUTE_HOST}}` and `{{ROUTE_HOST_API}}` — replaced by Makefile at apply time (e.g., `tarsy-dev.apps.cluster.example.com` and `tarsy-api-dev.apps.cluster.example.com`)
-- `insecureEdgeTerminationPolicy: Redirect` — HTTP → HTTPS redirect for browser route
+- **Single Route** for all browser traffic (dashboard, API, WebSocket, OAuth callbacks, health). Edge TLS: OpenShift terminates TLS and forwards plain HTTP to oauth2-proxy on :4180. Old TARSy had 5 separate path-based routes; new TARSy needs only one because oauth2-proxy handles all path-based routing internally (`skip_auth_routes`, `api_routes`)
+- **No API Route** — kube-rbac-proxy is internal-only (ClusterIP Service). In-cluster API clients connect directly to the `tarsy-api` Service. If external API access is needed later, a passthrough TLS Route can be added
+- `{{ROUTE_HOST}}` — replaced by Makefile at apply time (e.g., `tarsy.apps.cluster.example.com`)
+- `insecureEdgeTerminationPolicy: Redirect` — HTTP → HTTPS redirect
 
 ### OAuth2-Proxy Config Differences for Production
 
@@ -778,13 +762,14 @@ ConfigMaps are generated per-overlay via `configMapGenerator` in the overlay's `
 
 | ConfigMap | Contents | Source |
 |-----------|----------|--------|
+| `tarsy-app-config` | `tarsy.yaml` | Overlay file (system config, MCP servers) |
 | `agents-config` | `agents.yaml` | Overlay file |
 | `llm-providers-config` | `llm_providers.yaml` | Overlay file |
 | `oauth2-config` | `oauth2-proxy.cfg` | Overlay file (env-specific) |
 | `oauth2-templates` | `sign_in.html`, `tarsy-logo.png` | Overlay templates/ |
 | `tarsy-config` | Env vars: LOG_LEVEL, LLM_SERVICE_ADDR, etc. | Overlay literals |
 
-The config files (`agents.yaml`, `llm_providers.yaml`) are synced from the repo's `config/` directory to the overlay directory by the Makefile before `oc apply`.
+The config files (`tarsy.yaml`, `agents.yaml`, `llm_providers.yaml`) are synced from the repo's `config/` directory to the overlay directory by the Makefile before `oc apply`. The `tarsy.yaml` for OpenShift differs from the compose version: `dashboard_url` uses the HTTPS Route host, and MCP servers point to remote HTTP endpoints per Q6.
 
 ---
 
@@ -803,7 +788,7 @@ metadata:
     description: "TARSy secrets — created from environment variables"
 parameters:
   - name: NAMESPACE
-    value: "tarsy-dev"
+    value: "tarsy"
   - name: GOOGLE_API_KEY
     description: "Google API key for Gemini"
     required: true
@@ -821,7 +806,7 @@ parameters:
   - name: GOOGLE_SERVICE_ACCOUNT_KEY
     description: "GCP service account JSON (base64)"
     value: ""
-  - name: SLACK_TOKEN
+  - name: SLACK_BOT_TOKEN
     description: "Slack bot token for notifications"
     value: ""
   - name: DATABASE_PASSWORD
@@ -832,12 +817,9 @@ parameters:
   - name: DATABASE_NAME
     value: "tarsy"
   - name: DATABASE_HOST
-    value: "dev-tarsy-database"
+    value: "tarsy-database"
   - name: DATABASE_PORT
     value: "5432"
-  - name: MCP_KUBECONFIG_CONTENT
-    description: "Kubeconfig for Kubernetes MCP server (base64)"
-    value: ""
   - name: OAUTH2_CLIENT_ID
     required: true
   - name: OAUTH2_CLIENT_SECRET
@@ -861,7 +843,7 @@ objects:
       anthropic-api-key: ${ANTHROPIC_API_KEY}
       xai-api-key: ${XAI_API_KEY}
       vertex-ai-project: ${VERTEX_AI_PROJECT}
-      slack-token: ${SLACK_TOKEN}
+      slack-bot-token: ${SLACK_BOT_TOKEN}
   - apiVersion: v1
     kind: Secret
     metadata:
@@ -897,23 +879,14 @@ objects:
     type: Opaque
     data:
       service-account-key.json: ${GOOGLE_SERVICE_ACCOUNT_KEY}
-  - apiVersion: v1
-    kind: Secret
-    metadata:
-      name: mcp-kubeconfig-secret
-      namespace: ${NAMESPACE}
-      labels:
-        app: tarsy
-    type: Opaque
-    data:
-      config: ${MCP_KUBECONFIG_CONTENT}
 ```
 
 **Changes from old TARSy secrets template:**
 - **Removed**: `JWT_PUBLIC_KEY_CONTENT` (no JWT in new TARSy — kube-rbac-proxy handles API auth)
-- **Added**: `SLACK_TOKEN` (Phase 8.3 Slack notifications)
+- **Removed**: `MCP_KUBECONFIG_CONTENT` (MCP servers use remote HTTP transport in containers — no kubeconfig needed)
+- **Added**: `SLACK_BOT_TOKEN` (Phase 8.3 Slack notifications — matches `system.slack.token_env` default in tarsy config)
 - **OAuth2 secrets**: `OAUTH2_CLIENT_ID` and `OAUTH2_CLIENT_SECRET` are now required (not optional) since auth is always on in prod
-- **DATABASE_HOST**: Default is `dev-tarsy-database` (with namePrefix from overlay)
+- **DATABASE_HOST**: Default is `tarsy-database` (database Service name in the `tarsy` namespace)
 
 ---
 
@@ -1032,8 +1005,9 @@ oc create token my-api-client -n my-namespace --duration=8760h
 The client then uses this token in API requests:
 
 ```bash
-curl -H "Authorization: Bearer <token>" \
-  https://tarsy-api-dev.apps.cluster.example.com/api/v1/alerts \
+# From within the cluster (e.g., a CronJob or another pod)
+curl -k -H "Authorization: Bearer <token>" \
+  https://tarsy-api.tarsy.svc:8443/api/v1/alerts \
   -d '{"alert_type": "test", ...}'
 ```
 
@@ -1227,7 +1201,7 @@ BLUE := \033[0;34m
 NC := \033[0m
 
 # OpenShift variables
-OPENSHIFT_NAMESPACE := tarsy-dev
+OPENSHIFT_NAMESPACE := tarsy
 OPENSHIFT_REGISTRY = $(shell oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}' 2>/dev/null || echo "registry.not.found")
 TARSY_IMAGE = $(OPENSHIFT_REGISTRY)/$(OPENSHIFT_NAMESPACE)/tarsy
 LLM_IMAGE = $(OPENSHIFT_REGISTRY)/$(OPENSHIFT_NAMESPACE)/tarsy-llm
@@ -1249,7 +1223,6 @@ OPENSHIFT_TARGETS := openshift-check openshift-login-registry openshift-create-n
 ifneq ($(filter $(OPENSHIFT_TARGETS),$(MAKECMDGOALS)),)
 	ifneq ($(CLUSTER_DOMAIN),)
 		ROUTE_HOST := $(OPENSHIFT_NAMESPACE).$(CLUSTER_DOMAIN)
-		ROUTE_HOST_API := $(OPENSHIFT_NAMESPACE)-api.$(CLUSTER_DOMAIN)
 	endif
 	-include deploy/openshift.env
 	ifndef ROUTE_HOST
@@ -1331,7 +1304,7 @@ openshift-create-secrets: openshift-check openshift-create-namespace ## Create s
 	@[ -n "$$OAUTH2_CLIENT_SECRET" ] || { echo -e "$(RED)OAUTH2_CLIENT_SECRET not set$(NC)"; exit 1; }
 	@export DATABASE_USER=$${DATABASE_USER:-tarsy}; \
 	export DATABASE_NAME=$${DATABASE_NAME:-tarsy}; \
-	export DATABASE_HOST=$${DATABASE_HOST:-dev-tarsy-database}; \
+	export DATABASE_HOST=$${DATABASE_HOST:-tarsy-database}; \
 	export DATABASE_PORT=$${DATABASE_PORT:-5432}; \
 	oc process -f deploy/kustomize/base/secrets-template.yaml \
 		-p NAMESPACE=$(OPENSHIFT_NAMESPACE) \
@@ -1342,12 +1315,11 @@ openshift-create-secrets: openshift-check openshift-create-namespace ## Create s
 		-p XAI_API_KEY="$$XAI_API_KEY" \
 		-p VERTEX_AI_PROJECT="$$VERTEX_AI_PROJECT" \
 		-p GOOGLE_SERVICE_ACCOUNT_KEY="$$GOOGLE_SERVICE_ACCOUNT_KEY" \
-		-p SLACK_TOKEN="$$SLACK_TOKEN" \
+		-p SLACK_BOT_TOKEN="$$SLACK_BOT_TOKEN" \
 		-p DATABASE_USER="$$DATABASE_USER" \
 		-p DATABASE_NAME="$$DATABASE_NAME" \
 		-p DATABASE_HOST="$$DATABASE_HOST" \
 		-p DATABASE_PORT="$$DATABASE_PORT" \
-		-p MCP_KUBECONFIG_CONTENT="$$MCP_KUBECONFIG_CONTENT" \
 		-p OAUTH2_CLIENT_ID="$$OAUTH2_CLIENT_ID" \
 		-p OAUTH2_CLIENT_SECRET="$$OAUTH2_CLIENT_SECRET" \
 		$${DATABASE_PASSWORD:+-p DATABASE_PASSWORD="$$DATABASE_PASSWORD"} \
@@ -1361,6 +1333,10 @@ openshift-create-secrets: openshift-check openshift-create-namespace ## Create s
 openshift-check-config-files: ## Sync config files to overlay directory
 	@echo -e "$(BLUE)Syncing config files...$(NC)"
 	@mkdir -p deploy/kustomize/overlays/development/templates
+	@[ -f deploy/config/tarsy.yaml ] && \
+		sed -e 's|http://localhost:5173|https://$(ROUTE_HOST)|g' \
+		deploy/config/tarsy.yaml > deploy/kustomize/overlays/development/tarsy.yaml || \
+		{ echo -e "$(RED)deploy/config/tarsy.yaml not found$(NC)"; exit 1; }
 	@[ -f config/agents.yaml ] && cp config/agents.yaml deploy/kustomize/overlays/development/ || \
 		{ echo -e "$(RED)config/agents.yaml not found$(NC)"; exit 1; }
 	@[ -f config/llm_providers.yaml ] && cp config/llm_providers.yaml deploy/kustomize/overlays/development/ || \
@@ -1386,7 +1362,7 @@ openshift-check-config-files: ## Sync config files to overlay directory
 .PHONY: openshift-apply
 openshift-apply: openshift-check openshift-check-config-files ## Apply Kustomize manifests
 	@echo -e "$(BLUE)Applying manifests (Route Host: $(ROUTE_HOST))...$(NC)"
-	@sed -i.bak -e 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' -e 's|{{ROUTE_HOST_API}}|$(ROUTE_HOST_API)|g' deploy/kustomize/base/routes.yaml
+	@sed -i.bak 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' deploy/kustomize/base/routes.yaml
 	@oc apply -k deploy/kustomize/overlays/development/
 	@mv deploy/kustomize/base/routes.yaml.bak deploy/kustomize/base/routes.yaml
 	@echo -e "$(GREEN)✅ Manifests applied to $(OPENSHIFT_NAMESPACE)$(NC)"
@@ -1414,11 +1390,10 @@ openshift-status: openshift-check ## Show deployment status
 
 .PHONY: openshift-urls
 openshift-urls: openshift-check ## Show application URLs
-	@WEB=$$(oc get route dev-tarsy -n $(OPENSHIFT_NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
-	API=$$(oc get route dev-tarsy-api -n $(OPENSHIFT_NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
+	@WEB=$$(oc get route tarsy -n $(OPENSHIFT_NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
 	echo -e "$(BLUE)Dashboard: https://$$WEB$(NC)"; \
 	echo -e "$(BLUE)API (browser): https://$$WEB/api/v1/$(NC)"; \
-	echo -e "$(BLUE)API (SA token): https://$$API/api/v1/$(NC)"; \
+	echo -e "$(BLUE)API (in-cluster): https://tarsy-api.$(OPENSHIFT_NAMESPACE).svc:8443/api/v1/$(NC)"; \
 	echo -e "$(BLUE)Health: https://$$WEB/health$(NC)"
 
 .PHONY: openshift-logs
@@ -1431,7 +1406,7 @@ openshift-logs: openshift-check ## Show tarsy pod logs (all containers)
 openshift-clean: openshift-check ## Delete all TARSy resources
 	@printf "Delete all TARSy resources from $(OPENSHIFT_NAMESPACE)? [y/N] "; \
 	read REPLY; case "$$REPLY" in [Yy]*) \
-		sed -i.bak -e 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' -e 's|{{ROUTE_HOST_API}}|$(ROUTE_HOST_API)|g' deploy/kustomize/base/routes.yaml; \
+		sed -i.bak 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' deploy/kustomize/base/routes.yaml; \
 		oc delete -k deploy/kustomize/overlays/development/ 2>/dev/null || true; \
 		mv deploy/kustomize/base/routes.yaml.bak deploy/kustomize/base/routes.yaml; \
 		echo -e "$(GREEN)✅ Resources deleted$(NC)";; \
@@ -1452,13 +1427,13 @@ openshift-clean-images: openshift-check ## Delete images from registry
 openshift-db-reset: openshift-check ## Reset PostgreSQL (DESTRUCTIVE)
 	@printf "DELETE ALL DATABASE DATA? [y/N] "; \
 	read REPLY; case "$$REPLY" in [Yy]*) \
-		oc scale deployment dev-tarsy-database --replicas=0 -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
+		oc scale deployment tarsy-database --replicas=0 -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
 		oc wait --for=delete pod -l component=database -n $(OPENSHIFT_NAMESPACE) --timeout=60s 2>/dev/null || true; \
-		oc delete pvc dev-database-data -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
+		oc delete pvc database-data -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
 		$(MAKE) openshift-apply 2>/dev/null; \
-		oc scale deployment dev-tarsy-database --replicas=1 -n $(OPENSHIFT_NAMESPACE); \
-		oc wait --for=condition=available deployment/dev-tarsy-database -n $(OPENSHIFT_NAMESPACE) --timeout=120s; \
-		oc rollout restart deployment/dev-tarsy -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
+		oc scale deployment tarsy-database --replicas=1 -n $(OPENSHIFT_NAMESPACE); \
+		oc wait --for=condition=available deployment/tarsy-database -n $(OPENSHIFT_NAMESPACE) --timeout=120s; \
+		oc rollout restart deployment/tarsy -n $(OPENSHIFT_NAMESPACE) 2>/dev/null || true; \
 		echo -e "$(GREEN)✅ Database reset$(NC)";; \
 	*) echo "Cancelled";; esac
 ```
@@ -1469,7 +1444,7 @@ openshift-db-reset: openshift-check ## Reset PostgreSQL (DESTRUCTIVE)
 
 ### Rolling Update
 
-The tarsy Deployment uses the default `RollingUpdate` strategy with:
+The tarsy Deployment uses `RollingUpdate` strategy (explicit in the deployment YAML):
 
 ```yaml
 spec:
@@ -1484,24 +1459,22 @@ spec:
 
 ### Database Migration
 
-TARSy uses Ent ORM's auto-migration on startup (`entclient.Schema.Create(ctx)`). This runs before the HTTP server starts, so:
+TARSy uses **golang-migrate** with versioned `.up.sql` files (generated by Atlas CLI from Ent schema diffs). `runMigrations()` applies all pending migrations automatically on startup before the HTTP server starts:
 
-1. New pod starts → runs migration → schema updated → starts serving
-2. Old pod continues serving on old schema during migration
+1. New pod starts → `m.Up()` applies pending `.up.sql` files → schema updated → starts serving
+2. Old pod continues serving on the updated schema during rollout
 3. Once new pod passes readiness probe, traffic shifts
 
-**Constraint:** Ent auto-migration is additive (add tables, add columns, add indexes). It does not drop columns or rename tables. This means:
-- Rolling updates are safe — old code can still query the new schema (extra columns are ignored)
-- Breaking schema changes require manual migration (rare, planned downtime)
+Migrations can contain any SQL (CREATE, ALTER, DROP) — they are not limited to additive changes. Migration authors must ensure backward compatibility during rolling updates: the old pod's code must tolerate the new schema. Standard pattern: add first, deploy code, remove later.
 
 ### Rollback
 
 ```bash
 # Rollback to previous revision
-oc rollout undo deployment/dev-tarsy -n tarsy-dev
+oc rollout undo deployment/tarsy -n tarsy
 
 # Check rollout history
-oc rollout history deployment/dev-tarsy -n tarsy-dev
+oc rollout history deployment/tarsy -n tarsy
 ```
 
 ---
@@ -1514,7 +1487,7 @@ oc rollout history deployment/dev-tarsy -n tarsy-dev
 3. Write `persistentvolumeclaims.yaml`
 4. Write `database-deployment.yaml` (PostgreSQL with PVC)
 5. Write `services.yaml` (tarsy-web, tarsy-api, tarsy-database)
-6. Write `routes.yaml` (browser route + API route with placeholders)
+6. Write `routes.yaml` (browser Route with ROUTE_HOST placeholder)
 7. Write `imagestreams.yaml` (tarsy, tarsy-llm)
 8. Write base `kustomization.yaml`
 
@@ -1573,7 +1546,7 @@ oc rollout history deployment/dev-tarsy -n tarsy-dev
 | `deploy/kustomize/base/database-deployment.yaml` | PostgreSQL Deployment |
 | `deploy/kustomize/base/persistentvolumeclaims.yaml` | Database PVC |
 | `deploy/kustomize/base/services.yaml` | tarsy-web, tarsy-api, tarsy-database |
-| `deploy/kustomize/base/routes.yaml` | Browser + API Routes |
+| `deploy/kustomize/base/routes.yaml` | Browser Route (edge TLS) |
 | `deploy/kustomize/base/imagestreams.yaml` | tarsy, tarsy-llm ImageStreams |
 | `deploy/kustomize/base/rbac.yaml` | kube-rbac-proxy RBAC resources |
 | `deploy/kustomize/base/secrets-template.yaml` | OpenShift Template for secrets |
@@ -1590,7 +1563,7 @@ oc rollout history deployment/dev-tarsy -n tarsy-dev
 |------|---------|
 | `pkg/api/auth.go` | Add `X-Remote-User` header check for kube-rbac-proxy |
 | `Makefile` | Include `make/openshift.mk` (already includes `make/*.mk`) |
-| `.gitignore` | Add `deploy/kustomize/overlays/development/oauth2-proxy.cfg` and overlay config files |
+| `.gitignore` | Add `deploy/kustomize/overlays/development/oauth2-proxy.cfg`, `tarsy.yaml`, and overlay config files |
 
 ### Unchanged from Phase 9
 
@@ -1614,7 +1587,7 @@ oc rollout history deployment/dev-tarsy -n tarsy-dev
 1. **Kustomize syntax**: `kubectl kustomize deploy/kustomize/overlays/development/` renders valid YAML
 2. **Full deployment**: `make openshift-deploy` succeeds end-to-end
 3. **Browser flow**: HTTPS Route → OAuth login → dashboard loads → API calls work → WebSocket streams events
-4. **API client flow**: Create SA → bind ClusterRole → get token → `curl` with bearer token succeeds
+4. **API client flow**: Create SA → bind ClusterRole → get token → `curl` from within cluster to `tarsy-api` Service with bearer token succeeds
 5. **Health probes**: `oc describe pod` shows all containers passing probes
 6. **Rollout**: `make openshift-redeploy` → zero-downtime update verified
 7. **Rollback**: `oc rollout undo` → previous version restored
