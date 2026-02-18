@@ -12,6 +12,12 @@ type Config struct {
 	// Queue and worker pool configuration
 	Queue *QueueConfig
 
+	// GitHub integration configuration (resolved from system.github)
+	GitHub *GitHubConfig
+
+	// Runbook system configuration (resolved from system.runbooks)
+	Runbooks *RunbookConfig
+
 	// Component registries
 	AgentRegistry       *AgentRegistry
 	ChainRegistry       *ChainRegistry

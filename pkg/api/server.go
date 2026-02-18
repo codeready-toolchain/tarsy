@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/codeready-toolchain/tarsy/pkg/version"
 )
@@ -45,6 +46,7 @@ type Server struct {
 	interactionService *services.InteractionService    // nil until set (trace endpoints)
 	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
+	runbookService     *runbook.RunbookService         // nil until set (runbook endpoint)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 }
 
@@ -111,6 +113,11 @@ func (s *Server) SetStageService(svc *services.StageService) {
 // SetTimelineService sets the timeline service for the timeline endpoint.
 func (s *Server) SetTimelineService(svc *services.TimelineService) {
 	s.timelineService = svc
+}
+
+// SetRunbookService sets the runbook service for the runbook listing endpoint.
+func (s *Server) SetRunbookService(rs *runbook.RunbookService) {
+	s.runbookService = rs
 }
 
 // SetDashboardDir sets the path to the dashboard build directory and
@@ -190,6 +197,7 @@ func (s *Server) setupRoutes() {
 	v1.GET("/system/mcp-servers", s.mcpServersHandler)
 	v1.GET("/system/default-tools", s.defaultToolsHandler)
 	v1.GET("/alert-types", s.alertTypesHandler)
+	v1.GET("/runbooks", s.handleListRunbooks)
 
 	// Trace/observability endpoints (two-level loading).
 	v1.GET("/sessions/:id/trace", s.getTraceListHandler)

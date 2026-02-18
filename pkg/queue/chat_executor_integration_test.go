@@ -100,6 +100,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 
@@ -257,6 +258,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 
@@ -428,6 +430,7 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 
@@ -541,6 +544,7 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 
@@ -656,6 +660,7 @@ func TestChatExecutor_AcceptsInProgressSession(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 
@@ -732,6 +737,7 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 			SessionTimeout:    30 * time.Second,
 			HeartbeatInterval: 5 * time.Second,
 		},
+		nil,
 	)
 	defer chatExecutor.Stop()
 

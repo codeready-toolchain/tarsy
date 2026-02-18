@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 )
 
@@ -42,6 +43,10 @@ func (v *Validator) ValidateAll() error {
 
 	if err := v.validateDefaults(); err != nil {
 		return fmt.Errorf("defaults validation failed: %w", err)
+	}
+
+	if err := v.validateRunbooks(); err != nil {
+		return fmt.Errorf("runbooks validation failed: %w", err)
 	}
 
 	return nil
@@ -453,4 +458,29 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 	}
 
 	return referenced
+}
+
+func (v *Validator) validateRunbooks() error {
+	rb := v.cfg.Runbooks
+	if rb == nil {
+		return nil
+	}
+
+	if rb.CacheTTL <= 0 {
+		return fmt.Errorf("system.runbooks.cache_ttl must be positive, got %v", rb.CacheTTL)
+	}
+
+	if rb.RepoURL != "" {
+		if _, err := url.Parse(rb.RepoURL); err != nil {
+			return fmt.Errorf("system.runbooks.repo_url is not a valid URL: %w", err)
+		}
+	}
+
+	for i, domain := range rb.AllowedDomains {
+		if domain == "" {
+			return fmt.Errorf("system.runbooks.allowed_domains[%d] is empty", i)
+		}
+	}
+
+	return nil
 }

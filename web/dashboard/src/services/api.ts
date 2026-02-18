@@ -233,6 +233,17 @@ export async function getAlertTypes(): Promise<AlertTypesResponse> {
   return response.data;
 }
 
+// --- Runbooks ---
+
+export async function getRunbooks(): Promise<string[]> {
+  try {
+    const response = await client.get<string[]>('/api/v1/runbooks');
+    return response.data;
+  } catch {
+    return [];
+  }
+}
+
 // --- Alerts ---
 
 export async function submitAlert(data: SubmitAlertRequest): Promise<AlertResponse> {

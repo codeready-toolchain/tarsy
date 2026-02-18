@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  Autocomplete,
   Box,
   Card,
   CardContent,
@@ -36,7 +37,7 @@ import {
 } from '@mui/icons-material';
 
 import type { MCPSelectionConfig, MCPServerSelection } from '../../types/system.ts';
-import { getAlertTypes, submitAlert, handleAPIError } from '../../services/api.ts';
+import { getAlertTypes, getRunbooks, submitAlert, handleAPIError } from '../../services/api.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import { MCPSelection } from './MCPSelection.tsx';
 
@@ -121,6 +122,7 @@ export function ManualAlertForm() {
   // Available options
   const [availableAlertTypes, setAvailableAlertTypes] = useState<string[]>([]);
   const [defaultAlertType, setDefaultAlertType] = useState<string>('');
+  const [availableRunbooks, setAvailableRunbooks] = useState<string[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -209,6 +211,16 @@ export function ManualAlertForm() {
     };
 
     loadOptions();
+  }, []);
+
+  // ── STEP 3: Load available runbooks ─────────────────
+
+  useEffect(() => {
+    const loadRunbooks = async () => {
+      const urls = await getRunbooks();
+      setAvailableRunbooks(urls);
+    };
+    loadRunbooks();
   }, []);
 
   // ── Key-value pair helpers ────────────────────────────
@@ -447,21 +459,33 @@ export function ManualAlertForm() {
                 )}
               </TextField>
 
-              <TextField
+              <Autocomplete
+                freeSolo
                 fullWidth
-                label="Runbook URL"
-                value={runbookUrl}
-                onChange={(e) => setRunbookUrl(e.target.value)}
-                placeholder="https://github.com/org/repo/blob/main/runbooks/..."
-                helperText="Optional runbook URL for the agent to reference"
-                disabled={loading}
-                variant="filled"
-                sx={{
-                  '& .MuiFilledInput-root': {
-                    borderRadius: 2,
-                    '&:before, &:after': { display: 'none' },
-                  },
+                options={['Default Runbook', ...availableRunbooks]}
+                value={runbookUrl || 'Default Runbook'}
+                onInputChange={(_event, newValue) => {
+                  setRunbookUrl(newValue === 'Default Runbook' ? '' : newValue);
                 }}
+                onChange={(_event, newValue) => {
+                  setRunbookUrl(newValue === 'Default Runbook' || newValue === null ? '' : newValue);
+                }}
+                disabled={loading}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Runbook URL"
+                    placeholder="https://github.com/org/repo/blob/main/runbooks/..."
+                    helperText="Select a runbook or type a custom URL"
+                    variant="filled"
+                    sx={{
+                      '& .MuiFilledInput-root': {
+                        borderRadius: 2,
+                        '&:before, &:after': { display: 'none' },
+                      },
+                    }}
+                  />
+                )}
               />
             </Stack>
           </Box>

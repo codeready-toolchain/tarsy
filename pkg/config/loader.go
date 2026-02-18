@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"dario.cat/mergo"
 	"gopkg.in/yaml.v3"
@@ -13,11 +14,30 @@ import (
 
 // TarsyYAMLConfig represents the complete tarsy.yaml file structure
 type TarsyYAMLConfig struct {
+	System      *SystemYAMLConfig          `yaml:"system"`
 	MCPServers  map[string]MCPServerConfig `yaml:"mcp_servers"`
 	Agents      map[string]AgentConfig     `yaml:"agents"`
 	AgentChains map[string]ChainConfig     `yaml:"agent_chains"`
 	Defaults    *Defaults                  `yaml:"defaults"`
 	Queue       *QueueConfig               `yaml:"queue"`
+}
+
+// SystemYAMLConfig groups system-wide infrastructure settings.
+type SystemYAMLConfig struct {
+	GitHub   *GitHubYAMLConfig   `yaml:"github"`
+	Runbooks *RunbooksYAMLConfig `yaml:"runbooks"`
+}
+
+// GitHubYAMLConfig holds GitHub integration settings from YAML.
+type GitHubYAMLConfig struct {
+	TokenEnv string `yaml:"token_env,omitempty"` // Defaults to "GITHUB_TOKEN" if omitted
+}
+
+// RunbooksYAMLConfig holds runbook system settings from YAML.
+type RunbooksYAMLConfig struct {
+	RepoURL        string   `yaml:"repo_url,omitempty"`
+	CacheTTL       string   `yaml:"cache_ttl,omitempty"` // Parsed to time.Duration
+	AllowedDomains []string `yaml:"allowed_domains,omitempty"`
 }
 
 // LLMProvidersYAMLConfig represents the complete llm-providers.yaml file structure
@@ -125,10 +145,16 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
+	// Resolve system config (GitHub + Runbooks)
+	githubCfg := resolveGitHubConfig(tarsyConfig.System)
+	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
+
 	return &Config{
 		configDir:           configDir,
 		Defaults:            defaults,
 		Queue:               queueConfig,
+		GitHub:              githubCfg,
+		Runbooks:            runbooksCfg,
 		AgentRegistry:       agentRegistry,
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,
@@ -197,4 +223,44 @@ func (l *configLoader) loadLLMProvidersYAML() (map[string]LLMProviderConfig, err
 	}
 
 	return config.LLMProviders, nil
+}
+
+// resolveGitHubConfig resolves GitHub configuration from system YAML, applying defaults.
+func resolveGitHubConfig(sys *SystemYAMLConfig) *GitHubConfig {
+	cfg := &GitHubConfig{
+		TokenEnv: "GITHUB_TOKEN",
+	}
+
+	if sys != nil && sys.GitHub != nil && sys.GitHub.TokenEnv != "" {
+		cfg.TokenEnv = sys.GitHub.TokenEnv
+	}
+
+	return cfg
+}
+
+// resolveRunbooksConfig resolves runbook configuration from system YAML, applying defaults.
+func resolveRunbooksConfig(sys *SystemYAMLConfig) *RunbookConfig {
+	cfg := &RunbookConfig{
+		CacheTTL:       1 * time.Minute,
+		AllowedDomains: []string{"github.com", "raw.githubusercontent.com"},
+	}
+
+	if sys == nil || sys.Runbooks == nil {
+		return cfg
+	}
+
+	rb := sys.Runbooks
+	if rb.RepoURL != "" {
+		cfg.RepoURL = rb.RepoURL
+	}
+	if rb.CacheTTL != "" {
+		if d, err := time.ParseDuration(rb.CacheTTL); err == nil {
+			cfg.CacheTTL = d
+		}
+	}
+	if len(rb.AllowedDomains) > 0 {
+		cfg.AllowedDomains = rb.AllowedDomains
+	}
+
+	return cfg
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/joho/godotenv"
 )
@@ -183,7 +184,20 @@ func main() {
 		slog.Info("MCP health monitor started")
 	}
 
-	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory)
+	// 5c. Create RunbookService
+	tokenEnv := "GITHUB_TOKEN"
+	if cfg.GitHub != nil && cfg.GitHub.TokenEnv != "" {
+		tokenEnv = cfg.GitHub.TokenEnv
+	}
+	githubToken := os.Getenv(tokenEnv)
+	runbookService := runbook.NewRunbookService(cfg.Runbooks, githubToken, cfg.Defaults.Runbook)
+
+	if githubToken == "" && cfg.Runbooks != nil && cfg.Runbooks.RepoURL != "" {
+		warningsService.AddWarning("runbook", "GitHub token not configured",
+			"Set "+tokenEnv+" to access private repos. URL-based runbooks will fall back to default.", "")
+	}
+
+	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher)
@@ -200,6 +214,7 @@ func main() {
 			SessionTimeout:    cfg.Queue.SessionTimeout,
 			HeartbeatInterval: cfg.Queue.HeartbeatInterval,
 		},
+		runbookService,
 	)
 	slog.Info("Chat message executor initialized")
 
@@ -212,6 +227,7 @@ func main() {
 	httpServer.SetChatService(chatService)
 	httpServer.SetChatExecutor(chatExecutor)
 	httpServer.SetEventPublisher(eventPublisher)
+	httpServer.SetRunbookService(runbookService)
 
 	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)
