@@ -53,7 +53,7 @@ The same container images are used in both environments — only orchestration-l
 
 ```
 ┌─ tarsy Deployment (1 replica) ──────────────────────────────────────┐
-│                                                                      │
+│                                                                     │
 │  ┌────────────────────────┐  ┌──────────────────────────────────┐   │
 │  │   oauth2-proxy         │  │   kube-rbac-proxy                │   │
 │  │   :4180                │  │   :8443 (TLS)                    │   │
@@ -62,34 +62,34 @@ The same container images are used in both environments — only orchestration-l
 │  │   GitHub OAuth         │  │   SA token → TokenReview         │   │
 │  │   Cookie session       │  │   SubjectAccessReview (RBAC)     │   │
 │  └──────────┬─────────────┘  └────────────────┬─────────────────┘   │
-│             │                                 │                      │
-│             └────────────┬────────────────────┘                      │
-│                          │                                           │
-│                          ▼                                           │
-│  ┌───────────────────────────────────────────────────────────────┐   │
-│  │   tarsy                                                       │   │
-│  │   :8080                                                       │   │
-│  │                                                               │   │
-│  │   Go backend + pre-built dashboard static files               │   │
-│  │   REST API, WebSocket, worker pool, event streaming           │   │
-│  └──────────────────────┬────────────────────────────────────────┘   │
-│                          │                                           │
-│                          │ gRPC localhost:50051                       │
-│                          ▼                                           │
-│  ┌───────────────────────────────────────────────────────────────┐   │
-│  │   llm-service                                                 │   │
-│  │   :50051                                                      │   │
-│  │                                                               │   │
-│  │   Python gRPC — stateless LLM proxy                           │   │
-│  │   Health: gRPC health protocol (SERVING after init)           │   │
-│  └───────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+│             │                                 │                     │
+│             └────────────┬────────────────────┘                     │
+│                          │                                          │
+│                          ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │   tarsy                                                       │  │
+│  │   :8080                                                       │  │
+│  │                                                               │  │
+│  │   Go backend + pre-built dashboard static files               │  │
+│  │   REST API, WebSocket, worker pool, event streaming           │  │
+│  └───────────────────────┬───────────────────────────────────────┘  │
+│                          │                                          │
+│                          │ gRPC localhost:50051                     │
+│                          ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │   llm-service                                                 │  │
+│  │   :50051                                                      │  │
+│  │                                                               │  │
+│  │   Python gRPC — stateless LLM proxy                           │  │
+│  │   Health: gRPC health protocol (SERVING after init)           │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 
-┌─ tarsy-database Deployment (1 replica, Recreate strategy) ───────────┐
-│   PostgreSQL :5432 with PVC                                          │
-│   (or replace with managed DB — only connection params change)       │
-└──────────────────────────────────────────────────────────────────────┘
+┌─ tarsy-database Deployment (1 replica, Recreate strategy) ──────────┐
+│   PostgreSQL :5432 with PVC                                         │
+│   (or replace with managed DB — only connection params change)      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Access Paths
@@ -163,10 +163,9 @@ deploy/kustomize/
 └── overlays/
     └── development/
         ├── kustomization.yaml         # Overlay with configMapGenerator
-        ├── tarsy.yaml                 # Main tarsy config (system, MCP servers)
+        ├── tarsy.yaml                 # Main tarsy config (system, agents, MCP servers)
         ├── oauth2-proxy.cfg           # Environment-specific oauth2-proxy config
-        ├── agents.yaml                # Agent definitions
-        ├── llm_providers.yaml         # LLM provider config
+        ├── llm-providers.yaml         # LLM provider config
         └── templates/
             ├── sign_in.html           # Custom OAuth sign-in page
             └── tarsy-logo.png         # Sign-in logo
@@ -203,8 +202,8 @@ images:
     newName: quay.io/oauth2-proxy/oauth2-proxy
     newTag: latest
   - name: kube-rbac-proxy
-    newName: gcr.io/kubebuilder/kube-rbac-proxy
-    newTag: v0.16.0
+    newName: registry.redhat.io/openshift4/ose-kube-rbac-proxy
+    newTag: v4.15
 ```
 
 ### Development Overlay `kustomization.yaml`
@@ -226,14 +225,7 @@ configMapGenerator:
     behavior: create
     files:
       - tarsy.yaml
-  - name: agents-config
-    behavior: create
-    files:
-      - agents.yaml
-  - name: llm-providers-config
-    behavior: create
-    files:
-      - llm_providers.yaml
+      - llm-providers.yaml
   - name: oauth2-config
     behavior: create
     files:
@@ -344,12 +336,9 @@ spec:
             - name: tarsy-app-config
               mountPath: /app/config/tarsy.yaml
               subPath: tarsy.yaml
-            - name: agents-config
-              mountPath: /app/config/agents.yaml
-              subPath: agents.yaml
-            - name: llm-providers-config
-              mountPath: /app/config/llm_providers.yaml
-              subPath: llm_providers.yaml
+            - name: tarsy-app-config
+              mountPath: /app/config/llm-providers.yaml
+              subPath: llm-providers.yaml
           livenessProbe:
             httpGet:
               path: /health
@@ -510,7 +499,7 @@ spec:
 
         # ── kube-rbac-proxy (API client auth sidecar) ───────
         - name: kube-rbac-proxy
-          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+          image: registry.redhat.io/openshift4/ose-kube-rbac-proxy:v4.15
           args:
             - --secure-listen-address=0.0.0.0:8443
             - --upstream=http://127.0.0.1:8080/
@@ -550,12 +539,6 @@ spec:
         - name: tarsy-app-config
           configMap:
             name: tarsy-app-config
-        - name: agents-config
-          configMap:
-            name: agents-config
-        - name: llm-providers-config
-          configMap:
-            name: llm-providers-config
         - name: oauth2-config
           configMap:
             name: oauth2-config
@@ -762,14 +745,12 @@ ConfigMaps are generated per-overlay via `configMapGenerator` in the overlay's `
 
 | ConfigMap | Contents | Source |
 |-----------|----------|--------|
-| `tarsy-app-config` | `tarsy.yaml` | Overlay file (system config, MCP servers) |
-| `agents-config` | `agents.yaml` | Overlay file |
-| `llm-providers-config` | `llm_providers.yaml` | Overlay file |
+| `tarsy-app-config` | `tarsy.yaml`, `llm-providers.yaml` | Overlay files (system/agents/MCP config, LLM providers) |
 | `oauth2-config` | `oauth2-proxy.cfg` | Overlay file (env-specific) |
 | `oauth2-templates` | `sign_in.html`, `tarsy-logo.png` | Overlay templates/ |
 | `tarsy-config` | Env vars: LOG_LEVEL, LLM_SERVICE_ADDR, etc. | Overlay literals |
 
-The config files (`tarsy.yaml`, `agents.yaml`, `llm_providers.yaml`) are synced from the repo's `config/` directory to the overlay directory by the Makefile before `oc apply`. The `tarsy.yaml` for OpenShift differs from the compose version: `dashboard_url` uses the HTTPS Route host, and MCP servers point to remote HTTP endpoints per Q6.
+The config files (`tarsy.yaml`, `llm-providers.yaml`) are synced from `deploy/config/` to the overlay directory by the Makefile before `oc apply`. The `tarsy.yaml` for OpenShift differs from the compose version: `dashboard_url` uses the HTTPS Route host, and MCP servers point to remote HTTP endpoints per Q6.
 
 ---
 
@@ -1337,10 +1318,8 @@ openshift-check-config-files: ## Sync config files to overlay directory
 		sed -e 's|http://localhost:5173|https://$(ROUTE_HOST)|g' \
 		deploy/config/tarsy.yaml > deploy/kustomize/overlays/development/tarsy.yaml || \
 		{ echo -e "$(RED)deploy/config/tarsy.yaml not found$(NC)"; exit 1; }
-	@[ -f config/agents.yaml ] && cp config/agents.yaml deploy/kustomize/overlays/development/ || \
-		{ echo -e "$(RED)config/agents.yaml not found$(NC)"; exit 1; }
-	@[ -f config/llm_providers.yaml ] && cp config/llm_providers.yaml deploy/kustomize/overlays/development/ || \
-		{ echo -e "$(RED)config/llm_providers.yaml not found$(NC)"; exit 1; }
+	@[ -f deploy/config/llm-providers.yaml ] && cp deploy/config/llm-providers.yaml deploy/kustomize/overlays/development/ || \
+		{ echo -e "$(RED)deploy/config/llm-providers.yaml not found$(NC)"; exit 1; }
 	@[ -d deploy/config/templates ] && cp -r deploy/config/templates/* deploy/kustomize/overlays/development/templates/ || \
 		{ echo -e "$(RED)deploy/config/templates/ not found$(NC)"; exit 1; }
 	@echo -e "$(BLUE)Generating overlay oauth2-proxy.cfg from template...$(NC)"
