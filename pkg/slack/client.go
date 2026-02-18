@@ -58,27 +58,38 @@ func (c *Client) PostMessage(ctx context.Context, blocks []goslack.Block, thread
 }
 
 // FindMessageByFingerprint searches recent channel history for a message
-// containing the given fingerprint text. Returns the message timestamp (ts)
-// for threading, or empty string if not found.
+// containing the given fingerprint text. Pages through up to 1000 messages
+// from the last 24 hours. Returns the message timestamp (ts) for threading,
+// or empty string if not found.
 func (c *Client) FindMessageByFingerprint(ctx context.Context, fingerprint string) (string, error) {
 	oldest := fmt.Sprintf("%d", time.Now().Add(-24*time.Hour).Unix())
+	normalizedFingerprint := normalizeText(fingerprint)
 
 	params := &goslack.GetConversationHistoryParameters{
 		ChannelID: c.channelID,
 		Oldest:    oldest,
-		Limit:     50,
-	}
-	history, err := c.api.GetConversationHistoryContext(ctx, params)
-	if err != nil {
-		return "", fmt.Errorf("conversations.history failed: %w", err)
+		Limit:     200,
 	}
 
-	normalizedFingerprint := normalizeText(fingerprint)
-	for _, msg := range history.Messages {
-		text := collectMessageText(msg)
-		if strings.Contains(normalizeText(text), normalizedFingerprint) {
-			return msg.Timestamp, nil
+	const maxPages = 5
+	for page := 0; page < maxPages; page++ {
+		history, err := c.api.GetConversationHistoryContext(ctx, params)
+		if err != nil {
+			return "", fmt.Errorf("conversations.history failed: %w", err)
 		}
+
+		for _, msg := range history.Messages {
+			text := collectMessageText(msg)
+			if strings.Contains(normalizeText(text), normalizedFingerprint) {
+				return msg.Timestamp, nil
+			}
+		}
+
+		if !history.HasMore || history.ResponseMetaData.NextCursor == "" {
+			break
+		}
+		params.Cursor = history.ResponseMetaData.NextCursor
 	}
+
 	return "", nil
 }

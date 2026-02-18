@@ -3,6 +3,7 @@ package slack
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	goslack "github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
@@ -130,5 +131,16 @@ func TestTruncateForSlack(t *testing.T) {
 		result := truncateForSlack(text)
 		assert.True(t, len(result) < len(text))
 		assert.Contains(t, result, "truncated")
+	})
+
+	t.Run("multi-byte runes not split", func(t *testing.T) {
+		text := strings.Repeat("🔥", maxBlockTextLength+10)
+		result := truncateForSlack(text)
+		assert.Contains(t, result, "truncated")
+		// Verify it's valid UTF-8 by ensuring no broken runes.
+		assert.True(t, utf8.ValidString(result), "result should be valid UTF-8")
+		// Should contain exactly maxBlockTextLength emoji runes before the suffix.
+		prefix := strings.Split(result, "\n\n_...")[0]
+		assert.Equal(t, maxBlockTextLength, utf8.RuneCountInString(prefix))
 	})
 }

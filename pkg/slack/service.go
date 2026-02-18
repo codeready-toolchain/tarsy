@@ -76,7 +76,10 @@ func (s *Service) NotifySessionStarted(ctx context.Context, input SessionStarted
 		return ""
 	}
 
-	threadTS, err := s.client.FindMessageByFingerprint(ctx, input.SlackMessageFingerprint)
+	lookupCtx, lookupCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer lookupCancel()
+
+	threadTS, err := s.client.FindMessageByFingerprint(lookupCtx, input.SlackMessageFingerprint)
 	if err != nil {
 		s.logger.Warn("Failed to find Slack thread for fingerprint",
 			"session_id", input.SessionID,
@@ -103,8 +106,11 @@ func (s *Service) NotifySessionCompleted(ctx context.Context, input SessionCompl
 
 	threadTS := input.ThreadTS
 	if threadTS == "" && input.SlackMessageFingerprint != "" {
+		lookupCtx, lookupCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer lookupCancel()
+
 		var err error
-		threadTS, err = s.client.FindMessageByFingerprint(ctx, input.SlackMessageFingerprint)
+		threadTS, err = s.client.FindMessageByFingerprint(lookupCtx, input.SlackMessageFingerprint)
 		if err != nil {
 			s.logger.Warn("Failed to find Slack thread for fingerprint",
 				"session_id", input.SessionID,

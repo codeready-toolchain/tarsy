@@ -499,6 +499,10 @@ func (v *Validator) validateSlack() error {
 		return fmt.Errorf("system.slack.channel is required when Slack is enabled")
 	}
 
+	if s.TokenEnv == "" {
+		return fmt.Errorf("system.slack.token_env is required when Slack is enabled")
+	}
+
 	if token := os.Getenv(s.TokenEnv); token == "" {
 		return fmt.Errorf("system.slack.token_env: environment variable %s is not set", s.TokenEnv)
 	}

@@ -100,8 +100,9 @@ func BuildTerminalMessage(input SessionCompletedInput, dashboardURL string) []go
 }
 
 func truncateForSlack(text string) string {
-	if len(text) <= maxBlockTextLength {
+	runes := []rune(text)
+	if len(runes) <= maxBlockTextLength {
 		return text
 	}
-	return text[:maxBlockTextLength] + "\n\n_... (truncated — view full analysis in dashboard)_"
+	return string(runes[:maxBlockTextLength]) + "\n\n_... (truncated — view full analysis in dashboard)_"
 }

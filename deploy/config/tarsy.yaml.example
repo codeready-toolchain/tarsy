@@ -61,8 +61,10 @@ system:
   # Slack notification configuration
   # Sends notifications when sessions start, complete, fail, or time out.
   # Requires a Slack Bot Token with scopes: channels:history, groups:history, chat:write
+  # To enable: set enabled: true, provide a valid channel ID, and ensure the
+  # token env var (default: SLACK_BOT_TOKEN) is set in your environment.
   slack:
-    enabled: true
+    enabled: false
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
     channel: "C12345678"           # Slack channel ID (required when enabled)
 

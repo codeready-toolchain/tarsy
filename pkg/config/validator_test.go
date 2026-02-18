@@ -1686,6 +1686,16 @@ func TestValidateSlack(t *testing.T) {
 			errMsg:  "system.slack.channel is required when Slack is enabled",
 		},
 		{
+			name: "enabled with empty token_env fails",
+			slack: &SlackConfig{
+				Enabled:  true,
+				TokenEnv: "",
+				Channel:  "C12345678",
+			},
+			wantErr: true,
+			errMsg:  "system.slack.token_env is required when Slack is enabled",
+		},
+		{
 			name: "enabled with missing token env var fails",
 			slack: &SlackConfig{
 				Enabled:  true,
