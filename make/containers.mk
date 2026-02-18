@@ -2,7 +2,7 @@
 # Container Orchestration (podman-compose)
 # =============================================================================
 
-COMPOSE := COMPOSE_PROJECT_NAME=tarsy podman compose -f deploy/podman-compose.yml
+COMPOSE ?= COMPOSE_PROJECT_NAME=tarsy podman compose -f deploy/podman-compose.yml
 
 # ── Build ────────────────────────────────────────────────
 
@@ -50,12 +50,18 @@ containers-logs-tarsy: ## Follow tarsy container logs
 
 .PHONY: containers-stop
 containers-stop: ## Stop all containers
-	@$(COMPOSE) down
+	@$(COMPOSE) down 2>/dev/null || \
+		(echo -e "$(YELLOW)Compose down failed, forcing container removal...$(NC)" && \
+		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-oauth2 2>/dev/null; true)
 	@echo -e "$(GREEN)✅ Containers stopped$(NC)"
 
 .PHONY: containers-clean
 containers-clean: ## Stop containers and remove volumes
-	@$(COMPOSE) down -v
+	@$(COMPOSE) down -v 2>/dev/null || \
+		(echo -e "$(YELLOW)Compose down failed, forcing cleanup...$(NC)" && \
+		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-oauth2 2>/dev/null; \
+		 podman volume rm tarsy_postgres_data 2>/dev/null; true)
+	@podman network prune -f >/dev/null 2>&1 || true
 	@echo -e "$(GREEN)✅ Containers and volumes cleaned$(NC)"
 
 .PHONY: containers-db-reset
