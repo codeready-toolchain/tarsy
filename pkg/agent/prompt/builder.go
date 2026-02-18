@@ -33,8 +33,10 @@ func (b *PromptBuilder) MCPServerRegistry() *config.MCPServerRegistry {
 	return b.mcpRegistry
 }
 
-const taskFocus = "Focus on investigation and providing recommendations for human operators to execute."
-const chatTaskFocus = "Focus on answering follow-up questions about a completed investigation for human operators to execute."
+const (
+	taskFocus     = "Focus on investigation and providing recommendations for human operators to execute."
+	chatTaskFocus = "Focus on answering follow-up questions about a completed investigation for human operators to execute."
+)
 
 // BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
 // Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
@@ -126,6 +128,22 @@ func (b *PromptBuilder) BuildExecutiveSummarySystemPrompt() string {
 // BuildExecutiveSummaryUserPrompt builds the user prompt for generating an executive summary.
 func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string) string {
 	return fmt.Sprintf(executiveSummaryUserTemplate, finalAnalysis)
+}
+
+func (b *PromptBuilder) BuildScoringSystemPrompt() string {
+	return judgeSystemPrompt
+}
+
+func (b *PromptBuilder) BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string {
+	return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema)
+}
+
+func (b *PromptBuilder) BuildScoringOutputSchemaReminderPrompt(outputSchema string) string {
+	return fmt.Sprintf(judgePromptScoreReminder, outputSchema)
+}
+
+func (b *PromptBuilder) BuildScoringMissingToolsReportPrompt() string {
+	return judgePromptFollowupMissingTools
 }
 
 // buildInvestigationUserMessage builds the user message for an investigation.
