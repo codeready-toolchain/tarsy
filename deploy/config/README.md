@@ -195,91 +195,9 @@ agent_chains:
 
 Effective max_iterations for this agent: **10** (agent-level wins)
 
-## Deployment Examples
+## Deployment
 
-### Local Development (Host)
-
-```bash
-# In .env
-DB_HOST=localhost
-DB_PORT=5432
-KUBECONFIG=/home/user/.kube/config
-
-# Start TARSy
-go run cmd/tarsy/main.go
-```
-
-### Podman-Compose (Container Mode with OAuth2)
-
-Runs all 4 containers: postgres, llm-service, tarsy, and oauth2-proxy.
-
-```bash
-# 1. Set up OAuth2 credentials
-cp deploy/config/oauth.env.example deploy/config/oauth.env
-# Edit oauth.env with your GitHub OAuth App credentials
-
-# 2. Deploy all containers
-make containers-deploy
-
-# Dashboard: http://localhost:8080 (through oauth2-proxy)
-# Health:    http://localhost:8080/health (unauthenticated)
-```
-
-Other container commands:
-- `make containers-status` — show running containers
-- `make containers-logs` — follow all container logs
-- `make containers-logs-tarsy` — follow tarsy logs only
-- `make containers-redeploy` — rebuild and restart tarsy only
-- `make containers-stop` — stop all containers
-- `make containers-clean` — stop and remove volumes
-- `make containers-db-reset` — reset database only
-
-The existing `make dev` workflow (host-based, no containers) continues to work
-unchanged for development without OAuth2.
-
-### Kubernetes / OpenShift
-
-1. Create ConfigMap for YAML files:
-
-```bash
-kubectl create configmap tarsy-config \
-  --from-file=tarsy.yaml \
-  --from-file=llm-providers.yaml
-```
-
-2. Create Secret for environment variables:
-
-```bash
-kubectl create secret generic tarsy-secrets \
-  --from-env-file=.env
-```
-
-3. Mount in Deployment:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tarsy-backend
-spec:
-  template:
-    spec:
-      containers:
-      - name: backend
-        env:
-        - name: CONFIG_DIR
-          value: /etc/tarsy/config
-        envFrom:
-        - secretRef:
-            name: tarsy-secrets
-        volumeMounts:
-        - name: config
-          mountPath: /etc/tarsy/config
-      volumes:
-      - name: config
-        configMap:
-          name: tarsy-config
-```
+For step-by-step deployment instructions (host dev, container dev, OpenShift), see [deploy/README.md](../README.md).
 
 ## Configuration Validation
 

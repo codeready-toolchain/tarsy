@@ -81,7 +81,7 @@ Quick reference for common development tasks:
 ```bash
 # Quick start
 make help             # Show all available commands
-make dev-setup        # Complete setup (DB + code generation)
+make setup            # Install all dependencies (Go + Python + Dashboard)
 make build            # Build the application
 
 # Database operations
