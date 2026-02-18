@@ -4,7 +4,7 @@
 
 Add OAuth2-proxy authentication and containerize TARSy for the podman-compose development environment. This phase replaces old TARSy's 5-container architecture (postgres, oauth2-proxy, backend, dashboard, reverse-proxy) with 4 containers: **oauth2-proxy**, **tarsy** (Go backend + dashboard), **llm-service** (Python gRPC), and **postgres**.
 
-The podman-compose environment mirrors the production (OpenShift) topology: same container images, same inter-container networking, same health probes. The only difference is the orchestrator. In production, Phase 10 adds a `kube-rbac-proxy` sidecar for API client auth.
+The podman-compose environment mirrors the production (OpenShift) topology: same container images, same inter-container networking. The only difference is the orchestrator (and llm-service health probes — TCP in compose, gRPC health protocol in prod). In production, Phase 10 adds a `kube-rbac-proxy` sidecar for API client auth.
 
 The key architectural simplification over old TARSy: since new TARSy's Go backend already serves the dashboard statically and exposes all API/WebSocket endpoints on a single port, there is no need for an nginx reverse proxy. OAuth2-proxy upstreams directly to the tarsy container.
 
@@ -72,7 +72,7 @@ The key architectural simplification over old TARSy: since new TARSy's Go backen
 │  Python gRPC Server (single process)                     │
 │  - Stateless LLM proxy                                   │
 │  - GoogleNativeProvider, LangChainProvider               │
-│  - Health: gRPC reflection or TCP port check             │
+│  - Health: TCP (compose) / gRPC health protocol (prod)   │
 └──────────────────────────────────────────────────────────┘
           │
 ┌─────────▼────────────────────────────────────────────────┐
@@ -684,7 +684,6 @@ services:
       - "oauth2-proxy"
       - "--config=/config/oauth2-proxy.cfg"
       - "--skip-auth-preflight=true"
-      - "--custom-templates-dir=/templates"
     ports:
       - "8080:4180"
     volumes:
@@ -813,7 +812,10 @@ oauth2-config: ## Generate oauth2-proxy.cfg from template + oauth.env
 		    -e "s|{{OAUTH2_CLIENT_SECRET}}|$${OAUTH2_CLIENT_SECRET}|g" \
 		    -e "s|{{OAUTH2_COOKIE_SECRET}}|$${OAUTH2_COOKIE_SECRET}|g" \
 		    -e "s|{{OAUTH2_PROXY_REDIRECT_URL}}|$${OAUTH2_PROXY_REDIRECT_URL:-http://localhost:8080/oauth2/callback}|g" \
+		    -e "s|{{ROUTE_HOST}}|$${ROUTE_HOST:-localhost:8080}|g" \
 		    -e "s|{{COOKIE_SECURE}}|$${COOKIE_SECURE:-false}|g" \
+		    -e "s|{{GITHUB_ORG}}|$${GITHUB_ORG}|g" \
+		    -e "s|{{GITHUB_TEAM}}|$${GITHUB_TEAM}|g" \
 		    deploy/config/oauth2-proxy.cfg.template > deploy/config/oauth2-proxy.cfg
 	@echo -e "$(GREEN)Generated deploy/config/oauth2-proxy.cfg$(NC)"
 ```
@@ -939,11 +941,13 @@ The compose `start_period` values allow each container time to become ready:
 4. Add `oauth2-config` Makefile target
 5. Add `.gitignore` entries for generated `oauth2-proxy.cfg` and `oauth.env`
 
-### Phase 9.4: Dockerfiles
-1. Create `Dockerfile` at project root (Go backend + dashboard, multi-stage)
-2. Create `llm-service/Dockerfile` (Python LLM service)
-3. Test local builds: `podman build -t tarsy:dev .` and `podman build -t tarsy-llm:dev llm-service/`
-4. Verify both containers start and communicate via gRPC
+### Phase 9.4: Dockerfiles and LLM Health Service
+1. Add `grpcio-health-checking` to `llm-service/pyproject.toml`
+2. Add gRPC health service to `llm-service/llm/server.py` (sets SERVING after init)
+3. Create `Dockerfile` at project root (Go backend + dashboard, multi-stage)
+4. Create `llm-service/Dockerfile` (Python LLM service)
+5. Test local builds: `podman build -t tarsy:dev .` and `podman build -t tarsy-llm:dev llm-service/`
+6. Verify both containers start and communicate via gRPC
 
 ### Phase 9.5: podman-compose Orchestration
 1. Update `deploy/podman-compose.yml` with tarsy, llm-service, and oauth2-proxy services
