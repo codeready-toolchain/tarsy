@@ -9,7 +9,7 @@ import (
 )
 
 func TestRunbookCache_SetAndGet(t *testing.T) {
-	cache := NewRunbookCache(1 * time.Minute)
+	cache := NewCache(1 * time.Minute)
 
 	cache.Set("https://example.com/runbook.md", "# Runbook Content")
 
@@ -19,7 +19,7 @@ func TestRunbookCache_SetAndGet(t *testing.T) {
 }
 
 func TestRunbookCache_Miss(t *testing.T) {
-	cache := NewRunbookCache(1 * time.Minute)
+	cache := NewCache(1 * time.Minute)
 
 	content, ok := cache.Get("https://example.com/nonexistent.md")
 	assert.False(t, ok)
@@ -27,7 +27,7 @@ func TestRunbookCache_Miss(t *testing.T) {
 }
 
 func TestRunbookCache_TTLExpiry(t *testing.T) {
-	cache := NewRunbookCache(50 * time.Millisecond)
+	cache := NewCache(50 * time.Millisecond)
 
 	cache.Set("https://example.com/runbook.md", "content")
 
@@ -46,7 +46,7 @@ func TestRunbookCache_TTLExpiry(t *testing.T) {
 }
 
 func TestRunbookCache_Overwrite(t *testing.T) {
-	cache := NewRunbookCache(1 * time.Minute)
+	cache := NewCache(1 * time.Minute)
 
 	cache.Set("https://example.com/runbook.md", "old content")
 	cache.Set("https://example.com/runbook.md", "new content")
@@ -57,7 +57,7 @@ func TestRunbookCache_Overwrite(t *testing.T) {
 }
 
 func TestRunbookCache_MultipleKeys(t *testing.T) {
-	cache := NewRunbookCache(1 * time.Minute)
+	cache := NewCache(1 * time.Minute)
 
 	cache.Set("url1", "content1")
 	cache.Set("url2", "content2")
@@ -72,13 +72,13 @@ func TestRunbookCache_MultipleKeys(t *testing.T) {
 }
 
 func TestRunbookCache_ConcurrentAccess(t *testing.T) {
-	cache := NewRunbookCache(1 * time.Minute)
+	cache := NewCache(1 * time.Minute)
 	var wg sync.WaitGroup
 
 	// Concurrent writes
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func(_ int) {
 			defer wg.Done()
 			cache.Set("shared-key", "content")
 		}(i)

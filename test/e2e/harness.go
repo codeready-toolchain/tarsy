@@ -195,7 +195,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	chatService := services.NewChatService(entClient)
 
 	// 7. RunbookService (nil config/token → uses defaults).
-	runbookService := runbook.NewRunbookService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
+	runbookService := runbook.NewService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
 
 	// 8. Session executor.
 	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService)

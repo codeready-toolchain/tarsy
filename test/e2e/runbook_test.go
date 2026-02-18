@@ -32,7 +32,7 @@ func TestE2E_RunbookURL(t *testing.T) {
 
 	// Start a mock HTTP server serving custom runbook content.
 	const customRunbook = "# Custom Runbook\n\n1. Check pod logs\n2. Restart the deployment\n3. Verify metrics"
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte(customRunbook))
 	}))

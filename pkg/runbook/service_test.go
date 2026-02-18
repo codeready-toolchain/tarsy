@@ -15,7 +15,7 @@ import (
 
 func TestRunbookService_Resolve(t *testing.T) {
 	t.Run("URL provided fetches content", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("# Fetched Runbook"))
 		}))
 		defer server.Close()
@@ -27,14 +27,14 @@ func TestRunbookService_Resolve(t *testing.T) {
 	})
 
 	t.Run("empty URL returns default content", func(t *testing.T) {
-		svc := NewRunbookService(nil, "", "# Default Runbook")
+		svc := NewService(nil, "", "# Default Runbook")
 		content, err := svc.Resolve(context.Background(), "")
 		require.NoError(t, err)
 		assert.Equal(t, "# Default Runbook", content)
 	})
 
 	t.Run("fetch error returns error for caller to handle", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer server.Close()
@@ -49,7 +49,7 @@ func TestRunbookService_Resolve(t *testing.T) {
 		cfg := &config.RunbookConfig{
 			AllowedDomains: []string{"github.com"},
 		}
-		svc := NewRunbookService(cfg, "", "default")
+		svc := NewService(cfg, "", "default")
 
 		_, err := svc.Resolve(context.Background(), "https://evil.com/runbook.md")
 		require.Error(t, err)
@@ -58,7 +58,7 @@ func TestRunbookService_Resolve(t *testing.T) {
 
 	t.Run("caches fetched content", func(t *testing.T) {
 		callCount := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			callCount++
 			_, _ = w.Write([]byte("# Cached Content"))
 		}))
@@ -87,7 +87,7 @@ func TestRunbookService_ListRunbooks(t *testing.T) {
 			{Name: "net.md", Path: "runbooks/net.md", Type: "file", HTMLURL: "https://github.com/org/repo/blob/main/runbooks/net.md"},
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(items)
 		}))
@@ -107,7 +107,7 @@ func TestRunbookService_ListRunbooks(t *testing.T) {
 	})
 
 	t.Run("no repo URL returns empty slice", func(t *testing.T) {
-		svc := NewRunbookService(nil, "", "default")
+		svc := NewService(nil, "", "default")
 		files, err := svc.ListRunbooks(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, []string{}, files)
@@ -115,14 +115,14 @@ func TestRunbookService_ListRunbooks(t *testing.T) {
 
 	t.Run("empty repo URL returns empty slice", func(t *testing.T) {
 		cfg := &config.RunbookConfig{RepoURL: ""}
-		svc := NewRunbookService(cfg, "", "default")
+		svc := NewService(cfg, "", "default")
 		files, err := svc.ListRunbooks(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, []string{}, files)
 	})
 
 	t.Run("API failure returns error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 		}))
 		defer server.Close()
@@ -143,7 +143,7 @@ func TestRunbookService_ListRunbooks(t *testing.T) {
 			{Name: "k8s.md", Path: "runbooks/k8s.md", Type: "file", HTMLURL: "https://github.com/org/repo/blob/main/runbooks/k8s.md"},
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			callCount++
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(items)
@@ -169,8 +169,8 @@ func TestRunbookService_ListRunbooks(t *testing.T) {
 	})
 }
 
-// newTestService creates a RunbookService with no domain restrictions, using the test server for HTTP.
-func newTestService(t *testing.T, server *httptest.Server, defaultRunbook string) *RunbookService {
+// newTestService creates a Service with no domain restrictions, using the test server for HTTP.
+func newTestService(t *testing.T, server *httptest.Server, defaultRunbook string) *Service {
 	t.Helper()
 	cfg := &config.RunbookConfig{
 		CacheTTL:       1 * time.Minute,
@@ -179,10 +179,10 @@ func newTestService(t *testing.T, server *httptest.Server, defaultRunbook string
 	return newTestServiceWithConfig(t, server, cfg, defaultRunbook)
 }
 
-// newTestServiceWithConfig creates a RunbookService with custom config, routing API calls through the test server.
-func newTestServiceWithConfig(t *testing.T, server *httptest.Server, cfg *config.RunbookConfig, defaultRunbook string) *RunbookService {
+// newTestServiceWithConfig creates a Service with custom config, routing API calls through the test server.
+func newTestServiceWithConfig(t *testing.T, server *httptest.Server, cfg *config.RunbookConfig, defaultRunbook string) *Service {
 	t.Helper()
-	svc := NewRunbookService(cfg, "", defaultRunbook)
+	svc := NewService(cfg, "", defaultRunbook)
 	// Override the GitHub client to use test server
 	svc.github.httpClient = &http.Client{
 		Transport: &testTransport{

@@ -60,7 +60,7 @@ type ChatMessageExecutor struct {
 	eventPublisher agent.EventPublisher
 	promptBuilder  *prompt.PromptBuilder
 	execConfig     ChatMessageExecutorConfig
-	runbookService *runbook.RunbookService
+	runbookService *runbook.Service
 
 	// Services
 	timelineService    *services.TimelineService
@@ -85,7 +85,7 @@ func NewChatMessageExecutor(
 	mcpFactory *mcp.ClientFactory,
 	eventPublisher agent.EventPublisher,
 	execConfig ChatMessageExecutorConfig,
-	runbookService *runbook.RunbookService,
+	runbookService *runbook.Service,
 ) *ChatMessageExecutor {
 	controllerFactory := controller.NewFactory()
 	msgService := services.NewMessageService(dbClient)

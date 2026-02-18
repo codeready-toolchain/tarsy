@@ -46,10 +46,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 8: Integrations
 
-**Runbook System (Phase 8.1)** -- ✅ DONE
-- [ ] GitHub integration
-- [ ] Runbook fetching & caching
-- [ ] Per-chain runbook configuration
+**Runbook System (Phase 8.1)** -- ✅ DONE. GitHub integration for fetching runbook content from repositories. `RunbookService` (`pkg/runbook/`) orchestrates resolution, caching, and listing. Per-alert runbook URL (submitted via API `runbook` field, stored on `AlertSession.runbook_url`) fetched via `GitHubClient` with blob→raw URL conversion and bearer token auth. In-memory TTL cache (`RunbookCache`). URL validation (scheme + domain allowlist) at both API handler and service level. Resolution hierarchy: per-alert URL → default content (from config). Fail-open in executors: fetch failure falls back to default runbook. Config: `system.github.token_env` (env var name for GitHub token), `system.runbooks.repo_url` (GitHub tree URL for listing), `system.runbooks.cache_ttl`, `system.runbooks.allowed_domains`. `GET /api/v1/runbooks` endpoint lists available `.md` files from configured repo (recursive, via GitHub Contents API). Dashboard: Autocomplete dropdown for runbook URLs in ManualAlertForm. System warning when repo URL configured without GitHub token. E2E tests: runbook URL flow, invalid domain rejection, listing endpoint, default fallback.
 
 **Multi-LLM Support (Phase 8.2)** -- ✅ DONE. Replaced LangChain stub with real `LangChainProvider` supporting OpenAI, Anthropic, xAI, Google (via LangChain), and VertexAI. Completely removed ReAct iteration strategy and `ReActController`; renamed `NativeThinkingController` → `FunctionCallingController` (shared by `native-thinking` and new `langchain` strategies). Both use native/structured tool calling. Deleted all text-based ReAct parsing (`react_parser.go`, `tools.go`), ReAct streaming code, ReAct prompt templates. Added shared `tool_names.py` utility for canonical↔API name encoding. LangChain provider features: streaming via `astream()`, `content_blocks` for thinking/reasoning, `bind_tools()` for function calling, model caching, retry with exponential backoff. Dashboard cleanup: removed dead `isReActResponse()`, `NATIVE_THINKING` constant. Four strategies remain: `native-thinking`, `langchain`, `synthesis`, `synthesis-native-thinking`.
 

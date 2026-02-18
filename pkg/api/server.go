@@ -46,7 +46,7 @@ type Server struct {
 	interactionService *services.InteractionService    // nil until set (trace endpoints)
 	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
-	runbookService     *runbook.RunbookService         // nil until set (runbook endpoint)
+	runbookService     *runbook.Service                // nil until set (runbook endpoint)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 }
 
@@ -116,7 +116,7 @@ func (s *Server) SetTimelineService(svc *services.TimelineService) {
 }
 
 // SetRunbookService sets the runbook service for the runbook listing endpoint.
-func (s *Server) SetRunbookService(rs *runbook.RunbookService) {
+func (s *Server) SetRunbookService(rs *runbook.Service) {
 	s.runbookService = rs
 }
 

@@ -34,14 +34,14 @@ type RealSessionExecutor struct {
 	agentFactory   *agent.AgentFactory
 	promptBuilder  *prompt.PromptBuilder
 	mcpFactory     *mcp.ClientFactory
-	runbookService *runbook.RunbookService
+	runbookService *runbook.Service
 }
 
 // NewRealSessionExecutor creates a new session executor.
 // eventPublisher may be nil (streaming disabled).
 // mcpFactory may be nil (MCP disabled — uses stub tool executor).
 // runbookService may be nil (uses config default runbook content).
-func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.RunbookService) *RealSessionExecutor {
+func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
 		cfg:            cfg,

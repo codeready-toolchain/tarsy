@@ -9,26 +9,26 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-// RunbookService orchestrates runbook resolution and delivery.
-type RunbookService struct {
+// Service orchestrates runbook resolution and delivery.
+type Service struct {
 	github   *GitHubClient
-	cache    *RunbookCache
+	cache    *Cache
 	cfg      *config.RunbookConfig
 	defaults string // Fallback default content
 }
 
-// NewRunbookService creates a new RunbookService.
+// NewService creates a new Service.
 // githubToken is the resolved token value (empty string = no auth, public repos only).
 // defaultRunbook is the fallback content used when no URL is provided.
-func NewRunbookService(cfg *config.RunbookConfig, githubToken string, defaultRunbook string) *RunbookService {
+func NewService(cfg *config.RunbookConfig, githubToken string, defaultRunbook string) *Service {
 	cacheTTL := 1 * time.Minute
 	if cfg != nil && cfg.CacheTTL > 0 {
 		cacheTTL = cfg.CacheTTL
 	}
 
-	return &RunbookService{
+	return &Service{
 		github:   NewGitHubClient(githubToken),
-		cache:    NewRunbookCache(cacheTTL),
+		cache:    NewCache(cacheTTL),
 		cfg:      cfg,
 		defaults: defaultRunbook,
 	}
@@ -40,7 +40,7 @@ func NewRunbookService(cfg *config.RunbookConfig, githubToken string, defaultRun
 //
 // URL-based runbooks are fetched via GitHubClient with caching.
 // On fetch failure: returns error (caller applies fail-open policy).
-func (s *RunbookService) Resolve(ctx context.Context, alertRunbookURL string) (string, error) {
+func (s *Service) Resolve(ctx context.Context, alertRunbookURL string) (string, error) {
 	// Per-alert URL takes highest priority
 	if alertRunbookURL != "" {
 		content, err := s.fetchWithCache(ctx, alertRunbookURL)
@@ -56,7 +56,7 @@ func (s *RunbookService) Resolve(ctx context.Context, alertRunbookURL string) (s
 
 // ListRunbooks returns available runbook URLs from the configured repository.
 // Returns empty slice if repo_url is not configured.
-func (s *RunbookService) ListRunbooks(ctx context.Context) ([]string, error) {
+func (s *Service) ListRunbooks(ctx context.Context) ([]string, error) {
 	if s.cfg == nil || s.cfg.RepoURL == "" {
 		return []string{}, nil
 	}
@@ -82,11 +82,11 @@ func (s *RunbookService) ListRunbooks(ctx context.Context) ([]string, error) {
 
 // OverrideHTTPClientForTest replaces the internal GitHub client's HTTP client.
 // For testing only.
-func (s *RunbookService) OverrideHTTPClientForTest(httpClient *http.Client) {
+func (s *Service) OverrideHTTPClientForTest(httpClient *http.Client) {
 	s.github.httpClient = httpClient
 }
 
-func (s *RunbookService) fetchWithCache(ctx context.Context, rawURL string) (string, error) {
+func (s *Service) fetchWithCache(ctx context.Context, rawURL string) (string, error) {
 	// Validate URL
 	var allowedDomains []string
 	if s.cfg != nil {

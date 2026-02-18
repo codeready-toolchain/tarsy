@@ -1,3 +1,4 @@
+// Package runbook provides GitHub-based runbook fetching, caching, and URL resolution.
 package runbook
 
 import (
@@ -11,24 +12,24 @@ type cacheEntry struct {
 	fetchedAt time.Time
 }
 
-// RunbookCache is a thread-safe in-memory cache with TTL expiration.
+// Cache is a thread-safe in-memory cache with TTL expiration.
 // Expired entries are cleaned up lazily on Get() — no background goroutine.
-type RunbookCache struct {
+type Cache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry
 	ttl     time.Duration
 }
 
-// NewRunbookCache creates a new cache with the given TTL.
-func NewRunbookCache(ttl time.Duration) *RunbookCache {
-	return &RunbookCache{
+// NewCache creates a new cache with the given TTL.
+func NewCache(ttl time.Duration) *Cache {
+	return &Cache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     ttl,
 	}
 }
 
 // Get returns cached content if present and not expired.
-func (c *RunbookCache) Get(url string) (string, bool) {
+func (c *Cache) Get(url string) (string, bool) {
 	c.mu.RLock()
 	entry, ok := c.entries[url]
 	c.mu.RUnlock()
@@ -49,7 +50,7 @@ func (c *RunbookCache) Get(url string) (string, bool) {
 }
 
 // Set stores content with the current timestamp.
-func (c *RunbookCache) Set(url string, content string) {
+func (c *Cache) Set(url string, content string) {
 	c.mu.Lock()
 	c.entries[url] = &cacheEntry{
 		content:   content,

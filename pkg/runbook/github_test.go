@@ -13,7 +13,7 @@ import (
 
 func TestGitHubClient_DownloadContent(t *testing.T) {
 	t.Run("successful download", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("# Runbook Content\n\nStep 1: Check pods"))
 		}))
@@ -59,7 +59,7 @@ func TestGitHubClient_DownloadContent(t *testing.T) {
 	})
 
 	t.Run("HTTP 404 returns error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer server.Close()
@@ -72,7 +72,7 @@ func TestGitHubClient_DownloadContent(t *testing.T) {
 	})
 
 	t.Run("HTTP 500 returns error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer server.Close()
@@ -85,7 +85,7 @@ func TestGitHubClient_DownloadContent(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("content"))
 		}))
@@ -109,7 +109,7 @@ func TestGitHubClient_ListMarkdownFiles(t *testing.T) {
 			{Name: "README.txt", Path: "runbooks/README.txt", Type: "file", HTMLURL: "https://github.com/org/repo/blob/main/runbooks/README.txt"},
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(items)
 		}))
@@ -126,7 +126,7 @@ func TestGitHubClient_ListMarkdownFiles(t *testing.T) {
 
 	t.Run("recurses into subdirectories", func(t *testing.T) {
 		callCount := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			callCount++
 			w.Header().Set("Content-Type", "application/json")
 
@@ -158,7 +158,7 @@ func TestGitHubClient_ListMarkdownFiles(t *testing.T) {
 	})
 
 	t.Run("empty directory returns empty slice", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]githubContentItem{})
 		}))
@@ -171,7 +171,7 @@ func TestGitHubClient_ListMarkdownFiles(t *testing.T) {
 	})
 
 	t.Run("API error returns error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer server.Close()
@@ -195,7 +195,7 @@ func TestGitHubClient_ListMarkdownFiles(t *testing.T) {
 			{Name: "mixed.Md", Path: "runbooks/mixed.Md", Type: "file", HTMLURL: "https://github.com/org/repo/blob/main/runbooks/mixed.Md"},
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(items)
 		}))

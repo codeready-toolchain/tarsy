@@ -45,7 +45,11 @@ func (c *GitHubClient) DownloadContent(ctx context.Context, rawURL string) (stri
 	if err != nil {
 		return "", fmt.Errorf("fetch runbook from %s: %w", downloadURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Warn("failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub returned HTTP %d for %s", resp.StatusCode, downloadURL)
@@ -92,7 +96,11 @@ func (c *GitHubClient) listMarkdownFilesRecursive(ctx context.Context, owner, re
 	if err != nil {
 		return nil, fmt.Errorf("list contents at %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Warn("failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned HTTP %d for path %q", resp.StatusCode, path)

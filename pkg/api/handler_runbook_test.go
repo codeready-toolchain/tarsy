@@ -37,7 +37,7 @@ func TestHandleListRunbooks(t *testing.T) {
 	})
 
 	t.Run("service with no repo URL returns empty array", func(t *testing.T) {
-		svc := runbook.NewRunbookService(nil, "", "default")
+		svc := runbook.NewService(nil, "", "default")
 		s := &Server{
 			cfg:            &config.Config{},
 			runbookService: svc,
@@ -63,7 +63,7 @@ func TestHandleListRunbooks(t *testing.T) {
 			{"name":"k8s.md","path":"runbooks/k8s.md","type":"file","html_url":"https://github.com/org/repo/blob/main/runbooks/k8s.md"},
 			{"name":"net.md","path":"runbooks/net.md","type":"file","html_url":"https://github.com/org/repo/blob/main/runbooks/net.md"}
 		]`
-		mockGH := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mockGH := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(items))
 		}))
@@ -73,7 +73,7 @@ func TestHandleListRunbooks(t *testing.T) {
 			RepoURL:  "https://github.com/org/repo/tree/main/runbooks",
 			CacheTTL: 1 * time.Minute,
 		}
-		svc := runbook.NewRunbookService(rbCfg, "", "default")
+		svc := runbook.NewService(rbCfg, "", "default")
 		// Inject test transport into the service's GitHub client
 		svc.OverrideHTTPClientForTest(&http.Client{
 			Transport: &redirectTransport{target: mockGH.URL},

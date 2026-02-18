@@ -190,7 +190,7 @@ func main() {
 		tokenEnv = cfg.GitHub.TokenEnv
 	}
 	githubToken := os.Getenv(tokenEnv)
-	runbookService := runbook.NewRunbookService(cfg.Runbooks, githubToken, cfg.Defaults.Runbook)
+	runbookService := runbook.NewService(cfg.Runbooks, githubToken, cfg.Defaults.Runbook)
 
 	if githubToken == "" && cfg.Runbooks != nil && cfg.Runbooks.RepoURL != "" {
 		warningsService.AddWarning("runbook", "GitHub token not configured",
