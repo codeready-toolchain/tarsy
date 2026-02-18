@@ -493,11 +493,12 @@ func TestE2E_Pipeline(t *testing.T) {
 	// own human-readable golden file.
 
 	type interactionEntry struct {
-		Kind      string // "llm" or "mcp"
-		ID        string
-		AgentName string
-		CreatedAt string
-		Label     string // interaction_type or tool_name
+		Kind       string // "llm" or "mcp"
+		ID         string
+		AgentName  string
+		CreatedAt  string
+		Label      string // interaction_type or tool_name
+		ServerName string // MCP only; tiebreaker when created_at is equal
 	}
 
 	// Collect interactions per-execution in chronological order.
@@ -531,17 +532,25 @@ func TestE2E_Pipeline(t *testing.T) {
 				if tn, ok := mi["tool_name"].(string); ok && tn != "" {
 					label = tn
 				}
+				serverName, _ := mi["server_name"].(string)
 				execInteractions = append(execInteractions, interactionEntry{
-					Kind:      "mcp",
-					ID:        mi["id"].(string),
-					AgentName: agentName,
-					CreatedAt: mi["created_at"].(string),
-					Label:     label,
+					Kind:       "mcp",
+					ID:         mi["id"].(string),
+					AgentName:  agentName,
+					CreatedAt:  mi["created_at"].(string),
+					Label:      label,
+					ServerName: serverName,
 				})
 			}
 			// Sort within execution by created_at (deterministic for single agent).
+			// Tiebreak by server_name so same-millisecond tool_list interactions
+			// (created in a tight loop) always land in a consistent order.
 			sort.Slice(execInteractions, func(i, j int) bool {
-				return execInteractions[i].CreatedAt < execInteractions[j].CreatedAt
+				a, b := execInteractions[i], execInteractions[j]
+				if a.CreatedAt != b.CreatedAt {
+					return a.CreatedAt < b.CreatedAt
+				}
+				return a.ServerName < b.ServerName
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}
