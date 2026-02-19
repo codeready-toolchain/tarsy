@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -48,6 +49,8 @@ type Client struct {
 	MCPInteraction *MCPInteractionClient
 	// Message is the client for interacting with the Message builders.
 	Message *MessageClient
+	// SessionScore is the client for interacting with the SessionScore builders.
+	SessionScore *SessionScoreClient
 	// Stage is the client for interacting with the Stage builders.
 	Stage *StageClient
 	// TimelineEvent is the client for interacting with the TimelineEvent builders.
@@ -71,6 +74,7 @@ func (c *Client) init() {
 	c.LLMInteraction = NewLLMInteractionClient(c.config)
 	c.MCPInteraction = NewMCPInteractionClient(c.config)
 	c.Message = NewMessageClient(c.config)
+	c.SessionScore = NewSessionScoreClient(c.config)
 	c.Stage = NewStageClient(c.config)
 	c.TimelineEvent = NewTimelineEventClient(c.config)
 }
@@ -173,6 +177,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		LLMInteraction:  NewLLMInteractionClient(cfg),
 		MCPInteraction:  NewMCPInteractionClient(cfg),
 		Message:         NewMessageClient(cfg),
+		SessionScore:    NewSessionScoreClient(cfg),
 		Stage:           NewStageClient(cfg),
 		TimelineEvent:   NewTimelineEventClient(cfg),
 	}, nil
@@ -202,6 +207,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		LLMInteraction:  NewLLMInteractionClient(cfg),
 		MCPInteraction:  NewMCPInteractionClient(cfg),
 		Message:         NewMessageClient(cfg),
+		SessionScore:    NewSessionScoreClient(cfg),
 		Stage:           NewStageClient(cfg),
 		TimelineEvent:   NewTimelineEventClient(cfg),
 	}, nil
@@ -234,7 +240,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.Stage, c.TimelineEvent,
+		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionScore, c.Stage,
+		c.TimelineEvent,
 	} {
 		n.Use(hooks...)
 	}
@@ -245,7 +252,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.Stage, c.TimelineEvent,
+		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionScore, c.Stage,
+		c.TimelineEvent,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -270,6 +278,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.MCPInteraction.mutate(ctx, m)
 	case *MessageMutation:
 		return c.Message.mutate(ctx, m)
+	case *SessionScoreMutation:
+		return c.SessionScore.mutate(ctx, m)
 	case *StageMutation:
 		return c.Stage.mutate(ctx, m)
 	case *TimelineEventMutation:
@@ -737,6 +747,22 @@ func (c *AlertSessionClient) QueryChat(_m *AlertSession) *ChatQuery {
 			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
 			sqlgraph.To(chat.Table, chat.FieldID),
 			sqlgraph.Edge(sqlgraph.O2O, false, alertsession.ChatTable, alertsession.ChatColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySessionScores queries the session_scores edge of a AlertSession.
+func (c *AlertSessionClient) QuerySessionScores(_m *AlertSession) *SessionScoreQuery {
+	query := (&SessionScoreClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
+			sqlgraph.To(sessionscore.Table, sessionscore.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.SessionScoresTable, alertsession.SessionScoresColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1871,6 +1897,155 @@ func (c *MessageClient) mutate(ctx context.Context, m *MessageMutation) (Value, 
 	}
 }
 
+// SessionScoreClient is a client for the SessionScore schema.
+type SessionScoreClient struct {
+	config
+}
+
+// NewSessionScoreClient returns a client for the SessionScore from the given config.
+func NewSessionScoreClient(c config) *SessionScoreClient {
+	return &SessionScoreClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionscore.Hooks(f(g(h())))`.
+func (c *SessionScoreClient) Use(hooks ...Hook) {
+	c.hooks.SessionScore = append(c.hooks.SessionScore, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionscore.Intercept(f(g(h())))`.
+func (c *SessionScoreClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionScore = append(c.inters.SessionScore, interceptors...)
+}
+
+// Create returns a builder for creating a SessionScore entity.
+func (c *SessionScoreClient) Create() *SessionScoreCreate {
+	mutation := newSessionScoreMutation(c.config, OpCreate)
+	return &SessionScoreCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionScore entities.
+func (c *SessionScoreClient) CreateBulk(builders ...*SessionScoreCreate) *SessionScoreCreateBulk {
+	return &SessionScoreCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionScoreClient) MapCreateBulk(slice any, setFunc func(*SessionScoreCreate, int)) *SessionScoreCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionScoreCreateBulk{err: fmt.Errorf("calling to SessionScoreClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionScoreCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionScoreCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionScore.
+func (c *SessionScoreClient) Update() *SessionScoreUpdate {
+	mutation := newSessionScoreMutation(c.config, OpUpdate)
+	return &SessionScoreUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionScoreClient) UpdateOne(_m *SessionScore) *SessionScoreUpdateOne {
+	mutation := newSessionScoreMutation(c.config, OpUpdateOne, withSessionScore(_m))
+	return &SessionScoreUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionScoreClient) UpdateOneID(id string) *SessionScoreUpdateOne {
+	mutation := newSessionScoreMutation(c.config, OpUpdateOne, withSessionScoreID(id))
+	return &SessionScoreUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionScore.
+func (c *SessionScoreClient) Delete() *SessionScoreDelete {
+	mutation := newSessionScoreMutation(c.config, OpDelete)
+	return &SessionScoreDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionScoreClient) DeleteOne(_m *SessionScore) *SessionScoreDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionScoreClient) DeleteOneID(id string) *SessionScoreDeleteOne {
+	builder := c.Delete().Where(sessionscore.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionScoreDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionScore.
+func (c *SessionScoreClient) Query() *SessionScoreQuery {
+	return &SessionScoreQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionScore},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionScore entity by its id.
+func (c *SessionScoreClient) Get(ctx context.Context, id string) (*SessionScore, error) {
+	return c.Query().Where(sessionscore.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionScoreClient) GetX(ctx context.Context, id string) *SessionScore {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySession queries the session edge of a SessionScore.
+func (c *SessionScoreClient) QuerySession(_m *SessionScore) *AlertSessionQuery {
+	query := (&AlertSessionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sessionscore.Table, sessionscore.FieldID, id),
+			sqlgraph.To(alertsession.Table, alertsession.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sessionscore.SessionTable, sessionscore.SessionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SessionScoreClient) Hooks() []Hook {
+	return c.hooks.SessionScore
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionScoreClient) Interceptors() []Interceptor {
+	return c.inters.SessionScore
+}
+
+func (c *SessionScoreClient) mutate(ctx context.Context, m *SessionScoreMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionScoreCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionScoreUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionScoreUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionScoreDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionScore mutation op: %q", m.Op())
+	}
+}
+
 // StageClient is a client for the Stage schema.
 type StageClient struct {
 	config
@@ -2349,10 +2524,10 @@ func (c *TimelineEventClient) mutate(ctx context.Context, m *TimelineEventMutati
 type (
 	hooks struct {
 		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, Stage, TimelineEvent []ent.Hook
+		MCPInteraction, Message, SessionScore, Stage, TimelineEvent []ent.Hook
 	}
 	inters struct {
 		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, Stage, TimelineEvent []ent.Interceptor
+		MCPInteraction, Message, SessionScore, Stage, TimelineEvent []ent.Interceptor
 	}
 )

@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -426,6 +427,21 @@ func (_c *AlertSessionCreate) SetChat(v *Chat) *AlertSessionCreate {
 	return _c.SetChatID(v.ID)
 }
 
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by IDs.
+func (_c *AlertSessionCreate) AddSessionScoreIDs(ids ...string) *AlertSessionCreate {
+	_c.mutation.AddSessionScoreIDs(ids...)
+	return _c
+}
+
+// AddSessionScores adds the "session_scores" edges to the SessionScore entity.
+func (_c *AlertSessionCreate) AddSessionScores(v ...*SessionScore) *AlertSessionCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSessionScoreIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_c *AlertSessionCreate) Mutation() *AlertSessionMutation {
 	return _c.mutation
@@ -737,6 +753,22 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(chat.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SessionScoresIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

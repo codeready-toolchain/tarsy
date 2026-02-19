@@ -1619,6 +1619,29 @@ func HasChatWith(preds ...predicate.Chat) predicate.AlertSession {
 	})
 }
 
+// HasSessionScores applies the HasEdge predicate on the "session_scores" edge.
+func HasSessionScores() predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SessionScoresTable, SessionScoresColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSessionScoresWith applies the HasEdge predicate on the "session_scores" edge with a given conditions (other predicates).
+func HasSessionScoresWith(preds ...predicate.SessionScore) predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := newSessionScoresStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.AlertSession) predicate.AlertSession {
 	return predicate.AlertSession(sql.AndPredicates(predicates...))

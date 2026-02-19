@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/schema"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -42,6 +43,7 @@ const (
 	TypeLLMInteraction  = "LLMInteraction"
 	TypeMCPInteraction  = "MCPInteraction"
 	TypeMessage         = "Message"
+	TypeSessionScore    = "SessionScore"
 	TypeStage           = "Stage"
 	TypeTimelineEvent   = "TimelineEvent"
 )
@@ -1573,6 +1575,9 @@ type AlertSessionMutation struct {
 	clearedevents             bool
 	chat                      *string
 	clearedchat               bool
+	session_scores            map[string]struct{}
+	removedsession_scores     map[string]struct{}
+	clearedsession_scores     bool
 	done                      bool
 	oldValue                  func(context.Context) (*AlertSession, error)
 	predicates                []predicate.AlertSession
@@ -3133,6 +3138,60 @@ func (m *AlertSessionMutation) ResetChat() {
 	m.clearedchat = false
 }
 
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by ids.
+func (m *AlertSessionMutation) AddSessionScoreIDs(ids ...string) {
+	if m.session_scores == nil {
+		m.session_scores = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.session_scores[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSessionScores clears the "session_scores" edge to the SessionScore entity.
+func (m *AlertSessionMutation) ClearSessionScores() {
+	m.clearedsession_scores = true
+}
+
+// SessionScoresCleared reports if the "session_scores" edge to the SessionScore entity was cleared.
+func (m *AlertSessionMutation) SessionScoresCleared() bool {
+	return m.clearedsession_scores
+}
+
+// RemoveSessionScoreIDs removes the "session_scores" edge to the SessionScore entity by IDs.
+func (m *AlertSessionMutation) RemoveSessionScoreIDs(ids ...string) {
+	if m.removedsession_scores == nil {
+		m.removedsession_scores = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.session_scores, ids[i])
+		m.removedsession_scores[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSessionScores returns the removed IDs of the "session_scores" edge to the SessionScore entity.
+func (m *AlertSessionMutation) RemovedSessionScoresIDs() (ids []string) {
+	for id := range m.removedsession_scores {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SessionScoresIDs returns the "session_scores" edge IDs in the mutation.
+func (m *AlertSessionMutation) SessionScoresIDs() (ids []string) {
+	for id := range m.session_scores {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSessionScores resets all changes to the "session_scores" edge.
+func (m *AlertSessionMutation) ResetSessionScores() {
+	m.session_scores = nil
+	m.clearedsession_scores = false
+	m.removedsession_scores = nil
+}
+
 // Where appends a list predicates to the AlertSessionMutation builder.
 func (m *AlertSessionMutation) Where(ps ...predicate.AlertSession) {
 	m.predicates = append(m.predicates, ps...)
@@ -3743,7 +3802,7 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AlertSessionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.stages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -3767,6 +3826,9 @@ func (m *AlertSessionMutation) AddedEdges() []string {
 	}
 	if m.chat != nil {
 		edges = append(edges, alertsession.EdgeChat)
+	}
+	if m.session_scores != nil {
+		edges = append(edges, alertsession.EdgeSessionScores)
 	}
 	return edges
 }
@@ -3821,13 +3883,19 @@ func (m *AlertSessionMutation) AddedIDs(name string) []ent.Value {
 		if id := m.chat; id != nil {
 			return []ent.Value{*id}
 		}
+	case alertsession.EdgeSessionScores:
+		ids := make([]ent.Value, 0, len(m.session_scores))
+		for id := range m.session_scores {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AlertSessionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.removedstages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -3848,6 +3916,9 @@ func (m *AlertSessionMutation) RemovedEdges() []string {
 	}
 	if m.removedevents != nil {
 		edges = append(edges, alertsession.EdgeEvents)
+	}
+	if m.removedsession_scores != nil {
+		edges = append(edges, alertsession.EdgeSessionScores)
 	}
 	return edges
 }
@@ -3898,13 +3969,19 @@ func (m *AlertSessionMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case alertsession.EdgeSessionScores:
+		ids := make([]ent.Value, 0, len(m.removedsession_scores))
+		for id := range m.removedsession_scores {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AlertSessionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.clearedstages {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -3929,6 +4006,9 @@ func (m *AlertSessionMutation) ClearedEdges() []string {
 	if m.clearedchat {
 		edges = append(edges, alertsession.EdgeChat)
 	}
+	if m.clearedsession_scores {
+		edges = append(edges, alertsession.EdgeSessionScores)
+	}
 	return edges
 }
 
@@ -3952,6 +4032,8 @@ func (m *AlertSessionMutation) EdgeCleared(name string) bool {
 		return m.clearedevents
 	case alertsession.EdgeChat:
 		return m.clearedchat
+	case alertsession.EdgeSessionScores:
+		return m.clearedsession_scores
 	}
 	return false
 }
@@ -3994,6 +4076,9 @@ func (m *AlertSessionMutation) ResetEdge(name string) error {
 		return nil
 	case alertsession.EdgeChat:
 		m.ResetChat()
+		return nil
+	case alertsession.EdgeSessionScores:
+		m.ResetSessionScores()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession edge %s", name)
@@ -10310,6 +10395,1032 @@ func (m *MessageMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Message edge %s", name)
+}
+
+// SessionScoreMutation represents an operation that mutates the SessionScore nodes in the graph.
+type SessionScoreMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *string
+	prompt_hash            *string
+	total_score            *int
+	addtotal_score         *int
+	score_analysis         *string
+	missing_tools_analysis *string
+	score_triggered_by     *string
+	status                 *sessionscore.Status
+	started_at             *time.Time
+	completed_at           *time.Time
+	error_message          *string
+	clearedFields          map[string]struct{}
+	session                *string
+	clearedsession         bool
+	done                   bool
+	oldValue               func(context.Context) (*SessionScore, error)
+	predicates             []predicate.SessionScore
+}
+
+var _ ent.Mutation = (*SessionScoreMutation)(nil)
+
+// sessionscoreOption allows management of the mutation configuration using functional options.
+type sessionscoreOption func(*SessionScoreMutation)
+
+// newSessionScoreMutation creates new mutation for the SessionScore entity.
+func newSessionScoreMutation(c config, op Op, opts ...sessionscoreOption) *SessionScoreMutation {
+	m := &SessionScoreMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSessionScore,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSessionScoreID sets the ID field of the mutation.
+func withSessionScoreID(id string) sessionscoreOption {
+	return func(m *SessionScoreMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SessionScore
+		)
+		m.oldValue = func(ctx context.Context) (*SessionScore, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SessionScore.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSessionScore sets the old SessionScore of the mutation.
+func withSessionScore(node *SessionScore) sessionscoreOption {
+	return func(m *SessionScoreMutation) {
+		m.oldValue = func(context.Context) (*SessionScore, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SessionScoreMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SessionScoreMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SessionScore entities.
+func (m *SessionScoreMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SessionScoreMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SessionScoreMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SessionScore.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SessionScoreMutation) SetSessionID(s string) {
+	m.session = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SessionScoreMutation) SessionID() (r string, exists bool) {
+	v := m.session
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SessionScoreMutation) ResetSessionID() {
+	m.session = nil
+}
+
+// SetPromptHash sets the "prompt_hash" field.
+func (m *SessionScoreMutation) SetPromptHash(s string) {
+	m.prompt_hash = &s
+}
+
+// PromptHash returns the value of the "prompt_hash" field in the mutation.
+func (m *SessionScoreMutation) PromptHash() (r string, exists bool) {
+	v := m.prompt_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromptHash returns the old "prompt_hash" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldPromptHash(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromptHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromptHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromptHash: %w", err)
+	}
+	return oldValue.PromptHash, nil
+}
+
+// ClearPromptHash clears the value of the "prompt_hash" field.
+func (m *SessionScoreMutation) ClearPromptHash() {
+	m.prompt_hash = nil
+	m.clearedFields[sessionscore.FieldPromptHash] = struct{}{}
+}
+
+// PromptHashCleared returns if the "prompt_hash" field was cleared in this mutation.
+func (m *SessionScoreMutation) PromptHashCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldPromptHash]
+	return ok
+}
+
+// ResetPromptHash resets all changes to the "prompt_hash" field.
+func (m *SessionScoreMutation) ResetPromptHash() {
+	m.prompt_hash = nil
+	delete(m.clearedFields, sessionscore.FieldPromptHash)
+}
+
+// SetTotalScore sets the "total_score" field.
+func (m *SessionScoreMutation) SetTotalScore(i int) {
+	m.total_score = &i
+	m.addtotal_score = nil
+}
+
+// TotalScore returns the value of the "total_score" field in the mutation.
+func (m *SessionScoreMutation) TotalScore() (r int, exists bool) {
+	v := m.total_score
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalScore returns the old "total_score" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldTotalScore(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalScore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalScore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalScore: %w", err)
+	}
+	return oldValue.TotalScore, nil
+}
+
+// AddTotalScore adds i to the "total_score" field.
+func (m *SessionScoreMutation) AddTotalScore(i int) {
+	if m.addtotal_score != nil {
+		*m.addtotal_score += i
+	} else {
+		m.addtotal_score = &i
+	}
+}
+
+// AddedTotalScore returns the value that was added to the "total_score" field in this mutation.
+func (m *SessionScoreMutation) AddedTotalScore() (r int, exists bool) {
+	v := m.addtotal_score
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTotalScore clears the value of the "total_score" field.
+func (m *SessionScoreMutation) ClearTotalScore() {
+	m.total_score = nil
+	m.addtotal_score = nil
+	m.clearedFields[sessionscore.FieldTotalScore] = struct{}{}
+}
+
+// TotalScoreCleared returns if the "total_score" field was cleared in this mutation.
+func (m *SessionScoreMutation) TotalScoreCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldTotalScore]
+	return ok
+}
+
+// ResetTotalScore resets all changes to the "total_score" field.
+func (m *SessionScoreMutation) ResetTotalScore() {
+	m.total_score = nil
+	m.addtotal_score = nil
+	delete(m.clearedFields, sessionscore.FieldTotalScore)
+}
+
+// SetScoreAnalysis sets the "score_analysis" field.
+func (m *SessionScoreMutation) SetScoreAnalysis(s string) {
+	m.score_analysis = &s
+}
+
+// ScoreAnalysis returns the value of the "score_analysis" field in the mutation.
+func (m *SessionScoreMutation) ScoreAnalysis() (r string, exists bool) {
+	v := m.score_analysis
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScoreAnalysis returns the old "score_analysis" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldScoreAnalysis(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScoreAnalysis is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScoreAnalysis requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScoreAnalysis: %w", err)
+	}
+	return oldValue.ScoreAnalysis, nil
+}
+
+// ClearScoreAnalysis clears the value of the "score_analysis" field.
+func (m *SessionScoreMutation) ClearScoreAnalysis() {
+	m.score_analysis = nil
+	m.clearedFields[sessionscore.FieldScoreAnalysis] = struct{}{}
+}
+
+// ScoreAnalysisCleared returns if the "score_analysis" field was cleared in this mutation.
+func (m *SessionScoreMutation) ScoreAnalysisCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldScoreAnalysis]
+	return ok
+}
+
+// ResetScoreAnalysis resets all changes to the "score_analysis" field.
+func (m *SessionScoreMutation) ResetScoreAnalysis() {
+	m.score_analysis = nil
+	delete(m.clearedFields, sessionscore.FieldScoreAnalysis)
+}
+
+// SetMissingToolsAnalysis sets the "missing_tools_analysis" field.
+func (m *SessionScoreMutation) SetMissingToolsAnalysis(s string) {
+	m.missing_tools_analysis = &s
+}
+
+// MissingToolsAnalysis returns the value of the "missing_tools_analysis" field in the mutation.
+func (m *SessionScoreMutation) MissingToolsAnalysis() (r string, exists bool) {
+	v := m.missing_tools_analysis
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMissingToolsAnalysis returns the old "missing_tools_analysis" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldMissingToolsAnalysis(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMissingToolsAnalysis is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMissingToolsAnalysis requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMissingToolsAnalysis: %w", err)
+	}
+	return oldValue.MissingToolsAnalysis, nil
+}
+
+// ClearMissingToolsAnalysis clears the value of the "missing_tools_analysis" field.
+func (m *SessionScoreMutation) ClearMissingToolsAnalysis() {
+	m.missing_tools_analysis = nil
+	m.clearedFields[sessionscore.FieldMissingToolsAnalysis] = struct{}{}
+}
+
+// MissingToolsAnalysisCleared returns if the "missing_tools_analysis" field was cleared in this mutation.
+func (m *SessionScoreMutation) MissingToolsAnalysisCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldMissingToolsAnalysis]
+	return ok
+}
+
+// ResetMissingToolsAnalysis resets all changes to the "missing_tools_analysis" field.
+func (m *SessionScoreMutation) ResetMissingToolsAnalysis() {
+	m.missing_tools_analysis = nil
+	delete(m.clearedFields, sessionscore.FieldMissingToolsAnalysis)
+}
+
+// SetScoreTriggeredBy sets the "score_triggered_by" field.
+func (m *SessionScoreMutation) SetScoreTriggeredBy(s string) {
+	m.score_triggered_by = &s
+}
+
+// ScoreTriggeredBy returns the value of the "score_triggered_by" field in the mutation.
+func (m *SessionScoreMutation) ScoreTriggeredBy() (r string, exists bool) {
+	v := m.score_triggered_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScoreTriggeredBy returns the old "score_triggered_by" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldScoreTriggeredBy(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScoreTriggeredBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScoreTriggeredBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScoreTriggeredBy: %w", err)
+	}
+	return oldValue.ScoreTriggeredBy, nil
+}
+
+// ResetScoreTriggeredBy resets all changes to the "score_triggered_by" field.
+func (m *SessionScoreMutation) ResetScoreTriggeredBy() {
+	m.score_triggered_by = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *SessionScoreMutation) SetStatus(s sessionscore.Status) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *SessionScoreMutation) Status() (r sessionscore.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldStatus(ctx context.Context) (v sessionscore.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *SessionScoreMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetStartedAt sets the "started_at" field.
+func (m *SessionScoreMutation) SetStartedAt(t time.Time) {
+	m.started_at = &t
+}
+
+// StartedAt returns the value of the "started_at" field in the mutation.
+func (m *SessionScoreMutation) StartedAt() (r time.Time, exists bool) {
+	v := m.started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartedAt returns the old "started_at" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldStartedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+	}
+	return oldValue.StartedAt, nil
+}
+
+// ResetStartedAt resets all changes to the "started_at" field.
+func (m *SessionScoreMutation) ResetStartedAt() {
+	m.started_at = nil
+}
+
+// SetCompletedAt sets the "completed_at" field.
+func (m *SessionScoreMutation) SetCompletedAt(t time.Time) {
+	m.completed_at = &t
+}
+
+// CompletedAt returns the value of the "completed_at" field in the mutation.
+func (m *SessionScoreMutation) CompletedAt() (r time.Time, exists bool) {
+	v := m.completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedAt returns the old "completed_at" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedAt: %w", err)
+	}
+	return oldValue.CompletedAt, nil
+}
+
+// ClearCompletedAt clears the value of the "completed_at" field.
+func (m *SessionScoreMutation) ClearCompletedAt() {
+	m.completed_at = nil
+	m.clearedFields[sessionscore.FieldCompletedAt] = struct{}{}
+}
+
+// CompletedAtCleared returns if the "completed_at" field was cleared in this mutation.
+func (m *SessionScoreMutation) CompletedAtCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldCompletedAt]
+	return ok
+}
+
+// ResetCompletedAt resets all changes to the "completed_at" field.
+func (m *SessionScoreMutation) ResetCompletedAt() {
+	m.completed_at = nil
+	delete(m.clearedFields, sessionscore.FieldCompletedAt)
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *SessionScoreMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *SessionScoreMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *SessionScoreMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[sessionscore.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *SessionScoreMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *SessionScoreMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, sessionscore.FieldErrorMessage)
+}
+
+// ClearSession clears the "session" edge to the AlertSession entity.
+func (m *SessionScoreMutation) ClearSession() {
+	m.clearedsession = true
+	m.clearedFields[sessionscore.FieldSessionID] = struct{}{}
+}
+
+// SessionCleared reports if the "session" edge to the AlertSession entity was cleared.
+func (m *SessionScoreMutation) SessionCleared() bool {
+	return m.clearedsession
+}
+
+// SessionIDs returns the "session" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// SessionID instead. It exists only for internal usage by the builders.
+func (m *SessionScoreMutation) SessionIDs() (ids []string) {
+	if id := m.session; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetSession resets all changes to the "session" edge.
+func (m *SessionScoreMutation) ResetSession() {
+	m.session = nil
+	m.clearedsession = false
+}
+
+// Where appends a list predicates to the SessionScoreMutation builder.
+func (m *SessionScoreMutation) Where(ps ...predicate.SessionScore) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SessionScoreMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SessionScoreMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SessionScore, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SessionScoreMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SessionScoreMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SessionScore).
+func (m *SessionScoreMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SessionScoreMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.session != nil {
+		fields = append(fields, sessionscore.FieldSessionID)
+	}
+	if m.prompt_hash != nil {
+		fields = append(fields, sessionscore.FieldPromptHash)
+	}
+	if m.total_score != nil {
+		fields = append(fields, sessionscore.FieldTotalScore)
+	}
+	if m.score_analysis != nil {
+		fields = append(fields, sessionscore.FieldScoreAnalysis)
+	}
+	if m.missing_tools_analysis != nil {
+		fields = append(fields, sessionscore.FieldMissingToolsAnalysis)
+	}
+	if m.score_triggered_by != nil {
+		fields = append(fields, sessionscore.FieldScoreTriggeredBy)
+	}
+	if m.status != nil {
+		fields = append(fields, sessionscore.FieldStatus)
+	}
+	if m.started_at != nil {
+		fields = append(fields, sessionscore.FieldStartedAt)
+	}
+	if m.completed_at != nil {
+		fields = append(fields, sessionscore.FieldCompletedAt)
+	}
+	if m.error_message != nil {
+		fields = append(fields, sessionscore.FieldErrorMessage)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SessionScoreMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sessionscore.FieldSessionID:
+		return m.SessionID()
+	case sessionscore.FieldPromptHash:
+		return m.PromptHash()
+	case sessionscore.FieldTotalScore:
+		return m.TotalScore()
+	case sessionscore.FieldScoreAnalysis:
+		return m.ScoreAnalysis()
+	case sessionscore.FieldMissingToolsAnalysis:
+		return m.MissingToolsAnalysis()
+	case sessionscore.FieldScoreTriggeredBy:
+		return m.ScoreTriggeredBy()
+	case sessionscore.FieldStatus:
+		return m.Status()
+	case sessionscore.FieldStartedAt:
+		return m.StartedAt()
+	case sessionscore.FieldCompletedAt:
+		return m.CompletedAt()
+	case sessionscore.FieldErrorMessage:
+		return m.ErrorMessage()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SessionScoreMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sessionscore.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sessionscore.FieldPromptHash:
+		return m.OldPromptHash(ctx)
+	case sessionscore.FieldTotalScore:
+		return m.OldTotalScore(ctx)
+	case sessionscore.FieldScoreAnalysis:
+		return m.OldScoreAnalysis(ctx)
+	case sessionscore.FieldMissingToolsAnalysis:
+		return m.OldMissingToolsAnalysis(ctx)
+	case sessionscore.FieldScoreTriggeredBy:
+		return m.OldScoreTriggeredBy(ctx)
+	case sessionscore.FieldStatus:
+		return m.OldStatus(ctx)
+	case sessionscore.FieldStartedAt:
+		return m.OldStartedAt(ctx)
+	case sessionscore.FieldCompletedAt:
+		return m.OldCompletedAt(ctx)
+	case sessionscore.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	}
+	return nil, fmt.Errorf("unknown SessionScore field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionScoreMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sessionscore.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sessionscore.FieldPromptHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromptHash(v)
+		return nil
+	case sessionscore.FieldTotalScore:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalScore(v)
+		return nil
+	case sessionscore.FieldScoreAnalysis:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScoreAnalysis(v)
+		return nil
+	case sessionscore.FieldMissingToolsAnalysis:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMissingToolsAnalysis(v)
+		return nil
+	case sessionscore.FieldScoreTriggeredBy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScoreTriggeredBy(v)
+		return nil
+	case sessionscore.FieldStatus:
+		v, ok := value.(sessionscore.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case sessionscore.FieldStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartedAt(v)
+		return nil
+	case sessionscore.FieldCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedAt(v)
+		return nil
+	case sessionscore.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SessionScoreMutation) AddedFields() []string {
+	var fields []string
+	if m.addtotal_score != nil {
+		fields = append(fields, sessionscore.FieldTotalScore)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SessionScoreMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sessionscore.FieldTotalScore:
+		return m.AddedTotalScore()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionScoreMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sessionscore.FieldTotalScore:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalScore(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SessionScoreMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sessionscore.FieldPromptHash) {
+		fields = append(fields, sessionscore.FieldPromptHash)
+	}
+	if m.FieldCleared(sessionscore.FieldTotalScore) {
+		fields = append(fields, sessionscore.FieldTotalScore)
+	}
+	if m.FieldCleared(sessionscore.FieldScoreAnalysis) {
+		fields = append(fields, sessionscore.FieldScoreAnalysis)
+	}
+	if m.FieldCleared(sessionscore.FieldMissingToolsAnalysis) {
+		fields = append(fields, sessionscore.FieldMissingToolsAnalysis)
+	}
+	if m.FieldCleared(sessionscore.FieldCompletedAt) {
+		fields = append(fields, sessionscore.FieldCompletedAt)
+	}
+	if m.FieldCleared(sessionscore.FieldErrorMessage) {
+		fields = append(fields, sessionscore.FieldErrorMessage)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SessionScoreMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SessionScoreMutation) ClearField(name string) error {
+	switch name {
+	case sessionscore.FieldPromptHash:
+		m.ClearPromptHash()
+		return nil
+	case sessionscore.FieldTotalScore:
+		m.ClearTotalScore()
+		return nil
+	case sessionscore.FieldScoreAnalysis:
+		m.ClearScoreAnalysis()
+		return nil
+	case sessionscore.FieldMissingToolsAnalysis:
+		m.ClearMissingToolsAnalysis()
+		return nil
+	case sessionscore.FieldCompletedAt:
+		m.ClearCompletedAt()
+		return nil
+	case sessionscore.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SessionScoreMutation) ResetField(name string) error {
+	switch name {
+	case sessionscore.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sessionscore.FieldPromptHash:
+		m.ResetPromptHash()
+		return nil
+	case sessionscore.FieldTotalScore:
+		m.ResetTotalScore()
+		return nil
+	case sessionscore.FieldScoreAnalysis:
+		m.ResetScoreAnalysis()
+		return nil
+	case sessionscore.FieldMissingToolsAnalysis:
+		m.ResetMissingToolsAnalysis()
+		return nil
+	case sessionscore.FieldScoreTriggeredBy:
+		m.ResetScoreTriggeredBy()
+		return nil
+	case sessionscore.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case sessionscore.FieldStartedAt:
+		m.ResetStartedAt()
+		return nil
+	case sessionscore.FieldCompletedAt:
+		m.ResetCompletedAt()
+		return nil
+	case sessionscore.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SessionScoreMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.session != nil {
+		edges = append(edges, sessionscore.EdgeSession)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SessionScoreMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case sessionscore.EdgeSession:
+		if id := m.session; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SessionScoreMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SessionScoreMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SessionScoreMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedsession {
+		edges = append(edges, sessionscore.EdgeSession)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SessionScoreMutation) EdgeCleared(name string) bool {
+	switch name {
+	case sessionscore.EdgeSession:
+		return m.clearedsession
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SessionScoreMutation) ClearEdge(name string) error {
+	switch name {
+	case sessionscore.EdgeSession:
+		m.ClearSession()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SessionScoreMutation) ResetEdge(name string) error {
+	switch name {
+	case sessionscore.EdgeSession:
+		m.ResetSession()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionScore edge %s", name)
 }
 
 // StageMutation represents an operation that mutates the Stage nodes in the graph.

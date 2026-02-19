@@ -28,6 +28,8 @@ type Tx struct {
 	MCPInteraction *MCPInteractionClient
 	// Message is the client for interacting with the Message builders.
 	Message *MessageClient
+	// SessionScore is the client for interacting with the SessionScore builders.
+	SessionScore *SessionScoreClient
 	// Stage is the client for interacting with the Stage builders.
 	Stage *StageClient
 	// TimelineEvent is the client for interacting with the TimelineEvent builders.
@@ -171,6 +173,7 @@ func (tx *Tx) init() {
 	tx.LLMInteraction = NewLLMInteractionClient(tx.config)
 	tx.MCPInteraction = NewMCPInteractionClient(tx.config)
 	tx.Message = NewMessageClient(tx.config)
+	tx.SessionScore = NewSessionScoreClient(tx.config)
 	tx.Stage = NewStageClient(tx.config)
 	tx.TimelineEvent = NewTimelineEventClient(tx.config)
 }
