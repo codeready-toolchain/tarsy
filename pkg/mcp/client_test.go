@@ -199,9 +199,8 @@ func TestClient_HasSession(t *testing.T) {
 func TestClient_FailedServers(t *testing.T) {
 	client := newClient(config.NewMCPServerRegistry(nil))
 
-	// Initialize with a non-existent server
-	err := client.Initialize(context.Background(), []string{"nonexistent-server"})
-	require.NoError(t, err) // Initialize doesn't return error; it records failures
+	// Initialize with a non-existent server (failures recorded, not returned)
+	client.Initialize(context.Background(), []string{"nonexistent-server"})
 
 	failed := client.FailedServers()
 	assert.Contains(t, failed, "nonexistent-server")

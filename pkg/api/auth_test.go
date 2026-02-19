@@ -35,6 +35,21 @@ func TestExtractAuthor(t *testing.T) {
 			},
 			expected: "bob@example.com",
 		},
+		{
+			name: "X-Remote-User used for kube-rbac-proxy API clients",
+			headers: map[string]string{
+				"X-Remote-User": "system:serviceaccount:my-namespace:my-api-client",
+			},
+			expected: "system:serviceaccount:my-namespace:my-api-client",
+		},
+		{
+			name: "X-Forwarded-User takes priority over X-Remote-User",
+			headers: map[string]string{
+				"X-Forwarded-User": "alice",
+				"X-Remote-User":    "system:serviceaccount:ns:sa",
+			},
+			expected: "alice",
+		},
 	}
 
 	for _, tt := range tests {

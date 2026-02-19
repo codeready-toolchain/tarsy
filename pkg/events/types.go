@@ -119,6 +119,11 @@ const (
 // The session list page subscribes to this for real-time updates.
 const GlobalSessionsChannel = "sessions"
 
+// CancellationsChannel is the backend-to-backend channel for cross-pod
+// session cancellation. All pods LISTEN on this channel; the cancel handler
+// publishes the session ID as payload. The owning pod cancels the context.
+const CancellationsChannel = "cancellations"
+
 // SessionChannel returns the channel name for a specific session's events.
 // Format: "session:{session_id}"
 func SessionChannel(sessionID string) string {

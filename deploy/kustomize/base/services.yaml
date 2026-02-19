@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tarsy-database
+  namespace: tarsy
+spec:
+  selector:
+    component: database
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tarsy-web
+  namespace: tarsy
+spec:
+  selector:
+    component: tarsy
+  ports:
+    - name: oauth2-proxy
+      port: 4180
+      targetPort: 4180
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tarsy-api
+  namespace: tarsy
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: tarsy-serving-cert
+spec:
+  selector:
+    component: tarsy
+  ports:
+    - name: kube-rbac-proxy
+      port: 8443
+      targetPort: 8443

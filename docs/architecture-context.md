@@ -570,7 +570,7 @@ Maps `config.TransportConfig` to MCP SDK transports:
 
 ### Startup & Runtime Health
 
-**Startup (eager, fatal on failure)**: All configured MCP servers must initialize before TARSy becomes ready. Broken configs or unreachable servers prevent the readiness probe from passing. Rolling updates in OpenShift/K8s ensure no downtime.
+**Startup (eager, warn on failure)**: All configured MCP servers are validated at startup. Servers that fail to connect are logged as warnings and surfaced via `SystemWarningsService` on the dashboard. TARSy starts in a degraded state rather than refusing to start — the HealthMonitor handles runtime recovery and clears warnings when servers become reachable.
 
 **Runtime (HealthMonitor)**: Background checks every 15s detect degradation. Unhealthy servers surface as `SystemWarning`s in the health endpoint/dashboard. On recovery, warnings are cleared automatically.
 
@@ -1268,6 +1268,10 @@ Stage events are published from the **executor** (chain loop), not from controll
 
 PostgreSQL `NOTIFY`/`LISTEN` via `NotifyListener` (`pkg/events/listener.go`). `pgx.WaitForNotification` in a goroutine. NOTIFY payload limit: truncation at 7900 bytes.
 
+### Cross-Pod Cancellation
+
+Session cancellation uses a dedicated `cancellations` NOTIFY channel for instant cross-pod delivery. When the cancel API handler runs, it: (1) sets DB status to `cancelling`, (2) cancels locally via `WorkerPool.CancelSession` + `ChatExecutor.CancelBySessionID`, (3) publishes the session ID to the `cancellations` channel via `pg_notify`. All pods LISTEN on this channel via `NotifyListener.RegisterHandler` — the owning pod cancels the session context. The same-pod path remains instant (in-memory); cross-pod adds only network round-trip latency.
+
 ### Publishing Pattern
 
 DB INSERT + `pg_notify` in the same transaction for persistent events. `PublishTransient` for token streaming. Publish failures are non-blocking (logged, don't stop agent execution).
@@ -1484,11 +1488,12 @@ Shared utility for canonical ↔ API name conversion:
 | **Author extraction** | `X-Forwarded-User` > `X-Forwarded-Email` > `"api-client"` |
 | **Forced conclusion** | At max iterations: one extra LLM call without tools, asking for best conclusion with available data |
 | **Queue = sessions table** | `FOR UPDATE SKIP LOCKED` claim pattern; `pod_id` ownership; orphan detection (all pods, no leader) |
+| **Cross-pod cancellation** | Cancel request → DB `cancelling` + local cancel + `pg_notify('cancellations', sessionID)`. All pods LISTEN via `NotifyListener.RegisterHandler`; owning pod cancels context instantly |
 | **Soft deletes** | `deleted_at` on AlertSession; 90-day retention; hard delete can be added later |
 | **Native tools suppression** | When MCP tools are present, native tools (code execution, search) are disabled in Python |
 | **Per-agent-execution MCP isolation** | Each agent execution gets its own MCP Client with independent SDK sessions; no shared state between stages or parallel agents |
 | **Tool errors as content** | MCP tool errors → `ToolResult{IsError: true}` (LLM-observable). Go errors → `error` return (infrastructure only) |
-| **Eager startup validation** | All configured MCP servers must initialize at startup (readiness probe fails otherwise); runtime degradation detected by HealthMonitor |
+| **Eager startup validation** | All configured MCP servers are validated at startup; failures log warnings and TARSy starts degraded (non-fatal); runtime recovery handled by HealthMonitor |
 | **Multi-format input parsing** | ActionInput cascade: JSON → YAML → key-value → raw string; parsing in executor, not parser |
 | **Fail-closed masking (MCP)** | Masking failure on MCP tool results → full redaction notice; secrets never leak to LLM/timeline |
 | **Fail-open masking (alerts)** | Masking failure on alert payloads → continue with unmasked data; availability over secrecy for user-provided data |

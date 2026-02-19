@@ -1,0 +1,47 @@
+# ServiceAccount for the TARSy pod
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tarsy
+  namespace: tarsy
+
+---
+# ClusterRole granting permission to invoke TokenReview and SubjectAccessReview
+# (required by kube-rbac-proxy to validate incoming tokens)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tarsy-kube-rbac-proxy
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+
+---
+# Bind the proxy ClusterRole to the TARSy ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tarsy-kube-rbac-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tarsy-kube-rbac-proxy
+subjects:
+  - kind: ServiceAccount
+    name: tarsy
+    namespace: tarsy
+
+---
+# ClusterRole defining the "tarsy-api-access" permission
+# API clients need a RoleBinding to this ClusterRole to access TARSy API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tarsy-api-client
+rules:
+  - nonResourceURLs: ["/api/*", "/health"]
+    verbs: ["get", "post"]

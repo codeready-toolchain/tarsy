@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -153,27 +154,40 @@ func main() {
 	connManager.SetListener(notifyListener)
 	slog.Info("Streaming infrastructure initialized")
 
+	// Subscribe to the cancellations channel for cross-pod session cancellation.
+	// The handler is registered later (after workerPool and chatExecutor are created)
+	// because it depends on them. The subscription itself is safe to set up early.
+	if err := notifyListener.Subscribe(ctx, events.CancellationsChannel); err != nil {
+		slog.Error("Failed to subscribe to cancellations channel", "error", err)
+		os.Exit(1)
+	}
+
 	// 5b. Initialize MCP infrastructure
 	warningsService := services.NewSystemWarningsService()
 	mcpFactory := mcp.NewClientFactory(cfg.MCPServerRegistry, maskingService)
 
-	// Eager MCP validation: verify all configured servers can connect.
-	// If any server fails, the process exits — prevents silent broken configs.
+	// MCP startup validation: attempt to connect to all configured servers.
+	// Failures are non-fatal — TARSy starts degraded with warnings visible
+	// on the dashboard. The HealthMonitor handles recovery and warning cleanup.
 	mcpServerIDs := cfg.AllMCPServerIDs()
 	if len(mcpServerIDs) > 0 {
-		validationClient, mcpErr := mcpFactory.CreateClient(ctx, mcpServerIDs)
-		if mcpErr != nil {
-			slog.Error("MCP startup validation failed", "error", mcpErr)
-			os.Exit(1)
-		}
-		failed := validationClient.FailedServers()
-		if len(failed) > 0 {
-			slog.Error("MCP servers failed startup validation", "failed_servers", failed)
+		validationClient, err := mcpFactory.CreateClient(ctx, mcpServerIDs)
+		if err != nil {
+			slog.Warn("MCP client creation failed — starting degraded", "error", err)
+		} else {
+			failed := validationClient.FailedServers()
+			if len(failed) > 0 {
+				slog.Warn("MCP servers failed startup validation — starting degraded", "failed_servers", failed)
+				for serverID, errMsg := range failed {
+					warningsService.AddWarning("mcp_health",
+						fmt.Sprintf("MCP server %q unreachable at startup: %s", serverID, errMsg),
+						"Server will be retried by the health monitor.", serverID)
+				}
+			} else {
+				slog.Info("MCP servers validated", "count", len(mcpServerIDs))
+			}
 			_ = validationClient.Close()
-			os.Exit(1)
 		}
-		_ = validationClient.Close()
-		slog.Info("MCP servers validated", "count", len(mcpServerIDs))
 	}
 
 	// Start HealthMonitor (background goroutine)
@@ -238,6 +252,16 @@ func main() {
 	)
 	slog.Info("Chat message executor initialized")
 
+	// 6b. Register cross-pod cancellation handler.
+	// When any pod publishes a cancel NOTIFY, every pod (including the sender)
+	// attempts a local cancel. The owning pod will find the session and cancel it.
+	notifyListener.RegisterHandler(events.CancellationsChannel, func(payload []byte) {
+		sessionID := string(payload)
+		workerPool.CancelSession(sessionID)
+		chatExecutor.CancelBySessionID(context.Background(), sessionID)
+	})
+	slog.Info("Cross-pod cancellation handler registered")
+
 	// 7. Create HTTP server
 	httpServer := api.NewServer(cfg, dbClient, alertService, sessionService, workerPool, connManager)
 	if healthMonitor != nil {
@@ -247,6 +271,7 @@ func main() {
 	httpServer.SetChatService(chatService)
 	httpServer.SetChatExecutor(chatExecutor)
 	httpServer.SetEventPublisher(eventPublisher)
+	httpServer.SetCancelNotifier(eventPublisher)
 	httpServer.SetRunbookService(runbookService)
 
 	// 7a. Wire trace and timeline endpoints.

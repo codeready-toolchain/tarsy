@@ -178,6 +178,9 @@ func TestNewEventPublisher(t *testing.T) {
 	assert.Nil(t, publisher.db)
 }
 
+// Compile-time check: EventPublisher satisfies SessionCancelNotifier.
+var _ SessionCancelNotifier = (*EventPublisher)(nil)
+
 func TestStageStatusPayload_JSON(t *testing.T) {
 	payload := StageStatusPayload{
 		BasePayload: BasePayload{

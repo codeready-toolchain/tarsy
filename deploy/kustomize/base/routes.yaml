@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: tarsy
+  namespace: tarsy
+spec:
+  host: {{ROUTE_HOST}}
+  to:
+    kind: Service
+    name: tarsy-web
+    weight: 100
+  port:
+    targetPort: oauth2-proxy
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

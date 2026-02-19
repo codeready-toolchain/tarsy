@@ -31,10 +31,7 @@ func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string) (*
 		return f.createClientFn(ctx, serverIDs)
 	}
 	client := newClient(f.registry)
-	if err := client.Initialize(ctx, serverIDs); err != nil {
-		_ = client.Close() // Clean up partial initialization
-		return nil, err
-	}
+	client.Initialize(ctx, serverIDs)
 	return client, nil
 }
 

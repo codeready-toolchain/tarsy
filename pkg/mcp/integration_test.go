@@ -358,9 +358,8 @@ func TestIntegration_FailedServers(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
 	client := newClient(registry)
 
-	// Initialize with a non-existent server
-	err := client.Initialize(context.Background(), []string{"broken-server"})
-	require.NoError(t, err) // Initialize records failures, doesn't return error
+	// Initialize with a non-existent server (failures recorded, not returned)
+	client.Initialize(context.Background(), []string{"broken-server"})
 
 	failed := client.FailedServers()
 	assert.Contains(t, failed, "broken-server")
