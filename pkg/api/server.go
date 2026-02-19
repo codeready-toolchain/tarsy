@@ -46,6 +46,7 @@ type Server struct {
 	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 	runbookService     *runbook.Service                // nil until set (runbook endpoint)
+	cancelNotifier     events.SessionCancelNotifier    // nil until set (cross-pod cancel)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 	wsOriginPatterns   []string                        // allowed WebSocket origin patterns
 }
@@ -119,6 +120,11 @@ func (s *Server) SetTimelineService(svc *services.TimelineService) {
 // SetRunbookService sets the runbook service for the runbook listing endpoint.
 func (s *Server) SetRunbookService(rs *runbook.Service) {
 	s.runbookService = rs
+}
+
+// SetCancelNotifier sets the cross-pod cancel notifier for session cancellation.
+func (s *Server) SetCancelNotifier(cn events.SessionCancelNotifier) {
+	s.cancelNotifier = cn
 }
 
 // SetDashboardDir sets the path to the dashboard build directory and

@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// SessionCancelNotifier broadcasts session cancellation requests to all pods
+// via PostgreSQL NOTIFY. Used by the cancel API handler for cross-pod delivery.
+type SessionCancelNotifier interface {
+	NotifyCancelSession(ctx context.Context, sessionID string) error
+}
+
 // EventPublisher publishes events for WebSocket delivery.
 // Persistent events are stored in the events table then broadcast via NOTIFY.
 // Transient events (streaming chunks) are broadcast via NOTIFY only.
@@ -24,6 +30,16 @@ type EventPublisher struct {
 // The db parameter should be the *sql.DB from database.Client.DB().
 func NewEventPublisher(db *sql.DB) *EventPublisher {
 	return &EventPublisher{db: db}
+}
+
+// NotifyCancelSession broadcasts a session cancellation request to all pods.
+// The payload is the raw session ID — no JSON wrapping needed.
+func (p *EventPublisher) NotifyCancelSession(ctx context.Context, sessionID string) error {
+	_, err := p.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", CancellationsChannel, sessionID)
+	if err != nil {
+		return fmt.Errorf("cancel notify failed: %w", err)
+	}
+	return nil
 }
 
 // --- Typed public methods ---

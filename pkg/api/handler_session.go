@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,6 +156,13 @@ func (s *Server) cancelSessionHandler(c *echo.Context) error {
 	chatCancelled := false
 	if s.chatExecutor != nil {
 		chatCancelled = s.chatExecutor.CancelBySessionID(c.Request().Context(), sessionID)
+	}
+
+	// Broadcast to all pods via NOTIFY so the owning pod cancels the context.
+	if s.cancelNotifier != nil {
+		if err := s.cancelNotifier.NotifyCancelSession(c.Request().Context(), sessionID); err != nil {
+			slog.Warn("Failed to broadcast cancel notification", "session_id", sessionID, "error", err)
+		}
 	}
 
 	// Return success if either the session or a chat was cancelled.

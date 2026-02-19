@@ -21,7 +21,8 @@ type listenCmd struct {
 }
 
 // NotifyListener listens for PostgreSQL NOTIFY events and dispatches
-// them to the local ConnectionManager.
+// them to the local ConnectionManager (for WebSocket clients) and to
+// registered internal handlers (for backend-to-backend communication).
 type NotifyListener struct {
 	connString string
 	conn       *pgx.Conn // Dedicated connection for LISTEN
@@ -47,6 +48,11 @@ type NotifyListener struct {
 	listenGen   map[string]uint64
 	listenGenMu sync.Mutex
 
+	// handlers are internal (backend-to-backend) callbacks invoked when a
+	// NOTIFY arrives on a matching channel. Used for cross-pod cancellation.
+	handlers   map[string]func(payload []byte)
+	handlersMu sync.RWMutex
+
 	// cancelLoop and loopDone coordinate graceful shutdown of the receive loop.
 	cancelLoop context.CancelFunc
 	loopDone   chan struct{}
@@ -60,6 +66,7 @@ func NewNotifyListener(connString string, manager *ConnectionManager) *NotifyLis
 		channels:   make(map[string]bool),
 		cmdCh:      make(chan listenCmd, 16),
 		listenGen:  make(map[string]uint64),
+		handlers:   make(map[string]func(payload []byte)),
 	}
 }
 
@@ -202,6 +209,16 @@ func (l *NotifyListener) isListening(channel string) bool {
 	return l.channels[channel]
 }
 
+// RegisterHandler registers an internal handler for a specific channel.
+// When a NOTIFY arrives on that channel, the handler is invoked in addition
+// to the normal ConnectionManager broadcast. Used for backend-to-backend
+// communication (e.g., cross-pod session cancellation).
+func (l *NotifyListener) RegisterHandler(channel string, fn func(payload []byte)) {
+	l.handlersMu.Lock()
+	defer l.handlersMu.Unlock()
+	l.handlers[channel] = fn
+}
+
 // receiveLoop continuously receives notifications from PostgreSQL
 // and dispatches them to the ConnectionManager.
 // It is the sole goroutine that touches the pgx connection, avoiding
@@ -246,7 +263,15 @@ func (l *NotifyListener) receiveLoop(ctx context.Context) {
 			continue
 		}
 
-		// Dispatch to ConnectionManager
+		// Dispatch to internal handlers (backend-to-backend)
+		l.handlersMu.RLock()
+		handler := l.handlers[notification.Channel]
+		l.handlersMu.RUnlock()
+		if handler != nil {
+			handler([]byte(notification.Payload))
+		}
+
+		// Dispatch to ConnectionManager (WebSocket clients)
 		l.manager.Broadcast(notification.Channel, []byte(notification.Payload))
 	}
 }

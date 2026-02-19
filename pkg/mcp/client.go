@@ -52,15 +52,11 @@ func newClient(registry *config.MCPServerRegistry) *Client {
 }
 
 // Initialize connects to all configured MCP servers.
-// Servers that fail to connect are recorded in failedServers.
-// The caller decides how to handle failures:
+// Servers that fail to connect are recorded in failedServers (retrievable via
+// FailedServers()). The caller decides how to handle partial failures:
 //   - Startup: check FailedServers() and log warnings (non-fatal, TARSy starts degraded)
 //   - Per-session: partial initialization is acceptable
-//
-// Always returns nil today; the error return is retained so the signature can
-// evolve (e.g., returning an error when *all* servers fail) without breaking
-// callers.
-func (c *Client) Initialize(ctx context.Context, serverIDs []string) error {
+func (c *Client) Initialize(ctx context.Context, serverIDs []string) {
 	for _, serverID := range serverIDs {
 		if err := c.InitializeServer(ctx, serverID); err != nil {
 			c.mu.Lock()
@@ -70,7 +66,6 @@ func (c *Client) Initialize(ctx context.Context, serverIDs []string) error {
 				"server", serverID, "error", err)
 		}
 	}
-	return nil
 }
 
 // InitializeServer connects to a single MCP server.

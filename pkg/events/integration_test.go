@@ -586,3 +586,29 @@ func TestIntegration_ListenerGenerationCounter_StaleUnlistenSkipped(t *testing.T
 		}
 	}
 }
+
+// TestCancellationsChannel_CrossPodNotify verifies that a pg_notify on the
+// CancellationsChannel is received by the registered internal handler,
+// simulating the cross-pod cancellation flow.
+func TestCancellationsChannel_CrossPodNotify(t *testing.T) {
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	// Subscribe to cancellations channel
+	require.NoError(t, env.listener.Subscribe(ctx, CancellationsChannel))
+
+	received := make(chan string, 1)
+	env.listener.RegisterHandler(CancellationsChannel, func(payload []byte) {
+		received <- string(payload)
+	})
+
+	// Publish a cancel notification (simulates what cancelSessionHandler does)
+	require.NoError(t, env.publisher.NotifyCancelSession(ctx, env.sessionID))
+
+	select {
+	case got := <-received:
+		assert.Equal(t, env.sessionID, got)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for cancel notification")
+	}
+}
