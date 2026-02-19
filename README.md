@@ -25,7 +25,7 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 ### For Development Mode
 - **Go 1.25+** -- Backend orchestrator
 - **Python 3.13+** -- LLM service runtime
-- **Node.js 18+** -- Dashboard development and build tools
+- **Node.js 24+** -- Dashboard development and build tools
 - **uv** -- Modern Python package manager
   - Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **PostgreSQL 17+** -- Or Podman/Docker for local development
