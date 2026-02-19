@@ -5,7 +5,7 @@
   <img src="./docs/img/TARSy-logo.png" alt="TARSy" width="100"/>
 </div>
 
-**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through sequential agent chains, retrieves runbooks, and uses MCP (Model Context Protocol) servers to gather system information for comprehensive multi-stage incident analysis.
+**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through parallel agent chains, using MCP (Model Context Protocol) servers and optional runbooks for comprehensive multi-stage incident analysis.
 
 This is the Go-based hybrid rewrite of TARSy, replacing the [original Python implementation](https://github.com/codeready-toolchain/tarsy-bot) (now deprecated). The new architecture splits responsibilities between a Go orchestrator and a stateless Python LLM service for better performance, type safety, and scalability.
 
@@ -98,20 +98,24 @@ make containers-clean         # Remove all containers and data
 
 ## Key Features
 
+### Agent Architecture
 - **Configuration-Based Agents**: Deploy new agents and chain definitions via YAML without code changes
+- **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent, replica, and comparison parallelism for A/B testing providers or strategies
+- **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
+- **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
+- **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
+
+### Investigation & Analysis
 - **Flexible Alert Processing**: Accept arbitrary text payloads from any monitoring system
-- **Chain-Based Agent Architecture**: Specialized agents with domain-specific tools and AI reasoning working in coordinated stages
-- **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent parallelism, replica parallelism, and comparison parallelism for A/B testing providers or strategies
-- **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs). Add new servers via configuration
-- **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML. Native thinking mode for Gemini 2.5+. LangChain-based provider system for extensibility
-- **GitHub Runbook Integration**: Automatic retrieval and inclusion of relevant runbooks from GitHub repositories per agent chain
+- **Optional Runbook Integration**: Fetch supplemental guidance from GitHub repositories to steer agent behavior
+- **Data Masking**: Hybrid masking combining structural analysis (Kubernetes Secrets) with regex patterns to protect sensitive data
+- **Tool Result Summarization**: LLM-powered summarization of verbose MCP outputs to reduce token usage and improve reasoning
+
+### Observability & Operations
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
-- **Force Conclusion**: Configurable automatic conclusion at iteration limits. Hierarchical setting at system, agent, chain, stage, or parallel agent level
-- **Data Masking**: Hybrid masking system combining structural analysis (Kubernetes Secrets) with regex patterns (API keys, passwords, certificates) to protect sensitive data
-- **Tool Result Summarization**: LLM-powered summarization of verbose MCP tool outputs to reduce token usage and improve agent reasoning
-- **Slack Notifications**: Automatic notifications when alert processing completes or fails, with thread-based message grouping via fingerprint matching
-- **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline reconstruction and trace views
+- **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
+- **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views
 
 ## Architecture
 
@@ -138,14 +142,13 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 
 1. **Alert arrives** from monitoring systems with flexible text payload
 2. **Orchestrator selects** appropriate agent chain based on alert type
-3. **Runbook downloaded** (optional) automatically from GitHub for chain guidance
-4. **Sequential stages execute** where each agent builds upon previous stage data using AI to select and execute domain-specific tools
-   - Stages can run multiple agents in parallel for independent investigation
-   - Parallel results automatically synthesized into unified analysis
-5. **Automatic pause** if investigation reaches iteration limits (or forced conclusion if configured)
-6. **Comprehensive multi-stage analysis** provided to engineers with actionable recommendations
-7. **Follow-up chat available** after investigation completes
-8. **Full audit trail** captured with stage-level detail
+3. **Runbook injected** (optional) -- if configured, fetches supplemental guidance from GitHub to steer agent behavior
+4. **Agents investigate in parallel** -- each stage launches multiple agents concurrently (different providers, strategies, or focus areas) for independent analysis
+5. **Synthesis agent merges results** -- a dedicated LLM call critically evaluates parallel findings and produces a unified root cause analysis
+6. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
+7. **Comprehensive analysis** provided to engineers with actionable recommendations
+8. **Follow-up chat available** after investigation completes
+9. **Full audit trail** captured with stage-level detail
 
 ### Components
 
