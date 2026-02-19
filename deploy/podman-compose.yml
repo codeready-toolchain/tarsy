@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   postgres:
-    image: docker.io/library/postgres:17-alpine
+    image: mirror.gcr.io/library/postgres:17-alpine
     container_name: tarsy-postgres
     environment:
       POSTGRES_USER: tarsy
@@ -18,6 +16,72 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  llm-service:
+    build:
+      context: ../llm-service
+      dockerfile: Dockerfile
+    container_name: tarsy-llm
+    env_file:
+      - ./config/.env
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',50051)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: on-failure:3
+
+  tarsy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: tarsy-app
+    env_file:
+      - ./config/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: tarsy
+      DB_PASSWORD: tarsy_dev_password
+      DB_NAME: tarsy
+      DB_SSLMODE: disable
+      LLM_SERVICE_ADDR: llm-service:50051
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: on-failure:3
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: tarsy-oauth2
+    command:
+      - "oauth2-proxy"
+      - "--config=/config/oauth2-proxy.cfg"
+      - "--skip-auth-preflight=true"
+    ports:
+      - "8080:4180"
+    volumes:
+      - ./config/oauth2-proxy.cfg:/config/oauth2-proxy.cfg:ro
+      - ./config/templates:/templates:ro
+    depends_on:
+      tarsy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:4180/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:

@@ -11,12 +11,8 @@ func (s *Server) wsHandler(c *echo.Context) error {
 		return echo.NewHTTPError(503, "WebSocket not available")
 	}
 
-	// Upgrade HTTP to WebSocket
 	conn, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
-		// Accept all origins. Origin validation is deferred to Phase 9 (Security).
-		// Phase 9 should replace InsecureSkipVerify with OriginPatterns-based allowlist
-		// read from server config, rejecting connections by default if the list is empty.
-		InsecureSkipVerify: true,
+		OriginPatterns: s.wsOriginPatterns,
 	})
 	if err != nil {
 		return err

@@ -63,6 +63,7 @@ deploy/.env
 deploy/config/tarsy.yaml
 deploy/config/llm-providers.yaml
 deploy/config/oauth2-proxy.cfg
+deploy/config/oauth.env
 deploy/config/.env
 
 # Logs

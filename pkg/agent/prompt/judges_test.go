@@ -84,4 +84,3 @@ func TestJudgePromptFollowupMissingTools_NoPlaceholders(t *testing.T) {
 	assert.NotContains(t, judgePromptFollowupMissingTools, "%[1]s", "must have no placeholders")
 	assert.NotContains(t, judgePromptFollowupMissingTools, "%[2]s", "must have no placeholders")
 }
-

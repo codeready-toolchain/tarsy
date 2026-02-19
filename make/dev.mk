@@ -31,17 +31,6 @@ dev-stop: db-stop ## Stop all dev services (DB + LLM + backend + dashboard)
 	@-pkill -f 'web/dashboard.*vite' 2>/dev/null; true
 	@echo -e "$(GREEN)✅ All services stopped$(NC)"
 
-.PHONY: dev-setup
-dev-setup: db-start ent-generate ## Setup development environment
-	@echo ""
-	@echo -e "$(GREEN)✅ Development environment ready!$(NC)"
-	@echo -e "$(BLUE)  Database: $(DB_DSN)$(NC)"
-	@echo ""
-	@echo -e "$(YELLOW)Next steps:$(NC)"
-	@echo "  1. Ensure deploy/.env has your configuration"
-	@echo "  2. Run 'make build' to build the application"
-	@echo "  3. Run './bin/tarsy' to start the application"
-
 .PHONY: dev-clean
 dev-clean: db-clean ent-clean ## Clean all development artifacts
 	@echo -e "$(GREEN)✅ Development environment cleaned$(NC)"
@@ -235,12 +224,16 @@ proto-clean: ## Clean generated proto files
 # Dependencies
 # =============================================================================
 
-.PHONY: deps-install
-deps-install: ## Install Go dependencies
-	@echo -e "$(YELLOW)Installing dependencies...$(NC)"
+.PHONY: setup
+setup: ## Install all dependencies (Go + Python + Dashboard)
+	@echo -e "$(YELLOW)Installing Go dependencies...$(NC)"
 	@go mod download
 	@go mod tidy
-	@echo -e "$(GREEN)✅ Dependencies installed$(NC)"
+	@echo -e "$(YELLOW)Installing LLM service dependencies...$(NC)"
+	@cd llm-service && uv sync
+	@echo -e "$(YELLOW)Installing dashboard dependencies...$(NC)"
+	@cd web/dashboard && npm ci
+	@echo -e "$(GREEN)✅ All dependencies installed$(NC)"
 
 .PHONY: deps-update
 deps-update: ## Update Go dependencies

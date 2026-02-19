@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -237,9 +238,15 @@ func TestE2E_SlackNoFingerprint(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Only the terminal notification should be sent (start is skipped without fingerprint).
-	calls := mock.getCalls()
-	require.Len(t, calls, 1, "expected exactly 1 chat.postMessage call (terminal only, no start)")
+	// The terminal Slack notification is sent synchronously by the worker
+	// AFTER the DB status update, so there is a brief window where the
+	// session is "completed" but the HTTP call hasn't been made yet.
+	var calls []slackCall
+	require.Eventually(t, func() bool {
+		calls = mock.getCalls()
+		return len(calls) == 1
+	}, 5*time.Second, 50*time.Millisecond,
+		"expected exactly 1 chat.postMessage call (terminal only, no start)")
 
 	assert.Equal(t, channelID, calls[0].Channel, "terminal message: wrong channel")
 	assert.Empty(t, calls[0].ThreadTS, "terminal message should NOT be threaded without fingerprint")

@@ -24,10 +24,11 @@ type TarsyYAMLConfig struct {
 
 // SystemYAMLConfig groups system-wide infrastructure settings.
 type SystemYAMLConfig struct {
-	DashboardURL string              `yaml:"dashboard_url"`
-	GitHub       *GitHubYAMLConfig   `yaml:"github"`
-	Runbooks     *RunbooksYAMLConfig `yaml:"runbooks"`
-	Slack        *SlackYAMLConfig    `yaml:"slack"`
+	DashboardURL     string              `yaml:"dashboard_url"`
+	AllowedWSOrigins []string            `yaml:"allowed_ws_origins"`
+	GitHub           *GitHubYAMLConfig   `yaml:"github"`
+	Runbooks         *RunbooksYAMLConfig `yaml:"runbooks"`
+	Slack            *SlackYAMLConfig    `yaml:"slack"`
 }
 
 // SlackYAMLConfig holds Slack notification settings from YAML.
@@ -154,11 +155,12 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + DashboardURL)
+	// Resolve system config (GitHub + Runbooks + Slack + DashboardURL + WS Origins)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
+	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
 
 	return &Config{
 		configDir:           configDir,
@@ -168,6 +170,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		Runbooks:            runbooksCfg,
 		Slack:               slackCfg,
 		DashboardURL:        dashboardURL,
+		AllowedWSOrigins:    allowedWSOrigins,
 		AgentRegistry:       agentRegistry,
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,
@@ -314,4 +317,12 @@ func resolveDashboardURL(sys *SystemYAMLConfig) string {
 		return sys.DashboardURL
 	}
 	return "http://localhost:5173"
+}
+
+// resolveAllowedWSOrigins returns additional WebSocket origin patterns from system YAML.
+func resolveAllowedWSOrigins(sys *SystemYAMLConfig) []string {
+	if sys != nil {
+		return sys.AllowedWSOrigins
+	}
+	return nil
 }

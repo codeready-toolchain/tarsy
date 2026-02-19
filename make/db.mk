@@ -6,6 +6,7 @@
 CONTAINER_NAME := tarsy-postgres
 IMAGE_NAME := docker.io/library/postgres:17-alpine
 COMPOSE_FILE := $(CURDIR)/deploy/podman-compose.yml
+COMPOSE ?= COMPOSE_PROJECT_NAME=tarsy podman compose -f $(COMPOSE_FILE)
 
 # Database configuration (can be overridden via environment)
 DB_HOST := localhost
@@ -27,7 +28,7 @@ db-start: ## Start PostgreSQL container
 		echo -e "$(GREEN)PostgreSQL container already running$(NC)"; \
 	else \
 		echo -e "$(YELLOW)Starting PostgreSQL container...$(NC)"; \
-		podman-compose -f $(COMPOSE_FILE) up -d; \
+		$(COMPOSE) up -d postgres; \
 	fi
 	@echo -e "$(BLUE)Waiting for PostgreSQL to be ready...$(NC)"
 	@until podman exec $(CONTAINER_NAME) pg_isready -U $(DB_USER) > /dev/null 2>&1; do \
@@ -41,7 +42,7 @@ db-start: ## Start PostgreSQL container
 .PHONY: db-stop
 db-stop: ## Stop PostgreSQL container
 	@echo -e "$(YELLOW)Stopping PostgreSQL container...$(NC)"
-	@podman-compose -f $(COMPOSE_FILE) down
+	@$(COMPOSE) down
 	@echo -e "$(GREEN)✅ PostgreSQL stopped$(NC)"
 
 .PHONY: db-restart
@@ -111,7 +112,7 @@ db-reset: ## Reset database (WARNING: destroys all data)
 .PHONY: db-clean
 db-clean: db-stop ## Stop database and remove all data
 	@echo -e "$(YELLOW)Removing PostgreSQL container and volumes...$(NC)"
-	@podman-compose -f $(COMPOSE_FILE) down -v
+	@$(COMPOSE) down -v
 	@echo -e "$(GREEN)✅ Database cleaned!$(NC)"
 
 .PHONY: db-backup

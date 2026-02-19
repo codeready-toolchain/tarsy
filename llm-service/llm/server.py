@@ -2,11 +2,11 @@
 import asyncio
 import logging
 import os
-import sys
 from pathlib import Path
 
 import grpc
 from dotenv import load_dotenv
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from llm_proto import llm_service_pb2_grpc as pb_grpc
 from llm.servicer import LLMServicer
@@ -34,18 +34,21 @@ async def serve(port: int = 50051):
     # Create gRPC server
     server = grpc.aio.server()
 
-    # Add servicer
+    # Add LLM servicer
     servicer = LLMServicer()
     pb_grpc.add_LLMServiceServicer_to_server(servicer, server)
 
-    # Bind port
+    # Add gRPC health service (used by K8s probes in Phase 10)
+    health_servicer = health.aio.HealthServicer()
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+
     server.add_insecure_port(f"[::]:{port}")
-
-    # Start server
     await server.start()
-    logger.info("LLM gRPC server listening on port %d", port)
 
-    # Wait for termination
+    # Mark as serving only after server is fully started
+    await health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
+    logger.info("LLM gRPC server listening on port %d (health: SERVING)", port)
+
     await server.wait_for_termination()
 
 

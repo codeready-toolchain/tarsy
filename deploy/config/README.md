@@ -195,75 +195,9 @@ agent_chains:
 
 Effective max_iterations for this agent: **10** (agent-level wins)
 
-## Deployment Examples
+## Deployment
 
-### Local Development (Host)
-
-```bash
-# In .env
-DB_HOST=localhost
-DB_PORT=5432
-KUBECONFIG=/home/user/.kube/config
-
-# Start TARSy
-go run cmd/tarsy/main.go
-```
-
-### Podman-Compose
-
-```bash
-# In .env
-DB_HOST=postgres  # Service name
-DB_PORT=5432
-KUBECONFIG=/kubeconfig  # Mounted from host
-
-# Start with podman-compose
-podman-compose up
-```
-
-### Kubernetes / OpenShift
-
-1. Create ConfigMap for YAML files:
-
-```bash
-kubectl create configmap tarsy-config \
-  --from-file=tarsy.yaml \
-  --from-file=llm-providers.yaml
-```
-
-2. Create Secret for environment variables:
-
-```bash
-kubectl create secret generic tarsy-secrets \
-  --from-env-file=.env
-```
-
-3. Mount in Deployment:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tarsy-backend
-spec:
-  template:
-    spec:
-      containers:
-      - name: backend
-        env:
-        - name: CONFIG_DIR
-          value: /etc/tarsy/config
-        envFrom:
-        - secretRef:
-            name: tarsy-secrets
-        volumeMounts:
-        - name: config
-          mountPath: /etc/tarsy/config
-      volumes:
-      - name: config
-        configMap:
-          name: tarsy-config
-```
+For step-by-step deployment instructions (host dev, container dev, OpenShift), see [deploy/README.md](../README.md).
 
 ## Configuration Validation
 

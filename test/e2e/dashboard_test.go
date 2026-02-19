@@ -129,23 +129,18 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, "healthy", health["status"])
 		assert.NotEmpty(t, health["version"])
 
+		checks, ok := health["checks"].(map[string]interface{})
+		require.True(t, ok, "health.checks should be an object")
+
 		// Database health.
-		db, ok := health["database"].(map[string]interface{})
-		require.True(t, ok, "health.database should be an object")
+		db, ok := checks["database"].(map[string]interface{})
+		require.True(t, ok, "checks.database should be an object")
 		assert.Equal(t, "healthy", db["status"])
 
-		// Configuration stats (exact counts from built-in + concurrency config).
-		cfg, ok := health["configuration"].(map[string]interface{})
-		require.True(t, ok, "health.configuration should be an object")
-		assert.Equal(t, 4, toInt(cfg["agents"]))
-		assert.Equal(t, 2, toInt(cfg["chains"]))
-		assert.Equal(t, 1, toInt(cfg["mcp_servers"]))
-		assert.Equal(t, 10, toInt(cfg["llm_providers"]))
-
 		// Worker pool.
-		wp, ok := health["worker_pool"].(map[string]interface{})
-		require.True(t, ok, "health.worker_pool should be an object")
-		assert.NotEmpty(t, wp["pod_id"])
+		wp, ok := checks["worker_pool"].(map[string]interface{})
+		require.True(t, ok, "checks.worker_pool should be an object")
+		assert.Equal(t, "healthy", wp["status"])
 	})
 
 	// ── Session List (default) ──
