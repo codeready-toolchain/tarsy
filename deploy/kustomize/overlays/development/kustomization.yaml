@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tarsy
+
+resources:
+  - ../../base
+
+commonLabels:
+  environment: development
+
+configMapGenerator:
+  - name: tarsy-app-config
+    behavior: create
+    files:
+      - tarsy.yaml
+      - llm-providers.yaml
+  - name: oauth2-config
+    behavior: create
+    files:
+      - oauth2-proxy.cfg
+  - name: oauth2-templates
+    behavior: create
+    files:
+      - sign_in.html=templates/sign_in.html
+      - tarsy-logo.png=templates/tarsy-logo.png
+  - name: tarsy-config
+    behavior: create
+    literals:
+      - LOG_LEVEL=DEBUG
+      - LLM_SERVICE_ADDR=localhost:50051
+      - DASHBOARD_DIR=/app/dashboard
+      - CONFIG_DIR=/app/config
+      - DB_HOST=tarsy-database
+      - DB_NAME=tarsy
+
+images:
+  - name: tarsy
+    newName: image-registry.openshift-image-registry.svc:5000/tarsy/tarsy
+    newTag: dev
+  - name: tarsy-llm
+    newName: image-registry.openshift-image-registry.svc:5000/tarsy/tarsy-llm
+    newTag: dev

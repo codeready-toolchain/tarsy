@@ -1,0 +1,290 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tarsy
+  namespace: tarsy
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      component: tarsy
+  template:
+    metadata:
+      labels:
+        component: tarsy
+    spec:
+      # alert_processing_timeout (900s) + 60s buffer (15s preStop + 45s cleanup)
+      terminationGracePeriodSeconds: 960
+      serviceAccountName: tarsy
+      containers:
+
+        # -- tarsy (Go backend + dashboard) --
+        - name: tarsy
+          image: tarsy:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: HOME
+              value: /app/data
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_SSLMODE
+              value: "disable"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: password
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: google-api-key
+                  optional: true
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: github-token
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: slack-bot-token
+                  optional: true
+          envFrom:
+            - configMapRef:
+                name: tarsy-config
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tarsy-app-config
+              mountPath: /app/config/tarsy.yaml
+              subPath: tarsy.yaml
+            - name: tarsy-app-config
+              mountPath: /app/config/llm-providers.yaml
+              subPath: llm-providers.yaml
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+
+        # -- llm-service (Python gRPC) --
+        - name: llm-service
+          image: tarsy-llm:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 50051
+          env:
+            - name: HOME
+              value: /app/data
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: google-api-key
+                  optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: openai-api-key
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: anthropic-api-key
+                  optional: true
+            - name: XAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: xai-api-key
+                  optional: true
+            - name: VERTEX_AI_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: vertex-ai-project
+                  optional: true
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /app/.gcp/service-account-key.json
+          volumeMounts:
+            - name: llm-data
+              mountPath: /app/data
+            - name: gcp-service-account
+              mountPath: /app/.gcp
+              readOnly: true
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+
+        # -- oauth2-proxy (browser auth sidecar) --
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          command:
+            - oauth2-proxy
+            - --config=/config/oauth2-proxy.cfg
+            - --skip-auth-preflight=true
+          ports:
+            - containerPort: 4180
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-secret
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-secret
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-secret
+                  key: cookie-secret
+          volumeMounts:
+            - name: oauth2-config
+              mountPath: /config
+              readOnly: true
+            - name: oauth2-templates
+              mountPath: /templates
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+        # -- kube-rbac-proxy (API client auth sidecar) --
+        - name: kube-rbac-proxy
+          image: registry.redhat.io/openshift4/ose-kube-rbac-proxy:v4.15
+          args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --upstream=http://127.0.0.1:8080/
+            - --tls-cert-file=/var/run/secrets/serving-cert/tls.crt
+            - --tls-private-key-file=/var/run/secrets/serving-cert/tls.key
+            - --logtostderr=true
+            - --v=2
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: serving-cert
+              mountPath: /var/run/secrets/serving-cert
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: llm-data
+          emptyDir: {}
+        - name: tarsy-app-config
+          configMap:
+            name: tarsy-app-config
+        - name: oauth2-config
+          configMap:
+            name: oauth2-config
+        - name: oauth2-templates
+          configMap:
+            name: oauth2-templates
+        - name: gcp-service-account
+          secret:
+            secretName: gcp-service-account-secret
+            optional: true
+        - name: serving-cert
+          secret:
+            secretName: tarsy-serving-cert

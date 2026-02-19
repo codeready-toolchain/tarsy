@@ -50,7 +50,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ---
 
-### Phase 9: Security and Containerization
+### Phase 9: Security and Containerization -- ✅ DONE
 
 **Authentication & Authorization**
 - [ ] OAuth2-proxy integration
