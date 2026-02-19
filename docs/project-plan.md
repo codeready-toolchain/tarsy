@@ -56,7 +56,6 @@ Full design docs for completed phases are in `docs/archive/`.
 
 ### Phase 11: Monitoring & Operations
 
-- [ ] Prometheus metrics
 - [ ] Structured logging
 - [ ] Retention policies
 - [ ] Cleanup service
