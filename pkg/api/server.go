@@ -255,9 +255,7 @@ func (s *Server) setupRoutes() {
 
 	// WebSocket endpoint for real-time event streaming.
 	// Moved under /api/v1 so all sensitive endpoints share a single
-	// oauth2-proxy auth rule (/api/*) in Phase 9.
-	// Auth deferred to Phase 9 (Security) — currently open to any client,
-	// consistent with the InsecureSkipVerify origin policy in handler_ws.go.
+	// oauth2-proxy auth rule (/api/*).
 	v1.GET("/ws", s.wsHandler)
 
 	// Dashboard static file serving is registered via SetDashboardDir(),

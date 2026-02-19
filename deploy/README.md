@@ -192,8 +192,6 @@ curl -k -H "Authorization: Bearer $TOKEN" \
   https://tarsy-api.tarsy.svc:8443/api/v1/alerts -d '...'
 ```
 
-See [docs/phase10-kubernetes-deployment-design.md](../docs/phase10-kubernetes-deployment-design.md) for the full design.
-
 ---
 
 ## See Also

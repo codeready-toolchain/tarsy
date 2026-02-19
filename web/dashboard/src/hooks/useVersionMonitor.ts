@@ -4,8 +4,6 @@
  * Polls backend version from /health every 30s and checks index.html meta tag
  * for dashboard version changes. Shows update banner after 2 consecutive
  * mismatches (~60s) to avoid flicker during rolling updates.
- *
- * Ported from old TARSy dashboard, adapted for new API patterns.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';

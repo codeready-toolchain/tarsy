@@ -4,8 +4,6 @@ import { NotificationAdd } from '@mui/icons-material';
 /**
  * Reusable floating action button for quick alert submission access.
  * Uses proper anchor-based navigation to prevent tabnabbing security issues.
- *
- * Ported from old TARSy dashboard FloatingSubmitAlertFab.tsx.
  */
 export function FloatingSubmitAlertFab() {
   return (

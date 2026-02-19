@@ -5,7 +5,7 @@
  * ChainProgressCard + ActiveAlertCard split.
  * Progress data comes from `session.progress` WebSocket events.
  *
- * Visual layer ported from old TARSy ActiveAlertCard.tsx:
+ * Visual layer:
  * - Breathing glow animation on in-progress cards
  * - Hover lift effect
  * - Indeterminate activity bar for "alive" feeling

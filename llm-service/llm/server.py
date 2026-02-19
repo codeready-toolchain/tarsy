@@ -38,7 +38,7 @@ async def serve(port: int = 50051):
     servicer = LLMServicer()
     pb_grpc.add_LLMServiceServicer_to_server(servicer, server)
 
-    # Add gRPC health service (used by K8s probes in Phase 10)
+    # Add gRPC health service (used by K8s probes)
     health_servicer = health.aio.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 

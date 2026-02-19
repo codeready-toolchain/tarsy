@@ -654,7 +654,7 @@ func TestSessionService_SearchSessions(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
-// Dashboard Service Methods (Phase 7.0)
+// Dashboard Service Methods
 // ────────────────────────────────────────────────────────────
 
 // seedDashboardSession creates a completed session with stages, LLM and MCP

@@ -3,8 +3,6 @@
  *
  * Shows single "Version: X" when dashboard and agent match, separate versions
  * when they differ, and loading/unavailable states. Tooltip shows agent status.
- *
- * Visual layer ported from old TARSy VersionFooter.tsx.
  */
 
 import Box from '@mui/material/Box';

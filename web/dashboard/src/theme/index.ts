@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles';
 
 /**
- * MUI theme matching the old TARSy dashboard.
+ * MUI theme.
  * Uses MUI's alpha() utility for lighter/darker variants.
  */
 export const theme = createTheme({

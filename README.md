@@ -14,7 +14,9 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 ## Documentation
 
 - **[README.md](README.md)** -- This file: project overview and quick start
-- **[docs/architecture-context.md](docs/architecture-context.md)** -- Cumulative architecture: interfaces, patterns, decisions, tech stack
+- **[docs/architecture-overview.md](docs/architecture-overview.md)** -- High-level architecture, components, and processing flow
+- **[docs/functional-areas-design.md](docs/functional-areas-design.md)** -- Detailed design of each functional area with file paths and interfaces
+- **[docs/slack-integration.md](docs/slack-integration.md)** -- Slack notification setup, configuration, and threading
 - **[deploy/README.md](deploy/README.md)** -- Deployment and configuration guide
 - **[deploy/config/README.md](deploy/config/README.md)** -- Configuration reference
 

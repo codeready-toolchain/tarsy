@@ -173,17 +173,17 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- OpenAI ---
 		"openai-default": {
 			Type:                LLMProviderTypeOpenAI,
-			Model:               "o3",
+			Model:               "gpt-5.2",
 			APIKeyEnv:           "OPENAI_API_KEY",
-			MaxToolResultTokens: 250000, // Conservative for 272K context
+			MaxToolResultTokens: 380000, // Conservative for 400K context
 		},
 
 		// --- Anthropic ---
 		"anthropic-default": {
 			Type:                LLMProviderTypeAnthropic,
-			Model:               "claude-sonnet-4-5-20250929",
+			Model:               "claude-sonnet-4-6-20260217",
 			APIKeyEnv:           "ANTHROPIC_API_KEY",
-			MaxToolResultTokens: 150000, // Conservative for 200K context
+			MaxToolResultTokens: 900000, // Conservative for 1M context (beta)
 		},
 
 		// --- xAI ---
@@ -197,10 +197,10 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Vertex AI ---
 		"vertexai-default": {
 			Type:                LLMProviderTypeVertexAI,
-			Model:               "claude-sonnet-4-5@20250929", // Claude Sonnet 4.5 on Vertex AI
+			Model:               "claude-sonnet-4-6@20260217", // Claude Sonnet 4.6 on Vertex AI
 			ProjectEnv:          "GOOGLE_CLOUD_PROJECT",       // Standard GCP project ID env var
 			LocationEnv:         "GOOGLE_CLOUD_LOCATION",      // Standard GCP location env var
-			MaxToolResultTokens: 150000,                       // Conservative for 200K context
+			MaxToolResultTokens: 900000,                       // Conservative for 1M context (beta)
 		},
 	}
 }

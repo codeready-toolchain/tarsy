@@ -240,7 +240,7 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 	}
 
 	// Determine final status based on success policy.
-	// Resolve nil to "any" (default policy — matches old TARSy behavior).
+	// Resolve nil to "any" (default policy).
 	policy := stage.SuccessPolicyAny
 	if stg.SuccessPolicy != nil {
 		policy = *stg.SuccessPolicy

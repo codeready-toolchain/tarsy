@@ -4,8 +4,6 @@
  * Polls /api/v1/system/warnings every 10 seconds. Each warning is displayed
  * as an expandable Alert. Fetch errors are silently ignored — warnings are
  * non-critical.
- *
- * Visual layer ported from old TARSy SystemWarningBanner.tsx.
  */
 
 import { useEffect, useState } from 'react';

@@ -3,7 +3,7 @@
 // hierarchies, and strategy-specific formatting.
 package prompt
 
-// separator is a visual delimiter for prompt sections (matches old TARSy).
+// separator is a visual delimiter for prompt sections.
 const separator = "═══════════════════════════════════════════════════════════════════════════════"
 
 // analysisTask is the investigation task instruction appended to the user message.

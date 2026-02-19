@@ -60,7 +60,6 @@ func (TimelineEvent) Fields() []ent.Field {
 		//                        included for synthesis strategies.
 		//   llm_response       — Regular LLM text during intermediate iterations. The LLM may produce
 		//                        text alongside tool calls (native thinking) or as an intermediate step.
-		//                        Maps to old TARSy's INTERMEDIATE_RESPONSE.
 		//   llm_tool_call      — Tool call lifecycle event. Created with status "streaming" when the
 		//                        LLM requests a tool call (metadata: server_name, tool_name, arguments).
 		//                        Completed with the storage-truncated raw result in content and
@@ -72,8 +71,6 @@ func (TimelineEvent) Fields() []ent.Field {
 		//   user_question      — User question in chat mode.
 		//   executive_summary  — High-level session summary.
 		//   final_analysis     — Agent's final conclusion (no more iterations/tool calls).
-		//                        Maps to old TARSy's FINAL_ANSWER. Used as primary context
-		//                        for the next stage in sequential chains.
 		field.Enum("event_type").
 			Values(
 				"llm_thinking",

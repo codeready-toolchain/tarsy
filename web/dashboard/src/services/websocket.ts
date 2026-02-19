@@ -1,7 +1,7 @@
 /**
  * WebSocket service — single connection with channel subscriptions.
  *
- * Adapted from the old TARSy dashboard WebSocket service for the new protocol:
+ * For the protocol:
  * - Channel model: `sessions` (global), `session:{id}` (per-session)
  * - Actions: subscribe, unsubscribe, catchup (with last_event_id), ping
  * - Auto-catchup on subscribe (server sends prior events)

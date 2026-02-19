@@ -2,7 +2,7 @@
  * Authentication service for OAuth2 Proxy integration.
  *
  * Handles auth status checking, user info retrieval, login/logout redirects,
- * and 401 error handling. Adapted from the old TARSy dashboard auth service.
+ * and 401 error handling.
  *
  * Graceful degradation: when oauth2-proxy is not configured, all auth checks
  * fail silently and auth UI is hidden.
