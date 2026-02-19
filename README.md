@@ -49,8 +49,7 @@ make setup
 # 2. Configure environment (REQUIRED)
 cp deploy/config/.env.example deploy/config/.env
 # Edit deploy/config/.env and set:
-#   - GOOGLE_API_KEY (get from https://aistudio.google.com/app/apikey)
-#   - DB_PASSWORD
+#   - At least one LLM API key (e.g. GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY)
 
 # 3. Start everything (database, backend, LLM service, dashboard)
 make dev
@@ -65,36 +64,7 @@ make dev
 
 ### Container Deployment (Production-like)
 
-For production-like testing with containerized services, authentication, and database:
-
-```bash
-# 1. Install dependencies
-make setup
-
-# 2. Configure environment and OAuth (REQUIRED)
-# Edit deploy/config/.env for API keys
-# Edit deploy/config/oauth.env for GitHub OAuth (see deploy/config/README.md)
-
-# 3. Deploy the complete stack
-make containers-deploy        # Preserves database data (recommended)
-# OR for a fresh start:
-make containers-deploy-fresh  # Clean rebuild including database
-```
-
-**Services will be available at:**
-- **TARSy Dashboard**: http://localhost:8080 (with OAuth authentication)
-- **Backend API**: http://localhost:8080/api (protected by OAuth2-proxy)
-- **PostgreSQL Database**: localhost:5432
-
-**Container Management:**
-
-```bash
-make containers-status        # Check running services
-make containers-logs          # View all logs
-make containers-logs-tarsy    # View TARSy backend logs
-make containers-stop          # Stop containers
-make containers-clean         # Remove all containers and data
-```
+For containerized and OpenShift deployment with OAuth authentication, see **[deploy/README.md](deploy/README.md)**.
 
 ## Key Features
 
@@ -248,9 +218,3 @@ make db-reset           # Reset database
 - Check PostgreSQL logs: `make db-logs`
 - Connect manually: `make db-psql`
 - Reset if corrupted: `make db-reset`
-
-### Container issues
-- Check status: `make containers-status`
-- View logs: `make containers-logs`
-- Fresh rebuild: `make containers-deploy-fresh`
-- Clean everything: `make containers-clean`
