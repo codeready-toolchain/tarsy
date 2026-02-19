@@ -119,6 +119,13 @@ openshift-create-secrets: openshift-check openshift-create-namespace ## Create s
 	export DATABASE_NAME=$${DATABASE_NAME:-tarsy}; \
 	export DATABASE_HOST=$${DATABASE_HOST:-tarsy-database}; \
 	export DATABASE_PORT=$${DATABASE_PORT:-5432}; \
+	if [ -z "$$DATABASE_PASSWORD" ]; then \
+		EXISTING_PW=$$(oc get secret database-secret -n $(OPENSHIFT_NAMESPACE) -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null); \
+		if [ -n "$$EXISTING_PW" ]; then \
+			echo -e "$(BLUE)Reusing existing database password from cluster$(NC)"; \
+			export DATABASE_PASSWORD="$$EXISTING_PW"; \
+		fi; \
+	fi; \
 	oc process -f deploy/kustomize/base/secrets-template.yaml \
 		-p NAMESPACE=$(OPENSHIFT_NAMESPACE) \
 		-p GOOGLE_API_KEY="$$GOOGLE_API_KEY" \

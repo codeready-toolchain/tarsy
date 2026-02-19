@@ -171,19 +171,23 @@ func main() {
 	// on the dashboard. The HealthMonitor handles recovery and warning cleanup.
 	mcpServerIDs := cfg.AllMCPServerIDs()
 	if len(mcpServerIDs) > 0 {
-		validationClient, _ := mcpFactory.CreateClient(ctx, mcpServerIDs)
-		failed := validationClient.FailedServers()
-		if len(failed) > 0 {
-			slog.Warn("MCP servers failed startup validation — starting degraded", "failed_servers", failed)
-			for serverID, errMsg := range failed {
-				warningsService.AddWarning("mcp_health",
-					fmt.Sprintf("MCP server %q unreachable at startup: %s", serverID, errMsg),
-					"Server will be retried by the health monitor.", serverID)
-			}
+		validationClient, err := mcpFactory.CreateClient(ctx, mcpServerIDs)
+		if err != nil {
+			slog.Warn("MCP client creation failed — starting degraded", "error", err)
 		} else {
-			slog.Info("MCP servers validated", "count", len(mcpServerIDs))
+			failed := validationClient.FailedServers()
+			if len(failed) > 0 {
+				slog.Warn("MCP servers failed startup validation — starting degraded", "failed_servers", failed)
+				for serverID, errMsg := range failed {
+					warningsService.AddWarning("mcp_health",
+						fmt.Sprintf("MCP server %q unreachable at startup: %s", serverID, errMsg),
+						"Server will be retried by the health monitor.", serverID)
+				}
+			} else {
+				slog.Info("MCP servers validated", "count", len(mcpServerIDs))
+			}
+			_ = validationClient.Close()
 		}
-		_ = validationClient.Close()
 	}
 
 	// Start HealthMonitor (background goroutine)

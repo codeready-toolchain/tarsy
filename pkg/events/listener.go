@@ -263,12 +263,21 @@ func (l *NotifyListener) receiveLoop(ctx context.Context) {
 			continue
 		}
 
-		// Dispatch to internal handlers (backend-to-backend)
+		// Dispatch to internal handlers (backend-to-backend).
+		// Runs in a goroutine so a slow or panicking handler cannot
+		// stall the receive loop or kill NOTIFY processing.
 		l.handlersMu.RLock()
 		handler := l.handlers[notification.Channel]
 		l.handlersMu.RUnlock()
 		if handler != nil {
-			handler([]byte(notification.Payload))
+			go func(ch string, payload []byte) {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("Internal handler panicked", "channel", ch, "panic", r)
+					}
+				}()
+				handler(payload)
+			}(notification.Channel, []byte(notification.Payload))
 		}
 
 		// Dispatch to ConnectionManager (WebSocket clients)
