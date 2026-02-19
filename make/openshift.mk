@@ -180,9 +180,9 @@ openshift-check-config-files: ## Sync config files to overlay directory
 .PHONY: openshift-apply
 openshift-apply: openshift-check openshift-check-config-files ## Apply Kustomize manifests
 	@echo -e "$(BLUE)Applying manifests (Route Host: $(ROUTE_HOST))...$(NC)"
-	@sed -i.bak 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' deploy/kustomize/base/routes.yaml
-	@oc apply -k deploy/kustomize/overlays/development/
-	@mv deploy/kustomize/base/routes.yaml.bak deploy/kustomize/base/routes.yaml
+	@oc kustomize deploy/kustomize/overlays/development/ \
+		| sed 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' \
+		| oc apply -f -
 	@echo -e "$(GREEN)✅ Manifests applied to $(OPENSHIFT_NAMESPACE)$(NC)"
 
 # ── Deploy (full) ────────────────────────────────────────
@@ -224,9 +224,9 @@ openshift-logs: openshift-check ## Show tarsy pod logs (all containers)
 openshift-clean: openshift-check ## Delete all TARSy resources
 	@printf "Delete all TARSy resources from $(OPENSHIFT_NAMESPACE)? [y/N] "; \
 	read REPLY; case "$$REPLY" in [Yy]*) \
-		sed -i.bak 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' deploy/kustomize/base/routes.yaml; \
-		oc delete -k deploy/kustomize/overlays/development/ 2>/dev/null || true; \
-		mv deploy/kustomize/base/routes.yaml.bak deploy/kustomize/base/routes.yaml; \
+		oc kustomize deploy/kustomize/overlays/development/ \
+			| sed 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' \
+			| oc delete -f - 2>/dev/null || true; \
 		echo -e "$(GREEN)✅ Resources deleted$(NC)";; \
 	*) echo "Cancelled";; esac
 
