@@ -45,8 +45,12 @@ endif
 openshift-check: ## Check OpenShift login and registry access
 	@echo -e "$(BLUE)Checking OpenShift prerequisites...$(NC)"
 	@command -v oc >/dev/null 2>&1 || { echo -e "$(RED)oc CLI not found$(NC)"; exit 1; }
-	@oc whoami >/dev/null 2>&1 || { echo -e "$(RED)Not logged into OpenShift$(NC)"; exit 1; }
-	@[ "$(OPENSHIFT_REGISTRY)" != "registry.not.found" ] || { echo -e "$(RED)Registry not exposed$(NC)"; exit 1; }
+	@oc whoami >/dev/null 2>&1 || { echo -e "$(RED)Not logged into OpenShift. Run: oc login$(NC)"; exit 1; }
+	@[ "$(OPENSHIFT_REGISTRY)" != "registry.not.found" ] || { \
+		echo -e "$(RED)OpenShift internal registry not exposed$(NC)"; \
+		echo -e "$(YELLOW)Expose it with:$(NC)"; \
+		echo -e "$(YELLOW)  oc patch configs.imageregistry.operator.openshift.io/cluster --patch '{\"spec\":{\"defaultRoute\":true}}' --type=merge$(NC)"; \
+		exit 1; }
 	@echo -e "$(GREEN)✓ Logged in as: $$(oc whoami) | Registry: $(OPENSHIFT_REGISTRY)$(NC)"
 
 .PHONY: openshift-login-registry
