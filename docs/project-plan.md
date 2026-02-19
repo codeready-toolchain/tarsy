@@ -48,37 +48,14 @@ Full design docs for completed phases are in `docs/archive/`.
 
 **Slack Notifications (Phase 8.3)** -- ✅ DONE. Session lifecycle notifications via Slack using Block Kit. `slack.Service` (`pkg/slack/`) orchestrates delivery at two lifecycle points: session start (only for Slack-originated alerts with a `slack_message_fingerprint`) and terminal status (completed, failed, timed_out, cancelled). `slack.Client` wraps the `slack-go` SDK for `chat.postMessage` and `conversations.history`. Message templates in `message.go` use Block Kit with emoji status indicators and dashboard links; content truncated at 2900 chars. Fingerprint-based threading: `FindMessageByFingerprint()` searches last 24h channel history (case-insensitive, whitespace-normalized) and returns `thread_ts` for reply threading; `thread_ts` cached across worker lifecycle to avoid redundant lookups. `slack.NewService` returns nil when unconfigured (fail-closed creation); nil-receiver safe methods make caller code nil-check-free (same pattern as `MaskingService`). Fail-open delivery: Slack API errors are logged, never propagate. Config: `system.dashboard_url` (shared, default `http://localhost:8080`) + `system.slack.{enabled, token_env, channel}` with eager startup validation. E2E test: mock Slack HTTP server captures `chat.postMessage` calls; verifies start + terminal notifications, threading, disabled notifications, fail-open on API errors.
 
----
+**Security & Containerization (Phase 9)** -- ✅ DONE. OAuth2-proxy integration for GitHub OAuth browser auth (cookie-based sessions, `X-Forwarded-User/Email` headers, custom sign-in page ported from old TARSy). WebSocket origin validation replacing `InsecureSkipVerify` with configurable `OriginPatterns` derived from `system.dashboard_url` + localhost variants. Security headers middleware (X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy) and CORS middleware with `DashboardURL`-based origin allowlist. Multi-stage `Dockerfile` (Go builder + Node dashboard builder + Alpine runtime, non-root UID 65532, OpenShift GID 0 compat) and `llm-service/Dockerfile` (Python slim, same UID/GID pattern). gRPC health checking service added to llm-service (`grpcio-health-checking`, sets SERVING after init). Minimal `/health` endpoint (status + version + db/worker_pool checks only — no internals leaked). 4-service `podman-compose.yml` (postgres, llm-service, tarsy, oauth2-proxy) with health check chain. `make/containers.mk` with build/deploy/status/clean targets. OAuth2-proxy config template generation from `oauth.env`. Universal container images (same for compose and OpenShift). Config: `system.allowed_ws_origins` for additional WebSocket origins.
 
-### Phase 9: Security and Containerization -- ✅ DONE
-
-**Authentication & Authorization**
-- [ ] OAuth2-proxy integration
-- [ ] Token validation
-- [ ] GitHub OAuth flow
-- [ ] Session/user tracking
-- [ ] WebSocket origin validation (replace InsecureSkipVerify)
-
-**Containerization**
-- [ ] Multi-stage Podman builds
-- [ ] Container orchestration (podman-compose)
-- [ ] Build & push images
-- [ ] Service health checks
+**Kubernetes/OpenShift Deployment (Phase 10)** -- ✅ DONE. Kustomize manifests (`deploy/kustomize/base/` + `overlays/development/`) deploying TARSy to OpenShift. Single-pod 4-container Deployment (tarsy + llm-service + oauth2-proxy + kube-rbac-proxy) replacing old TARSy's 3-Deployment architecture. kube-rbac-proxy sidecar for API client auth via Kubernetes ServiceAccount tokens (replaces old TARSy's custom JWT infrastructure). RBAC resources: `tarsy` ServiceAccount, `tarsy-kube-rbac-proxy` ClusterRole (TokenReview/SubjectAccessReview), `tarsy-api-client` ClusterRole for API access grants. Author extraction updated with `X-Remote-User` header support. Separate database Deployment with PVC (Recreate strategy; replaceable with managed DB). Services: `tarsy-web` (oauth2-proxy :4180), `tarsy-api` (kube-rbac-proxy :8443 with auto-generated serving cert), `tarsy-database`. Single Route with edge TLS termination. OpenShift Template for secrets (tarsy-secrets, database-secret, oauth2-proxy-secret, gcp-service-account-secret). ConfigMaps via `configMapGenerator` (tarsy-app-config, oauth2-config, oauth2-templates, tarsy-config). ImageStreams (tarsy, tarsy-llm). Health probes: HTTP for tarsy, native gRPC for llm-service, HTTP /ping for oauth2-proxy, TCP for kube-rbac-proxy. GitHub Actions CI workflows for quay.io (buildah-build + push-to-registry, path-triggered). `make/openshift.mk` with full workflow: build, push (with skopeo fallback), create-secrets, apply, deploy, redeploy, status, logs, clean, db-reset. Rolling update strategy (maxUnavailable: 0, maxSurge: 1). `terminationGracePeriodSeconds: 960` (alert timeout + buffer).
 
 ---
-
-### Phase 10: Kubernetes Deployment
-
-**Kubernetes/OpenShift (Phase 11.2)**
-- [ ] Kustomize manifests
-- [ ] Service deployments
-- [ ] ConfigMaps & secrets
-- [ ] Routes/ingress
-- [ ] ImageStreams
 
 ### Phase 11: Monitoring & Operations
 
-- [ ] Health check endpoint enhancements
 - [ ] Structured logging
 - [ ] Retention policies
 - [ ] Cleanup service
