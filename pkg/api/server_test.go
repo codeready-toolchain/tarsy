@@ -79,6 +79,61 @@ func TestServer_ValidateWiring(t *testing.T) {
 	})
 }
 
+func TestParseDashboardOrigin(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        string
+		wantOrigin string
+		wantHost   string
+		wantOK     bool
+	}{
+		{
+			name:       "full URL with scheme",
+			raw:        "https://tarsy.example.com",
+			wantOrigin: "https://tarsy.example.com",
+			wantHost:   "tarsy.example.com",
+			wantOK:     true,
+		},
+		{
+			name:       "URL with port",
+			raw:        "http://localhost:5173",
+			wantOrigin: "http://localhost:5173",
+			wantHost:   "localhost:5173",
+			wantOK:     true,
+		},
+		{
+			name:       "URL with path stripped",
+			raw:        "http://example.com:8080/dashboard",
+			wantOrigin: "http://example.com:8080",
+			wantHost:   "example.com:8080",
+			wantOK:     true,
+		},
+		{
+			name:       "no scheme defaults to http",
+			raw:        "example.com:8080",
+			wantOrigin: "http://example.com:8080",
+			wantHost:   "example.com:8080",
+			wantOK:     true,
+		},
+		{
+			name:   "empty string",
+			raw:    "",
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origin, host, ok := parseDashboardOrigin(tt.raw)
+			assert.Equal(t, tt.wantOK, ok)
+			if ok {
+				assert.Equal(t, tt.wantOrigin, origin)
+				assert.Equal(t, tt.wantHost, host)
+			}
+		})
+	}
+}
+
 func TestServer_resolveWSOriginPatterns(t *testing.T) {
 	tests := []struct {
 		name             string

@@ -166,6 +166,24 @@ func (s *Server) ValidateWiring() error {
 	return nil
 }
 
+// parseDashboardOrigin normalises DashboardURL into an origin (scheme://host)
+// and a host (host[:port]) suitable for CORS and WebSocket validation
+// respectively.  It adds a default "http" scheme when missing and strips any
+// path, query or fragment so both consumers get a consistent value.
+func parseDashboardOrigin(raw string) (origin, host string, ok bool) {
+	if raw == "" {
+		return "", "", false
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "", "", false
+	}
+	return u.Scheme + "://" + u.Host, u.Host, true
+}
+
 // corsAllowOrigins builds the CORS allowed origin list from config.
 func (s *Server) corsAllowOrigins() []string {
 	allowed := []string{
@@ -174,8 +192,8 @@ func (s *Server) corsAllowOrigins() []string {
 		"http://127.0.0.1:5173",
 		"http://127.0.0.1:8080",
 	}
-	if s.cfg.DashboardURL != "" {
-		allowed = append(allowed, s.cfg.DashboardURL)
+	if origin, _, ok := parseDashboardOrigin(s.cfg.DashboardURL); ok {
+		allowed = append(allowed, origin)
 	}
 	return allowed
 }
@@ -245,10 +263,8 @@ func (s *Server) setupRoutes() {
 func (s *Server) resolveWSOriginPatterns() []string {
 	var patterns []string
 
-	if s.cfg.DashboardURL != "" {
-		if u, err := url.Parse(s.cfg.DashboardURL); err == nil && u.Host != "" {
-			patterns = append(patterns, u.Host)
-		}
+	if _, host, ok := parseDashboardOrigin(s.cfg.DashboardURL); ok {
+		patterns = append(patterns, host)
 	}
 
 	patterns = append(patterns, "localhost:*", "127.0.0.1:*")
@@ -347,4 +363,3 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	return s.httpServer.Shutdown(ctx)
 }
-
