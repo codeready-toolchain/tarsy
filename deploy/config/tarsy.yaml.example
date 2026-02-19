@@ -70,6 +70,12 @@ system:
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
     channel: "C12345678"           # Slack channel ID (required when enabled)
 
+  # Data retention and cleanup (all values below are defaults)
+  retention:
+    session_retention_days: 365      # Soft-delete completed sessions older than N days
+    event_ttl: 1h                    # Delete orphaned Event rows older than this
+    cleanup_interval: 12h            # How often the cleanup loop runs
+
 # =============================================================================
 # SYSTEM-WIDE DEFAULTS
 # =============================================================================

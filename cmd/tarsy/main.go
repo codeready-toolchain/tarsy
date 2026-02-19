@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/api"
+	"github.com/codeready-toolchain/tarsy/pkg/cleanup"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -47,7 +49,35 @@ func resolvePodID() string {
 	return "local"
 }
 
+func configureLogging() {
+	level := parseLogLevel(getEnv("LOG_LEVEL", "info"))
+	var handler slog.Handler
+	opts := &slog.HandlerOptions{Level: level}
+	switch getEnv("LOG_FORMAT", "text") {
+	case "json":
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	default:
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	slog.SetDefault(slog.New(handler))
+}
+
+func parseLogLevel(s string) slog.Level {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func main() {
+	configureLogging()
+
 	// Parse command-line flags
 	configDir := flag.String("config-dir",
 		getEnv("CONFIG_DIR", "./deploy/config"),
@@ -121,6 +151,12 @@ func main() {
 	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
 	slog.Info("Services initialized")
 
+	// 4a. Start cleanup service (retention + event TTL)
+	eventService := services.NewEventService(dbClient.Client)
+	cleanupService := cleanup.NewService(cfg.Retention, sessionService, eventService)
+	cleanupService.Start(ctx)
+	defer cleanupService.Stop()
+
 	// 5. Create LLM client and session executor
 	// Note: grpc.NewClient uses lazy dialing; actual connection happens on first RPC call
 	llmAddr := getEnv("LLM_SERVICE_ADDR", "localhost:50051")
@@ -137,7 +173,6 @@ func main() {
 	slog.Info("LLM client initialized", "addr", llmAddr)
 
 	// 5a. Initialize streaming infrastructure
-	eventService := services.NewEventService(dbClient.Client)
 	eventPublisher := events.NewEventPublisher(dbClient.DB())
 	catchupQuerier := events.NewEventServiceAdapter(eventService)
 	connManager := events.NewConnectionManager(catchupQuerier, 10*time.Second)

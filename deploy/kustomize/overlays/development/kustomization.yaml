@@ -28,6 +28,7 @@ configMapGenerator:
     behavior: create
     literals:
       - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=json
       - LLM_SERVICE_ADDR=localhost:50051
       - DASHBOARD_DIR=/app/dashboard
       - CONFIG_DIR=/app/config

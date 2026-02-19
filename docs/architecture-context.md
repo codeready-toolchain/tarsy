@@ -1,8 +1,8 @@
 # TARSy Architecture Context
 
-Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
+Cumulative architectural knowledge from all completed phases. Read this alongside `docs/archive/project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 10 (Kubernetes/OpenShift Deployment)
+**Last updated after**: Phase 11 (Monitoring & Operations)
 
 ---
 
@@ -52,6 +52,7 @@ pkg/
 ├── masking/              # Data masking service (regex patterns, code maskers, K8s Secret masker)
 ├── mcp/                  # MCP client infrastructure (client, executor, transport, health, testing helpers)
 ├── models/               # MCP selection, trace API response types, shared types
+├── cleanup/              # CleanupService — periodic retention enforcement (soft-delete + event TTL)
 ├── queue/                # Worker, WorkerPool, orphan detection, session executor, chat executor
 ├── runbook/              # Service, GitHubClient, Cache, URL validation/conversion
 ├── slack/                # SlackService, SlackClient, Block Kit message builders, fingerprint threading
@@ -1084,7 +1085,7 @@ Single Route with edge TLS termination → `tarsy-web` Service. API is internal-
 - `tarsy-app-config` — `tarsy.yaml`, `llm-providers.yaml`
 - `oauth2-config` — `oauth2-proxy.cfg`
 - `oauth2-templates` — sign-in page + logo
-- `tarsy-config` — env vars (LOG_LEVEL, LLM_SERVICE_ADDR, etc.)
+- `tarsy-config` — env vars (LOG_LEVEL, LOG_FORMAT, LLM_SERVICE_ADDR, etc.)
 
 ### Health Probes
 
@@ -1425,6 +1426,7 @@ Non-registry configuration resolved at startup from the `system` YAML section:
 | `SlackConfig` | `Enabled` (default: false), `TokenEnv` (default: `"SLACK_BOT_TOKEN"`), `Channel` (channel ID) | Slack notification delivery |
 | `DashboardURL` | string (default: `"http://localhost:8080"`) | Base URL for dashboard links, CORS origin, WebSocket origins, OAuth redirects; lives on `Config` directly |
 | `AllowedWSOrigins` | `[]string` (default: empty) | Additional WebSocket origin patterns beyond auto-derived dashboard URL + localhost |
+| `RetentionConfig` | `SessionRetentionDays` (default: 365), `EventTTL` (default: 1h), `CleanupInterval` (default: 12h) | Cleanup service settings: session soft-delete threshold, event TTL, loop interval |
 
 Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, credentials_env, project, location, base_url, backend, native_tools, max_tool_result_tokens). Python does not read YAML files; it reads env vars for API keys/credentials based on the `*_env` field values received via gRPC.
 

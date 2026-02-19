@@ -92,13 +92,13 @@ func (s *EventService) CleanupSessionEvents(ctx context.Context, sessionID strin
 	return count, nil
 }
 
-// CleanupOrphanedEvents removes events older than TTL
-func (s *EventService) CleanupOrphanedEvents(ctx context.Context, ttlDays int) (int, error) {
-	if ttlDays <= 0 {
-		return 0, fmt.Errorf("ttl_days must be positive, got %d", ttlDays)
+// CleanupOrphanedEvents removes events older than the given TTL duration.
+func (s *EventService) CleanupOrphanedEvents(ctx context.Context, ttl time.Duration) (int, error) {
+	if ttl <= 0 {
+		return 0, fmt.Errorf("ttl must be positive, got %v", ttl)
 	}
 
-	cutoff := time.Now().Add(-time.Duration(ttlDays) * 24 * time.Hour)
+	cutoff := time.Now().Add(-ttl)
 
 	writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
