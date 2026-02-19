@@ -2,7 +2,7 @@
 
 Cumulative architectural knowledge from all completed phases. Read this alongside `project-plan.md` for full context when designing or implementing new phases.
 
-**Last updated after**: Phase 8.3 (Slack Notifications)
+**Last updated after**: Phase 10 (Kubernetes/OpenShift Deployment)
 
 ---
 
@@ -14,7 +14,9 @@ Cumulative architectural knowledge from all completed phases. Read this alongsid
 
 **Python LLM Service** is a stateless LLM API proxy with two provider backends: `GoogleNativeProvider` (Gemini via `google-genai` SDK, native thinking features) and `LangChainProvider` (multi-provider: OpenAI, Anthropic, xAI, Google, VertexAI via LangChain). Receives messages + config via gRPC, calls LLM provider API, streams response chunks back (text, thinking, tool calls, grounding). Per-provider model caching. Zero orchestration state, zero MCP. Exists solely because LLM provider SDKs have best support in Python.
 
-Communication: gRPC with insecure credentials (same pod). RPC: `Generate(GenerateRequest) returns (stream GenerateResponse)`.
+Communication: gRPC with insecure credentials (same pod/network). RPC: `Generate(GenerateRequest) returns (stream GenerateResponse)`.
+
+**Deployment**: Single pod with 4 containers (tarsy, llm-service, oauth2-proxy, kube-rbac-proxy) + separate PostgreSQL. Browser auth via OAuth2-proxy (GitHub OAuth); API client auth via kube-rbac-proxy (K8s SA tokens). Same container images for dev (podman-compose) and prod (OpenShift).
 
 ### Five-Layer Data Model
 
@@ -57,8 +59,9 @@ pkg/
 ent/
 ├── schema/               # Ent schema definitions (10 entities)
 deploy/
-├── config/               # tarsy.yaml.example, llm-providers.yaml.example, .env.example
-├── podman-compose.yml
+├── config/               # tarsy.yaml.example, llm-providers.yaml.example, .env.example, oauth.env.example, oauth2-proxy.cfg.template, templates/
+├── podman-compose.yml    # 4-service dev environment (postgres, llm-service, tarsy, oauth2-proxy)
+├── kustomize/            # Kubernetes/OpenShift manifests (base + overlays/development)
 proto/
 └── llm_service.proto
 llm-service/
@@ -84,8 +87,10 @@ test/
 │   └── testdata/         # YAML configs per scenario, golden files, expected event definitions
 ├── database/             # SharedTestDB, NewTestClient (test DB helpers)
 └── util/                 # SetupTestDatabase, schema helpers, connection string utilities
+Dockerfile                # Multi-stage tarsy image (Go builder + Node dashboard builder + Alpine runtime)
+.github/workflows/        # CI: build-and-push-tarsy.yml, build-and-push-llm-service.yml
 make/
-├── dev.mk, db.mk, help.mk  # Makefile includes
+├── dev.mk, db.mk, containers.mk, openshift.mk, help.mk  # Makefile includes
 ```
 
 ---
@@ -95,7 +100,7 @@ make/
 The end-to-end happy path from alert submission to completion:
 
 1. **API handler** receives `POST /api/v1/alerts` → validates → `AlertService.SubmitAlert()` → creates `AlertSession` (status=`pending`) with `chain_id` resolved from alert type
-2. **Worker pool** polls for pending sessions → `SessionService.ClaimNextPendingSession()` uses `FOR UPDATE SKIP LOCKED` → sets status=`in_progress`, assigns `pod_id`
+2. **Worker pool** polls for pending sessions → `Worker.claimNextSession()` uses `FOR UPDATE SKIP LOCKED` → sets status=`in_progress`, assigns `pod_id`
 3. **SessionExecutor.Execute()** (`pkg/queue/executor.go`):
    - Resolves chain config from `ChainRegistry`
    - Resolves runbook content via `runbook.Service.Resolve()` (per-alert URL → fetch with cache → inject into `ExecutionContext.RunbookContent`; empty URL → default content from config; fetch failure → fail-open to default)
@@ -902,6 +907,225 @@ Validation (startup, eager): `channel` required when enabled; `token_env` env va
 
 ---
 
+## Security & Authentication
+
+### OAuth2-Proxy Integration
+
+OAuth2-proxy sits in front of the tarsy container, handling GitHub OAuth for browser-based access. The same pattern works in both podman-compose (Phase 9) and OpenShift (Phase 10) — only the upstream address differs (`http://tarsy:8080/` in compose vs `http://localhost:8080/` in pod).
+
+**Request flows:**
+- **Browser**: User → oauth2-proxy (:4180) → GitHub OAuth redirect → cookie set → proxy with `X-Forwarded-User/Email` to tarsy
+- **API client (OpenShift)**: Client → kube-rbac-proxy (:8443) → SA token validation (TokenReview/SubjectAccessReview) → proxy with `X-Remote-User/Groups` to tarsy
+- **Health**: Monitoring → oauth2-proxy → `/health` (skip_auth_routes) → tarsy
+
+**Key config:**
+- `api_routes = ["^/api/"]` — returns 401 (not redirect) for API/WebSocket paths
+- `skip_auth_routes = ["GET=^/health$"]` — health check unauthenticated
+- `session_cookie_minimal = false` — full session in cookie to reduce GitHub API calls
+- `custom_templates_dir` + `custom_sign_in_logo` — branded sign-in page
+- Config generation: `deploy/config/oauth2-proxy.cfg.template` + `oauth.env` → `oauth2-proxy.cfg` via Makefile `sed`
+
+**Author extraction** (`pkg/api/auth.go`):
+```go
+func extractAuthor(c *echo.Context) string {
+    // oauth2-proxy headers (browser users)
+    if user := c.Request().Header.Get("X-Forwarded-User"); user != "" { return user }
+    if email := c.Request().Header.Get("X-Forwarded-Email"); email != "" { return email }
+    // kube-rbac-proxy headers (API clients)
+    if user := c.Request().Header.Get("X-Remote-User"); user != "" { return user }
+    return "api-client"
+}
+```
+
+### WebSocket Origin Validation
+
+Replaced `InsecureSkipVerify: true` with configurable `OriginPatterns` on `websocket.AcceptOptions`. Patterns computed once at server startup via `resolveWSOriginPatterns()`:
+- Dashboard URL host (from `system.dashboard_url`)
+- `localhost:*` and `127.0.0.1:*` (always, for development)
+- Additional configured origins from `system.allowed_ws_origins`
+
+### Security Middleware (`pkg/api/middleware.go`, `pkg/api/server.go`)
+
+**Security headers** — applied to all responses:
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+**CORS** — Echo middleware with `DashboardURL`-based origin allowlist:
+- Always allows `localhost:5173/8080` and `127.0.0.1:5173/8080` (development)
+- Adds `system.dashboard_url` origin (production)
+- Credentials enabled, 1-hour max-age
+
+### Health Endpoint (Minimal)
+
+`GET /health` returns minimal, safe response for unauthenticated access:
+```json
+{
+  "status": "healthy",
+  "version": "tarsy/a3f8c2d1",
+  "checks": {
+    "database": { "status": "healthy" },
+    "worker_pool": { "status": "healthy" }
+  }
+}
+```
+
+Only tarsy's own components (database, worker pool) — external dependencies (MCP, LLM) excluded to prevent K8s from restarting tarsy when external services are unhealthy. MCP/LLM status available behind authenticated endpoints.
+
+---
+
+## Containerization
+
+### Container Images
+
+Two universal container images — same for podman-compose and OpenShift:
+
+**tarsy** (`Dockerfile`, project root) — Multi-stage:
+1. Go builder (golang Alpine): `go build` → static binary
+2. Dashboard builder (node Alpine): `npm ci && npm run build` → `dist/`
+3. Runtime (Alpine): binary + dashboard + ca-certificates + tzdata
+
+**llm-service** (`llm-service/Dockerfile`) — Single-stage:
+- Python slim, `uv sync --frozen --no-dev`, runs via `.venv/bin/python -m llm.server`
+
+**OpenShift compatibility** (both images):
+- Non-root user (UID 65532)
+- GID 0 permissions (`chgrp -R 0 /app && chmod -R g=u /app`) for OpenShift's arbitrary UID
+- `HOME=/app/data` (writable directory for random UID)
+- Non-privileged ports (8080, 50051)
+- Registry: `mirror.gcr.io` (mirrors Docker Hub)
+
+### gRPC Health Service (llm-service)
+
+`grpcio-health-checking` package in `llm/server.py`. Sets `SERVING` only after server initialization completes. Used by:
+- podman-compose: TCP port check (simpler, sufficient for dev)
+- OpenShift: Native gRPC probe (K8s 1.24+)
+
+### podman-compose (Development)
+
+4-service topology in `deploy/podman-compose.yml`:
+```
+postgres (:5432) → llm-service (:50051) → tarsy (:8080) → oauth2-proxy (:4180 → host :8080)
+```
+
+Health check chain: postgres + llm-service healthy → tarsy starts → oauth2-proxy starts. Only oauth2-proxy exposes port externally. Config mounted from `deploy/config/` as `/app/config:ro`.
+
+### Makefile Targets (`make/containers.mk`)
+
+| Target | Purpose |
+|--------|---------|
+| `containers-build` | Build tarsy:dev + tarsy-llm:dev images |
+| `containers-deploy` | Build + start all (generates oauth2-proxy.cfg first) |
+| `containers-deploy-fresh` | Clean rebuild and deploy |
+| `containers-redeploy` | Rebuild + restart tarsy only |
+| `containers-status` | Show container status |
+| `containers-logs` | Follow all container logs |
+| `containers-stop` | Stop all containers |
+| `containers-clean` | Stop + remove volumes |
+| `oauth2-config` | Generate oauth2-proxy.cfg from template + oauth.env |
+
+---
+
+## Kubernetes/OpenShift Deployment (`deploy/kustomize/`)
+
+### Architecture
+
+Single-pod 4-container Deployment + separate database Deployment:
+
+```
+tarsy Deployment (1 replica):
+  oauth2-proxy (:4180)     — browser auth (GitHub OAuth)
+  kube-rbac-proxy (:8443)  — API client auth (SA tokens → K8s RBAC)
+  tarsy (:8080)            — Go backend + dashboard
+  llm-service (:50051)     — Python gRPC LLM proxy
+
+tarsy-database Deployment (1 replica, Recreate strategy):
+  PostgreSQL with PVC
+```
+
+All 4 containers share localhost network within the pod. `LLM_SERVICE_ADDR=localhost:50051`.
+
+### kube-rbac-proxy (API Client Auth)
+
+Replaces old TARSy's custom JWT infrastructure (RS256 keys, JWKS endpoint, token generation CLI) with zero custom code:
+
+1. API client sends `Authorization: Bearer <SA-token>`
+2. kube-rbac-proxy validates via K8s TokenReview API
+3. Checks authorization via SubjectAccessReview
+4. Proxies to tarsy with `X-Remote-User`/`X-Remote-Groups` headers
+
+**RBAC resources** (`deploy/kustomize/base/rbac.yaml`):
+- `tarsy` ServiceAccount (for the pod)
+- `tarsy-kube-rbac-proxy` ClusterRole (TokenReview + SubjectAccessReview permissions)
+- `tarsy-api-client` ClusterRole (defines API access: `/api/*`, `/health`)
+
+Grant access: `oc create clusterrolebinding <name> --clusterrole=tarsy-api-client --serviceaccount=<ns>:<sa>`
+
+### Services & Routes
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `tarsy-web` | 4180 | Browser traffic through oauth2-proxy |
+| `tarsy-api` | 8443 | API client traffic through kube-rbac-proxy (auto TLS cert via OpenShift annotation) |
+| `tarsy-database` | 5432 | PostgreSQL |
+
+Single Route with edge TLS termination → `tarsy-web` Service. API is internal-only (ClusterIP).
+
+### Secrets & ConfigMaps
+
+**Secrets** via OpenShift Template (`secrets-template.yaml`):
+- `tarsy-secrets` — LLM API keys, GitHub token, Slack token
+- `database-secret` — DB credentials + connection URL
+- `oauth2-proxy-secret` — OAuth client ID/secret, cookie secret
+- `gcp-service-account-secret` — VertexAI credentials (optional)
+
+**ConfigMaps** via `configMapGenerator`:
+- `tarsy-app-config` — `tarsy.yaml`, `llm-providers.yaml`
+- `oauth2-config` — `oauth2-proxy.cfg`
+- `oauth2-templates` — sign-in page + logo
+- `tarsy-config` — env vars (LOG_LEVEL, LLM_SERVICE_ADDR, etc.)
+
+### Health Probes
+
+| Container | Liveness | Readiness | Startup |
+|-----------|----------|-----------|---------|
+| tarsy | HTTP `/health` :8080 | HTTP `/health` :8080 | HTTP `/health` :8080 (65s window) |
+| llm-service | gRPC :50051 | gRPC :50051 | gRPC :50051 (125s window) |
+| oauth2-proxy | HTTP `/ping` :4180 | HTTP `/ping` :4180 | — |
+| kube-rbac-proxy | TCP :8443 | TCP :8443 | — |
+
+Startup probes prevent premature liveness failures during slow initialization.
+
+### Rollout Strategy
+
+RollingUpdate with `maxUnavailable: 0`, `maxSurge: 1` (zero downtime). `terminationGracePeriodSeconds: 960` (alert_processing_timeout 900s + 60s buffer). Migrations applied automatically on startup via `m.Up()`.
+
+### Build Pipeline
+
+GitHub Actions workflows (`.github/workflows/`):
+- `build-and-push-tarsy.yml` — triggers on Go/dashboard/proto/Dockerfile changes
+- `build-and-push-llm-service.yml` — triggers on `llm-service/**` changes
+
+Both use `redhat-actions/buildah-build` + `push-to-registry` to quay.io with `latest` + commit SHA tags.
+
+### Makefile Targets (`make/openshift.mk`)
+
+| Target | Purpose |
+|--------|---------|
+| `openshift-build-all` | Build tarsy + llm-service images |
+| `openshift-push-all` | Push to OpenShift internal registry (skopeo fallback) |
+| `openshift-create-secrets` | Create secrets from env vars via OpenShift Template |
+| `openshift-apply` | Apply Kustomize manifests (syncs config, substitutes ROUTE_HOST) |
+| `openshift-deploy` | Full deployment (secrets + push + apply + rollout restart) |
+| `openshift-redeploy` | Rebuild and update (no secrets) |
+| `openshift-status` | Show pods, services, routes |
+| `openshift-logs` | Show all container logs |
+| `openshift-clean` | Delete all resources (interactive) |
+| `openshift-db-reset` | Reset database (destructive, interactive) |
+
+---
+
 ## Tool Result Summarization (`pkg/agent/controller/summarize.go`)
 
 ### Architecture Decision: Controller-Level Summarization
@@ -1199,7 +1423,8 @@ Non-registry configuration resolved at startup from the `system` YAML section:
 | `GitHubConfig` | `TokenEnv` (default: `"GITHUB_TOKEN"`) | GitHub API authentication for runbook fetching |
 | `RunbookConfig` | `RepoURL`, `CacheTTL` (default: 1m), `AllowedDomains` (default: `[github.com, raw.githubusercontent.com]`) | Runbook listing, caching, and URL validation |
 | `SlackConfig` | `Enabled` (default: false), `TokenEnv` (default: `"SLACK_BOT_TOKEN"`), `Channel` (channel ID) | Slack notification delivery |
-| `DashboardURL` | string (default: `"http://localhost:8080"`) | Base URL for dashboard links in notifications; lives on `Config` directly (shared across Slack, CORS, future OAuth) |
+| `DashboardURL` | string (default: `"http://localhost:8080"`) | Base URL for dashboard links, CORS origin, WebSocket origins, OAuth redirects; lives on `Config` directly |
+| `AllowedWSOrigins` | `[]string` (default: empty) | Additional WebSocket origin patterns beyond auto-derived dashboard URL + localhost |
 
 Python receives config via gRPC `LLMConfig` (provider, model, api_key_env, credentials_env, project, location, base_url, backend, native_tools, max_tool_result_tokens). Python does not read YAML files; it reads env vars for API keys/credentials based on the `*_env` field values received via gRPC.
 
@@ -1329,7 +1554,7 @@ In-process e2e tests boot a full TARSy instance per test (`TestApp`) with real P
 
 9 scenarios: Pipeline (comprehensive golden-file verification of all 4 data layers), FailureResilience (policy=any, exec summary fail-open), FailurePropagation (policy=all, fail-fast), Cancellation, Timeout, Concurrency (MaxConcurrentSessions), MultiReplica (cross-replica WS via NOTIFY/LISTEN), Runbook (URL fetch via mock server, invalid domain rejection, listing endpoint, default fallback), Slack (mock Slack HTTP server captures `chat.postMessage` calls; verifies start + terminal notifications, fingerprint-based threading, disabled notifications, fail-open on API errors).
 
-Makefile: `test-unit` (pkg only), `test-e2e` (e2e only), `test-go` (all Go + coverage), `test` (Go + Python).
+Makefile: `test-unit` (pkg only), `test-e2e` (e2e only), `test-go` (all Go + coverage), `test` (Go + Python). Container testing: `make containers-deploy` for end-to-end container validation.
 
 See `docs/archive/phase6-e2e-testing-design.md` for full details on test infrastructure, mock design, golden file system, and scenario coverage.
 
@@ -1549,7 +1774,14 @@ Shared utility for canonical ↔ API name conversion:
 | **Fail-open Slack notifications** | Slack API errors are logged but never block session processing or returned to callers. Slack is best-effort enrichment |
 | **ThreadTS caching across lifecycle** | Start notification resolves fingerprint → `thread_ts` and returns it; worker caches it in a local variable and passes it to the terminal notification, avoiding a redundant `conversations.history` call |
 | **Fingerprint-based threading** | `FindMessageByFingerprint()` searches last 24h channel history for the fingerprint, case-insensitive + whitespace-normalized. Not found → posts to channel directly. Fingerprint field already existed on `AlertSession` — no schema migration needed |
-| **`dashboard_url` as shared config** | `Config.DashboardURL` lives at the top level (not under Slack) — used by Slack notifications, and available for CORS and future OAuth redirects without refactoring |
+| **`dashboard_url` as shared config** | `Config.DashboardURL` lives at the top level (not under Slack) — used by Slack notifications, CORS origin allowlist, WebSocket origin patterns, and OAuth redirect URLs |
+| **Universal container images** | Same Dockerfile produces images that run identically in podman-compose (dev) and OpenShift (prod). Only orchestration-level config differs (env vars, volume mounts, probe types) |
+| **Non-root + GID 0** | All containers use UID 65532 with GID 0 group permissions (`chgrp -R 0 /app && chmod -R g=u /app`). Supports OpenShift's `restricted` SCC which assigns a random UID with GID 0 |
+| **Minimal health endpoint** | `/health` returns only status + version + db/worker_pool checks. No internals leaked. External dependencies excluded to prevent K8s from restarting tarsy when MCP/LLM is unhealthy |
+| **kube-rbac-proxy over JWT** | API client auth via Kubernetes ServiceAccount tokens + RBAC (TokenReview/SubjectAccessReview). Zero custom token code — replaces old TARSy's RS256 key pair, JWKS endpoint, and token generation CLI |
+| **Single-pod multi-container** | 4 containers sharing localhost network in one pod. oauth2-proxy (browser), kube-rbac-proxy (API), tarsy (backend), llm-service (LLM). Simplifies networking vs old TARSy's 3 separate Deployments |
+| **Health check chain** | In compose: postgres + llm-service healthy → tarsy starts → oauth2-proxy starts. In K8s: startup probes allow slow initialization without premature restarts |
+| **Config template generation** | oauth2-proxy config generated from template + env vars via Makefile `sed`. Compose: secrets baked in. OpenShift: secrets as K8s Secret → env var overrides |
 
 ---
 
@@ -1578,6 +1810,13 @@ Shared utility for canonical ↔ API name conversion:
 | Dashboard routing | react-router-dom v7 |
 | Dashboard HTTP | axios (retry, auth intercept) |
 | Dashboard content | react-markdown, react-syntax-highlighter |
+| Containerization | Podman + podman-compose (dev), OpenShift (prod) |
+| Container images | Multi-stage Dockerfile (Go + Node + Alpine), Python slim |
+| Orchestration (prod) | Kustomize (base + overlays) |
+| Auth (browser) | OAuth2-proxy (GitHub OAuth provider) |
+| Auth (API clients) | kube-rbac-proxy (K8s SA tokens + RBAC) |
+| CI/CD | GitHub Actions (buildah-build → quay.io) |
+| Python health | grpcio-health-checking (gRPC Health Checking Protocol) |
 
 ---
 
@@ -1589,8 +1828,6 @@ Shared utility for canonical ↔ API name conversion:
 - LLM cost calculation (token counts stored, no $ calculation)
 - Prometheus metrics
 - Hard delete support (schema ready, not implemented)
-- WebSocket origin validation (currently `InsecureSkipVerify: true`)
-- OAuth2-proxy integration (Phase 9)
 
 ---
 
