@@ -155,7 +155,7 @@ func TestEventService_CleanupOrphanedEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("cleans up old events", func(t *testing.T) {
-		count, err := eventService.CleanupOrphanedEvents(ctx, 7)
+		count, err := eventService.CleanupOrphanedEvents(ctx, 7*24*time.Hour)
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, count, 1)
 	})

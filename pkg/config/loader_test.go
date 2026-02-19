@@ -650,6 +650,49 @@ func TestResolveRunbooksConfig(t *testing.T) {
 	})
 }
 
+func TestResolveRetentionConfig(t *testing.T) {
+	t.Run("nil system config uses defaults", func(t *testing.T) {
+		cfg := resolveRetentionConfig(nil)
+		assert.Equal(t, 365, cfg.SessionRetentionDays)
+		assert.Equal(t, 1*time.Hour, cfg.EventTTL)
+		assert.Equal(t, 12*time.Hour, cfg.CleanupInterval)
+	})
+
+	t.Run("nil retention section uses defaults", func(t *testing.T) {
+		sys := &SystemYAMLConfig{}
+		cfg := resolveRetentionConfig(sys)
+		assert.Equal(t, 365, cfg.SessionRetentionDays)
+		assert.Equal(t, 1*time.Hour, cfg.EventTTL)
+		assert.Equal(t, 12*time.Hour, cfg.CleanupInterval)
+	})
+
+	t.Run("full config overrides defaults", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			Retention: &RetentionConfig{
+				SessionRetentionDays: 90,
+				EventTTL:             30 * time.Minute,
+				CleanupInterval:      6 * time.Hour,
+			},
+		}
+		cfg := resolveRetentionConfig(sys)
+		assert.Equal(t, 90, cfg.SessionRetentionDays)
+		assert.Equal(t, 30*time.Minute, cfg.EventTTL)
+		assert.Equal(t, 6*time.Hour, cfg.CleanupInterval)
+	})
+
+	t.Run("partial config keeps defaults for unset fields", func(t *testing.T) {
+		sys := &SystemYAMLConfig{
+			Retention: &RetentionConfig{
+				SessionRetentionDays: 180,
+			},
+		}
+		cfg := resolveRetentionConfig(sys)
+		assert.Equal(t, 180, cfg.SessionRetentionDays)
+		assert.Equal(t, 1*time.Hour, cfg.EventTTL)
+		assert.Equal(t, 12*time.Hour, cfg.CleanupInterval)
+	})
+}
+
 func TestSystemConfigYAMLLoading(t *testing.T) {
 	t.Run("system section parsed from YAML", func(t *testing.T) {
 		dir := t.TempDir()

@@ -341,7 +341,10 @@ func (s *SessionService) CancelSession(_ context.Context, sessionID string) erro
 	return nil
 }
 
-// SoftDeleteOldSessions soft deletes sessions older than retention period
+// SoftDeleteOldSessions soft deletes sessions older than retention period.
+// Targets two categories:
+//   - Completed/terminal sessions where completed_at < cutoff
+//   - Pending sessions where created_at < cutoff (never claimed, safety net)
 func (s *SessionService) SoftDeleteOldSessions(_ context.Context, retentionDays int) (int, error) {
 	if retentionDays <= 0 {
 		return 0, fmt.Errorf("retention_days must be positive, got %d", retentionDays)
@@ -349,14 +352,19 @@ func (s *SessionService) SoftDeleteOldSessions(_ context.Context, retentionDays 
 
 	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
 
-	// Use background context with timeout
 	deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	count, err := s.client.AlertSession.Update().
 		Where(
-			alertsession.CompletedAtLT(cutoff),
 			alertsession.DeletedAtIsNil(),
+			alertsession.Or(
+				alertsession.CompletedAtLT(cutoff),
+				alertsession.And(
+					alertsession.StatusEQ(alertsession.StatusPending),
+					alertsession.CreatedAtLT(cutoff),
+				),
+			),
 		).
 		SetDeletedAt(time.Now()).
 		Save(deleteCtx)

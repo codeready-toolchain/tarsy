@@ -15,7 +15,6 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 
 - **[README.md](README.md)** -- This file: project overview and quick start
 - **[docs/architecture-context.md](docs/architecture-context.md)** -- Cumulative architecture: interfaces, patterns, decisions, tech stack
-- **[docs/project-plan.md](docs/project-plan.md)** -- Roadmap and phase overview
 - **[deploy/README.md](deploy/README.md)** -- Deployment and configuration guide
 - **[deploy/config/README.md](deploy/config/README.md)** -- Configuration reference
 

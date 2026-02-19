@@ -21,6 +21,9 @@ type Config struct {
 	// Slack notification configuration (resolved from system.slack)
 	Slack *SlackConfig
 
+	// Retention and cleanup configuration (resolved from system.retention)
+	Retention *RetentionConfig
+
 	// Base URL for dashboard links (default: "http://localhost:5173")
 	DashboardURL string
 

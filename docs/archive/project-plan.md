@@ -52,14 +52,7 @@ Full design docs for completed phases are in `docs/archive/`.
 
 **Kubernetes/OpenShift Deployment (Phase 10)** -- ✅ DONE. Kustomize manifests (`deploy/kustomize/base/` + `overlays/development/`) deploying TARSy to OpenShift. Single-pod 4-container Deployment (tarsy + llm-service + oauth2-proxy + kube-rbac-proxy) replacing old TARSy's 3-Deployment architecture. kube-rbac-proxy sidecar for API client auth via Kubernetes ServiceAccount tokens (replaces old TARSy's custom JWT infrastructure). RBAC resources: `tarsy` ServiceAccount, `tarsy-kube-rbac-proxy` ClusterRole (TokenReview/SubjectAccessReview), `tarsy-api-client` ClusterRole for API access grants. Author extraction updated with `X-Remote-User` header support. Separate database Deployment with PVC (Recreate strategy; replaceable with managed DB). Services: `tarsy-web` (oauth2-proxy :4180), `tarsy-api` (kube-rbac-proxy :8443 with auto-generated serving cert), `tarsy-database`. Single Route with edge TLS termination. OpenShift Template for secrets (tarsy-secrets, database-secret, oauth2-proxy-secret, gcp-service-account-secret). ConfigMaps via `configMapGenerator` (tarsy-app-config, oauth2-config, oauth2-templates, tarsy-config). ImageStreams (tarsy, tarsy-llm). Health probes: HTTP for tarsy, native gRPC for llm-service, HTTP /ping for oauth2-proxy, TCP for kube-rbac-proxy. GitHub Actions CI workflows for quay.io (buildah-build + push-to-registry, path-triggered). `make/openshift.mk` with full workflow: build, push (with skopeo fallback), create-secrets, apply, deploy, redeploy, status, logs, clean, db-reset. Rolling update strategy (maxUnavailable: 0, maxSurge: 1). `terminationGracePeriodSeconds: 960` (alert timeout + buffer).
 
----
-
-### Phase 11: Monitoring & Operations
-
-- [ ] Structured logging
-- [ ] Retention policies
-- [ ] Cleanup service
-- [ ] Cascade deletes
+**Monitoring & Operations (Phase 11)** -- ✅ DONE. Structured logging configuration via `LOG_LEVEL` / `LOG_FORMAT` env vars (`configureLogging()` in `main.go`, slog text/JSON handlers). YAML-configurable retention policies (`system.retention` section: `session_retention_days` 365d, `event_ttl` 1h, `cleanup_interval` 12h). Standalone `CleanupService` (`pkg/cleanup/`) with `Start`/`Stop` lifecycle running a periodic background loop that soft-deletes old completed + stale pending sessions and removes orphaned Event rows past TTL. Cascade deletes via Ent schema FK constraints (completed in earlier phases). `CleanupOrphanedEvents` signature updated from `ttlDays int` to `ttl time.Duration`. Soft-delete scope extended to include old pending sessions (Q5 decision). All operations fail-open (log + continue). See `docs/archive/phase11-monitoring-operations-design.md`.
 
 ---
 

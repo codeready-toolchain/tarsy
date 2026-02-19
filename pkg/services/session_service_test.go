@@ -528,6 +528,31 @@ func TestSessionService_SoftDeleteOldSessions(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, updated.DeletedAt)
 	})
+
+	t.Run("soft deletes old pending sessions", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test-pending",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		// Backdate created_at to 100 days ago (session stays pending, never claimed)
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetCreatedAt(time.Now().Add(-100 * 24 * time.Hour)).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		count, err := service.SoftDeleteOldSessions(ctx, 90)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, count, 1)
+
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		assert.NotNil(t, updated.DeletedAt)
+	})
 }
 
 func TestSessionService_RestoreSession(t *testing.T) {

@@ -29,6 +29,7 @@ type SystemYAMLConfig struct {
 	GitHub           *GitHubYAMLConfig   `yaml:"github"`
 	Runbooks         *RunbooksYAMLConfig `yaml:"runbooks"`
 	Slack            *SlackYAMLConfig    `yaml:"slack"`
+	Retention        *RetentionConfig    `yaml:"retention"`
 }
 
 // SlackYAMLConfig holds Slack notification settings from YAML.
@@ -155,10 +156,11 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + DashboardURL + WS Origins)
+	// Resolve system config (GitHub + Runbooks + Slack + Retention + DashboardURL + WS Origins)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
+	retentionCfg := resolveRetentionConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
 
@@ -169,6 +171,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		GitHub:              githubCfg,
 		Runbooks:            runbooksCfg,
 		Slack:               slackCfg,
+		Retention:           retentionCfg,
 		DashboardURL:        dashboardURL,
 		AllowedWSOrigins:    allowedWSOrigins,
 		AgentRegistry:       agentRegistry,
@@ -317,6 +320,28 @@ func resolveDashboardURL(sys *SystemYAMLConfig) string {
 		return sys.DashboardURL
 	}
 	return "http://localhost:5173"
+}
+
+// resolveRetentionConfig resolves retention configuration from system YAML, applying defaults.
+func resolveRetentionConfig(sys *SystemYAMLConfig) *RetentionConfig {
+	cfg := DefaultRetentionConfig()
+
+	if sys == nil || sys.Retention == nil {
+		return cfg
+	}
+
+	r := sys.Retention
+	if r.SessionRetentionDays > 0 {
+		cfg.SessionRetentionDays = r.SessionRetentionDays
+	}
+	if r.EventTTL > 0 {
+		cfg.EventTTL = r.EventTTL
+	}
+	if r.CleanupInterval > 0 {
+		cfg.CleanupInterval = r.CleanupInterval
+	}
+
+	return cfg
 }
 
 // resolveAllowedWSOrigins returns additional WebSocket origin patterns from system YAML.
