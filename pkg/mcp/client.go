@@ -53,8 +53,8 @@ func newClient(registry *config.MCPServerRegistry) *Client {
 
 // Initialize connects to all configured MCP servers.
 // Servers that fail to connect are recorded in failedServers.
-// The caller decides whether failures are fatal:
-//   - Startup (readiness probe): check FailedServers() and fail if non-empty
+// The caller decides how to handle failures:
+//   - Startup: check FailedServers() and log warnings (non-fatal, TARSy starts degraded)
 //   - Per-session: partial initialization is acceptable
 //
 // Always returns nil today; the error return is retained so the signature can

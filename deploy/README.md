@@ -121,13 +121,76 @@ This builds both container images (`tarsy:dev`, `tarsy-llm:dev`), generates `oau
 
 ---
 
-## Option 3: OpenShift (Phase 10 -- coming soon)
+## Option 3: OpenShift (`make openshift-deploy`)
 
-Production deployment to OpenShift/Kubernetes using the same container images from Option 2. This mode adds:
+Production-like deployment to OpenShift using Kustomize manifests. Uses the same universal container images as Option 2, deployed as a single pod with 4 containers (tarsy, llm-service, oauth2-proxy, kube-rbac-proxy) plus a separate PostgreSQL deployment.
 
-- Kustomize overlays for environment-specific configuration
-- `kube-rbac-proxy` sidecar for API client authentication
-- OpenShift Routes for ingress
+### 1. Prerequisites
+
+- `oc` CLI logged into your OpenShift cluster
+- Podman (for building and pushing images to the internal registry)
+- Configuration files from the [Prerequisites](#prerequisites) section above
+
+**⚠️ MCP servers**: MCP servers configured for local development won't work on OpenShift. Stdio-based servers (including the built-in `kubernetes-server`) require binaries that are not present in the tarsy container image, and HTTP URLs pointing to `localhost` or `host.containers.internal` are not reachable from the cluster. TARSy will start in a degraded state with warnings visible on the dashboard if configured MCP servers are unreachable. Before deploying, update the MCP server entries in `deploy/config/tarsy.yaml` to use cluster-reachable HTTP endpoints (e.g., `http://mcp-server.tarsy.svc:8888/mcp` for an in-cluster MCP server, or a publicly accessible URL).
+
+### 2. Create cluster config
+
+```bash
+cp deploy/openshift.env.example deploy/openshift.env
+```
+
+Edit `deploy/openshift.env` with your `GITHUB_ORG` and `GITHUB_TEAM`. `ROUTE_HOST` is auto-detected from the cluster domain if not set.
+
+### 3. Deploy
+
+```bash
+# Set required env vars (or source from a file)
+export GOOGLE_API_KEY=...
+export GITHUB_TOKEN=...
+export OAUTH2_CLIENT_ID=...
+export OAUTH2_CLIENT_SECRET=...
+
+make openshift-deploy
+```
+
+This creates secrets, builds and pushes images to the OpenShift internal registry, applies Kustomize manifests, and restarts deployments.
+
+### 4. Access
+
+```bash
+make openshift-urls
+```
+
+| Path | Description |
+|------|-------------|
+| Dashboard | `https://<route-host>/` (GitHub login via oauth2-proxy) |
+| API (browser) | `https://<route-host>/api/v1/` |
+| API (in-cluster) | `https://tarsy-api.tarsy.svc:8443/api/v1/` (ServiceAccount token via kube-rbac-proxy) |
+| Health | `https://<route-host>/health` (unauthenticated) |
+
+### 5. Useful commands
+
+| Command | Description |
+|---------|-------------|
+| `make openshift-status` | Show pods, services, routes |
+| `make openshift-logs` | Show logs from all containers in the tarsy pod |
+| `make openshift-redeploy` | Rebuild images and reapply manifests (no secret changes) |
+| `make openshift-urls` | Show application URLs |
+| `make openshift-db-reset` | Reset PostgreSQL (destructive) |
+| `make openshift-clean` | Delete all TARSy resources |
+| `make openshift-clean-images` | Delete images from the internal registry |
+
+### 6. Granting programmatic API access
+
+```bash
+oc create serviceaccount my-api-client -n my-namespace
+oc create clusterrolebinding my-client-tarsy-access \
+  --clusterrole=tarsy-api-client \
+  --serviceaccount=my-namespace:my-api-client
+TOKEN=$(oc create token my-api-client -n my-namespace --duration=8760h)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://tarsy-api.tarsy.svc:8443/api/v1/alerts -d '...'
+```
 
 See [docs/phase10-kubernetes-deployment-design.md](../docs/phase10-kubernetes-deployment-design.md) for the full design.
 

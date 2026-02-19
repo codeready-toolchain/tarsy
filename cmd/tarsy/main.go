@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -157,23 +158,29 @@ func main() {
 	warningsService := services.NewSystemWarningsService()
 	mcpFactory := mcp.NewClientFactory(cfg.MCPServerRegistry, maskingService)
 
-	// Eager MCP validation: verify all configured servers can connect.
-	// If any server fails, the process exits — prevents silent broken configs.
+	// MCP startup validation: attempt to connect to all configured servers.
+	// Failures are non-fatal — TARSy starts degraded with warnings visible
+	// on the dashboard. The HealthMonitor handles recovery and warning cleanup.
 	mcpServerIDs := cfg.AllMCPServerIDs()
 	if len(mcpServerIDs) > 0 {
 		validationClient, mcpErr := mcpFactory.CreateClient(ctx, mcpServerIDs)
 		if mcpErr != nil {
-			slog.Error("MCP startup validation failed", "error", mcpErr)
-			os.Exit(1)
-		}
-		failed := validationClient.FailedServers()
-		if len(failed) > 0 {
-			slog.Error("MCP servers failed startup validation", "failed_servers", failed)
+			slog.Warn("MCP startup validation failed — starting degraded", "error", mcpErr)
+			warningsService.AddWarning("mcp_health", "MCP startup validation failed: "+mcpErr.Error(), "", "")
+		} else {
+			failed := validationClient.FailedServers()
+			if len(failed) > 0 {
+				slog.Warn("MCP servers failed startup validation — starting degraded", "failed_servers", failed)
+				for serverID, errMsg := range failed {
+					warningsService.AddWarning("mcp_health",
+						fmt.Sprintf("MCP server %q unreachable at startup: %s", serverID, errMsg),
+						"Server will be retried by the health monitor.", serverID)
+				}
+			} else {
+				slog.Info("MCP servers validated", "count", len(mcpServerIDs))
+			}
 			_ = validationClient.Close()
-			os.Exit(1)
 		}
-		_ = validationClient.Close()
-		slog.Info("MCP servers validated", "count", len(mcpServerIDs))
 	}
 
 	// Start HealthMonitor (background goroutine)
