@@ -2,7 +2,6 @@
  * Version context — shares version monitoring state across components.
  *
  * Wraps useVersionMonitor() in a context to prevent duplicate polling.
- * Ported from old TARSy dashboard, adapted for React 19 context pattern.
  */
 
 import { createContext, useContext, type ReactNode } from 'react';

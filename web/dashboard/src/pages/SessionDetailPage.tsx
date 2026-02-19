@@ -750,7 +750,7 @@ export function SessionDetailPage() {
 
           // When a new stage starts, clear per-agent progress and execution
           // status maps from the previous (potentially parallel) stage.  This
-          // mirrors old tarsy's pattern of clearing agentProgressStatuses when
+          // mirrors the pattern of clearing agentProgressStatuses when
           // the parallel parent stage completes — by the time the next stage
           // starts, the previous parallel execution state is no longer relevant.
           if (payload.status === EXECUTION_STATUS.STARTED) {
@@ -793,7 +793,7 @@ export function SessionDetailPage() {
         if (eventType === EVENT_EXECUTION_PROGRESS) {
           const payload = data as unknown as ExecutionProgressPayload;
           // Map phase to clean display message (e.g. "Investigating...", "Distilling...")
-          // matching old tarsy's ProgressStatusMessage. Fall back to raw message if
+          // Fall back to raw message if
           // the phase isn't in the map (shouldn't happen, but defensive).
           const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase] || payload.message;
           setAgentProgressStatuses((prev) => {

@@ -4,9 +4,6 @@
  * Allows users to customize which MCP servers, tools, and native tools to use
  * for alert processing. Shows default configuration and detects changes.
  * Only sends override config when user modifies the defaults.
- *
- * Visual layer ported from old TARSy dashboard MCPSelection.tsx.
- * Data layer rewritten for new Go backend endpoints.
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';

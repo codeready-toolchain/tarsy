@@ -5,7 +5,7 @@
   <img src="./docs/img/TARSy-logo.png" alt="TARSy" width="100"/>
 </div>
 
-**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through sequential agent chains, retrieves runbooks, and uses MCP (Model Context Protocol) servers to gather system information for comprehensive multi-stage incident analysis.
+**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through parallel agent chains, using MCP (Model Context Protocol) servers and optional runbooks for comprehensive multi-stage incident analysis.
 
 This is the Go-based hybrid rewrite of TARSy, replacing the [original Python implementation](https://github.com/codeready-toolchain/tarsy-bot) (now deprecated). The new architecture splits responsibilities between a Go orchestrator and a stateless Python LLM service for better performance, type safety, and scalability.
 
@@ -14,7 +14,9 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 ## Documentation
 
 - **[README.md](README.md)** -- This file: project overview and quick start
-- **[docs/architecture-context.md](docs/architecture-context.md)** -- Cumulative architecture: interfaces, patterns, decisions, tech stack
+- **[docs/architecture-overview.md](docs/architecture-overview.md)** -- High-level architecture, components, and processing flow
+- **[docs/functional-areas-design.md](docs/functional-areas-design.md)** -- Detailed design of each functional area with file paths and interfaces
+- **[docs/slack-integration.md](docs/slack-integration.md)** -- Slack notification setup, configuration, and threading
 - **[deploy/README.md](deploy/README.md)** -- Deployment and configuration guide
 - **[deploy/config/README.md](deploy/config/README.md)** -- Configuration reference
 
@@ -23,7 +25,7 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 ### For Development Mode
 - **Go 1.25+** -- Backend orchestrator
 - **Python 3.13+** -- LLM service runtime
-- **Node.js 18+** -- Dashboard development and build tools
+- **Node.js 24+** -- Dashboard development and build tools
 - **uv** -- Modern Python package manager
   - Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **PostgreSQL 17+** -- Or Podman/Docker for local development
@@ -47,8 +49,7 @@ make setup
 # 2. Configure environment (REQUIRED)
 cp deploy/config/.env.example deploy/config/.env
 # Edit deploy/config/.env and set:
-#   - GOOGLE_API_KEY (get from https://aistudio.google.com/app/apikey)
-#   - DB_PASSWORD
+#   - At least one LLM API key (e.g. GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY)
 
 # 3. Start everything (database, backend, LLM service, dashboard)
 make dev
@@ -63,53 +64,28 @@ make dev
 
 ### Container Deployment (Production-like)
 
-For production-like testing with containerized services, authentication, and database:
-
-```bash
-# 1. Install dependencies
-make setup
-
-# 2. Configure environment and OAuth (REQUIRED)
-# Edit deploy/config/.env for API keys
-# Edit deploy/config/oauth.env for GitHub OAuth (see deploy/config/README.md)
-
-# 3. Deploy the complete stack
-make containers-deploy        # Preserves database data (recommended)
-# OR for a fresh start:
-make containers-deploy-fresh  # Clean rebuild including database
-```
-
-**Services will be available at:**
-- **TARSy Dashboard**: http://localhost:8080 (with OAuth authentication)
-- **Backend API**: http://localhost:8080/api (protected by OAuth2-proxy)
-- **PostgreSQL Database**: localhost:5432
-
-**Container Management:**
-
-```bash
-make containers-status        # Check running services
-make containers-logs          # View all logs
-make containers-logs-tarsy    # View TARSy backend logs
-make containers-stop          # Stop containers
-make containers-clean         # Remove all containers and data
-```
+For containerized and OpenShift deployment with OAuth authentication, see **[deploy/README.md](deploy/README.md)**.
 
 ## Key Features
 
+### Agent Architecture
 - **Configuration-Based Agents**: Deploy new agents and chain definitions via YAML without code changes
+- **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent, replica, and comparison parallelism for A/B testing providers or strategies
+- **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
+- **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
+- **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
+
+### Investigation & Analysis
 - **Flexible Alert Processing**: Accept arbitrary text payloads from any monitoring system
-- **Chain-Based Agent Architecture**: Specialized agents with domain-specific tools and AI reasoning working in coordinated stages
-- **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent parallelism, replica parallelism, and comparison parallelism for A/B testing providers or strategies
-- **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs). Add new servers via configuration
-- **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML. Native thinking mode for Gemini 2.5+. LangChain-based provider system for extensibility
-- **GitHub Runbook Integration**: Automatic retrieval and inclusion of relevant runbooks from GitHub repositories per agent chain
+- **Optional Runbook Integration**: Fetch supplemental guidance from GitHub repositories to steer agent behavior
+- **Data Masking**: Hybrid masking combining structural analysis (Kubernetes Secrets) with regex patterns to protect sensitive data
+- **Tool Result Summarization**: LLM-powered summarization of verbose MCP outputs to reduce token usage and improve reasoning
+
+### Observability & Operations
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
-- **Force Conclusion**: Configurable automatic conclusion at iteration limits. Hierarchical setting at system, agent, chain, stage, or parallel agent level
-- **Data Masking**: Hybrid masking system combining structural analysis (Kubernetes Secrets) with regex patterns (API keys, passwords, certificates) to protect sensitive data
-- **Tool Result Summarization**: LLM-powered summarization of verbose MCP tool outputs to reduce token usage and improve agent reasoning
-- **Slack Notifications**: Automatic notifications when alert processing completes or fails, with thread-based message grouping via fingerprint matching
-- **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline reconstruction and trace views
+- **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
+- **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views
 
 ## Architecture
 
@@ -136,14 +112,13 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 
 1. **Alert arrives** from monitoring systems with flexible text payload
 2. **Orchestrator selects** appropriate agent chain based on alert type
-3. **Runbook downloaded** (optional) automatically from GitHub for chain guidance
-4. **Sequential stages execute** where each agent builds upon previous stage data using AI to select and execute domain-specific tools
-   - Stages can run multiple agents in parallel for independent investigation
-   - Parallel results automatically synthesized into unified analysis
-5. **Automatic pause** if investigation reaches iteration limits (or forced conclusion if configured)
-6. **Comprehensive multi-stage analysis** provided to engineers with actionable recommendations
-7. **Follow-up chat available** after investigation completes
-8. **Full audit trail** captured with stage-level detail
+3. **Runbook injected** (optional) -- if configured, fetches supplemental guidance from GitHub to steer agent behavior
+4. **Agents investigate in parallel** -- each stage launches multiple agents concurrently (different providers, strategies, or focus areas) for independent analysis
+5. **Synthesis agent merges results** -- a dedicated LLM call critically evaluates parallel findings and produces a unified root cause analysis
+6. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
+7. **Comprehensive analysis** provided to engineers with actionable recommendations
+8. **Follow-up chat available** after investigation completes
+9. **Full audit trail** captured with stage-level detail
 
 ### Components
 
@@ -243,9 +218,3 @@ make db-reset           # Reset database
 - Check PostgreSQL logs: `make db-logs`
 - Connect manually: `make db-psql`
 - Reset if corrupted: `make db-reset`
-
-### Container issues
-- Check status: `make containers-status`
-- View logs: `make containers-logs`
-- Fresh rebuild: `make containers-deploy-fresh`
-- Clean everything: `make containers-clean`

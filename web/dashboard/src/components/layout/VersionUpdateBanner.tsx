@@ -3,8 +3,6 @@
  *
  * Reads dashboardVersionChanged from VersionContext. Cannot be dismissed —
  * user must refresh to get updated JS bundles.
- *
- * Visual layer ported from old TARSy VersionUpdateBanner.tsx.
  */
 
 import Alert from '@mui/material/Alert';

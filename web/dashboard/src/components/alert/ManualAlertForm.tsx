@@ -2,12 +2,9 @@
  * Manual Alert submission form component.
  *
  * Dual-mode input: Text (default) or Structured Key-Value pairs.
- * Supports runbook URL free-text input (Phase 8.1 will add browsing/dropdown).
+ * Supports runbook URL free-text input with browsing/dropdown.
  * Supports MCP server/tool selection override via MCPSelection component.
  * Supports resubmit pre-fill from location state (used by Session Detail).
- *
- * Visual layer ported from old TARSy dashboard ManualAlertForm.tsx.
- * Data layer rewritten for new Go backend (SubmitAlertRequest).
  */
 
 import { useState, useEffect, useRef } from 'react';

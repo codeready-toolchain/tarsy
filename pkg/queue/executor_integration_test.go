@@ -1121,7 +1121,7 @@ func TestExecutor_StageEventsHaveCorrectIndex(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
-// Phase 5.2: Parallel execution tests
+// Parallel execution tests
 // ────────────────────────────────────────────────────────────
 
 func TestExecutor_SynthesisSkippedForSingleAgent(t *testing.T) {

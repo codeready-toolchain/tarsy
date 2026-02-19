@@ -263,7 +263,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     );
   }
 
-  // In-progress tool call (matches old tarsy styling)
+  // In-progress tool call
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_TOOL_CALL) {
     const toolName = (item.metadata?.tool_name as string) || 'unknown';
     return (

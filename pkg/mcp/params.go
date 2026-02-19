@@ -184,7 +184,6 @@ func isValidKey(k string) bool {
 }
 
 // coerceValue converts string values to appropriate Go types.
-// Matches old TARSy's _convert_parameter_value().
 func coerceValue(s string) any {
 	s = strings.TrimSpace(s)
 	lower := strings.ToLower(s)

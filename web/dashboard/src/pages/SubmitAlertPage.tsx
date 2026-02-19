@@ -1,7 +1,7 @@
 /**
  * Submit Alert page — manual alert submission form.
  *
- * Layout mirrors old TARSy ManualAlertSubmission.tsx:
+ * Layout:
  * - SharedHeader with back button and "Automated Incident Response" subtitle
  * - Backend health check on mount (error + success banners)
  * - ManualAlertForm (the core form component) with Fade transition

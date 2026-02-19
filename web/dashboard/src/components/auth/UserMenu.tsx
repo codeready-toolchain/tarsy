@@ -16,7 +16,7 @@ import { authService } from '../../services/auth.ts';
 
 /**
  * User menu with avatar, name, email header and logout action.
- * Matches old TARSy dashboard: Button trigger with AccountCircle + name,
+ * Button trigger with AccountCircle + name,
  * dropdown with user info header, divider, and logout.
  */
 export function UserMenu() {

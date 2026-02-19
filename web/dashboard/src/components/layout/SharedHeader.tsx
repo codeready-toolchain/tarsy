@@ -19,7 +19,6 @@ interface SharedHeaderProps {
 /**
  * Shared application header with gradient AppBar, logo, optional back button,
  * and auth UI (login button or user menu).
- * Matches the old TARSy dashboard header style.
  */
 export function SharedHeader({
   title,

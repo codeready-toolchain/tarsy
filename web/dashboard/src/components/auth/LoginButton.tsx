@@ -9,7 +9,7 @@ interface LoginButtonProps {
 
 /**
  * Icon-only login button that redirects to oauth2-proxy sign-in page.
- * Matches old TARSy dashboard: white icon with tooltip, glass-style hover.
+ * White icon with tooltip, glass-style hover.
  */
 export function LoginButton({ size = 'medium' }: LoginButtonProps) {
   return (

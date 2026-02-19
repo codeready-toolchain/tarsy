@@ -461,8 +461,7 @@ export default function ConversationTimeline({
           // For parallel stages: show the selected agent's per-agent progress
           // (e.g. "Investigating...", "Distilling...").  If the agent has
           // reached a terminal state and siblings are still running, override
-          // with "Waiting for other agents...".  This mirrors old tarsy's
-          // displayStatus logic in SessionDetailPageBase.
+          // with "Waiting for other agents...".
           if (selectedAgentExecutionId) {
             // Show the selected agent's progress phase (active agents)
             const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);

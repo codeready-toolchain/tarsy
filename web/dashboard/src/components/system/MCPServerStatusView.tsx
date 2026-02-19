@@ -2,7 +2,7 @@
  * MCP Server Status View — displays health, tools, and error details
  * for all configured MCP servers.
  *
- * New component (no old TARSy equivalent). Uses GET /api/v1/system/mcp-servers.
+ * Uses GET /api/v1/system/mcp-servers.
  */
 
 import { useState, useEffect, useCallback } from 'react';

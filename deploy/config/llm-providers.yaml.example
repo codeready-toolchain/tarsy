@@ -58,12 +58,12 @@ llm_providers:
 # OPENAI PROVIDERS
 # =============================================================================
 
-  # o3 for advanced reasoning
-  o3:
+  # GPT-5.2 for advanced reasoning (default)
+  gpt-5.2:
     type: openai
-    model: o3
+    model: gpt-5.2
     api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 100000
+    max_tool_result_tokens: 380000  # Conservative for 400K context
 
   # o4-mini for fast reasoning
   o4-mini:
@@ -79,9 +79,23 @@ llm_providers:
     api_key_env: OPENAI_API_KEY
     max_tool_result_tokens: 100000
 
+  # o3 for reasoning (legacy)
+  o3:
+    type: openai
+    model: o3
+    api_key_env: OPENAI_API_KEY
+    max_tool_result_tokens: 250000
+
 # =============================================================================
 # ANTHROPIC / CLAUDE PROVIDERS
 # =============================================================================
+
+  # Claude Sonnet 4.6 for balanced performance (default)
+  claude-sonnet-4-6:
+    type: anthropic
+    model: claude-sonnet-4-6-20260217
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 900000  # Conservative for 1M context (beta)
 
   # Claude Opus for maximum capability
   claude-opus:
@@ -90,8 +104,8 @@ llm_providers:
     api_key_env: ANTHROPIC_API_KEY
     max_tool_result_tokens: 150000  # Conservative for 200K context
 
-  # Claude Sonnet for balanced performance
-  claude-sonnet:
+  # Claude Sonnet 4 for cost efficiency
+  claude-sonnet-4:
     type: anthropic
     model: claude-sonnet-4-20250514
     api_key_env: ANTHROPIC_API_KEY
@@ -119,13 +133,13 @@ llm_providers:
 # VERTEX AI PROVIDERS (GCP)
 # =============================================================================
 
-  # Claude on Vertex AI
+  # Claude Sonnet 4.6 on Vertex AI
   vertexai-claude-sonnet:
     type: vertexai
-    model: claude-sonnet-4@20250514
+    model: claude-sonnet-4-6@20260217
     project_env: GCP_PROJECT
     location_env: GCP_LOCATION
-    max_tool_result_tokens: 150000
+    max_tool_result_tokens: 900000  # Conservative for 1M context (beta)
 
   # Gemini on Vertex AI
   vertexai-gemini-pro:
