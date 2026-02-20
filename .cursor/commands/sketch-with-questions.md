@@ -18,7 +18,7 @@ Only start generating documents once you have enough context to do so accurately
 
 ## Phase 1: Generate two documents
 
-### 1. `docs/{name}-sketch.md` — Sketch Document
+### 1. `docs/proposals/{name}-sketch.md` — Sketch Document
 
 A high-level technical description of the feature. Structure it however best fits the idea — not every feature is alike, and a rigid template can get in the way. Use judgment.
 
@@ -37,7 +37,7 @@ For uncertain areas, add an inline marker:
 > **Open question:** {brief description} — see [questions document]({name}-questions.md), Q{N}.
 ```
 
-### 2. `docs/{name}-questions.md` — Sketch Questions
+### 2. `docs/proposals/{name}-questions.md` — Sketch Questions
 
 A numbered list of open questions. These questions shape the technical sketch — they clarify what the feature is, how it behaves, how it integrates, and where the key technical trade-offs lie. They are not detailed implementation decisions (those belong in a design-with-questions session).
 
@@ -97,7 +97,7 @@ If a question's answer makes a subsequent question moot, note that and skip it.
 
 When all questions are resolved, or when the user explicitly asks to finalize:
 
-Update `docs/{name}-sketch.md` to reflect all decisions:
+Update `docs/proposals/{name}-sketch.md` to reflect all decisions:
  - Remove open question markers that are now resolved
  - Fill in the sketch based on the decisions
  - Ensure the document is internally consistent — later decisions may affect earlier sections
@@ -110,6 +110,6 @@ Update `docs/{name}-sketch.md` to reflect all decisions:
 Use `{name}` as a kebab-case identifier for the feature or topic.  
 Examples: `orchestrator-agent`, `auth-flow`, `rate-limiting`, `data-pipeline`
 
-Both documents live in `docs/`:
-- `docs/{name}-sketch.md`
-- `docs/{name}-questions.md`
+Both documents live in `docs/proposals/`:
+- `docs/proposals/{name}-sketch.md`
+- `docs/proposals/{name}-questions.md`
