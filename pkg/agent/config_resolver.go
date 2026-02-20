@@ -257,8 +257,9 @@ func ResolveScoringConfig(
 	strategy := resolveIterationStrategy(
 		agentDef.IterationStrategy, scoringStrategy,
 	)
-	if strategy != "" && !strategy.IsValidForScoring() {
-		return nil, fmt.Errorf("invalid scoring strategy %q: must be a scoring strategy", strategy)
+	if !strategy.IsValidForScoring() {
+		return nil, fmt.Errorf("invalid scoring strategy %q: must be %q or %q",
+			strategy, config.IterationStrategyScoring, config.IterationStrategyScoringNativeThinking)
 	}
 
 	// Resolve LLM provider (defaults → chain → scoringCfg)

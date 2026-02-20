@@ -552,6 +552,21 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid scoring strategy")
 	})
 
+	t.Run("errors on empty resolved scoring strategy", func(t *testing.T) {
+		badCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"ScoringAgent": {},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+
+		_, err := ResolveScoringConfig(badCfg, chain, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid scoring strategy")
+	})
+
 	t.Run("LLM provider resolution: scoringCfg overrides chain overrides defaults", func(t *testing.T) {
 		chain := &config.ChainConfig{
 			LLMProvider: "google-default",
