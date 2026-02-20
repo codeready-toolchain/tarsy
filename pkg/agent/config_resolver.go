@@ -256,9 +256,9 @@ func ResolveScoringConfig(
 
 	defaults := cfg.Defaults
 
-	// Agent name: scoringCfg.Agent → defaults.ScoringAgent → "ScoringAgent"
+	// Agent name: hardcoded → defaults → scoringCfg
 	agentName := "ScoringAgent"
-	if defaults != nil && defaults.ScoringAgent != "" {
+	if defaults.ScoringAgent != "" {
 		agentName = defaults.ScoringAgent
 	}
 	if scoringCfg != nil && scoringCfg.Agent != "" {
