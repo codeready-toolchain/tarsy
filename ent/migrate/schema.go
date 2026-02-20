@@ -435,7 +435,7 @@ var (
 		{Name: "score_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "missing_tools_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "score_triggered_by", Type: field.TypeString},
-		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "completed", "failed", "timed_out"}, Default: "pending"},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime},
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true, Size: 2147483647},

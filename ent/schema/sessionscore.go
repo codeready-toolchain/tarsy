@@ -42,7 +42,7 @@ func (SessionScore) Fields() []ent.Field {
 		field.String("score_triggered_by").
 			Comment("Who triggered scoring (from extractAuthor)"),
 		field.Enum("status").
-			Values("pending", "in_progress", "completed", "failed", "timed_out").
+			Values("pending", "in_progress", "completed", "failed", "timed_out", "cancelled").
 			Default("pending"),
 		field.Time("started_at").
 			Default(time.Now).
