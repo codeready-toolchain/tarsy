@@ -32,5 +32,8 @@ func (f *AgentFactory) CreateAgent(execCtx *ExecutionContext) (Agent, error) {
 		return nil, fmt.Errorf("failed to create controller for strategy %q: %w",
 			execCtx.Config.IterationStrategy, err)
 	}
+	if execCtx.Config.IterationStrategy.IsValidForScoring() {
+		return NewScoringAgent(controller), nil
+	}
 	return NewBaseAgent(controller), nil
 }
