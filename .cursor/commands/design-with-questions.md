@@ -19,7 +19,7 @@ Only start generating documents once you have enough context to produce an accur
 
 ## Phase 1: Generate two documents
 
-### 1. `docs/{name}-design.md` — Design Document
+### 1. `docs/proposals/{name}-design.md` — Design Document
 
 A best-guess draft of the full design. Complete enough to reason about, but with open question markers wherever a decision is still needed.
 
@@ -37,7 +37,7 @@ For each unresolved decision, add an inline marker in the relevant section:
 > **Open question:** {brief description} — see [questions document]({name}-questions.md), Q{N}.
 ```
 
-### 2. `docs/{name}-questions.md` — Design Questions
+### 2. `docs/proposals/{name}-questions.md` — Design Questions
 
 A numbered list of open questions. Each question must have options with trade-offs and a recommendation.
 
@@ -46,7 +46,7 @@ Header:
 **Status:** Open — decisions pending
 **Related:** [Design document]({name}-design.md)
 
-Each question has options with trade-offs and a recommendation. Go through them one by one to form the design vision, then update the design document.
+Each question has options with trade-offs and a recommendation. Go through them one by one to form the design, then update the design document.
 ```
 
 Format per question:
@@ -97,7 +97,7 @@ If a question's answer makes a subsequent question moot, note that and skip it.
 
 When all questions are resolved, or when the user explicitly asks to finalize:
 
-Update `docs/{name}-design.md` to reflect all decisions:
+Update `docs/proposals/{name}-design.md` to reflect all decisions:
  - Remove open question markers that are now resolved
  - Fill in concrete design choices where placeholders existed
  - Ensure the document is internally consistent — decisions made later in the walk-through may affect sections written earlier
@@ -110,6 +110,6 @@ Update `docs/{name}-design.md` to reflect all decisions:
 Use `{name}` as a kebab-case identifier for the feature or topic.  
 Examples: `orchestrator-agent`, `auth-flow`, `rate-limiting`, `data-pipeline`
 
-Both documents live in `docs/`:
-- `docs/{name}-design.md`
-- `docs/{name}-questions.md`
+Both documents live in `docs/proposals/`:
+- `docs/proposals/{name}-design.md`
+- `docs/proposals/{name}-questions.md`
