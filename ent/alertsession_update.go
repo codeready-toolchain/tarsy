@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -562,6 +563,21 @@ func (_u *AlertSessionUpdate) SetChat(v *Chat) *AlertSessionUpdate {
 	return _u.SetChatID(v.ID)
 }
 
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by IDs.
+func (_u *AlertSessionUpdate) AddSessionScoreIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.AddSessionScoreIDs(ids...)
+	return _u
+}
+
+// AddSessionScores adds the "session_scores" edges to the SessionScore entity.
+func (_u *AlertSessionUpdate) AddSessionScores(v ...*SessionScore) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSessionScoreIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_u *AlertSessionUpdate) Mutation() *AlertSessionMutation {
 	return _u.mutation
@@ -718,6 +734,27 @@ func (_u *AlertSessionUpdate) RemoveEvents(v ...*Event) *AlertSessionUpdate {
 func (_u *AlertSessionUpdate) ClearChat() *AlertSessionUpdate {
 	_u.mutation.ClearChat()
 	return _u
+}
+
+// ClearSessionScores clears all "session_scores" edges to the SessionScore entity.
+func (_u *AlertSessionUpdate) ClearSessionScores() *AlertSessionUpdate {
+	_u.mutation.ClearSessionScores()
+	return _u
+}
+
+// RemoveSessionScoreIDs removes the "session_scores" edge to SessionScore entities by IDs.
+func (_u *AlertSessionUpdate) RemoveSessionScoreIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.RemoveSessionScoreIDs(ids...)
+	return _u
+}
+
+// RemoveSessionScores removes "session_scores" edges to SessionScore entities.
+func (_u *AlertSessionUpdate) RemoveSessionScores(v ...*SessionScore) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSessionScoreIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1232,6 +1269,51 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(chat.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SessionScoresCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSessionScoresIDs(); len(nodes) > 0 && !_u.mutation.SessionScoresCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SessionScoresIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -1786,6 +1868,21 @@ func (_u *AlertSessionUpdateOne) SetChat(v *Chat) *AlertSessionUpdateOne {
 	return _u.SetChatID(v.ID)
 }
 
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by IDs.
+func (_u *AlertSessionUpdateOne) AddSessionScoreIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.AddSessionScoreIDs(ids...)
+	return _u
+}
+
+// AddSessionScores adds the "session_scores" edges to the SessionScore entity.
+func (_u *AlertSessionUpdateOne) AddSessionScores(v ...*SessionScore) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSessionScoreIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_u *AlertSessionUpdateOne) Mutation() *AlertSessionMutation {
 	return _u.mutation
@@ -1942,6 +2039,27 @@ func (_u *AlertSessionUpdateOne) RemoveEvents(v ...*Event) *AlertSessionUpdateOn
 func (_u *AlertSessionUpdateOne) ClearChat() *AlertSessionUpdateOne {
 	_u.mutation.ClearChat()
 	return _u
+}
+
+// ClearSessionScores clears all "session_scores" edges to the SessionScore entity.
+func (_u *AlertSessionUpdateOne) ClearSessionScores() *AlertSessionUpdateOne {
+	_u.mutation.ClearSessionScores()
+	return _u
+}
+
+// RemoveSessionScoreIDs removes the "session_scores" edge to SessionScore entities by IDs.
+func (_u *AlertSessionUpdateOne) RemoveSessionScoreIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.RemoveSessionScoreIDs(ids...)
+	return _u
+}
+
+// RemoveSessionScores removes "session_scores" edges to SessionScore entities.
+func (_u *AlertSessionUpdateOne) RemoveSessionScores(v ...*SessionScore) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSessionScoreIDs(ids...)
 }
 
 // Where appends a list predicates to the AlertSessionUpdate builder.
@@ -2486,6 +2604,51 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(chat.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SessionScoresCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSessionScoresIDs(); len(nodes) > 0 && !_u.mutation.SessionScoresCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SessionScoresIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.SessionScoresTable,
+			Columns: []string{alertsession.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

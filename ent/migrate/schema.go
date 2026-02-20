@@ -427,6 +427,69 @@ var (
 			},
 		},
 	}
+	// SessionScoresColumns holds the columns for the "session_scores" table.
+	SessionScoresColumns = []*schema.Column{
+		{Name: "score_id", Type: field.TypeString, Unique: true},
+		{Name: "prompt_hash", Type: field.TypeString, Nullable: true},
+		{Name: "total_score", Type: field.TypeInt, Nullable: true},
+		{Name: "score_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "missing_tools_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "score_triggered_by", Type: field.TypeString},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
+		{Name: "started_at", Type: field.TypeTime},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "error_message", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "session_id", Type: field.TypeString},
+	}
+	// SessionScoresTable holds the schema information for the "session_scores" table.
+	SessionScoresTable = &schema.Table{
+		Name:       "session_scores",
+		Columns:    SessionScoresColumns,
+		PrimaryKey: []*schema.Column{SessionScoresColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "session_scores_alert_sessions_session_scores",
+				Columns:    []*schema.Column{SessionScoresColumns[10]},
+				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionscore_prompt_hash",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[1]},
+			},
+			{
+				Name:    "sessionscore_total_score",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[2]},
+			},
+			{
+				Name:    "sessionscore_status",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[6]},
+			},
+			{
+				Name:    "sessionscore_session_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[10], SessionScoresColumns[6]},
+			},
+			{
+				Name:    "sessionscore_status_started_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[6], SessionScoresColumns[7]},
+			},
+			{
+				Name:    "sessionscore_session_id",
+				Unique:  true,
+				Columns: []*schema.Column{SessionScoresColumns[10]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status IN ('pending', 'in_progress')",
+				},
+			},
+		},
+	}
 	// StagesColumns holds the columns for the "stages" table.
 	StagesColumns = []*schema.Column{
 		{Name: "stage_id", Type: field.TypeString, Unique: true},
@@ -563,6 +626,7 @@ var (
 		LlmInteractionsTable,
 		McpInteractionsTable,
 		MessagesTable,
+		SessionScoresTable,
 		StagesTable,
 		TimelineEventsTable,
 	}
@@ -584,6 +648,7 @@ func init() {
 	MessagesTable.ForeignKeys[0].RefTable = AgentExecutionsTable
 	MessagesTable.ForeignKeys[1].RefTable = AlertSessionsTable
 	MessagesTable.ForeignKeys[2].RefTable = StagesTable
+	SessionScoresTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	StagesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	StagesTable.ForeignKeys[1].RefTable = ChatsTable
 	StagesTable.ForeignKeys[2].RefTable = ChatUserMessagesTable

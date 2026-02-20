@@ -75,6 +75,8 @@ const (
 	EdgeEvents = "events"
 	// EdgeChat holds the string denoting the chat edge name in mutations.
 	EdgeChat = "chat"
+	// EdgeSessionScores holds the string denoting the session_scores edge name in mutations.
+	EdgeSessionScores = "session_scores"
 	// StageFieldID holds the string denoting the ID field of the Stage.
 	StageFieldID = "stage_id"
 	// AgentExecutionFieldID holds the string denoting the ID field of the AgentExecution.
@@ -91,6 +93,8 @@ const (
 	EventFieldID = "id"
 	// ChatFieldID holds the string denoting the ID field of the Chat.
 	ChatFieldID = "chat_id"
+	// SessionScoreFieldID holds the string denoting the ID field of the SessionScore.
+	SessionScoreFieldID = "score_id"
 	// Table holds the table name of the alertsession in the database.
 	Table = "alert_sessions"
 	// StagesTable is the table that holds the stages relation/edge.
@@ -149,6 +153,13 @@ const (
 	ChatInverseTable = "chats"
 	// ChatColumn is the table column denoting the chat relation/edge.
 	ChatColumn = "session_id"
+	// SessionScoresTable is the table that holds the session_scores relation/edge.
+	SessionScoresTable = "session_scores"
+	// SessionScoresInverseTable is the table name for the SessionScore entity.
+	// It exists in this package in order to avoid circular dependency with the "sessionscore" package.
+	SessionScoresInverseTable = "session_scores"
+	// SessionScoresColumn is the table column denoting the session_scores relation/edge.
+	SessionScoresColumn = "session_id"
 )
 
 // Columns holds all SQL columns for alertsession fields.
@@ -436,6 +447,20 @@ func ByChatField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newChatStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// BySessionScoresCount orders the results by session_scores count.
+func BySessionScoresCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSessionScoresStep(), opts...)
+	}
+}
+
+// BySessionScores orders the results by session_scores terms.
+func BySessionScores(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSessionScoresStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newStagesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -490,5 +515,12 @@ func newChatStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ChatInverseTable, ChatFieldID),
 		sqlgraph.Edge(sqlgraph.O2O, false, ChatTable, ChatColumn),
+	)
+}
+func newSessionScoresStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SessionScoresInverseTable, SessionScoreFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SessionScoresTable, SessionScoresColumn),
 	)
 }

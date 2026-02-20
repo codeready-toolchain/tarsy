@@ -121,6 +121,8 @@ func (AlertSession) Edges() []ent.Edge {
 		edge.To("chat", Chat.Type).
 			Unique().
 			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("session_scores", SessionScore.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 
