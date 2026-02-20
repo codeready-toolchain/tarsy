@@ -67,3 +67,13 @@ type ChatConfig struct {
 	MCPServers        []string          `yaml:"mcp_servers,omitempty"`
 	MaxIterations     *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 }
+
+// ScoringConfig defines scoring agent configuration for session quality evaluation
+type ScoringConfig struct {
+	Enabled           bool              `yaml:"enabled"`
+	Agent             string            `yaml:"agent,omitempty"`
+	IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+	LLMProvider       string            `yaml:"llm_provider,omitempty"`
+	MCPServers        []string          `yaml:"mcp_servers,omitempty"`
+	MaxIterations     *int              `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+}

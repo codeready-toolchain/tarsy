@@ -22,10 +22,12 @@ const DefaultIterationTimeout = 120 * time.Second
 func ResolveBackend(strategy config.IterationStrategy) string {
 	switch strategy {
 	case config.IterationStrategyNativeThinking,
-		config.IterationStrategySynthesisNativeThinking:
+		config.IterationStrategySynthesisNativeThinking,
+		config.IterationStrategyScoringNativeThinking:
 		return BackendGoogleNative
 	case config.IterationStrategyLangChain,
-		config.IterationStrategySynthesis:
+		config.IterationStrategySynthesis,
+		config.IterationStrategyScoring:
 		return BackendLangChain
 	default:
 		return BackendLangChain
@@ -224,6 +226,102 @@ func ResolveChatAgentConfig(
 	}
 	if chatCfg != nil && len(chatCfg.MCPServers) > 0 {
 		mcpServers = chatCfg.MCPServers
+	}
+
+	return &ResolvedAgentConfig{
+		AgentName:          agentName,
+		IterationStrategy:  strategy,
+		LLMProvider:        provider,
+		LLMProviderName:    providerName,
+		MaxIterations:      maxIter,
+		IterationTimeout:   DefaultIterationTimeout,
+		MCPServers:         mcpServers,
+		CustomInstructions: agentDef.CustomInstructions,
+		Backend:            ResolveBackend(strategy),
+	}, nil
+}
+
+// ResolveScoringConfig builds the agent configuration for a scoring execution.
+// Hierarchy: defaults → agent definition → chain → scoring config.
+// Similar to ResolveChatAgentConfig but without stage aggregation for MCP servers
+// (scoring isn't part of investigation stages).
+func ResolveScoringConfig(
+	cfg *config.Config,
+	chain *config.ChainConfig,
+	scoringCfg *config.ScoringConfig,
+) (*ResolvedAgentConfig, error) {
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
+	defaults := cfg.Defaults
+
+	// Agent name: scoringCfg.Agent → defaults.ScoringAgent → "ScoringAgent"
+	agentName := "ScoringAgent"
+	if defaults != nil && defaults.ScoringAgent != "" {
+		agentName = defaults.ScoringAgent
+	}
+	if scoringCfg != nil && scoringCfg.Agent != "" {
+		agentName = scoringCfg.Agent
+	}
+
+	// Get agent definition (built-in or user-defined)
+	agentDef, err := cfg.GetAgent(agentName)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found: %w", agentName, err)
+	}
+
+	// Resolve iteration strategy: defaults → agentDef → chain → scoringCfg
+	strategy := defaults.IterationStrategy
+	if agentDef.IterationStrategy != "" {
+		strategy = agentDef.IterationStrategy
+	}
+	if chain.IterationStrategy != "" {
+		strategy = chain.IterationStrategy
+	}
+	if scoringCfg != nil && scoringCfg.IterationStrategy != "" {
+		strategy = scoringCfg.IterationStrategy
+	}
+
+	// Resolve LLM provider: defaults → chain → scoringCfg
+	providerName := defaults.LLMProvider
+	if chain.LLMProvider != "" {
+		providerName = chain.LLMProvider
+	}
+	if scoringCfg != nil && scoringCfg.LLMProvider != "" {
+		providerName = scoringCfg.LLMProvider
+	}
+	provider, err := cfg.GetLLMProvider(providerName)
+	if err != nil {
+		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
+	}
+
+	// Resolve max iterations: defaults → agentDef → chain → scoringCfg
+	maxIter := DefaultMaxIterations
+	if defaults.MaxIterations != nil {
+		maxIter = *defaults.MaxIterations
+	}
+	if agentDef.MaxIterations != nil {
+		maxIter = *agentDef.MaxIterations
+	}
+	if chain.MaxIterations != nil {
+		maxIter = *chain.MaxIterations
+	}
+	if scoringCfg != nil && scoringCfg.MaxIterations != nil {
+		maxIter = *scoringCfg.MaxIterations
+	}
+
+	// Resolve MCP servers: agentDef → chain → scoringCfg
+	// No stage aggregation — scoring isn't part of investigation stages.
+	var mcpServers []string
+	if len(agentDef.MCPServers) > 0 {
+		mcpServers = agentDef.MCPServers
+	}
+	if len(chain.MCPServers) > 0 {
+		mcpServers = chain.MCPServers
+	}
+	if scoringCfg != nil && len(scoringCfg.MCPServers) > 0 {
+		mcpServers = scoringCfg.MCPServers
 	}
 
 	return &ResolvedAgentConfig{

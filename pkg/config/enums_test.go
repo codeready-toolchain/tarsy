@@ -16,6 +16,8 @@ func TestIterationStrategyIsValid(t *testing.T) {
 		{"langchain", IterationStrategyLangChain, true},
 		{"synthesis", IterationStrategySynthesis, true},
 		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, true},
+		{"scoring", IterationStrategyScoring, true},
+		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
 		{"invalid", IterationStrategy("invalid"), false},
 		{"empty", IterationStrategy(""), false},
 	}

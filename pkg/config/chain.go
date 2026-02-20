@@ -19,6 +19,9 @@ type ChainConfig struct {
 	// Optional chat configuration
 	Chat *ChatConfig `yaml:"chat,omitempty"`
 
+	// Optional scoring configuration
+	Scoring *ScoringConfig `yaml:"scoring,omitempty"`
+
 	// Chain-level LLM provider override
 	LLMProvider string `yaml:"llm_provider,omitempty"`
 
