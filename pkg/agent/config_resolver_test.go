@@ -483,7 +483,7 @@ func TestResolveScoringConfig(t *testing.T) {
 				MaxIterations: &maxIter25,
 				ScoringAgent:  "CustomScorer",
 			},
-			AgentRegistry: cfg.AgentRegistry,
+			AgentRegistry:       cfg.AgentRegistry,
 			LLMProviderRegistry: cfg.LLMProviderRegistry,
 		}
 		chain := &config.ChainConfig{}
@@ -500,7 +500,7 @@ func TestResolveScoringConfig(t *testing.T) {
 				MaxIterations: &maxIter25,
 				ScoringAgent:  "KubernetesAgent",
 			},
-			AgentRegistry: cfg.AgentRegistry,
+			AgentRegistry:       cfg.AgentRegistry,
 			LLMProviderRegistry: cfg.LLMProviderRegistry,
 		}
 		chain := &config.ChainConfig{}

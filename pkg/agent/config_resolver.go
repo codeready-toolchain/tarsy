@@ -56,49 +56,25 @@ func ResolveAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentConfig.Name, err)
 	}
 
-	// Resolve iteration strategy: defaults.IterationStrategy → agentDef.IterationStrategy
-	// → chain.IterationStrategy → agentConfig.IterationStrategy (later values override earlier ones).
-	strategy := defaults.IterationStrategy
-	if agentDef.IterationStrategy != "" {
-		strategy = agentDef.IterationStrategy
-	}
-	if chain.IterationStrategy != "" {
-		strategy = chain.IterationStrategy
-	}
-	if agentConfig.IterationStrategy != "" {
-		strategy = agentConfig.IterationStrategy
-	}
+	// Resolve iteration strategy (defaults → agentDef → chain → agentConfig)
+	strategy := resolveIterationStrategy(
+		defaults.IterationStrategy, agentDef.IterationStrategy,
+		chain.IterationStrategy, agentConfig.IterationStrategy,
+	)
 
-	// Resolve LLM provider (stage-agent > chain > defaults)
-	providerName := defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if agentConfig.LLMProvider != "" {
-		providerName = agentConfig.LLMProvider
-	}
-	provider, err := cfg.GetLLMProvider(providerName)
+	// Resolve LLM provider (defaults → chain → agentConfig)
+	provider, providerName, err := resolveLLMProvider(cfg,
+		defaults.LLMProvider, chain.LLMProvider, agentConfig.LLMProvider,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
+		return nil, err
 	}
 
-	// Resolve max iterations (stage-agent > stage > chain > agent-def > defaults)
-	maxIter := DefaultMaxIterations
-	if defaults.MaxIterations != nil {
-		maxIter = *defaults.MaxIterations
-	}
-	if agentDef.MaxIterations != nil {
-		maxIter = *agentDef.MaxIterations
-	}
-	if chain.MaxIterations != nil {
-		maxIter = *chain.MaxIterations
-	}
-	if stageConfig.MaxIterations != nil {
-		maxIter = *stageConfig.MaxIterations
-	}
-	if agentConfig.MaxIterations != nil {
-		maxIter = *agentConfig.MaxIterations
-	}
+	// Resolve max iterations (defaults → agentDef → chain → stage → agentConfig)
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations,
+		chain.MaxIterations, stageConfig.MaxIterations, agentConfig.MaxIterations,
+	)
 
 	// Resolve MCP servers (stage-agent > stage > chain > agent-def > defaults)
 	var mcpServers []string
@@ -149,9 +125,6 @@ func ResolveChatProviderName(defaults *config.Defaults, chain *config.ChainConfi
 // ResolveChatAgentConfig builds the agent configuration for a chat execution.
 // Hierarchy: defaults → agent definition → chain → chat config.
 // Similar to ResolveAgentConfig but without stage-level overrides.
-// NOTE: The iteration strategy, LLM provider, and max iterations resolution
-// blocks parallel ResolveAgentConfig. If a third resolver variant is needed,
-// consider extracting common resolution helpers to reduce duplication.
 func ResolveChatAgentConfig(
 	cfg *config.Config,
 	chain *config.ChainConfig,
@@ -175,39 +148,35 @@ func ResolveChatAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentName, err)
 	}
 
-	// Resolve iteration strategy: defaults → agentDef → chain → chatCfg
-	strategy := defaults.IterationStrategy
-	if agentDef.IterationStrategy != "" {
-		strategy = agentDef.IterationStrategy
-	}
-	if chain.IterationStrategy != "" {
-		strategy = chain.IterationStrategy
-	}
-	if chatCfg != nil && chatCfg.IterationStrategy != "" {
-		strategy = chatCfg.IterationStrategy
+	// Extract optional overrides from chatCfg (may be nil)
+	var chatStrategy config.IterationStrategy
+	var chatProvider string
+	var chatMaxIter *int
+	if chatCfg != nil {
+		chatStrategy = chatCfg.IterationStrategy
+		chatProvider = chatCfg.LLMProvider
+		chatMaxIter = chatCfg.MaxIterations
 	}
 
-	// Resolve LLM provider: defaults → chain → chatCfg
-	providerName := ResolveChatProviderName(defaults, chain, chatCfg)
-	provider, err := cfg.GetLLMProvider(providerName)
+	// Resolve iteration strategy (defaults → agentDef → chain → chatCfg)
+	strategy := resolveIterationStrategy(
+		defaults.IterationStrategy, agentDef.IterationStrategy,
+		chain.IterationStrategy, chatStrategy,
+	)
+
+	// Resolve LLM provider (defaults → chain → chatCfg)
+	provider, providerName, err := resolveLLMProvider(cfg,
+		defaults.LLMProvider, chain.LLMProvider, chatProvider,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
+		return nil, err
 	}
 
-	// Resolve max iterations: defaults → agentDef → chain → chatCfg
-	maxIter := DefaultMaxIterations
-	if defaults.MaxIterations != nil {
-		maxIter = *defaults.MaxIterations
-	}
-	if agentDef.MaxIterations != nil {
-		maxIter = *agentDef.MaxIterations
-	}
-	if chain.MaxIterations != nil {
-		maxIter = *chain.MaxIterations
-	}
-	if chatCfg != nil && chatCfg.MaxIterations != nil {
-		maxIter = *chatCfg.MaxIterations
-	}
+	// Resolve max iterations (defaults → agentDef → chain → chatCfg)
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations,
+		chain.MaxIterations, chatMaxIter,
+	)
 
 	// Resolve MCP servers for chat (lowest-to-highest precedence):
 	// agentDef → chain (or aggregated chain stages) → chatCfg
@@ -256,7 +225,7 @@ func ResolveScoringConfig(
 
 	defaults := cfg.Defaults
 
-	// Agent name: hardcoded → defaults → scoringCfg
+	// Agent name: "ScoringAgent" → defaults.ScoringAgent → scoringCfg.Agent
 	agentName := "ScoringAgent"
 	if defaults.ScoringAgent != "" {
 		agentName = defaults.ScoringAgent
@@ -271,45 +240,35 @@ func ResolveScoringConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentName, err)
 	}
 
-	// Resolve iteration strategy: defaults → agentDef → chain → scoringCfg
-	strategy := defaults.IterationStrategy
-	if agentDef.IterationStrategy != "" {
-		strategy = agentDef.IterationStrategy
-	}
-	if chain.IterationStrategy != "" {
-		strategy = chain.IterationStrategy
-	}
-	if scoringCfg != nil && scoringCfg.IterationStrategy != "" {
-		strategy = scoringCfg.IterationStrategy
+	// Extract optional overrides from scoringCfg (may be nil)
+	var scoringStrategy config.IterationStrategy
+	var scoringProvider string
+	var scoringMaxIter *int
+	if scoringCfg != nil {
+		scoringStrategy = scoringCfg.IterationStrategy
+		scoringProvider = scoringCfg.LLMProvider
+		scoringMaxIter = scoringCfg.MaxIterations
 	}
 
-	// Resolve LLM provider: defaults → chain → scoringCfg
-	providerName := defaults.LLMProvider
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if scoringCfg != nil && scoringCfg.LLMProvider != "" {
-		providerName = scoringCfg.LLMProvider
-	}
-	provider, err := cfg.GetLLMProvider(providerName)
+	// Resolve iteration strategy (defaults → agentDef → chain → scoringCfg)
+	strategy := resolveIterationStrategy(
+		defaults.IterationStrategy, agentDef.IterationStrategy,
+		chain.IterationStrategy, scoringStrategy,
+	)
+
+	// Resolve LLM provider (defaults → chain → scoringCfg)
+	provider, providerName, err := resolveLLMProvider(cfg,
+		defaults.LLMProvider, chain.LLMProvider, scoringProvider,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("LLM provider %q not found: %w", providerName, err)
+		return nil, err
 	}
 
-	// Resolve max iterations: defaults → agentDef → chain → scoringCfg
-	maxIter := DefaultMaxIterations
-	if defaults.MaxIterations != nil {
-		maxIter = *defaults.MaxIterations
-	}
-	if agentDef.MaxIterations != nil {
-		maxIter = *agentDef.MaxIterations
-	}
-	if chain.MaxIterations != nil {
-		maxIter = *chain.MaxIterations
-	}
-	if scoringCfg != nil && scoringCfg.MaxIterations != nil {
-		maxIter = *scoringCfg.MaxIterations
-	}
+	// Resolve max iterations (defaults → agentDef → chain → scoringCfg)
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations,
+		chain.MaxIterations, scoringMaxIter,
+	)
 
 	// Resolve MCP servers: agentDef → chain → scoringCfg
 	// No stage aggregation — scoring isn't part of investigation stages.
@@ -335,6 +294,46 @@ func ResolveScoringConfig(
 		CustomInstructions: agentDef.CustomInstructions,
 		Backend:            ResolveBackend(strategy),
 	}, nil
+}
+
+// resolveIterationStrategy returns the last non-empty strategy from the
+// given overrides, listed in lowest-to-highest precedence order.
+func resolveIterationStrategy(overrides ...config.IterationStrategy) config.IterationStrategy {
+	var strategy config.IterationStrategy
+	for _, o := range overrides {
+		if o != "" {
+			strategy = o
+		}
+	}
+	return strategy
+}
+
+// resolveLLMProvider picks the last non-empty provider name from the given
+// overrides and looks it up in the config registry.
+func resolveLLMProvider(cfg *config.Config, providerNames ...string) (*config.LLMProviderConfig, string, error) {
+	var name string
+	for _, n := range providerNames {
+		if n != "" {
+			name = n
+		}
+	}
+	provider, err := cfg.GetLLMProvider(name)
+	if err != nil {
+		return nil, "", fmt.Errorf("LLM provider %q not found: %w", name, err)
+	}
+	return provider, name, nil
+}
+
+// resolveMaxIterations returns the last non-nil value from the given
+// overrides, falling back to DefaultMaxIterations.
+func resolveMaxIterations(overrides ...*int) int {
+	maxIter := DefaultMaxIterations
+	for _, o := range overrides {
+		if o != nil {
+			maxIter = *o
+		}
+	}
+	return maxIter
 }
 
 // AggregateChainMCPServers collects the union of all MCP servers used by the

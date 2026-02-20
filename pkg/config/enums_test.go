@@ -29,6 +29,29 @@ func TestIterationStrategyIsValid(t *testing.T) {
 	}
 }
 
+func TestIterationStrategyIsValidForScoring(t *testing.T) {
+	tests := []struct {
+		name     string
+		strategy IterationStrategy
+		valid    bool
+	}{
+		{"scoring", IterationStrategyScoring, true},
+		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
+		{"langchain", IterationStrategyLangChain, false},
+		{"native-thinking", IterationStrategyNativeThinking, false},
+		{"synthesis", IterationStrategySynthesis, false},
+		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, false},
+		{"invalid", IterationStrategy("invalid"), false},
+		{"empty", IterationStrategy(""), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.valid, tt.strategy.IsValidForScoring())
+		})
+	}
+}
+
 func TestSuccessPolicyIsValid(t *testing.T) {
 	tests := []struct {
 		name   string
