@@ -438,6 +438,7 @@ func TestResolveScoringConfig(t *testing.T) {
 
 	scoringAgentDef := &config.AgentConfig{
 		MCPServers:         []string{"scoring-server"},
+		IterationStrategy:  config.IterationStrategyScoring,
 		CustomInstructions: "You are a scoring agent",
 	}
 
@@ -513,10 +514,8 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Equal(t, "CustomScorer", resolved.AgentName)
 	})
 
-	t.Run("strategy resolution: scoringCfg overrides chain overrides agentDef overrides defaults", func(t *testing.T) {
-		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyNativeThinking,
-		}
+	t.Run("strategy resolution: scoringCfg overrides agentDef", func(t *testing.T) {
+		chain := &config.ChainConfig{}
 		scoringCfg := &config.ScoringConfig{
 			Agent:             "CustomScorer",
 			IterationStrategy: config.IterationStrategyScoringNativeThinking,
@@ -526,6 +525,31 @@ func TestResolveScoringConfig(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, config.IterationStrategyScoringNativeThinking, resolved.IterationStrategy)
 		assert.Equal(t, BackendGoogleNative, resolved.Backend)
+	})
+
+	t.Run("chain iteration strategy does not affect scoring", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			IterationStrategy: config.IterationStrategyNativeThinking,
+		}
+
+		resolved, err := ResolveScoringConfig(cfg, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, config.IterationStrategyScoring, resolved.IterationStrategy)
+	})
+
+	t.Run("errors on invalid resolved scoring strategy", func(t *testing.T) {
+		badCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"ScoringAgent": {IterationStrategy: config.IterationStrategyNativeThinking},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+
+		_, err := ResolveScoringConfig(badCfg, chain, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid scoring strategy")
 	})
 
 	t.Run("LLM provider resolution: scoringCfg overrides chain overrides defaults", func(t *testing.T) {

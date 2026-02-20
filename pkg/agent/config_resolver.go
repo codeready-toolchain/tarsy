@@ -250,11 +250,16 @@ func ResolveScoringConfig(
 		scoringMaxIter = scoringCfg.MaxIterations
 	}
 
-	// Resolve iteration strategy (defaults → agentDef → chain → scoringCfg)
+	// Resolve iteration strategy (agentDef → scoringCfg).
+	// chain.IterationStrategy is intentionally excluded: the chain-level
+	// strategy targets investigation agents and would let non-scoring
+	// strategies (e.g. "native-thinking") bleed into scoring resolution.
 	strategy := resolveIterationStrategy(
-		defaults.IterationStrategy, agentDef.IterationStrategy,
-		chain.IterationStrategy, scoringStrategy,
+		agentDef.IterationStrategy, scoringStrategy,
 	)
+	if strategy != "" && !strategy.IsValidForScoring() {
+		return nil, fmt.Errorf("invalid scoring strategy %q: must be a scoring strategy", strategy)
+	}
 
 	// Resolve LLM provider (defaults → chain → scoringCfg)
 	provider, providerName, err := resolveLLMProvider(cfg,

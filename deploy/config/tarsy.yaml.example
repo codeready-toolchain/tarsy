@@ -296,6 +296,8 @@ agents:
 
   # Example: Override built-in ScoringAgent
   # ScoringAgent evaluates session quality after investigation completes.
+  # iteration_strategy MUST be a scoring strategy: "scoring" or "scoring-native-thinking".
+  # Chain-level iteration_strategy does NOT inherit into scoring resolution.
   # ScoringAgent:
   #   iteration_strategy: "scoring"
   #   custom_instructions: |
@@ -325,7 +327,7 @@ agent_chains:
     scoring:
       enabled: true
       agent: "ScoringAgent"
-      iteration_strategy: "scoring"
+      iteration_strategy: "scoring"  # Must be "scoring" or "scoring-native-thinking"
       llm_provider: "google-default"
       max_iterations: 5
 
