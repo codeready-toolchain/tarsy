@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/schema"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
 
@@ -64,6 +65,12 @@ func init() {
 	messageDescCreatedAt := messageFields[10].Descriptor()
 	// message.DefaultCreatedAt holds the default value on creation for the created_at field.
 	message.DefaultCreatedAt = messageDescCreatedAt.Default.(func() time.Time)
+	sessionscoreFields := schema.SessionScore{}.Fields()
+	_ = sessionscoreFields
+	// sessionscoreDescStartedAt is the schema descriptor for started_at field.
+	sessionscoreDescStartedAt := sessionscoreFields[8].Descriptor()
+	// sessionscore.DefaultStartedAt holds the default value on creation for the started_at field.
+	sessionscore.DefaultStartedAt = sessionscoreDescStartedAt.Default.(func() time.Time)
 	stageFields := schema.Stage{}.Fields()
 	_ = stageFields
 	timelineeventFields := schema.TimelineEvent{}.Fields()

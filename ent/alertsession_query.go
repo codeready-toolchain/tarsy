@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -40,6 +41,7 @@ type AlertSessionQuery struct {
 	withMcpInteractions *MCPInteractionQuery
 	withEvents          *EventQuery
 	withChat            *ChatQuery
+	withSessionScores   *SessionScoreQuery
 	modifiers           []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -253,6 +255,28 @@ func (_q *AlertSessionQuery) QueryChat() *ChatQuery {
 	return query
 }
 
+// QuerySessionScores chains the current query on the "session_scores" edge.
+func (_q *AlertSessionQuery) QuerySessionScores() *SessionScoreQuery {
+	query := (&SessionScoreClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, selector),
+			sqlgraph.To(sessionscore.Table, sessionscore.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.SessionScoresTable, alertsession.SessionScoresColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first AlertSession entity from the query.
 // Returns a *NotFoundError when no AlertSession was found.
 func (_q *AlertSessionQuery) First(ctx context.Context) (*AlertSession, error) {
@@ -453,6 +477,7 @@ func (_q *AlertSessionQuery) Clone() *AlertSessionQuery {
 		withMcpInteractions: _q.withMcpInteractions.Clone(),
 		withEvents:          _q.withEvents.Clone(),
 		withChat:            _q.withChat.Clone(),
+		withSessionScores:   _q.withSessionScores.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -548,6 +573,17 @@ func (_q *AlertSessionQuery) WithChat(opts ...func(*ChatQuery)) *AlertSessionQue
 	return _q
 }
 
+// WithSessionScores tells the query-builder to eager-load the nodes that are connected to
+// the "session_scores" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AlertSessionQuery) WithSessionScores(opts ...func(*SessionScoreQuery)) *AlertSessionQuery {
+	query := (&SessionScoreClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSessionScores = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -626,7 +662,7 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*AlertSession{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [9]bool{
 			_q.withStages != nil,
 			_q.withAgentExecutions != nil,
 			_q.withTimelineEvents != nil,
@@ -635,6 +671,7 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withMcpInteractions != nil,
 			_q.withEvents != nil,
 			_q.withChat != nil,
+			_q.withSessionScores != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -710,6 +747,13 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	if query := _q.withChat; query != nil {
 		if err := _q.loadChat(ctx, query, nodes, nil,
 			func(n *AlertSession, e *Chat) { n.Edges.Chat = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSessionScores; query != nil {
+		if err := _q.loadSessionScores(ctx, query, nodes,
+			func(n *AlertSession) { n.Edges.SessionScores = []*SessionScore{} },
+			func(n *AlertSession, e *SessionScore) { n.Edges.SessionScores = append(n.Edges.SessionScores, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -938,6 +982,36 @@ func (_q *AlertSessionQuery) loadChat(ctx context.Context, query *ChatQuery, nod
 	}
 	query.Where(predicate.Chat(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(alertsession.ChatColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.SessionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "session_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AlertSessionQuery) loadSessionScores(ctx context.Context, query *SessionScoreQuery, nodes []*AlertSession, init func(*AlertSession), assign func(*AlertSession, *SessionScore)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AlertSession)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(sessionscore.FieldSessionID)
+	}
+	query.Where(predicate.SessionScore(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(alertsession.SessionScoresColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

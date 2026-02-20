@@ -105,6 +105,18 @@ func (f MessageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MessageMutation", m)
 }
 
+// The SessionScoreFunc type is an adapter to allow the use of ordinary
+// function as SessionScore mutator.
+type SessionScoreFunc func(context.Context, *ent.SessionScoreMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionScoreFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionScoreMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionScoreMutation", m)
+}
+
 // The StageFunc type is an adapter to allow the use of ordinary
 // function as Stage mutator.
 type StageFunc func(context.Context, *ent.StageMutation) (ent.Value, error)

@@ -20,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -90,6 +91,7 @@ func checkColumn(t, c string) error {
 			llminteraction.Table:  llminteraction.ValidColumn,
 			mcpinteraction.Table:  mcpinteraction.ValidColumn,
 			message.Table:         message.ValidColumn,
+			sessionscore.Table:    sessionscore.ValidColumn,
 			stage.Table:           stage.ValidColumn,
 			timelineevent.Table:   timelineevent.ValidColumn,
 		})

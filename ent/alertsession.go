@@ -87,9 +87,11 @@ type AlertSessionEdges struct {
 	Events []*Event `json:"events,omitempty"`
 	// Chat holds the value of the chat edge.
 	Chat *Chat `json:"chat,omitempty"`
+	// SessionScores holds the value of the session_scores edge.
+	SessionScores []*SessionScore `json:"session_scores,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [9]bool
 }
 
 // StagesOrErr returns the Stages value or an error if the edge
@@ -164,6 +166,15 @@ func (e AlertSessionEdges) ChatOrErr() (*Chat, error) {
 		return nil, &NotFoundError{label: chat.Label}
 	}
 	return nil, &NotLoadedError{edge: "chat"}
+}
+
+// SessionScoresOrErr returns the SessionScores value or an error if the edge
+// was not loaded in eager-loading.
+func (e AlertSessionEdges) SessionScoresOrErr() ([]*SessionScore, error) {
+	if e.loadedTypes[8] {
+		return e.SessionScores, nil
+	}
+	return nil, &NotLoadedError{edge: "session_scores"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -401,6 +412,11 @@ func (_m *AlertSession) QueryEvents() *EventQuery {
 // QueryChat queries the "chat" edge of the AlertSession entity.
 func (_m *AlertSession) QueryChat() *ChatQuery {
 	return NewAlertSessionClient(_m.config).QueryChat(_m)
+}
+
+// QuerySessionScores queries the "session_scores" edge of the AlertSession entity.
+func (_m *AlertSession) QuerySessionScores() *SessionScoreQuery {
+	return NewAlertSessionClient(_m.config).QuerySessionScores(_m)
 }
 
 // Update returns a builder for updating this AlertSession.
