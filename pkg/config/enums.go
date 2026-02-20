@@ -12,6 +12,10 @@ const (
 	IterationStrategySynthesis IterationStrategy = "synthesis"
 	// IterationStrategySynthesisNativeThinking is synthesis with native thinking
 	IterationStrategySynthesisNativeThinking IterationStrategy = "synthesis-native-thinking"
+	// IterationStrategyScoring is for scoring session quality evaluation
+	IterationStrategyScoring IterationStrategy = "scoring"
+	// IterationStrategyScoringNativeThinking is scoring with native thinking
+	IterationStrategyScoringNativeThinking IterationStrategy = "scoring-native-thinking"
 )
 
 // IsValid checks if the iteration strategy is valid
@@ -20,7 +24,19 @@ func (s IterationStrategy) IsValid() bool {
 	case IterationStrategyNativeThinking,
 		IterationStrategyLangChain,
 		IterationStrategySynthesis,
-		IterationStrategySynthesisNativeThinking:
+		IterationStrategySynthesisNativeThinking,
+		IterationStrategyScoring,
+		IterationStrategyScoringNativeThinking:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsValidForScoring checks whether the strategy is a valid scoring strategy
+func (s IterationStrategy) IsValidForScoring() bool {
+	switch s {
+	case IterationStrategyScoring, IterationStrategyScoringNativeThinking:
 		return true
 	default:
 		return false

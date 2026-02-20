@@ -105,6 +105,12 @@ func (v *Validator) validateDefaults() error {
 		return nil
 	}
 
+	// Validate scoring agent reference if specified
+	if defaults.ScoringAgent != "" && !v.cfg.AgentRegistry.Has(defaults.ScoringAgent) {
+		return NewValidationError("defaults", "", "scoring_agent",
+			fmt.Errorf("agent '%s' not found", defaults.ScoringAgent))
+	}
+
 	// Validate alert masking configuration
 	if defaults.AlertMasking != nil && defaults.AlertMasking.Enabled {
 		builtin := GetBuiltinConfig()
@@ -199,6 +205,40 @@ func (v *Validator) validateChains() error {
 			// Validate chat max iterations if specified
 			if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
 				return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
+			}
+		}
+
+		// Validate scoring agent if enabled
+		if chain.Scoring != nil && chain.Scoring.Enabled {
+			// Scoring agent is required when scoring is enabled
+			if chain.Scoring.Agent == "" {
+				return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("scoring.agent required when scoring is enabled"))
+			}
+
+			if !v.cfg.AgentRegistry.Has(chain.Scoring.Agent) {
+				return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("agent '%s' not found", chain.Scoring.Agent))
+			}
+
+			// Validate scoring iteration strategy if specified
+			if chain.Scoring.IterationStrategy != "" && !chain.Scoring.IterationStrategy.IsValidForScoring() {
+				return NewValidationError("chain", chainID, "scoring.iteration_strategy", fmt.Errorf("invalid scoring strategy: %s", chain.Scoring.IterationStrategy))
+			}
+
+			// Validate scoring LLM provider if specified
+			if chain.Scoring.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Scoring.LLMProvider) {
+				return NewValidationError("chain", chainID, "scoring.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Scoring.LLMProvider))
+			}
+
+			// Validate scoring max iterations if specified
+			if chain.Scoring.MaxIterations != nil && *chain.Scoring.MaxIterations < 1 {
+				return NewValidationError("chain", chainID, "scoring.max_iterations", fmt.Errorf("must be at least 1"))
+			}
+
+			// Validate scoring MCP servers if specified
+			for _, serverID := range chain.Scoring.MCPServers {
+				if !v.cfg.MCPServerRegistry.Has(serverID) {
+					return NewValidationError("chain", chainID, "scoring.mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
+				}
 			}
 		}
 
@@ -443,6 +483,11 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		// Chat-level LLM provider
 		if chain.Chat != nil && chain.Chat.LLMProvider != "" {
 			referenced[chain.Chat.LLMProvider] = true
+		}
+
+		// Scoring-level LLM provider
+		if chain.Scoring != nil && chain.Scoring.LLMProvider != "" {
+			referenced[chain.Scoring.LLMProvider] = true
 		}
 
 		// Stage-level LLM providers

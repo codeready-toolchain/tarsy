@@ -1319,6 +1319,265 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		// Scoring validation tests
+		{
+			name: "scoring enabled but no agent",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring:    &ScoringConfig{Enabled: true},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "scoring.agent required when scoring is enabled",
+		},
+		{
+			name: "scoring with invalid agent",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled: true,
+						Agent:   "nonexistent-scoring-agent",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "agent 'nonexistent-scoring-agent' not found",
+		},
+		{
+			name: "scoring with invalid strategy",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:           true,
+						Agent:             "test-agent",
+						IterationStrategy: "invalid-strategy",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "invalid scoring strategy",
+		},
+		{
+			name: "scoring with valid strategy unfit for scoring",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:           true,
+						Agent:             "test-agent",
+						IterationStrategy: "synthesis",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "invalid scoring strategy",
+		},
+		{
+			name: "scoring with invalid LLM provider",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:     true,
+						Agent:       "test-agent",
+						LLMProvider: "nonexistent-provider",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "LLM provider 'nonexistent-provider' not found",
+		},
+		{
+			name: "scoring with invalid max iterations",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:       true,
+						Agent:         "test-agent",
+						MaxIterations: &maxIter0,
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "must be at least 1",
+		},
+		{
+			name: "scoring with invalid MCP server",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:    true,
+						Agent:      "test-agent",
+						MCPServers: []string{"nonexistent-server"},
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "MCP server 'nonexistent-server' not found",
+		},
+		{
+			name: "scoring disabled with invalid fields passes",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:           false,
+						Agent:             "nonexistent-agent",
+						IterationStrategy: "invalid",
+						LLMProvider:       "nonexistent",
+						MaxIterations:     &maxIter0,
+						MCPServers:        []string{"nonexistent-server"},
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid scoring config passes",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Scoring: &ScoringConfig{
+						Enabled:           true,
+						Agent:             "scoring-agent",
+						IterationStrategy: IterationStrategyScoring,
+						LLMProvider:       "test-provider",
+						MaxIterations:     &maxIter15,
+						MCPServers:        []string{"test-server"},
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent":    {MCPServers: []string{"test-server"}},
+				"scoring-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "test-model",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1499,6 +1758,61 @@ func TestValidateDefaults(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
 				Defaults: tt.defaults,
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateDefaults()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateDefaultsScoringAgent(t *testing.T) {
+	tests := []struct {
+		name     string
+		defaults *Defaults
+		agents   map[string]*AgentConfig
+		wantErr  bool
+		errMsg   string
+	}{
+		{
+			name: "valid scoring agent passes",
+			defaults: &Defaults{
+				ScoringAgent: "scoring-agent",
+			},
+			agents: map[string]*AgentConfig{
+				"scoring-agent": {},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid scoring agent fails",
+			defaults: &Defaults{
+				ScoringAgent: "nonexistent-agent",
+			},
+			agents:  map[string]*AgentConfig{},
+			wantErr: true,
+			errMsg:  "agent 'nonexistent-agent' not found",
+		},
+		{
+			name:     "empty scoring agent passes",
+			defaults: &Defaults{},
+			agents:   map[string]*AgentConfig{},
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Defaults:      tt.defaults,
+				AgentRegistry: NewAgentRegistry(tt.agents),
 			}
 
 			validator := NewValidator(cfg)

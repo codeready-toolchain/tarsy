@@ -94,6 +94,9 @@ defaults:
   # Default success policy for parallel stages ("all" or "any")
   success_policy: "any"
   
+  # Default scoring agent name (fallback when chain has no scoring config)
+  scoring_agent: "ScoringAgent"
+  
   # Default alert type for new sessions (used in UI dropdown)
   alert_type: "kubernetes"
   
@@ -223,7 +226,7 @@ mcp_servers:
 # CUSTOM AGENT DEFINITIONS
 # =============================================================================
 # Define custom agents or override built-in agents
-# Built-in agents: KubernetesAgent, ChatAgent, SynthesisAgent
+# Built-in agents: KubernetesAgent, ChatAgent, SynthesisAgent, ScoringAgent
 
 agents:
   # Example: Security-focused agent
@@ -274,6 +277,33 @@ agents:
       - Consider dependencies and external factors
       - Provide clear, actionable recommendations
 
+  # Example: Override built-in ChatAgent
+  # ChatAgent inherits MCP servers from chain stages via aggregation,
+  # so you typically don't set mcp_servers here.
+  # ChatAgent:
+  #   custom_instructions: |
+  #     You are a follow-up chat agent for SRE investigations.
+  #     Use the investigation results to answer questions concisely.
+
+  # Example: Override built-in SynthesisAgent
+  # SynthesisAgent combines results from parallel investigation agents.
+  # It doesn't call tools, so mcp_servers is typically empty.
+  # SynthesisAgent:
+  #   iteration_strategy: "synthesis-native-thinking"
+  #   custom_instructions: |
+  #     You are an Incident Commander synthesizing parallel investigation results.
+  #     Produce a unified diagnosis with severity, root cause, and remediation steps.
+
+  # Example: Override built-in ScoringAgent
+  # ScoringAgent evaluates session quality after investigation completes.
+  # iteration_strategy MUST be a scoring strategy: "scoring" or "scoring-native-thinking".
+  # Chain-level iteration_strategy does NOT inherit into scoring resolution.
+  # ScoringAgent:
+  #   iteration_strategy: "scoring"
+  #   custom_instructions: |
+  #     You are a session quality evaluator.
+  #     Score the investigation based on thoroughness, accuracy, and actionability.
+
 # =============================================================================
 # AGENT CHAIN DEFINITIONS
 # =============================================================================
@@ -294,6 +324,12 @@ agent_chains:
     chat:
       enabled: true
       agent: "ChatAgent"
+    scoring:
+      enabled: true
+      agent: "ScoringAgent"
+      iteration_strategy: "scoring"  # Must be "scoring" or "scoring-native-thinking"
+      llm_provider: "google-default"
+      max_iterations: 5
 
   # Multi-stage chain with different strategies
   kubernetes-deep-troubleshooting:

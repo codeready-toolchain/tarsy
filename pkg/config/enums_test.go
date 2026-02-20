@@ -16,6 +16,8 @@ func TestIterationStrategyIsValid(t *testing.T) {
 		{"langchain", IterationStrategyLangChain, true},
 		{"synthesis", IterationStrategySynthesis, true},
 		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, true},
+		{"scoring", IterationStrategyScoring, true},
+		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
 		{"invalid", IterationStrategy("invalid"), false},
 		{"empty", IterationStrategy(""), false},
 	}
@@ -23,6 +25,29 @@ func TestIterationStrategyIsValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.valid, tt.strategy.IsValid())
+		})
+	}
+}
+
+func TestIterationStrategyIsValidForScoring(t *testing.T) {
+	tests := []struct {
+		name     string
+		strategy IterationStrategy
+		valid    bool
+	}{
+		{"scoring", IterationStrategyScoring, true},
+		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
+		{"langchain", IterationStrategyLangChain, false},
+		{"native-thinking", IterationStrategyNativeThinking, false},
+		{"synthesis", IterationStrategySynthesis, false},
+		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, false},
+		{"invalid", IterationStrategy("invalid"), false},
+		{"empty", IterationStrategy(""), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.valid, tt.strategy.IsValidForScoring())
 		})
 	}
 }

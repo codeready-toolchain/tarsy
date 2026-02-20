@@ -12,6 +12,9 @@ type Defaults struct {
 	// Iteration strategy default
 	IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
 
+	// Default scoring agent name (fallback when chain has no scoring config)
+	ScoringAgent string `yaml:"scoring_agent,omitempty"`
+
 	// Success policy default for parallel stages
 	SuccessPolicy SuccessPolicy `yaml:"success_policy,omitempty"`
 
