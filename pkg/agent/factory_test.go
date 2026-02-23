@@ -73,4 +73,43 @@ func TestAgentFactory_CreateAgent(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "execution context and config must not be nil")
 	})
+
+	t.Run("scoring strategy produces ScoringAgent", func(t *testing.T) {
+		factory := NewAgentFactory(&mockControllerFactory{})
+		execCtx := &ExecutionContext{
+			Config: &ResolvedAgentConfig{
+				IterationStrategy: config.IterationStrategyScoring,
+			},
+		}
+
+		agent, err := factory.CreateAgent(execCtx)
+		require.NoError(t, err)
+		assert.IsType(t, &ScoringAgent{}, agent)
+	})
+
+	t.Run("scoring native-thinking strategy produces ScoringAgent", func(t *testing.T) {
+		factory := NewAgentFactory(&mockControllerFactory{})
+		execCtx := &ExecutionContext{
+			Config: &ResolvedAgentConfig{
+				IterationStrategy: config.IterationStrategyScoringNativeThinking,
+			},
+		}
+
+		agent, err := factory.CreateAgent(execCtx)
+		require.NoError(t, err)
+		assert.IsType(t, &ScoringAgent{}, agent)
+	})
+
+	t.Run("non-scoring strategy produces BaseAgent", func(t *testing.T) {
+		factory := NewAgentFactory(&mockControllerFactory{})
+		execCtx := &ExecutionContext{
+			Config: &ResolvedAgentConfig{
+				IterationStrategy: config.IterationStrategyLangChain,
+			},
+		}
+
+		agent, err := factory.CreateAgent(execCtx)
+		require.NoError(t, err)
+		assert.IsType(t, &BaseAgent{}, agent)
+	})
 }
