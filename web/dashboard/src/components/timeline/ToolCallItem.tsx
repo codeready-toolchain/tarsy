@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined } from '@mui/icons-material';
 import JsonDisplay from '../shared/JsonDisplay';
@@ -60,6 +60,9 @@ const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
  */
 function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    setExpanded(expandAll);
+  }, [expandAll]);
   const isExpanded = expandAll || expanded;
 
   // Extract data from FlowItem metadata
@@ -121,7 +124,10 @@ function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
           cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
           '&:hover': { bgcolor: alpha(theme.palette[accentKey].main, 0.2) }
         })}
-        onClick={() => setExpanded(!isExpanded)}
+        onClick={() => {
+          if (expandAll) return;
+          setExpanded((prev) => !prev);
+        }}
       >
         <StatusIcon sx={(theme) => ({ fontSize: 18, color: theme.palette[accentKey].main })} />
         <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette[accentKey].main })}>
