@@ -9,6 +9,7 @@ import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 
 interface ToolCallItemProps {
   item: FlowItem;
+  expandAll?: boolean;
 }
 
 /**
@@ -57,8 +58,9 @@ const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
  * ToolCallItem - renders llm_tool_call timeline events.
  * Expandable box showing tool name, arguments preview, duration, and result.
  */
-function ToolCallItem({ item }: ToolCallItemProps) {
+function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false);
+  const isExpanded = expandAll || expanded;
 
   // Extract data from FlowItem metadata
   const toolName = (item.metadata?.tool_name as string) || 'unknown';
@@ -119,7 +121,7 @@ function ToolCallItem({ item }: ToolCallItemProps) {
           cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
           '&:hover': { bgcolor: alpha(theme.palette[accentKey].main, 0.2) }
         })}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setExpanded(!isExpanded)}
       >
         <StatusIcon sx={(theme) => ({ fontSize: 18, color: theme.palette[accentKey].main })} />
         <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette[accentKey].main })}>
@@ -134,11 +136,11 @@ function ToolCallItem({ item }: ToolCallItemProps) {
           </Typography>
         )}
         <IconButton size="small" sx={{ p: 0.25 }}>
-          {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+          {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>
       </Box>
 
-      <Collapse in={expanded}>
+      <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
             Server: {serverName}

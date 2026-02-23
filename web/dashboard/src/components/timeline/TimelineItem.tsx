@@ -13,6 +13,7 @@ interface TimelineItemProps {
   isAutoCollapsed?: boolean;
   onToggleAutoCollapse?: () => void;
   expandAll?: boolean;
+  expandAllToolCalls?: boolean;
   isCollapsible?: boolean;
 }
 
@@ -25,6 +26,7 @@ function TimelineItem({
   isAutoCollapsed = false,
   onToggleAutoCollapse,
   expandAll = false,
+  expandAllToolCalls = false,
   isCollapsible = false,
 }: TimelineItemProps) {
   // Hide response/executive_summary items with empty content. Defense-in-depth
@@ -69,7 +71,7 @@ function TimelineItem({
       );
 
     case FLOW_ITEM.TOOL_CALL:
-      return <ToolCallItem item={item} />;
+      return <ToolCallItem item={item} expandAll={expandAllToolCalls} />;
 
     case FLOW_ITEM.TOOL_SUMMARY:
       return (
