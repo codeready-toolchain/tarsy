@@ -104,6 +104,7 @@ export default function ConversationTimeline({
 
   // --- Auto-collapse system ---
   const [expandAllReasoning, setExpandAllReasoning] = useState(false);
+  const [expandAllToolCalls, setExpandAllToolCalls] = useState(false);
   // Manual overrides: items the user has explicitly toggled
   const [manualOverrides, setManualOverrides] = useState<Set<string>>(new Set());
 
@@ -283,6 +284,14 @@ export default function ConversationTimeline({
             >
               {expandAllReasoning ? 'Collapse All Reasoning' : 'Expand All Reasoning'}
             </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={expandAllToolCalls ? <ExpandLess /> : <ExpandMore />}
+              onClick={() => setExpandAllToolCalls((v) => !v)}
+            >
+              {expandAllToolCalls ? 'Collapse All Tools' : 'Expand All Tools'}
+            </Button>
             <CopyButton
               text={plainText}
               variant="button"
@@ -419,6 +428,7 @@ export default function ConversationTimeline({
                   shouldAutoCollapse={shouldAutoCollapse}
                   onToggleItemExpansion={toggleItemExpansion}
                   expandAllReasoning={expandAllReasoning}
+                  expandAllToolCalls={expandAllToolCalls}
                   isItemCollapsible={isItemCollapsible}
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}

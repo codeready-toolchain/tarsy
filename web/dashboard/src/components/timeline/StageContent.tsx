@@ -31,6 +31,7 @@ interface StageContentProps {
   shouldAutoCollapse?: (item: FlowItem) => boolean;
   onToggleItemExpansion?: (item: FlowItem) => void;
   expandAllReasoning?: boolean;
+  expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
   // Per-agent progress
   agentProgressStatuses?: Map<string, string>;
@@ -199,6 +200,7 @@ const StageContent: React.FC<StageContentProps> = ({
   shouldAutoCollapse,
   onToggleItemExpansion,
   expandAllReasoning = false,
+  expandAllToolCalls = false,
   isItemCollapsible,
   agentProgressStatuses = new Map(),
   executionStatuses,
@@ -371,6 +373,7 @@ const StageContent: React.FC<StageContentProps> = ({
             isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
             onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
             expandAll={expandAllReasoning}
+            expandAllToolCalls={expandAllToolCalls}
             isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
           />
         ))}
