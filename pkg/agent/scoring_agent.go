@@ -25,9 +25,8 @@ func NewScoringAgent(controller Controller) *ScoringAgent {
 
 // Execute runs the scoring evaluation by delegating to the controller.
 //
-// Error handling follows the same contract as BaseAgent.Execute:
-//   - Infrastructure failures return (nil, error)
-//   - Controller failures return (*ExecutionResult, nil) with result.Error set
+// All outcomes are returned as (*ExecutionResult, nil); no path returns (nil, error).
+// Errors from the controller are mapped to ExecutionResult.Status values directly.
 func (a *ScoringAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prevStageContext string) (*ExecutionResult, error) {
 	result, err := a.controller.Run(ctx, execCtx, prevStageContext)
 
