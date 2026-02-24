@@ -237,6 +237,7 @@ func (s *Server) setupRoutes() {
 	// Session detail and actions.
 	v1.GET("/sessions/:id", s.getSessionHandler)
 	v1.GET("/sessions/:id/summary", s.sessionSummaryHandler)
+	v1.GET("/sessions/:id/status", s.sessionStatusHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)

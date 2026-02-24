@@ -855,6 +855,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types and chain IDs |
 | GET | `/api/v1/sessions/:id` | Session details |
 | GET | `/api/v1/sessions/:id/summary` | Final analysis + executive summary |
+| GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, analysis, error) |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
 | GET | `/health` | Health check (DB, worker pool) |

@@ -92,3 +92,22 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionStatusHandler_Validation(t *testing.T) {
+	s := &Server{}
+
+	t.Run("missing session id returns 400", func(t *testing.T) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions//status", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := s.sessionStatusHandler(c)
+		if assert.Error(t, err) {
+			he, ok := err.(*echo.HTTPError)
+			if assert.True(t, ok, "expected echo.HTTPError") {
+				assert.Equal(t, http.StatusBadRequest, he.Code)
+			}
+		}
+	})
+}

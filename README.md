@@ -146,6 +146,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `GET /api/v1/sessions/filter-options` -- Available filter values
 - `GET /api/v1/sessions/:id` -- Session detail with chronological timeline
 - `GET /api/v1/sessions/:id/summary` -- Final analysis and executive summary
+- `GET /api/v1/sessions/:id/status` -- Lightweight polling status (id, status, analysis, error)
 - `POST /api/v1/sessions/:id/cancel` -- Cancel an active or paused session
 
 ### Chat

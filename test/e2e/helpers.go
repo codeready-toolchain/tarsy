@@ -152,6 +152,12 @@ func (app *TestApp) GetSessionSummary(t *testing.T, sessionID string) map[string
 	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/summary", http.StatusOK)
 }
 
+// GetSessionStatus calls GET /api/v1/sessions/:id/status.
+func (app *TestApp) GetSessionStatus(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/status", http.StatusOK)
+}
+
 // GetFilterOptions calls GET /api/v1/sessions/filter-options.
 func (app *TestApp) GetFilterOptions(t *testing.T) map[string]interface{} {
 	t.Helper()

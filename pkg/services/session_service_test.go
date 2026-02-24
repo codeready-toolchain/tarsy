@@ -1180,6 +1180,53 @@ func TestSessionService_GetDistinctAlertTypes(t *testing.T) {
 	assert.Contains(t, types, "type-b")
 }
 
+func TestSessionService_GetSessionStatus(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("returns status for completed session", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"status poll data", "pod-crash", "k8s-analysis",
+			100, 50, 150, 1)
+
+		status, err := service.GetSessionStatus(ctx, sessionID)
+		require.NoError(t, err)
+
+		assert.Equal(t, sessionID, status.ID)
+		assert.Equal(t, "completed", status.Status)
+		require.NotNil(t, status.FinalAnalysis)
+		assert.Contains(t, *status.FinalAnalysis, "status poll data")
+		require.NotNil(t, status.ExecutiveSummary)
+		assert.Contains(t, *status.ExecutiveSummary, "status poll data")
+		assert.Nil(t, status.ErrorMessage)
+	})
+
+	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
+		_, err := service.GetSessionStatus(ctx, "nonexistent-id")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("excludes soft-deleted session", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "soft-deleted session",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetDeletedAt(time.Now()).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		_, err = service.GetSessionStatus(ctx, session.ID)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
 func TestSessionService_GetDistinctChainIDs(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)

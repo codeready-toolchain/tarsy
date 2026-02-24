@@ -136,6 +136,21 @@ func (s *Server) sessionSummaryHandler(c *echo.Context) error {
 	return c.JSON(http.StatusOK, summary)
 }
 
+// sessionStatusHandler handles GET /api/v1/sessions/:id/status.
+func (s *Server) sessionStatusHandler(c *echo.Context) error {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
+	}
+
+	status, err := s.sessionService.GetSessionStatus(c.Request().Context(), sessionID)
+	if err != nil {
+		return mapServiceError(err)
+	}
+
+	return c.JSON(http.StatusOK, status)
+}
+
 // cancelSessionHandler handles POST /api/v1/sessions/:id/cancel.
 func (s *Server) cancelSessionHandler(c *echo.Context) error {
 	sessionID := c.Param("id")
