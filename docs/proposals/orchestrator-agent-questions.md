@@ -80,34 +80,49 @@ The LLM is smart enough to infer when to use "LogAnalyzer with Loki MCP server" 
 
 ## Q4: How does the orchestrator invoke sub-agents? — DECIDED
 
-> **Decision:** Async dispatch + get_result (Option B).
+> **Decision:** Async dispatch with push-based result delivery (evolved from original Option B).
 
-The orchestrator gets three tools for sub-agent management:
+The orchestrator gets tools for dispatch and lifecycle management. Results are **pushed automatically** — there is no `get_result` polling tool.
 
-- **`dispatch_agent`** — fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately.
-- **`get_result`** — retrieve status and result of a dispatched sub-agent by execution ID.
-- **`cancel_agent`** — cancel a running sub-agent by execution ID. Matches TARSy's existing agent/execution cancellation infrastructure (currently human-only, this extends it to LLM-driven cancellation).
+- **`dispatch_agent`** — fire-and-forget. Spawns a sub-agent, returns an execution ID immediately. Results are delivered automatically when the sub-agent finishes.
+- **`cancel_agent`** — cancel a running sub-agent by execution ID. Reuses TARSy's existing cancellation infrastructure, extended to LLM-driven cancellation.
+- **`list_agents`** — check status of all dispatched sub-agents. For status overview before deciding to cancel or dispatch more.
 
-This enables parallel execution with lifecycle control — the orchestrator can dispatch multiple agents, collect results, and cancel unnecessary work:
+Results are injected into the orchestrator's conversation as system messages when sub-agents complete. The controller handles this with two mechanisms:
+1. Before each LLM call: non-blocking drain of any available results
+2. When the LLM is idle (no tool calls): blocking wait for at least one pending sub-agent
+
+This enables multi-phase orchestration:
 
 ```
-dispatch_agent(name="log_analyzer", task="Find 5xx errors for service-X")  → { execution_id: "abc" }
-dispatch_agent(name="metric_checker", task="Check latency for service-X")  → { execution_id: "def" }
-get_result(execution_id="abc")  → { status: "completed", result: "Found spike at 14:23..." }
-cancel_agent(execution_id="def")  → { status: "cancelled" }
+Iteration 1:
+  dispatch_agent(name="log_analyzer", task="Find 5xx errors")  → { execution_id: "abc" }
+  dispatch_agent(name="metric_checker", task="Check latency")  → { execution_id: "def" }
+
+Iteration 2: LLM has no tools → pending sub-agents → waits...
+  ← log_analyzer finishes → result injected
+
+Iteration 3: LLM sees log_analyzer result, dispatches follow-up:
+  dispatch_agent(name="k8s_inspector", task="Check payments-db pods")  → { execution_id: "ghi" }
+  ← metric_checker finishes → result drained before next LLM call
+
+Iteration 4: LLM sees metric_checker result → waits for k8s_inspector...
+  ← k8s_inspector finishes → result injected
+
+Iteration 5: LLM synthesizes all results → done
 ```
 
 **Key points:**
 
 - Uses TARSy's existing `execution_id` concept for tracking sub-agent runs.
-- The orchestrator LLM decides sequencing — dispatch one at a time or fan out in parallel.
-- `get_result` returns status (`running`, `completed`, `failed`, `cancelled`) so the LLM knows when to poll vs proceed.
+- **No polling** — results are pushed into the conversation automatically.
+- Multi-phase dispatch: LLM can dispatch across multiple iterations, react to partial results, dispatch follow-ups.
 - `cancel_agent` reuses TARSy's existing cancellation mechanism, extending it from human-only to LLM-driven.
 - Requires a frontier model for the orchestrator (already supported — TARSy has all major providers).
-- Sub-agent runs are tracked in a registry for lifecycle management.
+- Sub-agent runs are tracked via `SubAgentRunner` with a results channel.
 - Guardrails: max concurrent sub-agents, per-agent timeout, total orchestrator budget.
 
-*Rejected alternatives: (A) sync-only `run_agent` — blocks on each call, no parallelism; (C) sync + batch parallel — complex schema, LLM struggles with batch input/output.*
+*Rejected alternatives: (A) sync-only `run_agent` — blocks on each call, no parallelism; (B-original) async + polling `get_result` — wastes iterations, LLMs unreliable at polling; (C) sync + batch parallel — complex schema.*
 
 ---
 
@@ -279,7 +294,7 @@ No memory in v1. Each run starts fresh. But memory is a likely future feature, s
 | Q1 | What is a sub-agent? | Regular TARSy agents (config + built-in) with `description`. Global registry with override. |
 | Q2 | How does orchestrator discover sub-agents? | Global registry from config + built-ins (follows from Q1) |
 | Q3 | How are sub-agents described? | Name + `description` (required) + MCP servers. LLM infers the rest. |
-| Q4 | How does orchestrator invoke sub-agents? | Async `dispatch_agent` + `get_result` + `cancel_agent` |
+| Q4 | How does orchestrator invoke sub-agents? | Async `dispatch_agent` + push-based results + `cancel_agent` + `list_agents` |
 | Q5 | How are MCP servers attached? | Config-driven only, reuse TARSy's existing `mcp_servers` |
 | Q6 | What format do results take? | Free text (raw LLM response) |
 | Q7 | Should TARSy have skills? | Defer — `custom_instructions` covers this |
@@ -301,7 +316,7 @@ No memory in v1. Each run starts fresh. But memory is a likely future feature, s
 | 2026-02-19 | Q1: What is a sub-agent? | Regular TARSy agents (config + built-in) with `description` field form the registry. Agents without `description` are excluded. `sub_agents` override at chain/stage/agent level for further scoping. | No new concept needed. `description` is the opt-in. Built-ins already have descriptions. Follows existing TARSy override patterns. |
 | 2026-02-19 | Q2: How does orchestrator discover sub-agents? | Global registry from config + built-ins. Follows directly from Q1. | No separate discovery needed — agents are already known from config and builtins. |
 | 2026-02-19 | Q3: How are sub-agents described? | Name + `description` (required for visibility) + MCP servers list. LLM infers when to use each agent. | `description` doubles as opt-in gate. Minimal config. LLM is capable of dispatch decisions from name + description + tools. Richer metadata can be added later if needed. |
-| 2026-02-19 | Q4: How does orchestrator invoke sub-agents? | Async `dispatch_agent` + `get_result`. Orchestrator manages execution IDs, can fan out in parallel. | Enables parallel investigation. Proven pattern. Frontier models handle async tool management well. |
+| 2026-02-19 | Q4: How does orchestrator invoke sub-agents? | Async `dispatch_agent` with push-based result delivery. No `get_result` polling — results injected automatically. `cancel_agent` + `list_agents` for lifecycle management. | Polling wastes iterations and LLMs are unreliable at it. Push-based model delivers results automatically. Multi-phase dispatch supported — LLM dispatches across iterations and reacts to partial results. |
 | 2026-02-19 | Q5: How are MCP servers attached? | Config-driven only. Reuse TARSy's existing `mcp_servers` on agents + chain/stage overrides. LLM does not control MCP attachment. | Keep LLM focused on tasks, not infrastructure. Existing TARSy mechanism already supports overrides. |
 | 2026-02-19 | Q6: What format do results take? | Free text — raw LLM response from sub-agent. | Simplest. No schema to maintain. Orchestrator LLM reasons over natural language. |
 | 2026-02-19 | Q7: Skills system? | Defer. Existing `custom_instructions` covers this. Q8 (skills format) also deferred. | TARSy's per-agent custom_instructions already serves the same purpose. Reusable blocks can be added later as a DX improvement. |

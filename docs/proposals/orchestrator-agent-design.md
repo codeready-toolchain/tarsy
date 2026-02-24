@@ -16,7 +16,7 @@ From TARSy's perspective, the orchestrator is just another agent in a chain. It 
 
 1. **Additive, not rewrite.** The orchestrator is a new capability layered on top of existing TARSy architecture. A single agent in an existing chain becomes the entry point to dynamic orchestration.
 
-2. **Regular agent, special tools.** The orchestrator is a standard TARSy agent with three additional tools (`dispatch_agent`, `get_result`, `cancel_agent`). Everything else — config, MCP servers, custom_instructions, LLM selection — works identically to any other agent.
+2. **Regular agent, special tools.** The orchestrator is a standard TARSy agent with additional tools (`dispatch_agent`, `cancel_agent`, `list_agents`) and push-based result delivery. Everything else — config, MCP servers, custom_instructions, LLM selection — works identically to any other agent.
 
 3. **LLM as the planner.** No hardcoded DAG or workflow engine. The orchestrator LLM reasons about input, available agents, and results to decide what to do, in what order, and when to stop.
 
@@ -46,9 +46,10 @@ From TARSy's perspective, the orchestrator is just another agent in a chain. It 
 │                 │  ┌─────────────────────────┐ │            │
 │                 │  │ dispatch_agent(LogA, ..)│ │            │
 │                 │  │ dispatch_agent(MetC, ..)│ │            │
-│                 │  │ get_result(exec_abc)    │ │            │
-│                 │  │ cancel_agent(exec_def)  │ │            │
-│                 │  │ get_result(exec_abc)    │ │            │
+│                 │  │ ← LogA result pushed    │ │            │
+│                 │  │ dispatch_agent(K8s, ..) │ │            │
+│                 │  │ ← MetC result pushed    │ │            │
+│                 │  │ ← K8s result pushed     │ │            │
 │                 │  │ → synthesized output    │ │            │
 │                 │  └─────────────────────────┘ │            │
 │                 └──────────────────────────────┘            │
@@ -111,28 +112,18 @@ agent_chains:
 
 ## Orchestrator Tools
 
-The orchestrator gets three tools in addition to any MCP server tools from its own config:
+The orchestrator gets tools in addition to any MCP server tools from its own config. There is no `get_result` tool — sub-agent results are **pushed automatically** into the orchestrator's conversation as they complete.
 
 ### `dispatch_agent`
 
-Fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately.
+Fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately. Results are delivered automatically when the sub-agent finishes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | yes | Agent name from the registry |
 | `task` | string | yes | Natural language task description |
 
-Returns: `{ execution_id: string }`
-
-### `get_result`
-
-Retrieve status and result of a dispatched sub-agent.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `execution_id` | string | yes | ID from `dispatch_agent` |
-
-Returns: `{ status: "running" | "completed" | "failed" | "cancelled", result?: string, error?: string }`
+Returns: `{ execution_id: string, status: "accepted" }`
 
 ### `cancel_agent`
 
@@ -144,44 +135,71 @@ Cancel a running sub-agent. Extends TARSy's existing cancellation infrastructure
 
 Returns: `{ status: "cancelled" | "already_completed" | "not_found" }`
 
+### `list_agents`
+
+Check status of all dispatched sub-agents. Useful for status overview before deciding to cancel or dispatch more.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| (none) | | | |
+
+Returns: `{ agents: [{ execution_id, name, task, status, runtime }] }`
+
+### Push-Based Result Delivery
+
+Sub-agent results appear as system-injected messages in the orchestrator's conversation:
+
+```
+[Sub-agent completed] LogAnalyzer (exec-abc)
+Status: completed
+Result: Found 2,847 5xx errors. 92% are 'connection refused' to payments-db...
+```
+
+Results are injected:
+- **Before each LLM call** — non-blocking drain of any available results
+- **When the LLM is idle** — if sub-agents are pending, the controller waits until at least one finishes
+
+The LLM never polls. It dispatches, continues working, and sees results appear naturally.
+
 ### Example Flow
 
 ```
 Orchestrator receives: "Alert: service-X 5xx rate at 15%"
 
-1. dispatch_agent(name="LogAnalyzer", task="Find all 5xx errors for service-X
-   in the last 30 min. Report: error count, top error messages, time pattern.")
-   → { execution_id: "exec-abc" }
+Iteration 1 — LLM dispatches parallel investigations:
+  dispatch_agent(name="LogAnalyzer", task="Find all 5xx errors for service-X
+    in the last 30 min. Report: error count, top error messages, time pattern.")
+    → { execution_id: "exec-abc", status: "accepted" }
+  dispatch_agent(name="MetricChecker", task="Check service-X latency, error rate,
+    and CPU/memory for the last hour. Flag any anomalies.")
+    → { execution_id: "exec-def", status: "accepted" }
 
-2. dispatch_agent(name="MetricChecker", task="Check service-X latency, error rate,
-   and CPU/memory for the last hour. Flag any anomalies.")
-   → { execution_id: "exec-def" }
+Iteration 2 — LLM: "Dispatched log and metric analysis. Waiting for results."
+  No tool calls → pending sub-agents → controller waits...
 
-3. get_result(execution_id="exec-abc")
-   → { status: "completed", result: "Found 2,847 5xx errors. 92% are
-      'connection refused' to payments-db. Spike started at 14:23 UTC..." }
+  LogAnalyzer finishes → result injected into conversation:
+  "[Sub-agent completed] LogAnalyzer (exec-abc): Found 2,847 5xx errors.
+   92% are 'connection refused' to payments-db. Spike started at 14:23 UTC..."
 
-4. get_result(execution_id="exec-def")
-   → { status: "running" }
+Iteration 3 — LLM sees LogAnalyzer result, dispatches follow-up:
+  dispatch_agent(name="K8sInspector", task="Check payments-db pod status,
+    recent events, and restarts in the last hour.")
+    → { execution_id: "exec-ghi", status: "accepted" }
 
-5. dispatch_agent(name="K8sInspector", task="Check payments-db pod status,
-   recent events, and restarts in the last hour.")
-   → { execution_id: "exec-ghi" }
+  Before iteration 4: MetricChecker finishes → result drained:
+  "[Sub-agent completed] MetricChecker (exec-def): p99 latency jumped from
+   120ms to 8.2s at 14:22. CPU nominal. Memory at 94% on payments-db pod."
 
-6. get_result(execution_id="exec-def")
-   → { status: "completed", result: "p99 latency jumped from 120ms to 8.2s
-      at 14:22. CPU nominal. Memory at 94% on payments-db pod." }
+Iteration 4 — LLM sees MetricChecker result, no new tools → waits for K8sInspector...
 
-7. cancel_agent(execution_id="exec-def")  // already done, no-op
-   → { status: "already_completed" }
+  K8sInspector finishes → result injected:
+  "[Sub-agent completed] K8sInspector (exec-ghi): payments-db-0 OOMKilled
+   at 14:22, restarted 3 times. Current memory limit: 512Mi."
 
-8. get_result(execution_id="exec-ghi")
-   → { status: "completed", result: "payments-db-0 OOMKilled at 14:22,
-      restarted 3 times. Current memory limit: 512Mi." }
-
-9. Orchestrator synthesizes: "Root cause: payments-db OOMKilled due to 512Mi
-   memory limit. This caused connection refused errors from service-X,
-   resulting in the 5xx spike starting 14:23 UTC."
+Iteration 5 — LLM synthesizes all three results:
+  "Root cause: payments-db OOMKilled due to 512Mi memory limit. This caused
+   connection refused errors from service-X, resulting in the 5xx spike
+   starting 14:23 UTC."
 ```
 
 ## Configuration
@@ -221,7 +239,9 @@ agent_chains:
 
 ## Execution Model
 
-- **Async dispatch:** `dispatch_agent` returns immediately with an execution ID. The orchestrator LLM manages sequencing — serial, parallel, or mixed.
+- **Dispatch and forget:** `dispatch_agent` returns immediately. Sub-agent results are pushed back automatically — the LLM never polls.
+- **Multi-phase dispatch:** The LLM can dispatch agents across multiple iterations, see early results, and dispatch follow-ups. Results that arrive while the LLM is busy are drained before the next LLM call.
+- **Idle wait:** When the LLM has no more tool calls but sub-agents are running, the controller pauses until at least one result arrives, then continues.
 - **Depth 1 only:** Sub-agents cannot spawn their own sub-agents. Simple, predictable, debuggable.
 - **Failure handling:** Sub-agent failures (error, timeout) are reported to the orchestrator with full context. The LLM decides what to do — retry, try a different agent, proceed with partial data, or report the failure. No auto-retry at orchestration level.
 
@@ -253,7 +273,7 @@ Each sub-agent run gets its own timeline, linked to the orchestrator via parent 
 
 | Guardrail | Config | Default |
 |-----------|--------|---------|
-| Max concurrent sub-agents | `orchestrator.max_concurrent` | TBD |
+| Max concurrent sub-agents | `orchestrator.max_concurrent_agents` | TBD |
 | Per sub-agent timeout | `orchestrator.agent_timeout` | TBD |
 | Total orchestrator budget | `orchestrator.max_budget` | TBD |
 | Allowed sub-agents | `sub_agents` override | All agents |
@@ -274,29 +294,33 @@ Alert data + prior agent results
 │  with descriptions  │  - custom_instructions
 │  + MCP servers      │  - available agents (name + description + MCP servers)
 │                     │  - chain context (alert, prior results)
+│                     │  - "Results are delivered automatically — do not poll"
 └────────┬────────────┘
          │
-    dispatch_agent(task="...")   ◄── task is the orchestrator's "contract"
-         │                          with the sub-agent: what to do, what to report
+    dispatch_agent(task="...")   ◄── fire-and-forget dispatch
+         │                          returns immediately with execution_id
          ▼
 ┌─────────────────────┐
 │  Sub-agent LLM      │
+│  (runs in goroutine)│
 │                     │
 │  Sees: task text    │  System prompt includes:
 │  + MCP tools        │  - agent's custom_instructions
-│  + alert context    │  - MCP server tools
+│                     │  - MCP server tools
 │                     │  - task from orchestrator
 └────────┬────────────┘
          │
-    Free text result    ◄── sub-agent's findings, in natural language
+    Result pushed to    ◄── sub-agent's findings, in natural language
+    orchestrator's           injected into conversation automatically
+    conversation             (before next LLM call or when idle)
          │
          ▼
 ┌─────────────────────┐
 │  Orchestrator LLM   │
 │                     │
-│  Reasons over       │  Decides: dispatch more agents? synthesize? retry?
-│  all results        │
-│                     │
+│  Sees pushed result │  Decides: dispatch more? cancel others? synthesize?
+│  + any other        │  Can dispatch follow-ups based on partial results
+│  available results  │
 └────────┬────────────┘
          │
     Text output to chain  ◄── final synthesis, same as any agent
@@ -322,5 +346,5 @@ Depth 1 is the starting point. Depth 2+ could be added with a configurable max d
 ### LLM Model Override (Q9)
 The orchestrator could gain an optional `model` parameter on `dispatch_agent` to override sub-agent models at runtime. Deferred because config-driven selection is sufficient for v1.
 
-### Steer (Q4)
+### Steer
 A `steer_agent` tool could inject new instructions into a running sub-agent, redirecting its work mid-execution. Deferred for v1.

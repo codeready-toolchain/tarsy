@@ -1,6 +1,6 @@
 # Orchestrator Agent — Implementation Questions
 
-**Status:** Open — decisions pending
+**Status:** All 11 questions decided
 **Related:** [Design document](orchestrator-impl-design.md)
 **Vision:** [orchestrator-agent-design.md](orchestrator-agent-design.md)
 **Last updated:** 2026-02-19
@@ -9,62 +9,37 @@ Each question has options with trade-offs and a recommendation. Go through them 
 
 ---
 
-## Q1: How is an orchestrator agent identified in config?
+## Q1: How is an orchestrator agent identified in config? — DECIDED
 
-Currently there is no `type` field on agents. Behavior is determined by `IterationStrategy` (→ controller selection) and `IsValidForScoring()` (→ agent wrapper). We need a way to mark an agent as an orchestrator so the session executor can wire up the `CompositeToolExecutor`.
+> **Decision:** Use the existing `type` field — `AgentTypeOrchestrator = "orchestrator"`.
 
-### Option A: New `type` field on `AgentConfig`
+Already resolved by [ADR-0001](../adr/0001-agent-type-refactor.md). The refactor replaced `IterationStrategy` with orthogonal `type` + `llm_backend` fields. The ADR explicitly plans for the orchestrator:
 
-Add `type: orchestrator` to agent config. The `type` determines *what* the agent does, while `iteration_strategy` determines *how* the LLM is called. Orchestrators still use `native-thinking` or `langchain` for their own LLM calls.
+```go
+// Future: AgentTypeOrchestrator AgentType = "orchestrator"
+```
+
+The orchestrator maps to `IteratingController` (same multi-turn tool-calling loop as default agents), with orchestration behavior coming from the `CompositeToolExecutor`. Config:
 
 ```yaml
 agents:
   MyOrchestrator:
     type: orchestrator
-    iteration_strategy: native-thinking
-    description: "Dynamic investigation orchestrator"
+    llm_backend: native-gemini
+    description: "Dynamic SRE investigation orchestrator"
 ```
 
-- **Pro:** Clean separation of concerns — type vs strategy are orthogonal.
-- **Pro:** Explicit, self-documenting config.
-- **Pro:** Extensible to future agent types.
-- **Con:** New concept in config. Currently TARSy has no `type` field.
+No new concept needed — just add the constant and the controller factory case.
 
-### Option B: New `IterationStrategy` value
-
-Add `orchestrator` or `orchestrator-native-thinking` as iteration strategies. The controller factory returns an `OrchestratorController`.
-
-```yaml
-agents:
-  MyOrchestrator:
-    iteration_strategy: orchestrator-native-thinking
-    description: "Dynamic investigation orchestrator"
-```
-
-- **Pro:** Fits existing pattern — strategy determines behavior.
-- **Pro:** No new field needed.
-- **Con:** Conflates two concerns — "orchestrate sub-agents" is not an iteration strategy, it's a capability.
-- **Con:** Would need `orchestrator-native-thinking` AND `orchestrator-langchain` variants (combinatorial explosion).
-
-### Option C: Convention-based — detect from config presence
-
-If an agent has `max_concurrent_agents` or similar orchestrator-only config, treat it as an orchestrator. No explicit type field.
-
-- **Pro:** No new field.
-- **Con:** Implicit, easy to misconfigure.
-- **Con:** Harder to validate.
-
-**Recommendation:** Option A. `type` is a clean, explicit concept that separates *what* (orchestrator) from *how* (native-thinking/langchain). Avoids combinatorial explosion of iteration strategies.
+*Resolved by: ADR-0001 agent type refactor.*
 
 ---
 
-## Q2: How are orchestration tools combined with MCP tools?
+## Q2: How are orchestration tools combined with MCP tools? — DECIDED
 
-The orchestrator needs both MCP tools (for its own direct queries, if configured) and orchestration tools (`dispatch_agent`, `get_result`, `cancel_agent`). These must appear as a unified tool set to the LLM.
+> **Decision:** Option A — CompositeToolExecutor (wrapper pattern).
 
-### Option A: CompositeToolExecutor (wrapper pattern)
-
-Create a `CompositeToolExecutor` that wraps the existing MCP `ToolExecutor` and adds orchestration tools. Implements the same `ToolExecutor` interface. Routing: if tool name matches an orchestration tool, handle internally; otherwise delegate to MCP.
+A `CompositeToolExecutor` wraps the existing MCP `ToolExecutor` and adds orchestration tools. Implements the same `ToolExecutor` interface. On `Execute`, routes by name: orchestration tools go to the `SubAgentRunner`, everything else delegates to MCP. The `IteratingController` doesn't need changes — it just sees tools.
 
 ```go
 type CompositeToolExecutor struct {
@@ -73,189 +48,133 @@ type CompositeToolExecutor struct {
 }
 ```
 
-- **Pro:** No changes to `ToolExecutor` interface or `FunctionCallingController`.
-- **Pro:** Clean composition — MCP executor is unaware of orchestration.
-- **Pro:** Session executor wires it up; the controller just sees tools.
-- **Con:** Orchestration tool execution has side effects (spawning goroutines) — more complex than a simple tool call.
-
-### Option B: Extend MCP ToolExecutor to support virtual tools
-
-Add a "virtual tool" registration mechanism to the existing MCP `ToolExecutor` so it can handle non-MCP tools.
-
-- **Pro:** Single executor, no wrapper.
-- **Con:** Pollutes the MCP executor with non-MCP concerns.
-- **Con:** Tight coupling between MCP and orchestration.
-
-### Option C: Controller intercepts orchestration calls
-
-The controller checks each tool call before delegating to `ToolExecutor`. If it's an orchestration tool, handle it directly in the controller.
-
-- **Pro:** Explicit — controller knows about orchestration.
-- **Con:** Requires a new controller or significant changes to `FunctionCallingController`.
-- **Con:** Breaks the "controller is strategy-agnostic" principle.
-
-**Recommendation:** Option A. The wrapper pattern keeps everything composable. The `FunctionCallingController` doesn't need to know it's running an orchestrator — it just calls tools and feeds results back to the LLM.
+*Rejected: (B) extend MCP executor — pollutes MCP with orchestration concerns; (C) controller intercepts — breaks the clean controller/tool separation from ADR-0001.*
 
 ---
 
-## Q3: How are orchestration tools named to avoid MCP collisions?
+## Q3: How are orchestration tools named to avoid MCP collisions? — DECIDED
 
-MCP tools use `server.tool` naming convention (e.g., `kubernetes-server.get_pod`). Orchestration tools need names that can't collide with MCP tool names.
+> **Decision:** Option A — plain names (`dispatch_agent`, `cancel_agent`, `list_agents`).
 
-### Option A: Plain names without prefix
+MCP tools always contain a dot (`server.tool` format), orchestration tools don't — natural namespace separation. The `CompositeToolExecutor` routes by matching the known orchestration tool names; everything else goes to MCP.
 
-`dispatch_agent`, `get_result`, `cancel_agent`. Simple and clean.
+Note: `get_result` was removed from the tool surface — results are pushed automatically (see Q4 decision).
 
-- **Pro:** Most natural names for the LLM.
-- **Pro:** No prefix noise in prompts.
-- **Con:** Could theoretically collide if an MCP server was named "dispatch_agent" — extremely unlikely.
-
-### Option B: Prefixed names
-
-`orchestrator.dispatch_agent`, `orchestrator.get_result`, `orchestrator.cancel_agent`. Uses the same `server.tool` convention as MCP.
-
-- **Pro:** Consistent with MCP naming pattern.
-- **Pro:** Zero collision risk.
-- **Con:** Longer names, more verbose in LLM tool calls.
-
-### Option C: Underscore-prefixed
-
-`_dispatch_agent`, `_get_result`, `_cancel_agent`. Special prefix signals "internal" tools.
-
-- **Pro:** Short names.
-- **Pro:** Convention signals these aren't MCP tools.
-- **Con:** Unconventional — LLMs might not handle leading underscores well.
-
-**Recommendation:** Option A. The names are unique enough in practice (`dispatch_agent` is not a plausible MCP server name since MCP servers use hyphenated names like `kubernetes-server`). The `CompositeToolExecutor` routes by exact name match, so even if a collision existed, it would be caught at config validation time.
+*Rejected: (B) prefixed `orchestrator.*` — unnecessary verbosity; (C) underscore-prefixed — unconventional, may confuse LLMs.*
 
 ---
 
-## Q4: Does the orchestrator need a new controller?
+## Q4: Does the orchestrator need a new controller? — DECIDED
 
-The `FunctionCallingController` runs the iteration loop: build messages → call LLM → process tool calls → repeat. The orchestrator follows the same loop, just with additional tools.
+> **Decision:** Reuse `IteratingController` with a targeted modification for push-based result collection.
 
-### Option A: Reuse FunctionCallingController as-is
+Per [ADR-0001](../adr/0001-agent-type-refactor.md), the `IteratingController` (renamed from `FunctionCallingController`) runs the multi-turn tool-calling loop. The orchestrator reuses this loop with one targeted change to support push-based sub-agent results.
 
-The orchestrator uses the exact same `FunctionCallingController`. All orchestration behavior comes from the `CompositeToolExecutor`. The controller doesn't know it's orchestrating.
+### Why push-based?
 
-The only gap: when the orchestrator finishes (no more tool calls, or forced conclusion), it needs to wait for all sub-agents to complete and cancel any stragglers. This cleanup happens in the agent's `Execute()` method (post-controller), not in the controller itself.
+**Polling-based `get_result` is problematic**: the LLM wastes iterations checking on running sub-agents, and there's no way to wait efficiently within the iteration loop. A push-based model avoids this entirely — sub-agent results are injected into the orchestrator's conversation as they complete.
 
-- **Pro:** Zero controller changes. Maximum reuse.
-- **Pro:** The `CompositeToolExecutor` is the single point of orchestration logic.
-- **Con:** Post-execution cleanup (WaitAll) needs to happen somewhere — adds logic to agent wrapper or executor.
+TARSy implements the push-based principle within the controller loop (the `IteratingController` already manages the iteration lifecycle, making it a natural integration point).
 
-### Option B: New OrchestratorController wrapping FunctionCallingController
+### Controller modification
 
-An `OrchestratorController` that embeds or delegates to `FunctionCallingController`, adding pre/post hooks for sub-agent lifecycle management.
+Two additions to the iteration loop (zero impact on non-orchestrator agents):
 
 ```go
-type OrchestratorController struct {
-    inner  *FunctionCallingController
-    runner *SubAgentRunner
-}
+for iteration := 0; iteration < maxIter; iteration++ {
+    // 1. Non-blocking drain: inject any completed sub-agent results
+    if runner := execCtx.SubAgentRunner; runner != nil {
+        for {
+            result, ok := runner.TryGetNext()
+            if !ok { break }
+            messages = append(messages, formatSubAgentResult(result))
+        }
+    }
 
-func (c *OrchestratorController) Run(ctx, execCtx, prevStageContext) (*ExecutionResult, error) {
-    defer c.runner.WaitAll(ctx)  // Cleanup
-    return c.inner.Run(ctx, execCtx, prevStageContext)
+    resp := callLLMWithStreaming(ctx, messages, tools)
+    // ... execute tool calls ...
+
+    if len(resp.ToolCalls) == 0 {
+        // 2. Wait when idle: if sub-agents are pending, wait for at least one
+        if runner := execCtx.SubAgentRunner; runner != nil && runner.HasPending() {
+            result, err := runner.WaitForNext(ctx)
+            if err != nil { break }
+            messages = append(messages, formatSubAgentResult(result))
+            continue
+        }
+        break
+    }
 }
 ```
 
-- **Pro:** Clean lifecycle hooks.
-- **Pro:** Sub-agent cleanup is explicit.
-- **Con:** New type, more wiring in the factory.
-- **Con:** The `SubAgentRunner` would be referenced both by the controller (for WaitAll) and by the `CompositeToolExecutor` (for Dispatch/GetResult/Cancel).
+This enables multi-phase orchestration:
+- LLM can dispatch agents across multiple iterations
+- Results appear automatically as sub-agents finish
+- Before each LLM call, any available results are injected
+- When the LLM is idle (no tool calls), it waits for pending sub-agents instead of exiting
+- The LLM can react to partial results (cancel, dispatch follow-ups, synthesize)
 
-### Option C: New standalone OrchestratorController
+### Cleanup
 
-Fork `FunctionCallingController` into a separate `OrchestratorController` with orchestration logic built into the iteration loop.
+Sub-agent cleanup (cancel + wait) is handled by `CompositeToolExecutor.Close()`, which is already deferred in `executeAgent()`. No controller-level cleanup needed.
 
-- **Pro:** Full control, can add orchestration-specific iteration logic.
-- **Con:** Code duplication with `FunctionCallingController`.
-- **Con:** Maintenance burden — any fix to the FC iteration loop must be replicated.
+### Why not the alternatives?
 
-**Recommendation:** Option A if the post-cleanup can be handled cleanly (e.g., by the `OrchestratorAgent` wrapper), otherwise Option B. The iteration loop itself doesn't need changes — orchestration tools are just tools.
+- **Option A (reuse as-is, no changes):** Would require a polling `get_result` tool — wastes iterations, LLMs are unreliable at polling. Push-based is strictly better.
+- **Option B (wrapper controller):** The wrapper approach was designed for cleanup hooks, but cleanup is handled by `CompositeToolExecutor.Close()`. The only remaining concern (result injection) requires modifying the loop itself, not wrapping it.
+- **Option C (fork controller):** Code duplication. The push-based modification is small enough to add directly.
+
+*The controller change is ~15 lines — two `if runner != nil` blocks. The iteration loop structure, tool execution, streaming, forced conclusion — all unchanged.*
 
 ---
 
-## Q5: Where do orchestrator guardrails live in config?
+## Q5: Where do orchestrator guardrails live in config? — DECIDED
 
-The orchestrator needs configurable limits: max concurrent sub-agents, per-sub-agent timeout, total budget. These are orchestrator-specific and don't apply to regular agents.
+> **Decision:** B + C — nested `orchestrator` section on agents, with global defaults under the existing `defaults` section.
 
-### Option A: Flat fields on `AgentConfig`
+The orchestrator needs configurable limits: max concurrent sub-agents, per-sub-agent timeout, total budget. These live in two places:
 
-Add `max_concurrent_agents`, `agent_timeout`, `max_budget` directly to `AgentConfig`. Ignored for non-orchestrator agents.
+1. **Global defaults** under the existing `defaults:` section (same pattern as `llm_provider`, `max_iterations`, etc.)
+2. **Per-agent overrides** under a nested `orchestrator:` section on each orchestrator agent
 
 ```yaml
-agents:
-  MyOrchestrator:
-    type: orchestrator
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+  orchestrator:                          # Global orchestrator defaults
     max_concurrent_agents: 5
     agent_timeout: 300s
-```
-
-- **Pro:** Simple, flat config.
-- **Pro:** Follows existing pattern — all agent config is flat.
-- **Con:** Adds orchestrator-only fields to a shared struct. Validation needs to reject these on non-orchestrator agents.
-
-### Option B: Nested `orchestrator` section
-
-Group orchestrator-specific config under a sub-section:
-
-```yaml
-agents:
-  MyOrchestrator:
-    type: orchestrator
-    orchestrator:
-      max_concurrent_agents: 5
-      agent_timeout: 300s
-      max_budget: 600s
-```
-
-- **Pro:** Clean grouping — orchestrator config is self-contained.
-- **Pro:** Easier to validate: if `type != orchestrator`, `orchestrator:` section is forbidden.
-- **Pro:** Extensible — new orchestrator-specific config goes here.
-- **Con:** Slightly deeper nesting.
-
-### Option C: Global defaults + per-agent override
-
-Global `orchestrator_defaults` section in config, overridable per agent.
-
-```yaml
-orchestrator_defaults:
-  max_concurrent_agents: 5
-  agent_timeout: 300s
+    max_budget: 600s
 
 agents:
   MyOrchestrator:
     type: orchestrator
+    orchestrator:                         # Per-agent override (optional)
+      max_concurrent_agents: 3           # Override: fewer concurrent agents
+      agent_timeout: 600s                # Override: longer timeout for this one
+
+  AnotherOrchestrator:
+    type: orchestrator
+    # No orchestrator section — uses global defaults
 ```
 
-- **Pro:** Centralized defaults.
-- **Con:** New top-level config section.
-- **Con:** Harder to reason about which value applies.
+**Merge semantics:** Per-agent `orchestrator:` fields override global `defaults.orchestrator:` fields. Missing per-agent fields fall back to global defaults. Missing global defaults use hardcoded sensible values.
 
-**Recommendation:** Option B. Nesting keeps orchestrator config cleanly separated and makes validation straightforward. Global defaults (Option C) can be layered on later if multiple orchestrators share the same settings.
+- **Pro:** Clean grouping — orchestrator config is self-contained under a nested section.
+- **Pro:** Follows TARSy's existing `defaults:` pattern for global settings.
+- **Pro:** Easy to validate: if `type != orchestrator`, `orchestrator:` section is forbidden.
+- **Pro:** Multiple orchestrators can share defaults while allowing per-agent tuning.
+- **Pro:** Extensible — new orchestrator-specific config goes in the same section.
+
+*Rejected: (A) flat fields on AgentConfig — pollutes shared struct with orchestrator-only fields.*
 
 ---
 
-## Q6: Where does `sub_agents` override live in the config hierarchy?
+## Q6: Where does `sub_agents` override live in the config hierarchy? — DECIDED
 
-The vision doc says `sub_agents` can be overridden at chain/stage/agent level. We need to decide where it fits in the existing config hierarchy.
+> **Decision:** Option B — full hierarchy (chain + stage + stage-agent), consistent with other TARSy overrides.
 
-### Option A: Chain-level only
-
-```yaml
-agent_chains:
-  focused:
-    sub_agents: [LogAnalyzer, MetricChecker]
-```
-
-- **Pro:** Simple — one override level.
-- **Con:** Can't scope differently per stage or orchestrator within a chain.
-
-### Option B: Chain + stage + stage-agent level (full hierarchy)
-
-Follow the existing override pattern (like `mcp_servers`, `llm_provider`, `max_iterations`):
+Follow the existing override pattern (like `mcp_servers`, `llm_provider`, `max_iterations`). All levels are optional — use only what you need.
 
 ```yaml
 agent_chains:
@@ -269,34 +188,32 @@ agent_chains:
             sub_agents: [LogAnalyzer, MetricChecker]  # Stage-agent override
 ```
 
-- **Pro:** Consistent with how TARSy handles other overrides.
-- **Pro:** Maximum flexibility.
-- **Con:** Complex — hard to reason about which level applies.
-- **Con:** `sub_agents` on `StageAgentConfig` adds fields to a widely-used struct.
-
-### Option C: Agent-level in `AgentConfig`
-
-Put `sub_agents` on the agent definition itself:
+In practice, most configs will only use one level — typically chain-level. The stage and stage-agent levels exist for flexibility but aren't required:
 
 ```yaml
-agents:
-  MyOrchestrator:
-    type: orchestrator
-    sub_agents: [LogAnalyzer, MetricChecker]
+# Typical usage — chain-level only
+agent_chains:
+  log-only-investigation:
+    sub_agents: [LogAnalyzer]
+    stages:
+      - name: investigate
+        agents:
+          - name: MyOrchestrator
 ```
 
-- **Pro:** Self-contained — orchestrator definition includes its scope.
-- **Con:** Can't vary by chain (same orchestrator, different sub-agent sets).
+If no `sub_agents` is specified at any level, the orchestrator sees all agents with a `description` (the global registry).
 
-**Recommendation:** Option A for v1 (chain-level only). It covers the main use case (different chains with different sub-agent scopes) without adding complexity to stage/agent config. Option B can be added later by extending `StageConfig` and `StageAgentConfig` if needed.
+- **Pro:** Consistent with how TARSy handles other overrides — same mental model.
+- **Pro:** Maximum flexibility when needed, simple when not.
+- **Pro:** Optional at every level — no noise unless you want fine-grained control.
+
+*Rejected: (A) chain-level only — inconsistent with other overrides, limits flexibility unnecessarily; (C) agent-level only — can't vary by chain.*
 
 ---
 
-## Q7: How are sub-agent executions modeled in the DB?
+## Q7: How are sub-agent executions modeled in the DB? — DECIDED
 
-Sub-agents spawned by the orchestrator need DB representation for timeline tracking and observability. The current hierarchy is: Session → Stage → AgentExecution.
-
-### Option A: AgentExecution with `parent_execution_id`
+> **Decision:** Option A — `AgentExecution` with `parent_execution_id`.
 
 Sub-agent runs are `AgentExecution` records under the same Stage as the orchestrator, with a `parent_execution_id` linking to the orchestrator's execution.
 
@@ -304,120 +221,107 @@ Sub-agent runs are `AgentExecution` records under the same Stage as the orchestr
 Session → Stage → [OrchestratorExecution, SubExec1(parent=Orch), SubExec2(parent=Orch)]
 ```
 
-- **Pro:** Minimal schema change — one new nullable column.
-- **Pro:** Reuses existing `AgentExecution` infrastructure (status tracking, timeline events).
-- **Pro:** Query is simple: `WHERE parent_execution_id = ?`.
-- **Con:** `agent_index` semantics change — sub-agents get dynamic indices.
-- **Con:** `expected_agent_count` on Stage won't account for sub-agents (it's set at stage creation).
-- **Con:** Stage status aggregation (`UpdateStageStatus`) would see sub-agents and try to aggregate — needs adjustment.
+Minimal schema change — one new nullable column. Reuses all existing `AgentExecution` infrastructure (status tracking, timeline events). Query is simple: `WHERE parent_execution_id = ?`.
 
-### Option B: Separate Stage for sub-agents
+The `UpdateStageStatus` function needs to filter out sub-agents (those with non-null `parent_execution_id`), and `expected_agent_count` excludes sub-agents. Both are targeted fixes.
 
-Create a "sub-stage" for each orchestrator's sub-agents, separate from the orchestrator's own stage.
+*Rejected: (B) separate stage — new stage concept, complex ordering, dashboard impact; (C) new entity — duplicates AgentExecution infrastructure.*
 
+---
+
+## Q8: How is the orchestrator's task injected into the sub-agent prompt? — DECIDED
+
+> **Decision:** Option A — task replaces alert data as the user message, but with a **custom sub-agent prompt template** (not the investigation template).
+
+The task from `dispatch_agent` becomes the sub-agent's user message. But it does NOT use the existing investigation template (`FormatAlertSection` with `<!-- ALERT_DATA_START -->` markers, runbook, chain context). Sub-agents get a clean, task-focused template.
+
+**Current investigation user message** (NOT used for sub-agents):
 ```
-Session → Stage(orchestrator) → [OrchestratorExecution]
-       → SubStage(dynamic)   → [SubExec1, SubExec2, ...]
+## Alert Details
+### Alert Metadata
+**Alert Type:** kubernetes
+### Alert Data
+<!-- ALERT_DATA_START -->
+{"description": "...", "namespace": "..."}
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+...
+
+## Previous Stage Data
+...
 ```
 
-- **Pro:** Clean separation — sub-agents don't pollute the orchestrator's stage.
-- **Pro:** Stage status aggregation works naturally on the sub-stage.
-- **Con:** New stage concept (not in chain config) — requires changes to stage creation logic.
-- **Con:** Stage index / ordering becomes complex.
-- **Con:** Dashboard stage rendering affected.
+**New sub-agent user message** (custom template):
+```
+## Task
 
-### Option C: New `SubAgentExecution` entity
+Find all 5xx errors for service-X in the last 30 min. Report: error count,
+top error messages, time pattern.
+```
 
-A new DB entity specifically for orchestrator sub-agents, separate from `AgentExecution`.
+Implementation — a new `buildSubAgentUserMessage` in `PromptBuilder`:
 
-- **Pro:** Complete separation — no impact on existing entities.
-- **Con:** Duplicates much of `AgentExecution` (status, timing, error handling).
-- **Con:** Timeline events need to support a new parent entity.
-- **Con:** Most infrastructure would need to be duplicated.
+```go
+func (b *PromptBuilder) buildSubAgentUserMessage(task string) string {
+    var sb strings.Builder
+    sb.WriteString("## Task\n\n")
+    sb.WriteString(task)
+    sb.WriteString("\n")
+    return sb.String()
+}
+```
 
-**Recommendation:** Option A. The `parent_execution_id` approach is the simplest schema change and reuses all existing infrastructure. The `UpdateStageStatus` function needs to filter out sub-agents (those with non-null `parent_execution_id`), but that's a targeted fix. `expected_agent_count` can exclude sub-agents.
+The prompt builder selects the template based on agent type or an `ExecutionContext.Task` field:
 
----
+```go
+// In BuildFunctionCallingMessages:
+if execCtx.Task != "" {
+    userContent = b.buildSubAgentUserMessage(execCtx.Task)
+} else if isChat {
+    userContent = b.buildChatUserMessage(execCtx)
+} else {
+    userContent = b.buildInvestigationUserMessage(execCtx, prevStageContext)
+}
+```
 
-## Q8: How is the orchestrator's task injected into the sub-agent prompt?
+The system message still includes the sub-agent's `custom_instructions` + MCP server instructions (Tier 1-3), same as any agent.
 
-When the orchestrator dispatches a sub-agent with `dispatch_agent(name="LogAnalyzer", task="Find 5xx errors...")`, the task needs to reach the sub-agent's LLM as the primary input. Currently, the user message in `BuildFunctionCallingMessages` contains alert data + previous stage context.
+- **Pro:** Clean separation — sub-agents see a task, not an alert investigation.
+- **Pro:** No confusing `<!-- ALERT_DATA_START -->` markers for a non-alert context.
+- **Pro:** Orchestrator is responsible for including relevant context in the task text ("natural language is the protocol").
+- **Pro:** Minimal change — new `Task` field on `ExecutionContext`, one new template function, small branch in `BuildFunctionCallingMessages`.
 
-### Option A: Task replaces alert data in the user message
-
-When building the sub-agent's prompt, use the `task` text as the alert data. The sub-agent sees:
-- System: custom_instructions + MCP instructions
-- User: task from orchestrator (replacing alert data)
-
-The `ExecutionContext.AlertData` field is set to the task text.
-
-- **Pro:** Simplest — reuses existing prompt building exactly.
-- **Pro:** Sub-agent doesn't know it was dispatched by an orchestrator.
-- **Con:** Previous stage context is empty (sub-agents have no "previous stage").
-- **Con:** Original alert data is not visible to the sub-agent (unless orchestrator includes it in the task).
-
-### Option B: Task as separate field, alert data still included
-
-Add a `Task` field to `ExecutionContext`. The prompt builder includes both: task as the primary request, alert data as background context.
-
-- **Pro:** Sub-agent sees both the specific task and the original alert context.
-- **Pro:** Richer context for the sub-agent's investigation.
-- **Con:** More complex prompt construction.
-- **Con:** Risk of conflicting instructions (task says one thing, alert implies another).
-
-### Option C: Task in AlertData, original alert in prevStageContext
-
-Use `AlertData` for the task, and pass the original alert data as `prevStageContext` so it appears as background context.
-
-- **Pro:** Sub-agent gets both task and alert context.
-- **Pro:** Reuses existing fields, no new concept.
-- **Con:** `prevStageContext` semantics are stretched — it's not actually previous stage context.
-
-**Recommendation:** Option A for v1. The orchestrator is responsible for including relevant alert context in the task description — this is part of the "natural language is the protocol" principle. If the orchestrator writes good tasks, the sub-agent has everything it needs. The original alert data is available to the orchestrator and it can include relevant parts in the task.
+*Rejected: (B) task + alert data both — risk of conflicting instructions, over-complex prompt; (C) task in AlertData, alert in prevStageContext — stretches field semantics.*
 
 ---
 
-## Q9: What dashboard changes are needed and how to phase them?
+## Q9: What dashboard changes are needed and how to phase them? — DECIDED
 
-The dashboard currently shows a flat timeline per execution. The orchestrator introduces a parent-child execution tree.
+> **Decision:** Option B — tree view from the start. Sub-agent executions must be visually distinguishable from the orchestrator and show the parent-child relationship.
 
-### Option A: MVP — flat view with sub-agent markers
+The dashboard needs to show:
+1. Sub-agent executions with their own timelines (not hidden behind the orchestrator)
+2. Clear parent-child relationship — which execution is the orchestrator, which are sub-agents
+3. Sub-agent status, results, and timing
 
-Show sub-agent executions as timeline events within the orchestrator's timeline (like tool calls). Click to expand into the sub-agent's full timeline.
+The initial implementation doesn't need to be fancy — a simple tree/nested view where sub-agents are indented or grouped under their parent orchestrator is sufficient. But the hierarchy must be visible from day one. Operators debugging an investigation need to see which sub-agent produced bad data and trace it back to the orchestrator's dispatch decision.
 
-- **Pro:** Minimal dashboard change — sub-agent dispatches appear as tool call events.
-- **Pro:** Clickable expansion to sub-agent timelines.
-- **Con:** Orchestrator timeline gets cluttered with sub-agent events.
+The backend already records everything needed (`parent_execution_id`, timeline events). The frontend queries `parent_execution_id` to build the tree.
 
-### Option B: Tree view from the start
+- **Pro:** Correct mental model from day one — operators see the investigation flow.
+- **Pro:** Essential for debugging — "which sub-agent gave bad data?"
+- **Pro:** Can start simple (nested list) and refine later (full tree visualization).
 
-Build a proper execution tree view: orchestrator at the root, sub-agents as expandable child nodes, each with their own timeline.
-
-- **Pro:** Correct visualization from day one.
-- **Pro:** Matches the mental model of the trace tree.
-- **Con:** Significant frontend work.
-- **Con:** Delays MVP.
-
-### Option C: No dashboard changes for v1
-
-Sub-agent executions appear in the existing stage view as additional executions (alongside the orchestrator). Timeline events are visible but not hierarchically organized.
-
-- **Pro:** Zero frontend work.
-- **Pro:** Sub-agent data is still visible and debuggable via the existing views.
-- **Con:** No visual hierarchy — harder to understand the orchestrator's flow.
-- **Con:** Sub-agents may look like parallel agents in a regular stage.
-
-**Recommendation:** Option C for initial implementation, then Option A as a fast follow. The backend records everything (timeline events, execution IDs, parent links). The existing dashboard shows all executions in a stage — sub-agents will appear there. Not ideal UX, but functional. Dashboard improvements can come after the backend is proven.
+*Rejected: (A) flat view with markers — clutters the orchestrator timeline; (C) no changes — sub-agents look like parallel stage agents, confusing.*
 
 ---
 
-## Q10: How are SubAgentRunner dependencies injected?
+## Q10: How are SubAgentRunner dependencies injected? — DECIDED
 
-The `SubAgentRunner` needs access to heavy infrastructure: `AgentFactory`, `ClientFactory` (MCP), `Config`, `PromptBuilder`, `LLMClient`, `EventPublisher`, and DB services. Currently these live in `RealSessionExecutor`.
+> **Decision:** Option A — pass a dependency bundle struct.
 
-### Option A: Pass a dependency bundle
-
-Create a struct that bundles the dependencies the runner needs, extracted from the session executor:
+The session executor creates a `SubAgentDeps` bundle from its own fields and passes it to the `SubAgentRunner`. Explicit, testable, no circular references.
 
 ```go
 type SubAgentDeps struct {
@@ -431,83 +335,26 @@ type SubAgentDeps struct {
 }
 ```
 
-The session executor creates this bundle and passes it to the `SubAgentRunner`.
+Option C (extract shared execution logic) is a nice-to-have refactor that can happen once the MVP works.
 
-- **Pro:** Explicit dependencies, testable (can mock the bundle).
-- **Pro:** No circular references.
-- **Con:** Another struct to maintain.
-
-### Option B: Interface for sub-agent execution
-
-Define an interface that the session executor implements:
-
-```go
-type SubAgentExecutor interface {
-    ExecuteSubAgent(ctx context.Context, parentExecCtx *ExecutionContext, agentName, task string) (executionID string, resultCh <-chan *ExecutionResult, err error)
-}
-```
-
-The `SubAgentRunner` gets this interface and delegates back to the session executor.
-
-- **Pro:** Clean separation — runner doesn't know about internals.
-- **Pro:** Session executor reuses its own `executeAgent` logic.
-- **Con:** Potential for circular dependency if not careful with interfaces.
-- **Con:** More indirection.
-
-### Option C: Extract shared execution logic
-
-Pull the "resolve config + create tools + create agent + execute" path into a standalone function that both `RealSessionExecutor.executeAgent` and `SubAgentRunner` call.
-
-- **Pro:** Maximum code reuse, no duplication.
-- **Pro:** Single source of truth for agent execution.
-- **Con:** May require refactoring `executeAgent` which has many parameters.
-
-**Recommendation:** Option A for simplicity. The dependency bundle is explicit and straightforward. Option C (extract shared logic) is a nice-to-have refactor that can happen once the MVP works. The session executor creates the bundle from its own fields and passes it to the runner.
+*Rejected: (B) interface — more indirection, potential circular dependency; (C) extract shared logic — good refactor but not needed for MVP.*
 
 ---
 
-## Q11: What is the implementation phasing?
+## Q11: What is the implementation phasing? — DECIDED
 
-The feature involves config changes, new Go types, DB schema changes, and eventually dashboard updates. How should we break this into shippable increments?
+> **Decision:** Option B — horizontal layers. Small, reviewable PRs.
 
-### Option A: Vertical slice — minimal end-to-end
+1. **PR1: Config foundation** — `sub_agents` override at chain/stage/agent level, `orchestrator` nested config section, `defaults.orchestrator` globals, validation
+2. **PR2: DB schema** — `parent_execution_id`, `task` on `AgentExecution`, `UpdateStageStatus` filter
+3. **PR3: SubAgentRunner + CompositeToolExecutor** — core orchestration types, dispatch/cancel/list, results channel
+4. **PR4: Controller modification + orchestrator prompt** — push-based drain/wait logic in `IteratingController`, `buildSubAgentUserMessage`, agent catalog in system prompt
+5. **PR5: Session executor wiring** — detect orchestrator → create runner + composite executor, `SubAgentDeps` bundle
+6. **PR6: Dashboard** — tree view with parent-child hierarchy
 
-Ship a minimal working orchestrator as a single PR (or small series):
-1. Config: `description`, `type`, sub_agents override (chain-level)
-2. Backend: `CompositeToolExecutor`, `SubAgentRunner`, orchestrator prompt
-3. DB: `parent_execution_id` on `AgentExecution`
-4. No dashboard changes (sub-agents visible as extra executions in stage)
+Each PR is self-contained and reviewable. Config (PR1) and DB (PR2) are independently useful. Feature becomes testable after PR5. Dashboard follows as a separate stream.
 
-Then iterate: guardrails, dashboard, polish.
-
-- **Pro:** Working feature fastest.
-- **Pro:** Real usage feedback early.
-- **Con:** Large initial PR.
-
-### Option B: Horizontal layers
-
-1. PR1: Config foundation — `Description`, `Type`, `sub_agents`, validation
-2. PR2: DB schema — `parent_execution_id`, `task` on AgentExecution
-3. PR3: SubAgentRunner + CompositeToolExecutor
-4. PR4: Orchestrator prompt building
-5. PR5: Session executor wiring
-6. PR6: Dashboard updates
-
-- **Pro:** Small, reviewable PRs.
-- **Pro:** Each PR is self-contained.
-- **Con:** Feature isn't usable until PR5.
-- **Con:** More PRs to coordinate.
-
-### Option C: Feature-flagged single merge
-
-Build everything behind a feature flag, merge in stages, enable when ready.
-
-- **Pro:** Can merge incrementally without affecting production.
-- **Pro:** Feature is tested end-to-end before enabling.
-- **Con:** Feature flag infrastructure may not exist.
-- **Con:** Dead code in production until enabled.
-
-**Recommendation:** Option B. Small PRs are easier to review and test. The config changes (PR1) and DB schema (PR2) are independently useful (e.g., `Description` on agents is valuable even without the orchestrator). The feature becomes usable after PR5 and can be tested manually. Dashboard improvements follow as a separate stream.
+*Rejected: (A) vertical slice — large initial PR, harder to review; (C) feature-flagged — no flag infrastructure, dead code.*
 
 ---
 
@@ -515,14 +362,14 @@ Build everything behind a feature flag, merge in stages, enable when ready.
 
 | # | Question | Recommendation |
 |---|----------|----------------|
-| Q1 | Orchestrator identification | New `type` field on `AgentConfig` |
+| Q1 | Orchestrator identification | Existing `type` field — `AgentTypeOrchestrator` (ADR-0001) |
 | Q2 | Tool combination approach | CompositeToolExecutor (wrapper pattern) |
-| Q3 | Orchestration tool naming | Plain names (`dispatch_agent`, etc.) |
-| Q4 | Controller approach | Reuse FunctionCallingController |
-| Q5 | Guardrail config location | Nested `orchestrator` section |
-| Q6 | `sub_agents` override hierarchy | Chain-level only for v1 |
-| Q7 | Sub-agent DB model | `parent_execution_id` on AgentExecution |
-| Q8 | Task injection into sub-agent | Task replaces alert data |
-| Q9 | Dashboard phasing | No changes for v1, sub-agents visible in existing views |
-| Q10 | Dependency injection | Pass a dependency bundle struct |
-| Q11 | Implementation phasing | Horizontal layers (small PRs) |
+| Q3 | Orchestration tool naming | Plain names (`dispatch_agent`, `cancel_agent`, `list_agents`) |
+| Q4 | Controller approach | Reuse IteratingController + push-based result injection |
+| Q5 | Guardrail config location | Nested `orchestrator` section + global defaults under `defaults:` |
+| Q6 | `sub_agents` override hierarchy | Full hierarchy (chain + stage + stage-agent), all optional |
+| Q7 | Sub-agent DB model | `parent_execution_id` on `AgentExecution` |
+| Q8 | Task injection into sub-agent | Custom sub-agent template (`## Task` + task text) |
+| Q9 | Dashboard phasing | Tree view from the start — simple but hierarchical |
+| Q10 | Dependency injection | Dependency bundle struct (`SubAgentDeps`) |
+| Q11 | Implementation phasing | Horizontal layers (6 PRs: config → DB → runner → controller → wiring → dashboard) |
