@@ -36,7 +36,7 @@ func TestSynthesisController_HappyPath(t *testing.T) {
 }
 
 func TestSynthesisController_WithThinking(t *testing.T) {
-	// synthesis-native-thinking may produce thinking content
+	// synthesis with google-native backend may produce thinking content
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{

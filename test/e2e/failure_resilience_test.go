@@ -21,7 +21,7 @@ import (
 //   1. analysis (Analyzer ∥ Investigator, policy=any)
 //      Analyzer: LLM error → fails (max_iterations=1)
 //      Investigator: tool call + final answer → succeeds
-//      → analysis - Synthesis (synthesis-native-thinking)
+//      → analysis - Synthesis (synthesis-google-native)
 //   2. summary (Summarizer) — succeeds
 //   Executive summary: LLM error → fail-open, session still completed
 //
@@ -58,7 +58,7 @@ func TestE2E_FailureResilience(t *testing.T) {
 		},
 	})
 
-	// ── Synthesis (synthesis-native-thinking) — falls to sequential dispatch ──
+	// ── Synthesis (synthesis-google-native) — falls to sequential dispatch ──
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "One agent succeeded, one failed. Summarizing available results."},

@@ -17,7 +17,7 @@ import (
 // ────────────────────────────────────────────────────────────
 // FailurePropagation test — Scenarios 3 (Fail Fast) + 6 (Policy All failure).
 // Three-stage chain:
-//   1. preparation  (Preparer, NativeThinking) — succeeds
+//   1. preparation  (Preparer, GoogleNative) — succeeds
 //   2. parallel-check (CheckerA ∥ CheckerB, policy=all)
 //      CheckerA succeeds, CheckerB LLM error → stage fails
 //   3. final (Finalizer) — NEVER STARTS (fail-fast)
@@ -29,7 +29,7 @@ import (
 func TestE2E_FailurePropagation(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
-	// ── Stage 1: preparation (Preparer, native-thinking) — succeeds ──
+	// ── Stage 1: preparation (Preparer, google-native) — succeeds ──
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "Analyzing the alert data."},

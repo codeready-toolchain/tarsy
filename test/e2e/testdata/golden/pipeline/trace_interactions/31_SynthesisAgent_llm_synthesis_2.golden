@@ -109,7 +109,7 @@ Pod OOMKilled
 
 ### Parallel Investigation: "scaling-review" — 2/2 agents succeeded
 
-#### Agent 1: ScalingReviewer-1 (native-thinking, test-provider)
+#### Agent 1: ScalingReviewer-1 (google-native, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -124,7 +124,7 @@ Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-#### Agent 2: ScalingReviewer-2 (native-thinking, test-provider)
+#### Agent 2: ScalingReviewer-2 (google-native, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**

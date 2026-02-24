@@ -11,7 +11,7 @@ import (
 )
 
 // FunctionCallingController implements the native function calling loop.
-// Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
+// Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 // Tool calls come as structured ToolCallChunk values (not parsed from text).
 // Completion signal: a response without any ToolCalls.
 type FunctionCallingController struct{}

@@ -121,9 +121,9 @@ func TestFunctionCallingController_ToolCallErrorLifecycle(t *testing.T) {
 	assert.True(t, found, "should have an llm_tool_call event for the failed tool")
 }
 
-// TestNativeThinkingController_ToolCallLifecycleEvents verifies the
-// NativeThinking controller produces the same lifecycle events.
-func TestNativeThinkingController_ToolCallLifecycleEvents(t *testing.T) {
+// TestGoogleNativeController_ToolCallLifecycleEvents verifies the
+// GoogleNative controller produces the same lifecycle events.
+func TestGoogleNativeController_ToolCallLifecycleEvents(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			// First response: tool call
@@ -336,10 +336,10 @@ func TestFunctionCallingController_NonStreamingEventStatus(t *testing.T) {
 	assert.NotEmpty(t, statusByType[timelineevent.EventTypeFinalAnalysis], "expected final_analysis events")
 }
 
-// TestNativeThinkingController_NonStreamingEventStatus verifies the same fix
-// for native-thinking: llm_thinking and final_analysis (both non-streaming
+// TestGoogleNativeController_NonStreamingEventStatus verifies the same fix
+// for google-native: llm_thinking and final_analysis (both non-streaming
 // when EventPublisher is nil) should be StatusCompleted.
-func TestNativeThinkingController_NonStreamingEventStatus(t *testing.T) {
+func TestGoogleNativeController_NonStreamingEventStatus(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			// Final answer (no tool calls)
@@ -431,10 +431,10 @@ func TestFunctionCallingController_StorageTruncation(t *testing.T) {
 	assert.True(t, found, "expected llm_tool_call event not found")
 }
 
-// TestNativeThinkingController_SummarizationIntegration verifies that
+// TestGoogleNativeController_SummarizationIntegration verifies that
 // summarization works in the FunctionCallingController. Tool results are
 // appended as role=tool messages with ToolCallID.
-func TestNativeThinkingController_SummarizationIntegration(t *testing.T) {
+func TestGoogleNativeController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -492,10 +492,10 @@ func TestNativeThinkingController_SummarizationIntegration(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, summarization, iteration")
 }
 
-// TestNativeThinkingController_SummarizationFailOpen verifies that when
-// summarization fails in the NativeThinking controller, the raw tool result
+// TestGoogleNativeController_SummarizationFailOpen verifies that when
+// summarization fails in the GoogleNative controller, the raw tool result
 // is used as the tool response message (fail-open behavior).
-func TestNativeThinkingController_SummarizationFailOpen(t *testing.T) {
+func TestGoogleNativeController_SummarizationFailOpen(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (fails), 3) final answer
 	toolCallCount := 0
 	llm := &mockLLMClient{
@@ -550,9 +550,9 @@ func TestNativeThinkingController_SummarizationFailOpen(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
-// TestNativeThinkingController_StorageTruncation verifies that very large
-// tool results are truncated for storage in NativeThinking tool call events.
-func TestNativeThinkingController_StorageTruncation(t *testing.T) {
+// TestGoogleNativeController_StorageTruncation verifies that very large
+// tool results are truncated for storage in GoogleNative tool call events.
+func TestGoogleNativeController_StorageTruncation(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{

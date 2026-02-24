@@ -160,7 +160,7 @@ Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
 Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
-#### Agent 2: MetricsValidator (native-thinking, test-provider)
+#### Agent 2: MetricsValidator (google-native, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**

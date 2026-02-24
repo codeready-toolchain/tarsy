@@ -177,7 +177,7 @@ func newSynthesisExecCtx() *agent.ExecutionContext {
 	}
 }
 
-func newSynthesisNativeThinkingExecCtx() *agent.ExecutionContext {
+func newSynthesisGoogleNativeExecCtx() *agent.ExecutionContext {
 	return &agent.ExecutionContext{
 		SessionID:      "test-session",
 		AgentName:      "SynthesisAgent",
@@ -243,7 +243,7 @@ const synthesisStageContext = `### Results from parallel stage 'investigation':
 
 **Parallel Execution Summary**: 2/2 agents succeeded
 
-#### Agent 1: KubernetesAgent (google-default, native-thinking)
+#### Agent 1: KubernetesAgent (google-default, google-native)
 **Status**: completed
 
 Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
@@ -273,7 +273,7 @@ func TestIntegration_FunctionCallingInvestigation(t *testing.T) {
 	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "native_thinking_investigation", serializeMessages(messages))
+	assertGolden(t, "google_native_investigation", serializeMessages(messages))
 }
 
 func TestIntegration_FunctionCallingInvestigationWithContext(t *testing.T) {
@@ -301,14 +301,14 @@ func TestIntegration_Synthesis(t *testing.T) {
 	assertGolden(t, "synthesis", serializeMessages(messages))
 }
 
-func TestIntegration_SynthesisNativeThinking(t *testing.T) {
+func TestIntegration_SynthesisGoogleNative(t *testing.T) {
 	builder := newIntegrationBuilder()
-	execCtx := newSynthesisNativeThinkingExecCtx()
+	execCtx := newSynthesisGoogleNativeExecCtx()
 
 	messages := builder.BuildSynthesisMessages(execCtx, synthesisStageContext)
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "synthesis_native_thinking", serializeMessages(messages))
+	assertGolden(t, "synthesis_google_native", serializeMessages(messages))
 }
 
 // ===========================================================================
@@ -322,7 +322,7 @@ func TestIntegration_FunctionCallingChat(t *testing.T) {
 	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "native_thinking_chat", serializeMessages(messages))
+	assertGolden(t, "google_native_chat", serializeMessages(messages))
 }
 
 // ===========================================================================
@@ -413,7 +413,7 @@ func TestIntegration_SynthesisNativeToolsGuidanceConditional(t *testing.T) {
 	})
 
 	t.Run("present when Google Search enabled", func(t *testing.T) {
-		execCtx := newSynthesisNativeThinkingExecCtx()
+		execCtx := newSynthesisGoogleNativeExecCtx()
 		messages := builder.BuildSynthesisMessages(execCtx, "some results")
 		systemMsg := messages[0].Content
 		assert.Contains(t, systemMsg, "## Web Search and URL Context Capabilities")
@@ -422,7 +422,7 @@ func TestIntegration_SynthesisNativeToolsGuidanceConditional(t *testing.T) {
 	})
 
 	t.Run("present when only URL Context enabled", func(t *testing.T) {
-		execCtx := newSynthesisNativeThinkingExecCtx()
+		execCtx := newSynthesisGoogleNativeExecCtx()
 		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch] = false
 		messages := builder.BuildSynthesisMessages(execCtx, "some results")
 		systemMsg := messages[0].Content
@@ -430,7 +430,7 @@ func TestIntegration_SynthesisNativeToolsGuidanceConditional(t *testing.T) {
 	})
 
 	t.Run("absent when both explicitly disabled", func(t *testing.T) {
-		execCtx := newSynthesisNativeThinkingExecCtx()
+		execCtx := newSynthesisGoogleNativeExecCtx()
 		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch] = false
 		execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolURLContext] = false
 		messages := builder.BuildSynthesisMessages(execCtx, "some results")

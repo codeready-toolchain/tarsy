@@ -39,7 +39,7 @@ const (
 )
 
 // BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
-// Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
+// Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,

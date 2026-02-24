@@ -59,7 +59,7 @@ This is a test runbook for integration testing.
 
 **Parallel Execution Summary**: 2/2 agents succeeded
 
-#### Agent 1: KubernetesAgent (google-default, native-thinking)
+#### Agent 1: KubernetesAgent (google-default, google-native)
 **Status**: completed
 
 Pod pod-1 is in CrashLoopBackOff state due to OOM kills.
