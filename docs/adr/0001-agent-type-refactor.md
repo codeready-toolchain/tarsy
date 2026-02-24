@@ -1,9 +1,7 @@
-# Agent Type System Refactor — Design Document
+# ADR-0001: Agent Type System Refactor
 
-**Status:** Ready for implementation
-**Context:** Identified during [orchestrator implementation design](orchestrator-impl-design.md)
-**Decisions:** All questions resolved — see [agent-type-refactor-questions.md](agent-type-refactor-questions.md)
-**Last updated:** 2026-02-23
+**Status:** Implemented
+**Date:** 2026-02-23
 
 ## Problem Statement
 
@@ -420,12 +418,10 @@ Each phase is a reviewable PR. The orchestrator work begins after phase 5.
 
 ## Decisions
 
-All questions resolved — see [agent-type-refactor-questions.md](agent-type-refactor-questions.md) for full rationale.
-
-| # | Question | Decision |
-|---|----------|----------|
-| Q1 | Controller restructuring | Two structural controllers (IteratingController + SingleShotController) with parameterized config |
-| Q2 | ScoringAgent merge | Keep separate; uses SingleShotController with scoring config |
-| Q3 | Backend selection | Remove `iteration_strategy`, introduce `llm_backend` (`native-gemini`, `langchain`). Controller from `type`. |
-| Q4 | Backward compatibility | Clean cut — no migration code |
-| Q5 | Sequencing | Refactor first, then orchestrator |
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| Q1 | Controller restructuring | Two structural controllers (IteratingController + SingleShotController) with parameterized config | Two controllers match two real control flow patterns. Shared code already in package-level functions. Parameterized `SingleShotConfig` serves both synthesis and scoring without type-awareness. |
+| Q2 | ScoringAgent merge | Keep separate; uses SingleShotController with scoring config | Small (52 lines), explicitly encapsulates different lifecycle (no execution status updates). Agent wrapper and controller are separate layers. |
+| Q3 | Backend selection | Remove `iteration_strategy`, introduce `llm_backend` (`native-gemini`, `langchain`). Controller from `type`. | `iteration_strategy` conflated backend selection and agent behavior. With `type` handling controller selection, the only remaining job is SDK path. Each field does exactly one thing. |
+| Q4 | Backward compatibility | Clean cut — no migration code | No deprecated code paths to maintain. Users update configs before upgrading. |
+| Q5 | Sequencing | Refactor first, then orchestrator | Independently valuable cleanup. Orchestrator builds on clean foundation. Each step is a small, reviewable PR. |

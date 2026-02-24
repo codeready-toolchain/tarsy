@@ -49,6 +49,7 @@ Commands in `.cursor/commands/` are available for explicit invocation:
 - `/create-python-tests` - Generate Python tests
 - `/lint-and-fix` - Run linter and fix issues
 - `/pr-comment` - PR review context
+- `/promote-to-adr` - Move implemented proposal to `docs/adr/` as numbered ADR
 - `/research` - Internet research
 
 **Note**: Commands are only executed when explicitly requested by the user.
