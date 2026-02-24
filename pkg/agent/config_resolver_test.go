@@ -58,6 +58,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentTypeDefault, resolved.Type)
 		// Agent def overrides defaults for LLM backend
 		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
@@ -106,6 +107,27 @@ func TestResolveAgentConfig(t *testing.T) {
 
 		// Chain-level langchain overrides agent-def's google-native
 		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("Type propagates from agent definition", func(t *testing.T) {
+		synthCfg := &config.Config{
+			Defaults: defaults,
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"SynthesisAgent": {
+					Type:               config.AgentTypeSynthesis,
+					CustomInstructions: "You synthesize.",
+				},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "SynthesisAgent"}
+
+		resolved, err := ResolveAgentConfig(synthCfg, chain, stageConfig, agentConfig)
+		require.NoError(t, err)
+
+		assert.Equal(t, config.AgentTypeSynthesis, resolved.Type)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {
@@ -249,6 +271,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ChatAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentTypeDefault, resolved.Type)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
 		assert.Equal(t, 25, resolved.MaxIterations)
 		assert.Equal(t, "You are a chat agent", resolved.CustomInstructions)
@@ -446,6 +469,7 @@ func TestResolveScoringConfig(t *testing.T) {
 		resolved, err := ResolveScoringConfig(cfg, chain, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ScoringAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentTypeScoring, resolved.Type)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
 		assert.Equal(t, 25, resolved.MaxIterations)
 		assert.Equal(t, "You are a scoring agent", resolved.CustomInstructions)
@@ -460,6 +484,7 @@ func TestResolveScoringConfig(t *testing.T) {
 		resolved, err := ResolveScoringConfig(cfg, chain, scoringCfg)
 		require.NoError(t, err)
 		assert.Equal(t, "CustomScorer", resolved.AgentName)
+		assert.Equal(t, config.AgentTypeScoring, resolved.Type)
 	})
 
 	t.Run("defaults.ScoringAgent used as fallback", func(t *testing.T) {
