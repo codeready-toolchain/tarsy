@@ -176,18 +176,19 @@ func testConfig(chainID string, chain *config.ChainConfig) *config.Config {
 	maxIter := 1
 	return &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyLangChain,
-			MaxIterations:     &maxIter,
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent": {
-				IterationStrategy: config.IterationStrategyLangChain,
-				MaxIterations:     &maxIter,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 			"SynthesisAgent": {
-				IterationStrategy: config.IterationStrategySynthesis,
-				MaxIterations:     &maxIter,
+				Type:          config.AgentTypeSynthesis,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -1281,13 +1282,13 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 		}
 	}
 	require.NotNil(t, synthExec, "should have SynthesisAgent execution")
-	assert.Equal(t, "synthesis", synthExec.IterationStrategy)
+	assert.Equal(t, string(config.LLMBackendLangChain), synthExec.LlmBackend)
 }
 
-func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
-	// When the iteration strategy is set in the agent registry (not at
+func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
+	// When the LLM backend is set in the agent registry (not at
 	// stage level), the AgentExecution DB record must store the resolved
-	// strategy — not the empty stage-level value or the system default.
+	// backend — not the empty stage-level value or the system default.
 	entClient, _ := util.SetupTestDatabase(t)
 
 	maxIter := 1
@@ -1297,8 +1298,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 			{
 				Name: "investigation",
 				Agents: []config.StageAgentConfig{
-					{Name: "NativeAgent"},    // no strategy override at stage level
-					{Name: "LangChainAgent"}, // no strategy override at stage level
+					{Name: "NativeAgent"},    // no backend override at stage level
+					{Name: "LangChainAgent"}, // no backend override at stage level
 				},
 			},
 		},
@@ -1320,25 +1321,26 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 		},
 	}
 
-	// Agent registry defines strategies; stage config does NOT override them.
+	// Agent registry defines backends; stage config does NOT override them.
 	cfg := &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyLangChain, // system default
-			MaxIterations:     &maxIter,
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain, // system default
+			MaxIterations: &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"NativeAgent": {
-				IterationStrategy: config.IterationStrategyNativeThinking,
-				MaxIterations:     &maxIter,
+				LLMBackend:    config.LLMBackendNativeGemini,
+				MaxIterations: &maxIter,
 			},
 			"LangChainAgent": {
-				IterationStrategy: config.IterationStrategyLangChain,
-				MaxIterations:     &maxIter,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 			"SynthesisAgent": {
-				IterationStrategy: config.IterationStrategySynthesis,
-				MaxIterations:     &maxIter,
+				Type:          config.AgentTypeSynthesis,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -1356,7 +1358,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 
-	// Verify execution records store the resolved strategy from agent registry
+	// Verify execution records store the resolved backend from agent registry
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	require.Len(t, execs, 3) // NativeAgent, LangChainAgent, SynthesisAgent
@@ -1367,19 +1369,19 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	}
 
 	require.Contains(t, execByName, "NativeAgent")
-	assert.Equal(t, "native-thinking", execByName["NativeAgent"].IterationStrategy,
-		"NativeAgent should have resolved strategy from agent registry, not default")
+	assert.Equal(t, string(config.LLMBackendNativeGemini), execByName["NativeAgent"].LlmBackend,
+		"NativeAgent should have resolved backend from agent registry, not default")
 
 	require.Contains(t, execByName, "LangChainAgent")
-	assert.Equal(t, "langchain", execByName["LangChainAgent"].IterationStrategy,
-		"LangChainAgent should have resolved strategy from agent registry")
+	assert.Equal(t, string(config.LLMBackendLangChain), execByName["LangChainAgent"].LlmBackend,
+		"LangChainAgent should have resolved backend from agent registry")
 
 	require.Contains(t, execByName, "SynthesisAgent")
-	assert.Equal(t, "synthesis", execByName["SynthesisAgent"].IterationStrategy)
+	assert.Equal(t, string(config.LLMBackendLangChain), execByName["SynthesisAgent"].LlmBackend)
 
-	// Verify the synthesis LLM call received correct strategy labels.
+	// Verify the synthesis LLM call received correct backend labels.
 	// The 3rd LLM call is synthesis — its input messages should contain
-	// the correct agent strategy labels.
+	// the correct agent backend labels.
 	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
 	synthInput := llm.capturedInputs[2]
 	synthUserMsg := ""
@@ -1388,7 +1390,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 			synthUserMsg = msg.Content
 		}
 	}
-	assert.Contains(t, synthUserMsg, "NativeAgent (native-thinking, test-provider)",
+	assert.Contains(t, synthUserMsg, "NativeAgent (google-native, test-provider)",
 		"synthesis prompt should show resolved strategy for NativeAgent")
 	assert.Contains(t, synthUserMsg, "LangChainAgent (langchain, test-provider)",
 		"synthesis prompt should show resolved strategy for LangChainAgent")
@@ -1615,10 +1617,10 @@ func TestExecutor_SuccessPolicyDefaulting(t *testing.T) {
 			executor := &RealSessionExecutor{
 				cfg: &config.Config{
 					Defaults: &config.Defaults{
-						SuccessPolicy:     tc.defaultPolicy,
-						MaxIterations:     &maxIter,
-						LLMProvider:       "test",
-						IterationStrategy: config.IterationStrategyLangChain,
+						SuccessPolicy: tc.defaultPolicy,
+						MaxIterations: &maxIter,
+						LLMProvider:   "test",
+						LLMBackend:    config.LLMBackendLangChain,
 					},
 				},
 			}
@@ -2069,19 +2071,20 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	// LLM should never be called.
 	llm := &mockLLMClient{}
 
-	// Register "BadAgent" with an unsupported iteration strategy so that
+	// Register "BadAgent" with an unsupported agent type so that
 	// ResolveAgentConfig succeeds but CreateAgent (→ CreateController) fails.
 	maxIter := 1
 	cfg := &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyLangChain,
-			MaxIterations:     &maxIter,
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"BadAgent": {
-				IterationStrategy: config.IterationStrategy("unsupported-strategy"),
-				MaxIterations:     &maxIter,
+				Type:          config.AgentType("unsupported-type"),
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{

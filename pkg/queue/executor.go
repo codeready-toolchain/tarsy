@@ -98,12 +98,12 @@ type stageResult struct {
 
 // agentResult captures the outcome of a single agent execution within a stage.
 type agentResult struct {
-	executionID       string
-	status            agent.ExecutionStatus
-	finalAnalysis     string
-	err               error
-	iterationStrategy string // resolved strategy (for synthesis context)
-	llmProviderName   string // resolved provider name (for synthesis context)
+	executionID     string
+	status          agent.ExecutionStatus
+	finalAnalysis   string
+	err             error
+	llmBackend      string // resolved backend (for synthesis context)
+	llmProviderName string // resolved provider name (for synthesis context)
 }
 
 // executionConfig wraps agent config with display name for stage execution.
@@ -411,15 +411,28 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Best-effort provider name for the error path (before ResolveAgentConfig
-	// succeeds). The happy path uses resolvedConfig.LLMProviderName instead,
-	// keeping ResolveAgentConfig as the single source of truth.
-	fallbackProviderName := e.cfg.Defaults.LLMProvider
+	// Best-effort provider/backend for the error path (before ResolveAgentConfig
+	// succeeds). The happy path uses resolvedConfig instead, keeping
+	// ResolveAgentConfig as the single source of truth.
+	var fallbackProviderName string
+	fallbackBackend := agent.DefaultLLMBackend
+	if e.cfg.Defaults != nil {
+		fallbackProviderName = e.cfg.Defaults.LLMProvider
+		if e.cfg.Defaults.LLMBackend != "" {
+			fallbackBackend = e.cfg.Defaults.LLMBackend
+		}
+	}
 	if input.chain.LLMProvider != "" {
 		fallbackProviderName = input.chain.LLMProvider
 	}
 	if agentConfig.LLMProvider != "" {
 		fallbackProviderName = agentConfig.LLMProvider
+	}
+	if input.chain.LLMBackend != "" {
+		fallbackBackend = input.chain.LLMBackend
+	}
+	if agentConfig.LLMBackend != "" {
+		fallbackBackend = agentConfig.LLMBackend
 	}
 
 	// Resolve agent config from hierarchy (before creating execution record
@@ -437,6 +450,7 @@ func (e *RealSessionExecutor) executeAgent(
 			SessionID:   input.session.ID,
 			AgentName:   displayName,
 			AgentIndex:  agentIndex + 1, // 1-based in DB
+			LLMBackend:  fallbackBackend,
 			LLMProvider: fallbackProviderName,
 		})
 		if createErr != nil {
@@ -461,24 +475,27 @@ func (e *RealSessionExecutor) executeAgent(
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
 			err:             resErr,
+			llmBackend:      string(fallbackBackend),
 			llmProviderName: fallbackProviderName,
 		}
 	}
 
 	// Create AgentExecution DB record with resolved strategy and provider
 	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         input.session.ID,
-		AgentName:         displayName,
-		AgentIndex:        agentIndex + 1, // 1-based in DB
-		IterationStrategy: resolvedConfig.IterationStrategy,
-		LLMProvider:       resolvedConfig.LLMProviderName,
+		StageID:     stg.ID,
+		SessionID:   input.session.ID,
+		AgentName:   displayName,
+		AgentIndex:  agentIndex + 1, // 1-based in DB
+		LLMBackend:  resolvedConfig.LLMBackend,
+		LLMProvider: resolvedConfig.LLMProviderName,
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
 		return agentResult{
-			status: agent.ExecutionStatusFailed,
-			err:    fmt.Errorf("failed to create agent execution: %w", err),
+			status:          agent.ExecutionStatusFailed,
+			err:             fmt.Errorf("failed to create agent execution: %w", err),
+			llmBackend:      string(resolvedConfig.LLMBackend),
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -490,7 +507,7 @@ func (e *RealSessionExecutor) executeAgent(
 	publishExecutionStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusActive), "")
 
 	// Metadata carried on all agentResult returns below (for synthesis context).
-	resolvedStrategy := string(resolvedConfig.IterationStrategy)
+	resolvedBackend := string(resolvedConfig.LLMBackend)
 
 	// Resolve MCP servers and tool filter
 	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
@@ -504,11 +521,11 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
-			executionID:       exec.ID,
-			status:            agent.ExecutionStatusFailed,
-			err:               failErr,
-			iterationStrategy: resolvedStrategy,
-			llmProviderName:   resolvedConfig.LLMProviderName,
+			executionID:     exec.ID,
+			status:          agent.ExecutionStatusFailed,
+			err:             failErr,
+			llmBackend:      resolvedBackend,
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -551,11 +568,11 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
 		return agentResult{
-			executionID:       exec.ID,
-			status:            agent.ExecutionStatusFailed,
-			err:               failErr,
-			iterationStrategy: resolvedStrategy,
-			llmProviderName:   resolvedConfig.LLMProviderName,
+			executionID:     exec.ID,
+			status:          agent.ExecutionStatusFailed,
+			err:             failErr,
+			llmBackend:      resolvedBackend,
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -578,11 +595,11 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(entErrStatus), err.Error())
 		return agentResult{
-			executionID:       exec.ID,
-			status:            errStatus,
-			err:               err,
-			iterationStrategy: resolvedStrategy,
-			llmProviderName:   resolvedConfig.LLMProviderName,
+			executionID:     exec.ID,
+			status:          errStatus,
+			err:             err,
+			llmBackend:      resolvedBackend,
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 
@@ -612,23 +629,23 @@ func (e *RealSessionExecutor) executeAgent(
 	if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entStatus, errMsg); updateErr != nil {
 		logger.Error("Failed to update agent execution status", "error", updateErr)
 		return agentResult{
-			executionID:       exec.ID,
-			status:            agent.ExecutionStatusFailed,
-			finalAnalysis:     result.FinalAnalysis,
-			err:               fmt.Errorf("agent completed but status update failed: %w", updateErr),
-			iterationStrategy: resolvedStrategy,
-			llmProviderName:   resolvedConfig.LLMProviderName,
+			executionID:     exec.ID,
+			status:          agent.ExecutionStatusFailed,
+			finalAnalysis:   result.FinalAnalysis,
+			err:             fmt.Errorf("agent completed but status update failed: %w", updateErr),
+			llmBackend:      resolvedBackend,
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 	publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(entStatus), errMsg)
 
 	return agentResult{
-		executionID:       exec.ID,
-		status:            result.Status,
-		finalAnalysis:     result.FinalAnalysis,
-		err:               result.Error,
-		iterationStrategy: resolvedStrategy,
-		llmProviderName:   resolvedConfig.LLMProviderName,
+		executionID:     exec.ID,
+		status:          result.Status,
+		finalAnalysis:   result.FinalAnalysis,
+		err:             result.Error,
+		llmBackend:      resolvedBackend,
+		llmProviderName: resolvedConfig.LLMProviderName,
 	}
 }
 
@@ -678,15 +695,14 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Build synthesis agent config — synthesis: block is optional, defaults apply
 	synthAgentConfig := config.StageAgentConfig{
-		Name:              "SynthesisAgent",
-		IterationStrategy: config.IterationStrategySynthesis,
+		Name: "SynthesisAgent",
 	}
 	if s := input.stageConfig.Synthesis; s != nil {
 		if s.Agent != "" {
 			synthAgentConfig.Name = s.Agent
 		}
-		if s.IterationStrategy != "" {
-			synthAgentConfig.IterationStrategy = s.IterationStrategy
+		if s.LLMBackend != "" {
+			synthAgentConfig.LLMBackend = s.LLMBackend
 		}
 		if s.LLMProvider != "" {
 			synthAgentConfig.LLMProvider = s.LLMProvider
@@ -739,9 +755,9 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 
 		investigation := agentctx.AgentInvestigation{
 			AgentName:   displayName,
-			AgentIndex:  i + 1,                // 1-based
-			Strategy:    ar.iterationStrategy, // resolved at execution time
-			LLMProvider: ar.llmProviderName,   // resolved at execution time
+			AgentIndex:  i + 1,              // 1-based
+			LLMBackend:  ar.llmBackend,      // resolved at execution time
+			LLMProvider: ar.llmProviderName, // resolved at execution time
 			Status:      mapAgentStatusToSessionStatus(ar.status),
 		}
 
@@ -996,7 +1012,10 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		events.ProgressPhaseFinalizing, "Generating executive summary")
 
 	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
-	providerName := e.cfg.Defaults.LLMProvider
+	var providerName string
+	if e.cfg.Defaults != nil {
+		providerName = e.cfg.Defaults.LLMProvider
+	}
 	if chain.LLMProvider != "" {
 		providerName = chain.LLMProvider
 	}
@@ -1008,12 +1027,14 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		return "", fmt.Errorf("executive summary LLM provider %q not found: %w", providerName, err)
 	}
 
-	// Resolve backend from chain-level strategy or defaults
-	strategy := e.cfg.Defaults.IterationStrategy
-	if chain.IterationStrategy != "" {
-		strategy = chain.IterationStrategy
+	// Resolve backend from chain-level LLM backend or defaults
+	backend := agent.DefaultLLMBackend
+	if e.cfg.Defaults != nil && e.cfg.Defaults.LLMBackend != "" {
+		backend = e.cfg.Defaults.LLMBackend
 	}
-	backend := agent.ResolveBackend(strategy)
+	if chain.LLMBackend != "" {
+		backend = chain.LLMBackend
+	}
 
 	// Build prompts
 	systemPrompt := e.promptBuilder.BuildExecutiveSummarySystemPrompt()
@@ -1286,7 +1307,7 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 	if input.stageConfig.SuccessPolicy != "" {
 		return input.stageConfig.SuccessPolicy
 	}
-	if e.cfg.Defaults.SuccessPolicy != "" {
+	if e.cfg.Defaults != nil && e.cfg.Defaults.SuccessPolicy != "" {
 		return e.cfg.Defaults.SuccessPolicy
 	}
 	return config.SuccessPolicyAny

@@ -1,6 +1,6 @@
 defaults:
   llm_provider: "test-provider"
-  iteration_strategy: "native-thinking"
+  llm_backend: "google-native"
 
 mcp_servers:
   test-mcp:
@@ -39,7 +39,7 @@ agent_chains:
           - name: Investigator
         synthesis:
           llm_provider: "test-provider"
-          iteration_strategy: "synthesis-native-thinking"
+          llm_backend: "google-native"
       - name: summary
         agents:
           - name: Summarizer

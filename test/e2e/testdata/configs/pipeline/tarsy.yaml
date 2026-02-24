@@ -1,6 +1,6 @@
 defaults:
   llm_provider: "test-provider"
-  iteration_strategy: "native-thinking"
+  llm_backend: "google-native"
 
 mcp_servers:
   test-mcp:
@@ -46,11 +46,11 @@ agent_chains:
     alert_types: [test-alert]
     llm_provider: "test-provider"
     executive_summary_provider: "test-provider-fast"
-    iteration_strategy: "native-thinking"
+    llm_backend: "google-native"
     chat:
       enabled: true
       agent: "ChatAgent"
-      iteration_strategy: "native-thinking"
+      llm_backend: "google-native"
     stages:
       - name: investigation
         agents:
@@ -58,20 +58,20 @@ agent_chains:
       - name: remediation
         agents:
           - name: Remediator
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
       - name: validation
         success_policy: all
         agents:
           - name: ConfigValidator
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
           - name: MetricsValidator
         synthesis:
           llm_provider: "test-provider"
-          iteration_strategy: "synthesis-native-thinking"
+          llm_backend: "google-native"
       - name: scaling-review
         replicas: 2
         agents:
           - name: ScalingReviewer
         synthesis:
           llm_provider: "test-provider-fast"
-          iteration_strategy: "synthesis"
+          llm_backend: "langchain"

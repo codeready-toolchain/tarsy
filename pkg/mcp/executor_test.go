@@ -88,7 +88,7 @@ func TestToolExecutor_Execute_KeyValue(t *testing.T) {
 	assert.Equal(t, "ok", result.Content)
 }
 
-func TestToolExecutor_Execute_NativeThinkingName(t *testing.T) {
+func TestToolExecutor_Execute_GoogleNativeName(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {
 			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -99,7 +99,7 @@ func TestToolExecutor_Execute_NativeThinkingName(t *testing.T) {
 		},
 	})
 
-	// NativeThinking uses __ instead of .
+	// GoogleNative uses __ instead of .
 	result, err := executor.Execute(context.Background(), agent.ToolCall{
 		ID:        "call-3",
 		Name:      "kubernetes__get_pods",

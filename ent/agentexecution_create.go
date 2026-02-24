@@ -120,9 +120,9 @@ func (_c *AgentExecutionCreate) SetNillableErrorMessage(v *string) *AgentExecuti
 	return _c
 }
 
-// SetIterationStrategy sets the "iteration_strategy" field.
-func (_c *AgentExecutionCreate) SetIterationStrategy(v string) *AgentExecutionCreate {
-	_c.mutation.SetIterationStrategy(v)
+// SetLlmBackend sets the "llm_backend" field.
+func (_c *AgentExecutionCreate) SetLlmBackend(v string) *AgentExecutionCreate {
+	_c.mutation.SetLlmBackend(v)
 	return _c
 }
 
@@ -279,8 +279,8 @@ func (_c *AgentExecutionCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AgentExecution.status": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.IterationStrategy(); !ok {
-		return &ValidationError{Name: "iteration_strategy", err: errors.New(`ent: missing required field "AgentExecution.iteration_strategy"`)}
+	if _, ok := _c.mutation.LlmBackend(); !ok {
+		return &ValidationError{Name: "llm_backend", err: errors.New(`ent: missing required field "AgentExecution.llm_backend"`)}
 	}
 	if len(_c.mutation.StageIDs()) == 0 {
 		return &ValidationError{Name: "stage", err: errors.New(`ent: missing required edge "AgentExecution.stage"`)}
@@ -351,9 +351,9 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 		_spec.SetField(agentexecution.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
 	}
-	if value, ok := _c.mutation.IterationStrategy(); ok {
-		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
-		_node.IterationStrategy = value
+	if value, ok := _c.mutation.LlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldLlmBackend, field.TypeString, value)
+		_node.LlmBackend = value
 	}
 	if value, ok := _c.mutation.LlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)

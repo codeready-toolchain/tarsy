@@ -9,14 +9,20 @@ import (
 
 // AgentConfig defines agent configuration (metadata only — see agent.AgentFactory for instantiation).
 type AgentConfig struct {
+	// Agent type determines controller + wrapper selection
+	Type AgentType `yaml:"type,omitempty"`
+
+	// Human-readable description
+	Description string `yaml:"description,omitempty"`
+
 	// MCP servers this agent uses
 	MCPServers []string `yaml:"mcp_servers" validate:"required,min=1"`
 
 	// Custom instructions override built-in agent behavior
 	CustomInstructions string `yaml:"custom_instructions"`
 
-	// Iteration strategy for this agent
-	IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+	// LLM backend for this agent
+	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
 	// Max iterations for this agent (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`

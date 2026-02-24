@@ -25,14 +25,14 @@ type ExpectedEvent struct {
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
 // Four stages + two synthesis stages + two chat messages:
-//   1. investigation  (DataCollector, NativeThinking)
+//   1. investigation  (DataCollector, google-native)
 //   2. remediation    (Remediator, langchain)
-//   3. validation     (ConfigValidator langchain ∥ MetricsValidator native-thinking, forced conclusion)
-//      → validation - Synthesis (synthesis-native-thinking)
-//   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
+//   3. validation     (ConfigValidator langchain ∥ MetricsValidator google-native, forced conclusion)
+//      → validation - Synthesis (synthesis-google-native)
+//   4. scaling-review (ScalingReviewer x2 replicas, google-native)
 //      → scaling-review - Synthesis (plain synthesis)
-//   + Chat 1: native-thinking with test-mcp tool call
-//   + Chat 2: native-thinking with prometheus-mcp tool call
+//   + Chat 1: google-native with test-mcp tool call
+//   + Chat 2: google-native with prometheus-mcp tool call
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
 // parallel agents, replicas, both synthesis strategies, forced conclusion,
 // executive summary, and follow-up chat with MCP tools.
@@ -41,7 +41,7 @@ type ExpectedEvent struct {
 var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 
-	// ── Stage 1: investigation (DataCollector, native-thinking) ──
+	// ── Stage 1: investigation (DataCollector, google-native) ──
 	{Type: "stage.status", StageName: "investigation", Status: "started"},
 
 	// Iteration 1: thinking + intermediate response + two tool calls from test-mcp.
@@ -143,7 +143,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
 
-	// ── Stage 3: validation (ConfigValidator langchain ∥ MetricsValidator native-thinking) ──
+	// ── Stage 3: validation (ConfigValidator langchain ∥ MetricsValidator google-native) ──
 	// Two agents run in parallel. Events from both agents interleave non-deterministically,
 	// so all timeline events are in a single Group (matched in any order).
 	{Type: "stage.status", StageName: "validation", Status: "started"},
@@ -170,7 +170,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 10,
 		Content: "Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold."},
 
-	// --- MetricsValidator (native-thinking, forced conclusion): iteration 1 — tool call ---
+	// --- MetricsValidator (google-native, forced conclusion): iteration 1 — tool call ---
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 10},
 	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 10,
@@ -184,7 +184,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	}},
 	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 10,
 		Content: `[{"slo":"availability","target":0.999,"current":0.95,"pod":"pod-1","violation":true}]`},
-	// --- MetricsValidator (native-thinking): forced conclusion (max_iterations=1 exhausted) ---
+	// --- MetricsValidator (google-native): forced conclusion (max_iterations=1 exhausted) ---
 	// All events from the forced conclusion path carry forced_conclusion metadata.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 10, Metadata: map[string]string{
 		"forced_conclusion": "true",
@@ -205,7 +205,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "validation", Status: "completed"},
 
-	// ── Validation Synthesis (synthesis-native-thinking — includes thinking + Google Search) ──
+	// ── Validation Synthesis (synthesis-google-native — includes thinking + Google Search) ──
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "started"},
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
@@ -220,7 +220,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 		Content: "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO."},
 	{Type: "stage.status", StageName: "validation - Synthesis", Status: "completed"},
 
-	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, native-thinking) ──
+	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, google-native) ──
 	// Replicas run in parallel — events interleave non-deterministically.
 	{Type: "stage.status", StageName: "scaling-review", Status: "started"},
 
@@ -258,7 +258,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "session.status", Status: "completed"},
 
-	// ── Chat 1: "What caused the OOM?" (ChatAgent, native-thinking with test-mcp tool) ──
+	// ── Chat 1: "What caused the OOM?" (ChatAgent, google-native with test-mcp tool) ──
 	{Type: "chat.created"},
 
 	// user_question published via WS so the dashboard can render it.
@@ -300,7 +300,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
 
-	// ── Chat 2: "What are the current SLO metrics?" (ChatAgent, native-thinking with prometheus-mcp tool) ──
+	// ── Chat 2: "What are the current SLO metrics?" (ChatAgent, google-native with prometheus-mcp tool) ──
 	// user_question published via WS so the dashboard can render it.
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "What are the current SLO metrics for pod-1?"},
@@ -339,7 +339,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 // Scenario: FailurePropagation
 // Three-stage chain where stage 2 (policy=all) fails when one parallel
 // agent's LLM returns an error. Fail-fast prevents stage 3 from starting.
-//   1. preparation (Preparer, NativeThinking) — succeeds
+//   1. preparation (Preparer, google-native) — succeeds
 //   2. parallel-check (CheckerA ∥ CheckerB, policy=all) — CheckerB errors → stage fails
 //   3. final (Finalizer) — NEVER STARTS (fail-fast)
 // ────────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 var FailurePropagationExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 
-	// ── Stage 1: preparation (Preparer, native-thinking) ──
+	// ── Stage 1: preparation (Preparer, google-native) ──
 	{Type: "stage.status", StageName: "preparation", Status: "started"},
 
 	// Preparer: single iteration — thinking + response + final_analysis.
@@ -365,7 +365,7 @@ var FailurePropagationExpectedEvents = []ExpectedEvent{
 	// ── Stage 2: parallel-check (CheckerA succeeds ∥ CheckerB errors, policy=all) ──
 	{Type: "stage.status", StageName: "parallel-check", Status: "started"},
 
-	// CheckerA (native-thinking): succeeds — thinking + response + final_analysis.
+	// CheckerA (google-native): succeeds — thinking + response + final_analysis.
 	// CheckerB: LLM error on Generate() → no timeline events at all.
 	// Since only CheckerA produces events, they don't need a Group.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -390,7 +390,7 @@ var FailurePropagationExpectedEvents = []ExpectedEvent{
 //   1. analysis (Analyzer ∥ Investigator, policy=any)
 //      Analyzer: LLM error → fails (max_iterations=1)
 //      Investigator: tool call + final answer → succeeds
-//      → analysis - Synthesis (synthesis-native-thinking)
+//      → analysis - Synthesis (synthesis-google-native)
 //   2. summary (Summarizer) — succeeds
 //   Executive summary: LLM error → fail-open, session still completed
 // ────────────────────────────────────────────────────────────
@@ -403,7 +403,7 @@ var FailureResilienceExpectedEvents = []ExpectedEvent{
 
 	// Parallel agents — events interleave non-deterministically → Group 1.
 	//
-	// Analyzer: Generate() returns error → NativeThinking controller creates
+	// Analyzer: Generate() returns error → GoogleNative controller creates
 	// a fire-and-forget "error" timeline event (no streaming phase).
 	{Type: "timeline_event.created", EventType: "error", Status: "completed", Group: 1},
 
@@ -433,7 +433,7 @@ var FailureResilienceExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "analysis", Status: "completed"},
 
-	// ── Synthesis: analysis - Synthesis (synthesis-native-thinking) ──
+	// ── Synthesis: analysis - Synthesis (synthesis-google-native) ──
 	{Type: "stage.status", StageName: "analysis - Synthesis", Status: "started"},
 
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -447,7 +447,7 @@ var FailureResilienceExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "analysis - Synthesis", Status: "completed"},
 
-	// ── Stage 2: summary (Summarizer, native-thinking) ──
+	// ── Stage 2: summary (Summarizer, google-native) ──
 	{Type: "stage.status", StageName: "summary", Status: "started"},
 
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -493,7 +493,7 @@ var CancellationInvestigationExpectedEvents = []ExpectedEvent{
 // Scenario: Cancellation — Session 2 (Chat cancellation)
 // Single-stage investigation completes normally, then chat is cancelled
 // and a follow-up chat succeeds.
-//   1. quick-check (QuickInvestigator, native-thinking) — succeeds
+//   1. quick-check (QuickInvestigator, google-native) — succeeds
 //   + Executive summary — succeeds
 //   + Chat 1: BlockUntilCancelled → cancelled
 //   + Chat 2: thinking + final answer → succeeds
@@ -502,7 +502,7 @@ var CancellationInvestigationExpectedEvents = []ExpectedEvent{
 var CancellationChatExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 
-	// ── Stage 1: quick-check (QuickInvestigator, native-thinking) ──
+	// ── Stage 1: quick-check (QuickInvestigator, google-native) ──
 	{Type: "stage.status", StageName: "quick-check", Status: "started"},
 
 	// Single iteration: thinking + response + final_analysis.
@@ -550,7 +550,7 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 // Scenario: Timeout — Session 1 (Investigation timeout)
 // Single stage with 1 agent that blocks via BlockUntilCancelled.
 // Session timeout (2s) fires → context.DeadlineExceeded → timed_out.
-//   1. investigation (TimeoutAgent, NativeThinking)
+//   1. investigation (TimeoutAgent, google-native)
 //      Agent blocks on BlockUntilCancelled → no streaming events created.
 //      Deadline fires → agent + stage + session timed_out.
 // ────────────────────────────────────────────────────────────
@@ -572,7 +572,7 @@ var TimeoutInvestigationExpectedEvents = []ExpectedEvent{
 // Scenario: Timeout — Session 2 (Chat timeout)
 // Single-stage investigation completes normally, then chat times out
 // and a follow-up chat succeeds.
-//   1. quick-check (QuickInvestigator, native-thinking) — succeeds
+//   1. quick-check (QuickInvestigator, google-native) — succeeds
 //   + Executive summary — succeeds
 //   + Chat 1: BlockUntilCancelled → timed_out (chat deadline fires)
 //   + Chat 2: thinking + final answer → succeeds
@@ -581,7 +581,7 @@ var TimeoutInvestigationExpectedEvents = []ExpectedEvent{
 var TimeoutChatExpectedEvents = []ExpectedEvent{
 	{Type: "session.status", Status: "in_progress"},
 
-	// ── Stage 1: quick-check (QuickInvestigator, native-thinking) ──
+	// ── Stage 1: quick-check (QuickInvestigator, google-native) ──
 	{Type: "stage.status", StageName: "quick-check", Status: "started"},
 
 	// Single iteration: thinking + response + final_analysis.

@@ -42,11 +42,11 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -143,11 +143,11 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -216,11 +216,11 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -288,11 +288,11 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -372,11 +372,11 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -453,11 +453,11 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	t.Run("handles last_message_id pointing to first message", func(t *testing.T) {
 		// Create a new execution for isolated test
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "TestAgent2",
-			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "TestAgent2",
+			AgentIndex: 2,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
@@ -495,11 +495,11 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	t.Run("handles last_message_id pointing to middle of long conversation", func(t *testing.T) {
 		// Create a new execution for isolated test
 		exec3, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "TestAgent3",
-			AgentIndex:        3,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "TestAgent3",
+			AgentIndex: 3,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
@@ -552,11 +552,11 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 	t.Run("handles execution with no messages at all", func(t *testing.T) {
 		// Create a new execution with no messages
 		exec4, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "TestAgent4",
-			AgentIndex:        4,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "TestAgent4",
+			AgentIndex: 4,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 

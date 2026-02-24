@@ -9,17 +9,18 @@ import (
 func TestMergeAgents(t *testing.T) {
 	builtin := map[string]BuiltinAgentConfig{
 		"builtin-agent": {
-			MCPServers:        []string{"builtin-server"},
-			IterationStrategy: IterationStrategyLangChain,
+			Description: "A built-in agent",
+			MCPServers:  []string{"builtin-server"},
 		},
 		"builtin-with-instructions": {
+			Description:        "Synthesis agent",
+			Type:               AgentTypeSynthesis,
 			MCPServers:         []string{"builtin-server"},
-			IterationStrategy:  IterationStrategySynthesis,
 			CustomInstructions: "Built-in custom instructions for synthesis.",
 		},
 		"override-me": {
-			MCPServers:        []string{"old-server"},
-			IterationStrategy: IterationStrategyLangChain,
+			Description: "Override target",
+			MCPServers:  []string{"old-server"},
 		},
 	}
 
@@ -30,7 +31,7 @@ func TestMergeAgents(t *testing.T) {
 		},
 		"override-me": {
 			MCPServers:         []string{"new-server"},
-			IterationStrategy:  IterationStrategyNativeThinking,
+			LLMBackend:         LLMBackendNativeGemini,
 			CustomInstructions: "Overridden instructions",
 		},
 	}
@@ -43,11 +44,11 @@ func TestMergeAgents(t *testing.T) {
 	// Built-in agent should exist
 	assert.Contains(t, result, "builtin-agent")
 	assert.Equal(t, []string{"builtin-server"}, result["builtin-agent"].MCPServers)
-	assert.Equal(t, IterationStrategyLangChain, result["builtin-agent"].IterationStrategy)
+	assert.Equal(t, "A built-in agent", result["builtin-agent"].Description)
 
 	// Built-in agent with custom instructions should preserve them
 	assert.Contains(t, result, "builtin-with-instructions")
-	assert.Equal(t, IterationStrategySynthesis, result["builtin-with-instructions"].IterationStrategy)
+	assert.Equal(t, AgentTypeSynthesis, result["builtin-with-instructions"].Type)
 	assert.Equal(t, "Built-in custom instructions for synthesis.", result["builtin-with-instructions"].CustomInstructions)
 
 	// User agent should exist
@@ -58,7 +59,7 @@ func TestMergeAgents(t *testing.T) {
 	// Overridden agent should have user values
 	assert.Contains(t, result, "override-me")
 	assert.Equal(t, []string{"new-server"}, result["override-me"].MCPServers)
-	assert.Equal(t, IterationStrategyNativeThinking, result["override-me"].IterationStrategy)
+	assert.Equal(t, LLMBackendNativeGemini, result["override-me"].LLMBackend)
 	assert.Equal(t, "Overridden instructions", result["override-me"].CustomInstructions)
 }
 

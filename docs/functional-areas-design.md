@@ -207,7 +207,7 @@ graph TB
 
 | Registry | Package | Lookup | Key Fields |
 |----------|---------|--------|------------|
-| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, IterationStrategy, MaxIterations |
+| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, Type, LLMBackend, MaxIterations |
 | `ChainRegistry` | `pkg/config/` | `Get(id)`, `GetByAlertType(type)` | AlertTypes, Stages[], Chat, LLMProvider, MCPServers |
 | `MCPServerRegistry` | `pkg/config/` | `Get(id)` | Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `pkg/config/` | `Get(name)`, `GetAll()` | Type, Model, APIKeyEnv, BaseURL, NativeTools |
@@ -229,7 +229,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- IterationStrategy, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType, LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 
 ---
 
@@ -292,12 +292,12 @@ stages:
     agents:
       - name: "KubernetesAgent"
         llm_provider: "gemini-2.5-flash"
-        iteration_strategy: "native-thinking"
+        llm_backend: "google-native"
       - name: "performance-agent"
         llm_provider: "gemini-2.5-pro"
-        iteration_strategy: "langchain"
+        llm_backend: "langchain"
     synthesis:
-      iteration_strategy: "synthesis-native-thinking"
+      llm_backend: "google-native"
       llm_provider: "gemini-3-pro"
 ```
 
@@ -313,7 +313,7 @@ stages:
 **Key parallel execution features**:
 - **Automatic synthesis**: SynthesisAgent synthesizes results after stages with >1 agent
 - **Success policies**: `all` (strict) or `any` (resilient, default) success requirements
-- **Per-agent configuration**: Each parallel agent can specify its own LLM provider and iteration strategy
+- **Per-agent configuration**: Each parallel agent can specify its own LLM provider and LLM backend
 - **Synthesis replaces investigation**: For downstream context, the synthesis result replaces raw per-agent results
 
 #### Stage Context & Data Flow
@@ -345,10 +345,15 @@ Non-stage components (executive summary, follow-up chat) use chain-level provide
 ---
 
 ### 4. Agent Architecture & Controller System
-**Purpose**: Agent framework and processing strategies
+**Purpose**: Agent framework and controller system
 **Key Responsibility**: Agent behavior and iteration patterns
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent) and YAML-configured agents.
+
+Agent behavior is governed by two orthogonal configuration axes:
+
+- **`AgentType`** (`""` | `"synthesis"` | `"scoring"`) — determines which controller runs the agent
+- **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
 
@@ -363,11 +368,11 @@ graph TB
     end
 
     subgraph controllers [Controllers]
-        FC["FunctionCallingController<br/>native-thinking + langchain"]
-        SC["SynthesisController<br/>synthesis + synthesis-native-thinking"]
+        FC["FunctionCallingController<br/>(iterating - multi-turn with tools)"]
+        SC["SynthesisController<br/>(single-shot - one LLM call, no tools)"]
     end
 
-    subgraph backends [Python Backends]
+    subgraph backends [LLM Backends]
         GN["google-native<br/>(Gemini SDK)"]
         LC["langchain<br/>(Multi-provider)"]
     end
@@ -405,18 +410,24 @@ type Controller interface {
 }
 ```
 
-**Strategy-to-controller mapping**:
+**AgentType-to-controller mapping**:
 
-| Strategy | Controller | Backend | Use Case |
-|----------|-----------|---------|----------|
-| `native-thinking` | FunctionCallingController | `google-native` | Gemini structured function calling with thinking |
-| `langchain` | FunctionCallingController | `langchain` | Multi-provider function calling |
-| `synthesis` | SynthesisController | `langchain` | Tool-less synthesis of parallel results |
-| `synthesis-native-thinking` | SynthesisController | `google-native` | Gemini thinking for synthesis |
+| AgentType | Controller | Pattern | Use Case |
+|-----------|-----------|---------|----------|
+| `""` (default) | FunctionCallingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
+| `"synthesis"` | SynthesisController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
+| `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
 
-#### FunctionCallingController (`pkg/agent/controller/function_calling.go`)
+**LLMBackend determines the Python SDK path** (orthogonal to controller):
 
-Handles both `native-thinking` and `langchain` strategies:
+| LLMBackend | Python Provider | Use Case |
+|------------|----------------|----------|
+| `"google-native"` | GoogleNativeProvider | Gemini native SDK with thinking + function calling |
+| `"langchain"` | LangChainProvider | Multi-provider (OpenAI, Anthropic, xAI, etc.) |
+
+#### FunctionCallingController — iterating (`pkg/agent/controller/function_calling.go`)
+
+Multi-turn iterating controller that loops: LLM call → tool execution → LLM call, until the agent produces a final answer or hits the iteration limit. Works with any `LLMBackend`:
 
 1. Build initial messages (system prompt + user context)
 2. List tools from MCP servers
@@ -426,9 +437,9 @@ Handles both `native-thinking` and `langchain` strategies:
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
 4. If max iterations reached: `forceConclusion()` -- call LLM WITHOUT tools to force text-only response
 
-#### SynthesisController (`pkg/agent/controller/synthesis.go`)
+#### SynthesisController — single-shot (`pkg/agent/controller/synthesis.go`)
 
-Single LLM call without tools for synthesizing multi-agent investigation results. Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
+Single-shot controller: one LLM call without tools. Used for synthesizing multi-agent investigation results. Receives full investigation history via timeline events (thinking, tool calls, results, analyses). Future single-shot agent types (e.g., scoring) will reuse this pattern.
 
 #### Instruction Composition
 
@@ -460,7 +471,7 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 - `pkg/agent/controller/summarize.go` -- Tool result summarization
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions
-- `pkg/agent/config_resolver.go` -- Hierarchical config resolution, `ResolveBackend()`
+- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations)
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext
 
@@ -816,7 +827,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
-`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `iteration_strategy`, `llm_provider`, `status`, `error_message`, timestamps
+`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `status`, `error_message`, timestamps
 
 **TimelineEvent** (`ent/schema/timelineevent.go`):
 `id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
@@ -911,7 +922,7 @@ agent_chains:
     chat:
       enabled: true
       agent: "ChatAgent"
-      iteration_strategy: "native-thinking"
+      llm_backend: "google-native"
       llm_provider: "google-default"
       mcp_servers: ["kubernetes-server"]
       max_iterations: 20

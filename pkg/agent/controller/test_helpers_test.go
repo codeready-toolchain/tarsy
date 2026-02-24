@@ -108,7 +108,7 @@ func (m *mockToolExecutorFunc) ListTools(_ context.Context) ([]agent.ToolDefinit
 func (m *mockToolExecutorFunc) Close() error { return nil }
 
 // newTestExecCtx creates a test ExecutionContext backed by a real test database.
-// Defaults: MaxIterations=20, IterationTimeout=120s, IterationStrategy=langchain.
+// Defaults: MaxIterations=20, IterationTimeout=120s, LLMBackend=langchain.
 // Tests that need different limits should override execCtx.Config.MaxIterations.
 func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecutor) *agent.ExecutionContext {
 	t.Helper()
@@ -148,7 +148,7 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 		SetStageID(stageID).
 		SetAgentName("test-agent").
 		SetAgentIndex(1).
-		SetIterationStrategy("langchain").
+		SetLlmBackend("langchain").
 		SetStatus(agentexecution.StatusActive).
 		Save(ctx)
 	require.NoError(t, err)
@@ -166,7 +166,8 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 		AlertType:   "test-alert",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "test-agent",
-			IterationStrategy:  config.IterationStrategyLangChain,
+			Type:               config.AgentTypeDefault,
+			LLMBackend:         config.LLMBackendLangChain,
 			LLMProvider:        &config.LLMProviderConfig{Model: "test-model"},
 			MaxIterations:      20,
 			IterationTimeout:   120 * time.Second,

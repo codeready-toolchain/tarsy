@@ -11,7 +11,7 @@ import (
 )
 
 // FunctionCallingController implements the native function calling loop.
-// Used by both native-thinking (Google SDK) and langchain (multi-provider) strategies.
+// Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 // Tool calls come as structured ToolCallChunk values (not parsed from text).
 // Completion signal: a response without any ToolCalls.
 type FunctionCallingController struct{}
@@ -78,7 +78,7 @@ func (c *FunctionCallingController) Run(
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       tools, // Tools bound for native calling
-			Backend:     execCtx.Config.Backend,
+			Backend:     execCtx.Config.LLMBackend,
 		}, &eventSeq)
 
 		if err != nil {
@@ -217,7 +217,7 @@ func (c *FunctionCallingController) forceConclusion(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools — force conclusion
-		Backend:     execCtx.Config.Backend,
+		Backend:     execCtx.Config.LLMBackend,
 	}, eventSeq, forcedMeta)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)

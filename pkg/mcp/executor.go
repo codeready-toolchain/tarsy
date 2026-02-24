@@ -57,7 +57,7 @@ func NewToolExecutor(
 // Execute runs a tool call via MCP.
 //
 // Flow:
-//  1. Normalize tool name (server__tool → server.tool for NativeThinking)
+//  1. Normalize tool name (server__tool → server.tool for GoogleNative)
 //  2. Split and validate server.tool name
 //  3. Check server is in allowed serverIDs
 //  4. Check tool is in allowed tools (if filter set)

@@ -28,7 +28,7 @@ type StageInvestigation struct {
 type AgentInvestigation struct {
 	AgentName    string
 	AgentIndex   int
-	Strategy     string               // e.g., "native-thinking", "langchain"
+	LLMBackend   string               // e.g., "google-native", "langchain"
 	LLMProvider  string               // e.g., "gemini-2.5-pro"
 	Status       alertsession.Status  // terminal status (completed, failed, etc.)
 	Events       []*ent.TimelineEvent // full investigation (from GetAgentTimeline)
@@ -55,9 +55,9 @@ func FormatStructuredInvestigation(stages []StageInvestigation, executiveSummary
 			// Single agent — show timeline directly under the stage header.
 			a := stg.Agents[0]
 			if a.LLMProvider != "" {
-				fmt.Fprintf(&sb, "**Agent:** %s (%s, %s)\n", a.AgentName, a.Strategy, a.LLMProvider)
+				fmt.Fprintf(&sb, "**Agent:** %s (%s, %s)\n", a.AgentName, a.LLMBackend, a.LLMProvider)
 			} else {
-				fmt.Fprintf(&sb, "**Agent:** %s (%s)\n", a.AgentName, a.Strategy)
+				fmt.Fprintf(&sb, "**Agent:** %s (%s)\n", a.AgentName, a.LLMBackend)
 			}
 			fmt.Fprintf(&sb, "**Status**: %s\n\n", a.Status)
 			formatAgentBody(&sb, a)
@@ -108,9 +108,9 @@ func formatParallelAgents(sb *strings.Builder, agents []AgentInvestigation, stag
 
 	for _, a := range agents {
 		if a.LLMProvider != "" {
-			fmt.Fprintf(sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.Strategy, a.LLMProvider)
+			fmt.Fprintf(sb, "#### Agent %d: %s (%s, %s)\n", a.AgentIndex, a.AgentName, a.LLMBackend, a.LLMProvider)
 		} else {
-			fmt.Fprintf(sb, "#### Agent %d: %s (%s)\n", a.AgentIndex, a.AgentName, a.Strategy)
+			fmt.Fprintf(sb, "#### Agent %d: %s (%s)\n", a.AgentIndex, a.AgentName, a.LLMBackend)
 		}
 		fmt.Fprintf(sb, "**Status**: %s\n\n", a.Status)
 		formatAgentBody(sb, a)

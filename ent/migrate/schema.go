@@ -19,7 +19,7 @@ var (
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
-		{Name: "iteration_strategy", Type: field.TypeString},
+		{Name: "llm_backend", Type: field.TypeString},
 		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "stage_id", Type: field.TypeString},

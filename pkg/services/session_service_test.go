@@ -84,7 +84,7 @@ func TestSessionService_CreateSession(t *testing.T) {
 		assert.Len(t, executions, 1)
 		assert.Equal(t, stages[0].ID, executions[0].StageID)
 		assert.Equal(t, 1, executions[0].AgentIndex)
-		assert.Equal(t, "langchain", executions[0].IterationStrategy)
+		assert.Equal(t, string(config.LLMBackendLangChain), executions[0].LlmBackend)
 		assert.Equal(t, req.AgentType, executions[0].AgentName)
 	})
 
@@ -707,7 +707,7 @@ func seedDashboardSession(
 		SetStageID(stg.ID).
 		SetAgentName("TestAgent").
 		SetAgentIndex(1).
-		SetIterationStrategy("langchain").
+		SetLlmBackend(string(config.LLMBackendLangChain)).
 		SetStartedAt(started).
 		SetStatus("completed").
 		SaveX(ctx)
@@ -805,7 +805,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, "TestAgent", eo.AgentName)
 		assert.Equal(t, 1, eo.AgentIndex)
 		assert.Equal(t, "completed", eo.Status)
-		assert.Equal(t, "langchain", eo.IterationStrategy)
+		assert.Equal(t, string(config.LLMBackendLangChain), eo.LLMBackend)
 		assert.Equal(t, int64(100), eo.InputTokens)
 		assert.Equal(t, int64(50), eo.OutputTokens)
 		assert.Equal(t, int64(150), eo.TotalTokens)
@@ -846,7 +846,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetStageID(stg.ID).
 			SetAgentName("KubernetesAgent").
 			SetAgentIndex(1).
-			SetIterationStrategy("native_thinking").
+			SetLlmBackend(string(config.LLMBackendNativeGemini)).
 			SetLlmProvider("gemini-2.5-pro").
 			SetStatus("completed").
 			SetStartedAt(started).
@@ -859,7 +859,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetStageID(stg.ID).
 			SetAgentName("ArgoCDAgent").
 			SetAgentIndex(2).
-			SetIterationStrategy("langchain").
+			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetStatus("completed").
 			SetStartedAt(started).
 			SetCompletedAt(completed).
@@ -914,7 +914,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, "KubernetesAgent", eo1.AgentName)
 		assert.Equal(t, 1, eo1.AgentIndex)
 		assert.Equal(t, "completed", eo1.Status)
-		assert.Equal(t, "native_thinking", eo1.IterationStrategy)
+		assert.Equal(t, string(config.LLMBackendNativeGemini), eo1.LLMBackend)
 		require.NotNil(t, eo1.LLMProvider)
 		assert.Equal(t, "gemini-2.5-pro", *eo1.LLMProvider)
 		// Tokens summed across two interactions: 200+100=300, 30+20=50, 230+120=350.
@@ -926,7 +926,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, exec2.ID, eo2.ExecutionID)
 		assert.Equal(t, "ArgoCDAgent", eo2.AgentName)
 		assert.Equal(t, 2, eo2.AgentIndex)
-		assert.Equal(t, "langchain", eo2.IterationStrategy)
+		assert.Equal(t, string(config.LLMBackendLangChain), eo2.LLMBackend)
 		assert.Nil(t, eo2.LLMProvider)
 		assert.Equal(t, int64(50), eo2.InputTokens)
 		assert.Equal(t, int64(10), eo2.OutputTokens)

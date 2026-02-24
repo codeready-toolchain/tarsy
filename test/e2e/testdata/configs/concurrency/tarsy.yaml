@@ -1,6 +1,6 @@
 defaults:
   llm_provider: "test-provider"
-  iteration_strategy: "native-thinking"
+  llm_backend: "google-native"
   max_iterations: 1
 
 mcp_servers:

@@ -49,27 +49,27 @@ func TestBuiltinAgents(t *testing.T) {
 		name                    string
 		agentID                 string
 		wantDesc                string
-		wantStrat               IterationStrategy
-		wantCustomInstructions  bool   // Whether CustomInstructions should be non-empty
-		customInstructionsMatch string // Substring to check in CustomInstructions (if wantCustomInstructions)
+		wantType                AgentType
+		wantCustomInstructions  bool
+		customInstructionsMatch string
 	}{
 		{
-			name:      "KubernetesAgent",
-			agentID:   "KubernetesAgent",
-			wantDesc:  "Kubernetes-specialized agent",
-			wantStrat: "", // No explicit strategy — inherits from defaults.
+			name:     "KubernetesAgent",
+			agentID:  "KubernetesAgent",
+			wantDesc: "Kubernetes-specialized agent",
+			wantType: AgentTypeDefault,
 		},
 		{
-			name:      "ChatAgent",
-			agentID:   "ChatAgent",
-			wantDesc:  "Built-in agent for follow-up conversations",
-			wantStrat: "", // No explicit strategy — inherits from defaults.
+			name:     "ChatAgent",
+			agentID:  "ChatAgent",
+			wantDesc: "Built-in agent for follow-up conversations",
+			wantType: AgentTypeDefault,
 		},
 		{
 			name:                    "SynthesisAgent",
 			agentID:                 "SynthesisAgent",
 			wantDesc:                "Synthesizes parallel investigation results",
-			wantStrat:               IterationStrategySynthesis,
+			wantType:                AgentTypeSynthesis,
 			wantCustomInstructions:  true,
 			customInstructionsMatch: "Incident Commander",
 		},
@@ -80,7 +80,7 @@ func TestBuiltinAgents(t *testing.T) {
 			agent, exists := cfg.Agents[tt.agentID]
 			require.True(t, exists, "Agent %s should exist", tt.agentID)
 			assert.Equal(t, tt.wantDesc, agent.Description)
-			assert.Equal(t, tt.wantStrat, agent.IterationStrategy)
+			assert.Equal(t, tt.wantType, agent.Type)
 
 			if tt.wantCustomInstructions {
 				assert.NotEmpty(t, agent.CustomInstructions, "Agent %s should have custom instructions", tt.agentID)
@@ -95,10 +95,10 @@ func TestBuiltinChatAgentInheritsFromDefaults(t *testing.T) {
 	agent, exists := cfg.Agents["ChatAgent"]
 	require.True(t, exists)
 
-	// ChatAgent should not pin a specific iteration strategy or MCP servers.
-	// Both are inherited at resolution time: strategy from defaults, MCP
+	// ChatAgent should not pin a specific type or MCP servers.
+	// LLM backend is inherited at resolution time from defaults, MCP
 	// servers from the chain's investigation stages via aggregation.
-	assert.Empty(t, agent.IterationStrategy, "ChatAgent should not set IterationStrategy")
+	assert.Equal(t, AgentTypeDefault, agent.Type, "ChatAgent should be default type")
 	assert.Empty(t, agent.MCPServers, "ChatAgent should not set MCPServers")
 	assert.Empty(t, agent.CustomInstructions, "ChatAgent should not set CustomInstructions")
 }

@@ -122,10 +122,10 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 	assert.Equal(t, "gh: repos", r2.Content)
 }
 
-// TestIntegration_NativeThinking_Normalization tests the __ → . normalization through the full pipeline.
+// TestIntegration_GoogleNative_Normalization tests the __ → . normalization through the full pipeline.
 // The LLM service may return tool call names in "server__tool" format (Gemini convention),
 // which the executor normalizes back to "server.tool" for routing.
-func TestIntegration_NativeThinking_Normalization(t *testing.T) {
+func TestIntegration_GoogleNative_Normalization(t *testing.T) {
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
 		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			return &mcpsdk.CallToolResult{

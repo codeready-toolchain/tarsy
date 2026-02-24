@@ -308,39 +308,39 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 
 	// Create agent executions for investigation stages (required for edges).
 	exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           investStage1.ID,
-		SessionID:         session.ID,
-		AgentName:         "agent-1",
-		AgentIndex:        1,
-		IterationStrategy: "langchain",
+		StageID:    investStage1.ID,
+		SessionID:  session.ID,
+		AgentName:  "agent-1",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
 	exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           investStage2.ID,
-		SessionID:         session.ID,
-		AgentName:         "agent-1",
-		AgentIndex:        1,
-		IterationStrategy: "langchain",
+		StageID:    investStage2.ID,
+		SessionID:  session.ID,
+		AgentName:  "agent-1",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
 	// Create agent executions for synthesis stages (extractFinalAnalysis reads these).
 	synthExec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           synthStage1.ID,
-		SessionID:         session.ID,
-		AgentName:         "synthesizer",
-		AgentIndex:        1,
-		IterationStrategy: "langchain",
+		StageID:    synthStage1.ID,
+		SessionID:  session.ID,
+		AgentName:  "synthesizer",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
 	synthExec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           synthStage2.ID,
-		SessionID:         session.ID,
-		AgentName:         "synthesizer",
-		AgentIndex:        1,
-		IterationStrategy: "langchain",
+		StageID:    synthStage2.ID,
+		SessionID:  session.ID,
+		AgentName:  "synthesizer",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -522,8 +522,8 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 func stubConfig() *config.Config {
 	return &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test",
-			IterationStrategy: "langchain",
+			LLMProvider: "test",
+			LLMBackend:  config.LLMBackendLangChain,
 		},
 		ChainRegistry:       config.NewChainRegistry(nil),
 		AgentRegistry:       config.NewAgentRegistry(nil),

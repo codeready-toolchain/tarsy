@@ -223,6 +223,11 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                     sx={{ fontWeight: 600, fontSize: '0.75rem', height: 22 }}
                   />
                 </Box>
+                {currentOverview.llm_backend && (
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Backend:</strong> {currentOverview.llm_backend}
+                  </Typography>
+                )}
                 {currentOverview.llm_provider && (
                   <Typography variant="body2" color="text.secondary">
                     <strong>Provider:</strong> {currentOverview.llm_provider}

@@ -169,16 +169,16 @@ func (_u *AgentExecutionUpdate) ClearErrorMessage() *AgentExecutionUpdate {
 	return _u
 }
 
-// SetIterationStrategy sets the "iteration_strategy" field.
-func (_u *AgentExecutionUpdate) SetIterationStrategy(v string) *AgentExecutionUpdate {
-	_u.mutation.SetIterationStrategy(v)
+// SetLlmBackend sets the "llm_backend" field.
+func (_u *AgentExecutionUpdate) SetLlmBackend(v string) *AgentExecutionUpdate {
+	_u.mutation.SetLlmBackend(v)
 	return _u
 }
 
-// SetNillableIterationStrategy sets the "iteration_strategy" field if the given value is not nil.
-func (_u *AgentExecutionUpdate) SetNillableIterationStrategy(v *string) *AgentExecutionUpdate {
+// SetNillableLlmBackend sets the "llm_backend" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableLlmBackend(v *string) *AgentExecutionUpdate {
 	if v != nil {
-		_u.SetIterationStrategy(*v)
+		_u.SetLlmBackend(*v)
 	}
 	return _u
 }
@@ -452,8 +452,8 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(agentexecution.FieldErrorMessage, field.TypeString)
 	}
-	if value, ok := _u.mutation.IterationStrategy(); ok {
-		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
+	if value, ok := _u.mutation.LlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldLlmBackend, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
@@ -799,16 +799,16 @@ func (_u *AgentExecutionUpdateOne) ClearErrorMessage() *AgentExecutionUpdateOne 
 	return _u
 }
 
-// SetIterationStrategy sets the "iteration_strategy" field.
-func (_u *AgentExecutionUpdateOne) SetIterationStrategy(v string) *AgentExecutionUpdateOne {
-	_u.mutation.SetIterationStrategy(v)
+// SetLlmBackend sets the "llm_backend" field.
+func (_u *AgentExecutionUpdateOne) SetLlmBackend(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetLlmBackend(v)
 	return _u
 }
 
-// SetNillableIterationStrategy sets the "iteration_strategy" field if the given value is not nil.
-func (_u *AgentExecutionUpdateOne) SetNillableIterationStrategy(v *string) *AgentExecutionUpdateOne {
+// SetNillableLlmBackend sets the "llm_backend" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableLlmBackend(v *string) *AgentExecutionUpdateOne {
 	if v != nil {
-		_u.SetIterationStrategy(*v)
+		_u.SetLlmBackend(*v)
 	}
 	return _u
 }
@@ -1112,8 +1112,8 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(agentexecution.FieldErrorMessage, field.TypeString)
 	}
-	if value, ok := _u.mutation.IterationStrategy(); ok {
-		_spec.SetField(agentexecution.FieldIterationStrategy, field.TypeString, value)
+	if value, ok := _u.mutation.LlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldLlmBackend, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)

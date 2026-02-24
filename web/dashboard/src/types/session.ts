@@ -114,7 +114,7 @@ export interface ExecutionOverview {
   agent_name: string;
   agent_index: number;
   status: string;
-  iteration_strategy: string;
+  llm_backend: string;
   llm_provider: string | null;
   started_at: string | null;
   completed_at: string | null;

@@ -10,29 +10,16 @@ import (
 
 const DefaultMaxIterations = 20
 
+// DefaultLLMBackend is the fallback when no level in the config hierarchy
+// specifies an LLM backend. LangChain is the general-purpose multi-provider
+// backend and matches the typical production default.
+const DefaultLLMBackend = config.LLMBackendLangChain
+
 // DefaultIterationTimeout is the default per-iteration timeout.
 // Each iteration (LLM call + tool execution) gets its own context.WithTimeout
 // derived from the parent session context. This prevents a single stuck
 // iteration from consuming the entire session budget.
 const DefaultIterationTimeout = 120 * time.Second
-
-// ResolveBackend maps an iteration strategy to its Python backend.
-// Native thinking strategies use the Google SDK directly; everything
-// else goes through LangChain.
-func ResolveBackend(strategy config.IterationStrategy) string {
-	switch strategy {
-	case config.IterationStrategyNativeThinking,
-		config.IterationStrategySynthesisNativeThinking,
-		config.IterationStrategyScoringNativeThinking:
-		return BackendGoogleNative
-	case config.IterationStrategyLangChain,
-		config.IterationStrategySynthesis,
-		config.IterationStrategyScoring:
-		return BackendLangChain
-	default:
-		return BackendLangChain
-	}
-}
 
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
@@ -42,13 +29,14 @@ func ResolveAgentConfig(
 	stageConfig config.StageConfig,
 	agentConfig config.StageAgentConfig,
 ) (*ResolvedAgentConfig, error) {
-	// Guard against nil chain to prevent nil pointer dereference
-	// when accessing chain.LLMProvider and chain.MaxIterations
 	if chain == nil {
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Get agent definition (built-in or user-defined)
 	agentDef, err := cfg.GetAgent(agentConfig.Name)
@@ -56,10 +44,10 @@ func ResolveAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentConfig.Name, err)
 	}
 
-	// Resolve iteration strategy (defaults → agentDef → chain → agentConfig)
-	strategy := resolveIterationStrategy(
-		defaults.IterationStrategy, agentDef.IterationStrategy,
-		chain.IterationStrategy, agentConfig.IterationStrategy,
+	// Resolve LLM backend (defaults → agentDef → chain → agentConfig)
+	backend := resolveLLMBackend(
+		defaults.LLMBackend, agentDef.LLMBackend,
+		chain.LLMBackend, agentConfig.LLMBackend,
 	)
 
 	// Resolve LLM provider (defaults → chain → agentConfig)
@@ -93,14 +81,14 @@ func ResolveAgentConfig(
 
 	return &ResolvedAgentConfig{
 		AgentName:          agentConfig.Name,
-		IterationStrategy:  strategy,
+		Type:               agentDef.Type,
+		LLMBackend:         backend,
 		LLMProvider:        provider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
-		Backend:            ResolveBackend(strategy),
 	}, nil
 }
 
@@ -134,7 +122,10 @@ func ResolveChatAgentConfig(
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Agent name: chatCfg.Agent → "ChatAgent"
 	agentName := "ChatAgent"
@@ -149,19 +140,19 @@ func ResolveChatAgentConfig(
 	}
 
 	// Extract optional overrides from chatCfg (may be nil)
-	var chatStrategy config.IterationStrategy
+	var chatBackend config.LLMBackend
 	var chatProvider string
 	var chatMaxIter *int
 	if chatCfg != nil {
-		chatStrategy = chatCfg.IterationStrategy
+		chatBackend = chatCfg.LLMBackend
 		chatProvider = chatCfg.LLMProvider
 		chatMaxIter = chatCfg.MaxIterations
 	}
 
-	// Resolve iteration strategy (defaults → agentDef → chain → chatCfg)
-	strategy := resolveIterationStrategy(
-		defaults.IterationStrategy, agentDef.IterationStrategy,
-		chain.IterationStrategy, chatStrategy,
+	// Resolve LLM backend (defaults → agentDef → chain → chatCfg)
+	backend := resolveLLMBackend(
+		defaults.LLMBackend, agentDef.LLMBackend,
+		chain.LLMBackend, chatBackend,
 	)
 
 	// Resolve LLM provider (defaults → chain → chatCfg)
@@ -198,15 +189,17 @@ func ResolveChatAgentConfig(
 	}
 
 	return &ResolvedAgentConfig{
-		AgentName:          agentName,
-		IterationStrategy:  strategy,
+		AgentName: agentName,
+		// Chat always uses the iterating function-calling controller,
+		// regardless of what the agent definition's Type field says.
+		Type:               config.AgentTypeDefault,
+		LLMBackend:         backend,
 		LLMProvider:        provider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
-		Backend:            ResolveBackend(strategy),
 	}, nil
 }
 
@@ -223,7 +216,10 @@ func ResolveScoringConfig(
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Agent name: "ScoringAgent" → defaults.ScoringAgent → scoringCfg.Agent
 	agentName := "ScoringAgent"
@@ -241,26 +237,21 @@ func ResolveScoringConfig(
 	}
 
 	// Extract optional overrides from scoringCfg (may be nil)
-	var scoringStrategy config.IterationStrategy
+	var scoringBackend config.LLMBackend
 	var scoringProvider string
 	var scoringMaxIter *int
 	if scoringCfg != nil {
-		scoringStrategy = scoringCfg.IterationStrategy
+		scoringBackend = scoringCfg.LLMBackend
 		scoringProvider = scoringCfg.LLMProvider
 		scoringMaxIter = scoringCfg.MaxIterations
 	}
 
-	// Resolve iteration strategy (agentDef → scoringCfg).
-	// chain.IterationStrategy is intentionally excluded: the chain-level
-	// strategy targets investigation agents and would let non-scoring
-	// strategies (e.g. "native-thinking") bleed into scoring resolution.
-	strategy := resolveIterationStrategy(
-		agentDef.IterationStrategy, scoringStrategy,
+	// Resolve LLM backend (defaults → agentDef → scoringCfg).
+	// chain.LLMBackend is intentionally excluded: the chain-level
+	// backend targets investigation agents.
+	backend := resolveLLMBackend(
+		defaults.LLMBackend, agentDef.LLMBackend, scoringBackend,
 	)
-	if !strategy.IsValidForScoring() {
-		return nil, fmt.Errorf("invalid scoring strategy %q: must be %q or %q",
-			strategy, config.IterationStrategyScoring, config.IterationStrategyScoringNativeThinking)
-	}
 
 	// Resolve LLM provider (defaults → chain → scoringCfg)
 	provider, providerName, err := resolveLLMProvider(cfg,
@@ -291,27 +282,28 @@ func ResolveScoringConfig(
 
 	return &ResolvedAgentConfig{
 		AgentName:          agentName,
-		IterationStrategy:  strategy,
+		Type:               config.AgentTypeScoring,
+		LLMBackend:         backend,
 		LLMProvider:        provider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
-		Backend:            ResolveBackend(strategy),
 	}, nil
 }
 
-// resolveIterationStrategy returns the last non-empty strategy from the
+// resolveLLMBackend returns the last non-empty backend from the
 // given overrides, listed in lowest-to-highest precedence order.
-func resolveIterationStrategy(overrides ...config.IterationStrategy) config.IterationStrategy {
-	var strategy config.IterationStrategy
+// Falls back to DefaultLLMBackend when no override provides a value.
+func resolveLLMBackend(overrides ...config.LLMBackend) config.LLMBackend {
+	backend := DefaultLLMBackend
 	for _, o := range overrides {
 		if o != "" {
-			strategy = o
+			backend = o
 		}
 	}
-	return strategy
+	return backend
 }
 
 // resolveLLMProvider picks the last non-empty provider name from the given

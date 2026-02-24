@@ -30,22 +30,23 @@ func chatTestConfig(chainID string, chain *config.ChainConfig) *config.Config {
 	maxIter := 1
 	return &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyLangChain,
-			MaxIterations:     &maxIter,
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent": {
-				IterationStrategy: config.IterationStrategyLangChain,
-				MaxIterations:     &maxIter,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 			"ChatAgent": {
-				IterationStrategy: config.IterationStrategyLangChain,
-				MaxIterations:     &maxIter,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 			"SynthesisAgent": {
-				IterationStrategy: config.IterationStrategySynthesis,
-				MaxIterations:     &maxIter,
+				Type:          config.AgentTypeSynthesis,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -293,7 +294,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		SetSessionID(session.ID).
 		SetAgentName("TestAgent").
 		SetAgentIndex(1).
-		SetIterationStrategy("native-thinking").
+		SetLlmBackend("google-native").
 		SetLlmProvider("gemini-2.5-pro").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(ctx)
@@ -306,7 +307,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		SetSessionID(session.ID).
 		SetAgentName("TestAgent").
 		SetAgentIndex(2).
-		SetIterationStrategy("native-thinking").
+		SetLlmBackend("google-native").
 		SetLlmProvider("gemini-2.5-pro").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(ctx)

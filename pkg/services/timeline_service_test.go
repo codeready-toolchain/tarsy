@@ -38,11 +38,11 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -181,11 +181,11 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -253,11 +253,11 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -370,11 +370,11 @@ func TestTimelineService_CompleteTimelineEventWithMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -475,11 +475,11 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -548,11 +548,11 @@ func TestTimelineService_GetTimelines(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -634,11 +634,11 @@ func TestTimelineService_GetMaxSequenceNumber(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 

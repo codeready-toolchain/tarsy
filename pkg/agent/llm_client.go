@@ -24,8 +24,8 @@ type GenerateInput struct {
 	ExecutionID string
 	Messages    []ConversationMessage
 	Config      *config.LLMProviderConfig
-	Tools       []ToolDefinition // nil = no tools
-	Backend     string           // BackendGoogleNative or BackendLangChain — resolved from iteration strategy
+	Tools       []ToolDefinition  // nil = no tools
+	Backend     config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
 }
 
 // Conversation message roles.

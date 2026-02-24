@@ -60,7 +60,7 @@ function makeExecutionOverview(overrides?: Partial<ExecutionOverview>): Executio
     agent_name: 'TestAgent',
     agent_index: 0,
     status: EXECUTION_STATUS.COMPLETED,
-    iteration_strategy: 'native-thinking',
+    llm_backend: 'google-native',
     llm_provider: 'google',
     started_at: '2025-01-15T10:00:00Z',
     completed_at: '2025-01-15T10:01:00Z',

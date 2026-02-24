@@ -118,7 +118,7 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 
 // synthesisNativeToolsGuidance is appended to the synthesis system prompt when
 // native Gemini tools (Google Search, URL Context) are available
-// (synthesis-native-thinking with Gemini backend). Since synthesis has no MCP
+// (synthesis with google-native backend). Since synthesis has no MCP
 // tools, native tools are not suppressed by the Gemini API's mutual-exclusivity
 // constraint.
 const synthesisNativeToolsGuidance = `## Web Search and URL Context Capabilities
@@ -136,7 +136,7 @@ func (b *PromptBuilder) composeSynthesisInstructions(execCtx *agent.ExecutionCon
 	sections := []string{synthesisGeneralInstructions}
 
 	// Add native tools guidance when Google Search or URL Context is available
-	// (synthesis-native-thinking). Synthesis has no MCP tools, so native tools
+	// (synthesis with google-native backend). Synthesis has no MCP tools, so native tools
 	// are not suppressed by the Gemini API's mutual-exclusivity constraint.
 	if hasNativeWebTools(execCtx) {
 		sections = append(sections, synthesisNativeToolsGuidance)

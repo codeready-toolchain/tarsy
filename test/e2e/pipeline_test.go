@@ -21,14 +21,14 @@ import (
 // ────────────────────────────────────────────────────────────
 // Pipeline test — grows incrementally into the full pipeline test.
 // Four stages + two synthesis stages + two chat messages:
-//   1. investigation  (DataCollector, NativeThinking)
+//   1. investigation  (DataCollector, GoogleNative)
 //   2. remediation    (Remediator, langchain/function calling)
-//   3. validation     (ConfigValidator langchain ∥ MetricsValidator native-thinking, forced conclusion)
-//      → validation - Synthesis (synthesis-native-thinking)
-//   4. scaling-review (ScalingReviewer x2 replicas, NativeThinking)
+//   3. validation     (ConfigValidator langchain ∥ MetricsValidator google-native, forced conclusion)
+//      → validation - Synthesis (synthesis-google-native)
+//   4. scaling-review (ScalingReviewer x2 replicas, GoogleNative)
 //      → scaling-review - Synthesis (plain synthesis)
-//   + Chat 1: native-thinking with test-mcp tool call
-//   + Chat 2: native-thinking with prometheus-mcp tool call
+//   + Chat 1: google-native with test-mcp tool call
+//   + Chat 2: google-native with prometheus-mcp tool call
 // Two MCP servers (test-mcp, prometheus-mcp), tool call summarization,
 // parallel agents, replicas, both synthesis strategies, forced conclusion,
 // executive summary, and follow-up chat with MCP tools.
@@ -37,7 +37,7 @@ import (
 func TestE2E_Pipeline(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
-	// ── Stage 1: investigation (DataCollector, native-thinking) ──
+	// ── Stage 1: investigation (DataCollector, google-native) ──
 
 	// Iteration 1: thinking + text + two tool calls from test-mcp.
 	llm.AddSequential(LLMScriptEntry{
@@ -100,7 +100,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Stage 3: validation (parallel: ConfigValidator langchain + MetricsValidator native-thinking) ──
+	// ── Stage 3: validation (parallel: ConfigValidator langchain + MetricsValidator google-native) ──
 	// Parallel agents use routed dispatch — LLM calls are matched by agent name.
 
 	// ConfigValidator (function calling): 2 iterations.
@@ -119,7 +119,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// MetricsValidator (native-thinking): max_iterations=1 → forced conclusion.
+	// MetricsValidator (google-native): max_iterations=1 → forced conclusion.
 	// Iteration 1: tool call consumes the single allowed iteration.
 	llm.AddRouted("MetricsValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
@@ -138,8 +138,8 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Validation Synthesis (synthesis-native-thinking — includes thinking + Google Search grounding) ──
-	// The test-provider has native_tools.google_search enabled, and synthesis-native-thinking
+	// ── Validation Synthesis (synthesis-google-native — includes thinking + Google Search grounding) ──
+	// The test-provider has native_tools.google_search enabled, and synthesis-google-native
 	// uses the google-native backend with no MCP tools, so native tools (Google Search) activate.
 	// The mock returns a GroundingChunk simulating a Google Search result.
 	llm.AddSequential(LLMScriptEntry{
@@ -156,7 +156,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, native-thinking) ──
+	// ── Stage 4: scaling-review (ScalingReviewer x2 replicas, google-native) ──
 	// Replicas run in parallel with the same agent config. Both extract "ScalingReviewer"
 	// from custom instructions, so routed dispatch handles them (entries consumed in arrival order).
 
@@ -181,7 +181,7 @@ func TestE2E_Pipeline(t *testing.T) {
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit."})
 
-	// ── Chat 1: "What caused the OOM?" — native-thinking with test-mcp tool call ──
+	// ── Chat 1: "What caused the OOM?" — google-native with test-mcp tool call ──
 	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
@@ -202,7 +202,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		},
 	})
 
-	// ── Chat 2: "What are the current SLO metrics?" — native-thinking with prometheus-mcp tool call ──
+	// ── Chat 2: "What are the current SLO metrics?" — google-native with prometheus-mcp tool call ──
 	// Iteration 1: thinking + text + tool call to prometheus-mcp/query_slo.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{

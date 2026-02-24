@@ -1,6 +1,6 @@
 defaults:
   llm_provider: "test-provider"
-  iteration_strategy: "native-thinking"
+  llm_backend: "google-native"
   # max_iterations=1 ensures BlockUntilCancelled agents don't retry: when the
   # LLM channel closes (due to timeout), the agent treats the empty response
   # as a completed iteration. Without this, it would loop up to 20 times.
@@ -35,7 +35,7 @@ agent_chains:
     chat:
       enabled: true
       agent: "ChatAgent"
-      iteration_strategy: "native-thinking"
+      llm_backend: "google-native"
     stages:
       - name: quick-check
         agents:

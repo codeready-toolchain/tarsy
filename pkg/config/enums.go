@@ -1,46 +1,40 @@
 package config
 
-// IterationStrategy defines available agent iteration strategies
-type IterationStrategy string
+// AgentType determines what the agent does — drives controller selection and agent wrapper.
+type AgentType string
 
 const (
-	// IterationStrategyNativeThinking uses LLM native thinking/reasoning via Google SDK
-	IterationStrategyNativeThinking IterationStrategy = "native-thinking"
-	// IterationStrategyLangChain uses LangChain for multi-provider function calling
-	IterationStrategyLangChain IterationStrategy = "langchain"
-	// IterationStrategySynthesis synthesizes parallel investigation results
-	IterationStrategySynthesis IterationStrategy = "synthesis"
-	// IterationStrategySynthesisNativeThinking is synthesis with native thinking
-	IterationStrategySynthesisNativeThinking IterationStrategy = "synthesis-native-thinking"
-	// IterationStrategyScoring is for scoring session quality evaluation
-	IterationStrategyScoring IterationStrategy = "scoring"
-	// IterationStrategyScoringNativeThinking is scoring with native thinking
-	IterationStrategyScoringNativeThinking IterationStrategy = "scoring-native-thinking"
+	// AgentTypeDefault is a regular investigation agent (iterating controller)
+	AgentTypeDefault AgentType = ""
+	// AgentTypeSynthesis synthesizes parallel investigation results (single-shot)
+	AgentTypeSynthesis AgentType = "synthesis"
+	// AgentTypeScoring evaluates session quality (single-shot)
+	AgentTypeScoring AgentType = "scoring"
 )
 
-// IsValid checks if the iteration strategy is valid
-func (s IterationStrategy) IsValid() bool {
-	switch s {
-	case IterationStrategyNativeThinking,
-		IterationStrategyLangChain,
-		IterationStrategySynthesis,
-		IterationStrategySynthesisNativeThinking,
-		IterationStrategyScoring,
-		IterationStrategyScoringNativeThinking:
+// IsValid checks if the agent type is valid (empty string is valid — means default).
+func (t AgentType) IsValid() bool {
+	switch t {
+	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeScoring:
 		return true
 	default:
 		return false
 	}
 }
 
-// IsValidForScoring checks whether the strategy is a valid scoring strategy
-func (s IterationStrategy) IsValidForScoring() bool {
-	switch s {
-	case IterationStrategyScoring, IterationStrategyScoringNativeThinking:
-		return true
-	default:
-		return false
-	}
+// LLMBackend determines which SDK path to use for LLM calls.
+type LLMBackend string
+
+const (
+	// LLMBackendNativeGemini uses the Google SDK directly
+	LLMBackendNativeGemini LLMBackend = "google-native"
+	// LLMBackendLangChain uses LangChain multi-provider
+	LLMBackendLangChain LLMBackend = "langchain"
+)
+
+// IsValid checks if the LLM backend is valid (empty string is NOT valid — must be explicit).
+func (b LLMBackend) IsValid() bool {
+	return b == LLMBackendNativeGemini || b == LLMBackendLangChain
 }
 
 // SuccessPolicy defines success criteria for parallel stages

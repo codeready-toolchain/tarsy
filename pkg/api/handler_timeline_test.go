@@ -164,7 +164,7 @@ func createTimelineTestStageAndExecution(t *testing.T, client *ent.Client, sessi
 		SetStageID(stg.ID).
 		SetAgentName("DataCollector").
 		SetAgentIndex(1).
-		SetIterationStrategy("native-thinking").
+		SetLlmBackend("google-native").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(context.Background())
 	require.NoError(t, err)

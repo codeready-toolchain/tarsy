@@ -92,9 +92,9 @@ func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 	if input.Config != nil {
 		req.LlmConfig = toProtoLLMConfig(input.Config)
 	}
-	// Backend is set by the caller based on iteration strategy, not derived from provider type
+	// Backend is set by the caller from LLMBackend config, not derived from provider type
 	if req.LlmConfig != nil && input.Backend != "" {
-		req.LlmConfig.Backend = input.Backend
+		req.LlmConfig.Backend = string(input.Backend)
 	}
 	return req
 }
@@ -151,7 +151,7 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 			pc.NativeTools[string(tool)] = enabled
 		}
 	}
-	// Backend is set by toProtoRequest() from input.Backend (resolved from iteration strategy).
+	// Backend is set by toProtoRequest() from input.Backend (from LLMBackend config).
 	return pc
 }
 

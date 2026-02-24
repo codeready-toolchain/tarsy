@@ -37,8 +37,8 @@ type AgentExecution struct {
 	DurationMs *int `json:"duration_ms,omitempty"`
 	// Error details if failed
 	ErrorMessage *string `json:"error_message,omitempty"`
-	// e.g., 'langchain', 'native_thinking' (for observability)
-	IterationStrategy string `json:"iteration_strategy,omitempty"`
+	// LLM backend used: 'google-native' or 'langchain' (for observability)
+	LlmBackend string `json:"llm_backend,omitempty"`
 	// Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')
 	LlmProvider *string `json:"llm_provider,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -131,7 +131,7 @@ func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentexecution.FieldAgentIndex, agentexecution.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldIterationStrategy, agentexecution.FieldLlmProvider:
+		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider:
 			values[i] = new(sql.NullString)
 		case agentexecution.FieldStartedAt, agentexecution.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -214,11 +214,11 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
-		case agentexecution.FieldIterationStrategy:
+		case agentexecution.FieldLlmBackend:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field iteration_strategy", values[i])
+				return fmt.Errorf("unexpected type %T for field llm_backend", values[i])
 			} else if value.Valid {
-				_m.IterationStrategy = value.String
+				_m.LlmBackend = value.String
 			}
 		case agentexecution.FieldLlmProvider:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -328,8 +328,8 @@ func (_m *AgentExecution) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
-	builder.WriteString("iteration_strategy=")
-	builder.WriteString(_m.IterationStrategy)
+	builder.WriteString("llm_backend=")
+	builder.WriteString(_m.LlmBackend)
 	builder.WriteString(", ")
 	if v := _m.LlmProvider; v != nil {
 		builder.WriteString("llm_provider=")

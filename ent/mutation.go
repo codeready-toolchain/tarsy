@@ -63,7 +63,7 @@ type AgentExecutionMutation struct {
 	duration_ms             *int
 	addduration_ms          *int
 	error_message           *string
-	iteration_strategy      *string
+	llm_backend             *string
 	llm_provider            *string
 	clearedFields           map[string]struct{}
 	stage                   *string
@@ -608,40 +608,40 @@ func (m *AgentExecutionMutation) ResetErrorMessage() {
 	delete(m.clearedFields, agentexecution.FieldErrorMessage)
 }
 
-// SetIterationStrategy sets the "iteration_strategy" field.
-func (m *AgentExecutionMutation) SetIterationStrategy(s string) {
-	m.iteration_strategy = &s
+// SetLlmBackend sets the "llm_backend" field.
+func (m *AgentExecutionMutation) SetLlmBackend(s string) {
+	m.llm_backend = &s
 }
 
-// IterationStrategy returns the value of the "iteration_strategy" field in the mutation.
-func (m *AgentExecutionMutation) IterationStrategy() (r string, exists bool) {
-	v := m.iteration_strategy
+// LlmBackend returns the value of the "llm_backend" field in the mutation.
+func (m *AgentExecutionMutation) LlmBackend() (r string, exists bool) {
+	v := m.llm_backend
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldIterationStrategy returns the old "iteration_strategy" field's value of the AgentExecution entity.
+// OldLlmBackend returns the old "llm_backend" field's value of the AgentExecution entity.
 // If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AgentExecutionMutation) OldIterationStrategy(ctx context.Context) (v string, err error) {
+func (m *AgentExecutionMutation) OldLlmBackend(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIterationStrategy is only allowed on UpdateOne operations")
+		return v, errors.New("OldLlmBackend is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIterationStrategy requires an ID field in the mutation")
+		return v, errors.New("OldLlmBackend requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIterationStrategy: %w", err)
+		return v, fmt.Errorf("querying old value for OldLlmBackend: %w", err)
 	}
-	return oldValue.IterationStrategy, nil
+	return oldValue.LlmBackend, nil
 }
 
-// ResetIterationStrategy resets all changes to the "iteration_strategy" field.
-func (m *AgentExecutionMutation) ResetIterationStrategy() {
-	m.iteration_strategy = nil
+// ResetLlmBackend resets all changes to the "llm_backend" field.
+func (m *AgentExecutionMutation) ResetLlmBackend() {
+	m.llm_backend = nil
 }
 
 // SetLlmProvider sets the "llm_provider" field.
@@ -1025,8 +1025,8 @@ func (m *AgentExecutionMutation) Fields() []string {
 	if m.error_message != nil {
 		fields = append(fields, agentexecution.FieldErrorMessage)
 	}
-	if m.iteration_strategy != nil {
-		fields = append(fields, agentexecution.FieldIterationStrategy)
+	if m.llm_backend != nil {
+		fields = append(fields, agentexecution.FieldLlmBackend)
 	}
 	if m.llm_provider != nil {
 		fields = append(fields, agentexecution.FieldLlmProvider)
@@ -1057,8 +1057,8 @@ func (m *AgentExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case agentexecution.FieldErrorMessage:
 		return m.ErrorMessage()
-	case agentexecution.FieldIterationStrategy:
-		return m.IterationStrategy()
+	case agentexecution.FieldLlmBackend:
+		return m.LlmBackend()
 	case agentexecution.FieldLlmProvider:
 		return m.LlmProvider()
 	}
@@ -1088,8 +1088,8 @@ func (m *AgentExecutionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldDurationMs(ctx)
 	case agentexecution.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
-	case agentexecution.FieldIterationStrategy:
-		return m.OldIterationStrategy(ctx)
+	case agentexecution.FieldLlmBackend:
+		return m.OldLlmBackend(ctx)
 	case agentexecution.FieldLlmProvider:
 		return m.OldLlmProvider(ctx)
 	}
@@ -1164,12 +1164,12 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetErrorMessage(v)
 		return nil
-	case agentexecution.FieldIterationStrategy:
+	case agentexecution.FieldLlmBackend:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetIterationStrategy(v)
+		m.SetLlmBackend(v)
 		return nil
 	case agentexecution.FieldLlmProvider:
 		v, ok := value.(string)
@@ -1314,8 +1314,8 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 	case agentexecution.FieldErrorMessage:
 		m.ResetErrorMessage()
 		return nil
-	case agentexecution.FieldIterationStrategy:
-		m.ResetIterationStrategy()
+	case agentexecution.FieldLlmBackend:
+		m.ResetLlmBackend()
 		return nil
 	case agentexecution.FieldLlmProvider:
 		m.ResetLlmProvider()

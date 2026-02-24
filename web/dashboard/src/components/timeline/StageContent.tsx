@@ -500,9 +500,9 @@ const StageContent: React.FC<StageContentProps> = ({
                       {eo.llm_provider}
                     </Typography>
                   )}
-                  {eo?.iteration_strategy && (
+                  {eo?.llm_backend && (
                     <Typography variant="caption" color="text.secondary">
-                      {eo.iteration_strategy.replace(/_/g, '-')}
+                      {eo.llm_backend}
                     </Typography>
                   )}
                   <Chip

@@ -1,4 +1,4 @@
-// Package controller provides iteration strategy implementations for agents.
+// Package controller provides agent type implementations for controllers.
 package controller
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-// Factory creates controllers by iteration strategy.
+// Factory creates controllers by agent type.
 // Implements agent.ControllerFactory.
 type Factory struct{}
 
@@ -17,16 +17,14 @@ func NewFactory() *Factory {
 	return &Factory{}
 }
 
-// CreateController builds a Controller for the given strategy.
-func (f *Factory) CreateController(strategy config.IterationStrategy, execCtx *agent.ExecutionContext) (agent.Controller, error) {
-	switch strategy {
-	case "":
-		return nil, fmt.Errorf("iteration strategy is required (must be one of: native-thinking, langchain, synthesis, synthesis-native-thinking)")
-	case config.IterationStrategyNativeThinking, config.IterationStrategyLangChain:
+// CreateController builds a Controller for the given agent type.
+func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.ExecutionContext) (agent.Controller, error) {
+	switch agentType {
+	case config.AgentTypeDefault:
 		return NewFunctionCallingController(), nil
-	case config.IterationStrategySynthesis, config.IterationStrategySynthesisNativeThinking:
+	case config.AgentTypeSynthesis:
 		return NewSynthesisController(), nil
 	default:
-		return nil, fmt.Errorf("unknown iteration strategy: %q", strategy)
+		return nil, fmt.Errorf("unknown agent type: %q", agentType)
 	}
 }

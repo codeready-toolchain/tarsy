@@ -88,8 +88,8 @@ defaults:
   # Default max iterations (forces conclusion when reached, no pause/resume)
   max_iterations: 20
   
-  # Default iteration strategy
-  iteration_strategy: "langchain"
+  # Default LLM backend
+  llm_backend: "langchain"
   
   # Default success policy for parallel stages ("all" or "any")
   success_policy: "any"
@@ -234,7 +234,7 @@ agents:
     mcp_servers:
       - "kubernetes-server"
       - "argocd-server"
-    iteration_strategy: "langchain"
+    llm_backend: "langchain"
     max_iterations: 25
     custom_instructions: |
       You are a security-focused SRE agent specializing in cybersecurity incidents.
@@ -255,7 +255,7 @@ agents:
     mcp_servers:
       - "monitoring-server"
       - "kubernetes-server"
-    iteration_strategy: "langchain"
+    llm_backend: "langchain"
     custom_instructions: |
       You are a performance-focused SRE agent specializing in system optimization.
       
@@ -288,18 +288,21 @@ agents:
   # Example: Override built-in SynthesisAgent
   # SynthesisAgent combines results from parallel investigation agents.
   # It doesn't call tools, so mcp_servers is typically empty.
+  # Agent type is set via type: synthesis; LLM backend is configured separately.
   # SynthesisAgent:
-  #   iteration_strategy: "synthesis-native-thinking"
+  #   type: synthesis
+  #   llm_backend: "google-native"
   #   custom_instructions: |
   #     You are an Incident Commander synthesizing parallel investigation results.
   #     Produce a unified diagnosis with severity, root cause, and remediation steps.
 
   # Example: Override built-in ScoringAgent
   # ScoringAgent evaluates session quality after investigation completes.
-  # iteration_strategy MUST be a scoring strategy: "scoring" or "scoring-native-thinking".
-  # Chain-level iteration_strategy does NOT inherit into scoring resolution.
+  # Agent type is set via type: scoring; LLM backend (e.g. "langchain" or "google-native") is configured separately.
+  # Chain-level llm_backend does NOT inherit into scoring resolution.
   # ScoringAgent:
-  #   iteration_strategy: "scoring"
+  #   type: scoring
+  #   llm_backend: "langchain"
   #   custom_instructions: |
   #     You are a session quality evaluator.
   #     Score the investigation based on thoroughness, accuracy, and actionability.
@@ -319,7 +322,7 @@ agent_chains:
       - name: "Investigation"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "native-thinking"
+            llm_backend: "google-native"
             max_iterations: 15
     chat:
       enabled: true
@@ -327,7 +330,7 @@ agent_chains:
     scoring:
       enabled: true
       agent: "ScoringAgent"
-      iteration_strategy: "scoring"  # Must be "scoring" or "scoring-native-thinking"
+      llm_backend: "langchain"
       llm_provider: "google-default"
       max_iterations: 5
 
@@ -339,13 +342,13 @@ agent_chains:
       - name: "system-data-collection"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
         max_iterations: 10
       
       - name: "final-diagnosis"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "native-thinking"
+            llm_backend: "google-native"
         max_iterations: 5
 
   # Multiple agents in parallel with synthesis
@@ -358,22 +361,22 @@ agent_chains:
         max_iterations: 10
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "native-thinking"
+            llm_backend: "google-native"
             llm_provider: "gemini-2.5-flash"
             max_iterations: 10
           
           - name: "KubernetesAgent"
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
             llm_provider: "gemini-2.5-flash"
             max_iterations: 3
           
           - name: "performance-agent"
-            iteration_strategy: "native-thinking"
+            llm_backend: "google-native"
             llm_provider: "gemini-2.5-pro"
         
         synthesis:
           agent: "SynthesisAgent"
-          iteration_strategy: "synthesis-native-thinking"
+          llm_backend: "google-native"
           llm_provider: "gemini-3-pro"
 
   # Replica chain (run same agent multiple times)
@@ -395,7 +398,7 @@ agent_chains:
       - name: "triage"
         agents:
           - name: "security-agent"
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
             max_iterations: 30
     chat:
       enabled: true
