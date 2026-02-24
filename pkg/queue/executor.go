@@ -414,17 +414,19 @@ func (e *RealSessionExecutor) executeAgent(
 	// Best-effort provider/backend for the error path (before ResolveAgentConfig
 	// succeeds). The happy path uses resolvedConfig instead, keeping
 	// ResolveAgentConfig as the single source of truth.
-	fallbackProviderName := e.cfg.Defaults.LLMProvider
+	var fallbackProviderName string
+	fallbackBackend := agent.DefaultLLMBackend
+	if e.cfg.Defaults != nil {
+		fallbackProviderName = e.cfg.Defaults.LLMProvider
+		if e.cfg.Defaults.LLMBackend != "" {
+			fallbackBackend = e.cfg.Defaults.LLMBackend
+		}
+	}
 	if input.chain.LLMProvider != "" {
 		fallbackProviderName = input.chain.LLMProvider
 	}
 	if agentConfig.LLMProvider != "" {
 		fallbackProviderName = agentConfig.LLMProvider
-	}
-
-	fallbackBackend := agent.DefaultLLMBackend
-	if e.cfg.Defaults.LLMBackend != "" {
-		fallbackBackend = e.cfg.Defaults.LLMBackend
 	}
 	if input.chain.LLMBackend != "" {
 		fallbackBackend = input.chain.LLMBackend
@@ -1300,7 +1302,7 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 	if input.stageConfig.SuccessPolicy != "" {
 		return input.stageConfig.SuccessPolicy
 	}
-	if e.cfg.Defaults.SuccessPolicy != "" {
+	if e.cfg.Defaults != nil && e.cfg.Defaults.SuccessPolicy != "" {
 		return e.cfg.Defaults.SuccessPolicy
 	}
 	return config.SuccessPolicyAny
