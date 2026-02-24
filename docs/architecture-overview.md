@@ -113,11 +113,14 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 ### 4. Specialized Agents & Controllers
 
-Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers.
+Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
+
+- **`AgentType`** (`""` | `"synthesis"` | `"scoring"`) — determines which controller runs the agent
+- **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Two controller types** (text-based ReAct parsing was completely removed):
 
-- **FunctionCallingController**: Structured function calling with tool definitions bound to the LLM. Handles both `native-thinking` (Gemini) and `langchain` (multi-provider) strategies
+- **FunctionCallingController**: Structured function calling with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
 - **SynthesisController**: Tool-less single LLM call for synthesizing multi-agent investigation results
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
@@ -347,7 +350,7 @@ All 4 containers share localhost network within the pod. The same container imag
 
 ## Extensibility
 
-- **New Agent Types**: Add custom agents via `agents` section in `tarsy.yaml` with MCP servers, instructions, and iteration configuration
+- **New Agent Types**: Add custom agents via `agents` section in `tarsy.yaml` with MCP servers, instructions, LLM backend, and iteration configuration
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
@@ -364,11 +367,11 @@ agent_chains:
       - name: "parallel-analysis"
         agents:
           - name: "KubernetesAgent"
-            iteration_strategy: "native-thinking"
+            llm_backend: "google-native"
             llm_provider: "gemini-3-pro"
             custom_instructions: "Focus on pod health, resource limits, and recent restarts"
           - name: "KubernetesAgent"
-            iteration_strategy: "langchain"
+            llm_backend: "langchain"
             llm_provider: "anthropic-default"
             custom_instructions: "Focus on networking, service endpoints, and ingress"
         max_iterations: 15

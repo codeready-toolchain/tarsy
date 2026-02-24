@@ -4,9 +4,12 @@ package config
 type AgentType string
 
 const (
-	AgentTypeDefault   AgentType = ""          // Regular investigation agent (iterating controller)
-	AgentTypeSynthesis AgentType = "synthesis" // Synthesizes parallel investigation results (single-shot)
-	AgentTypeScoring   AgentType = "scoring"   // Evaluates session quality (single-shot)
+	// AgentTypeDefault is a regular investigation agent (iterating controller)
+	AgentTypeDefault AgentType = ""
+	// AgentTypeSynthesis synthesizes parallel investigation results (single-shot)
+	AgentTypeSynthesis AgentType = "synthesis"
+	// AgentTypeScoring evaluates session quality (single-shot)
+	AgentTypeScoring AgentType = "scoring"
 )
 
 // IsValid checks if the agent type is valid (empty string is valid — means default).
@@ -23,8 +26,10 @@ func (t AgentType) IsValid() bool {
 type LLMBackend string
 
 const (
-	LLMBackendNativeGemini LLMBackend = "google-native" // Google SDK direct
-	LLMBackendLangChain    LLMBackend = "langchain"     // LangChain multi-provider
+	// LLMBackendNativeGemini uses the Google SDK directly
+	LLMBackendNativeGemini LLMBackend = "google-native"
+	// LLMBackendLangChain uses LangChain multi-provider
+	LLMBackendLangChain LLMBackend = "langchain"
 )
 
 // IsValid checks if the LLM backend is valid (empty string is NOT valid — must be explicit).
