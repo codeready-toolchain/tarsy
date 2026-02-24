@@ -107,6 +107,7 @@ func TestSessionStatusHandler_Validation(t *testing.T) {
 			he, ok := err.(*echo.HTTPError)
 			if assert.True(t, ok, "expected echo.HTTPError") {
 				assert.Equal(t, http.StatusBadRequest, he.Code)
+				assert.Contains(t, he.Message, "session id")
 			}
 		}
 	})

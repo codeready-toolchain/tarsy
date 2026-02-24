@@ -422,7 +422,7 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 // GetSessionDetail returns an enriched session detail DTO with computed fields.
 func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string) (*models.SessionDetailResponse, error) {
 	session, err := s.client.AlertSession.Query().
-		Where(alertsession.IDEQ(sessionID)).
+		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
 			q.WithAgentExecutions(func(eq *ent.AgentExecutionQuery) {
@@ -589,9 +589,8 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 
 // GetSessionSummary returns lightweight statistics for a session.
 func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string) (*models.SessionSummaryResponse, error) {
-	// Verify session exists.
 	session, err := s.client.AlertSession.Query().
-		Where(alertsession.IDEQ(sessionID)).
+		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages().
 		Only(ctx)
 	if err != nil {
