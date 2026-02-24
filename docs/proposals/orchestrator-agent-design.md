@@ -67,9 +67,9 @@ From TARSy's perspective, the orchestrator is just another agent in a chain. It 
 
 Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tarsy.yaml) and built-in agents (KubernetesAgent, ChatAgent, etc.). No new concept needed.
 
-**Discovery:** All agents form a global registry that the orchestrator sees by default. The view can be restricted via `sub_agents` override at chain/stage/agent level, following TARSy's existing override patterns.
+**Discovery:** Agents with a `description` field form the global sub-agent registry. Agents without `description` are excluded — the orchestrator cannot see or dispatch them. The registry can be further restricted via `sub_agents` override at chain/stage/agent level, following TARSy's existing override patterns.
 
-**Description:** Each agent is presented to the orchestrator LLM with its name, `description` (new optional field for config agents; built-ins already have it), and MCP servers list. The LLM infers dispatch decisions from this.
+**Description:** Each agent is presented to the orchestrator LLM with its name, `description` (required for orchestrator visibility), and MCP servers list. The LLM infers dispatch decisions from this. Built-in agents already have descriptions; config agents must explicitly opt in by defining one.
 
 ```yaml
 agents:
@@ -212,7 +212,7 @@ agent_chains:
 
 | Aspect | Mechanism | Default |
 |--------|-----------|---------|
-| Available sub-agents | Global registry (all agents) | All config + built-in agents |
+| Available sub-agents | Global registry (agents with `description`) | All agents that have `description` defined |
 | Sub-agent scoping | `sub_agents` override at chain/stage/agent | All agents visible |
 | MCP servers on sub-agents | `mcp_servers` on agent config | Per-agent config |
 | Orchestrator's own MCP servers | `mcp_servers` on orchestrator config | None (pure coordinator) |

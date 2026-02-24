@@ -12,7 +12,7 @@ Each question has multiple options with trade-offs and a recommendation. We'll g
 
 > **Decision:** Sub-agents are regular TARSy agents — global registry with override.
 
-Sub-agents are not a new concept. They are the existing TARSy agents — both config agents (`agents:` in tarsy.yaml) and built-in agents (KubernetesAgent, etc.). All agents form a global sub-agent registry that the orchestrator sees by default. The view can be restricted to a subset via `sub_agents` override at chain → stage → agent-name level.
+Sub-agents are not a new concept. They are the existing TARSy agents — both config agents (`agents:` in tarsy.yaml) and built-in agents (KubernetesAgent, etc.). Agents with a `description` field form the global sub-agent registry; agents without `description` are excluded from orchestrator visibility. The registry can be further restricted to a subset via `sub_agents` override at chain → stage → agent-name level.
 
 ```yaml
 agents:
@@ -42,10 +42,9 @@ agent_chains:
 
 **Key points:**
 
-- Zero-config default — orchestrator sees all agents automatically.
+- `description` is the opt-in: agents with it are orchestrator-visible, agents without it are excluded.
 - Same agent can appear in static chains AND as an orchestrator sub-agent.
-- Built-in agents (KubernetesAgent, etc.) are first-class sub-agents.
-- Only new field: optional `description` on config agents (built-ins already have it).
+- Built-in agents (KubernetesAgent, etc.) already have descriptions — they're first-class sub-agents by default.
 - `sub_agents` override follows TARSy's existing chain → stage → agent-name inheritance.
 
 *Rejected alternatives: (A) reuse-only — too rigid for ad-hoc invocation; (B) new separate concept — unnecessary duplication; (C) hybrid wrappers — over-engineered.*
@@ -66,14 +65,14 @@ The orchestrator's system prompt is built at runtime from the resolved agent lis
 
 ## Q3: How are sub-agents described to the orchestrator? — DECIDED
 
-> **Decision:** Name + `description` field. LLM infers the rest from MCP server list and agent name.
+> **Decision:** Name + `description` field + MCP servers. `description` is required for orchestrator visibility.
 
 Each agent's entry in the orchestrator's system prompt includes:
 - **Name** (already exists)
-- **Description** (new optional field on config agents; built-ins already have it)
+- **Description** (required — agents without it are excluded from the orchestrator's registry)
 - **MCP servers** (already exists in agent config)
 
-The LLM is smart enough to infer when to use "LogAnalyzer with Loki MCP server" vs "MetricChecker with Prometheus" without explicit `when_to_use` or `capabilities` fields. These can be added later if dispatch quality proves insufficient.
+The LLM is smart enough to infer when to use "LogAnalyzer with Loki MCP server" vs "MetricChecker with Prometheus" without explicit `when_to_use` or `capabilities` fields. These can be added later if dispatch quality proves insufficient. Built-in agents already have descriptions and are visible by default.
 
 *Rejected alternatives: (A) name-only — too sparse; (B) structured capabilities + domains — over-engineered for v1; (C) when_to_use examples — verbose, can add later if needed.*
 
@@ -277,9 +276,9 @@ No memory in v1. Each run starts fresh. But memory is a likely future feature, s
 
 | # | Question | Decision |
 |---|----------|----------|
-| Q1 | What is a sub-agent? | Regular TARSy agents (config + built-in), global registry with override |
+| Q1 | What is a sub-agent? | Regular TARSy agents (config + built-in) with `description`. Global registry with override. |
 | Q2 | How does orchestrator discover sub-agents? | Global registry from config + built-ins (follows from Q1) |
-| Q3 | How are sub-agents described? | Name + `description` + MCP servers. LLM infers the rest. |
+| Q3 | How are sub-agents described? | Name + `description` (required) + MCP servers. LLM infers the rest. |
 | Q4 | How does orchestrator invoke sub-agents? | Async `dispatch_agent` + `get_result` + `cancel_agent` |
 | Q5 | How are MCP servers attached? | Config-driven only, reuse TARSy's existing `mcp_servers` |
 | Q6 | What format do results take? | Free text (raw LLM response) |
@@ -299,9 +298,9 @@ No memory in v1. Each run starts fresh. But memory is a likely future feature, s
 
 | Date | Question | Decision | Rationale |
 |------|----------|----------|-----------|
-| 2026-02-19 | Q1: What is a sub-agent? | Regular TARSy agents (config + built-in) form a global registry. Orchestrator sees all by default, with `sub_agents` override at chain/stage/agent level. Only new field: optional `description`. | No new concept needed. Follows existing TARSy override patterns. Zero-config for common case. Built-ins work automatically. |
+| 2026-02-19 | Q1: What is a sub-agent? | Regular TARSy agents (config + built-in) with `description` field form the registry. Agents without `description` are excluded. `sub_agents` override at chain/stage/agent level for further scoping. | No new concept needed. `description` is the opt-in. Built-ins already have descriptions. Follows existing TARSy override patterns. |
 | 2026-02-19 | Q2: How does orchestrator discover sub-agents? | Global registry from config + built-ins. Follows directly from Q1. | No separate discovery needed — agents are already known from config and builtins. |
-| 2026-02-19 | Q3: How are sub-agents described? | Name + `description` + MCP servers list. LLM infers when to use each agent. | Minimal config. LLM is capable of dispatch decisions from name + description + tools. Richer metadata can be added later if needed. |
+| 2026-02-19 | Q3: How are sub-agents described? | Name + `description` (required for visibility) + MCP servers list. LLM infers when to use each agent. | `description` doubles as opt-in gate. Minimal config. LLM is capable of dispatch decisions from name + description + tools. Richer metadata can be added later if needed. |
 | 2026-02-19 | Q4: How does orchestrator invoke sub-agents? | Async `dispatch_agent` + `get_result`. Orchestrator manages execution IDs, can fan out in parallel. | Enables parallel investigation. Proven pattern. Frontier models handle async tool management well. |
 | 2026-02-19 | Q5: How are MCP servers attached? | Config-driven only. Reuse TARSy's existing `mcp_servers` on agents + chain/stage overrides. LLM does not control MCP attachment. | Keep LLM focused on tasks, not infrastructure. Existing TARSy mechanism already supports overrides. |
 | 2026-02-19 | Q6: What format do results take? | Free text — raw LLM response from sub-agent. | Simplest. No schema to maintain. Orchestrator LLM reasons over natural language. |
