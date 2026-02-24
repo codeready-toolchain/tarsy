@@ -400,6 +400,24 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.NotNil(t, resp)
 	})
 
+	// ── Session Status (lightweight polling endpoint) ──
+	t.Run("SessionStatus", func(t *testing.T) {
+		status := app.GetSessionStatus(t, ids[0])
+		expA := expectedByID[ids[0]]
+
+		assert.Equal(t, ids[0], status["id"])
+		assert.Equal(t, "completed", status["status"])
+		assert.Equal(t, expA.investText, status["final_analysis"])
+		assert.Equal(t, expA.summaryText, status["executive_summary"])
+		assert.Nil(t, status["error_message"])
+	})
+
+	// ── Session Status 404 ──
+	t.Run("SessionStatus/NotFound", func(t *testing.T) {
+		resp := app.getJSON(t, "/api/v1/sessions/nonexistent-id/status", 404)
+		assert.NotNil(t, resp)
+	})
+
 	// ── Filter Options (reflect actual DB data) ──
 	t.Run("FilterOptions", func(t *testing.T) {
 		options := app.GetFilterOptions(t)

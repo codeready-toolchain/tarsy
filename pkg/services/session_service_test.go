@@ -947,6 +947,20 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		_, err := service.GetSessionDetail(ctx, "nonexistent-id")
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
+
+	t.Run("excludes soft-deleted session", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"soft-deleted detail", "pod-crash", "k8s-analysis",
+			10, 5, 15, 0)
+
+		err := client.AlertSession.UpdateOneID(sessionID).
+			SetDeletedAt(time.Now()).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		_, err = service.GetSessionDetail(ctx, sessionID)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
 }
 
 func TestSessionService_GetSessionSummary(t *testing.T) {
@@ -979,6 +993,20 @@ func TestSessionService_GetSessionSummary(t *testing.T) {
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
 		_, err := service.GetSessionSummary(ctx, "nonexistent-id")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("excludes soft-deleted session", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"soft-deleted summary", "pod-crash", "k8s-analysis",
+			10, 5, 15, 0)
+
+		err := client.AlertSession.UpdateOneID(sessionID).
+			SetDeletedAt(time.Now()).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		_, err = service.GetSessionSummary(ctx, sessionID)
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
@@ -1178,6 +1206,76 @@ func TestSessionService_GetDistinctAlertTypes(t *testing.T) {
 	assert.Len(t, types, 2)
 	assert.Contains(t, types, "type-a")
 	assert.Contains(t, types, "type-b")
+}
+
+func TestSessionService_GetSessionStatus(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("returns status for in-progress session with nil optional fields", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "alert under investigation",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = service.UpdateSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
+		require.NoError(t, err)
+
+		status, err := service.GetSessionStatus(ctx, session.ID)
+		require.NoError(t, err)
+
+		assert.Equal(t, session.ID, status.ID)
+		assert.Equal(t, "in_progress", status.Status)
+		assert.Nil(t, status.FinalAnalysis)
+		assert.Nil(t, status.ExecutiveSummary)
+		assert.Nil(t, status.ErrorMessage)
+	})
+
+	t.Run("returns status for completed session", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"status poll data", "pod-crash", "k8s-analysis",
+			100, 50, 150, 1)
+
+		status, err := service.GetSessionStatus(ctx, sessionID)
+		require.NoError(t, err)
+
+		assert.Equal(t, sessionID, status.ID)
+		assert.Equal(t, "completed", status.Status)
+		require.NotNil(t, status.FinalAnalysis)
+		assert.Contains(t, *status.FinalAnalysis, "status poll data")
+		require.NotNil(t, status.ExecutiveSummary)
+		assert.Contains(t, *status.ExecutiveSummary, "status poll data")
+		assert.Nil(t, status.ErrorMessage)
+	})
+
+	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
+		_, err := service.GetSessionStatus(ctx, "nonexistent-id")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("excludes soft-deleted session", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "soft-deleted session",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetDeletedAt(time.Now()).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		_, err = service.GetSessionStatus(ctx, session.ID)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
 }
 
 func TestSessionService_GetDistinctChainIDs(t *testing.T) {

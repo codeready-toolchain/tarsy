@@ -422,7 +422,7 @@ func (s *SessionService) SearchSessions(ctx context.Context, query string, limit
 // GetSessionDetail returns an enriched session detail DTO with computed fields.
 func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string) (*models.SessionDetailResponse, error) {
 	session, err := s.client.AlertSession.Query().
-		Where(alertsession.IDEQ(sessionID)).
+		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
 			q.WithAgentExecutions(func(eq *ent.AgentExecutionQuery) {
@@ -589,9 +589,8 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 
 // GetSessionSummary returns lightweight statistics for a session.
 func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string) (*models.SessionSummaryResponse, error) {
-	// Verify session exists.
 	session, err := s.client.AlertSession.Query().
-		Where(alertsession.IDEQ(sessionID)).
+		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages().
 		Only(ctx)
 	if err != nil {
@@ -643,6 +642,31 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 			FailedStages:      failedStages,
 			CurrentStageIndex: session.CurrentStageIndex,
 		},
+	}, nil
+}
+
+// GetSessionStatus returns the minimal polling-friendly status for a session.
+// Single PK lookup, no edge-loading, no aggregate queries.
+func (s *SessionService) GetSessionStatus(ctx context.Context, sessionID string) (*models.SessionStatusResponse, error) {
+	session, err := s.client.AlertSession.Query().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get session status: %w", err)
+	}
+
+	return &models.SessionStatusResponse{
+		ID:               session.ID,
+		Status:           string(session.Status),
+		FinalAnalysis:    session.FinalAnalysis,
+		ExecutiveSummary: session.ExecutiveSummary,
+		ErrorMessage:     session.ErrorMessage,
 	}, nil
 }
 

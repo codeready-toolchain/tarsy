@@ -221,6 +221,15 @@ type SessionSummaryResponse struct {
 	ChainStatistics   ChainStatistics `json:"chain_statistics"`
 }
 
+// SessionStatusResponse is returned by GET /api/v1/sessions/:id/status.
+type SessionStatusResponse struct {
+	ID               string  `json:"id"`
+	Status           string  `json:"status"`
+	FinalAnalysis    *string `json:"final_analysis"`
+	ExecutiveSummary *string `json:"executive_summary"`
+	ErrorMessage     *string `json:"error_message"`
+}
+
 // ChainStatistics holds stage counts for the session summary.
 type ChainStatistics struct {
 	TotalStages       int  `json:"total_stages"`
