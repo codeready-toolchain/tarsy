@@ -291,9 +291,9 @@ func defaultTestConfig() *config.Config {
 	maxIter := 5
 	return &config.Config{
 		Defaults: &config.Defaults{
-			LLMProvider:       "test-provider",
-			IterationStrategy: config.IterationStrategyNativeThinking,
-			MaxIterations:     &maxIter,
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendNativeGemini,
+			MaxIterations: &maxIter,
 		},
 		AgentRegistry:       config.NewAgentRegistry(nil),
 		ChainRegistry:       config.NewChainRegistry(nil),

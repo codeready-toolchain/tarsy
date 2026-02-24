@@ -6,48 +6,40 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIterationStrategyIsValid(t *testing.T) {
+func TestAgentTypeIsValid(t *testing.T) {
 	tests := []struct {
-		name     string
-		strategy IterationStrategy
-		valid    bool
+		name      string
+		agentType AgentType
+		valid     bool
 	}{
-		{"native-thinking", IterationStrategyNativeThinking, true},
-		{"langchain", IterationStrategyLangChain, true},
-		{"synthesis", IterationStrategySynthesis, true},
-		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, true},
-		{"scoring", IterationStrategyScoring, true},
-		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
-		{"invalid", IterationStrategy("invalid"), false},
-		{"empty", IterationStrategy(""), false},
+		{"default (empty)", AgentTypeDefault, true},
+		{"synthesis", AgentTypeSynthesis, true},
+		{"scoring", AgentTypeScoring, true},
+		{"invalid", AgentType("invalid"), false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.valid, tt.strategy.IsValid())
+			assert.Equal(t, tt.valid, tt.agentType.IsValid())
 		})
 	}
 }
 
-func TestIterationStrategyIsValidForScoring(t *testing.T) {
+func TestLLMBackendIsValid(t *testing.T) {
 	tests := []struct {
-		name     string
-		strategy IterationStrategy
-		valid    bool
+		name    string
+		backend LLMBackend
+		valid   bool
 	}{
-		{"scoring", IterationStrategyScoring, true},
-		{"scoring-native-thinking", IterationStrategyScoringNativeThinking, true},
-		{"langchain", IterationStrategyLangChain, false},
-		{"native-thinking", IterationStrategyNativeThinking, false},
-		{"synthesis", IterationStrategySynthesis, false},
-		{"synthesis-native-thinking", IterationStrategySynthesisNativeThinking, false},
-		{"invalid", IterationStrategy("invalid"), false},
-		{"empty", IterationStrategy(""), false},
+		{"google-native", LLMBackendNativeGemini, true},
+		{"langchain", LLMBackendLangChain, true},
+		{"invalid", LLMBackend("invalid"), false},
+		{"empty", LLMBackend(""), false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.valid, tt.strategy.IsValidForScoring())
+			assert.Equal(t, tt.valid, tt.backend.IsValid())
 		})
 	}
 }

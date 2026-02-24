@@ -60,24 +60,18 @@ type ServiceBundle struct {
 	Stage       *services.StageService
 }
 
-// Backend constants — resolved from iteration strategy via ResolveBackend().
-const (
-	BackendGoogleNative = "google-native"
-	BackendLangChain    = "langchain"
-)
-
 // ResolvedAgentConfig is the fully-resolved configuration for an agent execution.
 // All hierarchy levels (defaults → chain → stage → agent) have been applied.
 type ResolvedAgentConfig struct {
 	AgentName          string
-	IterationStrategy  config.IterationStrategy
+	Type               config.AgentType  // Determines controller + wrapper selection
+	LLMBackend         config.LLMBackend // Determines SDK path (sent as-is to LLM service)
 	LLMProvider        *config.LLMProviderConfig
 	LLMProviderName    string // The resolved provider key (for observability / DB records)
 	MaxIterations      int
 	IterationTimeout   time.Duration // Per-iteration timeout (default: 120s)
 	MCPServers         []string
 	CustomInstructions string
-	Backend            string // "google-native" or "langchain" — resolved from iteration strategy
 
 	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
 	// Set by the session executor when the alert provides an MCP selection with native_tools.

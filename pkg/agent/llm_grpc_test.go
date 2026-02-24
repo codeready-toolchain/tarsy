@@ -69,10 +69,10 @@ func TestToProtoRequest_BackendPassthrough(t *testing.T) {
 				Type:  config.LLMProviderTypeGoogle,
 				Model: "gemini-2.5-pro",
 			},
-			Backend: BackendGoogleNative,
+			Backend: string(config.LLMBackendNativeGemini),
 		}
 		req := toProtoRequest(input)
-		assert.Equal(t, BackendGoogleNative, req.LlmConfig.Backend)
+		assert.Equal(t, "google-native", req.LlmConfig.Backend)
 	})
 
 	t.Run("langchain backend", func(t *testing.T) {
@@ -82,10 +82,10 @@ func TestToProtoRequest_BackendPassthrough(t *testing.T) {
 				Type:  config.LLMProviderTypeOpenAI,
 				Model: "gpt-5",
 			},
-			Backend: BackendLangChain,
+			Backend: string(config.LLMBackendLangChain),
 		}
 		req := toProtoRequest(input)
-		assert.Equal(t, BackendLangChain, req.LlmConfig.Backend)
+		assert.Equal(t, "langchain", req.LlmConfig.Backend)
 	})
 
 	t.Run("empty backend does not override", func(t *testing.T) {

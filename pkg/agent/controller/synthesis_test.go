@@ -22,7 +22,8 @@ func TestSynthesisController_HappyPath(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesis
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendLangChain
 	ctrl := NewSynthesisController()
 
 	prevContext := "Agent 1: Pods show high memory.\nAgent 2: Logs show OOMKilled."
@@ -47,7 +48,8 @@ func TestSynthesisController_WithThinking(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesisNativeThinking
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewSynthesisController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found no issues.")
@@ -65,7 +67,8 @@ func TestSynthesisController_LLMError(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesis
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendLangChain
 	ctrl := NewSynthesisController()
 
 	_, err := ctrl.Run(context.Background(), execCtx, "")
@@ -89,7 +92,8 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.AlertType = "kubernetes"
 	execCtx.RunbookContent = "# Synthesis Runbook\nReview agent findings."
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesis
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendLangChain
 	execCtx.Config.CustomInstructions = "Custom synthesis instructions."
 	ctrl := NewSynthesisController()
 
@@ -141,7 +145,8 @@ func TestSynthesisController_WithGrounding(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesisNativeThinking
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewSynthesisController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found OOM.")
@@ -175,7 +180,8 @@ func TestSynthesisController_WithCodeExecution(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategySynthesisNativeThinking
+	execCtx.Config.Type = config.AgentTypeSynthesis
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewSynthesisController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 collected metrics.")

@@ -141,11 +141,11 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 
 	t.Run("creates agent execution successfully", func(t *testing.T) {
 		req := models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "KubernetesAgent",
-			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "KubernetesAgent",
+			AgentIndex: 1,
+			LLMBackend: config.LLMBackendLangChain,
 		}
 
 		exec, err := stageService.CreateAgentExecution(ctx, req)
@@ -159,12 +159,12 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 
 	t.Run("persists llm_provider when set", func(t *testing.T) {
 		req := models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "GeminiAgent",
-			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyNativeThinking,
-			LLMProvider:       "gemini-2.5-pro",
+			StageID:     stg.ID,
+			SessionID:   session.ID,
+			AgentName:   "GeminiAgent",
+			AgentIndex:  2,
+			LLMBackend:  config.LLMBackendNativeGemini,
+			LLMProvider: "gemini-2.5-pro",
 		}
 
 		exec, err := stageService.CreateAgentExecution(ctx, req)
@@ -244,11 +244,11 @@ func TestStageService_UpdateAgentExecutionStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	execReq := models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	}
 	exec, err := stageService.CreateAgentExecution(ctx, execReq)
 	require.NoError(t, err)
@@ -311,11 +311,11 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
 			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-				StageID:           stg.ID,
-				SessionID:         session.ID,
-				AgentName:         "TestAgent",
-				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyLangChain,
+				StageID:    stg.ID,
+				SessionID:  session.ID,
+				AgentName:  "TestAgent",
+				AgentIndex: i,
+				LLMBackend: config.LLMBackendLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -366,11 +366,11 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
 			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-				StageID:           stg.ID,
-				SessionID:         session.ID,
-				AgentName:         "TestAgent",
-				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyLangChain,
+				StageID:    stg.ID,
+				SessionID:  session.ID,
+				AgentName:  "TestAgent",
+				AgentIndex: i,
+				LLMBackend: config.LLMBackendLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -427,11 +427,11 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		var executions []*ent.AgentExecution
 		for i := 1; i <= 3; i++ {
 			exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-				StageID:           stg.ID,
-				SessionID:         session.ID,
-				AgentName:         "TestAgent",
-				AgentIndex:        i,
-				IterationStrategy: config.IterationStrategyLangChain,
+				StageID:    stg.ID,
+				SessionID:  session.ID,
+				AgentName:  "TestAgent",
+				AgentIndex: i,
+				LLMBackend: config.LLMBackendLangChain,
 			})
 			require.NoError(t, err)
 			executions = append(executions, exec)
@@ -486,20 +486,20 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 
 		// Create 2 agent executions
 		exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "Agent1",
-			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "Agent1",
+			AgentIndex: 1,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "Agent2",
-			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "Agent2",
+			AgentIndex: 2,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
@@ -546,20 +546,20 @@ func TestStageService_UpdateStageStatus(t *testing.T) {
 		require.NoError(t, err)
 
 		exec1, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "Agent1",
-			AgentIndex:        1,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "Agent1",
+			AgentIndex: 1,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "Agent2",
-			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "Agent2",
+			AgentIndex: 2,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
@@ -665,6 +665,7 @@ func TestStageService_ForceStageFailure(t *testing.T) {
 			SessionID:  session.ID,
 			AgentName:  "TestAgent",
 			AgentIndex: 1,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 
@@ -747,11 +748,11 @@ func TestStageService_GetAgentExecutions(t *testing.T) {
 	var execIDs []string
 	for i := 1; i <= 3; i++ {
 		exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         fmt.Sprintf("TestAgent%d", i),
-			AgentIndex:        i,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  fmt.Sprintf("TestAgent%d", i),
+			AgentIndex: i,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 		execIDs = append(execIDs, exec.ID)

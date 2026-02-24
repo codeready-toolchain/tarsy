@@ -152,7 +152,8 @@ func newIntegrationExecCtx() *agent.ExecutionContext {
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "KubernetesAgent",
-			IterationStrategy:  config.IterationStrategyLangChain,
+			Type:               config.AgentTypeDefault,
+			LLMBackend:         config.LLMBackendLangChain,
 			MCPServers:         []string{"kubernetes-server"},
 			CustomInstructions: "Be thorough.",
 		},
@@ -168,7 +169,8 @@ func newSynthesisExecCtx() *agent.ExecutionContext {
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "SynthesisAgent",
-			IterationStrategy:  config.IterationStrategySynthesis,
+			Type:               config.AgentTypeSynthesis,
+			LLMBackend:         config.LLMBackendLangChain,
 			MCPServers:         []string{}, // Synthesis has no MCP servers
 			CustomInstructions: synthesisCustomInstructions,
 		},
@@ -184,7 +186,8 @@ func newSynthesisNativeThinkingExecCtx() *agent.ExecutionContext {
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "SynthesisAgent",
-			IterationStrategy:  config.IterationStrategySynthesisNativeThinking,
+			Type:               config.AgentTypeSynthesis,
+			LLMBackend:         config.LLMBackendNativeGemini,
 			MCPServers:         []string{}, // Synthesis has no MCP servers
 			CustomInstructions: synthesisCustomInstructions,
 			LLMProvider: &config.LLMProviderConfig{

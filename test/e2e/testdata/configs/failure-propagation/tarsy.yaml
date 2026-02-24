@@ -1,6 +1,6 @@
 defaults:
   llm_provider: "test-provider"
-  iteration_strategy: "native-thinking"
+  llm_backend: "google-native"
   # max_iterations=1 is critical for failure tests: when Generate() returns an
   # error, the agent framework treats it as a failed iteration and retries up to
   # max_iterations. Without this, CheckerB would retry 20 times (the default)

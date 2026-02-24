@@ -32,8 +32,8 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
-	// FieldIterationStrategy holds the string denoting the iteration_strategy field in the database.
-	FieldIterationStrategy = "iteration_strategy"
+	// FieldLlmBackend holds the string denoting the llm_backend field in the database.
+	FieldLlmBackend = "llm_backend"
 	// FieldLlmProvider holds the string denoting the llm_provider field in the database.
 	FieldLlmProvider = "llm_provider"
 	// EdgeStage holds the string denoting the stage edge name in mutations.
@@ -118,7 +118,7 @@ var Columns = []string{
 	FieldCompletedAt,
 	FieldDurationMs,
 	FieldErrorMessage,
-	FieldIterationStrategy,
+	FieldLlmBackend,
 	FieldLlmProvider,
 }
 
@@ -215,9 +215,9 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
 }
 
-// ByIterationStrategy orders the results by the iteration_strategy field.
-func ByIterationStrategy(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldIterationStrategy, opts...).ToFunc()
+// ByLlmBackend orders the results by the llm_backend field.
+func ByLlmBackend(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLlmBackend, opts...).ToFunc()
 }
 
 // ByLlmProvider orders the results by the llm_provider field.

@@ -147,7 +147,7 @@ func TestNativeThinkingController_ToolCallLifecycleEvents(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -479,7 +479,7 @@ func TestNativeThinkingController_SummarizationIntegration(t *testing.T) {
 	pb := prompt.NewPromptBuilder(registry)
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	execCtx.PromptBuilder = pb
 	ctrl := NewFunctionCallingController()
 
@@ -536,7 +536,7 @@ func TestNativeThinkingController_SummarizationFailOpen(t *testing.T) {
 	pb := prompt.NewPromptBuilder(registry)
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	execCtx.PromptBuilder = pb
 	ctrl := NewFunctionCallingController()
 
@@ -578,7 +578,7 @@ func TestNativeThinkingController_StorageTruncation(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")

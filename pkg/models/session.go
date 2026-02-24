@@ -193,19 +193,19 @@ type StageOverview struct {
 
 // ExecutionOverview is a summary of an agent execution within a stage.
 type ExecutionOverview struct {
-	ExecutionID       string     `json:"execution_id"`
-	AgentName         string     `json:"agent_name"`
-	AgentIndex        int        `json:"agent_index"`
-	Status            string     `json:"status"`
-	IterationStrategy string     `json:"iteration_strategy"`
-	LLMProvider       *string    `json:"llm_provider"`
-	StartedAt         *time.Time `json:"started_at"`
-	CompletedAt       *time.Time `json:"completed_at"`
-	DurationMs        *int64     `json:"duration_ms"`
-	ErrorMessage      *string    `json:"error_message"`
-	InputTokens       int64      `json:"input_tokens"`
-	OutputTokens      int64      `json:"output_tokens"`
-	TotalTokens       int64      `json:"total_tokens"`
+	ExecutionID  string     `json:"execution_id"`
+	AgentName    string     `json:"agent_name"`
+	AgentIndex   int        `json:"agent_index"`
+	Status       string     `json:"status"`
+	LLMBackend   string     `json:"llm_backend"`
+	LLMProvider  *string    `json:"llm_provider"`
+	StartedAt    *time.Time `json:"started_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+	DurationMs   *int64     `json:"duration_ms"`
+	ErrorMessage *string    `json:"error_message"`
+	InputTokens  int64      `json:"input_tokens"`
+	OutputTokens int64      `json:"output_tokens"`
+	TotalTokens  int64      `json:"total_tokens"`
 }
 
 // SessionSummaryResponse is returned by GET /api/v1/sessions/:id/summary.

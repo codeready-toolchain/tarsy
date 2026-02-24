@@ -40,7 +40,7 @@ func TestFunctionCallingController_HappyPath(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -79,7 +79,7 @@ func TestFunctionCallingController_MultipleToolCalls(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -116,7 +116,7 @@ func TestFunctionCallingController_ForcedConclusion(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -156,7 +156,7 @@ func TestFunctionCallingController_ThinkingContent(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -199,7 +199,7 @@ func TestFunctionCallingController_ToolExecutionError(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -217,7 +217,7 @@ func TestFunctionCallingController_ConsecutiveTimeouts(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -236,7 +236,7 @@ func TestFunctionCallingController_PrevStageContext(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found high CPU usage on node-3.")
@@ -281,7 +281,7 @@ func TestFunctionCallingController_ForcedConclusionWithFailedLast(t *testing.T) 
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -304,7 +304,7 @@ func TestFunctionCallingController_LLMErrorRecovery(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -336,7 +336,7 @@ func TestFunctionCallingController_TextAlongsideToolCalls(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -359,7 +359,7 @@ func TestFunctionCallingController_CodeExecution(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -397,7 +397,7 @@ func TestFunctionCallingController_GoogleSearch(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -434,7 +434,7 @@ func TestFunctionCallingController_UrlContext(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -473,7 +473,7 @@ func TestFunctionCallingController_PromptBuilderIntegration(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.AlertType = "kubernetes"
 	execCtx.RunbookContent = "# Test Runbook\nStep 1: Check pods"
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	execCtx.Config.CustomInstructions = "Custom native thinking instructions."
 	ctrl := NewFunctionCallingController()
 
@@ -537,7 +537,7 @@ func TestFunctionCallingController_ForcedConclusionUsesNativeFormat(t *testing.T
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -590,7 +590,7 @@ func TestFunctionCallingController_ForcedConclusionWithGrounding(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 3
-	execCtx.Config.IterationStrategy = config.IterationStrategyNativeThinking
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	ctrl := NewFunctionCallingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")

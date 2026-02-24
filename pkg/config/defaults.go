@@ -9,8 +9,8 @@ type Defaults struct {
 	// Max iterations default (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 
-	// Iteration strategy default
-	IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+	// LLM backend default
+	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
 	// Default scoring agent name (fallback when chain has no scoring config)
 	ScoringAgent string `yaml:"scoring_agent,omitempty"`

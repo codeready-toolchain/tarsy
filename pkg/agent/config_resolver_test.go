@@ -10,24 +10,13 @@ import (
 
 func intPtr(i int) *int { return &i }
 
-func TestResolveBackend(t *testing.T) {
-	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategyNativeThinking))
-	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategyLangChain))
-	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategySynthesis))
-	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategySynthesisNativeThinking))
-	assert.Equal(t, BackendLangChain, ResolveBackend(config.IterationStrategyScoring))
-	assert.Equal(t, BackendGoogleNative, ResolveBackend(config.IterationStrategyScoringNativeThinking))
-	// Unknown strategy defaults to langchain
-	assert.Equal(t, BackendLangChain, ResolveBackend("unknown"))
-}
-
 func TestResolveAgentConfig(t *testing.T) {
 	// Setup: build a Config with registries
 	maxIter25 := 25
 	defaults := &config.Defaults{
-		LLMProvider:       "google-default",
-		MaxIterations:     &maxIter25,
-		IterationStrategy: config.IterationStrategyLangChain,
+		LLMProvider:   "google-default",
+		MaxIterations: &maxIter25,
+		LLMBackend:    config.LLMBackendLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -45,7 +34,7 @@ func TestResolveAgentConfig(t *testing.T) {
 
 	agentDef := &config.AgentConfig{
 		MCPServers:         []string{"kubernetes-server"},
-		IterationStrategy:  config.IterationStrategyNativeThinking,
+		LLMBackend:         config.LLMBackendNativeGemini,
 		CustomInstructions: "You are a K8s agent",
 	}
 
@@ -69,14 +58,12 @@ func TestResolveAgentConfig(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
-		// Agent def overrides defaults for iteration strategy
-		assert.Equal(t, config.IterationStrategyNativeThinking, resolved.IterationStrategy)
+		// Agent def overrides defaults for LLM backend
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
 		assert.Equal(t, 25, resolved.MaxIterations)
 		assert.Equal(t, []string{"kubernetes-server"}, resolved.MCPServers)
 		assert.Equal(t, "You are a K8s agent", resolved.CustomInstructions)
-		// Backend resolved from iteration strategy
-		assert.Equal(t, BackendGoogleNative, resolved.Backend)
 	})
 
 	t.Run("stage-agent overrides chain and agent def", func(t *testing.T) {
@@ -88,11 +75,11 @@ func TestResolveAgentConfig(t *testing.T) {
 			MaxIterations: intPtr(10),
 		}
 		agentConfig := config.StageAgentConfig{
-			Name:              "KubernetesAgent",
-			IterationStrategy: config.IterationStrategyLangChain,
-			LLMProvider:       "openai-default",
-			MaxIterations:     intPtr(5),
-			MCPServers:        []string{"custom-server"},
+			Name:          "KubernetesAgent",
+			LLMBackend:    config.LLMBackendLangChain,
+			LLMProvider:   "openai-default",
+			MaxIterations: intPtr(5),
+			MCPServers:    []string{"custom-server"},
 		}
 
 		// Note: custom-server is not in the agent registry, but that's fine.
@@ -101,16 +88,15 @@ func TestResolveAgentConfig(t *testing.T) {
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, config.IterationStrategyLangChain, resolved.IterationStrategy)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 		assert.Equal(t, openaiProvider, resolved.LLMProvider)
 		assert.Equal(t, 5, resolved.MaxIterations)
 		assert.Equal(t, []string{"custom-server"}, resolved.MCPServers)
-		assert.Equal(t, BackendLangChain, resolved.Backend)
 	})
 
-	t.Run("chain-level strategy overrides agent-def", func(t *testing.T) {
+	t.Run("chain-level LLM backend overrides agent-def", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyLangChain,
+			LLMBackend: config.LLMBackendLangChain,
 		}
 		stageConfig := config.StageConfig{}
 		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
@@ -118,9 +104,8 @@ func TestResolveAgentConfig(t *testing.T) {
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		// Chain-level langchain overrides agent-def's native-thinking
-		assert.Equal(t, config.IterationStrategyLangChain, resolved.IterationStrategy)
-		assert.Equal(t, BackendLangChain, resolved.Backend)
+		// Chain-level langchain overrides agent-def's google-native
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {
@@ -225,9 +210,9 @@ func TestResolveAgentConfig(t *testing.T) {
 func TestResolveChatAgentConfig(t *testing.T) {
 	maxIter25 := 25
 	defaults := &config.Defaults{
-		LLMProvider:       "google-default",
-		MaxIterations:     &maxIter25,
-		IterationStrategy: config.IterationStrategyLangChain,
+		LLMProvider:   "google-default",
+		MaxIterations: &maxIter25,
+		LLMBackend:    config.LLMBackendLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -280,24 +265,23 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
 	})
 
-	t.Run("chatCfg overrides chain for strategy and provider", func(t *testing.T) {
+	t.Run("chatCfg overrides chain for LLM backend and provider", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyLangChain,
-			LLMProvider:       "google-default",
-			MaxIterations:     intPtr(10),
+			LLMBackend:    config.LLMBackendLangChain,
+			LLMProvider:   "google-default",
+			MaxIterations: intPtr(10),
 		}
 		chatCfg := &config.ChatConfig{
-			IterationStrategy: config.IterationStrategyNativeThinking,
-			LLMProvider:       "openai-default",
-			MaxIterations:     intPtr(3),
+			LLMBackend:    config.LLMBackendNativeGemini,
+			LLMProvider:   "openai-default",
+			MaxIterations: intPtr(3),
 		}
 
 		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
 		require.NoError(t, err)
-		assert.Equal(t, config.IterationStrategyNativeThinking, resolved.IterationStrategy)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 		assert.Equal(t, openaiProvider, resolved.LLMProvider)
 		assert.Equal(t, 3, resolved.MaxIterations)
-		assert.Equal(t, BackendGoogleNative, resolved.Backend)
 	})
 
 	t.Run("chatCfg MCP servers override chain aggregate", func(t *testing.T) {
@@ -420,9 +404,9 @@ func TestResolveChatAgentConfig(t *testing.T) {
 func TestResolveScoringConfig(t *testing.T) {
 	maxIter25 := 25
 	defaults := &config.Defaults{
-		LLMProvider:       "google-default",
-		MaxIterations:     &maxIter25,
-		IterationStrategy: config.IterationStrategyLangChain,
+		LLMProvider:   "google-default",
+		MaxIterations: &maxIter25,
+		LLMBackend:    config.LLMBackendLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -438,7 +422,8 @@ func TestResolveScoringConfig(t *testing.T) {
 
 	scoringAgentDef := &config.AgentConfig{
 		MCPServers:         []string{"scoring-server"},
-		IterationStrategy:  config.IterationStrategyScoring,
+		Type:               config.AgentTypeScoring,
+		LLMBackend:         config.LLMBackendLangChain,
 		CustomInstructions: "You are a scoring agent",
 	}
 
@@ -446,7 +431,7 @@ func TestResolveScoringConfig(t *testing.T) {
 		Defaults: defaults,
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"ScoringAgent":    scoringAgentDef,
-			"CustomScorer":    {MCPServers: []string{"custom-mcp"}, IterationStrategy: config.IterationStrategyScoring},
+			"CustomScorer":    {MCPServers: []string{"custom-mcp"}, Type: config.AgentTypeScoring, LLMBackend: config.LLMBackendLangChain},
 			"KubernetesAgent": {MCPServers: []string{"k8s-mcp"}},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -514,57 +499,27 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Equal(t, "CustomScorer", resolved.AgentName)
 	})
 
-	t.Run("strategy resolution: scoringCfg overrides agentDef", func(t *testing.T) {
+	t.Run("LLM backend resolution: scoringCfg overrides agentDef", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		scoringCfg := &config.ScoringConfig{
-			Agent:             "CustomScorer",
-			IterationStrategy: config.IterationStrategyScoringNativeThinking,
+			Agent:      "CustomScorer",
+			LLMBackend: config.LLMBackendNativeGemini,
 		}
 
 		resolved, err := ResolveScoringConfig(cfg, chain, scoringCfg)
 		require.NoError(t, err)
-		assert.Equal(t, config.IterationStrategyScoringNativeThinking, resolved.IterationStrategy)
-		assert.Equal(t, BackendGoogleNative, resolved.Backend)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 	})
 
-	t.Run("chain iteration strategy does not affect scoring", func(t *testing.T) {
+	t.Run("chain LLM backend does not affect scoring", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			IterationStrategy: config.IterationStrategyNativeThinking,
+			LLMBackend: config.LLMBackendNativeGemini,
 		}
 
 		resolved, err := ResolveScoringConfig(cfg, chain, nil)
 		require.NoError(t, err)
-		assert.Equal(t, config.IterationStrategyScoring, resolved.IterationStrategy)
-	})
-
-	t.Run("errors on invalid resolved scoring strategy", func(t *testing.T) {
-		badCfg := &config.Config{
-			Defaults: &config.Defaults{LLMProvider: "google-default"},
-			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ScoringAgent": {IterationStrategy: config.IterationStrategyNativeThinking},
-			}),
-			LLMProviderRegistry: cfg.LLMProviderRegistry,
-		}
-		chain := &config.ChainConfig{}
-
-		_, err := ResolveScoringConfig(badCfg, chain, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid scoring strategy")
-	})
-
-	t.Run("errors on empty resolved scoring strategy", func(t *testing.T) {
-		badCfg := &config.Config{
-			Defaults: &config.Defaults{LLMProvider: "google-default"},
-			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ScoringAgent": {},
-			}),
-			LLMProviderRegistry: cfg.LLMProviderRegistry,
-		}
-		chain := &config.ChainConfig{}
-
-		_, err := ResolveScoringConfig(badCfg, chain, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid scoring strategy")
+		// Scoring uses agentDef.LLMBackend (ScoringAgent has LLMBackendLangChain)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
 
 	t.Run("LLM provider resolution: scoringCfg overrides chain overrides defaults", func(t *testing.T) {
@@ -623,17 +578,6 @@ func TestResolveScoringConfig(t *testing.T) {
 		resolved, err := ResolveScoringConfig(cfg, chain, nil)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"scoring-server"}, resolved.MCPServers)
-	})
-
-	t.Run("backend resolved from strategy", func(t *testing.T) {
-		chain := &config.ChainConfig{}
-		scoringCfg := &config.ScoringConfig{
-			IterationStrategy: config.IterationStrategyScoring,
-		}
-
-		resolved, err := ResolveScoringConfig(cfg, chain, scoringCfg)
-		require.NoError(t, err)
-		assert.Equal(t, BackendLangChain, resolved.Backend)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {

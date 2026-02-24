@@ -52,8 +52,8 @@ func (AgentExecution) Fields() []ent.Field {
 			Comment("Error details if failed"),
 
 		// Agent Configuration
-		field.String("iteration_strategy").
-			Comment("e.g., 'langchain', 'native_thinking' (for observability)"),
+		field.String("llm_backend").
+			Comment("LLM backend used: 'google-native' or 'langchain' (for observability)"),
 		field.String("llm_provider").
 			Optional().
 			Nillable().

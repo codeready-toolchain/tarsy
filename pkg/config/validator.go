@@ -138,9 +138,14 @@ func (v *Validator) validateAgents() error {
 			}
 		}
 
-		// Validate iteration strategy if specified
-		if agent.IterationStrategy != "" && !agent.IterationStrategy.IsValid() {
-			return NewValidationError("agent", name, "iteration_strategy", fmt.Errorf("invalid strategy: %s", agent.IterationStrategy))
+		// Validate agent type if specified
+		if agent.Type != "" && !agent.Type.IsValid() {
+			return NewValidationError("agent", name, "type", fmt.Errorf("invalid agent type: %s", agent.Type))
+		}
+
+		// Validate LLM backend if specified
+		if agent.LLMBackend != "" && !agent.LLMBackend.IsValid() {
+			return NewValidationError("agent", name, "llm_backend", fmt.Errorf("invalid LLM backend: %s", agent.LLMBackend))
 		}
 
 		// Validate max iterations if specified
@@ -192,9 +197,9 @@ func (v *Validator) validateChains() error {
 				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
 			}
 
-			// Validate chat iteration strategy if specified
-			if chain.Chat.IterationStrategy != "" && !chain.Chat.IterationStrategy.IsValid() {
-				return NewValidationError("chain", chainID, "chat.iteration_strategy", fmt.Errorf("invalid strategy: %s", chain.Chat.IterationStrategy))
+			// Validate chat LLM backend if specified
+			if chain.Chat.LLMBackend != "" && !chain.Chat.LLMBackend.IsValid() {
+				return NewValidationError("chain", chainID, "chat.llm_backend", fmt.Errorf("invalid LLM backend: %s", chain.Chat.LLMBackend))
 			}
 
 			// Validate chat LLM provider if specified
@@ -219,9 +224,9 @@ func (v *Validator) validateChains() error {
 				return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("agent '%s' not found", chain.Scoring.Agent))
 			}
 
-			// Validate scoring iteration strategy if specified
-			if chain.Scoring.IterationStrategy != "" && !chain.Scoring.IterationStrategy.IsValidForScoring() {
-				return NewValidationError("chain", chainID, "scoring.iteration_strategy", fmt.Errorf("invalid scoring strategy: %s", chain.Scoring.IterationStrategy))
+			// Validate scoring LLM backend if specified
+			if chain.Scoring.LLMBackend != "" && !chain.Scoring.LLMBackend.IsValid() {
+				return NewValidationError("chain", chainID, "scoring.llm_backend", fmt.Errorf("invalid LLM backend: %s", chain.Scoring.LLMBackend))
 			}
 
 			// Validate scoring LLM provider if specified
@@ -282,9 +287,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 			return fmt.Errorf("%s: agent '%s' not found", stageRef, agentConfig.Name)
 		}
 
-		// Validate agent-level iteration strategy if specified
-		if agentConfig.IterationStrategy != "" && !agentConfig.IterationStrategy.IsValid() {
-			return fmt.Errorf("%s: agent '%s' has invalid iteration_strategy: %s", stageRef, agentConfig.Name, agentConfig.IterationStrategy)
+		// Validate agent-level LLM backend if specified
+		if agentConfig.LLMBackend != "" && !agentConfig.LLMBackend.IsValid() {
+			return fmt.Errorf("%s: agent '%s' has invalid llm_backend: %s", stageRef, agentConfig.Name, agentConfig.LLMBackend)
 		}
 
 		// Validate agent-level LLM provider if specified
@@ -327,9 +332,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 			return fmt.Errorf("%s: synthesis agent '%s' not found", stageRef, stage.Synthesis.Agent)
 		}
 
-		// Validate synthesis iteration strategy if specified
-		if stage.Synthesis.IterationStrategy != "" && !stage.Synthesis.IterationStrategy.IsValid() {
-			return fmt.Errorf("%s: synthesis has invalid iteration_strategy: %s", stageRef, stage.Synthesis.IterationStrategy)
+		// Validate synthesis LLM backend if specified
+		if stage.Synthesis.LLMBackend != "" && !stage.Synthesis.LLMBackend.IsValid() {
+			return fmt.Errorf("%s: synthesis has invalid llm_backend: %s", stageRef, stage.Synthesis.LLMBackend)
 		}
 
 		// Validate synthesis LLM provider if specified

@@ -20,15 +20,16 @@ func TestFactory_CreateController(t *testing.T) {
 		AgentIndex: 1,
 	}
 
-	t.Run("empty string returns error", func(t *testing.T) {
-		controller, err := factory.CreateController("", execCtx)
+	t.Run("unknown agent type returns error", func(t *testing.T) {
+		controller, err := factory.CreateController(config.AgentType("invalid"), execCtx)
 		require.Error(t, err)
 		assert.Nil(t, controller)
-		assert.Contains(t, err.Error(), "iteration strategy is required")
+		assert.Contains(t, err.Error(), "unknown agent type")
+		assert.Contains(t, err.Error(), "invalid")
 	})
 
-	t.Run("native-thinking strategy returns FunctionCallingController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.IterationStrategyNativeThinking, execCtx)
+	t.Run("default agent type returns FunctionCallingController", func(t *testing.T) {
+		controller, err := factory.CreateController(config.AgentTypeDefault, execCtx)
 		require.NoError(t, err)
 		require.NotNil(t, controller)
 
@@ -36,17 +37,8 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected FunctionCallingController")
 	})
 
-	t.Run("langchain strategy returns FunctionCallingController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.IterationStrategyLangChain, execCtx)
-		require.NoError(t, err)
-		require.NotNil(t, controller)
-
-		_, ok := controller.(*FunctionCallingController)
-		assert.True(t, ok, "expected FunctionCallingController")
-	})
-
-	t.Run("synthesis strategy returns SynthesisController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.IterationStrategySynthesis, execCtx)
+	t.Run("synthesis type returns SynthesisController", func(t *testing.T) {
+		controller, err := factory.CreateController(config.AgentTypeSynthesis, execCtx)
 		require.NoError(t, err)
 		require.NotNil(t, controller)
 
@@ -54,32 +46,20 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected SynthesisController")
 	})
 
-	t.Run("synthesis-native-thinking strategy returns SynthesisController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.IterationStrategySynthesisNativeThinking, execCtx)
-		require.NoError(t, err)
-		require.NotNil(t, controller)
-
-		_, ok := controller.(*SynthesisController)
-		assert.True(t, ok, "expected SynthesisController (same for both synthesis strategies)")
+	t.Run("scoring type returns error (WIP)", func(t *testing.T) {
+		controller, err := factory.CreateController(config.AgentTypeScoring, execCtx)
+		require.Error(t, err)
+		assert.Nil(t, controller)
+		assert.Contains(t, err.Error(), "unknown agent type")
 	})
 
-	t.Run("unknown strategy returns error", func(t *testing.T) {
-		unknownStrategy := config.IterationStrategy("unknown-strategy")
-		controller, err := factory.CreateController(unknownStrategy, execCtx)
+	t.Run("typo in agent type returns error", func(t *testing.T) {
+		typoType := config.AgentType("syntesis") // typo of "synthesis"
+		controller, err := factory.CreateController(typoType, execCtx)
 
 		require.Error(t, err)
 		assert.Nil(t, controller)
-		assert.Contains(t, err.Error(), "unknown iteration strategy")
-		assert.Contains(t, err.Error(), "unknown-strategy")
-	})
-
-	t.Run("typo in strategy returns error", func(t *testing.T) {
-		typoStrategy := config.IterationStrategy("langcahin") // typo of "langchain"
-		controller, err := factory.CreateController(typoStrategy, execCtx)
-
-		require.Error(t, err)
-		assert.Nil(t, controller)
-		assert.Contains(t, err.Error(), "unknown iteration strategy")
-		assert.Contains(t, err.Error(), "langcahin")
+		assert.Contains(t, err.Error(), "unknown agent type")
+		assert.Contains(t, err.Error(), "syntesis")
 	})
 }

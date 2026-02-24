@@ -25,7 +25,8 @@ func newFullExecCtx() *agent.ExecutionContext {
 		RunbookContent: "# Test Runbook\n\nStep 1: Check pods",
 		Config: &agent.ResolvedAgentConfig{
 			AgentName:          "TestAgent",
-			IterationStrategy:  config.IterationStrategyLangChain,
+			Type:               config.AgentTypeDefault,
+			LLMBackend:         config.LLMBackendLangChain,
 			MCPServers:         []string{"kubernetes-server"},
 			CustomInstructions: "Be thorough.",
 		},

@@ -19,12 +19,12 @@ type CreateStageRequest struct {
 
 // CreateAgentExecutionRequest contains fields for creating a new agent execution
 type CreateAgentExecutionRequest struct {
-	StageID           string                   `json:"stage_id"`
-	SessionID         string                   `json:"session_id"`
-	AgentName         string                   `json:"agent_name"`
-	AgentIndex        int                      `json:"agent_index"`
-	IterationStrategy config.IterationStrategy `json:"iteration_strategy"`
-	LLMProvider       string                   `json:"llm_provider,omitempty"` // resolved provider name (for observability)
+	StageID     string            `json:"stage_id"`
+	SessionID   string            `json:"session_id"`
+	AgentName   string            `json:"agent_name"`
+	AgentIndex  int               `json:"agent_index"`
+	LLMBackend  config.LLMBackend `json:"llm_backend"`
+	LLMProvider string            `json:"llm_provider,omitempty"` // resolved provider name (for observability)
 }
 
 // StageResponse wraps a Stage with optional loaded edges

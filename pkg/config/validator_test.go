@@ -54,8 +54,8 @@ func TestValidateAgents(t *testing.T) {
 			name: "synthesis agent without MCP servers is valid",
 			agents: map[string]*AgentConfig{
 				"synth": {
-					IterationStrategy: IterationStrategySynthesis,
-					MCPServers:        nil,
+					Type:       AgentTypeSynthesis,
+					MCPServers: nil,
 				},
 			},
 			servers: map[string]*MCPServerConfig{},
@@ -73,11 +73,11 @@ func TestValidateAgents(t *testing.T) {
 			errMsg:  "MCP server 'nonexistent-server' not found",
 		},
 		{
-			name: "agent with invalid iteration strategy",
+			name: "agent with invalid type",
 			agents: map[string]*AgentConfig{
 				"test-agent": {
-					MCPServers:        []string{"test-server"},
-					IterationStrategy: "invalid-strategy",
+					MCPServers: []string{"test-server"},
+					Type:       "invalid-type",
 				},
 			},
 			servers: map[string]*MCPServerConfig{
@@ -86,7 +86,23 @@ func TestValidateAgents(t *testing.T) {
 				},
 			},
 			wantErr: true,
-			errMsg:  "invalid strategy",
+			errMsg:  "invalid agent type",
+		},
+		{
+			name: "agent with invalid LLM backend",
+			agents: map[string]*AgentConfig{
+				"test-agent": {
+					MCPServers: []string{"test-server"},
+					LLMBackend: "invalid-backend",
+				},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
 		},
 	}
 
@@ -949,13 +965,13 @@ func TestValidateStageComprehensive(t *testing.T) {
 			errMsg:    "must specify at least one agent",
 		},
 		{
-			name: "stage with invalid agent iteration strategy",
+			name: "stage with invalid agent LLM backend",
 			stage: StageConfig{
 				Name: "stage1",
 				Agents: []StageAgentConfig{
 					{
-						Name:              "test-agent",
-						IterationStrategy: "invalid-strategy",
+						Name:       "test-agent",
+						LLMBackend: "invalid-backend",
 					},
 				},
 			},
@@ -967,7 +983,7 @@ func TestValidateStageComprehensive(t *testing.T) {
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
 			wantErr: true,
-			errMsg:  "invalid iteration_strategy",
+			errMsg:  "invalid llm_backend",
 		},
 		{
 			name: "stage with agent-level invalid LLM provider",
@@ -1103,13 +1119,13 @@ func TestValidateStageComprehensive(t *testing.T) {
 			errMsg:  "synthesis agent 'nonexistent-synthesis-agent' not found",
 		},
 		{
-			name: "stage with synthesis invalid iteration strategy",
+			name: "stage with synthesis invalid LLM backend",
 			stage: StageConfig{
 				Name:   "stage1",
 				Agents: []StageAgentConfig{{Name: "test-agent"}},
 				Synthesis: &SynthesisConfig{
-					Agent:             "synthesis-agent",
-					IterationStrategy: "invalid-strategy",
+					Agent:      "synthesis-agent",
+					LLMBackend: "invalid-backend",
 				},
 			},
 			agents: map[string]*AgentConfig{
@@ -1121,7 +1137,7 @@ func TestValidateStageComprehensive(t *testing.T) {
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
 			wantErr: true,
-			errMsg:  "synthesis has invalid iteration_strategy",
+			errMsg:  "synthesis has invalid llm_backend",
 		},
 		{
 			name: "stage with synthesis invalid LLM provider",
@@ -1372,14 +1388,14 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			errMsg:  "agent 'nonexistent-scoring-agent' not found",
 		},
 		{
-			name: "scoring with invalid strategy",
+			name: "scoring with invalid LLM backend",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Scoring: &ScoringConfig{
-						Enabled:           true,
-						Agent:             "test-agent",
-						IterationStrategy: "invalid-strategy",
+						Enabled:    true,
+						Agent:      "test-agent",
+						LLMBackend: "invalid-backend",
 					},
 					Stages: []StageConfig{
 						{
@@ -1397,35 +1413,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
 			wantErr: true,
-			errMsg:  "invalid scoring strategy",
-		},
-		{
-			name: "scoring with valid strategy unfit for scoring",
-			chains: map[string]*ChainConfig{
-				"test-chain": {
-					AlertTypes: []string{"test"},
-					Scoring: &ScoringConfig{
-						Enabled:           true,
-						Agent:             "test-agent",
-						IterationStrategy: "synthesis",
-					},
-					Stages: []StageConfig{
-						{
-							Name:   "stage1",
-							Agents: []StageAgentConfig{{Name: "test-agent"}},
-						},
-					},
-				},
-			},
-			agents: map[string]*AgentConfig{
-				"test-agent": {MCPServers: []string{"test-server"}},
-			},
-			providers: map[string]*LLMProviderConfig{},
-			servers: map[string]*MCPServerConfig{
-				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
-			},
-			wantErr: true,
-			errMsg:  "invalid scoring strategy",
+			errMsg:  "invalid LLM backend",
 		},
 		{
 			name: "scoring with invalid LLM provider",
@@ -1517,12 +1505,12 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Scoring: &ScoringConfig{
-						Enabled:           false,
-						Agent:             "nonexistent-agent",
-						IterationStrategy: "invalid",
-						LLMProvider:       "nonexistent",
-						MaxIterations:     &maxIter0,
-						MCPServers:        []string{"nonexistent-server"},
+						Enabled:       false,
+						Agent:         "nonexistent-agent",
+						LLMBackend:    "invalid",
+						LLMProvider:   "nonexistent",
+						MaxIterations: &maxIter0,
+						MCPServers:    []string{"nonexistent-server"},
 					},
 					Stages: []StageConfig{
 						{
@@ -1547,12 +1535,12 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Scoring: &ScoringConfig{
-						Enabled:           true,
-						Agent:             "scoring-agent",
-						IterationStrategy: IterationStrategyScoring,
-						LLMProvider:       "test-provider",
-						MaxIterations:     &maxIter15,
-						MCPServers:        []string{"test-server"},
+						Enabled:       true,
+						Agent:         "scoring-agent",
+						LLMBackend:    LLMBackendLangChain,
+						LLMProvider:   "test-provider",
+						MaxIterations: &maxIter15,
+						MCPServers:    []string{"test-server"},
 					},
 					Stages: []StageConfig{
 						{

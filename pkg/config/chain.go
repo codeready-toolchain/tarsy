@@ -28,8 +28,8 @@ type ChainConfig struct {
 	// LLM provider for executive summary generation (overrides LLMProvider for this purpose)
 	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
 
-	// Chain-level iteration strategy override
-	IterationStrategy IterationStrategy `yaml:"iteration_strategy,omitempty"`
+	// Chain-level LLM backend override
+	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
 	// Chain-level max iterations override
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`

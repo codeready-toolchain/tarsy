@@ -105,9 +105,9 @@ func ErrorMessage(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldErrorMessage, v))
 }
 
-// IterationStrategy applies equality check predicate on the "iteration_strategy" field. It's identical to IterationStrategyEQ.
-func IterationStrategy(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldEQ(FieldIterationStrategy, v))
+// LlmBackend applies equality check predicate on the "llm_backend" field. It's identical to LlmBackendEQ.
+func LlmBackend(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldLlmBackend, v))
 }
 
 // LlmProvider applies equality check predicate on the "llm_provider" field. It's identical to LlmProviderEQ.
@@ -595,69 +595,69 @@ func ErrorMessageContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldErrorMessage, v))
 }
 
-// IterationStrategyEQ applies the EQ predicate on the "iteration_strategy" field.
-func IterationStrategyEQ(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldEQ(FieldIterationStrategy, v))
+// LlmBackendEQ applies the EQ predicate on the "llm_backend" field.
+func LlmBackendEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldLlmBackend, v))
 }
 
-// IterationStrategyNEQ applies the NEQ predicate on the "iteration_strategy" field.
-func IterationStrategyNEQ(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldNEQ(FieldIterationStrategy, v))
+// LlmBackendNEQ applies the NEQ predicate on the "llm_backend" field.
+func LlmBackendNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldLlmBackend, v))
 }
 
-// IterationStrategyIn applies the In predicate on the "iteration_strategy" field.
-func IterationStrategyIn(vs ...string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldIn(FieldIterationStrategy, vs...))
+// LlmBackendIn applies the In predicate on the "llm_backend" field.
+func LlmBackendIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldLlmBackend, vs...))
 }
 
-// IterationStrategyNotIn applies the NotIn predicate on the "iteration_strategy" field.
-func IterationStrategyNotIn(vs ...string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldNotIn(FieldIterationStrategy, vs...))
+// LlmBackendNotIn applies the NotIn predicate on the "llm_backend" field.
+func LlmBackendNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldLlmBackend, vs...))
 }
 
-// IterationStrategyGT applies the GT predicate on the "iteration_strategy" field.
-func IterationStrategyGT(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldGT(FieldIterationStrategy, v))
+// LlmBackendGT applies the GT predicate on the "llm_backend" field.
+func LlmBackendGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldLlmBackend, v))
 }
 
-// IterationStrategyGTE applies the GTE predicate on the "iteration_strategy" field.
-func IterationStrategyGTE(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldGTE(FieldIterationStrategy, v))
+// LlmBackendGTE applies the GTE predicate on the "llm_backend" field.
+func LlmBackendGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldLlmBackend, v))
 }
 
-// IterationStrategyLT applies the LT predicate on the "iteration_strategy" field.
-func IterationStrategyLT(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldLT(FieldIterationStrategy, v))
+// LlmBackendLT applies the LT predicate on the "llm_backend" field.
+func LlmBackendLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldLlmBackend, v))
 }
 
-// IterationStrategyLTE applies the LTE predicate on the "iteration_strategy" field.
-func IterationStrategyLTE(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldLTE(FieldIterationStrategy, v))
+// LlmBackendLTE applies the LTE predicate on the "llm_backend" field.
+func LlmBackendLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldLlmBackend, v))
 }
 
-// IterationStrategyContains applies the Contains predicate on the "iteration_strategy" field.
-func IterationStrategyContains(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldContains(FieldIterationStrategy, v))
+// LlmBackendContains applies the Contains predicate on the "llm_backend" field.
+func LlmBackendContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldLlmBackend, v))
 }
 
-// IterationStrategyHasPrefix applies the HasPrefix predicate on the "iteration_strategy" field.
-func IterationStrategyHasPrefix(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldHasPrefix(FieldIterationStrategy, v))
+// LlmBackendHasPrefix applies the HasPrefix predicate on the "llm_backend" field.
+func LlmBackendHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldLlmBackend, v))
 }
 
-// IterationStrategyHasSuffix applies the HasSuffix predicate on the "iteration_strategy" field.
-func IterationStrategyHasSuffix(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldHasSuffix(FieldIterationStrategy, v))
+// LlmBackendHasSuffix applies the HasSuffix predicate on the "llm_backend" field.
+func LlmBackendHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldLlmBackend, v))
 }
 
-// IterationStrategyEqualFold applies the EqualFold predicate on the "iteration_strategy" field.
-func IterationStrategyEqualFold(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldEqualFold(FieldIterationStrategy, v))
+// LlmBackendEqualFold applies the EqualFold predicate on the "llm_backend" field.
+func LlmBackendEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldLlmBackend, v))
 }
 
-// IterationStrategyContainsFold applies the ContainsFold predicate on the "iteration_strategy" field.
-func IterationStrategyContainsFold(v string) predicate.AgentExecution {
-	return predicate.AgentExecution(sql.FieldContainsFold(FieldIterationStrategy, v))
+// LlmBackendContainsFold applies the ContainsFold predicate on the "llm_backend" field.
+func LlmBackendContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldLlmBackend, v))
 }
 
 // LlmProviderEQ applies the EQ predicate on the "llm_provider" field.

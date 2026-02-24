@@ -109,7 +109,7 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 		SetAgentName(req.AgentName).
 		SetAgentIndex(req.AgentIndex).
 		SetStatus(agentexecution.StatusPending).
-		SetIterationStrategy(string(req.IterationStrategy))
+		SetLlmBackend(string(req.LLMBackend))
 	if req.LLMProvider != "" {
 		builder.SetLlmProvider(req.LLMProvider)
 	}

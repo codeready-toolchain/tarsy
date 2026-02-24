@@ -10,10 +10,9 @@ import (
 )
 
 // SynthesisController implements a single LLM call for synthesis (no MCP tools).
-// Used for both "synthesis" (LangChain) and "synthesis-native-thinking" (Gemini)
-// strategies. The difference is the backend provider, configured in LLMProviderConfig.
+// The backend provider is configured in LLMProviderConfig.
 // Note: while no MCP tools are bound, native Gemini tools (Google Search, URL Context)
-// may still be available when using synthesis-native-thinking, since the Gemini API
+// may still be available when using google-native backend, since the Gemini API
 // only suppresses native tools when MCP tools are present.
 type SynthesisController struct{}
 
@@ -50,7 +49,7 @@ func (c *SynthesisController) Run(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No MCP tools; native tools (Google Search) may still activate
-		Backend:     execCtx.Config.Backend,
+		Backend:     string(execCtx.Config.LLMBackend),
 	}, &eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)

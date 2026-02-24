@@ -38,11 +38,11 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 	require.NoError(t, err)
 
 	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:           stg.ID,
-		SessionID:         session.ID,
-		AgentName:         "TestAgent",
-		AgentIndex:        1,
-		IterationStrategy: config.IterationStrategyLangChain,
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
 	})
 	require.NoError(t, err)
 
@@ -249,11 +249,11 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 	t.Run("gets stage messages across executions", func(t *testing.T) {
 		// Create a second execution in the same stage
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,
-			SessionID:         session.ID,
-			AgentName:         "TestAgent2",
-			AgentIndex:        2,
-			IterationStrategy: config.IterationStrategyLangChain,
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "TestAgent2",
+			AgentIndex: 2,
+			LLMBackend: config.LLMBackendLangChain,
 		})
 		require.NoError(t, err)
 

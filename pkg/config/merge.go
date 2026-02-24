@@ -11,8 +11,9 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 		mcpCopy := make([]string, len(builtin.MCPServers))
 		copy(mcpCopy, builtin.MCPServers)
 		result[name] = &AgentConfig{
+			Type:               builtin.Type,
+			Description:        builtin.Description,
 			MCPServers:         mcpCopy,
-			IterationStrategy:  builtin.IterationStrategy,
 			CustomInstructions: builtin.CustomInstructions,
 		}
 	}

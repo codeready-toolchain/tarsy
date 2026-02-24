@@ -22,9 +22,9 @@ type BuiltinConfig struct {
 // Agent instantiation/factory pattern is in pkg/agent/factory.go.
 type BuiltinAgentConfig struct {
 	Description        string
-	IterationStrategy  IterationStrategy
+	Type               AgentType
 	MCPServers         []string
-	CustomInstructions string // Built-in agents can have default instructions
+	CustomInstructions string
 }
 
 var (
@@ -60,12 +60,11 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 		},
 		"ChatAgent": {
 			Description: "Built-in agent for follow-up conversations",
-			// No IterationStrategy — inherits from defaults like any other agent.
 			// No MCPServers — inherits from chain stages via aggregateChainMCPServers.
 		},
 		"SynthesisAgent": {
-			Description:       "Synthesizes parallel investigation results",
-			IterationStrategy: IterationStrategySynthesis,
+			Description: "Synthesizes parallel investigation results",
+			Type:        AgentTypeSynthesis,
 			CustomInstructions: `You are an Incident Commander synthesizing results from multiple parallel investigations.
 
 Your task:

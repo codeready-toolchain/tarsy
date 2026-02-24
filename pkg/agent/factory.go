@@ -11,10 +11,10 @@ type AgentFactory struct {
 	controllerFactory ControllerFactory
 }
 
-// ControllerFactory creates controllers by strategy.
+// ControllerFactory creates controllers by agent type.
 // Implemented by the controller package to avoid import cycles.
 type ControllerFactory interface {
-	CreateController(strategy config.IterationStrategy, execCtx *ExecutionContext) (Controller, error)
+	CreateController(agentType config.AgentType, execCtx *ExecutionContext) (Controller, error)
 }
 
 // NewAgentFactory creates a new agent factory.
@@ -27,12 +27,12 @@ func (f *AgentFactory) CreateAgent(execCtx *ExecutionContext) (Agent, error) {
 	if execCtx == nil || execCtx.Config == nil {
 		return nil, fmt.Errorf("execution context and config must not be nil")
 	}
-	controller, err := f.controllerFactory.CreateController(execCtx.Config.IterationStrategy, execCtx)
+	controller, err := f.controllerFactory.CreateController(execCtx.Config.Type, execCtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create controller for strategy %q: %w",
-			execCtx.Config.IterationStrategy, err)
+		return nil, fmt.Errorf("failed to create controller for agent type %q: %w",
+			execCtx.Config.Type, err)
 	}
-	if execCtx.Config.IterationStrategy.IsValidForScoring() {
+	if execCtx.Config.Type == config.AgentTypeScoring {
 		return NewScoringAgent(controller), nil
 	}
 	return NewBaseAgent(controller), nil
