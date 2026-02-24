@@ -492,8 +492,10 @@ func (e *RealSessionExecutor) executeAgent(
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
 		return agentResult{
-			status: agent.ExecutionStatusFailed,
-			err:    fmt.Errorf("failed to create agent execution: %w", err),
+			status:          agent.ExecutionStatusFailed,
+			err:             fmt.Errorf("failed to create agent execution: %w", err),
+			llmBackend:      string(resolvedConfig.LLMBackend),
+			llmProviderName: resolvedConfig.LLMProviderName,
 		}
 	}
 
