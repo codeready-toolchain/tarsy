@@ -25,7 +25,7 @@ type GenerateInput struct {
 	Messages    []ConversationMessage
 	Config      *config.LLMProviderConfig
 	Tools       []ToolDefinition  // nil = no tools
-	Backend     config.LLMBackend // "google-native" or "langchain"
+	Backend     config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
 }
 
 // Conversation message roles.

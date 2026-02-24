@@ -473,6 +473,7 @@ func (e *RealSessionExecutor) executeAgent(
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
 			err:             resErr,
+			llmBackend:      string(fallbackBackend),
 			llmProviderName: fallbackProviderName,
 		}
 	}
@@ -1020,7 +1021,10 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	}
 
 	// Resolve backend from chain-level LLM backend or defaults
-	backend := e.cfg.Defaults.LLMBackend
+	backend := agent.DefaultLLMBackend
+	if e.cfg.Defaults != nil && e.cfg.Defaults.LLMBackend != "" {
+		backend = e.cfg.Defaults.LLMBackend
+	}
 	if chain.LLMBackend != "" {
 		backend = chain.LLMBackend
 	}

@@ -29,13 +29,14 @@ func ResolveAgentConfig(
 	stageConfig config.StageConfig,
 	agentConfig config.StageAgentConfig,
 ) (*ResolvedAgentConfig, error) {
-	// Guard against nil chain to prevent nil pointer dereference
-	// when accessing chain.LLMProvider and chain.MaxIterations
 	if chain == nil {
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Get agent definition (built-in or user-defined)
 	agentDef, err := cfg.GetAgent(agentConfig.Name)
@@ -121,7 +122,10 @@ func ResolveChatAgentConfig(
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Agent name: chatCfg.Agent → "ChatAgent"
 	agentName := "ChatAgent"
@@ -212,7 +216,10 @@ func ResolveScoringConfig(
 		return nil, fmt.Errorf("chain configuration cannot be nil")
 	}
 
-	defaults := cfg.Defaults
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
 
 	// Agent name: "ScoringAgent" → defaults.ScoringAgent → scoringCfg.Agent
 	agentName := "ScoringAgent"

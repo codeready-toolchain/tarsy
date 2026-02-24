@@ -151,6 +151,23 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.True(t, resolved.LLMBackend.IsValid())
 	})
 
+	t.Run("nil Defaults does not panic", func(t *testing.T) {
+		nilDefaultsCfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"PlainAgent": {},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "PlainAgent"}
+
+		// No panic — returns a proper error because no LLM provider is configured
+		_, err := ResolveAgentConfig(nilDefaultsCfg, chain, stageConfig, agentConfig)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
 	t.Run("errors on unknown agent", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}
