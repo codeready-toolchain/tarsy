@@ -10,7 +10,8 @@ import (
 )
 
 // SynthesisController implements a single LLM call for synthesis (no MCP tools).
-// The backend provider is configured in LLMProviderConfig.
+// Model/credentials are configured via LLMProviderConfig; SDK path selection is
+// controlled by LLMBackend.
 // Note: while no MCP tools are bound, native Gemini tools (Google Search, URL Context)
 // may still be available when using google-native backend, since the Gemini API
 // only suppresses native tools when MCP tools are present.
@@ -49,7 +50,7 @@ func (c *SynthesisController) Run(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No MCP tools; native tools (Google Search) may still activate
-		Backend:     string(execCtx.Config.LLMBackend),
+		Backend:     execCtx.Config.LLMBackend,
 	}, &eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)

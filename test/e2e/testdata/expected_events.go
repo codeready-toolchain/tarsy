@@ -25,11 +25,11 @@ type ExpectedEvent struct {
 // ────────────────────────────────────────────────────────────
 // Scenario: Pipeline
 // Four stages + two synthesis stages + two chat messages:
-//   1. investigation  (DataCollector, GoogleNative)
+//   1. investigation  (DataCollector, google-native)
 //   2. remediation    (Remediator, langchain)
 //   3. validation     (ConfigValidator langchain ∥ MetricsValidator google-native, forced conclusion)
 //      → validation - Synthesis (synthesis-google-native)
-//   4. scaling-review (ScalingReviewer x2 replicas, GoogleNative)
+//   4. scaling-review (ScalingReviewer x2 replicas, google-native)
 //      → scaling-review - Synthesis (plain synthesis)
 //   + Chat 1: google-native with test-mcp tool call
 //   + Chat 2: google-native with prometheus-mcp tool call
@@ -339,7 +339,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 // Scenario: FailurePropagation
 // Three-stage chain where stage 2 (policy=all) fails when one parallel
 // agent's LLM returns an error. Fail-fast prevents stage 3 from starting.
-//   1. preparation (Preparer, GoogleNative) — succeeds
+//   1. preparation (Preparer, google-native) — succeeds
 //   2. parallel-check (CheckerA ∥ CheckerB, policy=all) — CheckerB errors → stage fails
 //   3. final (Finalizer) — NEVER STARTS (fail-fast)
 // ────────────────────────────────────────────────────────────
@@ -550,7 +550,7 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 // Scenario: Timeout — Session 1 (Investigation timeout)
 // Single stage with 1 agent that blocks via BlockUntilCancelled.
 // Session timeout (2s) fires → context.DeadlineExceeded → timed_out.
-//   1. investigation (TimeoutAgent, GoogleNative)
+//   1. investigation (TimeoutAgent, google-native)
 //      Agent blocks on BlockUntilCancelled → no streaming events created.
 //      Deadline fires → agent + stage + session timed_out.
 // ────────────────────────────────────────────────────────────

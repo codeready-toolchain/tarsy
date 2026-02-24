@@ -465,9 +465,9 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 
 		result := FormatStructuredInvestigation(stages, "")
 
-		// Agent with provider shows "(strategy, provider)"
+		// Agent with provider shows "(backend, provider)"
 		assert.Contains(t, result, "#### Agent 1: AgentA (langchain, gemini-2.5-pro)")
-		// Agent without provider shows "(strategy)" only — no trailing comma/space
+		// Agent without provider shows "(backend)" only — no trailing comma/space
 		assert.Contains(t, result, "#### Agent 2: AgentB (google-native)")
 		assert.NotContains(t, result, "AgentB (google-native, )")
 	})

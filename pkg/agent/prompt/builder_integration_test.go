@@ -273,7 +273,7 @@ func TestIntegration_FunctionCallingInvestigation(t *testing.T) {
 	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "google_native_investigation", serializeMessages(messages))
+	assertGolden(t, "function_calling_investigation", serializeMessages(messages))
 }
 
 func TestIntegration_FunctionCallingInvestigationWithContext(t *testing.T) {
@@ -322,7 +322,7 @@ func TestIntegration_FunctionCallingChat(t *testing.T) {
 	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 
 	require.Len(t, messages, 2)
-	assertGolden(t, "google_native_chat", serializeMessages(messages))
+	assertGolden(t, "function_calling_chat", serializeMessages(messages))
 }
 
 // ===========================================================================

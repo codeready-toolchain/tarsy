@@ -78,7 +78,7 @@ func (c *FunctionCallingController) Run(
 			Messages:    messages,
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       tools, // Tools bound for native calling
-			Backend:     string(execCtx.Config.LLMBackend),
+			Backend:     execCtx.Config.LLMBackend,
 		}, &eventSeq)
 
 		if err != nil {
@@ -217,7 +217,7 @@ func (c *FunctionCallingController) forceConclusion(
 		Messages:    messages,
 		Config:      execCtx.Config.LLMProvider,
 		Tools:       nil, // No tools — force conclusion
-		Backend:     string(execCtx.Config.LLMBackend),
+		Backend:     execCtx.Config.LLMBackend,
 	}, eventSeq, forcedMeta)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)

@@ -130,6 +130,27 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeSynthesis, resolved.Type)
 	})
 
+	t.Run("falls back to DefaultLLMBackend when no level sets backend", func(t *testing.T) {
+		noBackendCfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:   "google-default",
+				MaxIterations: &maxIter25,
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"PlainAgent": {},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "PlainAgent"}
+
+		resolved, err := ResolveAgentConfig(noBackendCfg, chain, stageConfig, agentConfig)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultLLMBackend, resolved.LLMBackend)
+		assert.True(t, resolved.LLMBackend.IsValid())
+	})
+
 	t.Run("errors on unknown agent", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}

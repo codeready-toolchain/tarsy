@@ -411,15 +411,26 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Best-effort provider name for the error path (before ResolveAgentConfig
-	// succeeds). The happy path uses resolvedConfig.LLMProviderName instead,
-	// keeping ResolveAgentConfig as the single source of truth.
+	// Best-effort provider/backend for the error path (before ResolveAgentConfig
+	// succeeds). The happy path uses resolvedConfig instead, keeping
+	// ResolveAgentConfig as the single source of truth.
 	fallbackProviderName := e.cfg.Defaults.LLMProvider
 	if input.chain.LLMProvider != "" {
 		fallbackProviderName = input.chain.LLMProvider
 	}
 	if agentConfig.LLMProvider != "" {
 		fallbackProviderName = agentConfig.LLMProvider
+	}
+
+	fallbackBackend := agent.DefaultLLMBackend
+	if e.cfg.Defaults.LLMBackend != "" {
+		fallbackBackend = e.cfg.Defaults.LLMBackend
+	}
+	if input.chain.LLMBackend != "" {
+		fallbackBackend = input.chain.LLMBackend
+	}
+	if agentConfig.LLMBackend != "" {
+		fallbackBackend = agentConfig.LLMBackend
 	}
 
 	// Resolve agent config from hierarchy (before creating execution record
@@ -437,6 +448,7 @@ func (e *RealSessionExecutor) executeAgent(
 			SessionID:   input.session.ID,
 			AgentName:   displayName,
 			AgentIndex:  agentIndex + 1, // 1-based in DB
+			LLMBackend:  fallbackBackend,
 			LLMProvider: fallbackProviderName,
 		})
 		if createErr != nil {
@@ -1008,11 +1020,10 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	}
 
 	// Resolve backend from chain-level LLM backend or defaults
-	llmBackend := e.cfg.Defaults.LLMBackend
+	backend := e.cfg.Defaults.LLMBackend
 	if chain.LLMBackend != "" {
-		llmBackend = chain.LLMBackend
+		backend = chain.LLMBackend
 	}
-	backend := string(llmBackend)
 
 	// Build prompts
 	systemPrompt := e.promptBuilder.BuildExecutiveSummarySystemPrompt()

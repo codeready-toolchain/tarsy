@@ -94,7 +94,7 @@ func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 	}
 	// Backend is set by the caller from LLMBackend config, not derived from provider type
 	if req.LlmConfig != nil && input.Backend != "" {
-		req.LlmConfig.Backend = input.Backend
+		req.LlmConfig.Backend = string(input.Backend)
 	}
 	return req
 }

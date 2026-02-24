@@ -1282,13 +1282,13 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 		}
 	}
 	require.NotNil(t, synthExec, "should have SynthesisAgent execution")
-	assert.Equal(t, "langchain", synthExec.LlmBackend)
+	assert.Equal(t, string(config.LLMBackendLangChain), synthExec.LlmBackend)
 }
 
-func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
-	// When the iteration strategy is set in the agent registry (not at
+func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
+	// When the LLM backend is set in the agent registry (not at
 	// stage level), the AgentExecution DB record must store the resolved
-	// strategy — not the empty stage-level value or the system default.
+	// backend — not the empty stage-level value or the system default.
 	entClient, _ := util.SetupTestDatabase(t)
 
 	maxIter := 1
@@ -1298,8 +1298,8 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 			{
 				Name: "investigation",
 				Agents: []config.StageAgentConfig{
-					{Name: "NativeAgent"},    // no strategy override at stage level
-					{Name: "LangChainAgent"}, // no strategy override at stage level
+					{Name: "NativeAgent"},    // no backend override at stage level
+					{Name: "LangChainAgent"}, // no backend override at stage level
 				},
 			},
 		},
@@ -1321,7 +1321,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 		},
 	}
 
-	// Agent registry defines strategies; stage config does NOT override them.
+	// Agent registry defines backends; stage config does NOT override them.
 	cfg := &config.Config{
 		Defaults: &config.Defaults{
 			LLMProvider:   "test-provider",
@@ -1358,7 +1358,7 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 
-	// Verify execution records store the resolved strategy from agent registry
+	// Verify execution records store the resolved backend from agent registry
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	require.Len(t, execs, 3) // NativeAgent, LangChainAgent, SynthesisAgent
@@ -1369,19 +1369,19 @@ func TestExecutor_AgentExecutionStoresResolvedStrategy(t *testing.T) {
 	}
 
 	require.Contains(t, execByName, "NativeAgent")
-	assert.Equal(t, "google-native", execByName["NativeAgent"].LlmBackend,
-		"NativeAgent should have resolved strategy from agent registry, not default")
+	assert.Equal(t, string(config.LLMBackendNativeGemini), execByName["NativeAgent"].LlmBackend,
+		"NativeAgent should have resolved backend from agent registry, not default")
 
 	require.Contains(t, execByName, "LangChainAgent")
-	assert.Equal(t, "langchain", execByName["LangChainAgent"].LlmBackend,
-		"LangChainAgent should have resolved strategy from agent registry")
+	assert.Equal(t, string(config.LLMBackendLangChain), execByName["LangChainAgent"].LlmBackend,
+		"LangChainAgent should have resolved backend from agent registry")
 
 	require.Contains(t, execByName, "SynthesisAgent")
-	assert.Equal(t, "langchain", execByName["SynthesisAgent"].LlmBackend)
+	assert.Equal(t, string(config.LLMBackendLangChain), execByName["SynthesisAgent"].LlmBackend)
 
-	// Verify the synthesis LLM call received correct strategy labels.
+	// Verify the synthesis LLM call received correct backend labels.
 	// The 3rd LLM call is synthesis — its input messages should contain
-	// the correct agent strategy labels.
+	// the correct agent backend labels.
 	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
 	synthInput := llm.capturedInputs[2]
 	synthUserMsg := ""

@@ -10,6 +10,11 @@ import (
 
 const DefaultMaxIterations = 20
 
+// DefaultLLMBackend is the fallback when no level in the config hierarchy
+// specifies an LLM backend. LangChain is the general-purpose multi-provider
+// backend and matches the typical production default.
+const DefaultLLMBackend = config.LLMBackendLangChain
+
 // DefaultIterationTimeout is the default per-iteration timeout.
 // Each iteration (LLM call + tool execution) gets its own context.WithTimeout
 // derived from the parent session context. This prevents a single stuck
@@ -180,7 +185,9 @@ func ResolveChatAgentConfig(
 	}
 
 	return &ResolvedAgentConfig{
-		AgentName:          agentName,
+		AgentName: agentName,
+		// Chat always uses the iterating function-calling controller,
+		// regardless of what the agent definition's Type field says.
 		Type:               config.AgentTypeDefault,
 		LLMBackend:         backend,
 		LLMProvider:        provider,
@@ -281,8 +288,9 @@ func ResolveScoringConfig(
 
 // resolveLLMBackend returns the last non-empty backend from the
 // given overrides, listed in lowest-to-highest precedence order.
+// Falls back to DefaultLLMBackend when no override provides a value.
 func resolveLLMBackend(overrides ...config.LLMBackend) config.LLMBackend {
-	var backend config.LLMBackend
+	backend := DefaultLLMBackend
 	for _, o := range overrides {
 		if o != "" {
 			backend = o
