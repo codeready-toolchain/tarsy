@@ -91,9 +91,10 @@ agents:
     description: "Analyzes logs from Loki"
     mcp_servers: [loki]
 
-  MyOrchestrator:
-    type: orchestrator
-    description: "Dynamic investigation orchestrator"
+  # Future: orchestrator type (not part of this refactor)
+  # MyOrchestrator:
+  #   type: orchestrator
+  #   description: "Dynamic investigation orchestrator"
 
 agent_chains:
   security-investigation:
@@ -122,10 +123,10 @@ type AgentConfig struct {
 
 type AgentType string
 const (
-    AgentTypeDefault      AgentType = ""             // Regular investigation agent
-    AgentTypeSynthesis    AgentType = "synthesis"
-    AgentTypeScoring      AgentType = "scoring"
-    AgentTypeOrchestrator AgentType = "orchestrator"
+    AgentTypeDefault   AgentType = ""             // Regular investigation agent
+    AgentTypeSynthesis AgentType = "synthesis"
+    AgentTypeScoring   AgentType = "scoring"
+    // Future: AgentTypeOrchestrator AgentType = "orchestrator"
 )
 
 type LLMBackend string
@@ -213,8 +214,7 @@ func (f *Factory) CreateController(agentType AgentType, execCtx *ExecutionContex
         return NewSynthesisController(execCtx.PromptBuilder), nil
     case AgentTypeScoring:
         return NewScoringController(execCtx.PromptBuilder), nil
-    case AgentTypeOrchestrator:
-        return NewIteratingController(), nil  // orchestration via CompositeToolExecutor
+    // Future: AgentTypeOrchestrator → NewIteratingController() (tools from CompositeToolExecutor)
     default:
         return nil, fmt.Errorf("unknown agent type: %q", agentType)
     }
@@ -244,7 +244,7 @@ func (f *AgentFactory) CreateAgent(execCtx *ExecutionContext) (Agent, error) {
 | default (investigation) | IteratingController | — | BaseAgent |
 | `synthesis` | SingleShotController | `BuildSynthesisMessages`, `ThinkingFallback: true` | BaseAgent |
 | `scoring` | SingleShotController | `BuildScoringMessages`, `ThinkingFallback: false` | ScoringAgent |
-| `orchestrator` | IteratingController | tools from CompositeToolExecutor | BaseAgent |
+| *future: `orchestrator`* | *IteratingController* | *tools from CompositeToolExecutor* | *BaseAgent* |
 
 `llm_backend` is orthogonal — any type can use either `native-gemini` or `langchain`.
 
@@ -254,29 +254,68 @@ func (f *AgentFactory) CreateAgent(execCtx *ExecutionContext) (Agent, error) {
 
 ### Before → after examples
 
-```yaml
-# Before
-agents:
-  - name: SecurityAgent
-    iteration_strategy: native-thinking
+**Top-level defaults:**
 
-# After
-agents:
-  - name: SecurityAgent
-    llm_backend: native-gemini
+```yaml
+# Before                              # After
+defaults:                             defaults:
+  iteration_strategy: native-thinking   llm_backend: native-gemini
 ```
 
-```yaml
-# Before
-agents:
-  - name: SynthesisAgent
-    iteration_strategy: synthesis-native-thinking
+**Chain-level:**
 
-# After
-agents:
-  - name: SynthesisAgent
-    type: synthesis
-    llm_backend: native-gemini
+```yaml
+# Before                              # After
+agent_chains:                         agent_chains:
+  my-chain:                             my-chain:
+    iteration_strategy: langchain         llm_backend: langchain
+```
+
+**Stage agent override:**
+
+```yaml
+# Before                              # After
+agents:                               agents:
+  - name: SecurityAgent                 - name: SecurityAgent
+    iteration_strategy: native-thinking     llm_backend: native-gemini
+```
+
+**Synthesis config:**
+
+```yaml
+# Before                              # After
+synthesis:                            synthesis:
+  iteration_strategy: native-thinking   llm_backend: native-gemini
+  # type is implicit — synthesis config always creates a synthesis agent
+```
+
+**Chat config:**
+
+```yaml
+# Before                              # After
+chat:                                 chat:
+  iteration_strategy: native-thinking   llm_backend: native-gemini
+  # ChatAgent is type: default (iterating), no change needed for type
+```
+
+**Scoring config:**
+
+```yaml
+# Before                              # After
+scoring:                              scoring:
+  iteration_strategy: scoring           llm_backend: langchain
+  # type: scoring is now implicit — scoring config always creates a scoring agent
+```
+
+**Built-in SynthesisAgent:**
+
+```yaml
+# Before (compound strategy encodes both type and backend)
+iteration_strategy: synthesis-native-thinking
+
+# After (type and backend are separate)
+type: synthesis
+llm_backend: native-gemini
 ```
 
 ### Built-in agent updates
@@ -295,21 +334,68 @@ agents:
 }
 ```
 
+## ResolvedAgentConfig changes
+
+The internal `ResolvedAgentConfig` struct (used by controllers and executors) needs corresponding updates:
+
+```go
+// pkg/agent/context.go
+type ResolvedAgentConfig struct {
+    AgentName          string
+    Type               config.AgentType         // NEW — drives controller + wrapper selection
+    LLMBackend         config.LLMBackend        // RENAMED from IterationStrategy
+    LLMProvider        *config.LLMProviderConfig
+    LLMProviderName    string
+    MaxIterations      int
+    IterationTimeout   time.Duration
+    MCPServers         []string
+    CustomInstructions string
+    Backend            string                   // Resolved from LLMBackend (unchanged semantics)
+    NativeToolsOverride *models.NativeToolsConfig
+}
+```
+
+The `resolveIterationStrategy()` helper becomes `resolveLLMBackend()` — same last-non-empty-wins logic, different type. The `Type` is resolved from agent definition (not overridable at chain/stage level — an agent's type is intrinsic).
+
+### Config inheritance structs that carry `IterationStrategy` → `LLMBackend`
+
+All of these structs have an `IterationStrategy` field that becomes `LLMBackend`:
+
+- `Defaults` (`pkg/config/defaults.go`) — global default
+- `ChainConfig` (`pkg/config/types.go`) — chain-level override
+- `StageAgentConfig` (`pkg/config/types.go`) — per-agent-in-stage override
+- `SynthesisConfig` (`pkg/config/types.go`) — synthesis backend override
+- `ChatConfig` (`pkg/config/types.go`) — chat backend override
+- `ScoringConfig` (`pkg/config/types.go`) — scoring backend override
+- `AgentConfig` (`pkg/config/agent.go`) — agent definition
+
+### Scoring resolution simplification
+
+`ResolveScoringConfig` currently validates `IsValidForScoring()` on the resolved strategy. After the refactor, scoring is identified by `type: scoring` — the `LLMBackend` is just a backend choice and doesn't need scoring-specific validation.
+
+## DB schema impact
+
+`ent/schema/agentexecution.go` has an `iteration_strategy` column used for observability. This becomes `llm_backend`. Since Q4 decided on a clean cut (no migration code), this is a schema migration — rename the column and update all writers/readers.
+
 ## Impact Analysis
 
 ### Files affected
 
 | Area | Files | Change scope |
 |------|-------|-------------|
-| Config types | `pkg/config/agent.go`, `pkg/config/enums.go`, `pkg/config/types.go` | Add `Type`, `Description`, `LLMBackend`; remove `IterationStrategy` |
+| Config types | `pkg/config/agent.go`, `pkg/config/enums.go` | Add `AgentType`, `LLMBackend` types; remove `IterationStrategy` type and all methods (`IsValid`, `IsValidForScoring`) |
+| Config structs | `pkg/config/types.go`, `pkg/config/defaults.go` | `IterationStrategy` → `LLMBackend` on `Defaults`, `ChainConfig`, `StageAgentConfig`, `SynthesisConfig`, `ChatConfig`, `ScoringConfig`; add `Type`, `Description` to `AgentConfig` |
 | Config loading | `pkg/config/loader.go`, `pkg/config/merge.go` | Carry `Type`, `Description`, `LLMBackend` through merge |
 | Config validation | `pkg/config/validation.go` | Validate `Type` and `LLMBackend` values; remove strategy validation |
+| Built-in agents | `pkg/config/builtin.go` | Update `BuiltinAgentConfig`: `IterationStrategy` → `Type`; update `SynthesisAgent` definition |
+| Resolved config | `pkg/agent/context.go` | `ResolvedAgentConfig`: add `Type`, rename `IterationStrategy` → `LLMBackend` |
+| Config resolver | `pkg/agent/config_resolver.go` | `ResolveBackend` takes `LLMBackend`; `resolveIterationStrategy` → `resolveLLMBackend`; `ResolveChatAgentConfig`/`ResolveScoringConfig` resolve `LLMBackend` instead of strategy; remove `IsValidForScoring` check from scoring resolution |
 | Agent factory | `pkg/agent/factory.go` | Switch on `Type` instead of strategy |
 | Controller factory | `pkg/agent/controller/factory.go` | Switch on `Type`; create configured controllers |
-| Controllers | `pkg/agent/controller/` | Rename FC → IteratingController; replace SynthesisController with SingleShotController |
-| Config resolver | `pkg/agent/config_resolver.go` | `ResolveBackend` takes `LLMBackend` instead of strategy |
-| Built-in agents | `pkg/config/builtin.go` | Update `SynthesisAgent` to use `Type` |
+| Controllers | `pkg/agent/controller/` | Rename `FunctionCallingController` → `IteratingController`; replace `SynthesisController` with parameterized `SingleShotController` |
 | Session executor | `pkg/queue/executor.go` | Wire `Type` and `LLMBackend` through to agent factory |
+| Chat executor | `pkg/queue/chat_executor.go` | Pass `LLMBackend` instead of `IterationStrategy` to `CreateAgentExecution` |
+| DB schema | `ent/schema/agentexecution.go` | Rename `iteration_strategy` column → `llm_backend` |
 | Tests | Many | Strategy → type + llm_backend migration in test cases |
 
 ### Risk
@@ -324,11 +410,11 @@ This refactor ships **before** the orchestrator. It is independently valuable an
 
 ### Implementation phases
 
-1. **Config foundation:** Add `Type`, `Description`, `LLMBackend` fields. Remove `IterationStrategy`. Update validation. Update built-in agents.
-2. **Controller restructuring:** Rename `FunctionCallingController` → `IteratingController`. Replace `SynthesisController` with parameterized `SingleShotController`. Update controller factory to switch on `Type`.
-3. **Agent factory update:** Switch agent wrapper selection from `IsValidForScoring()` to `Type`. Update session executor wiring.
-4. **Config inheritance:** Ensure `LLMBackend` inherits through global defaults → chain → stage → agent (same path as old `IterationStrategy`).
-5. **Test migration:** Update all test cases from strategy-based to type + llm_backend.
+1. **Config foundation:** Add `AgentType`, `LLMBackend` types to `enums.go`. Add `Type`, `Description`, `LLMBackend` fields to `AgentConfig`. Replace `IterationStrategy` with `LLMBackend` on all config structs (`Defaults`, `ChainConfig`, `StageAgentConfig`, `SynthesisConfig`, `ChatConfig`, `ScoringConfig`). Remove `IterationStrategy` type and methods. Update `BuiltinAgentConfig` and built-in agent definitions. Update validation.
+2. **Config resolution:** Update `ResolvedAgentConfig` (add `Type`, rename `IterationStrategy` → `LLMBackend`). `resolveIterationStrategy` → `resolveLLMBackend`. Update `ResolveAgentConfig`, `ResolveChatAgentConfig`, `ResolveScoringConfig`. Simplify `ResolveBackend`. Remove `IsValidForScoring` check.
+3. **Controller restructuring:** Rename `FunctionCallingController` → `IteratingController`. Replace `SynthesisController` with parameterized `SingleShotController`. Update controller factory to switch on `Type`.
+4. **Factory + executor wiring:** Switch agent factory from strategy to `Type`. Update session executor and chat executor to wire `Type` and `LLMBackend`.
+5. **DB schema migration:** Rename `iteration_strategy` column → `llm_backend` on `AgentExecution`. Update all writers/readers.
 
 Each phase is a reviewable PR. The orchestrator work begins after phase 5.
 
