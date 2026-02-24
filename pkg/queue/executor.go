@@ -1010,7 +1010,10 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		events.ProgressPhaseFinalizing, "Generating executive summary")
 
 	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
-	providerName := e.cfg.Defaults.LLMProvider
+	var providerName string
+	if e.cfg.Defaults != nil {
+		providerName = e.cfg.Defaults.LLMProvider
+	}
 	if chain.LLMProvider != "" {
 		providerName = chain.LLMProvider
 	}
