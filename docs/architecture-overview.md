@@ -205,7 +205,7 @@ sequenceDiagram
         A->>MCP: List available tools
         MCP-->>A: Tool definitions
 
-        loop Function Calling iterations
+        loop IteratingController iterations
             A->>LLM: Generate (messages + tools) via gRPC
             LLM-->>A: Stream response chunks
             A-->>WS: Stream thinking + response to dashboard
