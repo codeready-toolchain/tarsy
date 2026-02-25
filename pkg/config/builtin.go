@@ -242,7 +242,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 
 func initBuiltinChains() map[string]ChainConfig {
 	return map[string]ChainConfig{
-		"kubernetes-agent-chain": {
+		"kubernetes": {
 			AlertTypes:  []string{"kubernetes"},
 			Description: "Single-stage Kubernetes analysis",
 			Stages: []StageConfig{

@@ -298,9 +298,9 @@ func TestBuiltinLLMProviders(t *testing.T) {
 func TestBuiltinChains(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
-	t.Run("kubernetes-agent-chain", func(t *testing.T) {
-		chain, exists := cfg.ChainDefinitions["kubernetes-agent-chain"]
-		require.True(t, exists, "kubernetes-agent-chain should exist")
+	t.Run("kubernetes", func(t *testing.T) {
+		chain, exists := cfg.ChainDefinitions["kubernetes"]
+		require.True(t, exists, "kubernetes chain should exist")
 
 		assert.Contains(t, chain.AlertTypes, "kubernetes")
 		assert.NotEmpty(t, chain.Description)

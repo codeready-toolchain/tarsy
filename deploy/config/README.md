@@ -163,7 +163,7 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 ### Built-in Chains
 
-- **kubernetes-agent-chain** - Single-stage Kubernetes analysis
+- **kubernetes** - Single-stage Kubernetes analysis
 
 You can override any built-in configuration by defining the same name/ID in your YAML files.
 

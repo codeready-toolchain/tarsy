@@ -919,7 +919,7 @@ graph TB
 
 ```yaml
 agent_chains:
-  kubernetes-agent-chain:
+  kubernetes:
     chat:
       enabled: true
       agent: "ChatAgent"
