@@ -104,6 +104,32 @@ func TestValidateAgents(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid LLM backend",
 		},
+		{
+			name: "agent with valid native tools",
+			agents: map[string]*AgentConfig{
+				"test-agent": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch:  true,
+						GoogleNativeToolCodeExecution: false,
+					},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
+		},
+		{
+			name: "agent with invalid native tool key",
+			agents: map[string]*AgentConfig{
+				"test-agent": {
+					NativeTools: map[GoogleNativeTool]bool{
+						"invalid_tool": true,
+					},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "invalid native tool",
+		},
 	}
 
 	for _, tt := range tests {

@@ -26,6 +26,11 @@ type AgentConfig struct {
 
 	// Max iterations for this agent (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+
+	// Per-agent native tool overrides (Google/Gemini). Merges with the LLM
+	// provider's NativeTools on a per-key basis: agent keys override provider keys,
+	// missing keys fall through to the provider default.
+	NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
 }
 
 // AgentRegistry stores agent configurations in memory with thread-safe access

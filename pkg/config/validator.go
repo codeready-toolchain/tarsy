@@ -152,6 +152,13 @@ func (v *Validator) validateAgents() error {
 		if agent.MaxIterations != nil && *agent.MaxIterations < 1 {
 			return NewValidationError("agent", name, "max_iterations", fmt.Errorf("must be at least 1"))
 		}
+
+		// Validate native tool keys if specified
+		for tool := range agent.NativeTools {
+			if !tool.IsValid() {
+				return NewValidationError("agent", name, "native_tools", fmt.Errorf("invalid native tool: %s", tool))
+			}
+		}
 	}
 
 	return nil
