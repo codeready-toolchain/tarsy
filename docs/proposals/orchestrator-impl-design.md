@@ -377,7 +377,14 @@ func (c *CompositeToolExecutor) Execute(ctx context.Context, call agent.ToolCall
 
 func (c *CompositeToolExecutor) Close() error {
     // Cancel any still-running sub-agents and wait for them to finish.
-    // Safety timeout prevents indefinite hang if a goroutine doesn't exit cleanly.
+    //
+    // Uses context.Background() intentionally: Close() is called from a defer in
+    // executeAgent, where the parent context may already be cancelled (e.g. session
+    // cancellation). Cleanup must proceed regardless — the 30s timeout is the real
+    // upper bound, not the parent context's lifetime.
+    //
+    // Deadlock safety: goroutine sends to resultsCh are ctx-aware (select with
+    // ctx.Done), so cancelled goroutines can always exit even if the channel is full.
     c.runner.CancelAll()
     waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
     defer cancel()
@@ -398,14 +405,14 @@ Manages the lifecycle of sub-agent goroutines within an orchestrator execution. 
 type SubAgentRunner struct {
     mu          sync.Mutex
     executions  map[string]*subAgentExecution   // execution_id → state
-    resultsCh   chan *SubAgentResult             // completed results (buffered)
+    resultsCh   chan *SubAgentResult             // completed results (buffered, cap = MaxConcurrentAgents)
     pending     int32                            // atomic count of running sub-agents
     
     deps               *SubAgentDeps                // Dependency bundle (Q10)
     parentExecID       string                       // Orchestrator's execution_id
     sessionID          string                       // Orchestrator's session_id (for sub-agent DB records)
     stageID            string                       // Orchestrator's stage_id (for sub-agent DB records)
-    nextSubAgentIndex  int32                        // Atomic counter for sub-agent agent_index (starts at stageAgentCount+1)
+    nextSubAgentIndex  int32                        // Atomic counter for sub-agent agent_index (starts at 1)
     registry           *config.SubAgentRegistry     // Available agents for dispatch
     guardrails         *OrchestratorGuardrails      // Resolved from defaults + per-agent config (Q5)
 }
@@ -470,8 +477,19 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
     // 9. Spawn goroutine:
     //    - Derive context with agent_timeout deadline from guardrails
     //    - agentFactory.CreateAgent → agent.Execute
-    //    - On completion: send SubAgentResult to resultsCh
+    //    - On completion: send SubAgentResult to resultsCh (ctx-aware, see below)
     //    - On timeout/cancel: update DB status → "cancelled" / "failed"
+    //    - Signal done channel (always, even on send failure)
+    //
+    //    The send to resultsCh MUST be non-blocking on cancellation to avoid
+    //    deadlock during Close(). Use select with ctx.Done():
+    //      select {
+    //      case r.resultsCh <- result:
+    //      case <-ctx.Done():
+    //          // Context cancelled (e.g. CancelAll during cleanup) — drop result.
+    //          // The orchestrator is shutting down and won't read it anyway.
+    //      }
+    //
     // 10. Return execution_id immediately
 }
 ```
@@ -708,7 +726,7 @@ There is no separate "synthesis" step. The orchestrator's `custom_instructions` 
 
 **Forced conclusion** also works unchanged: if the orchestrator hits `max_iterations` before producing its final answer, the existing forced-conclusion path sends a conclusion prompt with no tools, forcing the LLM to produce a final response. This becomes the `FinalAnalysis` even if some sub-agents are still running (they're cancelled by `CompositeToolExecutor.Close()`).
 
-Edge case: an orchestrator *can* be placed alongside other parallel agents in a stage, in which case stage-level synthesis would run after everything completes. This is valid but unusual — the orchestrator is designed to be the sole agent handling the dynamic workflow.
+Edge case: other agents (including multiple orchestrators) *can* be placed in the same stage, in which case stage-level synthesis would run after everything completes. This works because sub-agent `agent_index` values are scoped to their parent execution (see `agent_index` constraint below), so no collisions. Still unusual — the orchestrator is designed to be the sole agent handling the dynamic workflow.
 
 ## Database Schema Changes
 
@@ -753,7 +771,17 @@ This gives operators immediate visibility into what each sub-agent was asked to 
 
 Sub-agent executions are created under the **same Stage** as the orchestrator. The `parent_execution_id` field distinguishes them from the orchestrator's own execution. This avoids creating synthetic stages and disrupting stage indexing.
 
-**`agent_index` unique constraint:** The current schema has `UNIQUE(stage_id, agent_index)`. Top-level agents get indices 1..N (assigned by `executeStage`). Sub-agents get indices N+1, N+2, ... via the `SubAgentRunner`'s atomic counter (`nextSubAgentIndex`), initialized to `stageAgentCount + 1`. This avoids collisions without schema changes. Edge case: multiple orchestrators in the same stage (unusual — see note above) would need coordinated starting offsets; deferred until needed.
+**`agent_index` — parent-execution scoped for sub-agents:** The existing `UNIQUE(stage_id, agent_index)` constraint is replaced in PR2 with two partial indexes (PostgreSQL):
+
+```sql
+-- Top-level agents: unique within stage (same semantics as before)
+UNIQUE(stage_id, agent_index) WHERE parent_execution_id IS NULL
+
+-- Sub-agents: unique within parent orchestrator
+UNIQUE(parent_execution_id, agent_index) WHERE parent_execution_id IS NOT NULL
+```
+
+Top-level agents keep indices 1..N (assigned by `executeStage`). Sub-agents get their own index space starting at 1, scoped to their parent orchestrator (`SubAgentRunner.nextSubAgentIndex` starts at 1, incremented atomically). Multiple orchestrators in the same stage work naturally — each has an independent index space.
 
 **`UpdateStageStatus` filter:** The `UpdateStageStatus` function aggregates status from ALL `AgentExecution` records in a stage. Without filtering, sub-agent failures would incorrectly mark the stage as failed even if the orchestrator completed successfully. PR2 adds a filter: `WHERE parent_execution_id IS NULL` — only top-level executions participate in stage status aggregation.
 
@@ -945,7 +973,7 @@ func (e *RealSessionExecutor) executeAgent(...) agentResult {
         guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
         subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
         registry := e.subAgentRegistry.Filter(subAgentNames)  // nil = full registry
-        runner := orchestrator.NewSubAgentRunner(deps, exec.ID, input.session.ID, stg.ID, len(input.stageConfig.Agents), registry, guardrails)
+        runner := orchestrator.NewSubAgentRunner(deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
         toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
         execCtx.SubAgentRunner = runner
         execCtx.SubAgentCatalog = registry.Entries()
@@ -1031,8 +1059,9 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 ### PR2: DB schema
 - `parent_execution_id` on `AgentExecution` (nullable)
-- New timeline event type: `task_assigned`
 - `task` on `AgentExecution` (nullable)
+- Replace `UNIQUE(stage_id, agent_index)` with two partial indexes: `UNIQUE(stage_id, agent_index) WHERE parent_execution_id IS NULL` (top-level) + `UNIQUE(parent_execution_id, agent_index) WHERE parent_execution_id IS NOT NULL` (sub-agents)
+- New timeline event type: `task_assigned`
 - `UpdateStageStatus` filter: exclude sub-agents (non-null `parent_execution_id`)
 - Query helpers: sub-agents by parent, trace tree
 

@@ -6,7 +6,7 @@
 
 ## Overview
 
-The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration** to TARSy. Instead of following a predefined chain of agents, the orchestrator uses LLM reasoning to decide which agents to invoke, what tasks to give them, and how to synthesize their results — all at runtime.
+The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration** to TARSy. Instead of following a predefined chain of agents, the orchestrator uses LLM reasoning to decide which agents to invoke, what tasks to give them, and how to combine their results into a final response — all at runtime.
 
 From TARSy's perspective, the orchestrator is just another agent in a chain. It receives input, produces text output, and follows the existing execution model. But internally, it opens the door to flexible, multi-agent investigation flows that adapt to each situation.
 
@@ -284,9 +284,9 @@ Each sub-agent run gets its own timeline, linked to the orchestrator via parent 
 
 | Guardrail | Config | Default |
 |-----------|--------|---------|
-| Max concurrent sub-agents | `orchestrator.max_concurrent_agents` | TBD |
-| Per sub-agent timeout | `orchestrator.agent_timeout` | TBD |
-| Total orchestrator budget | `orchestrator.max_budget` | TBD |
+| Max concurrent sub-agents | `orchestrator.max_concurrent_agents` | 5 |
+| Per sub-agent timeout | `orchestrator.agent_timeout` | 300s |
+| Total orchestrator budget | `orchestrator.max_budget` | 600s |
 | Allowed sub-agents | `sub_agents` override | All agents |
 | Max depth | Hardcoded | 1 (no nesting) |
 
