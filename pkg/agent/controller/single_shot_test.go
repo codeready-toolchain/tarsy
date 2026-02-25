@@ -24,7 +24,7 @@ func TestSynthesisController_HappyPath(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendLangChain
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	prevContext := "Agent 1: Pods show high memory.\nAgent 2: Logs show OOMKilled."
 	result, err := ctrl.Run(context.Background(), execCtx, prevContext)
@@ -50,7 +50,7 @@ func TestSynthesisController_WithThinking(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found no issues.")
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestSynthesisController_LLMError(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendLangChain
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	_, err := ctrl.Run(context.Background(), execCtx, "")
 	require.Error(t, err)
@@ -95,7 +95,7 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendLangChain
 	execCtx.Config.CustomInstructions = "Custom synthesis instructions."
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	prevContext := "Agent 1: Pods show high memory.\nAgent 2: Logs show OOMKilled."
 	result, err := ctrl.Run(context.Background(), execCtx, prevContext)
@@ -147,7 +147,7 @@ func TestSynthesisController_WithGrounding(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 found OOM.")
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestSynthesisController_WithCodeExecution(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.Type = config.AgentTypeSynthesis
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	ctrl := NewSynthesisController()
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
 
 	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 collected metrics.")
 	require.NoError(t, err)
