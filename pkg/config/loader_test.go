@@ -158,6 +158,78 @@ agent_chains:
 	assert.Len(t, tarsyConfig.AgentChains, 1)
 }
 
+func TestLoadTarsyYAML_OrchestratorFields(t *testing.T) {
+	configDir := t.TempDir()
+
+	config := `
+defaults:
+  llm_provider: "test-provider"
+  orchestrator:
+    max_concurrent_agents: 5
+    agent_timeout: 5m
+    max_budget: 30m
+
+agents:
+  worker-agent:
+    description: "Worker"
+    mcp_servers:
+      - "test-server"
+  orch-agent:
+    type: orchestrator
+    description: "Orchestrator"
+    orchestrator:
+      max_concurrent_agents: 3
+      agent_timeout: 2m
+
+mcp_servers:
+  test-server:
+    transport:
+      type: "stdio"
+      command: "test-command"
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    sub_agents: ["worker-agent"]
+    stages:
+      - name: "stage1"
+        sub_agents: ["worker-agent"]
+        agents:
+          - name: "orch-agent"
+            sub_agents: ["worker-agent"]
+`
+	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(config), 0644)
+	require.NoError(t, err)
+
+	loader := &configLoader{configDir: configDir}
+	cfg, err := loader.loadTarsyYAML()
+	require.NoError(t, err)
+
+	// Defaults orchestrator
+	require.NotNil(t, cfg.Defaults.Orchestrator)
+	assert.Equal(t, 5, *cfg.Defaults.Orchestrator.MaxConcurrentAgents)
+	assert.Equal(t, 5*time.Minute, *cfg.Defaults.Orchestrator.AgentTimeout)
+	assert.Equal(t, 30*time.Minute, *cfg.Defaults.Orchestrator.MaxBudget)
+
+	// Agent orchestrator config
+	orch := cfg.Agents["orch-agent"]
+	assert.Equal(t, AgentTypeOrchestrator, orch.Type)
+	require.NotNil(t, orch.Orchestrator)
+	assert.Equal(t, 3, *orch.Orchestrator.MaxConcurrentAgents)
+	assert.Equal(t, 2*time.Minute, *orch.Orchestrator.AgentTimeout)
+	assert.Nil(t, orch.Orchestrator.MaxBudget)
+
+	// Chain-level sub_agents
+	chain := cfg.AgentChains["test-chain"]
+	assert.Equal(t, []string{"worker-agent"}, chain.SubAgents)
+
+	// Stage-level sub_agents
+	assert.Equal(t, []string{"worker-agent"}, chain.Stages[0].SubAgents)
+
+	// Stage-agent-level sub_agents
+	assert.Equal(t, []string{"worker-agent"}, chain.Stages[0].Agents[0].SubAgents)
+}
+
 func TestLoadLLMProvidersYAML(t *testing.T) {
 	configDir := t.TempDir()
 

@@ -10,11 +10,23 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 		// Defensive copy of MCPServers slice to prevent shared state
 		mcpCopy := make([]string, len(builtin.MCPServers))
 		copy(mcpCopy, builtin.MCPServers)
+
+		// Defensive copy of NativeTools map
+		var nativeToolsCopy map[GoogleNativeTool]bool
+		if builtin.NativeTools != nil {
+			nativeToolsCopy = make(map[GoogleNativeTool]bool, len(builtin.NativeTools))
+			for k, v := range builtin.NativeTools {
+				nativeToolsCopy[k] = v
+			}
+		}
+
 		result[name] = &AgentConfig{
 			Type:               builtin.Type,
 			Description:        builtin.Description,
 			MCPServers:         mcpCopy,
 			CustomInstructions: builtin.CustomInstructions,
+			LLMBackend:         builtin.LLMBackend,
+			NativeTools:        nativeToolsCopy,
 		}
 	}
 

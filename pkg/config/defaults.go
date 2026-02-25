@@ -26,6 +26,9 @@ type Defaults struct {
 
 	// Alert data masking configuration
 	AlertMasking *AlertMaskingDefaults `yaml:"alert_masking,omitempty"`
+
+	// Global orchestrator defaults (applied to all orchestrator agents unless overridden)
+	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
 }
 
 // AlertMaskingDefaults holds alert payload masking settings.

@@ -73,6 +73,30 @@ func TestBuiltinAgents(t *testing.T) {
 			wantCustomInstructions:  true,
 			customInstructionsMatch: "Incident Commander",
 		},
+		{
+			name:                    "WebResearcher",
+			agentID:                 "WebResearcher",
+			wantDesc:                "Searches the web and analyzes URLs for real-time information",
+			wantType:                AgentTypeDefault,
+			wantCustomInstructions:  true,
+			customInstructionsMatch: "web search",
+		},
+		{
+			name:                    "CodeExecutor",
+			agentID:                 "CodeExecutor",
+			wantDesc:                "Executes Python code for computation, data analysis, and calculations",
+			wantType:                AgentTypeDefault,
+			wantCustomInstructions:  true,
+			customInstructionsMatch: "Python code",
+		},
+		{
+			name:                    "GeneralWorker",
+			agentID:                 "GeneralWorker",
+			wantDesc:                "General-purpose agent for analysis, summarization, reasoning, and other tasks",
+			wantType:                AgentTypeDefault,
+			wantCustomInstructions:  true,
+			customInstructionsMatch: "general-purpose worker",
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +112,52 @@ func TestBuiltinAgents(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	t.Run("WebResearcher has native Gemini backend and tools", func(t *testing.T) {
+		agent, exists := cfg.Agents["WebResearcher"]
+		require.True(t, exists)
+		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
+		assert.True(t, agent.NativeTools[GoogleNativeToolGoogleSearch])
+		assert.True(t, agent.NativeTools[GoogleNativeToolURLContext])
+
+		val, present := agent.NativeTools[GoogleNativeToolCodeExecution]
+		assert.True(t, present, "CodeExecution key must be explicitly present")
+		assert.False(t, val, "CodeExecution must be explicitly disabled")
+	})
+
+	t.Run("CodeExecutor has native Gemini backend and code_execution", func(t *testing.T) {
+		agent, exists := cfg.Agents["CodeExecutor"]
+		require.True(t, exists)
+		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
+		assert.True(t, agent.NativeTools[GoogleNativeToolCodeExecution])
+
+		val, present := agent.NativeTools[GoogleNativeToolGoogleSearch]
+		assert.True(t, present, "GoogleSearch key must be explicitly present")
+		assert.False(t, val, "GoogleSearch must be explicitly disabled")
+
+		val, present = agent.NativeTools[GoogleNativeToolURLContext]
+		assert.True(t, present, "URLContext key must be explicitly present")
+		assert.False(t, val, "URLContext must be explicitly disabled")
+	})
+
+	t.Run("GeneralWorker has no backend or native tools", func(t *testing.T) {
+		agent, exists := cfg.Agents["GeneralWorker"]
+		require.True(t, exists)
+		assert.Empty(t, agent.LLMBackend)
+		assert.Nil(t, agent.NativeTools)
+		assert.Empty(t, agent.MCPServers)
+	})
+
+	t.Run("KubernetesAgent has no backend or native tools", func(t *testing.T) {
+		agent, exists := cfg.Agents["KubernetesAgent"]
+		require.True(t, exists)
+		assert.Empty(t, agent.LLMBackend)
+		assert.Nil(t, agent.NativeTools)
+	})
 }
 
 func TestBuiltinChatAgentInheritsFromDefaults(t *testing.T) {

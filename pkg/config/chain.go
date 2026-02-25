@@ -36,6 +36,9 @@ type ChainConfig struct {
 
 	// Chain-level MCP servers override
 	MCPServers []string `yaml:"mcp_servers,omitempty"`
+
+	// Sub-agents available to orchestrator agents in this chain
+	SubAgents []string `yaml:"sub_agents,omitempty"`
 }
 
 // StageConfig defines a single stage in a chain
@@ -60,6 +63,9 @@ type StageConfig struct {
 
 	// Stage-level MCP servers override
 	MCPServers []string `yaml:"mcp_servers,omitempty"`
+
+	// Sub-agents available to orchestrator agents in this stage
+	SubAgents []string `yaml:"sub_agents,omitempty"`
 
 	// Optional synthesis configuration (for parallel execution)
 	Synthesis *SynthesisConfig `yaml:"synthesis,omitempty"`

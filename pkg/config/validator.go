@@ -125,6 +125,12 @@ func (v *Validator) validateDefaults() error {
 		}
 	}
 
+	if defaults.Orchestrator != nil {
+		if err := v.validateOrchestratorConfig(defaults.Orchestrator, "defaults", ""); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -157,6 +163,17 @@ func (v *Validator) validateAgents() error {
 		for tool := range agent.NativeTools {
 			if !tool.IsValid() {
 				return NewValidationError("agent", name, "native_tools", fmt.Errorf("invalid native tool: %s", tool))
+			}
+		}
+
+		// Orchestrator config only valid on orchestrator agents
+		if agent.Orchestrator != nil && agent.Type != AgentTypeOrchestrator {
+			return NewValidationError("agent", name, "orchestrator", fmt.Errorf("orchestrator config only valid on orchestrator agents"))
+		}
+
+		if agent.Orchestrator != nil {
+			if err := v.validateOrchestratorConfig(agent.Orchestrator, "agent", name); err != nil {
+				return err
 			}
 		}
 	}
@@ -270,6 +287,11 @@ func (v *Validator) validateChains() error {
 				return NewValidationError("chain", chainID, "mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
 			}
 		}
+
+		// Validate chain-level sub_agents if specified
+		if err := v.validateSubAgentRefs(chain.SubAgents, "chain", chainID, "sub_agents"); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -315,6 +337,16 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 				return fmt.Errorf("%s: agent '%s' specifies MCP server '%s' which is not found", stageRef, agentConfig.Name, serverID)
 			}
 		}
+
+		// Validate agent-level sub_agents if specified
+		if err := v.validateSubAgentRefs(agentConfig.SubAgents, stageRef, agentConfig.Name, "sub_agents"); err != nil {
+			return err
+		}
+	}
+
+	// Validate stage-level sub_agents if specified
+	if err := v.validateSubAgentRefs(stage.SubAgents, stageRef, "", "sub_agents"); err != nil {
+		return err
 	}
 
 	// Validate replicas if specified
@@ -519,6 +551,32 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 	}
 
 	return referenced
+}
+
+func (v *Validator) validateOrchestratorConfig(oc *OrchestratorConfig, section, name string) error {
+	if oc.MaxConcurrentAgents != nil && *oc.MaxConcurrentAgents < 1 {
+		return NewValidationError(section, name, "orchestrator.max_concurrent_agents", fmt.Errorf("must be at least 1"))
+	}
+	if oc.AgentTimeout != nil && *oc.AgentTimeout <= 0 {
+		return NewValidationError(section, name, "orchestrator.agent_timeout", fmt.Errorf("must be positive"))
+	}
+	if oc.MaxBudget != nil && *oc.MaxBudget <= 0 {
+		return NewValidationError(section, name, "orchestrator.max_budget", fmt.Errorf("must be positive"))
+	}
+	return nil
+}
+
+func (v *Validator) validateSubAgentRefs(subAgents []string, section, name, field string) error {
+	for _, agentName := range subAgents {
+		if !v.cfg.AgentRegistry.Has(agentName) {
+			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", agentName))
+		}
+		agentDef, _ := v.cfg.AgentRegistry.Get(agentName)
+		if agentDef.Type == AgentTypeOrchestrator {
+			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' is an orchestrator and cannot be a sub-agent", agentName))
+		}
+	}
+	return nil
 }
 
 func (v *Validator) validateRunbooks() error {

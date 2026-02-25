@@ -1047,7 +1047,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Pass resolved native tools through to the LLM client
 - Independent of orchestrator — useful on its own
 
-### PR1: Config foundation
+### PR1: Config foundation ✅ DONE
 - `sub_agents` override at chain/stage/agent level (full hierarchy) — new fields on `ChainConfig`, `StageConfig`, `StageAgentConfig`
 - `orchestrator` nested config section on `AgentConfig`
 - `defaults.orchestrator` global defaults — new `Orchestrator` field on `Defaults` struct
