@@ -814,3 +814,36 @@ agent_chains: {}
 		assert.Equal(t, 1*time.Minute, cfg.Runbooks.CacheTTL)
 	})
 }
+
+func TestLoadAppliesSummarizationDefaults(t *testing.T) {
+	dir := t.TempDir()
+
+	tarsyYAML := `
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers:
+  my-server:
+    transport:
+      type: "http"
+      url: "https://example.com/mcp"
+    summarization:
+      enabled: true
+      summary_max_token_limit: 1200
+agent_chains: {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+	cfg, err := load(context.Background(), dir)
+	require.NoError(t, err)
+
+	server, err := cfg.MCPServerRegistry.Get("my-server")
+	require.NoError(t, err)
+	require.NotNil(t, server.Summarization)
+	assert.True(t, server.Summarization.Enabled)
+	assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens,
+		"size_threshold_tokens should default to %d when not specified", DefaultSizeThresholdTokens)
+	assert.Equal(t, 1200, server.Summarization.SummaryMaxTokenLimit)
+}

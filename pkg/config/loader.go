@@ -120,13 +120,20 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	chains := mergeChains(builtin.ChainDefinitions, tarsyConfig.AgentChains)
 	llmProvidersMerged := mergeLLMProviders(builtin.LLMProviders, llmProviders)
 
-	// 5. Build registries
+	// 5. Apply MCP server defaults (before validation)
+	for _, server := range mcpServers {
+		if server.Summarization != nil && server.Summarization.Enabled && server.Summarization.SizeThresholdTokens == 0 {
+			server.Summarization.SizeThresholdTokens = DefaultSizeThresholdTokens
+		}
+	}
+
+	// 6. Build registries
 	agentRegistry := NewAgentRegistry(agents)
 	mcpServerRegistry := NewMCPServerRegistry(mcpServers)
 	chainRegistry := NewChainRegistry(chains)
 	llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
 
-	// 6. Resolve defaults (YAML overrides built-in)
+	// 7. Resolve defaults (YAML overrides built-in)
 	defaults := tarsyConfig.Defaults
 	if defaults == nil {
 		defaults = &Defaults{}

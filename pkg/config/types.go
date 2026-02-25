@@ -33,6 +33,10 @@ type MaskingPattern struct {
 	Description string `yaml:"description,omitempty"`
 }
 
+// DefaultSizeThresholdTokens is the default token count above which MCP
+// responses are summarized (when summarization is enabled).
+const DefaultSizeThresholdTokens = 10000
+
 // SummarizationConfig defines when and how to summarize large MCP responses
 type SummarizationConfig struct {
 	Enabled              bool `yaml:"enabled"`
