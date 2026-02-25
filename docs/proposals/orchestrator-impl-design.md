@@ -1041,7 +1041,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 > **Decision:** Horizontal layers — 6 PRs. See [questions](orchestrator-impl-questions.md), Q11.
 
-### PR0: `native_tools` on AgentConfig (prerequisite)
+### PR0: `native_tools` on AgentConfig (prerequisite) ✅ DONE
 - `native_tools` field on `AgentConfig` — per-agent override of provider's native tools
 - Merge logic: agent-level keys override provider-level keys
 - Pass resolved native tools through to the LLM client

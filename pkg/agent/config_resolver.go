@@ -79,11 +79,14 @@ func ResolveAgentConfig(
 		mcpServers = agentConfig.MCPServers
 	}
 
+	// Apply agent-level native tools override (provider → agent merge)
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+
 	return &ResolvedAgentConfig{
 		AgentName:          agentConfig.Name,
 		Type:               agentDef.Type,
 		LLMBackend:         backend,
-		LLMProvider:        provider,
+		LLMProvider:        resolvedProvider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
@@ -188,13 +191,16 @@ func ResolveChatAgentConfig(
 		mcpServers = chatCfg.MCPServers
 	}
 
+	// Apply agent-level native tools override (provider → agent merge)
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+
 	return &ResolvedAgentConfig{
 		AgentName: agentName,
 		// Chat always uses the iterating function-calling controller,
 		// regardless of what the agent definition's Type field says.
 		Type:               config.AgentTypeDefault,
 		LLMBackend:         backend,
-		LLMProvider:        provider,
+		LLMProvider:        resolvedProvider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
@@ -280,17 +286,38 @@ func ResolveScoringConfig(
 		mcpServers = scoringCfg.MCPServers
 	}
 
+	// Apply agent-level native tools override (provider → agent merge)
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+
 	return &ResolvedAgentConfig{
 		AgentName:          agentName,
 		Type:               config.AgentTypeScoring,
 		LLMBackend:         backend,
-		LLMProvider:        provider,
+		LLMProvider:        resolvedProvider,
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 	}, nil
+}
+
+// applyAgentNativeTools clones the provider and merges agent-level native tool
+// overrides into the clone's NativeTools map. Returns the original provider
+// unchanged when the agent has no native tools override.
+func applyAgentNativeTools(provider *config.LLMProviderConfig, agentTools map[config.GoogleNativeTool]bool) *config.LLMProviderConfig {
+	if len(agentTools) == 0 {
+		return provider
+	}
+	cloned := *provider
+	cloned.NativeTools = make(map[config.GoogleNativeTool]bool, len(provider.NativeTools)+len(agentTools))
+	for k, v := range provider.NativeTools {
+		cloned.NativeTools[k] = v
+	}
+	for k, v := range agentTools {
+		cloned.NativeTools[k] = v
+	}
+	return &cloned
 }
 
 // resolveLLMBackend returns the last non-empty backend from the
