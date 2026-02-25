@@ -142,7 +142,7 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 			},
 			Summarization: &SummarizationConfig{
 				Enabled:              true,
-				SizeThresholdTokens:  5000,
+				SizeThresholdTokens:  DefaultSizeThresholdTokens,
 				SummaryMaxTokenLimit: 1000,
 			},
 		},

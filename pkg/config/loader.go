@@ -64,10 +64,11 @@ type LLMProvidersYAMLConfig struct {
 //  2. Expand environment variables
 //  3. Parse YAML into structs
 //  4. Merge built-in + user-defined configurations
-//  5. Build in-memory registries
-//  6. Apply default values
-//  7. Validate all configuration
-//  8. Return Config ready for use
+//  5. Apply MCP server defaults (e.g. size_threshold_tokens)
+//  6. Build in-memory registries
+//  7. Apply default values
+//  8. Validate all configuration
+//  9. Return Config ready for use
 func Initialize(ctx context.Context, configDir string) (*Config, error) {
 	log := slog.With("config_dir", configDir)
 	log.Info("Initializing configuration")
@@ -120,13 +121,20 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	chains := mergeChains(builtin.ChainDefinitions, tarsyConfig.AgentChains)
 	llmProvidersMerged := mergeLLMProviders(builtin.LLMProviders, llmProviders)
 
-	// 5. Build registries
+	// 5. Apply MCP server defaults (before validation)
+	for _, server := range mcpServers {
+		if server.Summarization != nil && server.Summarization.Enabled && server.Summarization.SizeThresholdTokens == 0 {
+			server.Summarization.SizeThresholdTokens = DefaultSizeThresholdTokens
+		}
+	}
+
+	// 6. Build registries
 	agentRegistry := NewAgentRegistry(agents)
 	mcpServerRegistry := NewMCPServerRegistry(mcpServers)
 	chainRegistry := NewChainRegistry(chains)
 	llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
 
-	// 6. Resolve defaults (YAML overrides built-in)
+	// 7. Resolve defaults (YAML overrides built-in)
 	defaults := tarsyConfig.Defaults
 	if defaults == nil {
 		defaults = &Defaults{}

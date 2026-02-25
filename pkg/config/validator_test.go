@@ -485,6 +485,39 @@ func TestValidateMCPServers(t *testing.T) {
 			wantErr: true,
 			errMsg:  "pattern 'nonexistent-pattern' not found",
 		},
+		{
+			name: "valid summarization with explicit threshold",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						Enabled:             true,
+						SizeThresholdTokens: 5000,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid summarization threshold too low",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						Enabled:             true,
+						SizeThresholdTokens: 50,
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "must be at least 100",
+		},
 	}
 
 	for _, tt := range tests {

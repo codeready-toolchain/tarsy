@@ -167,7 +167,7 @@ mcp_servers:
     
     summarization:
       enabled: true
-      size_threshold_tokens: 5000
+      # size_threshold_tokens: 10000  # Default: 10000 (omit to use default)
       summary_max_token_limit: 1000
 
   # Example: ArgoCD MCP server

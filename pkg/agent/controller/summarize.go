@@ -9,6 +9,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -61,7 +62,7 @@ func maybeSummarize(
 	estimatedTokens := mcp.EstimateTokens(rawContent)
 	threshold := sumConfig.SizeThresholdTokens
 	if threshold <= 0 {
-		threshold = 5000 // Default threshold
+		threshold = config.DefaultSizeThresholdTokens
 	}
 
 	if estimatedTokens <= threshold {
