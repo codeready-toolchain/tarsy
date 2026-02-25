@@ -906,7 +906,7 @@ graph TB
 - `GetOrCreateChat()` -- one Chat per session
 - Chat metadata, context snapshot, pod tracking
 
-**Design principle**: Chat is a prompt concern, not a controller concern. The same FunctionCalling and Synthesis controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations.
+**Design principle**: Chat is a prompt concern, not a controller concern. The same Iterating and SingleShot controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations.
 
 #### Lifecycle Constraints
 

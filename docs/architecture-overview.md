@@ -229,9 +229,9 @@ sequenceDiagram
     D->>D: Engineers review analysis
 ```
 
-### FunctionCalling Iteration Detail
+### IteratingController Iteration Detail
 
-For agents using the FunctionCalling controller, the investigation follows a structured function calling pattern:
+For agents using the IteratingController, the investigation follows a structured function calling pattern:
 
 ```mermaid
 sequenceDiagram
@@ -281,7 +281,7 @@ When an agent reaches its configured `max_iterations` limit, the system forces a
 
 After a session reaches a terminal state (completed, failed, or timed out), engineers can start a chat conversation to ask follow-up questions. The chat agent receives the full investigation timeline as context and has access to the same MCP tools. Responses stream in real-time and appear inline in the conversation timeline.
 
-Chat is a **prompt concern, not a controller concern** -- the same FunctionCalling and Synthesis controllers handle both investigation and chat. The `ChatContext` on the execution context triggers chat-specific prompting.
+Chat is a **prompt concern, not a controller concern** -- the same IteratingController and SingleShotController handle both investigation and chat. The `ChatContext` on the execution context triggers chat-specific prompting.
 
 ## Authentication & Access Control
 
