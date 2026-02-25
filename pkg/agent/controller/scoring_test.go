@@ -174,6 +174,7 @@ func TestScoringController_Run(t *testing.T) {
 		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract score after retries")
+		assert.Equal(t, 6, mock.callCount) // 1 initial + maxExtractionRetries (5) retries
 	})
 
 	t.Run("context cancellation propagates immediately", func(t *testing.T) {
@@ -246,6 +247,16 @@ func TestScoringController_Run(t *testing.T) {
 		_, err := ctrl.Run(context.Background(), execCtx, "data")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "execCtx.Config is nil")
+	})
+
+	t.Run("nil execCtx.Config.LLMProvider returns error", func(t *testing.T) {
+		execCtx := newScoringExecCtx(&mockLLMClient{})
+		execCtx.Config.LLMProvider = nil
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), execCtx, "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execCtx.Config.LLMProvider is nil")
 	})
 
 	t.Run("LLM failure during extraction retry", func(t *testing.T) {

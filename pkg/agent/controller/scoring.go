@@ -64,6 +64,9 @@ func (c *ScoringController) Run(
 	if execCtx.Config == nil {
 		return nil, fmt.Errorf("execCtx.Config is nil: cannot read LLM configuration")
 	}
+	if execCtx.Config.LLMProvider == nil {
+		return nil, fmt.Errorf("execCtx.Config.LLMProvider is nil: cannot determine LLM provider")
+	}
 	if execCtx.PromptBuilder == nil {
 		return nil, fmt.Errorf("PromptBuilder is nil: cannot build scoring prompts")
 	}
