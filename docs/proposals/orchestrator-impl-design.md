@@ -31,38 +31,38 @@ The orchestrator agent is a standard TARSy agent with three additional tools (`d
 │  Session Executor (pkg/queue/executor.go)                            │
 │                                                                      │
 │  executeStage → executeAgent → AgentFactory.CreateAgent              │
-│       │                              │                               │
-│       │                     ┌────────┴──────────┐                    │
-│       │                     │  Agent             │                    │
-│       │                     │  (type=orchestrator)│                    │
-│       │                     └────────┬──────────┘                    │
-│       │                              │                               │
-│       │                     ┌────────┴──────────────────┐            │
-│       │                     │  IteratingController       │            │
-│       │                     │  (+ push-based drain/wait) │            │
-│       │                     └────────┬──────────────────┘            │
-│       │                              │                               │
-│       │                     ┌────────┴──────────────────┐            │
-│       │                     │  CompositeToolExecutor     │            │
-│       │                     │  ├─ MCP tools (Loki, etc.)│            │
-│       │                     │  └─ Orchestration tools    │            │
-│       │                     │     ├─ dispatch_agent      │            │
-│       │                     │     ├─ cancel_agent        │            │
-│       │                     │     └─ list_agents         │            │
-│       │                     └────────┬──────────────────┘            │
-│       │                              │                               │
-│       │                     ┌────────┴──────────────────┐            │
-│       │                     │  SubAgentRunner            │            │
-│       │                     │  (spawns/tracks sub-agents)│            │
-│       │                     │                            │            │
-│       │                     │  goroutine per sub-agent:  │            │
-│       │                     │  ┌──────────────────────┐  │            │
-│       │                     │  │ ResolveAgentConfig   │  │            │
-│       │                     │  │ CreateToolExecutor   │  │            │
-│       │                     │  │ AgentFactory.Create  │  │            │
-│       │                     │  │ agent.Execute()      │  │            │
-│       │                     │  └──────────────────────┘  │            │
-│       │                     └────────────────────────────┘            │
+│                                      │                               │
+│                             ┌────────┴───────────────────┐           │
+│                             │  Agent                     │           │
+│                             │  (type=orchestrator)       │           │
+│                             └────────┬───────────────────┘           │
+│                                      │                               │
+│                             ┌────────┴───────────────────┐           │
+│                             │  IteratingController       │           │
+│                             │  (+ push-based drain/wait) │           │
+│                             └────────┬───────────────────┘           │
+│                                      │                               │
+│                             ┌────────┴───────────────────┐           │
+│                             │  CompositeToolExecutor     │           │
+│                             │  ├─ MCP tools (Loki, etc.) │           │
+│                             │  └─ Orchestration tools    │           │
+│                             │     ├─ dispatch_agent      │           │
+│                             │     ├─ cancel_agent        │           │
+│                             │     └─ list_agents         │           │
+│                             └────────┬───────────────────┘           │
+│                                      │                               │
+│                             ┌────────┴───────────────────┐           │
+│                             │  SubAgentRunner            │           │
+│                             │  (spawns/tracks sub-agents)│           │
+│                             │                            │           │
+│                             │  goroutine per sub-agent:  │           │
+│                             │  ┌──────────────────────┐  │           │
+│                             │  │ ResolveAgentConfig   │  │           │
+│                             │  │ CreateToolExecutor   │  │           │
+│                             │  │ AgentFactory.Create  │  │           │
+│                             │  │ agent.Execute()      │  │           │
+│                             │  └──────────────────────┘  │           │
+│                             └────────────────────────────┘           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,7 +84,7 @@ The orchestrator agent is a standard TARSy agent with three additional tools (`d
    → YES → SubAgentRunner.WaitForNext(ctx) blocks until a sub-agent finishes
 6. LogAnalyzer finishes → result injected into conversation:
    "[Sub-agent completed] LogAnalyzer (exec-abc): Found 2,847 5xx errors..."
-7. Controller continues iteration → LLM sees result, dispatches more or synthesizes
+7. Controller continues iteration → LLM sees result, dispatches more or produces final answer
 8. Before each LLM call: SubAgentRunner.TryGetNext() drains any results
    that arrived while the LLM was being called or tools were executing
 ```
@@ -159,6 +159,105 @@ agent_chains:
 
 If omitted at all levels, the orchestrator sees the full global registry (all agents with `description`).
 
+## New Built-In Agents
+
+Three new built-in agents ship with the orchestrator feature. All have `description` set, making them orchestrator-visible by default. No MCP servers — they use either Gemini native tools or pure LLM reasoning.
+
+### WebResearcher
+
+Uses Gemini's native `google_search` and `url_context` tools. Search and URL analysis are naturally complementary — the agent searches for something, then reads what it found.
+
+```yaml
+WebResearcher:
+  type: default
+  llm_backend: native-gemini
+  description: "Searches the web and analyzes URLs for real-time information"
+  native_tools:
+    google_search: true
+    url_context: true
+    code_execution: false
+  custom_instructions: |
+    You research topics using web search and URL analysis.
+    Report findings with sources. Be thorough but concise.
+```
+
+**Use cases:** real-time incident context ("what version was released?"), CVE lookups, documentation lookups, external service status checks.
+
+### CodeExecutor
+
+Uses Gemini's native `code_execution` tool for Python code execution in a sandbox. Fundamentally different from research — computation, data analysis, math.
+
+```yaml
+CodeExecutor:
+  type: default
+  llm_backend: native-gemini
+  description: "Executes Python code for computation, data analysis, and calculations"
+  native_tools:
+    google_search: false
+    code_execution: true
+    url_context: false
+  custom_instructions: |
+    You solve computational tasks by writing and executing Python code.
+    Show your work. Report results clearly.
+```
+
+**Use cases:** log pattern analysis (regex, counting), metric calculations, data transformations, statistical analysis.
+
+### GeneralWorker
+
+Pure LLM reasoning — no tools. Handles tasks that don't need external data access: summarization, comparison, drafting, text analysis. Operators can add MCP tools via config override if they want a more capable worker.
+
+```yaml
+GeneralWorker:
+  type: default
+  description: "General-purpose agent for analysis, summarization, reasoning, and other tasks"
+  custom_instructions: |
+    You are a general-purpose worker. Complete the assigned task
+    thoroughly and concisely.
+```
+
+**Use cases:** synthesize sub-agent findings, draft incident summaries, compare multiple data points, analyze error messages.
+
+### Built-in agent summary
+
+| Agent | Native Tools | MCP | Purpose |
+|-------|-------------|-----|---------|
+| WebResearcher | google_search, url_context | none | Web research and URL analysis |
+| CodeExecutor | code_execution | none | Python computation and analysis |
+| GeneralWorker | none | none | Reasoning, summarization, drafting |
+
+These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible.
+
+### Prerequisite: `native_tools` override on `AgentConfig`
+
+Currently, native tools are configured only on the LLM provider level (`LLMProviderConfig.NativeTools`). The orchestrator built-in agents need per-agent control. A new `native_tools` field on `AgentConfig` overrides the provider's defaults:
+
+```go
+// pkg/config/agent.go — addition
+type AgentConfig struct {
+    // ... existing fields ...
+    NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
+}
+```
+
+**Merge semantics:** Agent-level `native_tools` overrides the provider's `native_tools` per-key. Missing keys fall back to the provider's setting. This follows TARSy's existing override philosophy.
+
+```go
+// Resolution at execution time:
+func resolveNativeTools(provider *LLMProviderConfig, agent *AgentConfig) map[GoogleNativeTool]bool {
+    resolved := make(map[GoogleNativeTool]bool)
+    for k, v := range provider.NativeTools {
+        resolved[k] = v
+    }
+    for k, v := range agent.NativeTools {
+        resolved[k] = v  // agent overrides provider
+    }
+    return resolved
+}
+```
+
+This is a small, independent change that can land as a separate PR before the orchestrator work. It's useful on its own — any agent can override native tools without needing a dedicated LLM provider.
+
 ## Sub-Agent Registry
 
 A new `SubAgentRegistry` type built at config load time from the merged agent registry:
@@ -169,6 +268,7 @@ type SubAgentEntry struct {
     Name        string
     Description string
     MCPServers  []string
+    NativeTools []string   // Gemini native tools (google_search, url_context, code_execution)
 }
 
 type SubAgentRegistry struct {
@@ -515,11 +615,59 @@ This enables multi-phase orchestration within the existing loop:
 5. **Iteration 4**: LLM sees A's result, dispatches D → "accepted"
 6. Before iteration 5: agents B and C finished → results drained non-blockingly
 7. **Iteration 5**: LLM sees B and C results → no more tools → wait for D
-8. D finishes → result injected → LLM synthesizes → done
+8. D finishes → result injected → LLM produces final response → done
 
 The `SubAgentRunner` is accessed via `ExecutionContext.SubAgentRunner` (a new optional field). For non-orchestrator agents, this field is nil and the drain/wait code is skipped — zero impact on existing agents.
 
 Cleanup (cancel remaining sub-agents + wait for goroutines) is handled by `CompositeToolExecutor.Close()`, which is already deferred in `executeAgent()`.
+
+### Orchestrator final response vs. stage synthesis
+
+TARSy has two distinct mechanisms for producing combined output — they should not be confused:
+
+**Stage-level synthesis (existing):** When a stage has multiple parallel agents, a `SynthesisAgent` (type=synthesis) automatically runs after all agents complete to merge their outputs. This is a separate agent execution with its own `SynthesisController`, dedicated prompt, and `AgentExecution` record. Driven by `executeStage`.
+
+**Orchestrator final response:** The orchestrator is typically a **single agent in a stage**. It produces its final output within the same execution — no separate agent, no separate controller. This is just the LLM's last response when it has no more work to do.
+
+```
+Current parallel pattern:              Orchestrator pattern:
+
+Stage:                                 Stage:
+├─ Agent A (parallel) ──┐              └─ Orchestrator (single) ──────────┐
+├─ Agent B (parallel) ──┼─ SynthesisAgent    ├─ dispatch LogAnalyzer      │
+└─ Agent C (parallel) ──┘  (separate exec)   ├─ dispatch MetricChecker    │ same
+                                             ├─ collect results           │ execution
+                                             └─ final response → output ──┘
+```
+
+**Implementation:** The orchestrator's final response requires no special code. It uses the existing `IteratingController` completion path — the same path every iterating agent uses when it finishes:
+
+1. All sub-agents have finished → results are in the conversation
+2. LLM responds with text and **no tool calls**
+3. `SubAgentRunner.HasPending()` returns false (no pending sub-agents)
+4. Controller hits the `break` — exits the loop
+5. The LLM's last text response becomes `FinalAnalysis` (same as any iterating agent)
+6. A `final_analysis` timeline event is created (existing code)
+
+```go
+// Existing code in the controller — no change needed:
+if len(resp.ToolCalls) == 0 {
+    // ... (orchestrator drain/wait logic — skipped when HasPending() is false) ...
+    createTimelineEvent(ctx, execCtx,
+        timelineevent.EventTypeFinalAnalysis, resp.Text, nil, &eventSeq)
+    return &agent.ExecutionResult{
+        Status:        agent.ExecutionStatusCompleted,
+        FinalAnalysis: resp.Text,  // ← the orchestrator's final response
+        TokensUsed:    totalUsage,
+    }, nil
+}
+```
+
+There is no separate "synthesis" step. The orchestrator's `custom_instructions` guide what the LLM produces in its final response (e.g., "produce a root cause analysis"). The LLM has the full conversation (all dispatches, all sub-agent results) and naturally produces its final answer when it has nothing left to do.
+
+**Forced conclusion** also works unchanged: if the orchestrator hits `max_iterations` before producing its final answer, the existing forced-conclusion path sends a conclusion prompt with no tools, forcing the LLM to produce a final response. This becomes the `FinalAnalysis` even if some sub-agents are still running (they're cancelled by `CompositeToolExecutor.Close()`).
+
+Edge case: an orchestrator *can* be placed alongside other parallel agents in a stage, in which case stage-level synthesis would run after everything completes. This is valid but unusual — the orchestrator is designed to be the sole agent handling the dynamic workflow.
 
 ## Database Schema Changes
 
@@ -548,6 +696,17 @@ field.Text("task").
     Nillable().
     Comment("Task description from orchestrator dispatch"),
 ```
+
+The `task` field serves two purposes:
+1. **Dashboard tree view** — shown in the sub-agent's row/card so operators can see what each sub-agent was asked to do without drilling in
+2. **Timeline event** — a `task_assigned` timeline event is created at the start of each sub-agent execution, making the task visible in the detailed timeline:
+
+```go
+// In SubAgentRunner.Dispatch, after creating the AgentExecution:
+createTimelineEvent(ctx, subExecCtx, timelineevent.EventTypeTaskAssigned, task, nil, &eventSeq)
+```
+
+This gives operators immediate visibility into what each sub-agent was asked to do — both at a glance (tree view) and in detail (timeline).
 
 ### No new Stage for sub-agents
 
@@ -580,7 +739,7 @@ The system prompt includes:
 1. General SRE instructions (Tier 1)
 2. MCP server instructions for orchestrator's own MCP servers (Tier 2)
 3. Custom instructions (Tier 3)
-4. **Agent catalog** — list of available sub-agents with name, description, MCP servers
+4. **Agent catalog** — list of available sub-agents with name, description, tools
 
 Example agent catalog section in the prompt:
 
@@ -592,13 +751,22 @@ Results are delivered automatically when each sub-agent finishes — do not poll
 Use cancel_agent to stop unnecessary work. Use list_agents to check status.
 
 - **LogAnalyzer**: Analyzes logs from Loki to find error patterns and anomalies
-  Tools: loki
+  MCP tools: loki
 
 - **MetricChecker**: Queries Prometheus for metric anomalies and threshold breaches
-  Tools: prometheus
+  MCP tools: prometheus
 
 - **K8sInspector**: Inspects Kubernetes resources, pod status, and events
-  Tools: kubernetes-server
+  MCP tools: kubernetes-server
+
+- **WebResearcher**: Searches the web and analyzes URLs for real-time information
+  Native tools: google_search, url_context
+
+- **CodeExecutor**: Executes Python code for computation, data analysis, and calculations
+  Native tools: code_execution
+
+- **GeneralWorker**: General-purpose agent for analysis, summarization, reasoning, and other tasks
+  Tools: none (pure reasoning)
 ```
 
 ### Sub-agent prompt — DECIDED
@@ -725,15 +893,23 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 > **Decision:** Horizontal layers — 6 PRs. See [questions](orchestrator-impl-questions.md), Q11.
 
+### PR0: `native_tools` on AgentConfig (prerequisite)
+- `native_tools` field on `AgentConfig` — per-agent override of provider's native tools
+- Merge logic: agent-level keys override provider-level keys
+- Pass resolved native tools through to the LLM client
+- Independent of orchestrator — useful on its own
+
 ### PR1: Config foundation
 - `sub_agents` override at chain/stage/agent level (full hierarchy)
 - `orchestrator` nested config section on `AgentConfig`
 - `defaults.orchestrator` global defaults
 - `SubAgentRegistry` built from merged agents (agents with `description`)
+- New built-in agents: `WebResearcher`, `CodeExecutor`, `GeneralWorker` (depends on PR0)
 - Config validation: `orchestrator` section forbidden on non-orchestrator agents
 
 ### PR2: DB schema
 - `parent_execution_id` on `AgentExecution` (nullable)
+- New timeline event type: `task_assigned`
 - `task` on `AgentExecution` (nullable)
 - `UpdateStageStatus` filter: exclude sub-agents (non-null `parent_execution_id`)
 - Query helpers: sub-agents by parent, trace tree

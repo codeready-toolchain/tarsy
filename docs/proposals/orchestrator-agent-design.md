@@ -50,7 +50,7 @@ From TARSy's perspective, the orchestrator is just another agent in a chain. It 
 │                 │  │ dispatch_agent(K8s, ..) │ │            │
 │                 │  │ ← MetC result pushed    │ │            │
 │                 │  │ ← K8s result pushed     │ │            │
-│                 │  │ → synthesized output    │ │            │
+│                 │  │ → final response        │ │            │
 │                 │  └─────────────────────────┘ │            │
 │                 └──────────────────────────────┘            │
 │                        │              │                     │
@@ -70,7 +70,17 @@ Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tar
 
 **Discovery:** Agents with a `description` field form the global sub-agent registry. Agents without `description` are excluded — the orchestrator cannot see or dispatch them. The registry can be further restricted via `sub_agents` override at chain/stage/agent level, following TARSy's existing override patterns.
 
-**Description:** Each agent is presented to the orchestrator LLM with its name, `description` (required for orchestrator visibility), and MCP servers list. The LLM infers dispatch decisions from this. Built-in agents already have descriptions; config agents must explicitly opt in by defining one.
+**Description:** Each agent is presented to the orchestrator LLM with its name, `description` (required for orchestrator visibility), and tools list (MCP servers and/or native tools). The LLM infers dispatch decisions from this. Built-in agents already have descriptions; config agents must explicitly opt in by defining one.
+
+**New built-in agents:** Three new built-in agents ship with the orchestrator feature, providing common capabilities without requiring MCP infrastructure:
+
+| Agent | Tools | Purpose |
+|-------|-------|---------|
+| **WebResearcher** | Gemini native: google_search, url_context | Web research and URL analysis |
+| **CodeExecutor** | Gemini native: code_execution | Python computation and data analysis |
+| **GeneralWorker** | None (pure reasoning) | Summarization, comparison, drafting |
+
+These complement existing built-in agents (KubernetesAgent, etc.) and are orchestrator-visible by default.
 
 ```yaml
 agents:
@@ -196,7 +206,7 @@ Iteration 4 — LLM sees MetricChecker result, no new tools → waits for K8sIns
   "[Sub-agent completed] K8sInspector (exec-ghi): payments-db-0 OOMKilled
    at 14:22, restarted 3 times. Current memory limit: 512Mi."
 
-Iteration 5 — LLM synthesizes all three results:
+Iteration 5 — LLM produces final response from all three results:
   "Root cause: payments-db OOMKilled due to 512Mi memory limit. This caused
    connection refused errors from service-X, resulting in the 5xx spike
    starting 14:23 UTC."
@@ -244,6 +254,7 @@ agent_chains:
 - **Idle wait:** When the LLM has no more tool calls but sub-agents are running, the controller pauses until at least one result arrives, then continues.
 - **Depth 1 only:** Sub-agents cannot spawn their own sub-agents. Simple, predictable, debuggable.
 - **Failure handling:** Sub-agent failures (error, timeout) are reported to the orchestrator with full context. The LLM decides what to do — retry, try a different agent, proceed with partial data, or report the failure. No auto-retry at orchestration level.
+- **Final response (not synthesis):** The orchestrator is typically a single agent in a stage. Its final response is just the LLM's last output when it has no more work to do — no separate synthesis step, no stage-level `SynthesisAgent`. The `custom_instructions` guide what the LLM produces. This replaces TARSy's existing static parallel-agents-plus-synthesis pattern with a dynamic, LLM-driven version.
 
 ## Observability
 
@@ -264,7 +275,7 @@ Execution: exec-001 (Orchestrator)
 │   ├── LLM call: analyze prompt
 │   ├── MCP tool call: kubernetes.get_pod(...)
 │   └── Result: "payments-db-0 OOMKilled..."
-└── Orchestrator synthesis: "Root cause: payments-db OOMKilled..."
+└── Orchestrator final response: "Root cause: payments-db OOMKilled..."
 ```
 
 Each sub-agent run gets its own timeline, linked to the orchestrator via parent execution ID. Reuses TARSy's existing timeline infrastructure.
@@ -318,12 +329,12 @@ Alert data + prior agent results
 ┌─────────────────────┐
 │  Orchestrator LLM   │
 │                     │
-│  Sees pushed result │  Decides: dispatch more? cancel others? synthesize?
+│  Sees pushed result │  Decides: dispatch more? cancel others? produce final answer?
 │  + any other        │  Can dispatch follow-ups based on partial results
 │  available results  │
 └────────┬────────────┘
          │
-    Text output to chain  ◄── final synthesis, same as any agent
+    Text output to chain  ◄── final response, same as any agent
 ```
 
 ## Future Considerations
