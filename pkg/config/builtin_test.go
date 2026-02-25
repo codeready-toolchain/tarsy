@@ -123,7 +123,10 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
 		assert.True(t, agent.NativeTools[GoogleNativeToolGoogleSearch])
 		assert.True(t, agent.NativeTools[GoogleNativeToolURLContext])
-		assert.False(t, agent.NativeTools[GoogleNativeToolCodeExecution])
+
+		val, present := agent.NativeTools[GoogleNativeToolCodeExecution]
+		assert.True(t, present, "CodeExecution key must be explicitly present")
+		assert.False(t, val, "CodeExecution must be explicitly disabled")
 	})
 
 	t.Run("CodeExecutor has native Gemini backend and code_execution", func(t *testing.T) {
@@ -131,8 +134,14 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 		require.True(t, exists)
 		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
 		assert.True(t, agent.NativeTools[GoogleNativeToolCodeExecution])
-		assert.False(t, agent.NativeTools[GoogleNativeToolGoogleSearch])
-		assert.False(t, agent.NativeTools[GoogleNativeToolURLContext])
+
+		val, present := agent.NativeTools[GoogleNativeToolGoogleSearch]
+		assert.True(t, present, "GoogleSearch key must be explicitly present")
+		assert.False(t, val, "GoogleSearch must be explicitly disabled")
+
+		val, present = agent.NativeTools[GoogleNativeToolURLContext]
+		assert.True(t, present, "URLContext key must be explicitly present")
+		assert.False(t, val, "URLContext must be explicitly disabled")
 	})
 
 	t.Run("GeneralWorker has no backend or native tools", func(t *testing.T) {

@@ -74,6 +74,36 @@ func TestBuildSubAgentRegistry_Empty(t *testing.T) {
 	assert.Empty(t, registry.Entries())
 }
 
+func TestSubAgentRegistry_DefensiveCopies(t *testing.T) {
+	source := map[string]*AgentConfig{
+		"Agent": {
+			Description: "Agent",
+			MCPServers:  []string{"server-a", "server-b"},
+		},
+	}
+	registry := BuildSubAgentRegistry(source)
+
+	t.Run("MCPServers is a copy of the source", func(t *testing.T) {
+		entries := registry.Entries()
+		require.Len(t, entries, 1)
+		entries[0].MCPServers[0] = "mutated"
+		assert.Equal(t, []string{"server-a", "server-b"}, source["Agent"].MCPServers)
+		assert.Equal(t, "server-a", registry.Entries()[0].MCPServers[0])
+	})
+
+	t.Run("Entries returns a copy of the slice", func(t *testing.T) {
+		first := registry.Entries()
+		first[0] = SubAgentEntry{Name: "Replaced"}
+		assert.Equal(t, "Agent", registry.Entries()[0].Name)
+	})
+
+	t.Run("Filter nil returns independent copy", func(t *testing.T) {
+		filtered := registry.Filter(nil)
+		filtered.Entries()[0] = SubAgentEntry{Name: "Replaced"}
+		assert.Equal(t, "Agent", registry.Entries()[0].Name)
+	})
+}
+
 func TestBuildSubAgentRegistry_WithBuiltinAgents(t *testing.T) {
 	builtin := GetBuiltinConfig()
 	merged := mergeAgents(builtin.Agents, map[string]AgentConfig{})
@@ -118,10 +148,10 @@ func TestSubAgentRegistry_Filter(t *testing.T) {
 	}
 	registry := BuildSubAgentRegistry(agents)
 
-	t.Run("nil returns full registry", func(t *testing.T) {
+	t.Run("nil returns copy of full registry", func(t *testing.T) {
 		filtered := registry.Filter(nil)
-		assert.Same(t, registry, filtered)
-		assert.Len(t, filtered.Entries(), 3)
+		assert.NotSame(t, registry, filtered)
+		assert.Equal(t, registry.Entries(), filtered.Entries())
 	})
 
 	t.Run("filter to subset", func(t *testing.T) {

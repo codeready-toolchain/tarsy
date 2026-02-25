@@ -26,7 +26,10 @@ func BuildSubAgentRegistry(agents map[string]*AgentConfig) *SubAgentRegistry {
 		entry := SubAgentEntry{
 			Name:        name,
 			Description: agent.Description,
-			MCPServers:  agent.MCPServers,
+		}
+		if len(agent.MCPServers) > 0 {
+			entry.MCPServers = make([]string, len(agent.MCPServers))
+			copy(entry.MCPServers, agent.MCPServers)
 		}
 		for tool, enabled := range agent.NativeTools {
 			if enabled {
@@ -42,16 +45,37 @@ func BuildSubAgentRegistry(agents map[string]*AgentConfig) *SubAgentRegistry {
 	return &SubAgentRegistry{entries: entries}
 }
 
-// Entries returns all entries in the registry.
+// Entries returns a deep copy of all entries in the registry.
 func (r *SubAgentRegistry) Entries() []SubAgentEntry {
-	return r.entries
+	out := make([]SubAgentEntry, len(r.entries))
+	for i, e := range r.entries {
+		out[i] = e.clone()
+	}
+	return out
+}
+
+func (e SubAgentEntry) clone() SubAgentEntry {
+	c := e
+	if len(e.MCPServers) > 0 {
+		c.MCPServers = make([]string, len(e.MCPServers))
+		copy(c.MCPServers, e.MCPServers)
+	}
+	if len(e.NativeTools) > 0 {
+		c.NativeTools = make([]string, len(e.NativeTools))
+		copy(c.NativeTools, e.NativeTools)
+	}
+	return c
 }
 
 // Filter returns a new registry containing only agents whose names are in allowedNames.
-// If allowedNames is nil, returns the full registry (no copy — caller must not mutate).
+// If allowedNames is nil, returns a new registry with a copy of all entries.
 func (r *SubAgentRegistry) Filter(allowedNames []string) *SubAgentRegistry {
 	if allowedNames == nil {
-		return r
+		copied := make([]SubAgentEntry, len(r.entries))
+		for i, e := range r.entries {
+			copied[i] = e.clone()
+		}
+		return &SubAgentRegistry{entries: copied}
 	}
 	allowed := make(map[string]bool, len(allowedNames))
 	for _, name := range allowedNames {
