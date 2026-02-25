@@ -465,11 +465,11 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, false, nativeTools["url_context"])
 	})
 
-	// ── Alert Types (from config, not DB: concurrency-chain + kubernetes-agent-chain) ──
+	// ── Alert Types (from config, not DB: concurrency-chain + kubernetes) ──
 	t.Run("AlertTypes", func(t *testing.T) {
 		types := app.GetAlertTypes(t)
 
-		// Chains sorted alphabetically: concurrency-chain then kubernetes-agent-chain.
+		// Chains sorted alphabetically: concurrency-chain then kubernetes.
 		assert.Equal(t, "concurrency-chain", types["default_chain_id"])
 
 		alertTypes, ok := types["alert_types"].([]interface{})
@@ -482,7 +482,7 @@ func TestDashboardEndpoints(t *testing.T) {
 
 		at1 := alertTypes[1].(map[string]interface{})
 		assert.Equal(t, "kubernetes", at1["type"])
-		assert.Equal(t, "kubernetes-agent-chain", at1["chain_id"])
+		assert.Equal(t, "kubernetes", at1["chain_id"])
 		assert.Equal(t, "Single-stage Kubernetes analysis", at1["description"])
 	})
 }

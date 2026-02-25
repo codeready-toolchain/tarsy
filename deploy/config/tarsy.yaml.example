@@ -311,7 +311,7 @@ agents:
 # AGENT CHAIN DEFINITIONS
 # =============================================================================
 # Define multi-stage agent chains for different alert types
-# Built-in chains: kubernetes-agent-chain
+# Built-in chains: kubernetes
 
 agent_chains:
   # Single-stage chain with native thinking
