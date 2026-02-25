@@ -9,21 +9,45 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
-// SynthesisController implements a single LLM call for synthesis (no MCP tools).
-// Model/credentials are configured via LLMProviderConfig; SDK path selection is
-// controlled by LLMBackend.
+// SingleShotConfig parameterizes SingleShotController behavior.
+type SingleShotConfig struct {
+	// BuildMessages produces the initial conversation messages.
+	BuildMessages func(*agent.ExecutionContext, string) []agent.ConversationMessage
+
+	// ThinkingFallback uses ThinkingText as final analysis when resp.Text is empty.
+	ThinkingFallback bool
+
+	// InteractionLabel is recorded in LLM interactions (e.g. "synthesis").
+	InteractionLabel string
+}
+
+// SingleShotController executes a single LLM call with no MCP tools.
+// Parameterized via SingleShotConfig so the same controller serves synthesis,
+// scoring, and any future single-shot agent types.
+//
 // Note: while no MCP tools are bound, native Gemini tools (Google Search, URL Context)
 // may still be available when using google-native backend, since the Gemini API
 // only suppresses native tools when MCP tools are present.
-type SynthesisController struct{}
-
-// NewSynthesisController creates a new synthesis controller.
-func NewSynthesisController() *SynthesisController {
-	return &SynthesisController{}
+type SingleShotController struct {
+	cfg SingleShotConfig
 }
 
-// Run executes a single LLM call to synthesize previous stage results.
-func (c *SynthesisController) Run(
+// NewSingleShotController creates a new single-shot controller.
+func NewSingleShotController(cfg SingleShotConfig) *SingleShotController {
+	return &SingleShotController{cfg: cfg}
+}
+
+// NewSynthesisController creates a SingleShotController configured for synthesis.
+func NewSynthesisController(pb agent.PromptBuilder) *SingleShotController {
+	return NewSingleShotController(SingleShotConfig{
+		BuildMessages:    pb.BuildSynthesisMessages,
+		ThinkingFallback: true,
+		InteractionLabel: "synthesis",
+	})
+}
+
+// Run executes a single LLM call and returns the result.
+func (c *SingleShotController) Run(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
@@ -32,11 +56,11 @@ func (c *SynthesisController) Run(
 	msgSeq := 0
 	eventSeq := 0
 
-	// 1. Build messages via prompt builder
-	if execCtx.PromptBuilder == nil {
-		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildSynthesisMessages")
+	// 1. Build messages via config-provided builder
+	if c.cfg.BuildMessages == nil {
+		return nil, fmt.Errorf("BuildMessages function is nil")
 	}
-	messages := execCtx.PromptBuilder.BuildSynthesisMessages(execCtx, prevStageContext)
+	messages := c.cfg.BuildMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages
 	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
@@ -54,7 +78,7 @@ func (c *SynthesisController) Run(
 	}, &eventSeq)
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
-		return nil, fmt.Errorf("synthesis LLM call failed: %w", err)
+		return nil, fmt.Errorf("%s LLM call failed: %w", c.cfg.InteractionLabel, err)
 	}
 	resp := streamed.LLMResponse
 
@@ -69,10 +93,9 @@ func (c *SynthesisController) Run(
 	createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, &eventSeq)
 	createGroundingEvents(ctx, execCtx, resp.Groundings, &eventSeq)
 
-	// 5. Compute final analysis with fallback to thinking text when resp.Text is empty
-	// (e.g., when the LLM only produced ThinkingChunks)
+	// 5. Compute final analysis with optional thinking fallback
 	finalAnalysis := resp.Text
-	if finalAnalysis == "" && resp.ThinkingText != "" {
+	if c.cfg.ThinkingFallback && finalAnalysis == "" && resp.ThinkingText != "" {
 		finalAnalysis = resp.ThinkingText
 	}
 
@@ -80,7 +103,6 @@ func (c *SynthesisController) Run(
 	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnalysis, nil, &eventSeq)
 
 	// 7. Store assistant message and LLM interaction
-	// Use finalAnalysis for storage so the persisted message reflects the fallback
 	storeResp := resp
 	if resp.Text == "" && finalAnalysis != "" {
 		// Create a shallow copy with the fallback text so the stored message isn't empty
@@ -92,7 +114,7 @@ func (c *SynthesisController) Run(
 	if storeErr != nil {
 		return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
 	}
-	recordLLMInteraction(ctx, execCtx, 1, "synthesis", len(messages), storeResp, &assistantMsg.ID, startTime)
+	recordLLMInteraction(ctx, execCtx, 1, c.cfg.InteractionLabel, len(messages), storeResp, &assistantMsg.ID, startTime)
 
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,

@@ -120,8 +120,8 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 **Two controller types** (text-based ReAct parsing was completely removed):
 
-- **FunctionCallingController**: Structured function calling with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
-- **SynthesisController**: Tool-less single LLM call for synthesizing multi-agent investigation results
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis (and future scoring)
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
