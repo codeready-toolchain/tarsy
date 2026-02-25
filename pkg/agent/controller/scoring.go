@@ -35,8 +35,8 @@ func NewScoringController() *ScoringController {
 	return &ScoringController{}
 }
 
-// scoreRegex matches a number (0-100) optionally followed by whitespace at end of string.
-var scoreRegex = regexp.MustCompile(`([+-]?\d+)\s*$`)
+// scoreRegex matches a standalone integer (with optional sign) on a line.
+var scoreRegex = regexp.MustCompile(`^\s*([+-]?\d+)\s*$`)
 
 const (
 	// maxExtractionRetries is the number of times we try to persuade the LLM to give us the total score
@@ -58,6 +58,12 @@ func (c *ScoringController) Run(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) (*agent.ExecutionResult, error) {
+	if execCtx == nil {
+		return nil, fmt.Errorf("execCtx is nil")
+	}
+	if execCtx.Config == nil {
+		return nil, fmt.Errorf("execCtx.Config is nil: cannot read LLM configuration")
+	}
 	if execCtx.PromptBuilder == nil {
 		return nil, fmt.Errorf("PromptBuilder is nil: cannot build scoring prompts")
 	}
@@ -170,6 +176,10 @@ func extractScore(text string) (score int, analysis string, err error) {
 	score, err = strconv.Atoi(match[1])
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to parse score %q: %w", match[1], err)
+	}
+
+	if score < 0 || score > 100 {
+		return 0, "", fmt.Errorf("score %d out of valid range [0, 100]", score)
 	}
 
 	// Analysis is everything before the last line

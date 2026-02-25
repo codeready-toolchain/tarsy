@@ -231,6 +231,55 @@ func TestScoringController_Run(t *testing.T) {
 		assert.Contains(t, err.Error(), "LLMClient is nil")
 	})
 
+	t.Run("nil execCtx returns error", func(t *testing.T) {
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), nil, "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execCtx is nil")
+	})
+
+	t.Run("nil execCtx.Config returns error", func(t *testing.T) {
+		execCtx := newScoringExecCtx(&mockLLMClient{})
+		execCtx.Config = nil
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), execCtx, "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execCtx.Config is nil")
+	})
+
+	t.Run("LLM failure during extraction retry", func(t *testing.T) {
+		mock := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "no score here"}}},
+				{err: fmt.Errorf("LLM unavailable")},
+			},
+		}
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "scoring extraction retry LLM call failed")
+		assert.Equal(t, 2, mock.callCount)
+	})
+
+	t.Run("LLM failure during missing tools turn", func(t *testing.T) {
+		mock := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Analysis\n50"},
+				}},
+				{err: fmt.Errorf("LLM unavailable")},
+			},
+		}
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing tools LLM call failed")
+		assert.Equal(t, 2, mock.callCount)
+	})
+
 	t.Run("thinking chunks are collected but don't affect score extraction", func(t *testing.T) {
 		mock := &mockLLMClient{
 			responses: []mockLLMResponse{
@@ -341,10 +390,10 @@ func TestScoringController_extractScore(t *testing.T) {
 		assert.Contains(t, err.Error(), "out of valid range")
 	})
 
-	t.Run("score validation: negative sign supported", func(t *testing.T) {
-		score, _, err := extractScore("Analysis\n-1")
-		require.NoError(t, err)
-		assert.Equal(t, -1, score)
+	t.Run("score validation: negative value rejected", func(t *testing.T) {
+		_, _, err := extractScore("Analysis\n-1")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "out of valid range")
 	})
 
 	t.Run("score validation: explicit positive sign supported", func(t *testing.T) {
@@ -361,6 +410,12 @@ func TestScoringController_extractScore(t *testing.T) {
 
 	t.Run("score validation: non-numeric last line", func(t *testing.T) {
 		_, _, err := extractScore("Analysis\nno score here")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no numeric score found")
+	})
+
+	t.Run("score validation: trailing number in text rejected", func(t *testing.T) {
+		_, _, err := extractScore("Analysis\nTotal: 67")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no numeric score found")
 	})
