@@ -25,6 +25,8 @@ type BuiltinAgentConfig struct {
 	Type               AgentType
 	MCPServers         []string
 	CustomInstructions string
+	LLMBackend         LLMBackend
+	NativeTools        map[GoogleNativeTool]bool
 }
 
 var (
@@ -77,6 +79,33 @@ Your task:
 7. GENERATE actionable recommendations leveraging insights from the strongest investigations
 
 Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
+		},
+		"WebResearcher": {
+			Description: "Searches the web and analyzes URLs for real-time information",
+			LLMBackend:  LLMBackendNativeGemini,
+			NativeTools: map[GoogleNativeTool]bool{
+				GoogleNativeToolGoogleSearch:  true,
+				GoogleNativeToolURLContext:    true,
+				GoogleNativeToolCodeExecution: false,
+			},
+			CustomInstructions: `You research topics using web search and URL analysis.
+Report findings with sources. Be thorough but concise.`,
+		},
+		"CodeExecutor": {
+			Description: "Executes Python code for computation, data analysis, and calculations",
+			LLMBackend:  LLMBackendNativeGemini,
+			NativeTools: map[GoogleNativeTool]bool{
+				GoogleNativeToolGoogleSearch:  false,
+				GoogleNativeToolCodeExecution: true,
+				GoogleNativeToolURLContext:    false,
+			},
+			CustomInstructions: `You solve computational tasks by writing and executing Python code.
+Show your work. Report results clearly.`,
+		},
+		"GeneralWorker": {
+			Description: "General-purpose agent for analysis, summarization, reasoning, and other tasks",
+			CustomInstructions: `You are a general-purpose worker. Complete the assigned task
+thoroughly and concisely.`,
 		},
 	}
 }

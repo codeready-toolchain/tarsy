@@ -130,6 +130,84 @@ func TestValidateAgents(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid native tool",
 		},
+		{
+			name: "orchestrator agent with orchestrator config is valid",
+			agents: map[string]*AgentConfig{
+				"my-orch": {
+					Type:         AgentTypeOrchestrator,
+					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(3)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
+		},
+		{
+			name: "non-orchestrator agent with orchestrator config is invalid",
+			agents: map[string]*AgentConfig{
+				"regular": {
+					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(3)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "orchestrator config only valid on orchestrator agents",
+		},
+		{
+			name: "orchestrator config with zero max_concurrent_agents",
+			agents: map[string]*AgentConfig{
+				"orch": {
+					Type:         AgentTypeOrchestrator,
+					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(0)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "must be at least 1",
+		},
+		{
+			name: "orchestrator config with negative agent_timeout",
+			agents: map[string]*AgentConfig{
+				"orch": {
+					Type:         AgentTypeOrchestrator,
+					Orchestrator: &OrchestratorConfig{AgentTimeout: durPtr(-1 * time.Second)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "must be positive",
+		},
+		{
+			name: "orchestrator config with zero max_budget",
+			agents: map[string]*AgentConfig{
+				"orch": {
+					Type:         AgentTypeOrchestrator,
+					Orchestrator: &OrchestratorConfig{MaxBudget: durPtr(0)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "must be positive",
+		},
+		{
+			name: "orchestrator agent without orchestrator config is valid",
+			agents: map[string]*AgentConfig{
+				"orch": {Type: AgentTypeOrchestrator},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
+		},
+		{
+			name: "synthesis agent with orchestrator config is invalid",
+			agents: map[string]*AgentConfig{
+				"synth": {
+					Type:         AgentTypeSynthesis,
+					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(3)},
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "orchestrator config only valid on orchestrator agents",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2076,4 +2154,237 @@ func TestValidateSlack_IntegrationWithValidateAll(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slack validation failed")
 	assert.Contains(t, err.Error(), "system.slack.channel is required")
+}
+
+func TestValidateOrchestratorDefaults(t *testing.T) {
+	tests := []struct {
+		name    string
+		orch    *OrchestratorConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "nil orchestrator defaults is valid",
+			orch:    nil,
+			wantErr: false,
+		},
+		{
+			name:    "valid orchestrator defaults",
+			orch:    &OrchestratorConfig{MaxConcurrentAgents: intPtr(5), AgentTimeout: durPtr(300 * time.Second)},
+			wantErr: false,
+		},
+		{
+			name:    "zero max_concurrent_agents",
+			orch:    &OrchestratorConfig{MaxConcurrentAgents: intPtr(0)},
+			wantErr: true,
+			errMsg:  "must be at least 1",
+		},
+		{
+			name:    "negative agent_timeout",
+			orch:    &OrchestratorConfig{AgentTimeout: durPtr(-5 * time.Second)},
+			wantErr: true,
+			errMsg:  "must be positive",
+		},
+		{
+			name:    "zero max_budget",
+			orch:    &OrchestratorConfig{MaxBudget: durPtr(0)},
+			wantErr: true,
+			errMsg:  "must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Defaults:            &Defaults{Orchestrator: tt.orch},
+				AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{}),
+				MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+				LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateDefaults()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateSubAgents(t *testing.T) {
+	baseAgents := map[string]*AgentConfig{
+		"LogAnalyzer":    {Description: "Analyzes logs"},
+		"MetricChecker":  {Description: "Checks metrics"},
+		"MyOrchestrator": {Type: AgentTypeOrchestrator, Description: "Orchestrator"},
+	}
+
+	t.Run("valid chain-level sub_agents", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents:  []string{"LogAnalyzer", "MetricChecker"},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("chain-level sub_agents references unknown agent", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents:  []string{"NonExistent"},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "agent 'NonExistent' not found")
+	})
+
+	t.Run("sub_agents cannot reference orchestrator", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents:  []string{"MyOrchestrator"},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is an orchestrator and cannot be a sub-agent")
+	})
+
+	t.Run("valid stage-level sub_agents", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name:      "s1",
+							SubAgents: []string{"LogAnalyzer"},
+							Agents:    []StageAgentConfig{{Name: "MetricChecker"}},
+						},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("valid stage-agent-level sub_agents", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name: "s1",
+							Agents: []StageAgentConfig{
+								{Name: "MyOrchestrator", SubAgents: []string{"MetricChecker"}},
+							},
+						},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("stage-level sub_agents cannot reference orchestrator", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name:      "s1",
+							SubAgents: []string{"MyOrchestrator"},
+							Agents:    []StageAgentConfig{{Name: "LogAnalyzer"}},
+						},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is an orchestrator and cannot be a sub-agent")
+	})
+
+	t.Run("stage-agent-level sub_agents references unknown agent", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name: "s1",
+							Agents: []StageAgentConfig{
+								{Name: "MyOrchestrator", SubAgents: []string{"Ghost"}},
+							},
+						},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "agent 'Ghost' not found")
+	})
+}
+
+func intPtr(i int) *int {
+	return &i
+}
+
+func durPtr(d time.Duration) *time.Duration {
+	return &d
 }

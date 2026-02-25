@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // AgentConfig defines agent configuration (metadata only — see agent.AgentFactory for instantiation).
@@ -16,7 +17,7 @@ type AgentConfig struct {
 	Description string `yaml:"description,omitempty"`
 
 	// MCP servers this agent uses
-	MCPServers []string `yaml:"mcp_servers" validate:"required,min=1"`
+	MCPServers []string `yaml:"mcp_servers" validate:"omitempty"`
 
 	// Custom instructions override built-in agent behavior
 	CustomInstructions string `yaml:"custom_instructions"`
@@ -31,6 +32,17 @@ type AgentConfig struct {
 	// provider's NativeTools on a per-key basis: agent keys override provider keys,
 	// missing keys fall through to the provider default.
 	NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
+
+	// Orchestrator-specific configuration (only valid when Type == orchestrator)
+	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
+}
+
+// OrchestratorConfig holds orchestrator-specific settings.
+// Resolved at runtime by merging defaults.orchestrator → agent-level orchestrator.
+type OrchestratorConfig struct {
+	MaxConcurrentAgents *int           `yaml:"max_concurrent_agents,omitempty"`
+	AgentTimeout        *time.Duration `yaml:"agent_timeout,omitempty"`
+	MaxBudget           *time.Duration `yaml:"max_budget,omitempty"`
 }
 
 // AgentRegistry stores agent configurations in memory with thread-safe access

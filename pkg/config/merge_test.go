@@ -229,6 +229,37 @@ func TestMergeLLMProviders(t *testing.T) {
 	assert.Equal(t, 200000, result["override-me"].MaxToolResultTokens)
 }
 
+func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
+	builtin := map[string]BuiltinAgentConfig{
+		"web-agent": {
+			Description: "Web agent",
+			LLMBackend:  LLMBackendNativeGemini,
+			NativeTools: map[GoogleNativeTool]bool{
+				GoogleNativeToolGoogleSearch: true,
+				GoogleNativeToolURLContext:   true,
+			},
+		},
+		"plain-agent": {
+			Description: "Plain agent",
+		},
+	}
+
+	result := mergeAgents(builtin, map[string]AgentConfig{})
+
+	// web-agent should carry LLMBackend and NativeTools
+	assert.Equal(t, LLMBackendNativeGemini, result["web-agent"].LLMBackend)
+	assert.True(t, result["web-agent"].NativeTools[GoogleNativeToolGoogleSearch])
+	assert.True(t, result["web-agent"].NativeTools[GoogleNativeToolURLContext])
+
+	// plain-agent should have empty values
+	assert.Empty(t, result["plain-agent"].LLMBackend)
+	assert.Nil(t, result["plain-agent"].NativeTools)
+
+	// Defensive copy: mutating the result should not affect original
+	result["web-agent"].NativeTools[GoogleNativeToolCodeExecution] = true
+	assert.Len(t, builtin["web-agent"].NativeTools, 2)
+}
+
 // TestMergeEmptyMaps tests merging with empty built-in or user configs
 func TestMergeEmptyMaps(t *testing.T) {
 	t.Run("empty user agents", func(t *testing.T) {

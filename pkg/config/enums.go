@@ -10,12 +10,14 @@ const (
 	AgentTypeSynthesis AgentType = "synthesis"
 	// AgentTypeScoring evaluates session quality (single-shot)
 	AgentTypeScoring AgentType = "scoring"
+	// AgentTypeOrchestrator dispatches and coordinates sub-agents (iterating controller)
+	AgentTypeOrchestrator AgentType = "orchestrator"
 )
 
 // IsValid checks if the agent type is valid (empty string is valid — means default).
 func (t AgentType) IsValid() bool {
 	switch t {
-	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeScoring:
+	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeScoring, AgentTypeOrchestrator:
 		return true
 	default:
 		return false

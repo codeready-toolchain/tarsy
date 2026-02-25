@@ -49,6 +49,7 @@ type StageAgentConfig struct {
 	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
+	SubAgents     []string   `yaml:"sub_agents,omitempty"`
 }
 
 // SynthesisConfig defines synthesis agent configuration
