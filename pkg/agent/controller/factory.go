@@ -24,6 +24,8 @@ func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.Ex
 		return NewIteratingController(), nil
 	case config.AgentTypeSynthesis:
 		return NewSynthesisController(execCtx.PromptBuilder), nil
+	case config.AgentTypeScoring:
+		return NewScoringController(), nil
 	default:
 		return nil, fmt.Errorf("unknown agent type: %q", agentType)
 	}

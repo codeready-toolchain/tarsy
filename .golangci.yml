@@ -29,6 +29,7 @@ linters:
       - ent/           # Exclude generated Ent code
       - proto/         # Exclude generated protobuf code
       - github.com/    # Exclude vendored/copied code
+      - temp/          # Exclude temporary/vendored code
     rules:
       # Exclude some linters from running on test files
       - path: _test\.go
@@ -53,6 +54,7 @@ formatters:
       - ent/           # Exclude generated Ent code
       - proto/         # Exclude generated protobuf code
       - github.com/    # Exclude vendored/copied code
+      - temp/          # Exclude temporary/vendored code
 
 output:
   formats:

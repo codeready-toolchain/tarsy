@@ -55,11 +55,13 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected SingleShotController")
 	})
 
-	t.Run("scoring type returns error (WIP)", func(t *testing.T) {
+	t.Run("scoring type returns ScoringController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.AgentTypeScoring, execCtx)
-		require.Error(t, err)
-		assert.Nil(t, controller)
-		assert.Contains(t, err.Error(), "unknown agent type")
+		require.NoError(t, err)
+		require.NotNil(t, controller)
+
+		_, ok := controller.(*ScoringController)
+		assert.True(t, ok, "expected ScoringController")
 	})
 
 	t.Run("typo in agent type returns error", func(t *testing.T) {

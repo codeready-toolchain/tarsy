@@ -89,6 +89,10 @@ type PromptBuilder interface {
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string
 	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
+	BuildScoringSystemPrompt() string
+	BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string
+	BuildScoringOutputSchemaReminderPrompt(outputSchema string) string
+	BuildScoringMissingToolsReportPrompt() string
 	MCPServerRegistry() *config.MCPServerRegistry
 }
 
