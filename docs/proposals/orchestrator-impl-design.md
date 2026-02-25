@@ -228,6 +228,24 @@ GeneralWorker:
 
 These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible.
 
+### Prerequisite: Extend `BuiltinAgentConfig`
+
+The current `BuiltinAgentConfig` struct only has `Description`, `Type`, `MCPServers`, and `CustomInstructions`. WebResearcher and CodeExecutor need `LLMBackend` and `NativeTools` — fields that don't exist on the built-in config struct today.
+
+```go
+// pkg/config/builtin.go — extension
+type BuiltinAgentConfig struct {
+    Description        string
+    Type               AgentType
+    MCPServers         []string
+    CustomInstructions string
+    LLMBackend         LLMBackend                  // NEW: for agents that need a specific backend
+    NativeTools        map[GoogleNativeTool]bool    // NEW: per-agent native tool overrides
+}
+```
+
+The `mergeAgents` function in `pkg/config/merge.go` must also carry these new fields when converting `BuiltinAgentConfig` → `AgentConfig`. This change is part of PR0/PR1.
+
 ### Prerequisite: `native_tools` override on `AgentConfig`
 
 Currently, native tools are configured only on the LLM provider level (`LLMProviderConfig.NativeTools`). The orchestrator built-in agents need per-agent control. A new `native_tools` field on `AgentConfig` overrides the provider's defaults:
@@ -255,6 +273,8 @@ func resolveNativeTools(provider *LLMProviderConfig, agent *AgentConfig) map[Goo
     return resolved
 }
 ```
+
+**Three-level resolution chain:** The full native tools resolution at execution time is: LLM provider defaults → agent-level `native_tools` (this PR) → per-alert `NativeToolsOverride` (existing, from `resolveMCPSelection`). The per-alert override remains highest priority, applied after agent-level resolution.
 
 This is a small, independent change that can land as a separate PR before the orchestrator work. It's useful on its own — any agent can override native tools without needing a dedicated LLM provider.
 
@@ -355,9 +375,12 @@ func (c *CompositeToolExecutor) Execute(ctx context.Context, call agent.ToolCall
 }
 
 func (c *CompositeToolExecutor) Close() error {
-    // Cancel any still-running sub-agents and wait for them to finish
+    // Cancel any still-running sub-agents and wait for them to finish.
+    // Safety timeout prevents indefinite hang if a goroutine doesn't exit cleanly.
     c.runner.CancelAll()
-    c.runner.WaitAll(context.Background())
+    waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    c.runner.WaitAll(waitCtx)
     if c.mcpExecutor != nil {
         return c.mcpExecutor.Close()
     }
@@ -377,10 +400,13 @@ type SubAgentRunner struct {
     resultsCh   chan *SubAgentResult             // completed results (buffered)
     pending     int32                            // atomic count of running sub-agents
     
-    deps           *SubAgentDeps                // Dependency bundle (Q10)
-    parentExecID   string                       // Orchestrator's execution_id
-    registry       *config.SubAgentRegistry     // Available agents for dispatch
-    guardrails     *OrchestratorGuardrails       // Resolved from defaults + per-agent config (Q5)
+    deps               *SubAgentDeps                // Dependency bundle (Q10)
+    parentExecID       string                       // Orchestrator's execution_id
+    sessionID          string                       // Orchestrator's session_id (for sub-agent DB records)
+    stageID            string                       // Orchestrator's stage_id (for sub-agent DB records)
+    nextSubAgentIndex  int32                        // Atomic counter for sub-agent agent_index (starts at stageAgentCount+1)
+    registry           *config.SubAgentRegistry     // Available agents for dispatch
+    guardrails         *OrchestratorGuardrails      // Resolved from defaults + per-agent config (Q5)
 }
 
 // SubAgentDeps bundles dependencies extracted from the session executor.
@@ -429,19 +455,23 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
     // 2. Check max_concurrent_agents guardrail → error if exceeded
     //    (counts executions where status == running)
     // 3. Create AgentExecution DB record:
-    //    - parent_execution_id = orchestrator's execution ID
+    //    - stage_id = orchestrator's stage ID (from r.stageID)
+    //    - session_id = orchestrator's session ID (from r.sessionID)
+    //    - parent_execution_id = orchestrator's execution ID (from r.parentExecID)
     //    - task = task text
     //    - status = "running"
-    // 4. Resolve agent config (same path as executeAgent)
-    // 5. Create MCP tool executor for sub-agent's own MCP servers
-    // 6. Build ExecutionContext with Task field set (triggers sub-agent prompt template)
-    // 7. Spawn goroutine:
+    //    - agent_index = next sub-agent index (from r.nextSubAgentIndex, atomic)
+    // 4. Create task_assigned timeline event
+    // 5. Resolve agent config (same path as executeAgent)
+    // 6. Create MCP tool executor for sub-agent's own MCP servers
+    // 7. Build ExecutionContext with SubAgent field set (triggers sub-agent prompt template)
+    // 8. Increment pending counter (atomic) — BEFORE spawning goroutine to avoid race
+    // 9. Spawn goroutine:
     //    - Derive context with agent_timeout deadline from guardrails
     //    - agentFactory.CreateAgent → agent.Execute
     //    - On completion: send SubAgentResult to resultsCh
     //    - On timeout/cancel: update DB status → "cancelled" / "failed"
-    // 8. Increment pending counter (atomic)
-    // 9. Return execution_id immediately
+    // 10. Return execution_id immediately
 }
 ```
 
@@ -526,20 +556,30 @@ func (r *SubAgentRunner) WaitAll(ctx context.Context) {
 
 ## ExecutionContext Changes
 
-The `ExecutionContext` struct gains one new optional field:
+The `ExecutionContext` struct gains three new optional fields:
 
 ```go
-// pkg/agent/context.go — addition
+// pkg/agent/context.go — additions
+
+// SubAgentContext carries sub-agent-specific data for controllers and prompt builders.
+// Follows the same pattern as ChatContext.
+type SubAgentContext struct {
+    Task         string  // Task assigned by orchestrator
+    ParentExecID string  // Parent orchestrator's execution ID
+}
+
 type ExecutionContext struct {
     // ... existing fields ...
     
-    Task            string                          // Sub-agent task (set by orchestrator dispatch)
-    SubAgentRunner  *orchestrator.SubAgentRunner    // nil for non-orchestrator agents
+    SubAgent         *SubAgentContext                // nil for non-sub-agents (same pattern as ChatContext)
+    SubAgentRunner   *orchestrator.SubAgentRunner    // nil for non-orchestrator agents
+    SubAgentCatalog  []config.SubAgentEntry          // Available sub-agents (set for orchestrators)
 }
 ```
 
-- `Task`: set when the agent is a sub-agent dispatched by an orchestrator. Triggers `buildSubAgentUserMessage` in the prompt builder.
+- `SubAgent`: set when the agent is a sub-agent dispatched by an orchestrator. Detected via `execCtx.SubAgent != nil` — same pattern as `execCtx.ChatContext != nil`. Triggers `buildSubAgentMessages` in the prompt builder.
 - `SubAgentRunner`: set when the agent is an orchestrator. The `IteratingController` uses this to drain and wait for sub-agent results. `nil` for non-orchestrator agents — all drain/wait code is skipped (zero impact on existing agents).
+- `SubAgentCatalog`: set when the agent is an orchestrator. Used by `BuildFunctionCallingMessages` to include the agent catalog in the system prompt. Avoids coupling the prompt builder to the orchestrator package.
 
 ### Result Message Format
 
@@ -625,7 +665,7 @@ Cleanup (cancel remaining sub-agents + wait for goroutines) is handled by `Compo
 
 TARSy has two distinct mechanisms for producing combined output — they should not be confused:
 
-**Stage-level synthesis (existing):** When a stage has multiple parallel agents, a `SynthesisAgent` (type=synthesis) automatically runs after all agents complete to merge their outputs. This is a separate agent execution with its own `SynthesisController`, dedicated prompt, and `AgentExecution` record. Driven by `executeStage`.
+**Stage-level synthesis (existing):** When a stage has multiple parallel agents, a `SynthesisAgent` (type=synthesis) automatically runs after all agents complete to merge their outputs. This is a separate agent execution with its own `SingleShotController` (synthesis-configured), dedicated prompt, and `AgentExecution` record. Driven by `executeStage`.
 
 **Orchestrator final response:** The orchestrator is typically a **single agent in a stage**. It produces its final output within the same execution — no separate agent, no separate controller. This is just the LLM's last response when it has no more work to do.
 
@@ -710,7 +750,11 @@ This gives operators immediate visibility into what each sub-agent was asked to 
 
 ### No new Stage for sub-agents
 
-Sub-agent executions are created under the **same Stage** as the orchestrator. The `parent_execution_id` field distinguishes them from the orchestrator's own execution. This avoids disrupting stage indexing and the stage status aggregation logic.
+Sub-agent executions are created under the **same Stage** as the orchestrator. The `parent_execution_id` field distinguishes them from the orchestrator's own execution. This avoids creating synthetic stages and disrupting stage indexing.
+
+**`agent_index` unique constraint:** The current schema has `UNIQUE(stage_id, agent_index)`. Top-level agents get indices 1..N (assigned by `executeStage`). Sub-agents get indices N+1, N+2, ... via the `SubAgentRunner`'s atomic counter (`nextSubAgentIndex`), initialized to `stageAgentCount + 1`. This avoids collisions without schema changes. Edge case: multiple orchestrators in the same stage (unusual — see note above) would need coordinated starting offsets; deferred until needed.
+
+**`UpdateStageStatus` filter:** The `UpdateStageStatus` function aggregates status from ALL `AgentExecution` records in a stage. Without filtering, sub-agent failures would incorrectly mark the stage as failed even if the orchestrator completed successfully. PR2 adds a filter: `WHERE parent_execution_id IS NULL` — only top-level executions participate in stage status aggregation.
 
 ### Query patterns
 
@@ -725,21 +769,45 @@ client.AgentExecution.Query().
 
 ### Orchestrator system prompt
 
-The orchestrator needs a custom system prompt that includes the available agents catalog. A new method on `PromptBuilder`:
+The orchestrator prompt is handled by the existing `BuildFunctionCallingMessages` method — no new method on the `PromptBuilder` interface. The method already receives `execCtx` which contains `Config.Type`. When the type is `orchestrator`, it includes the agent catalog in the system prompt.
+
+The agent catalog is made available via a new `SubAgentCatalog` field on `ExecutionContext`:
 
 ```go
-func (b *PromptBuilder) BuildOrchestratorMessages(
-    execCtx *agent.ExecutionContext,
-    prevStageContext string,
-    agentCatalog []config.SubAgentEntry,
-) []agent.ConversationMessage
+// pkg/agent/context.go — addition
+type ExecutionContext struct {
+    // ... existing fields ...
+    
+    Task             string                          // Sub-agent task (set by orchestrator dispatch)
+    SubAgentRunner   *orchestrator.SubAgentRunner    // nil for non-orchestrator agents
+    SubAgentCatalog  []config.SubAgentEntry          // Available sub-agents (set for orchestrators)
+}
 ```
+
+Inside `BuildFunctionCallingMessages`, the orchestrator branch:
+
+```go
+func (b *PromptBuilder) BuildFunctionCallingMessages(execCtx *agent.ExecutionContext, prevStageContext string) []agent.ConversationMessage {
+    // Existing: detect chat mode via execCtx.ChatContext
+    // NEW: detect orchestrator via execCtx.Config.Type
+    if execCtx.Config.Type == config.AgentTypeOrchestrator {
+        return b.buildOrchestratorMessages(execCtx, prevStageContext)
+    }
+    // NEW: detect sub-agent via execCtx.SubAgent (same pattern as ChatContext)
+    if execCtx.SubAgent != nil {
+        return b.buildSubAgentMessages(execCtx, prevStageContext)
+    }
+    // ... existing investigation / chat paths ...
+}
+```
+
+This avoids adding new methods to the `PromptBuilder` interface (no test mock changes) and follows the same detection pattern already used for chat mode (`execCtx.ChatContext != nil`).
 
 The system prompt includes:
 1. General SRE instructions (Tier 1)
 2. MCP server instructions for orchestrator's own MCP servers (Tier 2)
 3. Custom instructions (Tier 3)
-4. **Agent catalog** — list of available sub-agents with name, description, tools
+4. **Agent catalog** — list of available sub-agents with name, description, tools (from `execCtx.SubAgentCatalog`)
 
 Example agent catalog section in the prompt:
 
@@ -771,7 +839,7 @@ Use cancel_agent to stop unnecessary work. Use list_agents to check status.
 
 ### Sub-agent prompt — DECIDED
 
-Sub-agents use `BuildFunctionCallingMessages` with a custom user message template. Instead of the investigation template (`FormatAlertSection` with `<!-- ALERT_DATA_START -->` markers, runbook, chain context), sub-agents get a clean task-focused message:
+Sub-agents are detected via `ExecutionContext.SubAgent` (non-nil, same pattern as `ChatContext`). When set, `BuildFunctionCallingMessages` dispatches to `buildSubAgentMessages` which uses a clean task-focused user message instead of the investigation template (`FormatAlertSection` with `<!-- ALERT_DATA_START -->` markers, runbook, chain context):
 
 ```
 ## Task
@@ -780,59 +848,123 @@ Find all 5xx errors for service-X in the last 30 min. Report: error count,
 top error messages, time pattern.
 ```
 
-The system message still includes `custom_instructions` + MCP instructions (Tier 1-3). The template is selected via `ExecutionContext.Task` — if set, the prompt builder uses `buildSubAgentUserMessage` instead of `buildInvestigationUserMessage`.
+The system message still includes `custom_instructions` + MCP instructions (Tier 1-3). The task text comes from `execCtx.SubAgent.Task`.
 
 See [questions](orchestrator-impl-questions.md), Q8.
 
 ## Agent Factory Changes
 
-Per [ADR-0001](../adr/0001-agent-type-refactor.md), the controller factory already switches on `AgentType`. The orchestrator adds one new case:
+Per [ADR-0001](../adr/0001-agent-type-refactor.md), the controller factory already switches on `AgentType`. The current factory handles `AgentTypeDefault` and `AgentTypeSynthesis`. The orchestrator adds one new case:
 
 ```go
+// pkg/agent/controller/factory.go — current + new case
 func (f *Factory) CreateController(agentType AgentType, execCtx *ExecutionContext) (Controller, error) {
     switch agentType {
-    case AgentTypeDefault, "":
+    case config.AgentTypeDefault:
         return NewIteratingController(), nil
-    case AgentTypeSynthesis:
+    case config.AgentTypeSynthesis:
         return NewSynthesisController(execCtx.PromptBuilder), nil
-    case AgentTypeScoring:
-        return NewScoringController(execCtx.PromptBuilder), nil
-    case AgentTypeOrchestrator:                    // NEW
-        return NewIteratingController(), nil       // Same controller, different tools
+    case config.AgentTypeOrchestrator:              // NEW
+        return NewIteratingController(), nil        // Same controller, different tools
+    default:
+        return nil, fmt.Errorf("unknown agent type: %q", agentType)
     }
 }
 ```
+
+The `AgentFactory.CreateAgent` already handles agent-type → agent-wrapper selection (`BaseAgent` vs `ScoringAgent`). The orchestrator uses `BaseAgent` — no new agent wrapper needed.
 
 The orchestrator maps to `IteratingController` — the same multi-turn tool-calling loop as default agents. The orchestration behavior comes entirely from the `CompositeToolExecutor` (tool routing) and the `SubAgentRunner` (push-based result delivery via `ExecutionContext`). The controller itself just gains the generic drain/wait logic that activates when `SubAgentRunner` is non-nil.
 
 ## Session Executor Changes
 
-The `executeAgent` method in `pkg/queue/executor.go` needs to detect orchestrator agents and wire up the `CompositeToolExecutor`:
+### New field on `RealSessionExecutor`
+
+The `SubAgentRegistry` is built once at construction time and stored on the executor:
+
+```go
+// pkg/queue/executor.go — addition
+type RealSessionExecutor struct {
+    // ... existing fields (cfg, dbClient, llmClient, eventPublisher, agentFactory, promptBuilder, mcpFactory, runbookService) ...
+    subAgentRegistry *config.SubAgentRegistry    // NEW: built from merged agents at startup
+}
+
+func NewRealSessionExecutor(...) *RealSessionExecutor {
+    // ... existing init ...
+    return &RealSessionExecutor{
+        // ... existing fields ...
+        subAgentRegistry: config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll()),
+    }
+}
+```
+
+### Helper functions
+
+```go
+// resolveOrchestratorGuardrails merges defaults.orchestrator + agent-level orchestrator config.
+func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentConfig) *orchestrator.OrchestratorGuardrails {
+    g := &orchestrator.OrchestratorGuardrails{
+        MaxConcurrentAgents: 5,       // hardcoded fallback
+        AgentTimeout:        300 * time.Second,
+        MaxBudget:           600 * time.Second,
+    }
+    // Apply global defaults
+    if cfg.Defaults != nil && cfg.Defaults.Orchestrator != nil {
+        applyOrchestratorDefaults(g, cfg.Defaults.Orchestrator)
+    }
+    // Apply per-agent override
+    if agentDef.Orchestrator != nil {
+        applyOrchestratorDefaults(g, agentDef.Orchestrator)
+    }
+    return g
+}
+
+// resolveSubAgents determines the sub_agents list from chain → stage → stage-agent hierarchy.
+// Returns nil if no override at any level (meaning: use full global registry).
+func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) []string {
+    // stage-agent > stage > chain (same pattern as mcp_servers)
+    if len(agentCfg.SubAgents) > 0 { return agentCfg.SubAgents }
+    if len(stage.SubAgents) > 0    { return stage.SubAgents }
+    if len(chain.SubAgents) > 0    { return chain.SubAgents }
+    return nil
+}
+```
+
+### Orchestrator wiring in `executeAgent`
+
+The `executeAgent` method detects orchestrator agents and wires up the `CompositeToolExecutor`. Note: the orchestrator check uses `resolvedConfig.Type` (resolved from the agent registry via `ResolveAgentConfig`), not `agentConfig.Type` (`StageAgentConfig` has no `Type` field):
 
 ```go
 func (e *RealSessionExecutor) executeAgent(...) agentResult {
-    resolvedConfig := ...
+    resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
+    // ... error handling, DB record creation, MCP resolution ...
     
-    // Standard MCP tool executor
-    toolExecutor := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
+    toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
+    defer func() { _ = toolExecutor.Close() }()
+    
+    // Build execution context (same as today)
+    execCtx := &agent.ExecutionContext{ /* ... existing fields ... */ }
     
     // If orchestrator: wrap with CompositeToolExecutor + set up SubAgentRunner
-    if agentConfig.Type == config.AgentTypeOrchestrator {
+    if resolvedConfig.Type == config.AgentTypeOrchestrator {
+        agentDef, _ := e.cfg.GetAgent(agentConfig.Name)
         deps := &orchestrator.SubAgentDeps{
-            Config: e.config, AgentFactory: e.agentFactory,
+            Config: e.cfg, AgentFactory: e.agentFactory,
             MCPFactory: e.mcpFactory, LLMClient: e.llmClient,
             EventPublisher: e.eventPublisher,
             PromptBuilder: e.promptBuilder, DBClient: e.dbClient,
         }
-        guardrails := resolveOrchestratorGuardrails(e.config, agentConfig)
-        registry := filterSubAgentRegistry(e.subAgentRegistry, resolvedSubAgents)
-        runner := orchestrator.NewSubAgentRunner(deps, execID, registry, guardrails)
+        guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
+        subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+        registry := e.subAgentRegistry.Filter(subAgentNames)  // nil = full registry
+        runner := orchestrator.NewSubAgentRunner(deps, exec.ID, input.session.ID, stg.ID, len(input.stageConfig.Agents), registry, guardrails)
         toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
-        execCtx.SubAgentRunner = runner   // Enables push-based drain/wait in controller
+        execCtx.SubAgentRunner = runner
+        execCtx.SubAgentCatalog = registry.Entries()
     }
     
     execCtx.ToolExecutor = toolExecutor
-    // ... rest stays the same
+    // ... rest stays the same (CreateAgent, Execute, status updates)
 }
 ```
 
@@ -900,12 +1032,14 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Independent of orchestrator — useful on its own
 
 ### PR1: Config foundation
-- `sub_agents` override at chain/stage/agent level (full hierarchy)
+- `sub_agents` override at chain/stage/agent level (full hierarchy) — new fields on `ChainConfig`, `StageConfig`, `StageAgentConfig`
 - `orchestrator` nested config section on `AgentConfig`
-- `defaults.orchestrator` global defaults
-- `SubAgentRegistry` built from merged agents (agents with `description`)
+- `defaults.orchestrator` global defaults — new `Orchestrator` field on `Defaults` struct
+- `SubAgentRegistry` built from merged agents (agents with `description`) — stored on `RealSessionExecutor`
 - New built-in agents: `WebResearcher`, `CodeExecutor`, `GeneralWorker` (depends on PR0)
+- Extend `BuiltinAgentConfig` with `LLMBackend` and `NativeTools` fields; update `mergeAgents` to carry them
 - Config validation: `orchestrator` section forbidden on non-orchestrator agents
+- **Note:** `AgentConfig.MCPServers` has a `validate:"required,min=1"` struct tag, but the actual validator (custom `validateAgents`) treats MCP servers as optional. Existing agents (ChatAgent, SynthesisAgent) have none. The new built-ins follow the same pattern. The struct tag should be corrected to `validate:"omitempty"` as a housekeeping fix.
 
 ### PR2: DB schema
 - `parent_execution_id` on `AgentExecution` (nullable)
@@ -923,15 +1057,19 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 ### PR4: Controller modification + orchestrator prompt
 - Push-based drain/wait logic in `IteratingController` (via `ExecutionContext.SubAgentRunner`)
-- `buildSubAgentUserMessage` — custom `## Task` template
-- `BuildOrchestratorMessages` — agent catalog in system prompt
-- `ExecutionContext.Task` field
+- `SubAgentContext` struct + `SubAgent` field on `ExecutionContext` (same pattern as `ChatContext`)
+- `buildSubAgentMessages` — custom `## Task` template (detected via `execCtx.SubAgent != nil`)
+- `buildOrchestratorMessages` — agent catalog in system prompt (detected via `execCtx.Config.Type`)
+- Both paths dispatched from existing `BuildFunctionCallingMessages` — no new methods on `PromptBuilder` interface
+- `ExecutionContext.SubAgentCatalog` field
 - Tests for prompt building and controller behavior
 
 ### PR5: Session executor wiring
-- Detect orchestrator type in `executeAgent` → create runner + composite executor
+- Add `subAgentRegistry` field to `RealSessionExecutor` (built at construction time)
+- `resolveOrchestratorGuardrails` + `resolveSubAgents` helper functions
+- Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
-- Set `ExecutionContext.SubAgentRunner` for orchestrator agents
+- Set `ExecutionContext.SubAgentRunner` and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
 - End-to-end integration test
 
 ### PR6: Dashboard
