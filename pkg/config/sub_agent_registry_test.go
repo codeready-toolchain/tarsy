@@ -74,6 +74,17 @@ func TestBuildSubAgentRegistry_Empty(t *testing.T) {
 	assert.Empty(t, registry.Entries())
 }
 
+func TestBuildSubAgentRegistry_NilEntry(t *testing.T) {
+	agents := map[string]*AgentConfig{
+		"Valid":  {Description: "A valid agent"},
+		"NilPtr": nil,
+	}
+	registry := BuildSubAgentRegistry(agents)
+	entries := registry.Entries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "Valid", entries[0].Name)
+}
+
 func TestSubAgentRegistry_DefensiveCopies(t *testing.T) {
 	source := map[string]*AgentConfig{
 		"Agent": {
@@ -101,6 +112,13 @@ func TestSubAgentRegistry_DefensiveCopies(t *testing.T) {
 		filtered := registry.Filter(nil)
 		filtered.Entries()[0] = SubAgentEntry{Name: "Replaced"}
 		assert.Equal(t, "Agent", registry.Entries()[0].Name)
+	})
+
+	t.Run("Filter non-nil returns independent copy", func(t *testing.T) {
+		filtered := registry.Filter([]string{"Agent"})
+		e := filtered.Entries()
+		e[0].MCPServers[0] = "mutated"
+		assert.Equal(t, "server-a", registry.Entries()[0].MCPServers[0])
 	})
 }
 

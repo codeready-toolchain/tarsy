@@ -20,7 +20,7 @@ type SubAgentRegistry struct {
 func BuildSubAgentRegistry(agents map[string]*AgentConfig) *SubAgentRegistry {
 	var entries []SubAgentEntry
 	for name, agent := range agents {
-		if agent.Description == "" || agent.Type == AgentTypeOrchestrator {
+		if agent == nil || agent.Description == "" || agent.Type == AgentTypeOrchestrator {
 			continue
 		}
 		entry := SubAgentEntry{
