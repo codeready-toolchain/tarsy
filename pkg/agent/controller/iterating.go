@@ -10,19 +10,19 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
-// FunctionCallingController implements the native function calling loop.
+// IteratingController implements the multi-turn tool-calling loop.
 // Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 // Tool calls come as structured ToolCallChunk values (not parsed from text).
 // Completion signal: a response without any ToolCalls.
-type FunctionCallingController struct{}
+type IteratingController struct{}
 
-// NewFunctionCallingController creates a new function calling controller.
-func NewFunctionCallingController() *FunctionCallingController {
-	return &FunctionCallingController{}
+// NewIteratingController creates a new iterating controller.
+func NewIteratingController() *IteratingController {
+	return &IteratingController{}
 }
 
 // Run executes the native thinking iteration loop.
-func (c *FunctionCallingController) Run(
+func (c *IteratingController) Run(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
@@ -174,7 +174,7 @@ func (c *FunctionCallingController) Run(
 }
 
 // forceConclusion forces the LLM to produce a final answer by calling without tools.
-func (c *FunctionCallingController) forceConclusion(
+func (c *IteratingController) forceConclusion(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	messages []agent.ConversationMessage,

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,22 +29,30 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid")
 	})
 
-	t.Run("default agent type returns FunctionCallingController", func(t *testing.T) {
+	t.Run("default agent type returns IteratingController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.AgentTypeDefault, execCtx)
 		require.NoError(t, err)
 		require.NotNil(t, controller)
 
-		_, ok := controller.(*FunctionCallingController)
-		assert.True(t, ok, "expected FunctionCallingController")
+		_, ok := controller.(*IteratingController)
+		assert.True(t, ok, "expected IteratingController")
 	})
 
-	t.Run("synthesis type returns SynthesisController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.AgentTypeSynthesis, execCtx)
+	t.Run("synthesis type returns SingleShotController", func(t *testing.T) {
+		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}))
+		synthExecCtx := &agent.ExecutionContext{
+			SessionID:     "test-session",
+			StageID:       "test-stage",
+			AgentName:     "test-agent",
+			AgentIndex:    1,
+			PromptBuilder: pb,
+		}
+		controller, err := factory.CreateController(config.AgentTypeSynthesis, synthExecCtx)
 		require.NoError(t, err)
 		require.NotNil(t, controller)
 
-		_, ok := controller.(*SynthesisController)
-		assert.True(t, ok, "expected SynthesisController")
+		_, ok := controller.(*SingleShotController)
+		assert.True(t, ok, "expected SingleShotController")
 	})
 
 	t.Run("scoring type returns error (WIP)", func(t *testing.T) {

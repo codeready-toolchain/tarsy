@@ -368,8 +368,8 @@ graph TB
     end
 
     subgraph controllers [Controllers]
-        FC["FunctionCallingController<br/>(iterating - multi-turn with tools)"]
-        SC["SynthesisController<br/>(single-shot - one LLM call, no tools)"]
+        FC["IteratingController<br/>(multi-turn with tools)"]
+        SC["SingleShotController<br/>(one LLM call, no tools)"]
     end
 
     subgraph backends [LLM Backends]
@@ -414,8 +414,8 @@ type Controller interface {
 
 | AgentType | Controller | Pattern | Use Case |
 |-----------|-----------|---------|----------|
-| `""` (default) | FunctionCallingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
-| `"synthesis"` | SynthesisController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
+| `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
+| `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
 
 **LLMBackend determines the Python SDK path** (orthogonal to controller):
@@ -425,7 +425,7 @@ type Controller interface {
 | `"google-native"` | GoogleNativeProvider | Gemini native SDK with thinking + function calling |
 | `"langchain"` | LangChainProvider | Multi-provider (OpenAI, Anthropic, xAI, etc.) |
 
-#### FunctionCallingController — iterating (`pkg/agent/controller/function_calling.go`)
+#### IteratingController — iterating (`pkg/agent/controller/iterating.go`)
 
 Multi-turn iterating controller that loops: LLM call → tool execution → LLM call, until the agent produces a final answer or hits the iteration limit. Works with any `LLMBackend`:
 
@@ -437,9 +437,9 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
 4. If max iterations reached: `forceConclusion()` -- call LLM WITHOUT tools to force text-only response
 
-#### SynthesisController — single-shot (`pkg/agent/controller/synthesis.go`)
+#### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
-Single-shot controller: one LLM call without tools. Used for synthesizing multi-agent investigation results. Receives full investigation history via timeline events (thinking, tool calls, results, analyses). Future single-shot agent types (e.g., scoring) will reuse this pattern.
+Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results (and future scoring). Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
 
 #### Instruction Composition
 
@@ -465,8 +465,8 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
 - `pkg/agent/base_agent.go` -- BaseAgent with Controller delegation
-- `pkg/agent/controller/function_calling.go` -- FunctionCallingController
-- `pkg/agent/controller/synthesis.go` -- SynthesisController
+- `pkg/agent/controller/iterating.go` -- IteratingController
+- `pkg/agent/controller/single_shot.go` -- SingleShotController
 - `pkg/agent/controller/tool_execution.go` -- Shared tool execution logic
 - `pkg/agent/controller/summarize.go` -- Tool result summarization
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
@@ -488,7 +488,7 @@ MCP (Model Context Protocol) servers provide agents with external tools and syst
 ```mermaid
 graph TB
     subgraph agentLayer [Agent Layer]
-        Controller[FunctionCallingController]
+        Controller[IteratingController]
     end
 
     subgraph mcpLayer [MCP Integration]
@@ -906,7 +906,7 @@ graph TB
 - `GetOrCreateChat()` -- one Chat per session
 - Chat metadata, context snapshot, pod tracking
 
-**Design principle**: Chat is a prompt concern, not a controller concern. The same FunctionCalling and Synthesis controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations.
+**Design principle**: Chat is a prompt concern, not a controller concern. The same Iterating and SingleShot controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations.
 
 #### Lifecycle Constraints
 

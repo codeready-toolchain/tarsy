@@ -15,7 +15,7 @@ import (
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
-// integrate into its conversation format (FunctionCallingController
+// integrate into its conversation format (IteratingController
 // tool message).
 type toolCallResult struct {
 	// Content is the tool result content to feed back to the LLM.

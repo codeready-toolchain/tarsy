@@ -120,8 +120,8 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 **Two controller types** (text-based ReAct parsing was completely removed):
 
-- **FunctionCallingController**: Structured function calling with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
-- **SynthesisController**: Tool-less single LLM call for synthesizing multi-agent investigation results
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis (and future scoring)
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
@@ -205,7 +205,7 @@ sequenceDiagram
         A->>MCP: List available tools
         MCP-->>A: Tool definitions
 
-        loop Function Calling iterations
+        loop IteratingController iterations
             A->>LLM: Generate (messages + tools) via gRPC
             LLM-->>A: Stream response chunks
             A-->>WS: Stream thinking + response to dashboard
@@ -229,9 +229,9 @@ sequenceDiagram
     D->>D: Engineers review analysis
 ```
 
-### FunctionCalling Iteration Detail
+### IteratingController Iteration Detail
 
-For agents using the FunctionCalling controller, the investigation follows a structured function calling pattern:
+For agents using the IteratingController, the investigation follows a structured function calling pattern:
 
 ```mermaid
 sequenceDiagram
@@ -281,7 +281,7 @@ When an agent reaches its configured `max_iterations` limit, the system forces a
 
 After a session reaches a terminal state (completed, failed, or timed out), engineers can start a chat conversation to ask follow-up questions. The chat agent receives the full investigation timeline as context and has access to the same MCP tools. Responses stream in real-time and appear inline in the conversation timeline.
 
-Chat is a **prompt concern, not a controller concern** -- the same FunctionCalling and Synthesis controllers handle both investigation and chat. The `ChatContext` on the execution context triggers chat-specific prompting.
+Chat is a **prompt concern, not a controller concern** -- the same IteratingController and SingleShotController handle both investigation and chat. The `ChatContext` on the execution context triggers chat-specific prompting.
 
 ## Authentication & Access Control
 

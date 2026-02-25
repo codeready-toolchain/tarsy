@@ -21,9 +21,9 @@ func NewFactory() *Factory {
 func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.ExecutionContext) (agent.Controller, error) {
 	switch agentType {
 	case config.AgentTypeDefault:
-		return NewFunctionCallingController(), nil
+		return NewIteratingController(), nil
 	case config.AgentTypeSynthesis:
-		return NewSynthesisController(), nil
+		return NewSynthesisController(execCtx.PromptBuilder), nil
 	default:
 		return nil, fmt.Errorf("unknown agent type: %q", agentType)
 	}

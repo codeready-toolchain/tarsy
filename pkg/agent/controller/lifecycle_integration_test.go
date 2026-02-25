@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFunctionCallingController_ToolCallLifecycleEvents verifies that the
+// TestIteratingController_ToolCallLifecycleEvents verifies that the
 // streaming tool call lifecycle creates proper timeline events in the DB
-// when using the langchain strategy.
-func TestFunctionCallingController_ToolCallLifecycleEvents(t *testing.T) {
+// when using the langchain backend.
+func TestIteratingController_ToolCallLifecycleEvents(t *testing.T) {
 	// LLM calls: 1) tool call 2) final answer
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
@@ -39,7 +39,7 @@ func TestFunctionCallingController_ToolCallLifecycleEvents(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -70,9 +70,9 @@ func TestFunctionCallingController_ToolCallLifecycleEvents(t *testing.T) {
 	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
-// TestFunctionCallingController_ToolCallErrorLifecycle verifies that tool errors
+// TestIteratingController_ToolCallErrorLifecycle verifies that tool errors
 // are properly reflected in the completed llm_tool_call event.
-func TestFunctionCallingController_ToolCallErrorLifecycle(t *testing.T) {
+func TestIteratingController_ToolCallErrorLifecycle(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -94,7 +94,7 @@ func TestFunctionCallingController_ToolCallErrorLifecycle(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestGoogleNativeController_ToolCallLifecycleEvents(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -171,9 +171,9 @@ func TestGoogleNativeController_ToolCallLifecycleEvents(t *testing.T) {
 	assert.Equal(t, 1, toolCallEvents, "should have exactly one llm_tool_call event")
 }
 
-// TestFunctionCallingController_SummarizationIntegration verifies that the summarization
+// TestIteratingController_SummarizationIntegration verifies that the summarization
 // path is exercised when a tool result exceeds the configured threshold.
-func TestFunctionCallingController_SummarizationIntegration(t *testing.T) {
+func TestIteratingController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
 	// The mock LLM receives 3 calls: iteration, summarization, iteration
 	llm := &mockLLMClient{
@@ -220,7 +220,7 @@ func TestFunctionCallingController_SummarizationIntegration(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -231,9 +231,9 @@ func TestFunctionCallingController_SummarizationIntegration(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, summarization, iteration")
 }
 
-// TestFunctionCallingController_SummarizationFailOpen verifies that when summarization
+// TestIteratingController_SummarizationFailOpen verifies that when summarization
 // fails, the raw tool result is used (fail-open behavior).
-func TestFunctionCallingController_SummarizationFailOpen(t *testing.T) {
+func TestIteratingController_SummarizationFailOpen(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (fails), 3) final answer
 	callCount := 0
 	llm := &mockLLMClient{
@@ -275,7 +275,7 @@ func TestFunctionCallingController_SummarizationFailOpen(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -287,12 +287,12 @@ func TestFunctionCallingController_SummarizationFailOpen(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
-// TestFunctionCallingController_NonStreamingEventStatus verifies that events created via
+// TestIteratingController_NonStreamingEventStatus verifies that events created via
 // createTimelineEvent (non-streaming: llm_thinking, final_analysis) are stored
 // with StatusCompleted in the DB, not StatusStreaming.
 // Note: llm_response is only created in the streaming path (requires EventPublisher),
 // so it is not present in these unit tests which use no EventPublisher.
-func TestFunctionCallingController_NonStreamingEventStatus(t *testing.T) {
+func TestIteratingController_NonStreamingEventStatus(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -304,7 +304,7 @@ func TestFunctionCallingController_NonStreamingEventStatus(t *testing.T) {
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestGoogleNativeController_NonStreamingEventStatus(t *testing.T) {
 		tools: []agent.ToolDefinition{{Name: "k8s__get_pods", Description: "Get pods"}},
 	}
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -379,9 +379,9 @@ func TestGoogleNativeController_NonStreamingEventStatus(t *testing.T) {
 	assert.True(t, typeSet[timelineevent.EventTypeFinalAnalysis], "expected final_analysis")
 }
 
-// TestFunctionCallingController_StorageTruncation verifies that very large tool
+// TestIteratingController_StorageTruncation verifies that very large tool
 // results are truncated for storage in the timeline event.
-func TestFunctionCallingController_StorageTruncation(t *testing.T) {
+func TestIteratingController_StorageTruncation(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -407,7 +407,7 @@ func TestFunctionCallingController_StorageTruncation(t *testing.T) {
 	}
 
 	execCtx := newTestExecCtx(t, llm, executor)
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestFunctionCallingController_StorageTruncation(t *testing.T) {
 }
 
 // TestGoogleNativeController_SummarizationIntegration verifies that
-// summarization works in the FunctionCallingController. Tool results are
+// summarization works in the IteratingController. Tool results are
 // appended as role=tool messages with ToolCallID.
 func TestGoogleNativeController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
@@ -481,7 +481,7 @@ func TestGoogleNativeController_SummarizationIntegration(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	execCtx.PromptBuilder = pb
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -538,7 +538,7 @@ func TestGoogleNativeController_SummarizationFailOpen(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 	execCtx.PromptBuilder = pb
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
@@ -579,7 +579,7 @@ func TestGoogleNativeController_StorageTruncation(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	ctrl := NewFunctionCallingController()
+	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
