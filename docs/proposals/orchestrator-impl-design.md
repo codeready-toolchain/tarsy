@@ -295,9 +295,10 @@ type SubAgentRegistry struct {
     entries []SubAgentEntry
 }
 
-func BuildSubAgentRegistry(agents map[string]*AgentConfig, builtinDescs map[string]string) *SubAgentRegistry {
-    // Include agents with Description set (config agents + built-ins)
-    // Exclude orchestrator agents themselves
+func BuildSubAgentRegistry(agents map[string]*AgentConfig) *SubAgentRegistry {
+    // Include agents with non-empty Description (built-in descriptions are already
+    // in the merged AgentConfig map from AgentRegistry.GetAll())
+    // Exclude orchestrator agents themselves (type == orchestrator)
 }
 ```
 
@@ -453,13 +454,13 @@ type SubAgentResult struct {
 func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (string, error) {
     // 1. Validate agent exists in registry → error if not found
     // 2. Check max_concurrent_agents guardrail → error if exceeded
-    //    (counts executions where status == running)
+    //    (counts executions where status == active)
     // 3. Create AgentExecution DB record:
     //    - stage_id = orchestrator's stage ID (from r.stageID)
     //    - session_id = orchestrator's session ID (from r.sessionID)
     //    - parent_execution_id = orchestrator's execution ID (from r.parentExecID)
     //    - task = task text
-    //    - status = "running"
+    //    - status = "active"
     //    - agent_index = next sub-agent index (from r.nextSubAgentIndex, atomic)
     // 4. Create task_assigned timeline event
     // 5. Resolve agent config (same path as executeAgent)
@@ -537,7 +538,7 @@ type SubAgentStatus struct {
 }
 
 func (r *SubAgentRunner) List() []SubAgentStatus {
-    // Return status of all dispatched sub-agents (running, completed, failed, cancelled)
+    // Return status of all dispatched sub-agents (active, completed, failed, cancelled)
 }
 ```
 
@@ -769,20 +770,7 @@ client.AgentExecution.Query().
 
 ### Orchestrator system prompt
 
-The orchestrator prompt is handled by the existing `BuildFunctionCallingMessages` method — no new method on the `PromptBuilder` interface. The method already receives `execCtx` which contains `Config.Type`. When the type is `orchestrator`, it includes the agent catalog in the system prompt.
-
-The agent catalog is made available via a new `SubAgentCatalog` field on `ExecutionContext`:
-
-```go
-// pkg/agent/context.go — addition
-type ExecutionContext struct {
-    // ... existing fields ...
-    
-    Task             string                          // Sub-agent task (set by orchestrator dispatch)
-    SubAgentRunner   *orchestrator.SubAgentRunner    // nil for non-orchestrator agents
-    SubAgentCatalog  []config.SubAgentEntry          // Available sub-agents (set for orchestrators)
-}
-```
+The orchestrator prompt is handled by the existing `BuildFunctionCallingMessages` method — no new method on the `PromptBuilder` interface. The method already receives `execCtx` which contains `Config.Type`. When the type is `orchestrator`, it includes the agent catalog in the system prompt (from `execCtx.SubAgentCatalog` — see [ExecutionContext Changes](#executioncontext-changes) above).
 
 Inside `BuildFunctionCallingMessages`, the orchestrator branch:
 
@@ -1057,11 +1045,11 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 ### PR4: Controller modification + orchestrator prompt
 - Push-based drain/wait logic in `IteratingController` (via `ExecutionContext.SubAgentRunner`)
-- `SubAgentContext` struct + `SubAgent` field on `ExecutionContext` (same pattern as `ChatContext`)
+- New fields on `ExecutionContext`: `SubAgentRunner`, `SubAgent *SubAgentContext`, `SubAgentCatalog`
+- `SubAgentContext` struct (same pattern as `ChatContext`)
 - `buildSubAgentMessages` — custom `## Task` template (detected via `execCtx.SubAgent != nil`)
 - `buildOrchestratorMessages` — agent catalog in system prompt (detected via `execCtx.Config.Type`)
 - Both paths dispatched from existing `BuildFunctionCallingMessages` — no new methods on `PromptBuilder` interface
-- `ExecutionContext.SubAgentCatalog` field
 - Tests for prompt building and controller behavior
 
 ### PR5: Session executor wiring
