@@ -307,7 +307,7 @@ func resolveMCPSelection(
 // The clone avoids mutating the shared config-registry pointer.
 func applyNativeToolsOverride(resolvedConfig *agent.ResolvedAgentConfig, nt *models.NativeToolsConfig) {
 	orig := resolvedConfig.LLMProvider
-	if orig == nil || len(orig.NativeTools) == 0 {
+	if orig == nil {
 		return
 	}
 
@@ -407,17 +407,35 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 // ────────────────────────────────────────────────────────────
 
 // resolveOrchestratorGuardrails merges hardcoded fallbacks < defaults.orchestrator < per-agent orchestrator config.
+// The config validator (pkg/config/validator.go) rejects invalid values at load
+// time, but we clamp here as defense-in-depth for programmatic construction.
 func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentConfig) *orchestrator.OrchestratorGuardrails {
+	const (
+		defaultMaxConcurrent = 5
+		defaultAgentTimeout  = 300 * time.Second
+		defaultMaxBudget     = 600 * time.Second
+	)
+
 	g := &orchestrator.OrchestratorGuardrails{
-		MaxConcurrentAgents: 5,
-		AgentTimeout:        300 * time.Second,
-		MaxBudget:           600 * time.Second,
+		MaxConcurrentAgents: defaultMaxConcurrent,
+		AgentTimeout:        defaultAgentTimeout,
+		MaxBudget:           defaultMaxBudget,
 	}
 	if cfg.Defaults != nil && cfg.Defaults.Orchestrator != nil {
 		applyOrchestratorConfig(g, cfg.Defaults.Orchestrator)
 	}
 	if agentDef.Orchestrator != nil {
 		applyOrchestratorConfig(g, agentDef.Orchestrator)
+	}
+
+	if g.MaxConcurrentAgents < 1 {
+		g.MaxConcurrentAgents = defaultMaxConcurrent
+	}
+	if g.AgentTimeout <= 0 {
+		g.AgentTimeout = defaultAgentTimeout
+	}
+	if g.MaxBudget <= 0 {
+		g.MaxBudget = defaultMaxBudget
 	}
 	return g
 }

@@ -179,6 +179,32 @@ func TestResolveMCPSelection(t *testing.T) {
 		assert.False(t, origProvider.NativeTools[config.GoogleNativeToolCodeExecution])
 	})
 
+	t.Run("native tools override applied when provider has empty NativeTools", func(t *testing.T) {
+		origProvider := &config.LLMProviderConfig{
+			NativeTools: nil,
+		}
+		session := &ent.AlertSession{
+			McpSelection: map[string]interface{}{
+				"servers": []interface{}{
+					map[string]interface{}{"name": "kubernetes-server"},
+				},
+				"native_tools": map[string]interface{}{
+					"google_search": true,
+				},
+			},
+		}
+		resolved := &agent.ResolvedAgentConfig{
+			MCPServers:  []string{"argocd-server"},
+			LLMProvider: origProvider,
+		}
+
+		_, _, err := resolveMCPSelection(session, resolved, registry)
+		require.NoError(t, err)
+
+		require.NotNil(t, resolved.LLMProvider.NativeTools)
+		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+	})
+
 	t.Run("empty servers in override returns error", func(t *testing.T) {
 		session := &ent.AlertSession{
 			McpSelection: map[string]interface{}{
@@ -393,6 +419,22 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 				MaxConcurrentAgents: 5,
 				AgentTimeout:        300 * time.Second,
 				MaxBudget:           30 * time.Second,
+			},
+		},
+		{
+			name: "zero or negative values are clamped to defaults",
+			cfg:  &config.Config{},
+			agentDef: &config.AgentConfig{
+				Orchestrator: &config.OrchestratorConfig{
+					MaxConcurrentAgents: intPtr(0),
+					AgentTimeout:        dur(-1 * time.Second),
+					MaxBudget:           dur(0),
+				},
+			},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 5,
+				AgentTimeout:        300 * time.Second,
+				MaxBudget:           600 * time.Second,
 			},
 		},
 	}

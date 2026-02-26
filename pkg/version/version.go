@@ -1,7 +1,6 @@
 // Package version exposes the application version derived from build metadata.
 //
-// Go 1.18+ automatically embeds VCS info (git commit, dirty flag, etc.)
-// into the binary via runtime/debug.BuildInfo. No -ldflags required.
+// Priority: -ldflags override > VCS info from debug.BuildInfo > "dev" fallback.
 //
 // Usage:
 //
@@ -14,11 +13,18 @@ import "runtime/debug"
 // AppName is the application name used in version strings and protocol handshakes.
 const AppName = "tarsy"
 
+// gitCommitOverride is set via -ldflags at build time for container builds
+// where .git is unavailable. Empty string means no override.
+var gitCommitOverride string
+
 // GitCommit is the short git commit hash (8 chars) from build info.
 // Set to "dev" when build info is unavailable (e.g., `go test`, non-git builds).
 var GitCommit = initGitCommit()
 
 func initGitCommit() string {
+	if gitCommitOverride != "" {
+		return gitCommitOverride
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "dev"

@@ -531,6 +531,8 @@ func (e *RealSessionExecutor) executeAgent(
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
+	runbookContent := e.resolveRunbook(ctx, input.session)
+
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      input.session.ID,
@@ -540,7 +542,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
-		RunbookContent: e.resolveRunbook(ctx, input.session),
+		RunbookContent: runbookContent,
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		EventPublisher: e.eventPublisher,
@@ -592,7 +594,7 @@ func (e *RealSessionExecutor) executeAgent(
 			InteractionService: input.interactionService,
 			AlertData:          input.session.AlertData,
 			AlertType:          input.session.AlertType,
-			RunbookContent:     e.resolveRunbook(ctx, input.session),
+			RunbookContent:     runbookContent,
 		}
 
 		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
