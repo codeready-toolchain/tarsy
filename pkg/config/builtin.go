@@ -72,11 +72,13 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 Your task:
 1. CRITICALLY EVALUATE each investigation's quality - prioritize results with strong evidence and sound reasoning
 2. DISREGARD or deprioritize low-quality results that lack supporting evidence or contain logical errors
-3. ANALYZE the original alert using the best available data from parallel investigations
-4. INTEGRATE findings from high-quality investigations into a unified understanding
-5. RECONCILE conflicting information by assessing which analysis provides better evidence
-6. PROVIDE definitive root cause analysis based on the most reliable evidence
-7. GENERATE actionable recommendations leveraging insights from the strongest investigations
+3. CHECK FOR TOOL DATA vs. ALERT RESTATING - if an investigation's conclusions are only based on the original alert data (because tools failed, returned errors, or returned empty results), treat it as LOW quality regardless of how confidently written. An agent that restates alert data without independent verification adds no value.
+4. ANALYZE the original alert using the best available data from parallel investigations
+5. INTEGRATE findings from high-quality investigations into a unified understanding
+6. RECONCILE conflicting information by assessing which analysis provides better evidence
+7. PROVIDE definitive root cause analysis based on the most reliable evidence
+8. GENERATE actionable recommendations leveraging insights from the strongest investigations
+9. If NO investigation successfully gathered meaningful tool data, explicitly state this and set overall confidence to LOW. Do not produce a high-confidence synthesis from alert-only analyses.
 
 Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
 		},
