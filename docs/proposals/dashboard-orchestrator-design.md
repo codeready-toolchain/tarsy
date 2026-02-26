@@ -1,6 +1,6 @@
 # Dashboard Orchestrator Support — Implementation Design
 
-**Status:** All questions decided — ready for implementation
+**Status:** Backend complete — frontend ready for implementation
 **Related:** [orchestrator-impl-design.md](orchestrator-impl-design.md), [questions](dashboard-orchestrator-questions.md)
 **Last updated:** 2026-02-26
 
@@ -20,39 +20,51 @@ The core challenge: orchestrator sub-agents are not parallel agents (statically 
 
 4. **Real-time from day one.** Sub-agent progress must stream in real-time, matching the existing experience for regular agents. No "refresh to see sub-agent results."
 
-## Backend Changes (small, in same PR)
+## Backend Changes (DONE)
 
-### `TimelineEvent` schema — add `parent_execution_id`
+All backend changes are implemented and tested.
 
-A new nullable column on `TimelineEvent`, set at creation time from `ExecutionContext.SubAgent.ParentExecID`. `NULL` for regular and orchestrator agents; set for sub-agents. This makes the REST timeline response self-describing — the dashboard can partition events without cross-referencing `ExecutionOverview.sub_agents`.
+### `TimelineEvent` schema — `parent_execution_id` ✅
 
-```go
-field.String("parent_execution_id").
-    Optional().
-    Nillable().
-    Immutable().
-    Comment("For sub-agent timeline events: links to the parent orchestrator execution"),
-```
+Nullable column on `TimelineEvent`, set at creation time from `ExecutionContext.SubAgent.ParentExecID`. `NULL` for regular and orchestrator agents; set for sub-agents. Makes the REST timeline response self-describing — the dashboard can partition events without cross-referencing `ExecutionOverview.sub_agents`.
 
-**Callers:** `CreateTimelineEventRequest` gains a `ParentExecutionID *string` field. The controller timeline/streaming helpers thread `execCtx.SubAgent.ParentExecID` through to the request. `TimelineService.CreateTimelineEvent` sets it on the ent create builder via `SetNillableParentExecutionID`.
+**What was done:**
+- `ent/schema/timelineevent.go`: Added `parent_execution_id` field (nullable, immutable) + edge to `AgentExecution`
+- `ent/schema/agentexecution.go`: Added `sub_agent_timeline_events` back-reference edge
+- `pkg/models/timeline.go`: Added `ParentExecutionID *string` to `CreateTimelineEventRequest`
+- `pkg/services/timeline_service.go`: Threads `ParentExecutionID` via `SetNillableParentExecutionID`
+- `pkg/agent/controller/timeline.go`: Added `parentExecID()` / `parentExecIDPtr()` helpers; threaded through all `CreateTimelineEvent` + `PublishTimeline*` call sites
+- `pkg/agent/controller/streaming.go`: Threaded through all streaming event creation + chunk publishing
+- `pkg/agent/controller/summarize.go`: Threaded through MCP summarization streaming events
+- `pkg/agent/controller/helpers.go`: Threaded through `publishExecutionProgress`
+- `pkg/agent/orchestrator/runner.go`: Added to `task_assigned` timeline event in `Dispatch`
+- `pkg/database/migrations/20260226223249_add_parent_execution_id_to_timeline_events.up.sql`: Column + FK + index
+- Ent code regenerated; all generated structs include `parent_execution_id` with `json:"parent_execution_id,omitempty"`
 
-### WebSocket payloads — add `parent_execution_id`
+### WebSocket payloads — `parent_execution_id` ✅
 
-Add `parent_execution_id` (nullable, `omitempty`) to all relevant WS payloads:
+Added `ParentExecutionID string` with `json:"parent_execution_id,omitempty"` to all relevant WS payloads in `pkg/events/payloads.go`:
 
 | Payload | Source |
 |---------|--------|
 | `TimelineCreatedPayload` | `execCtx.SubAgent.ParentExecID` at publish call sites in `streaming.go`, `timeline.go`, `summarize.go` |
 | `TimelineCompletedPayload` | Same — threaded through from the created event |
 | `StreamChunkPayload` | Same — carried from the streaming event context |
-| `ExecutionStatusPayload` | `AgentExecution.ParentExecutionID` (already on the DB record) |
+| `ExecutionStatusPayload` | Field present; populated when called for sub-agents |
 | `ExecutionProgressPayload` | `execCtx.SubAgent.ParentExecID` |
 
-For regular agents and orchestrators themselves, this field is `nil`/omitted. For sub-agents, it carries the parent orchestrator's execution ID.
+For regular agents and orchestrators themselves, this field is `""` / omitted. For sub-agents, it carries the parent orchestrator's execution ID.
 
-### REST timeline response — include `parent_execution_id`
+### REST timeline response — `parent_execution_id` ✅
 
-The `GET /sessions/:id/timeline` endpoint already returns raw `TimelineEvent` entities. With the new column, `parent_execution_id` is automatically included in the JSON response. The `TimelineEvent` TypeScript type gains the field.
+The `GET /sessions/:id/timeline` endpoint returns raw `TimelineEvent` entities. The new column is automatically included in the JSON response via ent's generated `json:"parent_execution_id,omitempty"` tag.
+
+### Tests ✅
+
+- Unit tests: `parentExecID` / `parentExecIDPtr` helpers (controller/timeline_test.go)
+- Integration tests: `CreateTimelineEvent` with/without `ParentExecutionID` (services/timeline_service_test.go)
+- API handler test: `parent_execution_id` in JSON response (api/handler_timeline_test.go)
+- E2E test: sub-agent timeline events carry `parent_execution_id` (test/e2e/orchestrator_test.go)
 
 ## Architecture
 
@@ -268,8 +280,8 @@ All changes ship in one PR (PR7): backend (DB migration, WS payload changes) + f
 
 ### Work Items
 
-1. **Backend: DB migration** — `parent_execution_id` on `TimelineEvent`. Update `CreateTimelineEventRequest`, `TimelineService`, controller publish sites.
-2. **Backend: WS payloads** — Add `parent_execution_id` to 5 payload structs. Thread from `ExecutionContext` at publish call sites.
+1. ~~**Backend: DB migration** — `parent_execution_id` on `TimelineEvent`. Update `CreateTimelineEventRequest`, `TimelineService`, controller publish sites.~~ ✅
+2. ~~**Backend: WS payloads** — Add `parent_execution_id` to 5 payload structs. Thread from `ExecutionContext` at publish call sites.~~ ✅
 3. **Frontend: Type updates** — `ExecutionOverview`, `TimelineEvent`, WS event payloads.
 4. **Frontend: WS handler** — SessionDetailPage: filter sub-agent events into separate maps using `parent_execution_id`.
 5. **Frontend: StageContent** — Partition execution groups into orchestrator + sub-agents. Render orchestrator as main timeline.

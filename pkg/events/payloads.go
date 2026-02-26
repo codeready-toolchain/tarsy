@@ -21,15 +21,15 @@ type BasePayload struct {
 // Published when a new timeline event is created (streaming or completed).
 type TimelineCreatedPayload struct {
 	BasePayload
-	EventID           string                  `json:"event_id"`                          // timeline event UUID
-	StageID           string                  `json:"stage_id,omitempty"`                // owning stage (empty for session-level events)
-	ExecutionID       string                  `json:"execution_id,omitempty"`            // owning agent execution (empty for session-level events)
-	ParentExecutionID string                  `json:"parent_execution_id,omitempty"`     // parent orchestrator execution (empty for non-sub-agents)
-	EventType         timelineevent.EventType `json:"event_type"`                        // llm_thinking, llm_response, llm_tool_call, mcp_tool_summary, etc.
-	Status            timelineevent.Status    `json:"status"`                            // streaming, completed, failed, cancelled, timed_out
-	Content           string                  `json:"content"`                           // event content (may be empty for streaming)
+	EventID           string                  `json:"event_id"`                      // timeline event UUID
+	StageID           string                  `json:"stage_id,omitempty"`            // owning stage (empty for session-level events)
+	ExecutionID       string                  `json:"execution_id,omitempty"`        // owning agent execution (empty for session-level events)
+	ParentExecutionID string                  `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	EventType         timelineevent.EventType `json:"event_type"`                    // llm_thinking, llm_response, llm_tool_call, mcp_tool_summary, etc.
+	Status            timelineevent.Status    `json:"status"`                        // streaming, completed, failed, cancelled, timed_out
+	Content           string                  `json:"content"`                       // event content (may be empty for streaming)
 	Metadata          map[string]any          `json:"metadata,omitempty"`
-	SequenceNumber    int                     `json:"sequence_number"`                   // order in timeline
+	SequenceNumber    int                     `json:"sequence_number"` // order in timeline
 }
 
 // TimelineCompletedPayload is the payload for timeline_event.completed events.
