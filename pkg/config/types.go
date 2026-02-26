@@ -54,11 +54,11 @@ type SummarizationConfig struct {
 // Used in stage.agents[] array (even for single-agent stages)
 // Parallel execution occurs when: len(agents) > 1 OR replicas > 1
 type StageAgentConfig struct {
-	Name          string     `yaml:"name" validate:"required"`
-	LLMProvider   string     `yaml:"llm_provider,omitempty"`
-	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
-	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
-	MCPServers    []string      `yaml:"mcp_servers,omitempty"`
+	Name          string       `yaml:"name" validate:"required"`
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
 	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
 }
 
