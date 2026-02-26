@@ -378,27 +378,31 @@ func (app *TestApp) WaitForNSessionsInStatus(t *testing.T, n int, status string)
 
 // CountLLMInteractions returns the current LLM interaction count for a session.
 func (app *TestApp) CountLLMInteractions(sessionID string) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	return app.EntClient.LLMInteraction.Query().
 		Where(llminteraction.SessionID(sessionID)).
-		Count(context.Background())
+		Count(ctx)
 }
 
 // AwaitLLMInteractionIncrease polls until the LLM interaction count exceeds
 // the given baseline, indicating the orchestrator has recorded a new response.
-// Returns true on success, false on timeout (30s). The test's own timeout via
-// WaitForSessionStatus is the primary failsafe for goroutine callers.
+// Returns true on success, false on timeout (10s). The test's own timeout via
+// WaitForSessionStatus (30s) is the primary failsafe for goroutine callers.
 func (app *TestApp) AwaitLLMInteractionIncrease(sessionID string, baseline int) bool {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.After(30 * time.Second)
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case <-deadline:
 			return false
 		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			n, err := app.EntClient.LLMInteraction.Query().
 				Where(llminteraction.SessionID(sessionID)).
-				Count(context.Background())
+				Count(ctx)
+			cancel()
 			if err == nil && n > baseline {
 				return true
 			}

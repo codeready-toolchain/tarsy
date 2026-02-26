@@ -134,14 +134,19 @@ func TestE2E_Orchestrator(t *testing.T) {
 	require.NoError(t, ws.Subscribe("session:"+sessionID))
 
 	// Release gates: wait for orchestrator iteration 2 to enter Generate,
-	// let it proceed, then open the sub-agent gate after iteration 2
-	// has had time to process the response and enter WaitForResult.
+	// let it proceed, then open the sub-agent gate after the orchestrator
+	// has recorded its response (observed via LLM interaction count increase).
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline, _ := app.CountLLMInteractions(sessionID)
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
 		close(orchIter2Gate)
-		app.AwaitLLMInteractionIncrease(sessionID, baseline)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
 		close(subAgentGate)
 	}()
 
@@ -505,9 +510,14 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline, _ := app.CountLLMInteractions(sessionID)
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
 		close(orchIter2Gate)
-		app.AwaitLLMInteractionIncrease(sessionID, baseline)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
 		close(subAgentGate)
 	}()
 
@@ -723,9 +733,14 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline, _ := app.CountLLMInteractions(sessionID)
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
 		close(orchIter2Gate)
-		app.AwaitLLMInteractionIncrease(sessionID, baseline)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
 		close(phase1Gate)
 	}()
 
@@ -904,9 +919,14 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline, _ := app.CountLLMInteractions(sessionID)
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
 		close(orchIter2Gate)
-		app.AwaitLLMInteractionIncrease(sessionID, baseline)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
 		close(subAgentGate)
 	}()
 
@@ -1020,9 +1040,14 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline, _ := app.CountLLMInteractions(sessionID)
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
 		close(orchIter2Gate)
-		app.AwaitLLMInteractionIncrease(sessionID, baseline)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
 		close(subAgentGate)
 	}()
 
