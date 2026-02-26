@@ -2,7 +2,7 @@
 
 **Status:** All questions decided — ready for implementation
 **Vision:** [orchestrator-agent-design.md](orchestrator-agent-design.md)
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-25
 
 ## Overview
 
@@ -594,6 +594,16 @@ The `ExecutionContext` struct gains three new optional fields:
 ```go
 // pkg/agent/context.go — additions
 
+// SubAgentResultCollector provides push-based delivery of completed sub-agent
+// results to the controller. Defined as interface in pkg/agent to avoid a
+// circular import between pkg/agent and pkg/agent/orchestrator.
+// Implemented by orchestrator.ResultCollector (adapter over SubAgentRunner).
+type SubAgentResultCollector interface {
+    TryDrainResult() (ConversationMessage, bool)
+    WaitForResult(ctx context.Context) (ConversationMessage, error)
+    HasPending() bool
+}
+
 // SubAgentContext carries sub-agent-specific data for controllers and prompt builders.
 // Follows the same pattern as ChatContext.
 type SubAgentContext struct {
@@ -604,14 +614,16 @@ type SubAgentContext struct {
 type ExecutionContext struct {
     // ... existing fields ...
     
-    SubAgent         *SubAgentContext                // nil for non-sub-agents (same pattern as ChatContext)
-    SubAgentRunner   *orchestrator.SubAgentRunner    // nil for non-orchestrator agents
-    SubAgentCatalog  []config.SubAgentEntry          // Available sub-agents (set for orchestrators)
+    SubAgent          *SubAgentContext          // nil for non-sub-agents (same pattern as ChatContext)
+    SubAgentCollector SubAgentResultCollector   // nil for non-orchestrator agents
+    SubAgentCatalog   []config.SubAgentEntry   // Available sub-agents (set for orchestrators)
 }
 ```
 
+The `SubAgentRunner` (PR3) is NOT referenced directly from `ExecutionContext` — that would create an `agent↔orchestrator` import cycle. Instead, the controller interacts through the `SubAgentResultCollector` interface. An `orchestrator.ResultCollector` adapter wraps the runner and converts raw `SubAgentResult` values into `ConversationMessage` via `FormatSubAgentResult`.
+
 - `SubAgent`: set when the agent is a sub-agent dispatched by an orchestrator. Detected via `execCtx.SubAgent != nil` — same pattern as `execCtx.ChatContext != nil`. Triggers `buildSubAgentMessages` in the prompt builder.
-- `SubAgentRunner`: set when the agent is an orchestrator. The `IteratingController` uses this to drain and wait for sub-agent results. `nil` for non-orchestrator agents — all drain/wait code is skipped (zero impact on existing agents).
+- `SubAgentCollector`: set when the agent is an orchestrator. The `IteratingController` uses this to drain and wait for sub-agent results. `nil` for non-orchestrator agents — all drain/wait code is skipped (zero impact on existing agents).
 - `SubAgentCatalog`: set when the agent is an orchestrator. Used by `BuildFunctionCallingMessages` to include the agent catalog in the system prompt. Avoids coupling the prompt builder to the orchestrator package.
 
 ### Result Message Format
@@ -651,13 +663,13 @@ The orchestrator reuses the existing `IteratingController` with one targeted cha
 // Pseudocode — changes to IteratingController.Run()
 for iteration := 0; iteration < maxIter; iteration++ {
     // NEW: drain any sub-agent results that are already available
-    if runner := execCtx.SubAgentRunner; runner != nil {
+    if collector := execCtx.SubAgentCollector; collector != nil {
         for {
-            result, ok := runner.TryGetNext()  // non-blocking
+            msg, ok := collector.TryDrainResult()  // non-blocking
             if !ok {
                 break
             }
-            messages = append(messages, formatSubAgentResult(result))
+            messages = append(messages, msg)
         }
     }
 
@@ -666,12 +678,12 @@ for iteration := 0; iteration < maxIter; iteration++ {
 
     if len(resp.ToolCalls) == 0 {
         // NEW: if sub-agents are still running, wait for at least one result
-        if runner := execCtx.SubAgentRunner; runner != nil && runner.HasPending() {
-            result, err := runner.WaitForNext(ctx)  // blocking
+        if collector := execCtx.SubAgentCollector; collector != nil && collector.HasPending() {
+            msg, err := collector.WaitForResult(ctx)  // blocking
             if err != nil {
                 break  // context cancelled
             }
-            messages = append(messages, formatSubAgentResult(result))
+            messages = append(messages, msg)
             continue  // give LLM another iteration with the new result
         }
         break  // truly done — no tool calls, no pending sub-agents
@@ -690,7 +702,7 @@ This enables multi-phase orchestration within the existing loop:
 7. **Iteration 5**: LLM sees B and C results → no more tools → wait for D
 8. D finishes → result injected → LLM produces final response → done
 
-The `SubAgentRunner` is accessed via `ExecutionContext.SubAgentRunner` (a new optional field). For non-orchestrator agents, this field is nil and the drain/wait code is skipped — zero impact on existing agents.
+The `SubAgentResultCollector` is accessed via `ExecutionContext.SubAgentCollector` (a new optional field). For non-orchestrator agents, this field is nil and the drain/wait code is skipped — zero impact on existing agents.
 
 Cleanup (cancel remaining sub-agents + wait for goroutines) is handled by `CompositeToolExecutor.Close()`, which is already deferred in `executeAgent()`.
 
@@ -825,7 +837,7 @@ func (b *PromptBuilder) BuildFunctionCallingMessages(execCtx *agent.ExecutionCon
     }
     // NEW: detect sub-agent via execCtx.SubAgent (same pattern as ChatContext)
     if execCtx.SubAgent != nil {
-        return b.buildSubAgentMessages(execCtx, prevStageContext)
+        return b.buildSubAgentMessages(execCtx)
     }
     // ... existing investigation / chat paths ...
 }
@@ -904,7 +916,7 @@ func (f *Factory) CreateController(agentType AgentType, execCtx *ExecutionContex
 
 The `AgentFactory.CreateAgent` already handles agent-type → agent-wrapper selection (`BaseAgent` vs `ScoringAgent`). The orchestrator uses `BaseAgent` — no new agent wrapper needed.
 
-The orchestrator maps to `IteratingController` — the same multi-turn tool-calling loop as default agents. The orchestration behavior comes entirely from the `CompositeToolExecutor` (tool routing) and the `SubAgentRunner` (push-based result delivery via `ExecutionContext`). The controller itself just gains the generic drain/wait logic that activates when `SubAgentRunner` is non-nil.
+The orchestrator maps to `IteratingController` — the same multi-turn tool-calling loop as default agents. The orchestration behavior comes entirely from the `CompositeToolExecutor` (tool routing) and the `SubAgentRunner` (push-based result delivery via `SubAgentResultCollector` interface on `ExecutionContext`). The controller itself just gains the generic drain/wait logic that activates when `SubAgentCollector` is non-nil.
 
 ## Session Executor Changes
 
@@ -993,7 +1005,7 @@ func (e *RealSessionExecutor) executeAgent(...) agentResult {
         registry := e.subAgentRegistry.Filter(subAgentNames)  // nil = full registry
         runner := orchestrator.NewSubAgentRunner(deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
         toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
-        execCtx.SubAgentRunner = runner
+        execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
         execCtx.SubAgentCatalog = registry.Entries()
     }
     
@@ -1098,24 +1110,42 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Unit tests (channel mechanics, dispatch validation, tool executor routing)
 - Integration tests (testcontainers DB + mock agent: concurrent dispatch, DB record verification, timeout, cancel)
 
-### PR4: Controller modification + orchestrator prompt
-- Push-based drain/wait logic in `IteratingController` (via `ExecutionContext.SubAgentRunner`)
-- New fields on `ExecutionContext`: `SubAgentRunner`, `SubAgent *SubAgentContext`, `SubAgentCatalog`
+### PR4: Controller modification + orchestrator prompt ✅ DONE
+- Push-based drain/wait logic in `IteratingController` (via `ExecutionContext.SubAgentCollector`)
+- `SubAgentResultCollector` interface in `pkg/agent/context.go` — breaks `agent↔orchestrator` import cycle
+- `ResultCollector` adapter in `pkg/agent/orchestrator/collector.go` — wraps `SubAgentRunner`, converts `SubAgentResult` → `ConversationMessage` via `FormatSubAgentResult`
+- New fields on `ExecutionContext`: `SubAgentCollector`, `SubAgent *SubAgentContext`, `SubAgentCatalog`
 - `SubAgentContext` struct (same pattern as `ChatContext`)
+- `AgentTypeOrchestrator` case in controller factory → `IteratingController`
 - `buildSubAgentMessages` — custom `## Task` template (detected via `execCtx.SubAgent != nil`)
 - `buildOrchestratorMessages` — agent catalog in system prompt (detected via `execCtx.Config.Type`)
 - Both paths dispatched from existing `BuildFunctionCallingMessages` — no new methods on `PromptBuilder` interface
-- Tests for prompt building and controller behavior
+- Tests for prompt building, controller behavior, collector adapter, and factory
 
 ### PR5: Session executor wiring
 - Add `subAgentRegistry` field to `RealSessionExecutor` (built at construction time)
 - `resolveOrchestratorGuardrails` + `resolveSubAgents` helper functions
 - Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
-- Set `ExecutionContext.SubAgentRunner` and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
-- End-to-end integration test
+- Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
+- Integration test
 
-### PR6: Dashboard
+### PR6: E2E Tests
+- New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use
+- New config: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure, used for cancellation cascade test
+- **Happy path** (`orchestrator_test.go`): orchestrator dispatches 2 sub-agents via `dispatch_agent` tool calls in a single iteration, results arrive and are drained before the next LLM call, orchestrator produces final answer
+  - DB assertions: 1 stage, 3 executions (orchestrator + 2 sub-agents); sub-agent `parent_execution_id` links to orchestrator; `task` field set on sub-agent executions; `task_assigned` timeline events for each sub-agent; `final_analysis` for orchestrator
+  - API assertions: `GetSession` returns completed session with `final_analysis`; `GetTraceList` shows orchestrator execution with nested sub-agent executions
+  - WS event sequence in `testdata/expected_events.go`: `OrchestratorExpectedEvents` covering session/stage/execution status for orchestrator and sub-agents, timeline events (`task_assigned`, `llm_tool_call` for `dispatch_agent`, sub-agent `final_analysis`, orchestrator `final_analysis`)
+  - sub-agent makes MCP tool calls during its execution → tool results appear in sub-agent timeline. Verifies the sub-agent's own `ToolExecutor` (not the `CompositeToolExecutor`) routes MCP calls correctly.
+  - Golden files: session, stages, timeline, trace list, trace interaction details (orchestrator dispatch iterations + sub-agent iterations)
+- **Wait path**: orchestrator dispatches sub-agents, but sub-agents haven't finished yet when the LLM returns no tool calls → controller blocks on `SubAgentCollector.WaitForResult` → sub-agent finishes → result injected → LLM gets another iteration → final answer. Uses `WaitCh` on sub-agent LLM entries to control timing.
+- **Sub-agent failure**: one sub-agent receives LLM error → `[Sub-agent failed]` result injected into orchestrator conversation → orchestrator produces final answer referencing the failure. Assertions: failed sub-agent execution has `status=failed` and `error_message` set; orchestrator execution `status=completed`; session `status=completed`
+- **Cancellation cascade** (`orchestrator_cancel_test.go`): orchestrator dispatches sub-agents, session is cancelled via API while sub-agents are running. Uses `BlockUntilCancelled` on sub-agent LLM entries. Assertions: all executions end in `cancelled` status; `SubAgentRunner.CancelAll` + `WaitAll` ensure clean goroutine shutdown.
+- **Orchestrator with `list_agents`**: orchestrator calls `list_agents` tool to check sub-agent status mid-execution. Verifies the status summary tool works end-to-end.
+- **Executive summary**: verify orchestrator's `final_analysis` flows through to executive summary generation (same as regular agents — no special handling needed, but should be covered)
+
+### PR7: Dashboard
 - Tree view: orchestrator → sub-agents (backend API already returns nested `SubAgents` in `ExecutionOverview` — see PR2)
 - Sub-agent status, timelines, results
 - Real-time updates via existing WebSocket events

@@ -40,10 +40,20 @@ const (
 
 // BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
 // Used by both google-native (Google SDK) and langchain (multi-provider) backends.
+//
+// Dispatches to specialized builders for orchestrator and sub-agent modes
+// before falling through to chat / investigation paths.
 func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
+	if execCtx.Config.Type == config.AgentTypeOrchestrator {
+		return b.buildOrchestratorMessages(execCtx, prevStageContext)
+	}
+	if execCtx.SubAgent != nil {
+		return b.buildSubAgentMessages(execCtx)
+	}
+
 	isChat := execCtx.ChatContext != nil
 
 	// System message (tools are bound natively, not described in text)
