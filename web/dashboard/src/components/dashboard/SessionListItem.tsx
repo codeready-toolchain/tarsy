@@ -114,7 +114,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                   </Box>
                   <Divider sx={{ mb: 1.5 }} />
                   <Box sx={executiveSummaryMarkdownStyles}>
-                    <ReactMarkdown>{session.executive_summary}</ReactMarkdown>
+                    <ReactMarkdown skipHtml>{session.executive_summary}</ReactMarkdown>
                   </Box>
                 </Card>
               </Popover>
