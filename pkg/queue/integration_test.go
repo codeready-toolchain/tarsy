@@ -460,17 +460,20 @@ func TestHeartbeatUpdates(t *testing.T) {
 	require.NotNil(t, s1.LastInteractionAt)
 	initialTime := *s1.LastInteractionAt
 
-	// Wait for at least one heartbeat to occur (heartbeat interval is 100ms)
-	time.Sleep(250 * time.Millisecond)
+	// Poll until the heartbeat updates last_interaction_at (interval is 100ms)
+	awaitCondition(t, 5*time.Second, 50*time.Millisecond,
+		"waiting for heartbeat to update last_interaction_at",
+		func() bool {
+			s, err := client.AlertSession.Get(ctx, session.ID)
+			if err != nil {
+				return false
+			}
+			return s.LastInteractionAt != nil && s.LastInteractionAt.After(initialTime)
+		})
 
-	// Get updated last_interaction_at
 	s2, err := client.AlertSession.Get(ctx, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, alertsession.StatusInProgress, s2.Status, "session should still be in progress")
-	require.NotNil(t, s2.LastInteractionAt)
-
-	// Verify heartbeat actually updated the timestamp
-	assert.True(t, s2.LastInteractionAt.After(initialTime), "last_interaction_at should be updated by heartbeat")
 
 	// Release executor and stop pool
 	close(releaseCh)
@@ -547,8 +550,13 @@ func TestNilExecutionResultGuard(t *testing.T) {
 			"waiting for session to be processed",
 			func() bool { return executor.processed.Load() >= 1 })
 
-		// Give the worker time to persist the terminal status
-		time.Sleep(100 * time.Millisecond)
+		// Poll until the worker persists the terminal status
+		awaitCondition(t, 5*time.Second, 20*time.Millisecond,
+			"waiting for session to reach timed_out status",
+			func() bool {
+				s, err := client.AlertSession.Get(ctx, session.ID)
+				return err == nil && s.Status == alertsession.StatusTimedOut
+			})
 		pool.Stop()
 
 		updated, err := client.AlertSession.Get(ctx, session.ID)

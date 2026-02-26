@@ -2128,3 +2128,212 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	assert.Contains(t, failedEvents[0].ErrorMessage, "failed to create agent")
 	assert.Equal(t, 1, failedEvents[0].AgentIndex, "single agent should have agent_index=1")
 }
+
+// ────────────────────────────────────────────────────────────
+// Orchestrator integration tests
+// ────────────────────────────────────────────────────────────
+
+// routingMockLLM routes LLM calls to different response lists based on
+// whether the input messages contain the sub-agent "## Task" marker.
+// This makes orchestrator integration tests deterministic despite
+// concurrent goroutines.
+type routingMockLLM struct {
+	mu               sync.Mutex
+	orchestratorResp []mockLLMResponse
+	subAgentResp     []mockLLMResponse
+	orchestratorIdx  int
+	subAgentIdx      int
+}
+
+func (m *routingMockLLM) Generate(_ context.Context, input *agent.GenerateInput) (<-chan agent.Chunk, error) {
+	isSubAgent := false
+	for _, msg := range input.Messages {
+		if strings.Contains(msg.Content, "## Task") {
+			isSubAgent = true
+			break
+		}
+	}
+
+	m.mu.Lock()
+	var resp mockLLMResponse
+	if isSubAgent {
+		if m.subAgentIdx >= len(m.subAgentResp) {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("no more sub-agent mock responses (call %d)", m.subAgentIdx+1)
+		}
+		resp = m.subAgentResp[m.subAgentIdx]
+		m.subAgentIdx++
+	} else {
+		if m.orchestratorIdx >= len(m.orchestratorResp) {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("no more orchestrator mock responses (call %d)", m.orchestratorIdx+1)
+		}
+		resp = m.orchestratorResp[m.orchestratorIdx]
+		m.orchestratorIdx++
+	}
+	m.mu.Unlock()
+
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	ch := make(chan agent.Chunk, len(resp.chunks))
+	for _, c := range resp.chunks {
+		ch <- c
+	}
+	close(ch)
+	return ch, nil
+}
+
+func (m *routingMockLLM) Close() error { return nil }
+
+func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 10
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "orchestrate",
+				Agents: []config.StageAgentConfig{
+					{Name: "OrchestratorAgent"},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"OrchestratorAgent": {
+				Type:          config.AgentTypeOrchestrator,
+				Description:   "Test orchestrator",
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			"GeneralWorker": {
+				Description:   "General-purpose worker for analysis",
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": chain,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	// The orchestrator loop timing is non-deterministic: the sub-agent may
+	// complete before or after the orchestrator's 2nd LLM call. Provide
+	// responses for both paths — each text response carries the final answer
+	// so the assert passes regardless of scheduling order.
+	//
+	// Fast sub-agent (2 orchestrator calls):
+	//   iter 1: dispatch_agent → sub-agent starts & completes
+	//   iter 2: drain picks up result → LLM call 2 → text (final) → stop
+	//
+	// Slow sub-agent (3 orchestrator calls):
+	//   iter 1: dispatch_agent → sub-agent still running
+	//   iter 2: drain empty → LLM call 2 → text → HasPending → wait → result → continue
+	//   iter 3: LLM call 3 → text (final) → stop
+	llm := &routingMockLLM{
+		orchestratorResp: []mockLLMResponse{
+			// Orchestrator call 1: dispatch a sub-agent
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{
+					CallID:    "call-1",
+					Name:      "dispatch_agent",
+					Arguments: `{"name":"GeneralWorker","task":"Analyze the alert data for root cause"}`,
+				},
+			}},
+			// Orchestrator call 2: final analysis (fast path) or intermediate (slow path)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Root cause: memory pressure on pod-1 based on sub-agent analysis."},
+			}},
+			// Orchestrator call 3: final analysis (slow path only — unused in fast path)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Root cause: memory pressure on pod-1 based on sub-agent analysis."},
+			}},
+		},
+		subAgentResp: []mockLLMResponse{
+			// Sub-agent call 1: return analysis
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Found memory pressure on pod-1, OOMKilled 3 times."},
+			}},
+		},
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Contains(t, result.FinalAnalysis, "memory pressure")
+	assert.Nil(t, result.Error)
+
+	// Verify stage
+	stages, err := entClient.Stage.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 1)
+	assert.Equal(t, "orchestrate", stages[0].StageName)
+	assert.Equal(t, stage.StatusCompleted, stages[0].Status)
+
+	// Verify AgentExecution records: orchestrator + sub-agent
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 2, "expected orchestrator + 1 sub-agent execution")
+
+	var orchestratorExec, subAgentExec *ent.AgentExecution
+	for _, e := range execs {
+		switch e.AgentName {
+		case "OrchestratorAgent":
+			orchestratorExec = e
+		case "GeneralWorker":
+			subAgentExec = e
+		}
+	}
+	require.NotNil(t, orchestratorExec, "orchestrator execution should exist")
+	require.NotNil(t, subAgentExec, "sub-agent execution should exist")
+
+	// Orchestrator has no parent
+	assert.Nil(t, orchestratorExec.ParentExecutionID, "orchestrator should have no parent")
+	assert.Equal(t, agentexecution.StatusCompleted, orchestratorExec.Status)
+
+	// Sub-agent links to orchestrator
+	require.NotNil(t, subAgentExec.ParentExecutionID, "sub-agent should have parent_execution_id")
+	assert.Equal(t, orchestratorExec.ID, *subAgentExec.ParentExecutionID)
+	assert.Equal(t, agentexecution.StatusCompleted, subAgentExec.Status)
+
+	// Sub-agent has task set
+	require.NotNil(t, subAgentExec.Task, "sub-agent should have task")
+	assert.Equal(t, "Analyze the alert data for root cause", *subAgentExec.Task)
+
+	// Verify task_assigned timeline event for sub-agent
+	taskEvents, err := entClient.TimelineEvent.Query().
+		Where(timelineevent.EventTypeEQ(timelineevent.EventTypeTaskAssigned)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, taskEvents, 1, "should have one task_assigned event")
+	assert.Equal(t, "Analyze the alert data for root cause", taskEvents[0].Content)
+
+	// Verify final_analysis timeline events (orchestrator + sub-agent each have one)
+	finalEvents, err := entClient.TimelineEvent.Query().
+		Where(timelineevent.EventTypeEQ(timelineevent.EventTypeFinalAnalysis)).
+		All(context.Background())
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(finalEvents), 1, "should have at least 1 final_analysis event")
+}

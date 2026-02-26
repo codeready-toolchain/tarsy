@@ -36,6 +36,11 @@ type SubAgentRunner struct {
 	// Atomic count of sub-agents whose results have not yet been consumed.
 	pending int32
 
+	// parentCtx is the session-level context used to derive sub-agent contexts.
+	// Sub-agent goroutines must NOT use the per-iteration context from
+	// executeToolCall (which is cancelled at the end of each iteration).
+	parentCtx context.Context
+
 	deps         *SubAgentDeps
 	parentExecID string
 	sessionID    string
@@ -49,8 +54,11 @@ type SubAgentRunner struct {
 }
 
 // NewSubAgentRunner creates a runner for managing sub-agents within an
-// orchestrator execution.
+// orchestrator execution. parentCtx should be the session-level context
+// (not a per-iteration context) so sub-agent goroutines outlive individual
+// orchestrator iterations.
 func NewSubAgentRunner(
+	parentCtx context.Context,
 	deps *SubAgentDeps,
 	parentExecID string,
 	sessionID string,
@@ -62,6 +70,7 @@ func NewSubAgentRunner(
 		executions:   make(map[string]*subAgentExecution),
 		resultsCh:    make(chan *SubAgentResult, guardrails.MaxConcurrentAgents),
 		closeCh:      make(chan struct{}),
+		parentCtx:    parentCtx,
 		deps:         deps,
 		parentExecID: parentExecID,
 		sessionID:    sessionID,
@@ -151,7 +160,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		Content:        task,
 	})
 
-	subCtx, cancel := context.WithTimeout(ctx, r.guardrails.AgentTimeout)
+	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)
 
 	subExec := &subAgentExecution{
 		executionID: executionID,
@@ -212,6 +221,10 @@ func (r *SubAgentRunner) runSubAgent(
 		ToolExecutor:   toolExecutor,
 		EventPublisher: r.deps.EventPublisher,
 		PromptBuilder:  r.deps.PromptBuilder,
+		SubAgent: &agent.SubAgentContext{
+			Task:         exec.task,
+			ParentExecID: r.parentExecID,
+		},
 		Services: &agent.ServiceBundle{
 			Timeline:    r.deps.TimelineService,
 			Message:     r.deps.MessageService,

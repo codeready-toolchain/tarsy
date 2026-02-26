@@ -111,8 +111,10 @@ func TestE2E_FailureResilience(t *testing.T) {
 	// Wait for session to reach terminal status (completed — fail-open).
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the last expected WS event instead of a fixed sleep.
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "completed"
+	}, 5*time.Second, "waiting for session.status=completed WS event")
 
 	// ── Session assertions ──
 	session := app.GetSession(t, sessionID)

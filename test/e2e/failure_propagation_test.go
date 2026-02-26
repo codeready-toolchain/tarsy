@@ -76,8 +76,10 @@ func TestE2E_FailurePropagation(t *testing.T) {
 	// Wait for session to reach terminal status (failed).
 	app.WaitForSessionStatus(t, sessionID, "failed")
 
-	// Allow trailing WS events to arrive.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the last expected WS event instead of a fixed sleep.
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "failed"
+	}, 5*time.Second, "waiting for session.status=failed WS event")
 
 	// ── Session assertions ──
 	session := app.GetSession(t, sessionID)

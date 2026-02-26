@@ -408,6 +408,7 @@ type SubAgentRunner struct {
     resultsCh   chan *SubAgentResult             // completed results (buffered, cap = MaxConcurrentAgents)
     pending     int32                            // atomic count of running sub-agents
     
+    parentCtx          context.Context               // Session-level context (long-lived) — sub-agent contexts derive from this
     deps               *SubAgentDeps                // Dependency bundle (Q10)
     parentExecID       string                       // Orchestrator's execution_id
     sessionID          string                       // Orchestrator's session_id (for sub-agent DB records)
@@ -487,7 +488,9 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
     // 7. Build ExecutionContext with SubAgent field set (triggers sub-agent prompt template)
     // 8. Increment pending counter (atomic) — BEFORE spawning goroutine to avoid race
     // 9. Spawn goroutine:
-    //    - Derive context with agent_timeout deadline from guardrails
+    //    - Derive context with agent_timeout from r.parentCtx (session-level, NOT
+    //      the per-iteration ctx passed to Dispatch — that ctx is short-lived and
+    //      would cancel the sub-agent when the orchestrator's current iteration ends)
     //    - agentFactory.CreateAgent → agent.Execute
     //    - On completion: send SubAgentResult to resultsCh (ctx-aware, see below)
     //    - On timeout/cancel: update DB status → "cancelled" / "failed"
@@ -1003,7 +1006,7 @@ func (e *RealSessionExecutor) executeAgent(...) agentResult {
         guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
         subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
         registry := e.subAgentRegistry.Filter(subAgentNames)  // nil = full registry
-        runner := orchestrator.NewSubAgentRunner(deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
+        runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
         toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
         execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
         execCtx.SubAgentCatalog = registry.Entries()
@@ -1025,7 +1028,7 @@ When the orchestrator is cancelled (session cancel via API):
 5. `SubAgentRunner.WaitAll()` waits for all sub-agent goroutines to exit
 6. Orchestrator returns `ExecutionStatusCancelled`
 
-Implementation: the `SubAgentRunner` spawns sub-agent goroutines with contexts derived from the orchestrator's context. When the parent context is cancelled, all child contexts are automatically cancelled.
+Implementation: `SubAgentRunner` stores the session-level context (`parentCtx`) passed at construction time. Sub-agent goroutines derive their contexts from `parentCtx` (with `agent_timeout` deadline), **not** from the per-iteration `ctx` passed to `Dispatch`. This is critical — the per-iteration context is short-lived and cancelled at the end of each orchestrator iteration, which would prematurely terminate sub-agents. The session-level context lives for the entire session, so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled.
 
 ## Dashboard Impact — DECIDED
 
@@ -1122,13 +1125,14 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Both paths dispatched from existing `BuildFunctionCallingMessages` — no new methods on `PromptBuilder` interface
 - Tests for prompt building, controller behavior, collector adapter, and factory
 
-### PR5: Session executor wiring
+### PR5: Session executor wiring ✅ DONE
 - Add `subAgentRegistry` field to `RealSessionExecutor` (built at construction time)
 - `resolveOrchestratorGuardrails` + `resolveSubAgents` helper functions
 - Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
+- Pass session-level `ctx` to `NewSubAgentRunner` as `parentCtx` — sub-agent contexts must derive from the long-lived session context, not the per-iteration context (which is cancelled at the end of each orchestrator iteration)
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
-- Integration test
+- Integration tests
 
 ### PR6: E2E Tests
 - New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use

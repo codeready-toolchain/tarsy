@@ -4,18 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
-	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
-	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -27,14 +23,15 @@ import (
 
 // RealSessionExecutor implements SessionExecutor using the agent framework.
 type RealSessionExecutor struct {
-	cfg            *config.Config
-	dbClient       *ent.Client
-	llmClient      agent.LLMClient
-	eventPublisher agent.EventPublisher
-	agentFactory   *agent.AgentFactory
-	promptBuilder  *prompt.PromptBuilder
-	mcpFactory     *mcp.ClientFactory
-	runbookService *runbook.Service
+	cfg              *config.Config
+	dbClient         *ent.Client
+	llmClient        agent.LLMClient
+	eventPublisher   agent.EventPublisher
+	agentFactory     *agent.AgentFactory
+	promptBuilder    *prompt.PromptBuilder
+	mcpFactory       *mcp.ClientFactory
+	runbookService   *runbook.Service
+	subAgentRegistry *config.SubAgentRegistry
 }
 
 // NewRealSessionExecutor creates a new session executor.
@@ -44,14 +41,15 @@ type RealSessionExecutor struct {
 func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
-		cfg:            cfg,
-		dbClient:       dbClient,
-		llmClient:      llmClient,
-		eventPublisher: eventPublisher,
-		agentFactory:   agent.NewAgentFactory(controllerFactory),
-		promptBuilder:  prompt.NewPromptBuilder(cfg.MCPServerRegistry),
-		mcpFactory:     mcpFactory,
-		runbookService: runbookService,
+		cfg:              cfg,
+		dbClient:         dbClient,
+		llmClient:        llmClient,
+		eventPublisher:   eventPublisher,
+		agentFactory:     agent.NewAgentFactory(controllerFactory),
+		promptBuilder:    prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		mcpFactory:       mcpFactory,
+		runbookService:   runbookService,
+		subAgentRegistry: config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll()),
 	}
 }
 
@@ -130,6 +128,9 @@ type executeStageInput struct {
 	// Used for progress reporting so CurrentStageIndex never exceeds TotalStages.
 	totalExpectedStages int
 
+	// Precomputed once per session
+	runbookContent string
+
 	// Services (shared across stages)
 	stageService       *services.StageService
 	messageService     *services.MessageService
@@ -170,11 +171,12 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 2. Initialize services (shared across all stages)
+	// 2. Initialize services and resolve runbook (shared across all stages)
 	stageService := services.NewStageService(e.dbClient)
 	messageService := services.NewMessageService(e.dbClient)
 	timelineService := services.NewTimelineService(e.dbClient)
 	interactionService := services.NewInteractionService(e.dbClient, messageService)
+	runbookContent := e.resolveRunbook(ctx, session)
 
 	// 3. Sequential chain loop
 	// dbStageIndex tracks the actual DB stage index, which may differ from the
@@ -201,6 +203,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			stageIndex:          dbStageIndex,
 			prevContext:         prevContext,
 			totalExpectedStages: totalExpectedStages,
+			runbookContent:      runbookContent,
 			stageService:        stageService,
 			messageService:      messageService,
 			timelineService:     timelineService,
@@ -233,6 +236,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 				stageIndex:          dbStageIndex,
 				prevContext:         prevContext,
 				totalExpectedStages: totalExpectedStages,
+				runbookContent:      runbookContent,
 				stageService:        stageService,
 				messageService:      messageService,
 				timelineService:     timelineService,
@@ -542,10 +546,9 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
-		RunbookContent: e.resolveRunbook(ctx, input.session),
+		RunbookContent: input.runbookContent,
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
-		ToolExecutor:   toolExecutor,
 		EventPublisher: e.eventPublisher,
 		PromptBuilder:  e.promptBuilder,
 		FailedServers:  failedServers,
@@ -556,6 +559,55 @@ func (e *RealSessionExecutor) executeAgent(
 			Stage:       input.stageService,
 		},
 	}
+
+	if resolvedConfig.Type == config.AgentTypeOrchestrator {
+		agentDef, getErr := e.cfg.GetAgent(agentConfig.Name)
+		if getErr != nil {
+			failErr := fmt.Errorf("failed to get orchestrator agent config: %w", getErr)
+			logger.Error("Failed to get agent definition for orchestrator", "error", getErr)
+			if updateErr := input.stageService.UpdateAgentExecutionStatus(
+				context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+			); updateErr != nil {
+				logger.Error("Failed to update agent execution status", "error", updateErr)
+			}
+			publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
+			return agentResult{
+				executionID:     exec.ID,
+				status:          agent.ExecutionStatusFailed,
+				err:             failErr,
+				llmBackend:      resolvedBackend,
+				llmProviderName: resolvedConfig.LLMProviderName,
+			}
+		}
+
+		guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
+		subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+		registry := e.subAgentRegistry.Filter(subAgentNames)
+
+		deps := &orchestrator.SubAgentDeps{
+			Config:             e.cfg,
+			Chain:              input.chain,
+			AgentFactory:       e.agentFactory,
+			MCPFactory:         e.mcpFactory,
+			LLMClient:          e.llmClient,
+			EventPublisher:     e.eventPublisher,
+			PromptBuilder:      e.promptBuilder,
+			StageService:       input.stageService,
+			TimelineService:    input.timelineService,
+			MessageService:     input.messageService,
+			InteractionService: input.interactionService,
+			AlertData:          input.session.AlertData,
+			AlertType:          input.session.AlertType,
+			RunbookContent:     input.runbookContent,
+		}
+
+		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
+		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
+		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
+		execCtx.SubAgentCatalog = registry.Entries()
+	}
+
+	execCtx.ToolExecutor = toolExecutor
 
 	agentInstance, err := e.agentFactory.CreateAgent(execCtx)
 	if err != nil {
@@ -646,857 +698,5 @@ func (e *RealSessionExecutor) executeAgent(
 		err:             result.Error,
 		llmBackend:      resolvedBackend,
 		llmProviderName: resolvedConfig.LLMProviderName,
-	}
-}
-
-// ────────────────────────────────────────────────────────────
-// Synthesis stage execution
-// ────────────────────────────────────────────────────────────
-
-// executeSynthesisStage runs a synthesis agent after a multi-agent stage.
-// Creates its own Stage DB record, separate from the investigation stage.
-func (e *RealSessionExecutor) executeSynthesisStage(
-	ctx context.Context,
-	input executeStageInput,
-	parallelResult stageResult,
-) stageResult {
-	synthStageName := parallelResult.stageName + " - Synthesis"
-	logger := slog.With(
-		"session_id", input.session.ID,
-		"stage_name", synthStageName,
-		"stage_index", input.stageIndex,
-	)
-
-	// Create synthesis Stage DB record
-	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
-		SessionID:          input.session.ID,
-		StageName:          synthStageName,
-		StageIndex:         input.stageIndex + 1, // 1-based in DB
-		ExpectedAgentCount: 1,
-		// No parallel_type, no success_policy (single-agent synthesis)
-	})
-	if err != nil {
-		logger.Error("Failed to create synthesis stage", "error", err)
-		return stageResult{
-			stageName: synthStageName,
-			status:    alertsession.StatusFailed,
-			err:       fmt.Errorf("failed to create synthesis stage: %w", err),
-		}
-	}
-
-	// Update session progress + publish stage.status: started
-	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
-	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
-		input.stageIndex, input.totalExpectedStages, 1,
-		"Synthesizing...")
-	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
-		events.ProgressPhaseSynthesizing, fmt.Sprintf("Starting synthesis for %s", parallelResult.stageName))
-
-	// Build synthesis agent config — synthesis: block is optional, defaults apply
-	synthAgentConfig := config.StageAgentConfig{
-		Name: "SynthesisAgent",
-	}
-	if s := input.stageConfig.Synthesis; s != nil {
-		if s.Agent != "" {
-			synthAgentConfig.Name = s.Agent
-		}
-		if s.LLMBackend != "" {
-			synthAgentConfig.LLMBackend = s.LLMBackend
-		}
-		if s.LLMProvider != "" {
-			synthAgentConfig.LLMProvider = s.LLMProvider
-		}
-	}
-
-	// Build synthesis context: query full conversation history for each parallel agent
-	synthContext := e.buildSynthesisContext(ctx, parallelResult, input)
-
-	// Execute synthesis agent — override prevContext to feed parallel investigation histories
-	synthInput := input
-	synthInput.prevContext = synthContext
-
-	ar := e.executeAgent(ctx, synthInput, stg, synthAgentConfig, 0, synthAgentConfig.Name)
-
-	// Update synthesis stage status (use background context — ctx may be cancelled)
-	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
-		logger.Error("Failed to update synthesis stage status", "error", updateErr)
-	}
-
-	return stageResult{
-		stageID:       stg.ID,
-		stageName:     synthStageName,
-		status:        mapAgentStatusToSessionStatus(ar.status),
-		finalAnalysis: ar.finalAnalysis,
-		err:           ar.err,
-		agentResults:  []agentResult{ar},
-	}
-}
-
-// buildSynthesisContext queries the full timeline for each parallel agent
-// and formats it for the synthesis agent.
-func (e *RealSessionExecutor) buildSynthesisContext(
-	ctx context.Context,
-	parallelResult stageResult,
-	input executeStageInput,
-) string {
-	configs := buildConfigs(input.stageConfig)
-
-	investigations := make([]agentctx.AgentInvestigation, len(parallelResult.agentResults))
-	for i, ar := range parallelResult.agentResults {
-		// Use display name from configs (handles replica naming)
-		displayName := ""
-		if i < len(configs) {
-			displayName = configs[i].displayName
-		}
-		if displayName == "" && i < len(input.stageConfig.Agents) {
-			displayName = input.stageConfig.Agents[i].Name
-		}
-
-		investigation := agentctx.AgentInvestigation{
-			AgentName:   displayName,
-			AgentIndex:  i + 1,              // 1-based
-			LLMBackend:  ar.llmBackend,      // resolved at execution time
-			LLMProvider: ar.llmProviderName, // resolved at execution time
-			Status:      mapAgentStatusToSessionStatus(ar.status),
-		}
-
-		if ar.err != nil {
-			investigation.ErrorMessage = ar.err.Error()
-		}
-
-		// Query full timeline for this agent execution
-		if ar.executionID != "" {
-			timeline, err := input.timelineService.GetAgentTimeline(ctx, ar.executionID)
-			if err != nil {
-				slog.Warn("Failed to get agent timeline for synthesis",
-					"execution_id", ar.executionID,
-					"error", err,
-				)
-			} else {
-				investigation.Events = timeline
-			}
-		}
-
-		investigations[i] = investigation
-	}
-
-	return agentctx.FormatInvestigationForSynthesis(investigations, input.stageConfig.Name)
-}
-
-// ────────────────────────────────────────────────────────────
-// Helper methods
-// ────────────────────────────────────────────────────────────
-
-// createToolExecutor creates an MCP tool executor or falls back to a stub.
-// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-func createToolExecutor(
-	ctx context.Context,
-	mcpFactory *mcp.ClientFactory,
-	serverIDs []string,
-	toolFilter map[string][]string,
-	logger *slog.Logger,
-) (agent.ToolExecutor, map[string]string) {
-	if mcpFactory != nil && len(serverIDs) > 0 {
-		mcpExecutor, mcpClient, mcpErr := mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter)
-		if mcpErr != nil {
-			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
-			return agent.NewStubToolExecutor(nil), nil
-		}
-		var failedServers map[string]string
-		if mcpClient != nil {
-			failedServers = mcpClient.FailedServers()
-		}
-		return mcpExecutor, failedServers
-	}
-	return agent.NewStubToolExecutor(nil), nil
-}
-
-// mapCancellation checks if the context was cancelled or timed out and returns
-// an appropriate ExecutionResult, or nil if the context is still active.
-func (e *RealSessionExecutor) mapCancellation(ctx context.Context) *ExecutionResult {
-	if ctx.Err() == nil {
-		return nil
-	}
-	if ctx.Err() == context.DeadlineExceeded {
-		return &ExecutionResult{
-			Status: alertsession.StatusTimedOut,
-			Error:  fmt.Errorf("session timed out"),
-		}
-	}
-	return &ExecutionResult{
-		Status: alertsession.StatusCancelled,
-		Error:  context.Canceled,
-	}
-}
-
-// buildStageContext converts completed stageResults into a context string
-// for the next stage's agent prompt.
-func (e *RealSessionExecutor) buildStageContext(stages []stageResult) string {
-	results := make([]agentctx.StageResult, len(stages))
-	for i, s := range stages {
-		results[i] = agentctx.StageResult{
-			StageName:     s.stageName,
-			FinalAnalysis: s.finalAnalysis,
-		}
-	}
-	return agentctx.BuildStageContext(results)
-}
-
-// extractFinalAnalysis returns the final analysis from the last completed stage.
-// Searches in reverse to find the most recent stage with a non-empty analysis.
-func extractFinalAnalysis(stages []stageResult) string {
-	for i := len(stages) - 1; i >= 0; i-- {
-		if stages[i].finalAnalysis != "" {
-			return stages[i].finalAnalysis
-		}
-	}
-	return ""
-}
-
-// updateSessionProgress updates current_stage_index and current_stage_id on the session.
-// Non-blocking: logs warning on failure.
-func (e *RealSessionExecutor) updateSessionProgress(ctx context.Context, sessionID string, stageIndex int, stageID string) {
-	update := e.dbClient.AlertSession.UpdateOneID(sessionID).
-		SetCurrentStageIndex(stageIndex + 1) // 1-based in DB
-
-	if stageID != "" {
-		update = update.SetCurrentStageID(stageID)
-	}
-
-	if err := update.Exec(ctx); err != nil {
-		slog.Warn("Failed to update session progress",
-			"session_id", sessionID,
-			"stage_index", stageIndex,
-			"stage_id", stageID,
-			"error", err,
-		)
-	}
-}
-
-// publishSessionProgress publishes a session.progress transient event to the global channel.
-// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
-func publishSessionProgress(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageName string, stageIndex, totalStages, activeExecutions int, statusText string) {
-	if eventPublisher == nil {
-		return
-	}
-	// 1-based index for clients, clamped so it never exceeds TotalStages.
-	currentIndex := stageIndex + 1
-	if totalStages > 0 && currentIndex > totalStages {
-		currentIndex = totalStages
-	}
-	if err := eventPublisher.PublishSessionProgress(ctx, events.SessionProgressPayload{
-		BasePayload: events.BasePayload{
-			Type:      events.EventTypeSessionProgress,
-			SessionID: sessionID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		},
-		CurrentStageName:  stageName,
-		CurrentStageIndex: currentIndex,
-		TotalStages:       totalStages,
-		ActiveExecutions:  activeExecutions,
-		StatusText:        statusText,
-	}); err != nil {
-		slog.Warn("Failed to publish session progress",
-			"session_id", sessionID,
-			"stage_name", stageName,
-			"error", err,
-		)
-	}
-}
-
-// publishExecutionProgress publishes an execution.progress transient event.
-// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
-func publishExecutionProgressFromExecutor(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID, phase, message string) {
-	if eventPublisher == nil {
-		return
-	}
-	if err := eventPublisher.PublishExecutionProgress(ctx, sessionID, events.ExecutionProgressPayload{
-		BasePayload: events.BasePayload{
-			Type:      events.EventTypeExecutionProgress,
-			SessionID: sessionID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		},
-		StageID:     stageID,
-		ExecutionID: executionID,
-		Phase:       phase,
-		Message:     message,
-	}); err != nil {
-		slog.Warn("Failed to publish execution progress",
-			"session_id", sessionID,
-			"phase", phase,
-			"error", err,
-		)
-	}
-}
-
-// publishExecutionStatus publishes an execution.status transient event.
-// Nil-safe for EventPublisher. Best-effort: logs on failure, never aborts.
-// agentIndex is 1-based and preserves the chain config ordering.
-func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, executionID string, agentIndex int, status, errMsg string) {
-	if eventPublisher == nil {
-		return
-	}
-	if err := eventPublisher.PublishExecutionStatus(ctx, sessionID, events.ExecutionStatusPayload{
-		BasePayload: events.BasePayload{
-			Type:      events.EventTypeExecutionStatus,
-			SessionID: sessionID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		},
-		StageID:      stageID,
-		ExecutionID:  executionID,
-		AgentIndex:   agentIndex,
-		Status:       status,
-		ErrorMessage: errMsg,
-	}); err != nil {
-		slog.Warn("Failed to publish execution status",
-			"session_id", sessionID,
-			"execution_id", executionID,
-			"status", status,
-			"error", err,
-		)
-	}
-}
-
-// publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
-// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, status string) {
-	if eventPublisher == nil {
-		return
-	}
-	if err := eventPublisher.PublishStageStatus(ctx, sessionID, events.StageStatusPayload{
-		BasePayload: events.BasePayload{
-			Type:      events.EventTypeStageStatus,
-			SessionID: sessionID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-		},
-		StageID:    stageID,
-		StageName:  stageName,
-		StageIndex: stageIndex + 1, // 1-based for clients
-		Status:     status,
-	}); err != nil {
-		slog.Warn("Failed to publish stage status",
-			"session_id", sessionID,
-			"stage_name", stageName,
-			"status", status,
-			"error", err,
-		)
-	}
-}
-
-// executiveSummarySeqNum is a sentinel sequence number ensuring the executive
-// summary timeline event sorts after all stage events.
-const executiveSummarySeqNum = 999_999
-
-// generateExecutiveSummary generates an executive summary from the final analysis.
-// Uses a single LLM call (no tools, no streaming to timeline).
-// Fail-open: returns ("", error) on failure; caller decides how to handle.
-func (e *RealSessionExecutor) generateExecutiveSummary(
-	ctx context.Context,
-	session *ent.AlertSession,
-	chain *config.ChainConfig,
-	finalAnalysis string,
-	timelineService *services.TimelineService,
-	interactionService *services.InteractionService,
-) (string, error) {
-	logger := slog.With("session_id", session.ID)
-	startTime := time.Now()
-
-	// Publish session progress: finalizing.
-	// Executive summary is the last expected step; use totalExpectedStages - 1 as
-	// the 0-based index so CurrentStageIndex (1-based) equals totalExpectedStages.
-	totalExpectedStages := countExpectedStages(chain)
-	publishSessionProgress(ctx, e.eventPublisher, session.ID, "Executive Summary",
-		totalExpectedStages-1, totalExpectedStages, 0, "Generating executive summary")
-	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, session.ID, "", "",
-		events.ProgressPhaseFinalizing, "Generating executive summary")
-
-	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
-	var providerName string
-	if e.cfg.Defaults != nil {
-		providerName = e.cfg.Defaults.LLMProvider
-	}
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if chain.ExecutiveSummaryProvider != "" {
-		providerName = chain.ExecutiveSummaryProvider
-	}
-	provider, err := e.cfg.GetLLMProvider(providerName)
-	if err != nil {
-		return "", fmt.Errorf("executive summary LLM provider %q not found: %w", providerName, err)
-	}
-
-	// Resolve backend from chain-level LLM backend or defaults
-	backend := agent.DefaultLLMBackend
-	if e.cfg.Defaults != nil && e.cfg.Defaults.LLMBackend != "" {
-		backend = e.cfg.Defaults.LLMBackend
-	}
-	if chain.LLMBackend != "" {
-		backend = chain.LLMBackend
-	}
-
-	// Build prompts
-	systemPrompt := e.promptBuilder.BuildExecutiveSummarySystemPrompt()
-	userPrompt := e.promptBuilder.BuildExecutiveSummaryUserPrompt(finalAnalysis)
-
-	messages := []agent.ConversationMessage{
-		{Role: agent.RoleSystem, Content: systemPrompt},
-		{Role: agent.RoleUser, Content: userPrompt},
-	}
-
-	// Single LLM call — no tools, consume full response from stream
-	input := &agent.GenerateInput{
-		SessionID: session.ID,
-		Messages:  messages,
-		Config:    provider,
-		Backend:   backend,
-	}
-
-	// Derive a cancellable context so the producer goroutine in Generate
-	// is always cleaned up when we return (e.g. on ErrorChunk early exit).
-	llmCtx, llmCancel := context.WithCancel(ctx)
-	defer llmCancel()
-
-	ch, err := e.llmClient.Generate(llmCtx, input)
-	if err != nil {
-		return "", fmt.Errorf("executive summary LLM call failed: %w", err)
-	}
-
-	// Collect full text response
-	var sb strings.Builder
-	for chunk := range ch {
-		switch c := chunk.(type) {
-		case *agent.TextChunk:
-			sb.WriteString(c.Content)
-		case *agent.ErrorChunk:
-			return "", fmt.Errorf("executive summary LLM error: %s", c.Message)
-		}
-	}
-
-	summary := sb.String()
-	if summary == "" {
-		return "", fmt.Errorf("executive summary LLM returned empty response")
-	}
-
-	durationMs := int(time.Since(startTime).Milliseconds())
-
-	// Record session-level LLM interaction with inline conversation for observability.
-	conversation := []map[string]string{
-		{"role": string(agent.RoleSystem), "content": systemPrompt},
-		{"role": string(agent.RoleUser), "content": userPrompt},
-		{"role": string(agent.RoleAssistant), "content": summary},
-	}
-	interaction, createErr := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
-		SessionID:       session.ID,
-		InteractionType: "executive_summary",
-		ModelName:       provider.Model,
-		LLMRequest: map[string]any{
-			"messages_count": len(messages),
-			"conversation":   conversation,
-		},
-		LLMResponse: map[string]any{
-			"text_length":      len(summary),
-			"tool_calls_count": 0,
-		},
-		DurationMs: &durationMs,
-	})
-	if createErr != nil {
-		logger.Warn("Failed to record executive summary LLM interaction",
-			"error", createErr)
-	} else if e.eventPublisher != nil {
-		// Publish interaction.created for trace view live updates.
-		if pubErr := e.eventPublisher.PublishInteractionCreated(ctx, session.ID, events.InteractionCreatedPayload{
-			BasePayload: events.BasePayload{
-				Type:      events.EventTypeInteractionCreated,
-				SessionID: session.ID,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
-			},
-			InteractionID:   interaction.ID,
-			InteractionType: events.InteractionTypeLLM,
-		}); pubErr != nil {
-			logger.Warn("Failed to publish interaction created for executive summary",
-				"error", pubErr)
-		}
-	}
-
-	// Create session-level timeline event (no stage_id, no execution_id).
-	// Use a fixed sequence number — executive summary is always the last event.
-	//
-	// NOTE: This event is persisted to the DB only — it is NOT published to
-	// WebSocket clients via EventPublisher. Clients discover the executive
-	// summary through the session API response (executive_summary field) or
-	// by querying the timeline after the session completes.
-	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      session.ID,
-		SequenceNumber: executiveSummarySeqNum,
-		EventType:      timelineevent.EventTypeExecutiveSummary,
-		Status:         timelineevent.StatusCompleted,
-		Content:        summary,
-	})
-	if err != nil {
-		logger.Warn("Failed to create executive summary timeline event (summary still returned)",
-			"error", err)
-	}
-
-	logger.Info("Executive summary generated", "summary_length", len(summary))
-	return summary, nil
-}
-
-// ────────────────────────────────────────────────────────────
-// MCP selection resolution
-// ────────────────────────────────────────────────────────────
-
-// resolveMCPSelection determines the MCP servers and tool filter for this session.
-// If the session has an MCP override (mcp_selection JSON), it replaces the chain
-// config entirely (replace semantics, not merge).
-//
-// Side effects when the override includes NativeTools:
-//  1. Sets resolvedConfig.NativeToolsOverride (used by recordLLMInteraction metadata).
-//  2. Clones resolvedConfig.LLMProvider and merges the override into the clone's
-//     NativeTools map, so the gRPC layer (toProtoLLMConfig) sends the correct
-//     config to the Python LLM service.
-//
-// Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-// Returns (serverIDs, toolFilter, error).
-func resolveMCPSelection(
-	session *ent.AlertSession,
-	resolvedConfig *agent.ResolvedAgentConfig,
-	mcpRegistry *config.MCPServerRegistry,
-) ([]string, map[string][]string, error) {
-	// No override — use chain config (existing behavior)
-	if len(session.McpSelection) == 0 {
-		return resolvedConfig.MCPServers, nil, nil
-	}
-
-	// Deserialize override
-	override, err := models.ParseMCPSelectionConfig(session.McpSelection)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse MCP selection: %w", err)
-	}
-	if override == nil {
-		// ParseMCPSelectionConfig returns nil for empty maps
-		return resolvedConfig.MCPServers, nil, nil
-	}
-
-	// Build serverIDs and toolFilter from override
-	serverIDs := make([]string, 0, len(override.Servers))
-	toolFilter := make(map[string][]string)
-
-	for _, sel := range override.Servers {
-		// Validate server exists in registry
-		if mcpRegistry != nil && !mcpRegistry.Has(sel.Name) {
-			return nil, nil, fmt.Errorf("MCP server %q from override not found in configuration", sel.Name)
-		}
-		serverIDs = append(serverIDs, sel.Name)
-
-		// Only add to toolFilter if specific tools are requested
-		if len(sel.Tools) > 0 {
-			toolFilter[sel.Name] = sel.Tools
-		}
-	}
-
-	// Return nil toolFilter if no server has tool restrictions
-	if len(toolFilter) == 0 {
-		toolFilter = nil
-	}
-
-	// Apply native tools override to the resolved config.
-	// Store the override struct for recordLLMInteraction metadata, and merge
-	// individual overrides into a cloned LLMProvider so the gRPC call path
-	// sends the correct native tools to the Python LLM service.
-	if override.NativeTools != nil {
-		resolvedConfig.NativeToolsOverride = override.NativeTools
-		applyNativeToolsOverride(resolvedConfig, override.NativeTools)
-	}
-
-	return serverIDs, toolFilter, nil
-}
-
-// applyNativeToolsOverride clones resolvedConfig.LLMProvider and merges the
-// per-alert native tools override into the clone's NativeTools map.
-// The clone avoids mutating the shared config-registry pointer.
-func applyNativeToolsOverride(resolvedConfig *agent.ResolvedAgentConfig, nt *models.NativeToolsConfig) {
-	orig := resolvedConfig.LLMProvider
-	if orig == nil || len(orig.NativeTools) == 0 {
-		return
-	}
-
-	// Shallow copy the provider config; only NativeTools map differs.
-	cloned := *orig
-	cloned.NativeTools = make(map[config.GoogleNativeTool]bool, len(orig.NativeTools))
-	for k, v := range orig.NativeTools {
-		cloned.NativeTools[k] = v
-	}
-
-	if nt.GoogleSearch != nil {
-		cloned.NativeTools[config.GoogleNativeToolGoogleSearch] = *nt.GoogleSearch
-	}
-	if nt.CodeExecution != nil {
-		cloned.NativeTools[config.GoogleNativeToolCodeExecution] = *nt.CodeExecution
-	}
-	if nt.URLContext != nil {
-		cloned.NativeTools[config.GoogleNativeToolURLContext] = *nt.URLContext
-	}
-
-	resolvedConfig.LLMProvider = &cloned
-}
-
-// countExpectedStages computes the total number of progress steps for the chain,
-// including synthesis stages (for multi-agent/replica stages) and the executive
-// summary step. Used for accurate progress reporting so CurrentStageIndex never
-// exceeds TotalStages.
-func countExpectedStages(chain *config.ChainConfig) int {
-	total := len(chain.Stages)
-	for _, stageCfg := range chain.Stages {
-		if len(stageCfg.Agents) > 1 || stageCfg.Replicas > 1 {
-			total++ // synthesis stage will follow
-		}
-	}
-	total++ // executive summary step
-	return total
-}
-
-// ────────────────────────────────────────────────────────────
-// Config builders
-// ────────────────────────────────────────────────────────────
-
-// buildConfigs creates execution configs for a stage. For single-agent stages,
-// returns a single config. Same path, no branching.
-func buildConfigs(stageCfg config.StageConfig) []executionConfig {
-	if stageCfg.Replicas > 1 {
-		return buildReplicaConfigs(stageCfg)
-	}
-	return buildMultiAgentConfigs(stageCfg)
-}
-
-// buildMultiAgentConfigs creates one executionConfig per agent in the stage.
-// For single-agent stages, returns []executionConfig with 1 entry.
-func buildMultiAgentConfigs(stageCfg config.StageConfig) []executionConfig {
-	configs := make([]executionConfig, len(stageCfg.Agents))
-	for i, agentCfg := range stageCfg.Agents {
-		configs[i] = executionConfig{
-			agentConfig: agentCfg,
-			displayName: agentCfg.Name,
-		}
-	}
-	return configs
-}
-
-// buildReplicaConfigs replicates the first agent config N times.
-// Display names: {BaseName}-1, {BaseName}-2, etc.
-func buildReplicaConfigs(stageCfg config.StageConfig) []executionConfig {
-	baseAgent := stageCfg.Agents[0]
-	configs := make([]executionConfig, stageCfg.Replicas)
-	for i := 0; i < stageCfg.Replicas; i++ {
-		configs[i] = executionConfig{
-			agentConfig: baseAgent,
-			displayName: fmt.Sprintf("%s-%d", baseAgent.Name, i+1),
-		}
-	}
-	return configs
-}
-
-// ────────────────────────────────────────────────────────────
-// Policy resolution
-// ────────────────────────────────────────────────────────────
-
-// resolvedSuccessPolicy resolves the success policy for a stage:
-// stage config > system default > fallback SuccessPolicyAny.
-func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) config.SuccessPolicy {
-	if input.stageConfig.SuccessPolicy != "" {
-		return input.stageConfig.SuccessPolicy
-	}
-	if e.cfg.Defaults != nil && e.cfg.Defaults.SuccessPolicy != "" {
-		return e.cfg.Defaults.SuccessPolicy
-	}
-	return config.SuccessPolicyAny
-}
-
-// parallelTypePtr returns the parallel_type for DB storage, or nil for single-agent stages.
-func parallelTypePtr(stageCfg config.StageConfig) *string {
-	if stageCfg.Replicas > 1 {
-		s := "replica"
-		return &s
-	}
-	if len(stageCfg.Agents) > 1 {
-		s := "multi_agent"
-		return &s
-	}
-	return nil
-}
-
-// successPolicyPtr returns the resolved success policy as *string for DB storage,
-// or nil for single-agent stages (policy is irrelevant when there's only one agent).
-func successPolicyPtr(stageCfg config.StageConfig, resolved config.SuccessPolicy) *string {
-	if len(stageCfg.Agents) <= 1 && stageCfg.Replicas <= 1 {
-		return nil
-	}
-	s := string(resolved)
-	return &s
-}
-
-// ────────────────────────────────────────────────────────────
-// Result aggregation
-// ────────────────────────────────────────────────────────────
-
-// collectAndSort drains the indexedAgentResult channel and returns results
-// sorted by their original launch index.
-func collectAndSort(ch <-chan indexedAgentResult) []agentResult {
-	var indexed []indexedAgentResult
-	for iar := range ch {
-		indexed = append(indexed, iar)
-	}
-	sort.Slice(indexed, func(i, j int) bool {
-		return indexed[i].index < indexed[j].index
-	})
-	results := make([]agentResult, len(indexed))
-	for i, iar := range indexed {
-		results[i] = iar.result
-	}
-	return results
-}
-
-// aggregateStatus determines the overall stage status from agent results and
-// the resolved success policy. Works identically for 1 or N agents.
-func aggregateStatus(results []agentResult, policy config.SuccessPolicy) alertsession.Status {
-	var completed, failed, timedOut, cancelled int
-
-	for _, r := range results {
-		switch mapAgentStatusToSessionStatus(r.status) {
-		case alertsession.StatusCompleted:
-			completed++
-		case alertsession.StatusTimedOut:
-			timedOut++
-		case alertsession.StatusCancelled:
-			cancelled++
-		default:
-			failed++
-		}
-	}
-
-	nonSuccess := failed + timedOut + cancelled
-
-	switch policy {
-	case config.SuccessPolicyAll:
-		if nonSuccess == 0 {
-			return alertsession.StatusCompleted
-		}
-	default: // SuccessPolicyAny (default when unset)
-		if completed > 0 {
-			return alertsession.StatusCompleted
-		}
-	}
-
-	// Stage failed — use most specific terminal status when uniform
-	if nonSuccess == timedOut {
-		return alertsession.StatusTimedOut
-	}
-	if nonSuccess == cancelled {
-		return alertsession.StatusCancelled
-	}
-	return alertsession.StatusFailed
-}
-
-// aggregateError builds a descriptive error for failed stages.
-// Single-agent: returns the agent's error directly.
-// Multi-agent: lists each non-successful agent with details.
-func aggregateError(results []agentResult, stageStatus alertsession.Status, stageCfg config.StageConfig) error {
-	if stageStatus == alertsession.StatusCompleted {
-		return nil
-	}
-
-	// Single agent — passthrough
-	if len(results) == 1 {
-		return results[0].err
-	}
-
-	// Multi-agent — build descriptive error
-	var nonSuccess int
-	for _, r := range results {
-		if mapAgentStatusToSessionStatus(r.status) != alertsession.StatusCompleted {
-			nonSuccess++
-		}
-	}
-
-	policy := "any"
-	if stageCfg.SuccessPolicy != "" {
-		policy = string(stageCfg.SuccessPolicy)
-	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "multi-agent stage failed: %d/%d executions failed (policy: %s)", nonSuccess, len(results), policy)
-
-	sb.WriteString("\n\nFailed agents:")
-	for i, r := range results {
-		sessionStatus := mapAgentStatusToSessionStatus(r.status)
-		if sessionStatus == alertsession.StatusCompleted {
-			continue
-		}
-		errMsg := "unknown error"
-		if r.err != nil {
-			errMsg = r.err.Error()
-		}
-		fmt.Fprintf(&sb, "\n  - agent %d (%s): %s", i+1, sessionStatus, errMsg)
-	}
-
-	return fmt.Errorf("%s", sb.String())
-}
-
-// mapTerminalStatus extracts a terminal status string for event publishing.
-func mapTerminalStatus(sr stageResult) string {
-	switch sr.status {
-	case alertsession.StatusCompleted:
-		return events.StageStatusCompleted
-	case alertsession.StatusFailed:
-		return events.StageStatusFailed
-	case alertsession.StatusTimedOut:
-		return events.StageStatusTimedOut
-	case alertsession.StatusCancelled:
-		return events.StageStatusCancelled
-	default:
-		return events.StageStatusFailed
-	}
-}
-
-// ────────────────────────────────────────────────────────────
-// Status mappers
-// ────────────────────────────────────────────────────────────
-
-// mapAgentStatusToEntStatus converts agent.ExecutionStatus to ent agentexecution.Status.
-// Pending/Active statuses fall through to Failed intentionally — they should
-// never reach this mapper since BaseAgent always sets a terminal status before
-// returning. Mapping Active to Failed (rather than Active) prevents leaving
-// AgentExecution records in a non-terminal state permanently.
-func mapAgentStatusToEntStatus(status agent.ExecutionStatus) agentexecution.Status {
-	switch status {
-	case agent.ExecutionStatusCompleted:
-		return agentexecution.StatusCompleted
-	case agent.ExecutionStatusFailed:
-		return agentexecution.StatusFailed
-	case agent.ExecutionStatusTimedOut:
-		return agentexecution.StatusTimedOut
-	case agent.ExecutionStatusCancelled:
-		return agentexecution.StatusCancelled
-	default:
-		return agentexecution.StatusFailed
-	}
-}
-
-// mapAgentStatusToSessionStatus converts agent.ExecutionStatus to alertsession.Status.
-// Pending/Active statuses fall through to Failed intentionally — they should never
-// reach this mapper since BaseAgent always sets a terminal status before returning.
-func mapAgentStatusToSessionStatus(status agent.ExecutionStatus) alertsession.Status {
-	switch status {
-	case agent.ExecutionStatusCompleted:
-		return alertsession.StatusCompleted
-	case agent.ExecutionStatusFailed:
-		return alertsession.StatusFailed
-	case agent.ExecutionStatusTimedOut:
-		return alertsession.StatusTimedOut
-	case agent.ExecutionStatusCancelled:
-		return alertsession.StatusCancelled
-	default:
-		return alertsession.StatusFailed
 	}
 }

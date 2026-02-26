@@ -15,7 +15,7 @@ COPY proto/ proto/
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X github.com/codeready-toolchain/tarsy/pkg/version.gitCommitOverride=${VERSION}" \
     -o /tarsy ./cmd/tarsy
 
 # Stage 2: Build dashboard

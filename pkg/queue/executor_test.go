@@ -3,11 +3,13 @@ package queue
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,6 +179,32 @@ func TestResolveMCPSelection(t *testing.T) {
 		assert.False(t, origProvider.NativeTools[config.GoogleNativeToolCodeExecution])
 	})
 
+	t.Run("native tools override applied when provider has empty NativeTools", func(t *testing.T) {
+		origProvider := &config.LLMProviderConfig{
+			NativeTools: nil,
+		}
+		session := &ent.AlertSession{
+			McpSelection: map[string]interface{}{
+				"servers": []interface{}{
+					map[string]interface{}{"name": "kubernetes-server"},
+				},
+				"native_tools": map[string]interface{}{
+					"google_search": true,
+				},
+			},
+		}
+		resolved := &agent.ResolvedAgentConfig{
+			MCPServers:  []string{"argocd-server"},
+			LLMProvider: origProvider,
+		}
+
+		_, _, err := resolveMCPSelection(session, resolved, registry)
+		require.NoError(t, err)
+
+		require.NotNil(t, resolved.LLMProvider.NativeTools)
+		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+	})
+
 	t.Run("empty servers in override returns error", func(t *testing.T) {
 		session := &ent.AlertSession{
 			McpSelection: map[string]interface{}{
@@ -318,4 +346,149 @@ func TestMapCancellation(t *testing.T) {
 		assert.Equal(t, alertsession.StatusTimedOut, result.Status)
 		assert.Contains(t, result.Error.Error(), "timed out")
 	})
+}
+
+func TestResolveOrchestratorGuardrails(t *testing.T) {
+	dur := func(d time.Duration) *time.Duration { return &d }
+	intPtr := func(i int) *int { return &i }
+
+	tests := []struct {
+		name     string
+		cfg      *config.Config
+		agentDef *config.AgentConfig
+		want     *orchestrator.OrchestratorGuardrails
+	}{
+		{
+			name:     "hardcoded fallbacks when no config",
+			cfg:      &config.Config{},
+			agentDef: &config.AgentConfig{},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 5,
+				AgentTimeout:        300 * time.Second,
+				MaxBudget:           600 * time.Second,
+			},
+		},
+		{
+			name: "global defaults override fallbacks",
+			cfg: &config.Config{
+				Defaults: &config.Defaults{
+					Orchestrator: &config.OrchestratorConfig{
+						MaxConcurrentAgents: intPtr(10),
+						AgentTimeout:        dur(60 * time.Second),
+					},
+				},
+			},
+			agentDef: &config.AgentConfig{},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 10,
+				AgentTimeout:        60 * time.Second,
+				MaxBudget:           600 * time.Second,
+			},
+		},
+		{
+			name: "per-agent overrides global defaults",
+			cfg: &config.Config{
+				Defaults: &config.Defaults{
+					Orchestrator: &config.OrchestratorConfig{
+						MaxConcurrentAgents: intPtr(10),
+						AgentTimeout:        dur(60 * time.Second),
+						MaxBudget:           dur(120 * time.Second),
+					},
+				},
+			},
+			agentDef: &config.AgentConfig{
+				Orchestrator: &config.OrchestratorConfig{
+					MaxConcurrentAgents: intPtr(3),
+				},
+			},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 3,
+				AgentTimeout:        60 * time.Second,
+				MaxBudget:           120 * time.Second,
+			},
+		},
+		{
+			name: "per-agent only without global defaults",
+			cfg:  &config.Config{},
+			agentDef: &config.AgentConfig{
+				Orchestrator: &config.OrchestratorConfig{
+					MaxBudget: dur(30 * time.Second),
+				},
+			},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 5,
+				AgentTimeout:        300 * time.Second,
+				MaxBudget:           30 * time.Second,
+			},
+		},
+		{
+			name: "zero or negative values are clamped to defaults",
+			cfg:  &config.Config{},
+			agentDef: &config.AgentConfig{
+				Orchestrator: &config.OrchestratorConfig{
+					MaxConcurrentAgents: intPtr(0),
+					AgentTimeout:        dur(-1 * time.Second),
+					MaxBudget:           dur(0),
+				},
+			},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 5,
+				AgentTimeout:        300 * time.Second,
+				MaxBudget:           600 * time.Second,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveOrchestratorGuardrails(tt.cfg, tt.agentDef)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveSubAgents(t *testing.T) {
+	tests := []struct {
+		name     string
+		chain    *config.ChainConfig
+		stage    config.StageConfig
+		agentCfg config.StageAgentConfig
+		want     []string
+	}{
+		{
+			name:     "no override at any level",
+			chain:    &config.ChainConfig{},
+			stage:    config.StageConfig{},
+			agentCfg: config.StageAgentConfig{},
+			want:     nil,
+		},
+		{
+			name:     "chain level",
+			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer", "MetricChecker"}},
+			stage:    config.StageConfig{},
+			agentCfg: config.StageAgentConfig{},
+			want:     []string{"LogAnalyzer", "MetricChecker"},
+		},
+		{
+			name:     "stage overrides chain",
+			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer"}},
+			stage:    config.StageConfig{SubAgents: []string{"WebResearcher"}},
+			agentCfg: config.StageAgentConfig{},
+			want:     []string{"WebResearcher"},
+		},
+		{
+			name:     "agent overrides stage and chain",
+			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer"}},
+			stage:    config.StageConfig{SubAgents: []string{"WebResearcher"}},
+			agentCfg: config.StageAgentConfig{SubAgents: []string{"CodeExecutor", "GeneralWorker"}},
+			want:     []string{"CodeExecutor", "GeneralWorker"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveSubAgents(tt.chain, tt.stage, tt.agentCfg)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
