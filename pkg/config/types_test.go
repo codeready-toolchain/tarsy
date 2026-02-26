@@ -69,6 +69,42 @@ func TestSubAgentRefs_UnmarshalYAML(t *testing.T) {
 				{Name: "GeneralWorker"},
 			},
 		},
+		// ── Negative cases ──────────────────────────────────────────
+		{
+			name:    "non-sequence (scalar)",
+			yaml:    "sub_agents: LogAnalyzer",
+			wantErr: "sub_agents must be a sequence",
+		},
+		{
+			name:    "non-sequence (map)",
+			yaml:    "sub_agents:\n  name: LogAnalyzer",
+			wantErr: "sub_agents must be a sequence",
+		},
+		{
+			name:    "integer scalar in sequence",
+			yaml:    "sub_agents: [42]",
+			wantErr: "sub_agents[0]: expected string, got !!int",
+		},
+		{
+			name:    "boolean scalar in sequence",
+			yaml:    "sub_agents: [true]",
+			wantErr: "sub_agents[0]: expected string, got !!bool",
+		},
+		{
+			name: "unknown key in mapping",
+			yaml: `sub_agents:
+  - name: LogAnalyzer
+    max_iteration: 5`,
+			wantErr: `sub_agents[0]: unknown field "max_iteration"`,
+		},
+		{
+			name: "unknown key in second element",
+			yaml: `sub_agents:
+  - name: LogAnalyzer
+  - name: Worker
+    foo: bar`,
+			wantErr: `sub_agents[1]: unknown field "foo"`,
+		},
 	}
 
 	for _, tt := range tests {

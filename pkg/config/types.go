@@ -80,6 +80,16 @@ type SubAgentRefs []SubAgentRef
 //   - Short-form:  [LogAnalyzer, GeneralWorker]
 //   - Long-form:   [{name: LogAnalyzer, max_iterations: 5}, ...]
 //   - Mixed:       [LogAnalyzer, {name: GeneralWorker, llm_provider: fast}]
+// subAgentRefAllowedKeys are the YAML keys accepted in a SubAgentRef mapping.
+// Kept in sync with the struct tags on SubAgentRef.
+var subAgentRefAllowedKeys = map[string]bool{
+	"name":           true,
+	"llm_provider":   true,
+	"llm_backend":    true,
+	"max_iterations": true,
+	"mcp_servers":    true,
+}
+
 func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.SequenceNode {
 		return fmt.Errorf("sub_agents must be a sequence, got %v", value.Tag)
@@ -88,8 +98,14 @@ func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 	for i, node := range value.Content {
 		switch node.Kind {
 		case yaml.ScalarNode:
+			if node.Tag != "!!str" {
+				return fmt.Errorf("sub_agents[%d]: expected string, got %s", i, node.Tag)
+			}
 			refs = append(refs, SubAgentRef{Name: node.Value})
 		case yaml.MappingNode:
+			if err := checkUnknownKeys(node, subAgentRefAllowedKeys, i); err != nil {
+				return err
+			}
 			var ref SubAgentRef
 			if err := node.Decode(&ref); err != nil {
 				return fmt.Errorf("sub_agents[%d]: %w", i, err)
@@ -100,6 +116,18 @@ func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 		}
 	}
 	*r = refs
+	return nil
+}
+
+// checkUnknownKeys validates that a MappingNode contains only keys in the
+// allowed set. MappingNode.Content alternates key, value, key, value, ...
+func checkUnknownKeys(node *yaml.Node, allowed map[string]bool, index int) error {
+	for j := 0; j < len(node.Content)-1; j += 2 {
+		key := node.Content[j].Value
+		if !allowed[key] {
+			return fmt.Errorf("sub_agents[%d]: unknown field %q", index, key)
+		}
+	}
 	return nil
 }
 
