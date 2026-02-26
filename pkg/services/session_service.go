@@ -426,6 +426,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
 			q.WithAgentExecutions(func(eq *ent.AgentExecutionQuery) {
+				eq.Where(agentexecution.ParentExecutionIDIsNil())
 				eq.Order(ent.Asc(agentexecution.FieldAgentIndex))
 				eq.WithSubAgents(func(sq *ent.AgentExecutionQuery) {
 					sq.Order(ent.Asc(agentexecution.FieldAgentIndex))
@@ -482,15 +483,12 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		}
 
 		// Build execution overviews for this stage.
-		// Only top-level executions appear in the list; sub-agents are nested
-		// under their parent via the SubAgents field.
+		// The query already filters for top-level executions only;
+		// sub-agents are nested via the SubAgents field.
 		var execOverviews []models.ExecutionOverview
 		if stg.Edges.AgentExecutions != nil {
 			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
 			for _, exec := range stg.Edges.AgentExecutions {
-				if exec.ParentExecutionID != nil {
-					continue
-				}
 				overview := buildExecutionOverview(exec, execTokens)
 
 				if exec.Edges.SubAgents != nil {

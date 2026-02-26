@@ -1023,6 +1023,71 @@ func TestStageService_CreateAgentExecution_SubAgent(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, ent.IsConstraintError(err), "expected constraint error, got: %v", err)
 	})
+
+	t.Run("rejects nonexistent parent execution", func(t *testing.T) {
+		bogus := "nonexistent-id"
+		task := "Won't run"
+		_, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "Orphan",
+			AgentIndex:        99,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &bogus,
+			Task:              &task,
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("rejects parent from different stage", func(t *testing.T) {
+		otherStg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Other Stage",
+			StageIndex:         2,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		task := "Cross-stage"
+		_, err = stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           otherStg.ID, // different stage than the orchestrator's
+			SessionID:         session.ID,
+			AgentName:         "CrossStage",
+			AgentIndex:        1,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+		assert.Contains(t, err.Error(), "different stage")
+	})
+
+	t.Run("rejects parent from different session", func(t *testing.T) {
+		otherSession, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "other",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+
+		task := "Cross-session"
+		_, err = stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,            // same stage as parent
+			SessionID:         otherSession.ID,   // different session
+			AgentName:         "CrossSession",
+			AgentIndex:        1,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+		assert.Contains(t, err.Error(), "different session")
+	})
 }
 
 func TestStageService_UpdateStageStatus_ExcludesSubAgents(t *testing.T) {

@@ -114,6 +114,19 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 		builder.SetLlmProvider(req.LLMProvider)
 	}
 	if req.ParentExecutionID != nil {
+		parent, err := s.client.AgentExecution.Get(ctx, *req.ParentExecutionID)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return nil, NewValidationError("parent_execution_id", "parent execution not found")
+			}
+			return nil, fmt.Errorf("failed to look up parent execution: %w", err)
+		}
+		if parent.StageID != req.StageID {
+			return nil, NewValidationError("parent_execution_id", "parent execution belongs to a different stage")
+		}
+		if parent.SessionID != req.SessionID {
+			return nil, NewValidationError("parent_execution_id", "parent execution belongs to a different session")
+		}
 		builder.SetParentExecutionID(*req.ParentExecutionID)
 	}
 	if req.Task != nil {
