@@ -157,6 +157,18 @@ agent_chains:
             sub_agents: [LogAnalyzer, MetricChecker]  # Stage-agent level (recommended)
 ```
 
+The `sub_agents` field supports per-reference overrides (same fields as `StageAgentConfig`: `llm_provider`, `llm_backend`, `max_iterations`, `mcp_servers`). Both short-form (list of strings) and long-form (list of objects with overrides) are supported, and can be mixed:
+
+```yaml
+sub_agents:
+  - name: LogAnalyzer
+    max_iterations: 5
+    llm_provider: "fast-model"
+  - GeneralWorker          # no overrides — uses agent definition as-is
+```
+
+Per-reference overrides win over agent definition defaults (same precedence as `StageAgentConfig` in `ResolveAgentConfig`). The `SubAgentRefs` type has a custom YAML unmarshaler handling all three forms (strings, objects, mixed).
+
 Stage-agent level is recommended — it makes the orchestrator-to-sub-agent relationship explicit. Chain and stage levels are useful when multiple orchestrators share the same sub-agent pool.
 
 If omitted at all levels, the orchestrator sees the full global registry (all agents with `description`).
@@ -449,6 +461,7 @@ type SubAgentRunner struct {
     nextSubAgentIndex  int32                        // Atomic counter for sub-agent agent_index (starts at 1)
     registry           *config.SubAgentRegistry     // Available agents for dispatch
     guardrails         *OrchestratorGuardrails      // Resolved from defaults + per-agent config (Q5)
+    overrides          map[string]config.SubAgentRef // Per-reference overrides from sub_agents config
 }
 
 // SubAgentDeps bundles dependencies extracted from the session executor.
@@ -516,7 +529,8 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
     //    - status = "active"
     //    - agent_index = next sub-agent index (from r.nextSubAgentIndex, atomic)
     // 4. Create task_assigned timeline event
-    // 5. Resolve agent config (same path as executeAgent)
+    // 5. Look up per-reference overrides (r.overrides[name]) and resolve agent config
+    //    with overrides passed as StageAgentConfig fields (same path as executeAgent)
     // 6. Create MCP tool executor for sub-agent's own MCP servers
     // 7. Build ExecutionContext with SubAgent field set (triggers sub-agent prompt template)
     // 8. Increment pending counter (atomic) — BEFORE spawning goroutine to avoid race
@@ -1028,7 +1042,8 @@ func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentCon
 
 // resolveSubAgents determines the sub_agents list from chain → stage → stage-agent hierarchy.
 // Returns nil if no override at any level (meaning: use full global registry).
-func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) []string {
+// Returns SubAgentRefs which carry both agent names and per-reference overrides.
+func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) config.SubAgentRefs {
     // stage-agent > stage > chain (same pattern as mcp_servers)
     if len(agentCfg.SubAgents) > 0 { return agentCfg.SubAgents }
     if len(stage.SubAgents) > 0    { return stage.SubAgents }
@@ -1066,9 +1081,9 @@ func (e *RealSessionExecutor) executeAgent(...) agentResult {
             RunbookContent: e.resolveRunbook(ctx, input.session),
         }
         guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
-        subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
-        registry := e.subAgentRegistry.Filter(subAgentNames)  // nil = full registry
-        runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
+        subAgentRefs := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+        registry := e.subAgentRegistry.Filter(subAgentRefs.Names())  // nil = full registry
+        runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
         toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
         execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
         execCtx.SubAgentCatalog = registry.Entries()
@@ -1143,7 +1158,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Independent of orchestrator — useful on its own
 
 ### PR1: Config foundation ✅ DONE
-- `sub_agents` override at chain/stage/agent level (full hierarchy) — new fields on `ChainConfig`, `StageConfig`, `StageAgentConfig`
+- `sub_agents` override at chain/stage/agent level (full hierarchy) — `SubAgentRefs` type on `ChainConfig`, `StageConfig`, `StageAgentConfig` with custom YAML unmarshaler supporting both short-form (`[]string`) and long-form (`[]SubAgentRef` with per-reference overrides)
 - `orchestrator` nested config section on `AgentConfig`
 - `defaults.orchestrator` global defaults — new `Orchestrator` field on `Defaults` struct
 - `SubAgentRegistry` built from merged agents (agents with `description`) — stored on `RealSessionExecutor`
@@ -1189,15 +1204,17 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 
 ### PR5: Session executor wiring ✅ DONE
 - Add `subAgentRegistry` field to `RealSessionExecutor` (built at construction time)
-- `resolveOrchestratorGuardrails` + `resolveSubAgents` helper functions
+- `resolveOrchestratorGuardrails` + `resolveSubAgents` helper functions (`resolveSubAgents` returns `config.SubAgentRefs` carrying per-reference overrides)
 - Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
 - Pass session-level `ctx` to `NewSubAgentRunner` as `parentCtx` — sub-agent contexts must derive from the long-lived session context, not the per-iteration context (which is cancelled at the end of each orchestrator iteration)
+- Pass `SubAgentRefs` to `NewSubAgentRunner` — builds `overrides map[string]SubAgentRef` used at dispatch time to populate `StageAgentConfig` fields for `ResolveAgentConfig`
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
 - Integration tests
 
 ### PR6: E2E Tests ✅ DONE
-- **Config**: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` at stage-agent level, one custom sub-agent (LogAnalyzer with MCP tools, `max_iterations: 2`) and one built-in sub-agent (GeneralWorker, used as-is with no overrides). This mix tests both custom agent definition and built-in agent reuse — the production-realistic pattern.
+- **Config**: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` at stage-agent level (short-form), one custom sub-agent (LogAnalyzer with MCP tools, `max_iterations: 2`) and one built-in sub-agent (GeneralWorker, used as-is with no overrides). This mix tests both custom agent definition and built-in agent reuse — the production-realistic pattern.
+- **Config**: `testdata/configs/builtin-orchestrator/tarsy.yaml` — built-in Orchestrator with mixed-form `sub_agents`: long-form LogAnalyzer (with `max_iterations: 3` per-reference override) and short-form GeneralWorker. Exercises the `SubAgentRefs` custom YAML unmarshaler end-to-end.
 - **Config**: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure with `defaults.max_iterations: 1` for cancellation test (prevents retry loops after context cancellation).
 - **7 E2E tests** covering deterministic golden-file verification, realistic multi-agent scenarios, reactive multi-phase dispatch, failure handling, tool coverage (dispatch/list/cancel), and cascading cancellation:
 

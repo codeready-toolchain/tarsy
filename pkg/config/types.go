@@ -1,5 +1,11 @@
 package config
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
 // Shared types used across configuration structs
 
 // TransportConfig defines MCP server transport configuration
@@ -48,12 +54,94 @@ type SummarizationConfig struct {
 // Used in stage.agents[] array (even for single-agent stages)
 // Parallel execution occurs when: len(agents) > 1 OR replicas > 1
 type StageAgentConfig struct {
+	Name          string       `yaml:"name" validate:"required"`
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
+	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
+}
+
+// SubAgentRef is a reference to a sub-agent with optional per-reference overrides.
+// Same override fields as StageAgentConfig, minus SubAgents (nesting forbidden).
+type SubAgentRef struct {
 	Name          string     `yaml:"name" validate:"required"`
 	LLMProvider   string     `yaml:"llm_provider,omitempty"`
 	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
-	SubAgents     []string   `yaml:"sub_agents,omitempty"`
+}
+
+// SubAgentRefs is a list of sub-agent references that supports both short-form
+// (list of strings) and long-form (list of objects with overrides) in YAML.
+type SubAgentRefs []SubAgentRef
+
+// subAgentRefAllowedKeys are the YAML keys accepted in a SubAgentRef mapping.
+// Kept in sync with the struct tags on SubAgentRef.
+var subAgentRefAllowedKeys = map[string]bool{
+	"name":           true,
+	"llm_provider":   true,
+	"llm_backend":    true,
+	"max_iterations": true,
+	"mcp_servers":    true,
+}
+
+// UnmarshalYAML implements custom unmarshaling to support both:
+//   - Short-form:  [LogAnalyzer, GeneralWorker]
+//   - Long-form:   [{name: LogAnalyzer, max_iterations: 5}, ...]
+//   - Mixed:       [LogAnalyzer, {name: GeneralWorker, llm_provider: fast}]
+func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return fmt.Errorf("sub_agents must be a sequence, got %v", value.Tag)
+	}
+	refs := make(SubAgentRefs, 0, len(value.Content))
+	for i, node := range value.Content {
+		switch node.Kind {
+		case yaml.ScalarNode:
+			if node.Tag != "!!str" {
+				return fmt.Errorf("sub_agents[%d]: expected string, got %s", i, node.Tag)
+			}
+			refs = append(refs, SubAgentRef{Name: node.Value})
+		case yaml.MappingNode:
+			if err := checkUnknownKeys(node, subAgentRefAllowedKeys, i); err != nil {
+				return err
+			}
+			var ref SubAgentRef
+			if err := node.Decode(&ref); err != nil {
+				return fmt.Errorf("sub_agents[%d]: %w", i, err)
+			}
+			refs = append(refs, ref)
+		default:
+			return fmt.Errorf("sub_agents[%d]: expected string or mapping, got %v", i, node.Tag)
+		}
+	}
+	*r = refs
+	return nil
+}
+
+// checkUnknownKeys validates that a MappingNode contains only keys in the
+// allowed set. MappingNode.Content alternates key, value, key, value, ...
+func checkUnknownKeys(node *yaml.Node, allowed map[string]bool, index int) error {
+	for j := 0; j < len(node.Content)-1; j += 2 {
+		key := node.Content[j].Value
+		if !allowed[key] {
+			return fmt.Errorf("sub_agents[%d]: unknown field %q", index, key)
+		}
+	}
+	return nil
+}
+
+// Names returns the agent names from all refs. Returns nil when the receiver is nil,
+// preserving the "nil = use full registry" semantic in SubAgentRegistry.Filter.
+func (r SubAgentRefs) Names() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, len(r))
+	for i, ref := range r {
+		names[i] = ref.Name
+	}
+	return names
 }
 
 // SynthesisConfig defines synthesis agent configuration

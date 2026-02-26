@@ -453,7 +453,7 @@ func TestResolveSubAgents(t *testing.T) {
 		chain    *config.ChainConfig
 		stage    config.StageConfig
 		agentCfg config.StageAgentConfig
-		want     []string
+		want     config.SubAgentRefs
 	}{
 		{
 			name:     "no override at any level",
@@ -464,24 +464,24 @@ func TestResolveSubAgents(t *testing.T) {
 		},
 		{
 			name:     "chain level",
-			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer", "MetricChecker"}},
+			chain:    &config.ChainConfig{SubAgents: config.SubAgentRefs{{Name: "LogAnalyzer"}, {Name: "MetricChecker"}}},
 			stage:    config.StageConfig{},
 			agentCfg: config.StageAgentConfig{},
-			want:     []string{"LogAnalyzer", "MetricChecker"},
+			want:     config.SubAgentRefs{{Name: "LogAnalyzer"}, {Name: "MetricChecker"}},
 		},
 		{
 			name:     "stage overrides chain",
-			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer"}},
-			stage:    config.StageConfig{SubAgents: []string{"WebResearcher"}},
+			chain:    &config.ChainConfig{SubAgents: config.SubAgentRefs{{Name: "LogAnalyzer"}}},
+			stage:    config.StageConfig{SubAgents: config.SubAgentRefs{{Name: "WebResearcher"}}},
 			agentCfg: config.StageAgentConfig{},
-			want:     []string{"WebResearcher"},
+			want:     config.SubAgentRefs{{Name: "WebResearcher"}},
 		},
 		{
 			name:     "agent overrides stage and chain",
-			chain:    &config.ChainConfig{SubAgents: []string{"LogAnalyzer"}},
-			stage:    config.StageConfig{SubAgents: []string{"WebResearcher"}},
-			agentCfg: config.StageAgentConfig{SubAgents: []string{"CodeExecutor", "GeneralWorker"}},
-			want:     []string{"CodeExecutor", "GeneralWorker"},
+			chain:    &config.ChainConfig{SubAgents: config.SubAgentRefs{{Name: "LogAnalyzer"}}},
+			stage:    config.StageConfig{SubAgents: config.SubAgentRefs{{Name: "WebResearcher"}}},
+			agentCfg: config.StageAgentConfig{SubAgents: config.SubAgentRefs{{Name: "CodeExecutor"}, {Name: "GeneralWorker"}}},
+			want:     config.SubAgentRefs{{Name: "CodeExecutor"}, {Name: "GeneralWorker"}},
 		},
 	}
 

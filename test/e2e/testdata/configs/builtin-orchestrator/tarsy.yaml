@@ -30,4 +30,7 @@ agent_chains:
       - name: orchestrate
         agents:
           - name: Orchestrator
-            sub_agents: [LogAnalyzer, GeneralWorker]
+            sub_agents:
+              - name: LogAnalyzer
+                max_iterations: 3
+              - GeneralWorker

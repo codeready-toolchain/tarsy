@@ -566,14 +566,28 @@ func (v *Validator) validateOrchestratorConfig(oc *OrchestratorConfig, section, 
 	return nil
 }
 
-func (v *Validator) validateSubAgentRefs(subAgents []string, section, name, field string) error {
-	for _, agentName := range subAgents {
-		if !v.cfg.AgentRegistry.Has(agentName) {
-			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", agentName))
+func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, field string) error {
+	for _, ref := range subAgents {
+		if !v.cfg.AgentRegistry.Has(ref.Name) {
+			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", ref.Name))
 		}
-		agentDef, _ := v.cfg.AgentRegistry.Get(agentName)
+		agentDef, _ := v.cfg.AgentRegistry.Get(ref.Name)
 		if agentDef.Type == AgentTypeOrchestrator {
-			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' is an orchestrator and cannot be a sub-agent", agentName))
+			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' is an orchestrator and cannot be a sub-agent", ref.Name))
+		}
+		if ref.LLMBackend != "" && !ref.LLMBackend.IsValid() {
+			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' has invalid llm_backend: %s", ref.Name, ref.LLMBackend))
+		}
+		if ref.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(ref.LLMProvider) {
+			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies LLM provider '%s' which is not found", ref.Name, ref.LLMProvider))
+		}
+		if ref.MaxIterations != nil && *ref.MaxIterations < 1 {
+			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' max_iterations must be at least 1", ref.Name))
+		}
+		for _, serverID := range ref.MCPServers {
+			if !v.cfg.MCPServerRegistry.Has(serverID) {
+				return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies MCP server '%s' which is not found", ref.Name, serverID))
+			}
 		}
 	}
 	return nil

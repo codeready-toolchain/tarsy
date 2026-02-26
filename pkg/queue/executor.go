@@ -581,8 +581,8 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 
 		guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
-		subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
-		registry := e.subAgentRegistry.Filter(subAgentNames)
+		subAgentRefs := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+		registry := e.subAgentRegistry.Filter(subAgentRefs.Names())
 
 		deps := &orchestrator.SubAgentDeps{
 			Config:             e.cfg,
@@ -601,7 +601,7 @@ func (e *RealSessionExecutor) executeAgent(
 			RunbookContent:     input.runbookContent,
 		}
 
-		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
+		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
 		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
 		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
 		execCtx.SubAgentCatalog = registry.Entries()

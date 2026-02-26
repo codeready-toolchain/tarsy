@@ -51,6 +51,7 @@ type SubAgentRunner struct {
 
 	registry   *config.SubAgentRegistry
 	guardrails *OrchestratorGuardrails
+	overrides  map[string]config.SubAgentRef
 }
 
 // NewSubAgentRunner creates a runner for managing sub-agents within an
@@ -65,7 +66,12 @@ func NewSubAgentRunner(
 	stageID string,
 	registry *config.SubAgentRegistry,
 	guardrails *OrchestratorGuardrails,
+	refs config.SubAgentRefs,
 ) *SubAgentRunner {
+	overrides := make(map[string]config.SubAgentRef, len(refs))
+	for _, ref := range refs {
+		overrides[ref.Name] = ref
+	}
 	return &SubAgentRunner{
 		executions:   make(map[string]*subAgentExecution),
 		resultsCh:    make(chan *SubAgentResult, guardrails.MaxConcurrentAgents),
@@ -77,6 +83,7 @@ func NewSubAgentRunner(
 		stageID:      stageID,
 		registry:     registry,
 		guardrails:   guardrails,
+		overrides:    overrides,
 	}
 }
 
@@ -117,10 +124,17 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 
 	agentIndex := int(atomic.AddInt32(&r.nextSubAgentIndex, 1))
 
+	ref := r.overrides[name]
 	resolvedConfig, err := agent.ResolveAgentConfig(
 		r.deps.Config, r.deps.Chain,
 		config.StageConfig{},
-		config.StageAgentConfig{Name: name},
+		config.StageAgentConfig{
+			Name:          name,
+			LLMProvider:   ref.LLMProvider,
+			LLMBackend:    ref.LLMBackend,
+			MaxIterations: ref.MaxIterations,
+			MCPServers:    ref.MCPServers,
+		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve config for sub-agent %s: %w", name, err)
