@@ -36,4 +36,6 @@ agent_chains:
       - name: orchestrate
         agents:
           - name: SREOrchestrator
-            sub_agents: [LogAnalyzer, GeneralWorker]
+            sub_agents:
+              - name: LogAnalyzer
+              - GeneralWorker

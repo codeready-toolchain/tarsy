@@ -469,6 +469,7 @@ func newMinimalRunner(maxConcurrent int) *SubAgentRunner {
 			AgentTimeout:        5 * time.Minute,
 			MaxBudget:           10 * time.Minute,
 		},
+		nil,
 	)
 }
 
@@ -635,6 +636,7 @@ func setupIntegrationRunner(
 			AgentTimeout:        30 * time.Second,
 			MaxBudget:           60 * time.Second,
 		},
+		nil,
 	)
 
 	return runner, func() {}

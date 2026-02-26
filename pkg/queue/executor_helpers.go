@@ -455,7 +455,7 @@ func applyOrchestratorConfig(g *orchestrator.OrchestratorGuardrails, oc *config.
 // resolveSubAgents returns the sub_agents override from the most specific level
 // in the hierarchy: stage-agent > stage > chain. Returns nil if no override
 // (meaning the full global registry is used).
-func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) []string {
+func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) config.SubAgentRefs {
 	if len(agentCfg.SubAgents) > 0 {
 		return agentCfg.SubAgents
 	}

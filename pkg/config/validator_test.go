@@ -2263,7 +2263,7 @@ func TestValidateSubAgents(t *testing.T) {
 			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 				"chain1": {
 					AlertTypes: []string{"test"},
-					SubAgents:  []string{"LogAnalyzer", "MetricChecker"},
+					SubAgents:  SubAgentRefs{{Name: "LogAnalyzer"}, {Name: "MetricChecker"}},
 					Stages: []StageConfig{
 						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
 					},
@@ -2283,7 +2283,7 @@ func TestValidateSubAgents(t *testing.T) {
 			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 				"chain1": {
 					AlertTypes: []string{"test"},
-					SubAgents:  []string{"NonExistent"},
+					SubAgents:  SubAgentRefs{{Name: "NonExistent"}},
 					Stages: []StageConfig{
 						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
 					},
@@ -2304,7 +2304,7 @@ func TestValidateSubAgents(t *testing.T) {
 			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 				"chain1": {
 					AlertTypes: []string{"test"},
-					SubAgents:  []string{"MyOrchestrator"},
+					SubAgents:  SubAgentRefs{{Name: "MyOrchestrator"}},
 					Stages: []StageConfig{
 						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
 					},
@@ -2328,7 +2328,7 @@ func TestValidateSubAgents(t *testing.T) {
 					Stages: []StageConfig{
 						{
 							Name:      "s1",
-							SubAgents: []string{"LogAnalyzer"},
+							SubAgents: SubAgentRefs{{Name: "LogAnalyzer"}},
 							Agents:    []StageAgentConfig{{Name: "MetricChecker"}},
 						},
 					},
@@ -2352,7 +2352,7 @@ func TestValidateSubAgents(t *testing.T) {
 						{
 							Name: "s1",
 							Agents: []StageAgentConfig{
-								{Name: "MyOrchestrator", SubAgents: []string{"MetricChecker"}},
+								{Name: "MyOrchestrator", SubAgents: SubAgentRefs{{Name: "MetricChecker"}}},
 							},
 						},
 					},
@@ -2375,7 +2375,7 @@ func TestValidateSubAgents(t *testing.T) {
 					Stages: []StageConfig{
 						{
 							Name:      "s1",
-							SubAgents: []string{"MyOrchestrator"},
+							SubAgents: SubAgentRefs{{Name: "MyOrchestrator"}},
 							Agents:    []StageAgentConfig{{Name: "LogAnalyzer"}},
 						},
 					},
@@ -2400,7 +2400,7 @@ func TestValidateSubAgents(t *testing.T) {
 						{
 							Name: "s1",
 							Agents: []StageAgentConfig{
-								{Name: "MyOrchestrator", SubAgents: []string{"Ghost"}},
+								{Name: "MyOrchestrator", SubAgents: SubAgentRefs{{Name: "Ghost"}}},
 							},
 						},
 					},
@@ -2411,6 +2411,120 @@ func TestValidateSubAgents(t *testing.T) {
 		err := validator.validateChains()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "agent 'Ghost' not found")
+	})
+
+	t.Run("sub_agent ref with valid overrides", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{"grafana": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "grafana"}}}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{"fast": {}}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", LLMProvider: "fast", MaxIterations: intPtr(5), MCPServers: []string{"grafana"}},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("sub_agent ref with invalid llm_backend", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", LLMBackend: "invalid-backend"},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid llm_backend")
+	})
+
+	t.Run("sub_agent ref with unknown llm_provider", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", LLMProvider: "nonexistent"},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "LLM provider 'nonexistent' which is not found")
+	})
+
+	t.Run("sub_agent ref with invalid max_iterations", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", MaxIterations: intPtr(0)},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "max_iterations must be at least 1")
+	})
+
+	t.Run("sub_agent ref with unknown mcp_server", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", MCPServers: []string{"missing-server"}},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "MCP server 'missing-server' which is not found")
 	})
 }
 

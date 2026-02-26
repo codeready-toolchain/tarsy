@@ -221,13 +221,13 @@ agent_chains:
 
 	// Chain-level sub_agents
 	chain := cfg.AgentChains["test-chain"]
-	assert.Equal(t, []string{"worker-agent"}, chain.SubAgents)
+	assert.Equal(t, SubAgentRefs{{Name: "worker-agent"}}, chain.SubAgents)
 
 	// Stage-level sub_agents
-	assert.Equal(t, []string{"worker-agent"}, chain.Stages[0].SubAgents)
+	assert.Equal(t, SubAgentRefs{{Name: "worker-agent"}}, chain.Stages[0].SubAgents)
 
 	// Stage-agent-level sub_agents
-	assert.Equal(t, []string{"worker-agent"}, chain.Stages[0].Agents[0].SubAgents)
+	assert.Equal(t, SubAgentRefs{{Name: "worker-agent"}}, chain.Stages[0].Agents[0].SubAgents)
 }
 
 func TestLoadLLMProvidersYAML(t *testing.T) {
