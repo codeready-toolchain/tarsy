@@ -21,6 +21,8 @@ const (
 	FieldStageID = "stage_id"
 	// FieldExecutionID holds the string denoting the execution_id field in the database.
 	FieldExecutionID = "execution_id"
+	// FieldParentExecutionID holds the string denoting the parent_execution_id field in the database.
+	FieldParentExecutionID = "parent_execution_id"
 	// FieldSequenceNumber holds the string denoting the sequence_number field in the database.
 	FieldSequenceNumber = "sequence_number"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -45,6 +47,8 @@ const (
 	EdgeStage = "stage"
 	// EdgeAgentExecution holds the string denoting the agent_execution edge name in mutations.
 	EdgeAgentExecution = "agent_execution"
+	// EdgeParentExecution holds the string denoting the parent_execution edge name in mutations.
+	EdgeParentExecution = "parent_execution"
 	// EdgeLlmInteraction holds the string denoting the llm_interaction edge name in mutations.
 	EdgeLlmInteraction = "llm_interaction"
 	// EdgeMcpInteraction holds the string denoting the mcp_interaction edge name in mutations.
@@ -82,6 +86,13 @@ const (
 	AgentExecutionInverseTable = "agent_executions"
 	// AgentExecutionColumn is the table column denoting the agent_execution relation/edge.
 	AgentExecutionColumn = "execution_id"
+	// ParentExecutionTable is the table that holds the parent_execution relation/edge.
+	ParentExecutionTable = "timeline_events"
+	// ParentExecutionInverseTable is the table name for the AgentExecution entity.
+	// It exists in this package in order to avoid circular dependency with the "agentexecution" package.
+	ParentExecutionInverseTable = "agent_executions"
+	// ParentExecutionColumn is the table column denoting the parent_execution relation/edge.
+	ParentExecutionColumn = "parent_execution_id"
 	// LlmInteractionTable is the table that holds the llm_interaction relation/edge.
 	LlmInteractionTable = "timeline_events"
 	// LlmInteractionInverseTable is the table name for the LLMInteraction entity.
@@ -104,6 +115,7 @@ var Columns = []string{
 	FieldSessionID,
 	FieldStageID,
 	FieldExecutionID,
+	FieldParentExecutionID,
 	FieldSequenceNumber,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -219,6 +231,11 @@ func ByExecutionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExecutionID, opts...).ToFunc()
 }
 
+// ByParentExecutionID orders the results by the parent_execution_id field.
+func ByParentExecutionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldParentExecutionID, opts...).ToFunc()
+}
+
 // BySequenceNumber orders the results by the sequence_number field.
 func BySequenceNumber(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSequenceNumber, opts...).ToFunc()
@@ -280,6 +297,13 @@ func ByAgentExecutionField(field string, opts ...sql.OrderTermOption) OrderOptio
 	}
 }
 
+// ByParentExecutionField orders the results by parent_execution field.
+func ByParentExecutionField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newParentExecutionStep(), sql.OrderByField(field, opts...))
+	}
+}
+
 // ByLlmInteractionField orders the results by llm_interaction field.
 func ByLlmInteractionField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -312,6 +336,13 @@ func newAgentExecutionStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(AgentExecutionInverseTable, AgentExecutionFieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, AgentExecutionTable, AgentExecutionColumn),
+	)
+}
+func newParentExecutionStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ParentExecutionInverseTable, AgentExecutionFieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ParentExecutionTable, ParentExecutionColumn),
 	)
 }
 func newLlmInteractionStep() *sqlgraph.Step {

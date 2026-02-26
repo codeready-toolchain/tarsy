@@ -1033,6 +1033,29 @@ func HasMcpInteractionsWith(preds ...predicate.MCPInteraction) predicate.AgentEx
 	})
 }
 
+// HasSubAgentTimelineEvents applies the HasEdge predicate on the "sub_agent_timeline_events" edge.
+func HasSubAgentTimelineEvents() predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SubAgentTimelineEventsTable, SubAgentTimelineEventsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSubAgentTimelineEventsWith applies the HasEdge predicate on the "sub_agent_timeline_events" edge with a given conditions (other predicates).
+func HasSubAgentTimelineEventsWith(preds ...predicate.TimelineEvent) predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := newSubAgentTimelineEventsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasSubAgents applies the HasEdge predicate on the "sub_agents" edge.
 func HasSubAgents() predicate.AgentExecution {
 	return predicate.AgentExecution(func(s *sql.Selector) {

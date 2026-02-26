@@ -29,6 +29,8 @@ type TimelineEvent struct {
 	StageID *string `json:"stage_id,omitempty"`
 	// Which agent — nil for session-level events (e.g. executive_summary)
 	ExecutionID *string `json:"execution_id,omitempty"`
+	// For sub-agent events: the parent orchestrator's execution ID
+	ParentExecutionID *string `json:"parent_execution_id,omitempty"`
 	// Order in timeline
 	SequenceNumber int `json:"sequence_number,omitempty"`
 	// Creation timestamp
@@ -61,13 +63,15 @@ type TimelineEventEdges struct {
 	Stage *Stage `json:"stage,omitempty"`
 	// AgentExecution holds the value of the agent_execution edge.
 	AgentExecution *AgentExecution `json:"agent_execution,omitempty"`
+	// ParentExecution holds the value of the parent_execution edge.
+	ParentExecution *AgentExecution `json:"parent_execution,omitempty"`
 	// LlmInteraction holds the value of the llm_interaction edge.
 	LlmInteraction *LLMInteraction `json:"llm_interaction,omitempty"`
 	// McpInteraction holds the value of the mcp_interaction edge.
 	McpInteraction *MCPInteraction `json:"mcp_interaction,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [6]bool
 }
 
 // SessionOrErr returns the Session value or an error if the edge
@@ -103,12 +107,23 @@ func (e TimelineEventEdges) AgentExecutionOrErr() (*AgentExecution, error) {
 	return nil, &NotLoadedError{edge: "agent_execution"}
 }
 
+// ParentExecutionOrErr returns the ParentExecution value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e TimelineEventEdges) ParentExecutionOrErr() (*AgentExecution, error) {
+	if e.ParentExecution != nil {
+		return e.ParentExecution, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: agentexecution.Label}
+	}
+	return nil, &NotLoadedError{edge: "parent_execution"}
+}
+
 // LlmInteractionOrErr returns the LlmInteraction value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e TimelineEventEdges) LlmInteractionOrErr() (*LLMInteraction, error) {
 	if e.LlmInteraction != nil {
 		return e.LlmInteraction, nil
-	} else if e.loadedTypes[3] {
+	} else if e.loadedTypes[4] {
 		return nil, &NotFoundError{label: llminteraction.Label}
 	}
 	return nil, &NotLoadedError{edge: "llm_interaction"}
@@ -119,7 +134,7 @@ func (e TimelineEventEdges) LlmInteractionOrErr() (*LLMInteraction, error) {
 func (e TimelineEventEdges) McpInteractionOrErr() (*MCPInteraction, error) {
 	if e.McpInteraction != nil {
 		return e.McpInteraction, nil
-	} else if e.loadedTypes[4] {
+	} else if e.loadedTypes[5] {
 		return nil, &NotFoundError{label: mcpinteraction.Label}
 	}
 	return nil, &NotLoadedError{edge: "mcp_interaction"}
@@ -134,7 +149,7 @@ func (*TimelineEvent) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case timelineevent.FieldSequenceNumber:
 			values[i] = new(sql.NullInt64)
-		case timelineevent.FieldID, timelineevent.FieldSessionID, timelineevent.FieldStageID, timelineevent.FieldExecutionID, timelineevent.FieldEventType, timelineevent.FieldStatus, timelineevent.FieldContent, timelineevent.FieldLlmInteractionID, timelineevent.FieldMcpInteractionID:
+		case timelineevent.FieldID, timelineevent.FieldSessionID, timelineevent.FieldStageID, timelineevent.FieldExecutionID, timelineevent.FieldParentExecutionID, timelineevent.FieldEventType, timelineevent.FieldStatus, timelineevent.FieldContent, timelineevent.FieldLlmInteractionID, timelineevent.FieldMcpInteractionID:
 			values[i] = new(sql.NullString)
 		case timelineevent.FieldCreatedAt, timelineevent.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -178,6 +193,13 @@ func (_m *TimelineEvent) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ExecutionID = new(string)
 				*_m.ExecutionID = value.String
+			}
+		case timelineevent.FieldParentExecutionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field parent_execution_id", values[i])
+			} else if value.Valid {
+				_m.ParentExecutionID = new(string)
+				*_m.ParentExecutionID = value.String
 			}
 		case timelineevent.FieldSequenceNumber:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -265,6 +287,11 @@ func (_m *TimelineEvent) QueryAgentExecution() *AgentExecutionQuery {
 	return NewTimelineEventClient(_m.config).QueryAgentExecution(_m)
 }
 
+// QueryParentExecution queries the "parent_execution" edge of the TimelineEvent entity.
+func (_m *TimelineEvent) QueryParentExecution() *AgentExecutionQuery {
+	return NewTimelineEventClient(_m.config).QueryParentExecution(_m)
+}
+
 // QueryLlmInteraction queries the "llm_interaction" edge of the TimelineEvent entity.
 func (_m *TimelineEvent) QueryLlmInteraction() *LLMInteractionQuery {
 	return NewTimelineEventClient(_m.config).QueryLlmInteraction(_m)
@@ -308,6 +335,11 @@ func (_m *TimelineEvent) String() string {
 	builder.WriteString(", ")
 	if v := _m.ExecutionID; v != nil {
 		builder.WriteString("execution_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ParentExecutionID; v != nil {
+		builder.WriteString("parent_execution_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

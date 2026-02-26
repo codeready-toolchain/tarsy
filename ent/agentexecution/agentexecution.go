@@ -52,6 +52,8 @@ const (
 	EdgeLlmInteractions = "llm_interactions"
 	// EdgeMcpInteractions holds the string denoting the mcp_interactions edge name in mutations.
 	EdgeMcpInteractions = "mcp_interactions"
+	// EdgeSubAgentTimelineEvents holds the string denoting the sub_agent_timeline_events edge name in mutations.
+	EdgeSubAgentTimelineEvents = "sub_agent_timeline_events"
 	// EdgeSubAgents holds the string denoting the sub_agents edge name in mutations.
 	EdgeSubAgents = "sub_agents"
 	// EdgeParent holds the string denoting the parent edge name in mutations.
@@ -112,6 +114,13 @@ const (
 	McpInteractionsInverseTable = "mcp_interactions"
 	// McpInteractionsColumn is the table column denoting the mcp_interactions relation/edge.
 	McpInteractionsColumn = "execution_id"
+	// SubAgentTimelineEventsTable is the table that holds the sub_agent_timeline_events relation/edge.
+	SubAgentTimelineEventsTable = "timeline_events"
+	// SubAgentTimelineEventsInverseTable is the table name for the TimelineEvent entity.
+	// It exists in this package in order to avoid circular dependency with the "timelineevent" package.
+	SubAgentTimelineEventsInverseTable = "timeline_events"
+	// SubAgentTimelineEventsColumn is the table column denoting the sub_agent_timeline_events relation/edge.
+	SubAgentTimelineEventsColumn = "parent_execution_id"
 	// SubAgentsTable is the table that holds the sub_agents relation/edge.
 	SubAgentsTable = "agent_executions"
 	// SubAgentsColumn is the table column denoting the sub_agents relation/edge.
@@ -323,6 +332,20 @@ func ByMcpInteractions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// BySubAgentTimelineEventsCount orders the results by sub_agent_timeline_events count.
+func BySubAgentTimelineEventsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSubAgentTimelineEventsStep(), opts...)
+	}
+}
+
+// BySubAgentTimelineEvents orders the results by sub_agent_timeline_events terms.
+func BySubAgentTimelineEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSubAgentTimelineEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // BySubAgentsCount orders the results by sub_agents count.
 func BySubAgentsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -383,6 +406,13 @@ func newMcpInteractionsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(McpInteractionsInverseTable, MCPInteractionFieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, McpInteractionsTable, McpInteractionsColumn),
+	)
+}
+func newSubAgentTimelineEventsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SubAgentTimelineEventsInverseTable, TimelineEventFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SubAgentTimelineEventsTable, SubAgentTimelineEventsColumn),
 	)
 }
 func newSubAgentsStep() *sqlgraph.Step {

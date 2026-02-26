@@ -56,9 +56,10 @@ func (s *TimelineService) CreateTimelineEvent(httpCtx context.Context, req model
 		SetCreatedAt(time.Now()).
 		SetUpdatedAt(time.Now())
 
-	// Set stage_id and execution_id only when provided (session-level events pass nil)
+	// Set optional FK fields only when provided (session-level events pass nil)
 	create = create.SetNillableStageID(req.StageID).
-		SetNillableExecutionID(req.ExecutionID)
+		SetNillableExecutionID(req.ExecutionID).
+		SetNillableParentExecutionID(req.ParentExecutionID)
 
 	event, err := create.Save(ctx)
 	if err != nil {

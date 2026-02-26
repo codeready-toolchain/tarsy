@@ -21,33 +21,36 @@ type BasePayload struct {
 // Published when a new timeline event is created (streaming or completed).
 type TimelineCreatedPayload struct {
 	BasePayload
-	EventID        string                  `json:"event_id"`               // timeline event UUID
-	StageID        string                  `json:"stage_id,omitempty"`     // owning stage (empty for session-level events)
-	ExecutionID    string                  `json:"execution_id,omitempty"` // owning agent execution (empty for session-level events)
-	EventType      timelineevent.EventType `json:"event_type"`             // llm_thinking, llm_response, llm_tool_call, mcp_tool_summary, etc.
-	Status         timelineevent.Status    `json:"status"`                 // streaming, completed, failed, cancelled, timed_out
-	Content        string                  `json:"content"`                // event content (may be empty for streaming)
-	Metadata       map[string]any          `json:"metadata,omitempty"`
-	SequenceNumber int                     `json:"sequence_number"` // order in timeline
+	EventID           string                  `json:"event_id"`                      // timeline event UUID
+	StageID           string                  `json:"stage_id,omitempty"`            // owning stage (empty for session-level events)
+	ExecutionID       string                  `json:"execution_id,omitempty"`        // owning agent execution (empty for session-level events)
+	ParentExecutionID string                  `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	EventType         timelineevent.EventType `json:"event_type"`                    // llm_thinking, llm_response, llm_tool_call, mcp_tool_summary, etc.
+	Status            timelineevent.Status    `json:"status"`                        // streaming, completed, failed, cancelled, timed_out
+	Content           string                  `json:"content"`                       // event content (may be empty for streaming)
+	Metadata          map[string]any          `json:"metadata,omitempty"`
+	SequenceNumber    int                     `json:"sequence_number"` // order in timeline
 }
 
 // TimelineCompletedPayload is the payload for timeline_event.completed events.
 // Published when a streaming timeline event transitions to a terminal status.
 type TimelineCompletedPayload struct {
 	BasePayload
-	EventID   string                  `json:"event_id"`   // timeline event UUID
-	EventType timelineevent.EventType `json:"event_type"` // llm_thinking, llm_response, llm_tool_call, etc.
-	Content   string                  `json:"content"`    // final content
-	Status    timelineevent.Status    `json:"status"`     // completed, failed, cancelled, timed_out
-	Metadata  map[string]any          `json:"metadata,omitempty"`
+	EventID           string                  `json:"event_id"`                      // timeline event UUID
+	ParentExecutionID string                  `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	EventType         timelineevent.EventType `json:"event_type"`                    // llm_thinking, llm_response, llm_tool_call, etc.
+	Content           string                  `json:"content"`                       // final content
+	Status            timelineevent.Status    `json:"status"`                        // completed, failed, cancelled, timed_out
+	Metadata          map[string]any          `json:"metadata,omitempty"`
 }
 
 // StreamChunkPayload is the payload for stream.chunk transient events.
 // Published for each LLM streaming token — high frequency, ephemeral.
 type StreamChunkPayload struct {
 	BasePayload
-	EventID string `json:"event_id"` // parent timeline event UUID
-	Delta   string `json:"delta"`    // incremental text chunk
+	EventID           string `json:"event_id"`                      // parent timeline event UUID
+	ParentExecutionID string `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	Delta             string `json:"delta"`                         // incremental text chunk
 }
 
 // SessionStatusPayload is the payload for session.status events.
@@ -101,10 +104,11 @@ type SessionProgressPayload struct {
 // Published to SessionChannel(sessionID) for per-agent progress display.
 type ExecutionProgressPayload struct {
 	BasePayload
-	StageID     string `json:"stage_id"`     // stage UUID
-	ExecutionID string `json:"execution_id"` // agent execution UUID
-	Phase       string `json:"phase"`        // ProgressPhase constant
-	Message     string `json:"message"`      // human-readable message
+	StageID           string `json:"stage_id"`                      // stage UUID
+	ExecutionID       string `json:"execution_id"`                  // agent execution UUID
+	ParentExecutionID string `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	Phase             string `json:"phase"`                         // ProgressPhase constant
+	Message           string `json:"message"`                       // human-readable message
 }
 
 // ExecutionStatusPayload is the payload for execution.status transient events.
@@ -113,9 +117,10 @@ type ExecutionProgressPayload struct {
 // independently of stage completion.
 type ExecutionStatusPayload struct {
 	BasePayload
-	StageID      string `json:"stage_id"`                // stage UUID
-	ExecutionID  string `json:"execution_id"`            // agent execution UUID
-	AgentIndex   int    `json:"agent_index"`             // 1-based index preserving chain config order
-	Status       string `json:"status"`                  // active, completed, failed, timed_out, cancelled
-	ErrorMessage string `json:"error_message,omitempty"` // populated on failure
+	StageID           string `json:"stage_id"`                      // stage UUID
+	ExecutionID       string `json:"execution_id"`                  // agent execution UUID
+	ParentExecutionID string `json:"parent_execution_id,omitempty"` // parent orchestrator execution (empty for non-sub-agents)
+	AgentIndex        int    `json:"agent_index"`                   // 1-based index preserving chain config order
+	Status            string `json:"status"`                        // active, completed, failed, timed_out, cancelled
+	ErrorMessage      string `json:"error_message,omitempty"`       // populated on failure
 }

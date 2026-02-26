@@ -196,7 +196,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 	require.NotNil(t, laParentID, "sub-agent should have parent_execution_id")
 	assert.Equal(t, orchExec, *laParentID, "sub-agent parent should be orchestrator")
 
-	// Timeline: task_assigned event for sub-agent.
+	// Timeline: task_assigned event for sub-agent + parent_execution_id on sub-agent events.
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 
@@ -207,6 +207,13 @@ func TestE2E_Orchestrator(t *testing.T) {
 		}
 		if string(te.EventType) == "final_analysis" {
 			finalAnalysisCount++
+		}
+		// Sub-agent events should carry parent_execution_id; orchestrator events should not.
+		if te.ExecutionID != nil && *te.ExecutionID == laExec {
+			require.NotNil(t, te.ParentExecutionID, "sub-agent timeline event should have parent_execution_id (event_type=%s)", te.EventType)
+			assert.Equal(t, orchExec, *te.ParentExecutionID)
+		} else if te.ExecutionID != nil && *te.ExecutionID == orchExec {
+			assert.Nil(t, te.ParentExecutionID, "orchestrator timeline event should have no parent_execution_id")
 		}
 	}
 	assert.Equal(t, 1, taskAssignedCount, "should have 1 task_assigned event")

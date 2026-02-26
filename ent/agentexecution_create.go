@@ -244,6 +244,21 @@ func (_c *AgentExecutionCreate) AddMcpInteractions(v ...*MCPInteraction) *AgentE
 	return _c.AddMcpInteractionIDs(ids...)
 }
 
+// AddSubAgentTimelineEventIDs adds the "sub_agent_timeline_events" edge to the TimelineEvent entity by IDs.
+func (_c *AgentExecutionCreate) AddSubAgentTimelineEventIDs(ids ...string) *AgentExecutionCreate {
+	_c.mutation.AddSubAgentTimelineEventIDs(ids...)
+	return _c
+}
+
+// AddSubAgentTimelineEvents adds the "sub_agent_timeline_events" edges to the TimelineEvent entity.
+func (_c *AgentExecutionCreate) AddSubAgentTimelineEvents(v ...*TimelineEvent) *AgentExecutionCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSubAgentTimelineEventIDs(ids...)
+}
+
 // AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
 func (_c *AgentExecutionCreate) AddSubAgentIDs(ids ...string) *AgentExecutionCreate {
 	_c.mutation.AddSubAgentIDs(ids...)
@@ -516,6 +531,22 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(mcpinteraction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SubAgentTimelineEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

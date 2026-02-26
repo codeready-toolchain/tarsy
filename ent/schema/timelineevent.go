@@ -34,6 +34,11 @@ func (TimelineEvent) Fields() []ent.Field {
 			Nillable().
 			Immutable().
 			Comment("Which agent — nil for session-level events (e.g. executive_summary)"),
+		field.String("parent_execution_id").
+			Optional().
+			Nillable().
+			Immutable().
+			Comment("For sub-agent events: the parent orchestrator's execution ID"),
 
 		// Timeline Ordering
 		field.Int("sequence_number").
@@ -127,6 +132,11 @@ func (TimelineEvent) Edges() []ent.Edge {
 			Field("execution_id").
 			Unique().
 			Immutable(),
+		edge.From("parent_execution", AgentExecution.Type).
+			Ref("sub_agent_timeline_events").
+			Field("parent_execution_id").
+			Unique().
+			Immutable(),
 		edge.From("llm_interaction", LLMInteraction.Type).
 			Ref("timeline_events").
 			Field("llm_interaction_id").
@@ -147,6 +157,8 @@ func (TimelineEvent) Indexes() []ent.Index {
 		index.Fields("stage_id", "sequence_number"),
 		// Agent timeline filtering (execution_id is nullable; EQ predicates naturally exclude NULLs)
 		index.Fields("execution_id", "sequence_number"),
+		// Sub-agent event lookups by parent orchestrator
+		index.Fields("parent_execution_id", "sequence_number"),
 		// Chronological queries
 		index.Fields("created_at"),
 	}

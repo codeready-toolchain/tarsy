@@ -76,11 +76,11 @@ func init() {
 	timelineeventFields := schema.TimelineEvent{}.Fields()
 	_ = timelineeventFields
 	// timelineeventDescCreatedAt is the schema descriptor for created_at field.
-	timelineeventDescCreatedAt := timelineeventFields[5].Descriptor()
+	timelineeventDescCreatedAt := timelineeventFields[6].Descriptor()
 	// timelineevent.DefaultCreatedAt holds the default value on creation for the created_at field.
 	timelineevent.DefaultCreatedAt = timelineeventDescCreatedAt.Default.(func() time.Time)
 	// timelineeventDescUpdatedAt is the schema descriptor for updated_at field.
-	timelineeventDescUpdatedAt := timelineeventFields[6].Descriptor()
+	timelineeventDescUpdatedAt := timelineeventFields[7].Descriptor()
 	// timelineevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	timelineevent.DefaultUpdatedAt = timelineeventDescUpdatedAt.Default.(func() time.Time)
 	// timelineevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

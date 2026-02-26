@@ -559,6 +559,7 @@ var (
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "execution_id", Type: field.TypeString, Nullable: true},
+		{Name: "parent_execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "llm_interaction_id", Type: field.TypeString, Nullable: true},
 		{Name: "mcp_interaction_id", Type: field.TypeString, Nullable: true},
@@ -577,26 +578,32 @@ var (
 				OnDelete:   schema.Cascade,
 			},
 			{
-				Symbol:     "timeline_events_alert_sessions_timeline_events",
+				Symbol:     "timeline_events_agent_executions_sub_agent_timeline_events",
 				Columns:    []*schema.Column{TimelineEventsColumns[9]},
+				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "timeline_events_alert_sessions_timeline_events",
+				Columns:    []*schema.Column{TimelineEventsColumns[10]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "timeline_events_llm_interactions_timeline_events",
-				Columns:    []*schema.Column{TimelineEventsColumns[10]},
+				Columns:    []*schema.Column{TimelineEventsColumns[11]},
 				RefColumns: []*schema.Column{LlmInteractionsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "timeline_events_mcp_interactions_timeline_events",
-				Columns:    []*schema.Column{TimelineEventsColumns[11]},
+				Columns:    []*schema.Column{TimelineEventsColumns[12]},
 				RefColumns: []*schema.Column{McpInteractionsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "timeline_events_stages_timeline_events",
-				Columns:    []*schema.Column{TimelineEventsColumns[12]},
+				Columns:    []*schema.Column{TimelineEventsColumns[13]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -605,17 +612,22 @@ var (
 			{
 				Name:    "timelineevent_session_id_sequence_number",
 				Unique:  false,
-				Columns: []*schema.Column{TimelineEventsColumns[9], TimelineEventsColumns[1]},
+				Columns: []*schema.Column{TimelineEventsColumns[10], TimelineEventsColumns[1]},
 			},
 			{
 				Name:    "timelineevent_stage_id_sequence_number",
 				Unique:  false,
-				Columns: []*schema.Column{TimelineEventsColumns[12], TimelineEventsColumns[1]},
+				Columns: []*schema.Column{TimelineEventsColumns[13], TimelineEventsColumns[1]},
 			},
 			{
 				Name:    "timelineevent_execution_id_sequence_number",
 				Unique:  false,
 				Columns: []*schema.Column{TimelineEventsColumns[8], TimelineEventsColumns[1]},
+			},
+			{
+				Name:    "timelineevent_parent_execution_id_sequence_number",
+				Unique:  false,
+				Columns: []*schema.Column{TimelineEventsColumns[9], TimelineEventsColumns[1]},
 			},
 			{
 				Name:    "timelineevent_created_at",
@@ -662,8 +674,9 @@ func init() {
 	StagesTable.ForeignKeys[1].RefTable = ChatsTable
 	StagesTable.ForeignKeys[2].RefTable = ChatUserMessagesTable
 	TimelineEventsTable.ForeignKeys[0].RefTable = AgentExecutionsTable
-	TimelineEventsTable.ForeignKeys[1].RefTable = AlertSessionsTable
-	TimelineEventsTable.ForeignKeys[2].RefTable = LlmInteractionsTable
-	TimelineEventsTable.ForeignKeys[3].RefTable = McpInteractionsTable
-	TimelineEventsTable.ForeignKeys[4].RefTable = StagesTable
+	TimelineEventsTable.ForeignKeys[1].RefTable = AgentExecutionsTable
+	TimelineEventsTable.ForeignKeys[2].RefTable = AlertSessionsTable
+	TimelineEventsTable.ForeignKeys[3].RefTable = LlmInteractionsTable
+	TimelineEventsTable.ForeignKeys[4].RefTable = McpInteractionsTable
+	TimelineEventsTable.ForeignKeys[5].RefTable = StagesTable
 }
