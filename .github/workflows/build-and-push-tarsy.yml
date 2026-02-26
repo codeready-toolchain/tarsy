@@ -28,8 +28,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set short SHA
-        run: echo "COMMIT_SHORT_SHA=$(git rev-parse --short ${GITHUB_SHA})" >> ${GITHUB_ENV}
+      - name: Set version SHAs
+        run: |
+          echo "COMMIT_SHORT_SHA=$(git rev-parse --short ${GITHUB_SHA})" >> ${GITHUB_ENV}
+          echo "DASHBOARD_SHORT_SHA=$(git log -1 --format=%h -- web/dashboard/)" >> ${GITHUB_ENV}
 
       - name: Build image
         id: build-image
@@ -39,7 +41,9 @@ jobs:
           tags: latest ${{ env.COMMIT_SHORT_SHA }}
           context: .
           containerfiles: ./Dockerfile
-          build-args: VERSION=${{ env.COMMIT_SHORT_SHA }}
+          build-args: |
+            VERSION=${{ env.COMMIT_SHORT_SHA }}
+            DASHBOARD_VERSION=${{ env.DASHBOARD_SHORT_SHA }}
 
       - name: Log into quay.io
         uses: redhat-actions/podman-login@v1

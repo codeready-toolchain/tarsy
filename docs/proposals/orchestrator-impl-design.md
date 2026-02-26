@@ -1134,7 +1134,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
 - Integration tests
 
-### PR6: E2E Tests
+### PR6: E2E Tests ✅ DONE
 - New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use
 - New config: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure, used for cancellation cascade test
 - **Happy path** (`orchestrator_test.go`): orchestrator dispatches 2 sub-agents via `dispatch_agent` tool calls in a single iteration, results arrive and are drained before the next LLM call, orchestrator produces final answer

@@ -28,8 +28,8 @@ RUN npm ci --include=dev
 
 COPY web/dashboard/ .
 
-ARG VERSION=dev
-ENV VITE_APP_VERSION=${VERSION}
+ARG DASHBOARD_VERSION=dev
+ENV VITE_APP_VERSION=${DASHBOARD_VERSION}
 
 RUN npm run build
 
