@@ -298,7 +298,7 @@ stages:
         llm_backend: "langchain"
     synthesis:
       llm_backend: "google-native"
-      llm_provider: "gemini-3-pro"
+      llm_provider: "gemini-3.1-pro"
 ```
 
 **Replica Parallelism** (same agent runs multiple times):
@@ -695,7 +695,7 @@ Shared convention between Go and Python:
 | `google-default` | google | gemini-3-flash-preview | 1M |
 | `gemini-2.5-flash` | google | gemini-2.5-flash | 1M |
 | `gemini-2.5-pro` | google | gemini-2.5-pro | 1M |
-| `gemini-3-pro` | google | gemini-3-pro-preview | 1M |
+| `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-5.2 | 400K |
 | `anthropic-default` | anthropic | claude-sonnet-4-6 | 1M (beta) |
 | `xai-default` | xai | grok-4-1-fast-reasoning | 2M |

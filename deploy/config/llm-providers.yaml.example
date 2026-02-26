@@ -36,9 +36,9 @@ llm_providers:
       url_context: true
 
   # Next-gen model
-  gemini-3-pro:
+  gemini-3.1-pro:
     type: google
-    model: gemini-3-pro-preview
+    model: gemini-3.1-pro-preview
     api_key_env: GOOGLE_API_KEY
     max_tool_result_tokens: 950000
     native_tools:

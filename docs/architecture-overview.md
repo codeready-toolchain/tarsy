@@ -368,7 +368,7 @@ agent_chains:
         agents:
           - name: "KubernetesAgent"
             llm_backend: "google-native"
-            llm_provider: "gemini-3-pro"
+            llm_provider: "gemini-3.1-pro"
             custom_instructions: "Focus on pod health, resource limits, and recent restarts"
           - name: "KubernetesAgent"
             llm_backend: "langchain"

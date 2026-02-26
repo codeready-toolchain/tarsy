@@ -260,6 +260,68 @@ Orchestrator:
 
 The `custom_instructions` only contains strategy and principles. Universal operational mechanics (result delivery, agent catalog) are system-injected for all orchestrators — see [Orchestrator system prompt](#orchestrator-system-prompt) below.
 
+#### Usage examples
+
+**Minimal** — reference the built-in Orchestrator by name. LLM provider and backend come from `defaults:`:
+
+```yaml
+defaults:
+  llm_provider: "google-prod"
+  llm_backend: "google-native"
+
+agents:
+  LogAnalyzer:
+    description: "Analyzes logs for error patterns"
+    mcp_servers: [loki]
+
+agent_chains:
+  alert-investigation:
+    alert_types: [high-error-rate]
+    stages:
+      - name: orchestrate
+        agents:
+          - name: Orchestrator
+            sub_agents: [LogAnalyzer, GeneralWorker]
+```
+
+**Comprehensive** — override LLM provider/backend for the orchestrator, add MCP servers to GeneralWorker, and configure sub-agent overrides. No agent redefinition needed — the built-in definitions (type, description, custom_instructions) are preserved:
+
+```yaml
+defaults:
+  llm_provider: "google-prod"
+  llm_backend: "google-native"
+
+agents:
+  LogAnalyzer:
+    description: "Analyzes logs for error patterns"
+    mcp_servers: [loki]
+  MetricChecker:
+    description: "Queries Prometheus for metric anomalies"
+    mcp_servers: [prometheus]
+
+agent_chains:
+  deep-investigation:
+    alert_types: [high-error-rate, latency-spike]
+    executive_summary_provider: "google-prod"
+    stages:
+      - name: orchestrate
+        agents:
+          - name: Orchestrator
+            llm_provider: "openai-prod"       # override: use OpenAI for orchestration
+            llm_backend: "langchain"           # override: langchain backend for OpenAI
+            sub_agents:
+              - name: LogAnalyzer
+              - name: MetricChecker
+              - name: WebResearcher
+              - name: GeneralWorker
+                mcp_servers: [kubernetes-server]  # override: give GeneralWorker K8s access
+                max_iterations: 5                 # override: allow more iterations
+              - name: CodeExecutor
+                llm_provider: "google-prod"       # override: keep CodeExecutor on Gemini
+```
+
+The override hierarchy (`defaults → agentDef → chain → stage → stage-agent`) means built-in agents can be fully customized operationally at the point of use — no redefinition required.
+
 ### Built-in agent summary
 
 | Agent | Type | Native Tools | MCP | Purpose |
