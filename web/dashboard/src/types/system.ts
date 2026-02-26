@@ -79,6 +79,7 @@ export interface AlertTypeInfo {
 export interface AlertTypesResponse {
   alert_types: AlertTypeInfo[];
   default_chain_id: string;
+  default_alert_type: string;
 }
 
 /** Filter options response. */

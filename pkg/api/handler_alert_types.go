@@ -9,8 +9,9 @@ import (
 
 // AlertTypesResponse is returned by GET /api/v1/alert-types.
 type AlertTypesResponse struct {
-	AlertTypes     []AlertTypeInfo `json:"alert_types"`
-	DefaultChainID string          `json:"default_chain_id"`
+	AlertTypes       []AlertTypeInfo `json:"alert_types"`
+	DefaultChainID   string          `json:"default_chain_id"`
+	DefaultAlertType string          `json:"default_alert_type"`
 }
 
 // AlertTypeInfo describes a single alert type and its associated chain.
@@ -26,6 +27,11 @@ func (s *Server) alertTypesHandler(c *echo.Context) error {
 
 	var alertTypes []AlertTypeInfo
 	defaultChainID := ""
+	defaultAlertType := ""
+
+	if s.cfg.Defaults != nil {
+		defaultAlertType = s.cfg.Defaults.AlertType
+	}
 
 	// Sort chain IDs for deterministic output.
 	chainIDs := make([]string, 0, len(chains))
@@ -42,11 +48,15 @@ func (s *Server) alertTypesHandler(c *echo.Context) error {
 				ChainID:     chainID,
 				Description: chain.Description,
 			})
+			if alertType == defaultAlertType {
+				defaultChainID = chainID
+			}
 		}
-		// Use first chain as default if no default configured
-		if defaultChainID == "" {
-			defaultChainID = chainID
-		}
+	}
+
+	// Fall back to first chain if configured default doesn't match any alert type.
+	if defaultChainID == "" && len(chainIDs) > 0 {
+		defaultChainID = chainIDs[0]
 	}
 
 	if alertTypes == nil {
@@ -54,7 +64,8 @@ func (s *Server) alertTypesHandler(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, AlertTypesResponse{
-		AlertTypes:     alertTypes,
-		DefaultChainID: defaultChainID,
+		AlertTypes:       alertTypes,
+		DefaultChainID:   defaultChainID,
+		DefaultAlertType: defaultAlertType,
 	})
 }
