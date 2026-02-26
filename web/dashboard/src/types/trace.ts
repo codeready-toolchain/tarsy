@@ -21,6 +21,7 @@ export interface TraceExecutionGroup {
   agent_name: string;
   llm_interactions: LLMInteractionListItem[];
   mcp_interactions: MCPInteractionListItem[];
+  sub_agents?: TraceExecutionGroup[];
 }
 
 /** LLM interaction list item (collapsed view). */

@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -40,9 +41,13 @@ import (
 func TestE2E_Orchestrator(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
-	// Sub-agent release channel: closed after orchestrator's iteration 2
-	// enters WaitForResult, ensuring deterministic iteration count.
+	// Synchronization: orchIter2Ready signals that the orchestrator has
+	// entered Generate for iteration 2. We then release orchIter2Gate
+	// (let iteration 2 proceed) with a small delay before opening
+	// subAgentGate to ensure iteration 2 finishes and enters WaitForResult.
 	subAgentGate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
 
 	// ── SREOrchestrator LLM entries ──
 
@@ -56,7 +61,11 @@ func TestE2E_Orchestrator(t *testing.T) {
 		},
 	})
 	// Iteration 2: thinking + text (no tool calls) → HasPending → WaitForResult blocks.
+	// WaitCh+OnBlock ensure we release the sub-agent gate only after the
+	// orchestrator has reached this Generate call, avoiding a timing race.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "I've dispatched LogAnalyzer. Waiting for results."},
 			&agent.TextChunk{Content: "Waiting for sub-agent results to complete the investigation."},
@@ -124,11 +133,14 @@ func TestE2E_Orchestrator(t *testing.T) {
 	require.NotEmpty(t, sessionID)
 	require.NoError(t, ws.Subscribe("session:"+sessionID))
 
-	// Wait for session to be in_progress, then release sub-agent after a delay.
-	// The delay ensures the orchestrator's iteration 2 has entered WaitForResult.
+	// Release gates: wait for orchestrator iteration 2 to enter Generate,
+	// let it proceed, then open the sub-agent gate after iteration 2
+	// has had time to process the response and enter WaitForResult.
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		<-orchIter2Ready
+		close(orchIter2Gate)
+		time.Sleep(50 * time.Millisecond)
 		close(subAgentGate)
 	}()
 
@@ -158,6 +170,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 	require.Len(t, execs, 2, "expected orchestrator + 1 sub-agent")
 
 	var orchExec, laExec string
+	var laParentID *string
 	for _, e := range execs {
 		switch e.AgentName {
 		case "SREOrchestrator":
@@ -166,8 +179,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 			assert.Equal(t, "completed", string(e.Status))
 		case "LogAnalyzer":
 			laExec = e.ID
-			require.NotNil(t, e.ParentExecutionID, "sub-agent should have parent_execution_id")
-			assert.Equal(t, orchExec, *e.ParentExecutionID)
+			laParentID = e.ParentExecutionID
 			assert.Equal(t, "completed", string(e.Status))
 			require.NotNil(t, e.Task)
 			assert.Equal(t, "Find all error patterns in the last 30 minutes", *e.Task)
@@ -175,6 +187,8 @@ func TestE2E_Orchestrator(t *testing.T) {
 	}
 	assert.NotEmpty(t, orchExec, "orchestrator execution should exist")
 	assert.NotEmpty(t, laExec, "LogAnalyzer execution should exist")
+	require.NotNil(t, laParentID, "sub-agent should have parent_execution_id")
+	assert.Equal(t, orchExec, *laParentID, "sub-agent parent should be orchestrator")
 
 	// Timeline: task_assigned event for sub-agent.
 	timeline := app.QueryTimeline(t, sessionID)
@@ -309,7 +323,10 @@ func TestE2E_Orchestrator(t *testing.T) {
 			})
 		}
 		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].CreatedAt < entries[j].CreatedAt
+			if entries[i].CreatedAt != entries[j].CreatedAt {
+				return entries[i].CreatedAt < entries[j].CreatedAt
+			}
+			return entries[i].ID < entries[j].ID
 		})
 		allInteractions = append(allInteractions, entries...)
 	}
@@ -338,7 +355,10 @@ func TestE2E_Orchestrator(t *testing.T) {
 			})
 		}
 		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].CreatedAt < entries[j].CreatedAt
+			if entries[i].CreatedAt != entries[j].CreatedAt {
+				return entries[i].CreatedAt < entries[j].CreatedAt
+			}
+			return entries[i].ID < entries[j].ID
 		})
 		allInteractions = append(allInteractions, entries...)
 	}
@@ -390,6 +410,8 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	subAgentGate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
 
 	// Orchestrator iteration 1: dispatch both sub-agents.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
@@ -401,12 +423,20 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
 		},
 	})
-	// Iterations 2-4: text responses while waiting for sub-agents.
-	// Exact count depends on timing; extras won't be consumed.
-	for i := range 3 {
+	// Iteration 2: text → WaitForResult. OnBlock signals readiness.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Waiting for sub-agent results (cycle 1)."},
+			&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
+		},
+	})
+	// Iterations 3-4: buffer for timing variance (may or may not be consumed).
+	for i := range 2 {
 		llm.AddRouted("SREOrchestrator", LLMScriptEntry{
 			Chunks: []agent.Chunk{
-				&agent.TextChunk{Content: fmt.Sprintf("Waiting for sub-agent results (cycle %d).", i+1)},
+				&agent.TextChunk{Content: fmt.Sprintf("Waiting for sub-agent results (cycle %d).", i+2)},
 				&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
 			},
 		})
@@ -473,7 +503,9 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		<-orchIter2Ready
+		close(orchIter2Gate)
+		time.Sleep(50 * time.Millisecond)
 		close(subAgentGate)
 	}()
 
@@ -569,6 +601,8 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	phase1Gate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
 
 	// ── SREOrchestrator LLM entries ──
 
@@ -583,7 +617,10 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 		},
 	})
 	// Iteration 2: text → WaitForResult (phase 1 agents still running).
+	// OnBlock signals when orchestrator reaches this Generate call.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Dispatched LogAnalyzer and GeneralWorker. Waiting for phase 1 results."},
 			&agent.UsageChunk{InputTokens: 300, OutputTokens: 20, TotalTokens: 320},
@@ -683,7 +720,9 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		<-orchIter2Ready
+		close(orchIter2Gate)
+		time.Sleep(50 * time.Millisecond)
 		close(phase1Gate)
 	}()
 
@@ -792,6 +831,8 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	subAgentGate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
 
 	// Orchestrator iteration 1: dispatch both sub-agents.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
@@ -805,6 +846,8 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	})
 	// Orchestrator iteration 2: no tools → wait for sub-agents.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Dispatched agents, waiting for results."},
 			&agent.UsageChunk{InputTokens: 150, OutputTokens: 15, TotalTokens: 165},
@@ -857,7 +900,9 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		<-orchIter2Ready
+		close(orchIter2Gate)
+		time.Sleep(50 * time.Millisecond)
 		close(subAgentGate)
 	}()
 
@@ -895,6 +940,8 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	subAgentGate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
 
 	// Orchestrator iteration 1: dispatch both + call list_agents.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
@@ -914,7 +961,10 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 		},
 	})
 	// Orchestrator iteration 3: text → wait for sub-agents.
+	// OnBlock signals when orchestrator reaches this Generate call.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Checking agent status, waiting for completion."},
 			&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
@@ -965,7 +1015,9 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		<-orchIter2Ready
+		close(orchIter2Gate)
+		time.Sleep(50 * time.Millisecond)
 		close(subAgentGate)
 	}()
 
@@ -1169,14 +1221,17 @@ func cancelAgentRewriter(targetAgent string) func([]agent.ConversationMessage, [
 // findDispatchedExecID scans the conversation for a dispatch_agent tool call
 // targeting the named agent and returns the execution_id from its tool result.
 func findDispatchedExecID(messages []agent.ConversationMessage, agentName string) string {
-	// Find the assistant tool call for dispatch_agent(name=agentName) and get its CallID.
 	var targetCallID string
 	for _, msg := range messages {
 		if msg.Role != agent.RoleAssistant {
 			continue
 		}
 		for _, tc := range msg.ToolCalls {
-			if tc.Name == "dispatch_agent" && strings.Contains(tc.Arguments, `"name":"`+agentName+`"`) {
+			if tc.Name != "dispatch_agent" {
+				continue
+			}
+			var args struct{ Name string }
+			if json.Unmarshal([]byte(tc.Arguments), &args) == nil && args.Name == agentName {
 				targetCallID = tc.ID
 				break
 			}
@@ -1189,15 +1244,11 @@ func findDispatchedExecID(messages []agent.ConversationMessage, agentName string
 		return ""
 	}
 
-	// Find the matching tool result and extract execution_id.
 	for _, msg := range messages {
 		if msg.Role == agent.RoleTool && msg.ToolCallID == targetCallID {
-			// Content is JSON: {"execution_id":"<uuid>","status":"accepted"}
-			if idx := strings.Index(msg.Content, `"execution_id":"`); idx >= 0 {
-				rest := msg.Content[idx+len(`"execution_id":"`):]
-				if end := strings.Index(rest, `"`); end >= 0 {
-					return rest[:end]
-				}
+			var result struct{ ExecutionID string `json:"execution_id"` }
+			if json.Unmarshal([]byte(msg.Content), &result) == nil {
+				return result.ExecutionID
 			}
 		}
 	}

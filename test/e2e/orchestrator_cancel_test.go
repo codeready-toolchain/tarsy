@@ -32,10 +32,12 @@ func TestE2E_OrchestratorCancellation(t *testing.T) {
 		for range onBlockCh {
 			blockedMu.Lock()
 			blockedCount++
-			if blockedCount >= 3 {
-				close(allBlocked)
-			}
+			done := blockedCount >= 3
 			blockedMu.Unlock()
+			if done {
+				close(allBlocked)
+				return
+			}
 		}
 	}()
 
