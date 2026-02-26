@@ -21,6 +21,8 @@ var (
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "llm_backend", Type: field.TypeString},
 		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
+		{Name: "task", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "parent_execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "stage_id", Type: field.TypeString},
 	}
@@ -31,28 +33,34 @@ var (
 		PrimaryKey: []*schema.Column{AgentExecutionsColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
+				Symbol:     "agent_executions_agent_executions_sub_agents",
+				Columns:    []*schema.Column{AgentExecutionsColumns[11]},
+				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
 				Symbol:     "agent_executions_alert_sessions_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[10]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[12]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_stages_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[11]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[13]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "agentexecution_stage_id_agent_index",
-				Unique:  true,
-				Columns: []*schema.Column{AgentExecutionsColumns[11], AgentExecutionsColumns[2]},
-			},
-			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[10]},
+				Columns: []*schema.Column{AgentExecutionsColumns[12]},
+			},
+			{
+				Name:    "agentexecution_parent_execution_id",
+				Unique:  false,
+				Columns: []*schema.Column{AgentExecutionsColumns[11]},
 			},
 		},
 	}
@@ -546,7 +554,7 @@ var (
 		{Name: "sequence_number", Type: field.TypeInt},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result"}},
+		{Name: "event_type", Type: field.TypeEnum, Enums: []string{"llm_thinking", "llm_response", "llm_tool_call", "mcp_tool_summary", "error", "user_question", "executive_summary", "final_analysis", "code_execution", "google_search_result", "url_context_result", "task_assigned"}},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"streaming", "completed", "failed", "cancelled", "timed_out"}, Default: "streaming"},
 		{Name: "content", Type: field.TypeString, Size: 2147483647},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
@@ -633,8 +641,9 @@ var (
 )
 
 func init() {
-	AgentExecutionsTable.ForeignKeys[0].RefTable = AlertSessionsTable
-	AgentExecutionsTable.ForeignKeys[1].RefTable = StagesTable
+	AgentExecutionsTable.ForeignKeys[0].RefTable = AgentExecutionsTable
+	AgentExecutionsTable.ForeignKeys[1].RefTable = AlertSessionsTable
+	AgentExecutionsTable.ForeignKeys[2].RefTable = StagesTable
 	ChatsTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	ChatUserMessagesTable.ForeignKeys[0].RefTable = ChatsTable
 	EventsTable.ForeignKeys[0].RefTable = AlertSessionsTable

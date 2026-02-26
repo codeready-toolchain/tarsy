@@ -58,6 +58,16 @@ func (AgentExecution) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')"),
+
+		// Orchestrator sub-agent fields
+		field.String("parent_execution_id").
+			Optional().
+			Nillable().
+			Comment("For orchestrator sub-agents: links to the parent orchestrator execution"),
+		field.Text("task").
+			Optional().
+			Nillable().
+			Comment("Task description from orchestrator dispatch"),
 	}
 }
 
@@ -84,16 +94,28 @@ func (AgentExecution) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("mcp_interactions", MCPInteraction.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
+		// Orchestrator sub-agent hierarchy (self-referential)
+		edge.To("sub_agents", AgentExecution.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.From("parent", AgentExecution.Type).
+			Ref("sub_agents").
+			Field("parent_execution_id").
+			Unique(),
 	}
 }
 
 // Indexes of the AgentExecution.
 func (AgentExecution) Indexes() []ent.Index {
 	return []ent.Index{
-		// Unique constraint for agent ordering within stage
-		index.Fields("stage_id", "agent_index").
-			Unique(),
+		// NOTE: The unique constraint for agent ordering is enforced via two partial
+		// indexes in PostgreSQL (see 20260225235224_add_orchestrator_sub_agent_fields.up.sql).
+		// Ent/Atlas cannot express WHERE clauses, so the uniqueness is not declared here.
+		//   UNIQUE(stage_id, agent_index) WHERE parent_execution_id IS NULL
+		//   UNIQUE(parent_execution_id, agent_index) WHERE parent_execution_id IS NOT NULL
+
 		// Session-wide queries
 		index.Fields("session_id"),
+		// Sub-agent lookups by parent
+		index.Fields("parent_execution_id"),
 	}
 }

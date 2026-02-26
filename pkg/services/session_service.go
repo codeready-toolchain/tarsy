@@ -426,7 +426,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		WithStages(func(q *ent.StageQuery) {
 			q.Order(ent.Asc(stage.FieldStageIndex))
 			q.WithAgentExecutions(func(eq *ent.AgentExecutionQuery) {
+				eq.Where(agentexecution.ParentExecutionIDIsNil())
 				eq.Order(ent.Asc(agentexecution.FieldAgentIndex))
+				eq.WithSubAgents(func(sq *ent.AgentExecutionQuery) {
+					sq.Order(ent.Asc(agentexecution.FieldAgentIndex))
+				})
 			})
 		}).
 		WithChat().
@@ -479,31 +483,22 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		}
 
 		// Build execution overviews for this stage.
+		// The query already filters for top-level executions only;
+		// sub-agents are nested via the SubAgents field.
 		var execOverviews []models.ExecutionOverview
 		if stg.Edges.AgentExecutions != nil {
 			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
 			for _, exec := range stg.Edges.AgentExecutions {
-				tokens := execTokens[exec.ID]
-				var durationMs *int64
-				if exec.DurationMs != nil {
-					v := int64(*exec.DurationMs)
-					durationMs = &v
+				overview := buildExecutionOverview(exec, execTokens)
+
+				if exec.Edges.SubAgents != nil {
+					overview.SubAgents = make([]models.ExecutionOverview, 0, len(exec.Edges.SubAgents))
+					for _, sub := range exec.Edges.SubAgents {
+						overview.SubAgents = append(overview.SubAgents, buildExecutionOverview(sub, execTokens))
+					}
 				}
-				execOverviews = append(execOverviews, models.ExecutionOverview{
-					ExecutionID:  exec.ID,
-					AgentName:    exec.AgentName,
-					AgentIndex:   exec.AgentIndex,
-					Status:       string(exec.Status),
-					LLMBackend:   exec.LlmBackend,
-					LLMProvider:  exec.LlmProvider,
-					StartedAt:    exec.StartedAt,
-					CompletedAt:  exec.CompletedAt,
-					DurationMs:   durationMs,
-					ErrorMessage: exec.ErrorMessage,
-					InputTokens:  tokens.Input,
-					OutputTokens: tokens.Output,
-					TotalTokens:  tokens.Total,
-				})
+
+				execOverviews = append(execOverviews, overview)
 			}
 		}
 
@@ -1110,6 +1105,33 @@ func (s *SessionService) GetDistinctChainIDs(ctx context.Context) ([]string, err
 		results = []string{}
 	}
 	return results, nil
+}
+
+// buildExecutionOverview creates an ExecutionOverview from an AgentExecution entity.
+func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]executionTokenStats) models.ExecutionOverview {
+	tokens := execTokens[exec.ID]
+	var durationMs *int64
+	if exec.DurationMs != nil {
+		v := int64(*exec.DurationMs)
+		durationMs = &v
+	}
+	return models.ExecutionOverview{
+		ExecutionID:       exec.ID,
+		AgentName:         exec.AgentName,
+		AgentIndex:        exec.AgentIndex,
+		Status:            string(exec.Status),
+		LLMBackend:        exec.LlmBackend,
+		LLMProvider:       exec.LlmProvider,
+		StartedAt:         exec.StartedAt,
+		CompletedAt:       exec.CompletedAt,
+		DurationMs:        durationMs,
+		ErrorMessage:      exec.ErrorMessage,
+		InputTokens:       tokens.Input,
+		OutputTokens:      tokens.Output,
+		TotalTokens:       tokens.Total,
+		ParentExecutionID: exec.ParentExecutionID,
+		Task:              exec.Task,
+	}
 }
 
 // validateMCPOverride validates MCP server selection override

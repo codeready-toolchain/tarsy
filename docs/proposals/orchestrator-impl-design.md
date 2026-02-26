@@ -1057,13 +1057,16 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Config validation: `orchestrator` section forbidden on non-orchestrator agents
 - **Note:** `AgentConfig.MCPServers` has a `validate:"required,min=1"` struct tag, but the actual validator (custom `validateAgents`) treats MCP servers as optional. Existing agents (ChatAgent, SynthesisAgent) have none. The new built-ins follow the same pattern. The struct tag should be corrected to `validate:"omitempty"` as a housekeeping fix.
 
-### PR2: DB schema
+### PR2: DB schema ✅
 - `parent_execution_id` on `AgentExecution` (nullable)
 - `task` on `AgentExecution` (nullable)
 - Replace `UNIQUE(stage_id, agent_index)` with two partial indexes: `UNIQUE(stage_id, agent_index) WHERE parent_execution_id IS NULL` (top-level) + `UNIQUE(parent_execution_id, agent_index) WHERE parent_execution_id IS NOT NULL` (sub-agents)
 - New timeline event type: `task_assigned`
 - `UpdateStageStatus` filter: exclude sub-agents (non-null `parent_execution_id`)
 - Query helpers: sub-agents by parent, trace tree
+- DTOs: `ParentExecutionID` + `Task` on `CreateAgentExecutionRequest` and `ExecutionOverview`; `SubAgents []ExecutionOverview` on `ExecutionOverview`
+- `GetSessionDetail`: eager-loads sub-agents; filters top-level `Executions` to exclude sub-agents (they appear only nested under their parent via `SubAgents`)
+- `buildExecutionOverview` helper extracted for reuse across top-level and sub-agent overviews
 
 ### PR3: SubAgentRunner + CompositeToolExecutor
 - `SubAgentRunner` — dispatch, cancel, list, results channel (`TryGetNext`, `WaitForNext`, `HasPending`)
@@ -1090,6 +1093,6 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - End-to-end integration test
 
 ### PR6: Dashboard
-- Tree view: orchestrator → sub-agents (query `parent_execution_id`)
+- Tree view: orchestrator → sub-agents (backend API already returns nested `SubAgents` in `ExecutionOverview` — see PR2)
 - Sub-agent status, timelines, results
 - Real-time updates via existing WebSocket events

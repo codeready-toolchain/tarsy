@@ -113,6 +113,25 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	if req.LLMProvider != "" {
 		builder.SetLlmProvider(req.LLMProvider)
 	}
+	if req.ParentExecutionID != nil {
+		parent, err := s.client.AgentExecution.Get(ctx, *req.ParentExecutionID)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return nil, NewValidationError("parent_execution_id", "parent execution not found")
+			}
+			return nil, fmt.Errorf("failed to look up parent execution: %w", err)
+		}
+		if parent.StageID != req.StageID {
+			return nil, NewValidationError("parent_execution_id", "parent execution belongs to a different stage")
+		}
+		if parent.SessionID != req.SessionID {
+			return nil, NewValidationError("parent_execution_id", "parent execution belongs to a different session")
+		}
+		builder.SetParentExecutionID(*req.ParentExecutionID)
+	}
+	if req.Task != nil {
+		builder.SetTask(*req.Task)
+	}
 	execution, err := builder.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent execution: %w", err)
@@ -178,10 +197,13 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// Get stage with agent executions
+	// Get stage with top-level agent executions only (exclude orchestrator sub-agents).
+	// Sub-agent failures must not affect stage status aggregation.
 	stg, err := s.client.Stage.Query().
 		Where(stage.IDEQ(stageID)).
-		WithAgentExecutions().
+		WithAgentExecutions(func(q *ent.AgentExecutionQuery) {
+			q.Where(agentexecution.ParentExecutionIDIsNil())
+		}).
 		Only(writeCtx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -425,4 +447,43 @@ func (s *StageService) GetActiveStageForChat(ctx context.Context, chatID string)
 	}
 
 	return stg, nil
+}
+
+// GetSubAgentExecutions returns all sub-agent executions for a parent orchestrator execution.
+func (s *StageService) GetSubAgentExecutions(ctx context.Context, parentExecutionID string) ([]*ent.AgentExecution, error) {
+	if parentExecutionID == "" {
+		return nil, NewValidationError("parent_execution_id", "required")
+	}
+
+	executions, err := s.client.AgentExecution.Query().
+		Where(agentexecution.ParentExecutionIDEQ(parentExecutionID)).
+		Order(ent.Asc(agentexecution.FieldAgentIndex)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sub-agent executions: %w", err)
+	}
+
+	return executions, nil
+}
+
+// GetExecutionTree returns an agent execution with its sub-agents eagerly loaded.
+func (s *StageService) GetExecutionTree(ctx context.Context, executionID string) (*ent.AgentExecution, error) {
+	if executionID == "" {
+		return nil, NewValidationError("execution_id", "required")
+	}
+
+	execution, err := s.client.AgentExecution.Query().
+		Where(agentexecution.IDEQ(executionID)).
+		WithSubAgents(func(q *ent.AgentExecutionQuery) {
+			q.Order(ent.Asc(agentexecution.FieldAgentIndex))
+		}).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get execution tree: %w", err)
+	}
+
+	return execution, nil
 }

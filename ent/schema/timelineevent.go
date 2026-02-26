@@ -71,6 +71,7 @@ func (TimelineEvent) Fields() []ent.Field {
 		//   user_question      — User question in chat mode.
 		//   executive_summary  — High-level session summary.
 		//   final_analysis     — Agent's final conclusion (no more iterations/tool calls).
+		//   task_assigned      — Task assigned to a sub-agent by an orchestrator.
 		field.Enum("event_type").
 			Values(
 				"llm_thinking",
@@ -84,6 +85,7 @@ func (TimelineEvent) Fields() []ent.Field {
 				"code_execution",
 				"google_search_result",
 				"url_context_result",
+				"task_assigned",
 			),
 		field.Enum("status").
 			Values("streaming", "completed", "failed", "cancelled", "timed_out").

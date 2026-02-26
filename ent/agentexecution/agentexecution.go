@@ -36,6 +36,10 @@ const (
 	FieldLlmBackend = "llm_backend"
 	// FieldLlmProvider holds the string denoting the llm_provider field in the database.
 	FieldLlmProvider = "llm_provider"
+	// FieldParentExecutionID holds the string denoting the parent_execution_id field in the database.
+	FieldParentExecutionID = "parent_execution_id"
+	// FieldTask holds the string denoting the task field in the database.
+	FieldTask = "task"
 	// EdgeStage holds the string denoting the stage edge name in mutations.
 	EdgeStage = "stage"
 	// EdgeSession holds the string denoting the session edge name in mutations.
@@ -48,6 +52,10 @@ const (
 	EdgeLlmInteractions = "llm_interactions"
 	// EdgeMcpInteractions holds the string denoting the mcp_interactions edge name in mutations.
 	EdgeMcpInteractions = "mcp_interactions"
+	// EdgeSubAgents holds the string denoting the sub_agents edge name in mutations.
+	EdgeSubAgents = "sub_agents"
+	// EdgeParent holds the string denoting the parent edge name in mutations.
+	EdgeParent = "parent"
 	// StageFieldID holds the string denoting the ID field of the Stage.
 	StageFieldID = "stage_id"
 	// AlertSessionFieldID holds the string denoting the ID field of the AlertSession.
@@ -104,6 +112,14 @@ const (
 	McpInteractionsInverseTable = "mcp_interactions"
 	// McpInteractionsColumn is the table column denoting the mcp_interactions relation/edge.
 	McpInteractionsColumn = "execution_id"
+	// SubAgentsTable is the table that holds the sub_agents relation/edge.
+	SubAgentsTable = "agent_executions"
+	// SubAgentsColumn is the table column denoting the sub_agents relation/edge.
+	SubAgentsColumn = "parent_execution_id"
+	// ParentTable is the table that holds the parent relation/edge.
+	ParentTable = "agent_executions"
+	// ParentColumn is the table column denoting the parent relation/edge.
+	ParentColumn = "parent_execution_id"
 )
 
 // Columns holds all SQL columns for agentexecution fields.
@@ -120,6 +136,8 @@ var Columns = []string{
 	FieldErrorMessage,
 	FieldLlmBackend,
 	FieldLlmProvider,
+	FieldParentExecutionID,
+	FieldTask,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -225,6 +243,16 @@ func ByLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLlmProvider, opts...).ToFunc()
 }
 
+// ByParentExecutionID orders the results by the parent_execution_id field.
+func ByParentExecutionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldParentExecutionID, opts...).ToFunc()
+}
+
+// ByTask orders the results by the task field.
+func ByTask(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTask, opts...).ToFunc()
+}
+
 // ByStageField orders the results by stage field.
 func ByStageField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -294,6 +322,27 @@ func ByMcpInteractions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newMcpInteractionsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySubAgentsCount orders the results by sub_agents count.
+func BySubAgentsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSubAgentsStep(), opts...)
+	}
+}
+
+// BySubAgents orders the results by sub_agents terms.
+func BySubAgents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSubAgentsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByParentField orders the results by parent field.
+func ByParentField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newParentStep(), sql.OrderByField(field, opts...))
+	}
+}
 func newStageStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -334,5 +383,19 @@ func newMcpInteractionsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(McpInteractionsInverseTable, MCPInteractionFieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, McpInteractionsTable, McpInteractionsColumn),
+	)
+}
+func newSubAgentsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SubAgentsTable, SubAgentsColumn),
+	)
+}
+func newParentStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ParentTable, ParentColumn),
 	)
 }

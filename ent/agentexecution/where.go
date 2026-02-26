@@ -115,6 +115,16 @@ func LlmProvider(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldLlmProvider, v))
 }
 
+// ParentExecutionID applies equality check predicate on the "parent_execution_id" field. It's identical to ParentExecutionIDEQ.
+func ParentExecutionID(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldParentExecutionID, v))
+}
+
+// Task applies equality check predicate on the "task" field. It's identical to TaskEQ.
+func Task(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldTask, v))
+}
+
 // StageIDEQ applies the EQ predicate on the "stage_id" field.
 func StageIDEQ(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldStageID, v))
@@ -735,6 +745,156 @@ func LlmProviderContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldLlmProvider, v))
 }
 
+// ParentExecutionIDEQ applies the EQ predicate on the "parent_execution_id" field.
+func ParentExecutionIDEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDNEQ applies the NEQ predicate on the "parent_execution_id" field.
+func ParentExecutionIDNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDIn applies the In predicate on the "parent_execution_id" field.
+func ParentExecutionIDIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldParentExecutionID, vs...))
+}
+
+// ParentExecutionIDNotIn applies the NotIn predicate on the "parent_execution_id" field.
+func ParentExecutionIDNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldParentExecutionID, vs...))
+}
+
+// ParentExecutionIDGT applies the GT predicate on the "parent_execution_id" field.
+func ParentExecutionIDGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDGTE applies the GTE predicate on the "parent_execution_id" field.
+func ParentExecutionIDGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDLT applies the LT predicate on the "parent_execution_id" field.
+func ParentExecutionIDLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDLTE applies the LTE predicate on the "parent_execution_id" field.
+func ParentExecutionIDLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDContains applies the Contains predicate on the "parent_execution_id" field.
+func ParentExecutionIDContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDHasPrefix applies the HasPrefix predicate on the "parent_execution_id" field.
+func ParentExecutionIDHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDHasSuffix applies the HasSuffix predicate on the "parent_execution_id" field.
+func ParentExecutionIDHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDIsNil applies the IsNil predicate on the "parent_execution_id" field.
+func ParentExecutionIDIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldParentExecutionID))
+}
+
+// ParentExecutionIDNotNil applies the NotNil predicate on the "parent_execution_id" field.
+func ParentExecutionIDNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldParentExecutionID))
+}
+
+// ParentExecutionIDEqualFold applies the EqualFold predicate on the "parent_execution_id" field.
+func ParentExecutionIDEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDContainsFold applies the ContainsFold predicate on the "parent_execution_id" field.
+func ParentExecutionIDContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldParentExecutionID, v))
+}
+
+// TaskEQ applies the EQ predicate on the "task" field.
+func TaskEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldTask, v))
+}
+
+// TaskNEQ applies the NEQ predicate on the "task" field.
+func TaskNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldTask, v))
+}
+
+// TaskIn applies the In predicate on the "task" field.
+func TaskIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldTask, vs...))
+}
+
+// TaskNotIn applies the NotIn predicate on the "task" field.
+func TaskNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldTask, vs...))
+}
+
+// TaskGT applies the GT predicate on the "task" field.
+func TaskGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldTask, v))
+}
+
+// TaskGTE applies the GTE predicate on the "task" field.
+func TaskGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldTask, v))
+}
+
+// TaskLT applies the LT predicate on the "task" field.
+func TaskLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldTask, v))
+}
+
+// TaskLTE applies the LTE predicate on the "task" field.
+func TaskLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldTask, v))
+}
+
+// TaskContains applies the Contains predicate on the "task" field.
+func TaskContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldTask, v))
+}
+
+// TaskHasPrefix applies the HasPrefix predicate on the "task" field.
+func TaskHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldTask, v))
+}
+
+// TaskHasSuffix applies the HasSuffix predicate on the "task" field.
+func TaskHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldTask, v))
+}
+
+// TaskIsNil applies the IsNil predicate on the "task" field.
+func TaskIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldTask))
+}
+
+// TaskNotNil applies the NotNil predicate on the "task" field.
+func TaskNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldTask))
+}
+
+// TaskEqualFold applies the EqualFold predicate on the "task" field.
+func TaskEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldTask, v))
+}
+
+// TaskContainsFold applies the ContainsFold predicate on the "task" field.
+func TaskContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldTask, v))
+}
+
 // HasStage applies the HasEdge predicate on the "stage" edge.
 func HasStage() predicate.AgentExecution {
 	return predicate.AgentExecution(func(s *sql.Selector) {
@@ -865,6 +1025,52 @@ func HasMcpInteractions() predicate.AgentExecution {
 func HasMcpInteractionsWith(preds ...predicate.MCPInteraction) predicate.AgentExecution {
 	return predicate.AgentExecution(func(s *sql.Selector) {
 		step := newMcpInteractionsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasSubAgents applies the HasEdge predicate on the "sub_agents" edge.
+func HasSubAgents() predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SubAgentsTable, SubAgentsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSubAgentsWith applies the HasEdge predicate on the "sub_agents" edge with a given conditions (other predicates).
+func HasSubAgentsWith(preds ...predicate.AgentExecution) predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := newSubAgentsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasParent applies the HasEdge predicate on the "parent" edge.
+func HasParent() predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ParentTable, ParentColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasParentWith applies the HasEdge predicate on the "parent" edge with a given conditions (other predicates).
+func HasParentWith(preds ...predicate.AgentExecution) predicate.AgentExecution {
+	return predicate.AgentExecution(func(s *sql.Selector) {
+		step := newParentStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
