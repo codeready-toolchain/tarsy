@@ -95,7 +95,7 @@ class TestGoogleNativeProvider:
 
     def test_get_thinking_config_default(self, provider):
         """Test thinking config for other models uses default."""
-        config = provider._get_thinking_config("gemini-3.0")
+        config = provider._get_thinking_config("gemini-3.1")
         
         assert config.thinking_level == genai_types.ThinkingLevel.HIGH
         assert config.include_thoughts is True

@@ -377,7 +377,7 @@ agent_chains:
         synthesis:
           agent: "SynthesisAgent"
           llm_backend: "google-native"
-          llm_provider: "gemini-3-pro"
+          llm_provider: "gemini-3.1-pro"
 
   # Replica chain (run same agent multiple times)
   kubernetes-2-replicas:
@@ -404,3 +404,37 @@ agent_chains:
       enabled: true
       agent: "ChatAgent"
       max_iterations: 20
+
+  # ── Orchestrator chains ──────────────────────────────────────
+  # The built-in Orchestrator agent dispatches sub-agents dynamically.
+  # No need to define it in agents: — reference it by name.
+
+  # Minimal orchestrator chain — uses defaults for everything
+  orchestrator-minimal:
+    alert_types: ["HighErrorRate"]
+    description: "Orchestrated investigation using built-in Orchestrator"
+    executive_summary_provider: "google-default"
+    stages:
+      - name: "orchestrate"
+        agents:
+          - name: "Orchestrator"
+            sub_agents: [KubernetesAgent, GeneralWorker]
+
+  # Comprehensive orchestrator chain — overrides for orchestrator and sub-agents
+  orchestrator-comprehensive:
+    alert_types: ["LatencySpike", "HighErrorRate-Deep"]
+    description: "Deep orchestrated investigation with custom overrides"
+    executive_summary_provider: "google-default"
+    stages:
+      - name: "orchestrate"
+        agents:
+          - name: "Orchestrator"
+            llm_provider: "gemini-3.1-pro"        # use a more capable model for orchestration
+            llm_backend: "google-native"
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+              - name: WebResearcher               # built-in: web search + URL analysis
+              - name: CodeExecutor                # built-in: Python code execution
+              - name: GeneralWorker               # built-in: pure reasoning / summarization
+                mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
+                max_iterations: 5
