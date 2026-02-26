@@ -151,16 +151,20 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		Content:        task,
 	})
 
+	subCtx, cancel := context.WithTimeout(ctx, r.guardrails.AgentTimeout)
+
 	subExec := &subAgentExecution{
 		executionID: executionID,
 		agentName:   name,
 		task:        task,
 		status:      agent.ExecutionStatusActive,
+		cancel:      cancel,
 		done:        make(chan struct{}),
 	}
 
 	// Register the execution and release the reservation in a single lock hold
-	// so concurrent Dispatch calls see a consistent count.
+	// so concurrent Dispatch calls see a consistent count. cancel is set above
+	// so Cancel() never sees a nil function pointer.
 	r.mu.Lock()
 	r.executions[executionID] = subExec
 	r.reserved--
@@ -168,9 +172,6 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 	r.mu.Unlock()
 
 	atomic.AddInt32(&r.pending, 1)
-
-	subCtx, cancel := context.WithTimeout(ctx, r.guardrails.AgentTimeout)
-	subExec.cancel = cancel
 
 	go r.runSubAgent(subCtx, cancel, subExec, resolvedConfig, agentIndex)
 

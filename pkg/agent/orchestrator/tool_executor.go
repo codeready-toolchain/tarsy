@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,12 +30,15 @@ type CompositeToolExecutor struct {
 }
 
 // NewCompositeToolExecutor creates a composite executor. mcpExecutor may be nil
-// if the orchestrator has no MCP servers of its own.
+// if the orchestrator has no MCP servers of its own. runner must not be nil.
 func NewCompositeToolExecutor(
 	mcpExecutor agent.ToolExecutor,
 	runner *SubAgentRunner,
 	registry *config.SubAgentRegistry,
 ) *CompositeToolExecutor {
+	if runner == nil {
+		panic("NewCompositeToolExecutor: runner must not be nil")
+	}
 	return &CompositeToolExecutor{
 		mcpExecutor: mcpExecutor,
 		runner:      runner,
@@ -201,6 +205,10 @@ func (c *CompositeToolExecutor) handleList(call agent.ToolCall) (*agent.ToolResu
 			Content: "No sub-agents dispatched yet.",
 		}, nil
 	}
+
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].ExecutionID < statuses[j].ExecutionID
+	})
 
 	var b strings.Builder
 	for i, s := range statuses {
