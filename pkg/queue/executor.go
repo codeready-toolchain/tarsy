@@ -128,6 +128,9 @@ type executeStageInput struct {
 	// Used for progress reporting so CurrentStageIndex never exceeds TotalStages.
 	totalExpectedStages int
 
+	// Precomputed once per session
+	runbookContent string
+
 	// Services (shared across stages)
 	stageService       *services.StageService
 	messageService     *services.MessageService
@@ -168,11 +171,12 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		}
 	}
 
-	// 2. Initialize services (shared across all stages)
+	// 2. Initialize services and resolve runbook (shared across all stages)
 	stageService := services.NewStageService(e.dbClient)
 	messageService := services.NewMessageService(e.dbClient)
 	timelineService := services.NewTimelineService(e.dbClient)
 	interactionService := services.NewInteractionService(e.dbClient, messageService)
+	runbookContent := e.resolveRunbook(ctx, session)
 
 	// 3. Sequential chain loop
 	// dbStageIndex tracks the actual DB stage index, which may differ from the
@@ -199,6 +203,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			stageIndex:          dbStageIndex,
 			prevContext:         prevContext,
 			totalExpectedStages: totalExpectedStages,
+			runbookContent:      runbookContent,
 			stageService:        stageService,
 			messageService:      messageService,
 			timelineService:     timelineService,
@@ -231,6 +236,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 				stageIndex:          dbStageIndex,
 				prevContext:         prevContext,
 				totalExpectedStages: totalExpectedStages,
+				runbookContent:      runbookContent,
 				stageService:        stageService,
 				messageService:      messageService,
 				timelineService:     timelineService,
@@ -531,8 +537,6 @@ func (e *RealSessionExecutor) executeAgent(
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
-	runbookContent := e.resolveRunbook(ctx, input.session)
-
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      input.session.ID,
@@ -542,7 +546,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
-		RunbookContent: runbookContent,
+		RunbookContent: input.runbookContent,
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
 		EventPublisher: e.eventPublisher,
@@ -594,7 +598,7 @@ func (e *RealSessionExecutor) executeAgent(
 			InteractionService: input.interactionService,
 			AlertData:          input.session.AlertData,
 			AlertType:          input.session.AlertType,
-			RunbookContent:     runbookContent,
+			RunbookContent:     input.runbookContent,
 		}
 
 		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)

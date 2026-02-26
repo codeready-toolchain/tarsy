@@ -23,6 +23,9 @@ var GitCommit = initGitCommit()
 
 func initGitCommit() string {
 	if gitCommitOverride != "" {
+		if len(gitCommitOverride) > 8 {
+			return gitCommitOverride[:8]
+		}
 		return gitCommitOverride
 	}
 	info, ok := debug.ReadBuildInfo()
