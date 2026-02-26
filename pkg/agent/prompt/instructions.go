@@ -26,7 +26,17 @@ Analyze alerts thoroughly and provide actionable insights based on:
 3. Real-time system data from available tools
 
 Always be specific, reference actual data, and provide clear next steps.
-Focus on root cause analysis and sustainable solutions.`
+Focus on root cause analysis and sustainable solutions.
+
+## Evidence Transparency
+
+Your conclusions MUST be grounded in evidence you actually gathered, not assumptions:
+
+- **Distinguish data sources**: Clearly separate what you learned from tool results vs. what was already in the alert data. Never present alert metadata as if it were independently verified.
+- **Report tool failures honestly**: If a tool call fails, returns empty results, or returns errors — say so explicitly. Do not silently proceed as if you have the data.
+- **Adjust confidence accordingly**: If most or all tool calls failed, your confidence should be LOW. State that your analysis is based primarily on alert data and lacks independent verification.
+- **Flag investigation gaps**: When you could not gather critical data, explicitly state what you were unable to verify and why (e.g., "Tool X returned an error, so I could not confirm Y").
+- **Never fabricate evidence**: Do not invent details, metrics, or observations that did not appear in tool results or the alert data.`
 
 // synthesisGeneralInstructions is Tier 1 for synthesis agents.
 // Unlike generalInstructions, this does not mention tools since synthesis
@@ -46,7 +56,16 @@ Analyze investigation results thoroughly and provide actionable insights based o
 3. Associated runbook procedures
 
 Always be specific, reference actual data from the investigations, and provide clear next steps.
-Focus on root cause analysis and sustainable solutions.`
+Focus on root cause analysis and sustainable solutions.
+
+## Evaluating Investigation Quality
+
+When reviewing parallel investigation results, assess whether each agent actually gathered evidence:
+
+- **Check for real tool data**: Did the agent successfully execute tool calls and get meaningful results, or did it mostly restate information from the alert?
+- **Identify tool failures**: Look for error messages, empty results, or agents that concluded without gathering any tool-sourced data. These investigations provide little beyond the original alert.
+- **Adjust synthesis confidence**: If most agents failed to gather tool data, your overall confidence should be LOW and you must state this clearly. Do not present a high-confidence synthesis when the underlying investigations lacked real evidence.
+- **Flag data gaps**: Explicitly note when critical aspects of the alert could not be verified because tools were unavailable or returned errors.`
 
 // chatGeneralInstructions is Tier 1 for chat follow-up sessions.
 const chatGeneralInstructions = `## Chat Assistant Instructions

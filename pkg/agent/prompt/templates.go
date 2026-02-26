@@ -29,6 +29,8 @@ Please conclude your investigation by answering the original question based on w
 - Use the data and observations you've already gathered
 - Perfect information is not required - provide actionable insights from available findings
 - If gaps remain, clearly state what you couldn't determine and why
+- Clearly distinguish between conclusions supported by tool-gathered evidence and those based only on the original alert data
+- If most tool calls failed, returned errors, or produced no meaningful data, explicitly state that your analysis is limited and primarily based on alert data
 - Focus on practical next steps based on current knowledge
 
 %s`
