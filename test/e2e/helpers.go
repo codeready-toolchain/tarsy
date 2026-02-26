@@ -377,27 +377,32 @@ func (app *TestApp) WaitForNSessionsInStatus(t *testing.T, n int, status string)
 // ────────────────────────────────────────────────────────────
 
 // CountLLMInteractions returns the current LLM interaction count for a session.
-func (app *TestApp) CountLLMInteractions(sessionID string) int {
-	n, _ := app.EntClient.LLMInteraction.Query().
+func (app *TestApp) CountLLMInteractions(sessionID string) (int, error) {
+	return app.EntClient.LLMInteraction.Query().
 		Where(llminteraction.SessionID(sessionID)).
 		Count(context.Background())
-	return n
 }
 
 // AwaitLLMInteractionIncrease polls until the LLM interaction count exceeds
 // the given baseline, indicating the orchestrator has recorded a new response.
-// Falls back after 30s to prevent infinite hangs; the test's own timeout
-// will catch any real problem.
-func (app *TestApp) AwaitLLMInteractionIncrease(sessionID string, baseline int) {
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		n, err := app.EntClient.LLMInteraction.Query().
-			Where(llminteraction.SessionID(sessionID)).
-			Count(context.Background())
-		if err == nil && n > baseline {
-			return
+// Returns true on success, false on timeout (30s). The test's own timeout via
+// WaitForSessionStatus is the primary failsafe for goroutine callers.
+func (app *TestApp) AwaitLLMInteractionIncrease(sessionID string, baseline int) bool {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			return false
+		case <-ticker.C:
+			n, err := app.EntClient.LLMInteraction.Query().
+				Where(llminteraction.SessionID(sessionID)).
+				Count(context.Background())
+			if err == nil && n > baseline {
+				return true
+			}
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

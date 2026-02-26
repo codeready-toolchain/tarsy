@@ -139,7 +139,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline := app.CountLLMInteractions(sessionID)
+		baseline, _ := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
 		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
@@ -505,7 +505,7 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline := app.CountLLMInteractions(sessionID)
+		baseline, _ := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
 		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
@@ -723,7 +723,7 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline := app.CountLLMInteractions(sessionID)
+		baseline, _ := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
 		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(phase1Gate)
@@ -904,7 +904,7 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline := app.CountLLMInteractions(sessionID)
+		baseline, _ := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
 		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
@@ -1020,7 +1020,7 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
-		baseline := app.CountLLMInteractions(sessionID)
+		baseline, _ := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
 		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
