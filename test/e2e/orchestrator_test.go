@@ -1246,7 +1246,9 @@ func findDispatchedExecID(messages []agent.ConversationMessage, agentName string
 
 	for _, msg := range messages {
 		if msg.Role == agent.RoleTool && msg.ToolCallID == targetCallID {
-			var result struct{ ExecutionID string `json:"execution_id"` }
+			var result struct {
+				ExecutionID string `json:"execution_id"`
+			}
 			if json.Unmarshal([]byte(msg.Content), &result) == nil {
 				return result.ExecutionID
 			}

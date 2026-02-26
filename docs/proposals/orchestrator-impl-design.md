@@ -354,6 +354,8 @@ var orchestrationTools = []agent.ToolDefinition{
 
 MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. The `CompositeToolExecutor` routes by matching the known orchestration tool names.
 
+**Observability:** When orchestration tool calls are recorded as `MCPInteraction` records, they use `server_name: "orchestrator"` (via `OrchestrationServerName` constant) instead of an empty string. This lets dashboards distinguish orchestration tool calls from real MCP server calls by checking `server_name == "orchestrator"`.
+
 ## CompositeToolExecutor — DECIDED
 
 > **Decision:** Wrapper pattern (Option A) — see [questions](orchestrator-impl-questions.md), Q2.
@@ -1154,6 +1156,11 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 6. **`TestE2E_OrchestratorCancelSpecific`** (`cancel_agent` tool): dispatches LogAnalyzer (blocks via `BlockUntilCancelled`) and GeneralWorker (completes quickly). After GeneralWorker completes, orchestrator calls `cancel_agent` with LogAnalyzer's execution_id. Uses `RewriteChunks` callback on `ScriptedLLMClient` to dynamically inject the real execution_id from the conversation history (extracted from `dispatch_agent` tool result). Verifies: LogAnalyzer `status=cancelled`, GeneralWorker `status=completed`, `cancel_agent` tool call in timeline, 2 sub-agents in trace API.
 
 7. **`TestE2E_OrchestratorCancellation`** (`orchestrator_cancel_test.go`): dispatches sub-agents, session cancelled via API while sub-agents are running. Uses `BlockUntilCancelled` on sub-agent LLM entries + `OnBlock` synchronization to ensure sub-agents are running before cancel. Verifies: all executions end in `cancelled` status, clean goroutine shutdown.
+
+- **Bug fixes** discovered during E2E test review:
+  - **Executive summary tokens**: `generateExecutiveSummary` now captures `UsageChunk` from the LLM stream and records `InputTokens`/`OutputTokens`/`TotalTokens` on the LLM interaction. Previously tokens were silently dropped.
+  - **Timeline sequence collision**: Sub-agent executions had `task_assigned` (sequence 1) colliding with the first `llm_thinking` (also sequence 1). Fixed by adding `GetMaxSequenceForExecution` to `TimelineService` and initializing the controller's `eventSeq` from the DB rather than from 0.
+  - **Orchestration tool `server_name`**: `dispatch_agent`/`cancel_agent`/`list_agents` tool calls are now recorded with `server_name: "orchestrator"` instead of `""`, enabling dashboard distinction between orchestration and real MCP calls.
 
 ### PR7: Dashboard
 - Tree view: orchestrator → sub-agents (backend API already returns nested `SubAgents` in `ExecutionOverview` — see PR2)
