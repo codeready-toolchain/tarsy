@@ -104,8 +104,8 @@ Show your work. Report results clearly.`,
 		},
 		"GeneralWorker": {
 			Description: "General-purpose agent for analysis, summarization, reasoning, and other tasks",
-			CustomInstructions: `You are a general-purpose worker. Complete the assigned task
-thoroughly and concisely.`,
+			CustomInstructions: `You are GeneralWorker, a general-purpose agent.
+Complete the assigned task thoroughly and concisely.`,
 		},
 	}
 }

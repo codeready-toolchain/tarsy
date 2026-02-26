@@ -1,0 +1,126 @@
+[
+  {
+    "agent": "LogAnalyzer",
+    "content": "Let me search the logs for error patterns.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "Find all error patterns in the last 30 minutes",
+    "event_type": "task_assigned",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "[{\"timestamp\":\"{TIMESTAMP}\",\"level\":\"error\",\"service\":\"payment\",\"message\":\"OOM killed\"},{\"timestamp\":\"{TIMESTAMP}\",\"level\":\"error\",\"service\":\"payment\",\"message\":\"connection refused\"}]",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"query\":\"error OR 5xx\",\"timerange\":\"30m\"}",
+      "is_error": false,
+      "server_name": "test-mcp",
+      "tool_name": "search_logs"
+    },
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "Found significant error patterns in the logs.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.",
+    "event_type": "llm_response",
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.",
+    "event_type": "final_analysis",
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "I need to investigate this alert. Let me dispatch LogAnalyzer to check error patterns.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "{\"execution_id\":\"{EXEC_ID_2}\",\"status\":\"accepted\"}",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"name\":\"LogAnalyzer\",\"task\":\"Find all error patterns in the last 30 minutes\"}",
+      "is_error": false,
+      "server_name": "",
+      "tool_name": "dispatch_agent"
+    },
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "I've dispatched LogAnalyzer. Waiting for results.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "Waiting for sub-agent results to complete the investigation.",
+    "event_type": "llm_response",
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "LogAnalyzer found 5xx errors from the payment service. Memory pressure from recent deployment.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.",
+    "event_type": "llm_response",
+    "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "agent": "SREOrchestrator",
+    "content": "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.",
+    "event_type": "final_analysis",
+    "sequence": 7,
+    "status": "completed"
+  },
+  {
+    "content": "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
+    "event_type": "executive_summary",
+    "sequence": 999999,
+    "status": "completed"
+  }
+]

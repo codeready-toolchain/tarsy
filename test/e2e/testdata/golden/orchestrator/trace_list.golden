@@ -1,0 +1,109 @@
+{
+  "session_interactions": [
+    {
+      "created_at": "{TIMESTAMP}",
+      "duration_ms": {DURATION_MS},
+      "id": "{INTERACTION_ID_9}",
+      "interaction_type": "executive_summary",
+      "model_name": "test-model"
+    }
+  ],
+  "stages": [
+    {
+      "executions": [
+        {
+          "agent_name": "SREOrchestrator",
+          "execution_id": "{EXEC_ID_1}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_1}",
+              "input_tokens": 200,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 40,
+              "total_tokens": 240
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_2}",
+              "input_tokens": 300,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 30,
+              "total_tokens": 330
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_3}",
+              "input_tokens": 500,
+              "interaction_type": "iteration",
+              "model_name": "test-model",
+              "output_tokens": 60,
+              "total_tokens": 560
+            }
+          ],
+          "mcp_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_4}",
+              "interaction_type": "tool_call",
+              "server_name": "",
+              "tool_name": "dispatch_agent"
+            }
+          ],
+          "sub_agents": [
+            {
+              "agent_name": "LogAnalyzer",
+              "execution_id": "{EXEC_ID_2}",
+              "llm_interactions": [
+                {
+                  "created_at": "{TIMESTAMP}",
+                  "duration_ms": {DURATION_MS},
+                  "id": "{INTERACTION_ID_5}",
+                  "input_tokens": 100,
+                  "interaction_type": "iteration",
+                  "model_name": "test-model",
+                  "output_tokens": 20,
+                  "total_tokens": 120
+                },
+                {
+                  "created_at": "{TIMESTAMP}",
+                  "duration_ms": {DURATION_MS},
+                  "id": "{INTERACTION_ID_6}",
+                  "input_tokens": 200,
+                  "interaction_type": "iteration",
+                  "model_name": "test-model",
+                  "output_tokens": 40,
+                  "total_tokens": 240
+                }
+              ],
+              "mcp_interactions": [
+                {
+                  "created_at": "{TIMESTAMP}",
+                  "id": "{INTERACTION_ID_7}",
+                  "interaction_type": "tool_list",
+                  "server_name": "test-mcp"
+                },
+                {
+                  "created_at": "{TIMESTAMP}",
+                  "duration_ms": {DURATION_MS},
+                  "id": "{INTERACTION_ID_8}",
+                  "interaction_type": "tool_call",
+                  "server_name": "test-mcp",
+                  "tool_name": "search_logs"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "stage_id": "{STAGE_ID_1}",
+      "stage_name": "orchestrate"
+    }
+  ]
+}

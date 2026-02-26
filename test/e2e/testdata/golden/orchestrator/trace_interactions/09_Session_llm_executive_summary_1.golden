@@ -1,0 +1,38 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_9}",
+  "interaction_type": "executive_summary",
+  "llm_request": {
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 89,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model"
+}
+
+=== MESSAGE: system ===
+You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity, brevity, and actionable information.
+
+=== MESSAGE: user ===
+Generate a 1-4 line executive summary of this incident analysis.
+
+CRITICAL RULES:
+- Only summarize what is EXPLICITLY stated in the analysis
+- Do NOT infer future actions or recommendations not mentioned
+- Do NOT add your own conclusions
+- Focus on: what happened, current status, and ONLY stated next steps
+
+Analysis to summarize:
+
+=================================================================================
+Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.
+=================================================================================
+
+Executive Summary (1-4 lines, facts only):
+
+=== MESSAGE: assistant ===
+Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.
+

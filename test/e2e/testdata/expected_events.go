@@ -624,3 +624,108 @@ var TimeoutChatExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Orchestrator — happy path with WaitCh-controlled timing
+// Single stage with SREOrchestrator (type=orchestrator) dispatching
+// LogAnalyzer (MCP tools). Only 1 sub-agent for deterministic iteration count:
+//
+//	Iteration 1: dispatch LogAnalyzer
+//	Iteration 2: drain empty → text (no tools) → HasPending → WaitForResult
+//	  Sub-agent released → LogAnalyzer (MCP tool call + answer) → result injected
+//	Iteration 3: drain empty → final answer
+//	Executive summary
+// ────────────────────────────────────────────────────────────
+
+var OrchestratorExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: orchestrate (SREOrchestrator) ──
+	{Type: "stage.status", StageName: "orchestrate", Status: "started"},
+
+	// Orchestrator iteration 1: thinking + dispatch_agent
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "I need to investigate this alert. Let me dispatch LogAnalyzer to check error patterns."},
+
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"tool_name": "dispatch_agent",
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// task_assigned events are DB-only (created by SubAgentRunner, not published to WS).
+
+	// Orchestrator iteration 2: thinking + text (no tools) → wait for sub-agent
+	// Streaming: created events arrive together, completed events arrive together.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "I've dispatched LogAnalyzer. Waiting for results.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Waiting for sub-agent results to complete the investigation.", Group: 1},
+
+	// Sub-agent events (parallel — Group 2): LogAnalyzer iteration 1 (MCP tool call)
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 2,
+		Content: "Let me search the logs for error patterns."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Group: 2, Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "search_logs",
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call", Group: 2},
+
+	// LogAnalyzer iteration 2 (final answer after tool result)
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming", Group: 2},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_thinking", Group: 2,
+		Content: "Found significant error patterns in the logs."},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 2,
+		Content: "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed", Group: 2,
+		Content: "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service."},
+
+	// Orchestrator iteration 3: thinking + final answer
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "LogAnalyzer found 5xx errors from the payment service. Memory pressure from recent deployment.", Group: 3},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.", Group: 3},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase."},
+
+	{Type: "stage.status", StageName: "orchestrate", Status: "completed"},
+	{Type: "session.status", Status: "completed"},
+}
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Orchestrator Cancellation
+// Single stage with SREOrchestrator dispatching 2 sub-agents.
+// All agents use BlockUntilCancelled. Session cancelled via API.
+//
+//	Orchestrator dispatches sub-agents → sub-agents block →
+//	orchestrator blocks → session cancelled → cascade cancel
+// ────────────────────────────────────────────────────────────
+
+var OrchestratorCancellationExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: orchestrate (SREOrchestrator) ──
+	{Type: "stage.status", StageName: "orchestrate", Status: "started"},
+
+	// Orchestrator iteration 1: dispatch_agent tool calls
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"tool_name": "dispatch_agent",
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"tool_name": "dispatch_agent",
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// task_assigned events are DB-only (created by SubAgentRunner, not published to WS).
+
+	// Cancellation — all agents blocked, session cancelled via API
+	{Type: "stage.status", StageName: "orchestrate", Status: "cancelled"},
+	{Type: "session.status", Status: "cancelled"},
+}

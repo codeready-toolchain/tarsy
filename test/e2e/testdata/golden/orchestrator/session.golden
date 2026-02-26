@@ -1,0 +1,79 @@
+{
+  "alert_data": "Payment service 5xx errors spiking",
+  "alert_type": "test-orchestrator",
+  "author": "api-client",
+  "chain_id": "orchestrator-chain",
+  "chat_enabled": true,
+  "chat_id": null,
+  "chat_message_count": 0,
+  "completed_at": "{TIMESTAMP}",
+  "completed_stages": 1,
+  "created_at": "{TIMESTAMP}",
+  "current_stage_id": "{STAGE_ID_1}",
+  "current_stage_index": 1,
+  "duration_ms": {DURATION_MS},
+  "error_message": null,
+  "executive_summary": "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
+  "executive_summary_error": null,
+  "failed_stages": 0,
+  "final_analysis": "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.",
+  "has_parallel_stages": false,
+  "id": "{SESSION_ID}",
+  "input_tokens": 1300,
+  "llm_interaction_count": 6,
+  "mcp_interaction_count": 3,
+  "output_tokens": 190,
+  "runbook_url": null,
+  "stages": [
+    {
+      "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "SREOrchestrator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_1}",
+          "input_tokens": 1000,
+          "llm_backend": "google-native",
+          "llm_provider": "test-provider",
+          "output_tokens": 130,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "sub_agents": [
+            {
+              "agent_index": 1,
+              "agent_name": "LogAnalyzer",
+              "completed_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "error_message": null,
+              "execution_id": "{EXEC_ID_2}",
+              "input_tokens": 300,
+              "llm_backend": "google-native",
+              "llm_provider": "test-provider",
+              "output_tokens": 60,
+              "parent_execution_id": "{EXEC_ID_1}",
+              "started_at": "{TIMESTAMP}",
+              "status": "completed",
+              "task": "Find all error patterns in the last 30 minutes",
+              "total_tokens": 360
+            }
+          ],
+          "total_tokens": 1130
+        }
+      ],
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_1}",
+      "parallel_type": null,
+      "stage_index": 1,
+      "stage_name": "orchestrate",
+      "started_at": null,
+      "status": "completed"
+    }
+  ],
+  "started_at": "{TIMESTAMP}",
+  "status": "completed",
+  "total_stages": 1,
+  "total_tokens": 1490
+}
