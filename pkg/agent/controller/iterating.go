@@ -68,6 +68,19 @@ func (c *IteratingController) Run(
 			return failedResult(state, totalUsage), nil
 		}
 
+		// Drain any sub-agent results that arrived while tools were executing
+		// or the LLM was being called. Non-blocking — skipped when nil.
+		if collector := execCtx.SubAgentCollector; collector != nil {
+			for {
+				msg, ok := collector.TryDrainResult()
+				if !ok {
+					break
+				}
+				messages = append(messages, msg)
+				storeObservationMessage(ctx, execCtx, msg.Content, &msgSeq)
+			}
+		}
+
 		iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 		startTime := time.Now()
 
@@ -148,7 +161,28 @@ func (c *IteratingController) Run(
 				storeToolResultMessage(ctx, execCtx, tc.ID, tc.Name, tcResult.Content, &msgSeq)
 			}
 		} else {
-			// No tool calls — this is the final answer
+			// No tool calls — check for pending sub-agents before treating as final
+			if collector := execCtx.SubAgentCollector; collector != nil && collector.HasPending() {
+				// Store the assistant's intermediate response before waiting
+				if resp.Text != "" {
+					messages = append(messages, agent.ConversationMessage{
+						Role:    agent.RoleAssistant,
+						Content: resp.Text,
+					})
+				}
+
+				msg, waitErr := collector.WaitForResult(ctx)
+				if waitErr != nil {
+					iterCancel()
+					break
+				}
+				messages = append(messages, msg)
+				storeObservationMessage(ctx, execCtx, msg.Content, &msgSeq)
+				iterCancel()
+				continue
+			}
+
+			// No tool calls, no pending sub-agents — this is the final answer
 			assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
 			if storeErr != nil {
 				iterCancel()

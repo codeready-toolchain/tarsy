@@ -608,3 +608,233 @@ func TestIteratingController_ForcedConclusionWithGrounding(t *testing.T) {
 	}
 	require.True(t, foundSearch, "google_search_result event should be created during forced conclusion")
 }
+
+// ─── Sub-agent drain/wait tests ─────────────────────────────────────────────
+
+func TestIteratingController_DrainSubAgentResults(t *testing.T) {
+	// Sub-agent results are available before the LLM call. They should be
+	// drained and included in the messages sent to the LLM.
+	subAgentMsg := agent.ConversationMessage{
+		Role:    agent.RoleUser,
+		Content: "[Sub-agent completed] LogAnalyzer (exec abc): Found 42 errors",
+	}
+
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// First LLM call: after drain, LLM produces final answer
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Based on the sub-agent findings..."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.SubAgentCollector = &mockSubAgentCollector{
+		drainResults: []agent.ConversationMessage{subAgentMsg},
+		pending:      false,
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Based on the sub-agent findings...", result.FinalAnalysis)
+
+	// Verify the LLM saw the drained sub-agent result in its messages
+	require.Len(t, llm.capturedInputs, 1)
+	foundSubAgentMsg := false
+	for _, m := range llm.capturedInputs[0].Messages {
+		if strings.Contains(m.Content, "Found 42 errors") {
+			foundSubAgentMsg = true
+			break
+		}
+	}
+	require.True(t, foundSubAgentMsg, "LLM should see the drained sub-agent result")
+}
+
+func TestIteratingController_WaitForPendingSubAgents(t *testing.T) {
+	// LLM returns no tool calls, but sub-agents are pending. Controller
+	// should wait for a result, inject it, and give the LLM another turn.
+	subAgentMsg := agent.ConversationMessage{
+		Role:    agent.RoleUser,
+		Content: "[Sub-agent completed] MetricChecker (exec def): Latency spike at 14:30",
+	}
+
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// First call: LLM has no tool calls (triggers wait)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Waiting for sub-agent results..."},
+			}},
+			// Second call: after wait result injected, LLM produces final answer
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "The latency spike was caused by..."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.SubAgentCollector = &mockSubAgentCollector{
+		waitResults: []agent.ConversationMessage{subAgentMsg},
+		pending:     true,
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "The latency spike was caused by...", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount, "LLM should be called twice: once before wait, once after")
+
+	// Second LLM call should include the waited sub-agent result
+	foundSubAgentMsg := false
+	for _, m := range llm.capturedInputs[1].Messages {
+		if strings.Contains(m.Content, "Latency spike at 14:30") {
+			foundSubAgentMsg = true
+			break
+		}
+	}
+	require.True(t, foundSubAgentMsg, "second LLM call should see the waited sub-agent result")
+}
+
+func TestIteratingController_DrainAndWait(t *testing.T) {
+	// Combined scenario: drain picks up a result before the first LLM call,
+	// LLM makes a tool call, then on iteration 2 returns no tools with
+	// pending sub-agents → wait delivers a second result → iteration 3
+	// the LLM produces the final answer.
+	drainMsg := agent.ConversationMessage{
+		Role:    agent.RoleUser,
+		Content: "[Sub-agent completed] LogAnalyzer (exec abc): Found 42 errors",
+	}
+	waitMsg := agent.ConversationMessage{
+		Role:    agent.RoleUser,
+		Content: "[Sub-agent completed] MetricChecker (exec def): Latency spike at 14:30",
+	}
+
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// Iteration 1: after drain, LLM makes a tool call
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
+			}},
+			// Iteration 2: no tool calls → triggers wait (pending=true)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Processing sub-agent results..."},
+			}},
+			// Iteration 3: final answer after wait result injected
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Both agents found issues: errors and latency."},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"k8s.get_pods": {Content: "pod-1 Running"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.SubAgentCollector = &mockSubAgentCollector{
+		drainResults: []agent.ConversationMessage{drainMsg},
+		waitResults:  []agent.ConversationMessage{waitMsg},
+		pending:      true,
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Both agents found issues: errors and latency.", result.FinalAnalysis)
+	require.Equal(t, 3, llm.callCount)
+
+	// Iteration 1: LLM should see the drained result
+	foundDrain := false
+	for _, m := range llm.capturedInputs[0].Messages {
+		if strings.Contains(m.Content, "Found 42 errors") {
+			foundDrain = true
+			break
+		}
+	}
+	require.True(t, foundDrain, "first LLM call should include drained sub-agent result")
+
+	// Iteration 3: LLM should see the waited result
+	foundWait := false
+	for _, m := range llm.capturedInputs[2].Messages {
+		if strings.Contains(m.Content, "Latency spike at 14:30") {
+			foundWait = true
+			break
+		}
+	}
+	require.True(t, foundWait, "third LLM call should include waited sub-agent result")
+}
+
+func TestIteratingController_WaitErrorBreaksLoop(t *testing.T) {
+	// WaitForResult fails → loop breaks → forced conclusion
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			// Iteration 1: no tool calls → triggers wait (which fails)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Waiting for sub-agents..."},
+			}},
+			// Forced conclusion call (no tools)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Forced conclusion: partial results."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.SubAgentCollector = &mockSubAgentCollector{
+		waitResults: []agent.ConversationMessage{{}},
+		waitErrors:  []error{context.Canceled},
+		pending:     true,
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "Forced conclusion")
+	require.Equal(t, 2, llm.callCount, "one iteration + forced conclusion")
+}
+
+func TestIteratingController_NilCollectorSkipsDrainWait(t *testing.T) {
+	// With nil SubAgentCollector, controller behaves exactly as before —
+	// no drain, no wait, just the normal iteration loop.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Everything is fine."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	// SubAgentCollector is nil by default
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Everything is fine.", result.FinalAnalysis)
+	require.Equal(t, 1, llm.callCount)
+}

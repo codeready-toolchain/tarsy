@@ -46,6 +46,19 @@ type ExecutionContext struct {
 	// Chat context (nil for non-chat sessions)
 	ChatContext *ChatContext
 
+	// Sub-agent context (nil for non-sub-agents). Same pattern as ChatContext.
+	// Set when the agent was dispatched by an orchestrator.
+	SubAgent *SubAgentContext
+
+	// SubAgentCollector provides push-based delivery of completed sub-agent
+	// results. nil for non-orchestrator agents — all drain/wait code is skipped.
+	// Implemented by orchestrator.ResultCollector; interface avoids agent↔orchestrator cycle.
+	SubAgentCollector SubAgentResultCollector
+
+	// SubAgentCatalog lists agents available for orchestrator dispatch.
+	// Used by the prompt builder to include the catalog in the system prompt.
+	SubAgentCatalog []config.SubAgentEntry
+
 	// FailedServers maps serverID → error message for MCP servers that
 	// failed to initialize. Used by the prompt builder to warn the LLM.
 	// nil when all servers initialized successfully.
@@ -115,8 +128,34 @@ type EventPublisher interface {
 	PublishExecutionStatus(ctx context.Context, sessionID string, payload events.ExecutionStatusPayload) error
 }
 
+// SubAgentResultCollector provides push-based delivery of completed sub-agent
+// results to the controller. Implemented by orchestrator.ResultCollector;
+// defined as interface here to avoid a circular import between pkg/agent
+// and pkg/agent/orchestrator.
+type SubAgentResultCollector interface {
+	// TryDrainResult returns a formatted sub-agent result as a conversation
+	// message without blocking. Returns (msg, true) if a result was available,
+	// (zero, false) otherwise.
+	TryDrainResult() (ConversationMessage, bool)
+
+	// WaitForResult blocks until a sub-agent result is available or the
+	// context is cancelled.
+	WaitForResult(ctx context.Context) (ConversationMessage, error)
+
+	// HasPending returns true if any dispatched sub-agents haven't delivered
+	// results yet.
+	HasPending() bool
+}
+
 // ChatContext carries chat-specific data for controllers.
 type ChatContext struct {
 	UserQuestion         string
 	InvestigationContext string
+}
+
+// SubAgentContext carries sub-agent-specific data for controllers and prompt
+// builders. Same pattern as ChatContext — nil for non-sub-agents.
+type SubAgentContext struct {
+	Task         string // Task assigned by the orchestrator
+	ParentExecID string // Parent orchestrator's execution ID
 }

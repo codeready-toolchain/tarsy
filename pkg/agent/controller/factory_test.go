@@ -64,6 +64,15 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected ScoringController")
 	})
 
+	t.Run("orchestrator type returns IteratingController", func(t *testing.T) {
+		controller, err := factory.CreateController(config.AgentTypeOrchestrator, execCtx)
+		require.NoError(t, err)
+		require.NotNil(t, controller)
+
+		_, ok := controller.(*IteratingController)
+		assert.True(t, ok, "expected IteratingController")
+	})
+
 	t.Run("typo in agent type returns error", func(t *testing.T) {
 		typoType := config.AgentType("syntesis") // typo of "synthesis"
 		controller, err := factory.CreateController(typoType, execCtx)

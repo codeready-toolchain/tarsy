@@ -156,3 +156,40 @@ func TestBuildFunctionCallingMessages_ChatMode(t *testing.T) {
 	assert.Contains(t, messages[0].Content, "Chat Assistant Instructions")
 	assert.Contains(t, messages[1].Content, "Show me the pod status")
 }
+
+func TestBuildFunctionCallingMessages_OrchestratorMode(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeOrchestrator
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
+	}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
+	require.Len(t, messages, 2)
+
+	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
+	assert.Contains(t, messages[0].Content, "LogAnalyzer")
+	assert.Contains(t, messages[1].Content, "Alert Details")
+}
+
+func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.SubAgent = &agent.SubAgentContext{
+		Task:         "Find 5xx errors in the last hour",
+		ParentExecID: "parent-exec-1",
+	}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "Previous data")
+	require.Len(t, messages, 2)
+
+	// System: normal Tier 1-3 instructions
+	assert.Contains(t, messages[0].Content, "General SRE Agent Instructions")
+
+	// User: task only, no investigation context
+	assert.Contains(t, messages[1].Content, "## Task")
+	assert.Contains(t, messages[1].Content, "Find 5xx errors")
+	assert.NotContains(t, messages[1].Content, "Alert Details")
+	assert.NotContains(t, messages[1].Content, "Previous data")
+}

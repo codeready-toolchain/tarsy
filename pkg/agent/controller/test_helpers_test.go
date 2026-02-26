@@ -180,6 +180,51 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 	}
 }
 
+// mockSubAgentCollector implements agent.SubAgentResultCollector for testing.
+type mockSubAgentCollector struct {
+	// Results to return from TryDrainResult (consumed in order).
+	drainResults []agent.ConversationMessage
+	drainIdx     int
+
+	// Results to return from WaitForResult (consumed in order).
+	waitResults []agent.ConversationMessage
+	waitErrors  []error
+	waitIdx     int
+
+	pending bool
+}
+
+func (m *mockSubAgentCollector) TryDrainResult() (agent.ConversationMessage, bool) {
+	if m.drainIdx >= len(m.drainResults) {
+		return agent.ConversationMessage{}, false
+	}
+	msg := m.drainResults[m.drainIdx]
+	m.drainIdx++
+	return msg, true
+}
+
+func (m *mockSubAgentCollector) WaitForResult(_ context.Context) (agent.ConversationMessage, error) {
+	if m.waitIdx >= len(m.waitResults) {
+		return agent.ConversationMessage{}, context.Canceled
+	}
+	msg := m.waitResults[m.waitIdx]
+	var err error
+	if m.waitIdx < len(m.waitErrors) {
+		err = m.waitErrors[m.waitIdx]
+	}
+	m.waitIdx++
+	if err != nil {
+		return agent.ConversationMessage{}, err
+	}
+	// After delivering a wait result, mark as no longer pending
+	m.pending = false
+	return msg, nil
+}
+
+func (m *mockSubAgentCollector) HasPending() bool {
+	return m.pending
+}
+
 func newTestServiceBundle(t *testing.T, entClient *ent.Client) *agent.ServiceBundle {
 	t.Helper()
 	msgSvc := services.NewMessageService(entClient)
