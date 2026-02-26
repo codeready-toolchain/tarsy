@@ -32,7 +32,7 @@ import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
-import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.ts';
+import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface SessionListItemProps {
