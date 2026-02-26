@@ -460,6 +460,7 @@ func newMinimalRunner(maxConcurrent int) *SubAgentRunner {
 		"TestAgent": {Description: "A test agent"},
 	})
 	return NewSubAgentRunner(
+		context.Background(),
 		&SubAgentDeps{},
 		"parent-exec", "session-1", "stage-1",
 		registry,
@@ -623,6 +624,7 @@ func setupIntegrationRunner(
 	}
 
 	runner := NewSubAgentRunner(
+		context.Background(),
 		deps,
 		parentExecID,
 		session.ID,

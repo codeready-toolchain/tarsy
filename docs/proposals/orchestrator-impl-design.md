@@ -1128,7 +1128,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
-- Integration test
+- Integration tests
 
 ### PR6: E2E Tests
 - New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use

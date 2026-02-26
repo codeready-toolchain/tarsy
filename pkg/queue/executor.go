@@ -16,6 +16,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -27,14 +28,15 @@ import (
 
 // RealSessionExecutor implements SessionExecutor using the agent framework.
 type RealSessionExecutor struct {
-	cfg            *config.Config
-	dbClient       *ent.Client
-	llmClient      agent.LLMClient
-	eventPublisher agent.EventPublisher
-	agentFactory   *agent.AgentFactory
-	promptBuilder  *prompt.PromptBuilder
-	mcpFactory     *mcp.ClientFactory
-	runbookService *runbook.Service
+	cfg              *config.Config
+	dbClient         *ent.Client
+	llmClient        agent.LLMClient
+	eventPublisher   agent.EventPublisher
+	agentFactory     *agent.AgentFactory
+	promptBuilder    *prompt.PromptBuilder
+	mcpFactory       *mcp.ClientFactory
+	runbookService   *runbook.Service
+	subAgentRegistry *config.SubAgentRegistry
 }
 
 // NewRealSessionExecutor creates a new session executor.
@@ -44,14 +46,15 @@ type RealSessionExecutor struct {
 func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
-		cfg:            cfg,
-		dbClient:       dbClient,
-		llmClient:      llmClient,
-		eventPublisher: eventPublisher,
-		agentFactory:   agent.NewAgentFactory(controllerFactory),
-		promptBuilder:  prompt.NewPromptBuilder(cfg.MCPServerRegistry),
-		mcpFactory:     mcpFactory,
-		runbookService: runbookService,
+		cfg:              cfg,
+		dbClient:         dbClient,
+		llmClient:        llmClient,
+		eventPublisher:   eventPublisher,
+		agentFactory:     agent.NewAgentFactory(controllerFactory),
+		promptBuilder:    prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		mcpFactory:       mcpFactory,
+		runbookService:   runbookService,
+		subAgentRegistry: config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll()),
 	}
 }
 
@@ -545,7 +548,6 @@ func (e *RealSessionExecutor) executeAgent(
 		RunbookContent: e.resolveRunbook(ctx, input.session),
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,
-		ToolExecutor:   toolExecutor,
 		EventPublisher: e.eventPublisher,
 		PromptBuilder:  e.promptBuilder,
 		FailedServers:  failedServers,
@@ -556,6 +558,55 @@ func (e *RealSessionExecutor) executeAgent(
 			Stage:       input.stageService,
 		},
 	}
+
+	if resolvedConfig.Type == config.AgentTypeOrchestrator {
+		agentDef, getErr := e.cfg.GetAgent(agentConfig.Name)
+		if getErr != nil {
+			failErr := fmt.Errorf("failed to get orchestrator agent config: %w", getErr)
+			logger.Error("Failed to get agent definition for orchestrator", "error", getErr)
+			if updateErr := input.stageService.UpdateAgentExecutionStatus(
+				context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+			); updateErr != nil {
+				logger.Error("Failed to update agent execution status", "error", updateErr)
+			}
+			publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
+			return agentResult{
+				executionID:     exec.ID,
+				status:          agent.ExecutionStatusFailed,
+				err:             failErr,
+				llmBackend:      resolvedBackend,
+				llmProviderName: resolvedConfig.LLMProviderName,
+			}
+		}
+
+		guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
+		subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+		registry := e.subAgentRegistry.Filter(subAgentNames)
+
+		deps := &orchestrator.SubAgentDeps{
+			Config:             e.cfg,
+			Chain:              input.chain,
+			AgentFactory:       e.agentFactory,
+			MCPFactory:         e.mcpFactory,
+			LLMClient:          e.llmClient,
+			EventPublisher:     e.eventPublisher,
+			PromptBuilder:      e.promptBuilder,
+			StageService:       input.stageService,
+			TimelineService:    input.timelineService,
+			MessageService:     input.messageService,
+			InteractionService: input.interactionService,
+			AlertData:          input.session.AlertData,
+			AlertType:          input.session.AlertType,
+			RunbookContent:     e.resolveRunbook(ctx, input.session),
+		}
+
+		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails)
+		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
+		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
+		execCtx.SubAgentCatalog = registry.Entries()
+	}
+
+	execCtx.ToolExecutor = toolExecutor
 
 	agentInstance, err := e.agentFactory.CreateAgent(execCtx)
 	if err != nil {
@@ -1311,6 +1362,54 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 		return e.cfg.Defaults.SuccessPolicy
 	}
 	return config.SuccessPolicyAny
+}
+
+// ────────────────────────────────────────────────────────────
+// Orchestrator resolution
+// ────────────────────────────────────────────────────────────
+
+// resolveOrchestratorGuardrails merges hardcoded fallbacks < defaults.orchestrator < per-agent orchestrator config.
+func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentConfig) *orchestrator.OrchestratorGuardrails {
+	g := &orchestrator.OrchestratorGuardrails{
+		MaxConcurrentAgents: 5,
+		AgentTimeout:        300 * time.Second,
+		MaxBudget:           600 * time.Second,
+	}
+	if cfg.Defaults != nil && cfg.Defaults.Orchestrator != nil {
+		applyOrchestratorConfig(g, cfg.Defaults.Orchestrator)
+	}
+	if agentDef.Orchestrator != nil {
+		applyOrchestratorConfig(g, agentDef.Orchestrator)
+	}
+	return g
+}
+
+func applyOrchestratorConfig(g *orchestrator.OrchestratorGuardrails, oc *config.OrchestratorConfig) {
+	if oc.MaxConcurrentAgents != nil {
+		g.MaxConcurrentAgents = *oc.MaxConcurrentAgents
+	}
+	if oc.AgentTimeout != nil {
+		g.AgentTimeout = *oc.AgentTimeout
+	}
+	if oc.MaxBudget != nil {
+		g.MaxBudget = *oc.MaxBudget
+	}
+}
+
+// resolveSubAgents returns the sub_agents override from the most specific level
+// in the hierarchy: stage-agent > stage > chain. Returns nil if no override
+// (meaning the full global registry is used).
+func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agentCfg config.StageAgentConfig) []string {
+	if len(agentCfg.SubAgents) > 0 {
+		return agentCfg.SubAgents
+	}
+	if len(stage.SubAgents) > 0 {
+		return stage.SubAgents
+	}
+	if len(chain.SubAgents) > 0 {
+		return chain.SubAgents
+	}
+	return nil
 }
 
 // parallelTypePtr returns the parallel_type for DB storage, or nil for single-agent stages.
