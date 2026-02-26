@@ -418,14 +418,26 @@ type SubAgentRunner struct {
 }
 
 // SubAgentDeps bundles dependencies extracted from the session executor.
+// Uses service interfaces instead of raw *ent.Client to follow existing
+// data access patterns (confirmed during PR3 planning).
 type SubAgentDeps struct {
     Config         *config.Config
+    Chain          *config.ChainConfig        // For ResolveAgentConfig
     AgentFactory   *agent.AgentFactory
     MCPFactory     *mcp.ClientFactory
     LLMClient      agent.LLMClient
     EventPublisher agent.EventPublisher
-    PromptBuilder  *prompt.PromptBuilder
-    DBClient       *ent.Client
+    PromptBuilder  agent.PromptBuilder        // Interface (avoids agent↔prompt import cycle)
+
+    StageService       *services.StageService
+    TimelineService    *services.TimelineService
+    MessageService     *services.MessageService
+    InteractionService *services.InteractionService
+
+    // Orchestrator's session context, passed through to sub-agent ExecutionContexts.
+    AlertData      string
+    AlertType      string
+    RunbookContent string
 }
 
 // OrchestratorGuardrails holds resolved orchestrator limits (defaults + per-agent override).
@@ -481,14 +493,16 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
     //    - On timeout/cancel: update DB status → "cancelled" / "failed"
     //    - Signal done channel (always, even on send failure)
     //
-    //    The send to resultsCh MUST be non-blocking on cancellation to avoid
-    //    deadlock during Close(). Use select with ctx.Done():
+    //    The send to resultsCh MUST be non-blocking during shutdown to avoid
+    //    deadlock during Close(). Use a dedicated closeCh (not ctx.Done()):
     //      select {
     //      case r.resultsCh <- result:
-    //      case <-ctx.Done():
-    //          // Context cancelled (e.g. CancelAll during cleanup) — drop result.
-    //          // The orchestrator is shutting down and won't read it anyway.
+    //      case <-r.closeCh:
+    //          // CancelAll closed closeCh — orchestrator is shutting down.
     //      }
+    //    Using closeCh (closed only by CancelAll) instead of ctx.Done() ensures
+    //    that individual sub-agent cancellations still deliver their result to
+    //    the orchestrator. Only bulk shutdown drops results.
     //
     // 10. Return execution_id immediately
 }
@@ -605,7 +619,7 @@ type ExecutionContext struct {
 Sub-agent results are injected into the conversation as user-role messages (external inputs the orchestrator LLM did not produce):
 
 ```go
-func formatSubAgentResult(result *SubAgentResult) agent.ConversationMessage {
+func FormatSubAgentResult(result *SubAgentResult) agent.ConversationMessage {
     var content string
     if result.Status == agent.ExecutionStatusCompleted {
         content = fmt.Sprintf(
@@ -965,10 +979,14 @@ func (e *RealSessionExecutor) executeAgent(...) agentResult {
     if resolvedConfig.Type == config.AgentTypeOrchestrator {
         agentDef, _ := e.cfg.GetAgent(agentConfig.Name)
         deps := &orchestrator.SubAgentDeps{
-            Config: e.cfg, AgentFactory: e.agentFactory,
-            MCPFactory: e.mcpFactory, LLMClient: e.llmClient,
-            EventPublisher: e.eventPublisher,
-            PromptBuilder: e.promptBuilder, DBClient: e.dbClient,
+            Config: e.cfg, Chain: input.chain,
+            AgentFactory: e.agentFactory, MCPFactory: e.mcpFactory,
+            LLMClient: e.llmClient, EventPublisher: e.eventPublisher,
+            PromptBuilder: e.promptBuilder,
+            StageService: input.stageService, TimelineService: input.timelineService,
+            MessageService: input.messageService, InteractionService: input.interactionService,
+            AlertData: input.session.AlertData, AlertType: input.session.AlertType,
+            RunbookContent: e.resolveRunbook(ctx, input.session),
         }
         guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
         subAgentNames := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
@@ -1057,7 +1075,7 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Config validation: `orchestrator` section forbidden on non-orchestrator agents
 - **Note:** `AgentConfig.MCPServers` has a `validate:"required,min=1"` struct tag, but the actual validator (custom `validateAgents`) treats MCP servers as optional. Existing agents (ChatAgent, SynthesisAgent) have none. The new built-ins follow the same pattern. The struct tag should be corrected to `validate:"omitempty"` as a housekeeping fix.
 
-### PR2: DB schema ✅
+### PR2: DB schema ✅ DONE
 - `parent_execution_id` on `AgentExecution` (nullable)
 - `task` on `AgentExecution` (nullable)
 - Replace `UNIQUE(stage_id, agent_index)` with two partial indexes: `UNIQUE(stage_id, agent_index) WHERE parent_execution_id IS NULL` (top-level) + `UNIQUE(parent_execution_id, agent_index) WHERE parent_execution_id IS NOT NULL` (sub-agents)
@@ -1068,12 +1086,17 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - `GetSessionDetail`: eager-loads sub-agents; filters top-level `Executions` to exclude sub-agents (they appear only nested under their parent via `SubAgents`)
 - `buildExecutionOverview` helper extracted for reuse across top-level and sub-agent overviews
 
-### PR3: SubAgentRunner + CompositeToolExecutor
+### PR3: SubAgentRunner + CompositeToolExecutor ✅ DONE
 - `SubAgentRunner` — dispatch, cancel, list, results channel (`TryGetNext`, `WaitForNext`, `HasPending`)
 - `CompositeToolExecutor` — wraps MCP executor + orchestration tools
-- `SubAgentDeps` dependency bundle
-- `SubAgentResult` type
-- Unit tests
+- `SubAgentDeps` dependency bundle (uses services, not raw `*ent.Client` — see struct above)
+- `SubAgentResult`, `SubAgentStatus`, `OrchestratorGuardrails` types
+- `FormatSubAgentResult` (exported — called from controller package in PR4)
+- Tool name constants (`ToolDispatchAgent`, `ToolCancelAgent`, `ToolListAgents`)
+- `closeCh` mechanism for clean result delivery on individual cancel vs bulk shutdown
+- `SubAgentRegistry.Get(name)` method for dispatch validation
+- Unit tests (channel mechanics, dispatch validation, tool executor routing)
+- Integration tests (testcontainers DB + mock agent: concurrent dispatch, DB record verification, timeout, cancel)
 
 ### PR4: Controller modification + orchestrator prompt
 - Push-based drain/wait logic in `IteratingController` (via `ExecutionContext.SubAgentRunner`)

@@ -67,6 +67,16 @@ func (e SubAgentEntry) clone() SubAgentEntry {
 	return c
 }
 
+// Get returns the entry for the given agent name, or false if not found.
+func (r *SubAgentRegistry) Get(name string) (SubAgentEntry, bool) {
+	for _, e := range r.entries {
+		if e.Name == name {
+			return e.clone(), true
+		}
+	}
+	return SubAgentEntry{}, false
+}
+
 // Filter returns a new registry containing only agents whose names are in allowedNames.
 // If allowedNames is nil, returns a new registry with a copy of all entries.
 func (r *SubAgentRegistry) Filter(allowedNames []string) *SubAgentRegistry {
