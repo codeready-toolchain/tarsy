@@ -80,6 +80,7 @@ type SubAgentRefs []SubAgentRef
 //   - Short-form:  [LogAnalyzer, GeneralWorker]
 //   - Long-form:   [{name: LogAnalyzer, max_iterations: 5}, ...]
 //   - Mixed:       [LogAnalyzer, {name: GeneralWorker, llm_provider: fast}]
+//
 // subAgentRefAllowedKeys are the YAML keys accepted in a SubAgentRef mapping.
 // Kept in sync with the struct tags on SubAgentRef.
 var subAgentRefAllowedKeys = map[string]bool{
