@@ -158,7 +158,7 @@ func (TimelineEvent) Indexes() []ent.Index {
 		// Agent timeline filtering (execution_id is nullable; EQ predicates naturally exclude NULLs)
 		index.Fields("execution_id", "sequence_number"),
 		// Sub-agent event lookups by parent orchestrator
-		index.Fields("parent_execution_id"),
+		index.Fields("parent_execution_id", "sequence_number"),
 		// Chronological queries
 		index.Fields("created_at"),
 	}

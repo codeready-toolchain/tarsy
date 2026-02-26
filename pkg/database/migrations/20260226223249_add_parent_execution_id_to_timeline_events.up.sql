@@ -8,4 +8,4 @@ ALTER TABLE "public"."timeline_events"
         ON UPDATE NO ACTION ON DELETE SET NULL;
 
 -- Index for efficient sub-agent event lookups by parent orchestrator
-CREATE INDEX "timelineevent_parent_execution_id" ON "public"."timeline_events" ("parent_execution_id");
+CREATE INDEX "timelineevent_parent_execution_id_sequence_number" ON "public"."timeline_events" ("parent_execution_id", "sequence_number");
