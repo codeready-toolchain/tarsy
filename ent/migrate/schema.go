@@ -625,6 +625,11 @@ var (
 				Columns: []*schema.Column{TimelineEventsColumns[8], TimelineEventsColumns[1]},
 			},
 			{
+				Name:    "timelineevent_parent_execution_id",
+				Unique:  false,
+				Columns: []*schema.Column{TimelineEventsColumns[9]},
+			},
+			{
 				Name:    "timelineevent_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{TimelineEventsColumns[2]},

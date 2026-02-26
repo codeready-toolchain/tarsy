@@ -156,11 +156,21 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 	})
 
 	t.Run("creates sub-agent event with parent_execution_id", func(t *testing.T) {
+		// Create a distinct parent (orchestrator) execution to validate true parent-child relationship.
+		parentExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "Orchestrator",
+			AgentIndex: 2,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
 		req := models.CreateTimelineEventRequest{
 			SessionID:         session.ID,
 			StageID:           &stg.ID,
 			ExecutionID:       &exec.ID,
-			ParentExecutionID: &exec.ID, // self-referencing for test simplicity
+			ParentExecutionID: &parentExec.ID,
 			SequenceNumber:    200,
 			EventType:         timelineevent.EventTypeTaskAssigned,
 			Status:            timelineevent.StatusCompleted,
@@ -170,7 +180,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		event, err := timelineService.CreateTimelineEvent(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, event.ParentExecutionID)
-		assert.Equal(t, exec.ID, *event.ParentExecutionID)
+		assert.Equal(t, parentExec.ID, *event.ParentExecutionID)
 		assert.Equal(t, "Analyze the logs", event.Content)
 	})
 

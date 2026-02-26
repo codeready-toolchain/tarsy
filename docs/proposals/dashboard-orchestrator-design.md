@@ -91,7 +91,7 @@ The `GET /sessions/:id/timeline` endpoint returns raw `TimelineEvent` entities. 
 
 ### Component Change Map
 
-```
+```text
 SessionDetailPage
   ├─ WS handler ────────── Filters sub-agent events into separate
   │                         subAgentExecutionStatuses map using parent_execution_id.
@@ -114,7 +114,7 @@ Types/events.ts ───── Add parent_execution_id to all relevant WS paylo
 
 ### Data Flow for Sub-Agent Events
 
-```
+```text
 Active session (WS path):
 1. Sub-agent starts → execution.status { execution_id: "sub-123", parent_execution_id: "orch-456" }
    → Dashboard stores in subAgentExecutionStatuses (not top-level executionStatuses)
@@ -191,7 +191,7 @@ The trace API already nests `sub_agents` inside `TraceExecutionGroup`. The trace
 `countStageInteractions` recursively includes sub-agent interactions in the total count. A separate "N sub-agents" chip on the stage accordion signals that nesting is involved. Operators expand for the breakdown.
 
 ```typescript
-function countStageInteractions(stage: TraceStageGroup): { total, llm, mcp, subAgentCount } {
+function countStageInteractions(stage: TraceStageGroup): { total: number; llm: number; mcp: number; subAgentCount: number } {
   let llm = 0, mcp = 0, subAgentCount = 0;
   for (const exec of stage.executions) {
     llm += exec.llm_interactions.length;
