@@ -53,6 +53,13 @@ Use cancel_agent to stop unnecessary work. Use list_agents to check status.
   MCP tools: test-mcp
 
 
+## Result Delivery
+
+Sub-agent results appear automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled]. You do not need to poll for them.
+If you have no more tool calls but sub-agents are still running, the system automatically waits — you do not need to take any action to stay alive.
+You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or continue waiting.
+When all relevant results are collected, produce your final analysis.
+
 Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators.
 
 === MESSAGE: user ===

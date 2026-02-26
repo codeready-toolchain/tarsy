@@ -23,6 +23,8 @@ func TestBuildSubAgentMessages_TaskOnly(t *testing.T) {
 	system := messages[0]
 	assert.Equal(t, agent.RoleSystem, system.Role)
 	assert.Contains(t, system.Content, "General SRE Agent Instructions")
+	assert.Contains(t, system.Content, "sub-agent dispatched by an orchestrator")
+	assert.Contains(t, system.Content, "reported back to the orchestrator")
 
 	user := messages[1]
 	assert.Equal(t, agent.RoleUser, user.Role)

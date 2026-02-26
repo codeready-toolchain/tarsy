@@ -1,0 +1,33 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  LogAnalyzer:
+    description: "Analyzes logs for error patterns and anomalies"
+    mcp_servers: [test-mcp]
+    max_iterations: 2
+    custom_instructions: "You are LogAnalyzer, you analyze logs to find error patterns."
+  # Orchestrator: built-in agent — no override needed
+  # GeneralWorker: built-in agent — no override needed
+
+agent_chains:
+  builtin-orchestrator-chain:
+    alert_types: [test-builtin-orchestrator]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: orchestrate
+        agents:
+          - name: Orchestrator
+            sub_agents: [LogAnalyzer, GeneralWorker]

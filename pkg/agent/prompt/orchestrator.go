@@ -8,6 +8,13 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
+const orchestratorResultDelivery = `## Result Delivery
+
+Sub-agent results appear automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled]. You do not need to poll for them.
+If you have no more tool calls but sub-agents are still running, the system automatically waits — you do not need to take any action to stay alive.
+You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or continue waiting.
+When all relevant results are collected, produce your final analysis.`
+
 const orchestratorTaskFocus = "Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators."
 
 // buildOrchestratorMessages builds the initial conversation for an orchestrator agent.
@@ -18,7 +25,7 @@ func (b *PromptBuilder) buildOrchestratorMessages(
 ) []agent.ConversationMessage {
 	composed := b.ComposeInstructions(execCtx)
 	catalog := formatAgentCatalog(execCtx.SubAgentCatalog)
-	systemContent := composed + "\n\n" + catalog + "\n\n" + orchestratorTaskFocus
+	systemContent := composed + "\n\n" + catalog + "\n\n" + orchestratorResultDelivery + "\n\n" + orchestratorTaskFocus
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},

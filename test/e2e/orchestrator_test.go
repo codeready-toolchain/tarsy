@@ -598,6 +598,203 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Built-in Orchestrator agent — verifies that a user-defined chain can
+// reference the built-in "Orchestrator" agent by name (not defined in
+// the test config's agents: section) and get full orchestrator functionality.
+//
+// Same pattern as TestE2E_OrchestratorMultiAgent but uses:
+//   - Built-in "Orchestrator" agent (type=orchestrator) instead of custom "SREOrchestrator"
+//   - Config: builtin-orchestrator (Orchestrator not in agents: section)
+//
+// Verifies: built-in agent resolved, 3 executions, parent-child links, trace API, session completion.
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	subAgentGate := make(chan struct{})
+	orchIter2Gate := make(chan struct{})
+	orchIter2Ready := make(chan struct{}, 1)
+
+	// Orchestrator iteration 1: dispatch both sub-agents.
+	llm.AddRouted("Orchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
+				Arguments: `{"name":"LogAnalyzer","task":"Analyze recent error logs for the payment service"}`},
+			&agent.ToolCallChunk{CallID: "orch-d2", Name: "dispatch_agent",
+				Arguments: `{"name":"GeneralWorker","task":"Summarize the alert context and severity"}`},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+	// Iteration 2: text → WaitForResult. OnBlock signals readiness.
+	llm.AddRouted("Orchestrator", LLMScriptEntry{
+		WaitCh:  orchIter2Gate,
+		OnBlock: orchIter2Ready,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Waiting for sub-agent results."},
+			&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
+		},
+	})
+	// Iterations 3-4: buffer for timing variance.
+	for i := range 2 {
+		llm.AddRouted("Orchestrator", LLMScriptEntry{
+			Chunks: []agent.Chunk{
+				&agent.TextChunk{Content: fmt.Sprintf("Waiting for sub-agent results (cycle %d).", i+2)},
+				&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
+			},
+		})
+	}
+	// Final answer after receiving all results.
+	llm.AddRouted("Orchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Both sub-agents completed. LogAnalyzer found errors, " +
+				"GeneralWorker assessed severity. Root cause: memory pressure after deploy-5678."},
+			&agent.UsageChunk{InputTokens: 600, OutputTokens: 80, TotalTokens: 680},
+		},
+	})
+
+	// ── LogAnalyzer: MCP tool call + answer (gated) ──
+	searchLogsResult := `[{"timestamp":"2026-02-25T15:00:00Z","level":"error","service":"payment","message":"OOM killed"}]`
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		WaitCh: subAgentGate,
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "la-call-1", Name: "test-mcp__search_logs",
+				Arguments: `{"query":"error","timerange":"30m"}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+		},
+	})
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Found 987 5xx errors from payment-service in the last 30 minutes."},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+
+	// ── GeneralWorker: pure reasoning, no tools (gated) ──
+	llm.AddRouted("GeneralWorker", LLMScriptEntry{
+		WaitCh: subAgentGate,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Alert severity: P2. Payment service errors spiking post-deployment."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 30, TotalTokens: 180},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{
+		Text: "Payment service errors caused by memory pressure after deploy-5678. Severity: P2.",
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "builtin-orchestrator")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"search_logs": StaticToolHandler(searchLogsResult),
+			},
+		}),
+	)
+
+	ctx := context.Background()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-builtin-orchestrator", "Payment service 5xx errors after deploy-5678")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	app.WaitForSessionStatus(t, sessionID, "in_progress")
+	go func() {
+		<-orchIter2Ready
+		baseline, err := app.CountLLMInteractions(sessionID)
+		if err != nil {
+			t.Errorf("CountLLMInteractions failed: %v", err)
+		}
+		close(orchIter2Gate)
+		if !app.AwaitLLMInteractionIncrease(sessionID, baseline) {
+			t.Errorf("AwaitLLMInteractionIncrease timed out (baseline=%d)", baseline)
+		}
+		close(subAgentGate)
+	}()
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Session: completed with analysis and summary ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.NotEmpty(t, session["final_analysis"])
+	assert.NotEmpty(t, session["executive_summary"])
+
+	// ── DB: 3 executions (Orchestrator + 2 sub-agents), all completed ──
+	execs := app.QueryExecutions(t, sessionID)
+	require.Len(t, execs, 3, "expected orchestrator + 2 sub-agents")
+
+	agentNames := make(map[string]bool)
+	var orchExecID string
+	for _, e := range execs {
+		agentNames[e.AgentName] = true
+		assert.Equal(t, "completed", string(e.Status), "%s should be completed", e.AgentName)
+
+		switch e.AgentName {
+		case "Orchestrator":
+			orchExecID = e.ID
+			assert.Nil(t, e.ParentExecutionID)
+		case "LogAnalyzer":
+			require.NotNil(t, e.ParentExecutionID)
+			assert.NotNil(t, e.Task)
+			assert.Contains(t, *e.Task, "error logs")
+		case "GeneralWorker":
+			require.NotNil(t, e.ParentExecutionID)
+			assert.NotNil(t, e.Task)
+			assert.Contains(t, *e.Task, "alert context")
+		}
+	}
+	assert.True(t, agentNames["Orchestrator"], "should have built-in Orchestrator")
+	assert.True(t, agentNames["LogAnalyzer"], "should have LogAnalyzer")
+	assert.True(t, agentNames["GeneralWorker"], "should have GeneralWorker")
+	assert.NotEmpty(t, orchExecID)
+
+	// Sub-agents point to orchestrator.
+	for _, e := range execs {
+		if e.ParentExecutionID != nil {
+			assert.Equal(t, orchExecID, *e.ParentExecutionID)
+		}
+	}
+
+	// ── Trace API: orchestrator with 2 nested sub-agents ──
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages := traceList["stages"].([]interface{})
+	require.Len(t, traceStages, 1)
+
+	stg := traceStages[0].(map[string]interface{})
+	traceExecs := stg["executions"].([]interface{})
+	require.Len(t, traceExecs, 1, "only orchestrator at top level")
+
+	orchTrace := traceExecs[0].(map[string]interface{})
+	assert.Equal(t, "Orchestrator", orchTrace["agent_name"])
+
+	subAgents := orchTrace["sub_agents"].([]interface{})
+	require.Len(t, subAgents, 2, "orchestrator should have 2 nested sub-agents")
+
+	subNames := make(map[string]bool)
+	for _, raw := range subAgents {
+		sub := raw.(map[string]interface{})
+		subNames[sub["agent_name"].(string)] = true
+	}
+	assert.True(t, subNames["LogAnalyzer"])
+	assert.True(t, subNames["GeneralWorker"])
+
+	// ── WS: session completed event received ──
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "completed"
+	}, 10*time.Second, "expected session.status completed WS event")
+
+	wsEvents := ws.Events()
+	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
+}
+
+// ────────────────────────────────────────────────────────────
 // Multi-phase dispatch — reactive orchestration pattern.
 //
 // Phase 1: orchestrator dispatches LogAnalyzer (MCP tools) and GeneralWorker
