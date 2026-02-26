@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -34,7 +35,11 @@ func (c *IteratingController) Run(
 
 	// Initialize eventSeq from DB to avoid collisions with events created
 	// before this loop starts (e.g., task_assigned from orchestrator dispatch).
-	eventSeq, _ := execCtx.Services.Timeline.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
+	eventSeq, seqErr := execCtx.Services.Timeline.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
+	if seqErr != nil {
+		slog.Warn("Failed to get max sequence for execution, starting from 0",
+			"execution_id", execCtx.ExecutionID, "error", seqErr)
+	}
 
 	// 1. Build initial conversation via prompt builder
 	if execCtx.PromptBuilder == nil {

@@ -149,7 +149,11 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 			"execution_id", executionID, "error", updateErr)
 	}
 
-	maxSeq, _ := r.deps.TimelineService.GetMaxSequenceForExecution(ctx, executionID)
+	maxSeq, seqErr := r.deps.TimelineService.GetMaxSequenceForExecution(ctx, executionID)
+	if seqErr != nil {
+		slog.Warn("Failed to get max sequence for new execution",
+			"execution_id", executionID, "error", seqErr)
+	}
 	_, _ = r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:      r.sessionID,
 		StageID:        &r.stageID,
