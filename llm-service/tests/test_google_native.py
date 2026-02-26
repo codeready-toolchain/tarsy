@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from google.genai import types as genai_types
 
 from llm_proto import llm_service_pb2 as pb
-from llm.providers.google_native import GoogleNativeProvider, _normalize_schema_for_gemini
+from llm.providers.google_native import GoogleNativeProvider
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 pytestmark = pytest.mark.unit
@@ -198,7 +198,7 @@ class TestGoogleNativeProvider:
         decl = result[0].function_declarations[0]
         assert decl.name == "server__read"
         assert decl.description == "Read a file"
-        assert decl.parameters is not None
+        assert decl.parameters_json_schema is not None
 
     def test_convert_tools_native_tools(self, provider):
         """Test conversion of native tools when no MCP tools present."""
@@ -223,8 +223,8 @@ class TestGoogleNativeProvider:
         assert len(result) == 1
         assert hasattr(result[0], "function_declarations")
 
-    def test_convert_tools_normalizes_nullable_type(self, provider):
-        """Test that list-typed nullable schemas are accepted by Gemini SDK after normalization."""
+    def test_convert_tools_accepts_raw_json_schema(self, provider):
+        """Test that raw JSON Schema (nullable types, additionalProperties) is accepted via parameters_json_schema."""
         tools = [
             pb.ToolDefinition(
                 name="server.search",
@@ -235,20 +235,17 @@ class TestGoogleNativeProvider:
                         "query": {"type": "string"},
                         "contentFilter": {"type": ["null", "object"], "properties": {"key": {"type": "string"}}},
                     },
+                    "additionalProperties": False,
                 }),
             ),
         ]
 
-        # Should not raise — before normalization this would fail with:
-        # "Input should be 'TYPE_UNSPECIFIED', 'STRING', ... [type=enum, input_value=['null', 'object']]"
+        # Should not raise — parameters_json_schema lets the SDK handle JSON Schema conversion
         result = provider._convert_tools(tools, {})
 
         decl = result[0].function_declarations[0]
         assert decl.name == "server__search"
-        assert decl.parameters is not None
-        cf = decl.parameters.properties["contentFilter"]
-        assert cf.type == "OBJECT"
-        assert cf.nullable is True
+        assert decl.parameters_json_schema is not None
 
     def test_model_content_caching(self, provider):
         """Test model Content caching and retrieval per execution."""
@@ -819,75 +816,3 @@ class TestBuildGroundingDelta:
         assert list(responses[1].grounding.web_search_queries) == ["Euro 2024 winner"]
         assert responses[2].HasField("usage")
         assert responses[3].is_final
-
-
-class TestNormalizeSchemaForGemini:
-    """Test _normalize_schema_for_gemini utility."""
-
-    def test_passthrough_simple_schema(self):
-        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
-        assert _normalize_schema_for_gemini(schema) == schema
-
-    def test_type_list_nullable(self):
-        schema = {"type": ["null", "object"], "properties": {"key": {"type": "string"}}}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["type"] == "object"
-        assert result["nullable"] is True
-        assert result["properties"]["key"]["type"] == "string"
-
-    def test_type_list_non_null_only(self):
-        schema = {"type": ["string"]}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["type"] == "string"
-        assert "nullable" not in result
-
-    def test_type_list_null_only(self):
-        schema = {"type": ["null"]}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["type"] == "string"
-        assert result["nullable"] is True
-
-    def test_nested_properties(self):
-        schema = {
-            "type": "object",
-            "properties": {
-                "filter": {
-                    "type": ["null", "object"],
-                    "properties": {"q": {"type": ["null", "string"]}},
-                },
-            },
-        }
-        result = _normalize_schema_for_gemini(schema)
-        filt = result["properties"]["filter"]
-        assert filt["type"] == "object"
-        assert filt["nullable"] is True
-        assert filt["properties"]["q"]["type"] == "string"
-        assert filt["properties"]["q"]["nullable"] is True
-
-    def test_items_normalized(self):
-        schema = {"type": "array", "items": {"type": ["null", "integer"]}}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["items"]["type"] == "integer"
-        assert result["items"]["nullable"] is True
-
-    def test_anyof_nullable_flattened(self):
-        schema = {"anyOf": [{"type": "null"}, {"type": "object", "properties": {"a": {"type": "string"}}}]}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["type"] == "object"
-        assert result["nullable"] is True
-        assert "anyOf" not in result
-
-    def test_oneof_nullable_flattened(self):
-        schema = {"oneOf": [{"type": "null"}, {"type": "string"}]}
-        result = _normalize_schema_for_gemini(schema)
-        assert result["type"] == "string"
-        assert result["nullable"] is True
-        assert "oneOf" not in result
-
-    def test_anyof_non_nullable_preserved(self):
-        schema = {"anyOf": [{"type": "string"}, {"type": "integer"}]}
-        result = _normalize_schema_for_gemini(schema)
-        assert "anyOf" in result
-
-    def test_non_dict_passthrough(self):
-        assert _normalize_schema_for_gemini("not a dict") == "not a dict"

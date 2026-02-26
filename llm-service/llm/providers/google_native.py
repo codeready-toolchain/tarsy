@@ -27,62 +27,6 @@ EMPTY_RESPONSE_RETRY_DELAY = 3  # seconds
 MODEL_CONTENT_CACHE_TTL = 3600  # 1 hour
 
 
-def _normalize_schema_for_gemini(schema: dict) -> dict:
-    """Normalize JSON Schema for Gemini API compatibility.
-
-    Gemini's FunctionDeclaration expects ``type`` to be a single enum string
-    (e.g. ``"object"``), but JSON Schema allows ``type`` to be a list
-    (e.g. ``["null", "object"]`` for nullable fields). This walks the schema
-    recursively and converts list types to a single type + ``nullable: true``.
-
-    Also flattens ``anyOf``/``oneOf`` nullable wrappers like:
-        {"anyOf": [{"type": "null"}, {"type": "object", ...}]}
-    into:
-        {"type": "object", ..., "nullable": true}
-    """
-    if not isinstance(schema, dict):
-        return schema
-
-    result = dict(schema)
-
-    # --- Handle anyOf / oneOf nullable wrappers ---
-    for keyword in ("anyOf", "oneOf"):
-        variants = result.get(keyword)
-        if not isinstance(variants, list):
-            continue
-        null_variants = [v for v in variants if isinstance(v, dict) and v.get("type") == "null"]
-        non_null = [v for v in variants if v not in null_variants]
-        if null_variants and len(non_null) == 1:
-            merged = {k: v for k, v in result.items() if k != keyword}
-            merged.update(_normalize_schema_for_gemini(non_null[0]))
-            merged["nullable"] = True
-            return merged
-
-    # --- Handle type-as-list  (e.g. ["null", "object"]) ---
-    type_val = result.get("type")
-    if isinstance(type_val, list):
-        non_null_types = [t for t in type_val if t != "null"]
-        if len(non_null_types) < len(type_val):
-            result["nullable"] = True
-        result["type"] = non_null_types[0] if non_null_types else "string"
-
-    # --- Recurse into nested schemas ---
-    if isinstance(result.get("properties"), dict):
-        result["properties"] = {
-            k: _normalize_schema_for_gemini(v)
-            for k, v in result["properties"].items()
-        }
-    if isinstance(result.get("items"), dict):
-        result["items"] = _normalize_schema_for_gemini(result["items"])
-    if isinstance(result.get("additionalProperties"), dict):
-        result["additionalProperties"] = _normalize_schema_for_gemini(result["additionalProperties"])
-    for keyword in ("anyOf", "oneOf", "allOf"):
-        if isinstance(result.get(keyword), list):
-            result[keyword] = [_normalize_schema_for_gemini(v) for v in result[keyword]]
-
-    return result
-
-
 class GoogleNativeProvider(LLMProvider):
     """LLM provider using Google's native genai SDK.
 
@@ -262,13 +206,11 @@ class GoogleNativeProvider(LLMProvider):
                     params = json.loads(tool.parameters_schema) if tool.parameters_schema else {}
                 except json.JSONDecodeError:
                     params = {}
-                if params:
-                    params = _normalize_schema_for_gemini(params)
                 declarations.append(
                     genai_types.FunctionDeclaration(
                         name=tool_name_to_api(tool.name),
                         description=tool.description,
-                        parameters=params if params else None,
+                        parameters_json_schema=params if params else None,
                     )
                 )
             result_tools.append(genai_types.Tool(function_declarations=declarations))
