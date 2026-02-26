@@ -76,11 +76,6 @@ type SubAgentRef struct {
 // (list of strings) and long-form (list of objects with overrides) in YAML.
 type SubAgentRefs []SubAgentRef
 
-// UnmarshalYAML implements custom unmarshaling to support both:
-//   - Short-form:  [LogAnalyzer, GeneralWorker]
-//   - Long-form:   [{name: LogAnalyzer, max_iterations: 5}, ...]
-//   - Mixed:       [LogAnalyzer, {name: GeneralWorker, llm_provider: fast}]
-//
 // subAgentRefAllowedKeys are the YAML keys accepted in a SubAgentRef mapping.
 // Kept in sync with the struct tags on SubAgentRef.
 var subAgentRefAllowedKeys = map[string]bool{
@@ -91,6 +86,10 @@ var subAgentRefAllowedKeys = map[string]bool{
 	"mcp_servers":    true,
 }
 
+// UnmarshalYAML implements custom unmarshaling to support both:
+//   - Short-form:  [LogAnalyzer, GeneralWorker]
+//   - Long-form:   [{name: LogAnalyzer, max_iterations: 5}, ...]
+//   - Mixed:       [LogAnalyzer, {name: GeneralWorker, llm_provider: fast}]
 func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.SequenceNode {
 		return fmt.Errorf("sub_agents must be a sequence, got %v", value.Tag)
