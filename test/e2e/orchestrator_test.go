@@ -554,6 +554,234 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Multi-phase dispatch — reactive orchestration pattern.
+//
+// Phase 1: orchestrator dispatches LogAnalyzer (MCP tools) and GeneralWorker
+//   (severity assessment) in parallel.
+// Phase 2: after receiving phase 1 results, orchestrator dispatches
+//   GeneralWorker again with a follow-up remediation task.
+//
+// Tests: same agent dispatched twice, reactive dispatch based on earlier
+// results, 4 total executions (orchestrator + 3 sub-agents).
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_OrchestratorMultiPhase(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	phase1Gate := make(chan struct{})
+
+	// ── SREOrchestrator LLM entries ──
+
+	// Iteration 1: dispatch LogAnalyzer + GeneralWorker (phase 1, parallel).
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
+				Arguments: `{"name":"LogAnalyzer","task":"Check error logs for payment-service in the last 30 minutes"}`},
+			&agent.ToolCallChunk{CallID: "orch-d2", Name: "dispatch_agent",
+				Arguments: `{"name":"GeneralWorker","task":"Assess alert severity and blast radius"}`},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+	// Iteration 2: text → WaitForResult (phase 1 agents still running).
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Dispatched LogAnalyzer and GeneralWorker. Waiting for phase 1 results."},
+			&agent.UsageChunk{InputTokens: 300, OutputTokens: 20, TotalTokens: 320},
+		},
+	})
+	// Iteration 3: reactive dispatch — GeneralWorker again with follow-up task.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "orch-d3", Name: "dispatch_agent",
+				Arguments: `{"name":"GeneralWorker","task":"Analyze the OOM pattern from LogAnalyzer findings and recommend remediation steps"}`},
+			&agent.UsageChunk{InputTokens: 500, OutputTokens: 30, TotalTokens: 530},
+		},
+	})
+	// Iteration 4: text → WaitForResult (phase 2 agent running).
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Waiting for remediation analysis."},
+			&agent.UsageChunk{InputTokens: 600, OutputTokens: 15, TotalTokens: 615},
+		},
+	})
+	// Buffer entries for timing variance (may or may not be consumed).
+	for i := range 2 {
+		llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+			Chunks: []agent.Chunk{
+				&agent.TextChunk{Content: fmt.Sprintf("Processing results (cycle %d).", i+1)},
+				&agent.UsageChunk{InputTokens: 650, OutputTokens: 15, TotalTokens: 665},
+			},
+		})
+	}
+	// Final answer combining all 3 sub-agent results.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Investigation complete. LogAnalyzer found 1,203 5xx errors (OOM pattern) from payment-service. " +
+				"Severity assessed as P2. Remediation: rollback deploy-1234 and increase memory limits to 2Gi."},
+			&agent.UsageChunk{InputTokens: 800, OutputTokens: 80, TotalTokens: 880},
+		},
+	})
+
+	// ── LogAnalyzer: MCP tool call + answer (phase 1, gated) ──
+	searchLogsResult := `[{"timestamp":"2026-02-25T14:30:00Z","level":"error","service":"payment","message":"OOM killed"}]`
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		WaitCh: phase1Gate,
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "la-call-1", Name: "test-mcp__search_logs",
+				Arguments: `{"query":"error OR 5xx","timerange":"30m"}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+		},
+	})
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Found 1,203 5xx errors from payment-service. OOM pattern detected: pods restarting with memory pressure."},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+
+	// ── GeneralWorker: 2 entries consumed FIFO ──
+	// Entry 1 (phase 1, gated): severity assessment.
+	llm.AddRouted("GeneralWorker", LLMScriptEntry{
+		WaitCh: phase1Gate,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Severity assessment: P2. Payment service errors spiking post-deployment. Blast radius: checkout flow affected."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 30, TotalTokens: 180},
+		},
+	})
+	// Entry 2 (phase 2, no gate): remediation analysis.
+	llm.AddRouted("GeneralWorker", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Remediation: rollback deploy-1234 to previous version, increase memory limits from 1Gi to 2Gi."},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 35, TotalTokens: 235},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{
+		Text: "Payment service OOM after deploy-1234. P2 severity. Rollback and increase memory limits.",
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "orchestrator")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"search_logs": StaticToolHandler(searchLogsResult),
+			},
+		}),
+	)
+
+	ctx := context.Background()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-orchestrator", "Payment service 5xx errors after deploy-1234")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	app.WaitForSessionStatus(t, sessionID, "in_progress")
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		close(phase1Gate)
+	}()
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Session: completed with analysis and summary ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.NotEmpty(t, session["final_analysis"])
+	assert.NotEmpty(t, session["executive_summary"])
+
+	// ── DB: 4 executions (orchestrator + 3 sub-agents) ──
+	execs := app.QueryExecutions(t, sessionID)
+	require.Len(t, execs, 4, "expected orchestrator + 3 sub-agents")
+
+	var orchExecID string
+	var gwTasks []string
+	agentCounts := make(map[string]int)
+	for _, e := range execs {
+		agentCounts[e.AgentName]++
+		assert.Equal(t, "completed", string(e.Status), "%s should be completed", e.AgentName)
+
+		switch e.AgentName {
+		case "SREOrchestrator":
+			orchExecID = e.ID
+			assert.Nil(t, e.ParentExecutionID)
+		case "LogAnalyzer":
+			require.NotNil(t, e.ParentExecutionID)
+			assert.NotNil(t, e.Task)
+			assert.Contains(t, *e.Task, "error logs")
+		case "GeneralWorker":
+			require.NotNil(t, e.ParentExecutionID)
+			assert.NotNil(t, e.Task)
+			gwTasks = append(gwTasks, *e.Task)
+		}
+	}
+
+	assert.Equal(t, 1, agentCounts["SREOrchestrator"])
+	assert.Equal(t, 1, agentCounts["LogAnalyzer"])
+	assert.Equal(t, 2, agentCounts["GeneralWorker"], "GeneralWorker should be dispatched twice")
+	assert.NotEmpty(t, orchExecID)
+
+	// Verify the two GeneralWorker tasks are different (phase 1 vs phase 2).
+	require.Len(t, gwTasks, 2)
+	assert.NotEqual(t, gwTasks[0], gwTasks[1], "GeneralWorker tasks should differ across phases")
+
+	// Sub-agents point to orchestrator.
+	for _, e := range execs {
+		if e.ParentExecutionID != nil {
+			assert.Equal(t, orchExecID, *e.ParentExecutionID)
+		}
+	}
+
+	// ── Timeline: 3 dispatch_agent tool calls ──
+	timeline := app.QueryTimeline(t, sessionID)
+	var dispatchCount int
+	for _, te := range timeline {
+		if string(te.EventType) == "llm_tool_call" && te.Metadata != nil {
+			if tn, ok := te.Metadata["tool_name"]; ok && tn == "dispatch_agent" {
+				dispatchCount++
+			}
+		}
+	}
+	assert.Equal(t, 3, dispatchCount, "should have 3 dispatch_agent tool calls (2 phase-1 + 1 phase-2)")
+
+	// ── Trace API: orchestrator with 3 nested sub-agents ──
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages := traceList["stages"].([]interface{})
+	require.Len(t, traceStages, 1)
+
+	stg := traceStages[0].(map[string]interface{})
+	traceExecs := stg["executions"].([]interface{})
+	require.Len(t, traceExecs, 1, "only orchestrator at top level")
+
+	orchTrace := traceExecs[0].(map[string]interface{})
+	assert.Equal(t, "SREOrchestrator", orchTrace["agent_name"])
+
+	subAgents := orchTrace["sub_agents"].([]interface{})
+	require.Len(t, subAgents, 3, "orchestrator should have 3 nested sub-agents")
+
+	subNameCounts := make(map[string]int)
+	for _, raw := range subAgents {
+		sub := raw.(map[string]interface{})
+		subNameCounts[sub["agent_name"].(string)]++
+	}
+	assert.Equal(t, 1, subNameCounts["LogAnalyzer"])
+	assert.Equal(t, 2, subNameCounts["GeneralWorker"])
+
+	// ── WS: session completed event received ──
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "completed"
+	}, 10*time.Second, "expected session.status completed WS event")
+
+	wsEvents := ws.Events()
+	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
+}
+
+// ────────────────────────────────────────────────────────────
 // Sub-agent failure test.
 // Orchestrator dispatches 2 sub-agents. LogAnalyzer receives an LLM error,
 // GeneralWorker succeeds. The orchestrator sees the failure result and
@@ -766,4 +994,212 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 		assert.Equal(t, "completed", string(e.Status),
 			"execution %s (%s) should be completed", e.ID, e.AgentName)
 	}
+}
+
+// ────────────────────────────────────────────────────────────
+// cancel_agent tool test.
+//
+// Orchestrator dispatches LogAnalyzer and GeneralWorker. GeneralWorker
+// completes quickly. Orchestrator then calls cancel_agent to cancel the
+// slow LogAnalyzer, and produces a final answer from GeneralWorker's
+// result alone.
+//
+// Uses RewriteChunks on the cancel_agent entry to dynamically inject the
+// real execution_id (extracted from the dispatch_agent tool result in the
+// conversation history).
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	subAgentGate := make(chan struct{})
+	laBlocked := make(chan struct{}, 1)
+
+	// Orchestrator iteration 1: dispatch both sub-agents.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
+				Arguments: `{"name":"LogAnalyzer","task":"Deep log analysis of payment-service errors"}`},
+			&agent.ToolCallChunk{CallID: "orch-d2", Name: "dispatch_agent",
+				Arguments: `{"name":"GeneralWorker","task":"Quick severity assessment"}`},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+	// Iteration 2: text → wait for first result.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Waiting for sub-agent results."},
+			&agent.UsageChunk{InputTokens: 300, OutputTokens: 15, TotalTokens: 315},
+		},
+	})
+	// Iteration 3: cancel LogAnalyzer (too slow). RewriteChunks patches the
+	// execution_id from the dispatch_agent result in conversation history.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "orch-cancel", Name: "cancel_agent",
+				Arguments: `{"execution_id":"PLACEHOLDER"}`},
+			&agent.UsageChunk{InputTokens: 400, OutputTokens: 20, TotalTokens: 420},
+		},
+		RewriteChunks: cancelAgentRewriter("LogAnalyzer"),
+	})
+	// Buffer entries for timing after cancel result + cancelled sub-agent result.
+	for i := range 2 {
+		llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+			Chunks: []agent.Chunk{
+				&agent.TextChunk{Content: fmt.Sprintf("Processing cancellation (cycle %d).", i+1)},
+				&agent.UsageChunk{InputTokens: 450, OutputTokens: 15, TotalTokens: 465},
+			},
+		})
+	}
+	// Final answer using GeneralWorker result only.
+	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "LogAnalyzer was too slow and has been cancelled. Based on GeneralWorker's assessment: P3 severity, no immediate action required."},
+			&agent.UsageChunk{InputTokens: 500, OutputTokens: 50, TotalTokens: 550},
+		},
+	})
+
+	// LogAnalyzer: blocks until cancelled. OnBlock signals when it's blocked.
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		BlockUntilCancelled: true,
+		OnBlock:             laBlocked,
+	})
+
+	// GeneralWorker: quick result (gated so it doesn't run before dispatch).
+	llm.AddRouted("GeneralWorker", LLMScriptEntry{
+		WaitCh: subAgentGate,
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Quick assessment: P3 severity. Payment errors elevated but within SLO budget."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 25, TotalTokens: 125},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{
+		Text: "P3 severity. Payment errors elevated but within SLO budget. LogAnalyzer cancelled.",
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "orchestrator")),
+		WithLLMClient(llm),
+	)
+
+	resp := app.SubmitAlert(t, "test-orchestrator", "Payment service elevated error rate")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "in_progress")
+
+	// Wait for LogAnalyzer to be blocked, then release GeneralWorker.
+	<-laBlocked
+	close(subAgentGate)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Session: completed ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.NotEmpty(t, session["final_analysis"])
+
+	// ── DB: 3 executions — orchestrator+GW completed, LA cancelled ──
+	execs := app.QueryExecutions(t, sessionID)
+	require.Len(t, execs, 3, "expected orchestrator + 2 sub-agents")
+
+	for _, e := range execs {
+		switch e.AgentName {
+		case "SREOrchestrator":
+			assert.Equal(t, "completed", string(e.Status))
+		case "LogAnalyzer":
+			assert.Equal(t, "cancelled", string(e.Status),
+				"LogAnalyzer should be cancelled via cancel_agent tool")
+		case "GeneralWorker":
+			assert.Equal(t, "completed", string(e.Status))
+		}
+	}
+
+	// ── Timeline: cancel_agent tool call present ──
+	timeline := app.QueryTimeline(t, sessionID)
+	var cancelAgentFound bool
+	for _, te := range timeline {
+		if string(te.EventType) == "llm_tool_call" && te.Metadata != nil {
+			if tn, ok := te.Metadata["tool_name"]; ok && tn == "cancel_agent" {
+				cancelAgentFound = true
+				break
+			}
+		}
+	}
+	assert.True(t, cancelAgentFound, "should have a cancel_agent tool call in timeline")
+
+	// ── Trace API: 2 sub-agents nested under orchestrator ──
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages := traceList["stages"].([]interface{})
+	require.Len(t, traceStages, 1)
+
+	stg := traceStages[0].(map[string]interface{})
+	traceExecs := stg["executions"].([]interface{})
+	require.Len(t, traceExecs, 1, "only orchestrator at top level")
+
+	subAgents := traceExecs[0].(map[string]interface{})["sub_agents"].([]interface{})
+	require.Len(t, subAgents, 2, "orchestrator should have 2 nested sub-agents")
+}
+
+// cancelAgentRewriter returns a RewriteChunks function that patches
+// cancel_agent ToolCallChunk arguments with the real execution_id of the
+// named agent, extracted from dispatch_agent results in the conversation.
+func cancelAgentRewriter(targetAgent string) func([]agent.ConversationMessage, []agent.Chunk) []agent.Chunk {
+	return func(messages []agent.ConversationMessage, chunks []agent.Chunk) []agent.Chunk {
+		execID := findDispatchedExecID(messages, targetAgent)
+		if execID == "" {
+			return chunks
+		}
+
+		rewritten := make([]agent.Chunk, len(chunks))
+		copy(rewritten, chunks)
+		for i, ch := range rewritten {
+			if tc, ok := ch.(*agent.ToolCallChunk); ok && tc.Name == "cancel_agent" {
+				clone := *tc
+				clone.Arguments = fmt.Sprintf(`{"execution_id":"%s"}`, execID)
+				rewritten[i] = &clone
+			}
+		}
+		return rewritten
+	}
+}
+
+// findDispatchedExecID scans the conversation for a dispatch_agent tool call
+// targeting the named agent and returns the execution_id from its tool result.
+func findDispatchedExecID(messages []agent.ConversationMessage, agentName string) string {
+	// Find the assistant tool call for dispatch_agent(name=agentName) and get its CallID.
+	var targetCallID string
+	for _, msg := range messages {
+		if msg.Role != agent.RoleAssistant {
+			continue
+		}
+		for _, tc := range msg.ToolCalls {
+			if tc.Name == "dispatch_agent" && strings.Contains(tc.Arguments, `"name":"`+agentName+`"`) {
+				targetCallID = tc.ID
+				break
+			}
+		}
+		if targetCallID != "" {
+			break
+		}
+	}
+	if targetCallID == "" {
+		return ""
+	}
+
+	// Find the matching tool result and extract execution_id.
+	for _, msg := range messages {
+		if msg.Role == agent.RoleTool && msg.ToolCallID == targetCallID {
+			// Content is JSON: {"execution_id":"<uuid>","status":"accepted"}
+			if idx := strings.Index(msg.Content, `"execution_id":"`); idx >= 0 {
+				rest := msg.Content[idx+len(`"execution_id":"`):]
+				if end := strings.Index(rest, `"`); end >= 0 {
+					return rest[:end]
+				}
+			}
+		}
+	}
+	return ""
 }
