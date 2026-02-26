@@ -1,4 +1,5 @@
 """Tests for GoogleNativeProvider."""
+import json
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -197,7 +198,7 @@ class TestGoogleNativeProvider:
         decl = result[0].function_declarations[0]
         assert decl.name == "server__read"
         assert decl.description == "Read a file"
-        assert decl.parameters is not None
+        assert decl.parameters_json_schema is not None
 
     def test_convert_tools_native_tools(self, provider):
         """Test conversion of native tools when no MCP tools present."""
@@ -221,6 +222,30 @@ class TestGoogleNativeProvider:
         
         assert len(result) == 1
         assert hasattr(result[0], "function_declarations")
+
+    def test_convert_tools_accepts_raw_json_schema(self, provider):
+        """Test that raw JSON Schema (nullable types, additionalProperties) is accepted via parameters_json_schema."""
+        tools = [
+            pb.ToolDefinition(
+                name="server.search",
+                description="Search with filter",
+                parameters_schema=json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "contentFilter": {"type": ["null", "object"], "properties": {"key": {"type": "string"}}},
+                    },
+                    "additionalProperties": False,
+                }),
+            ),
+        ]
+
+        # Should not raise — parameters_json_schema lets the SDK handle JSON Schema conversion
+        result = provider._convert_tools(tools, {})
+
+        decl = result[0].function_declarations[0]
+        assert decl.name == "server__search"
+        assert decl.parameters_json_schema is not None
 
     def test_model_content_caching(self, provider):
         """Test model Content caching and retrieval per execution."""

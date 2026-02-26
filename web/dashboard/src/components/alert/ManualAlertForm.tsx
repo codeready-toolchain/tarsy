@@ -200,8 +200,11 @@ export function ManualAlertForm() {
 
           setAvailableAlertTypes(finalTypes);
 
-          // Determine default: first type from API
-          const apiDefault = types.length > 0 ? types[0] : '';
+          // Determine default: use configured default from backend, fall back to first type
+          const apiDefault =
+            (resp.default_alert_type && types.includes(resp.default_alert_type))
+              ? resp.default_alert_type
+              : (types.length > 0 ? types[0] : '');
           setDefaultAlertType(apiDefault);
 
           if (resubmitDefault) {

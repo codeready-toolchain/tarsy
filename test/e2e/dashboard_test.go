@@ -468,8 +468,9 @@ func TestDashboardEndpoints(t *testing.T) {
 	t.Run("AlertTypes", func(t *testing.T) {
 		types := app.GetAlertTypes(t)
 
-		// Chains sorted alphabetically: concurrency-chain then kubernetes.
-		assert.Equal(t, "concurrency-chain", types["default_chain_id"])
+		// Default alert type "kubernetes" (from builtin defaults) resolves to "kubernetes" chain.
+		assert.Equal(t, "kubernetes", types["default_chain_id"])
+		assert.Equal(t, "kubernetes", types["default_alert_type"])
 
 		alertTypes, ok := types["alert_types"].([]interface{})
 		require.True(t, ok, "alert_types should be an array")

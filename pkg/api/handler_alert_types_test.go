@@ -14,9 +14,10 @@ import (
 )
 
 func TestAlertTypesHandler(t *testing.T) {
-	t.Run("returns sorted alert types with default chain", func(t *testing.T) {
+	t.Run("returns sorted alert types with default from config", func(t *testing.T) {
 		s := &Server{
 			cfg: &config.Config{
+				Defaults: &config.Defaults{AlertType: "alert-z"},
 				ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
 					"z-chain": {
 						AlertTypes:  []string{"alert-z"},
@@ -42,10 +43,9 @@ func TestAlertTypesHandler(t *testing.T) {
 		var resp AlertTypesResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
-		// Default chain should be the first sorted: "a-chain".
-		assert.Equal(t, "a-chain", resp.DefaultChainID)
+		assert.Equal(t, "alert-z", resp.DefaultAlertType)
+		assert.Equal(t, "z-chain", resp.DefaultChainID)
 
-		// Alert types should follow sorted chain order: a-chain's types first, then z-chain.
 		require.Len(t, resp.AlertTypes, 3)
 		assert.Equal(t, "alert-a1", resp.AlertTypes[0].Type)
 		assert.Equal(t, "a-chain", resp.AlertTypes[0].ChainID)
@@ -53,6 +53,37 @@ func TestAlertTypesHandler(t *testing.T) {
 		assert.Equal(t, "alert-a2", resp.AlertTypes[1].Type)
 		assert.Equal(t, "alert-z", resp.AlertTypes[2].Type)
 		assert.Equal(t, "z-chain", resp.AlertTypes[2].ChainID)
+	})
+
+	t.Run("falls back to first chain when default not configured", func(t *testing.T) {
+		s := &Server{
+			cfg: &config.Config{
+				ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+					"z-chain": {
+						AlertTypes:  []string{"alert-z"},
+						Description: "Z chain",
+					},
+					"a-chain": {
+						AlertTypes:  []string{"alert-a1"},
+						Description: "A chain",
+					},
+				}),
+			},
+		}
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/alert-types", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := s.alertTypesHandler(c)
+		require.NoError(t, err)
+
+		var resp AlertTypesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+		assert.Empty(t, resp.DefaultAlertType)
+		assert.Equal(t, "a-chain", resp.DefaultChainID)
 	})
 
 	t.Run("returns empty array for no chains", func(t *testing.T) {
@@ -74,6 +105,7 @@ func TestAlertTypesHandler(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
 		assert.Empty(t, resp.DefaultChainID)
+		assert.Empty(t, resp.DefaultAlertType)
 		assert.NotNil(t, resp.AlertTypes, "should be empty array, not nil")
 		assert.Len(t, resp.AlertTypes, 0)
 	})

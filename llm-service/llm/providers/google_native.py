@@ -210,7 +210,7 @@ class GoogleNativeProvider(LLMProvider):
                     genai_types.FunctionDeclaration(
                         name=tool_name_to_api(tool.name),
                         description=tool.description,
-                        parameters=params if params else None,
+                        parameters_json_schema=params if params else None,
                     )
                 )
             result_tools.append(genai_types.Tool(function_declarations=declarations))
