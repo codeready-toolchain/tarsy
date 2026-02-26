@@ -2,6 +2,7 @@
   "created_at": "{TIMESTAMP}",
   "duration_ms": {DURATION_MS},
   "id": "{INTERACTION_ID_43}",
+  "input_tokens": 10,
   "interaction_type": "executive_summary",
   "llm_request": {
     "messages_count": 2
@@ -10,7 +11,9 @@
     "text_length": 71,
     "tool_calls_count": 0
   },
-  "model_name": "test-model-fast"
+  "model_name": "test-model-fast",
+  "output_tokens": 5,
+  "total_tokens": 15
 }
 
 === MESSAGE: system ===

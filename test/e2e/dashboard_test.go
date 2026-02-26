@@ -88,8 +88,7 @@ func TestDashboardEndpoints(t *testing.T) {
 	// Submission order: ids[0]=Alpha (earliest), ids[1]=Beta, ids[2]=Charlie (latest).
 
 	// Pre-compute per-session expected values.
-	// NOTE: Token counts reflect investigation interactions only — the executive
-	// summary executor does not capture UsageChunk tokens from the LLM stream.
+	// Token counts include both investigation and executive summary interactions.
 	type sessionExpected struct {
 		alertData    string
 		investText   string
@@ -104,9 +103,9 @@ func TestDashboardEndpoints(t *testing.T) {
 			alertData:    s.alertData,
 			investText:   s.investText,
 			summaryText:  s.summaryText,
-			inputTokens:  s.invIn,
-			outputTokens: s.invOut,
-			totalTokens:  s.invTotal,
+			inputTokens:  s.invIn + s.sumIn,
+			outputTokens: s.invOut + s.sumOut,
+			totalTokens:  s.invTotal + s.sumTotal,
 		}
 	}
 

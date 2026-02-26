@@ -236,12 +236,17 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		return "", fmt.Errorf("executive summary LLM call failed: %w", err)
 	}
 
-	// Collect full text response
+	// Collect full text response and token usage.
 	var sb strings.Builder
+	var usage agent.TokenUsage
 	for chunk := range ch {
 		switch c := chunk.(type) {
 		case *agent.TextChunk:
 			sb.WriteString(c.Content)
+		case *agent.UsageChunk:
+			usage.InputTokens += c.InputTokens
+			usage.OutputTokens += c.OutputTokens
+			usage.TotalTokens += c.TotalTokens
 		case *agent.ErrorChunk:
 			return "", fmt.Errorf("executive summary LLM error: %s", c.Message)
 		}
@@ -260,7 +265,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		{"role": string(agent.RoleUser), "content": userPrompt},
 		{"role": string(agent.RoleAssistant), "content": summary},
 	}
-	interaction, createErr := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+	createReq := models.CreateLLMInteractionRequest{
 		SessionID:       session.ID,
 		InteractionType: "executive_summary",
 		ModelName:       provider.Model,
@@ -273,7 +278,13 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 			"tool_calls_count": 0,
 		},
 		DurationMs: &durationMs,
-	})
+	}
+	if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.TotalTokens > 0 {
+		createReq.InputTokens = &usage.InputTokens
+		createReq.OutputTokens = &usage.OutputTokens
+		createReq.TotalTokens = &usage.TotalTokens
+	}
+	interaction, createErr := interactionService.CreateLLMInteraction(ctx, createReq)
 	if createErr != nil {
 		logger.Warn("Failed to record executive summary LLM interaction",
 			"error", createErr)

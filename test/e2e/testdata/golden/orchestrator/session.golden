@@ -19,10 +19,10 @@
   "final_analysis": "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.",
   "has_parallel_stages": false,
   "id": "{SESSION_ID}",
-  "input_tokens": 1300,
+  "input_tokens": 1310,
   "llm_interaction_count": 6,
   "mcp_interaction_count": 3,
-  "output_tokens": 190,
+  "output_tokens": 195,
   "runbook_url": null,
   "stages": [
     {
@@ -75,5 +75,5 @@
   "started_at": "{TIMESTAMP}",
   "status": "completed",
   "total_stages": 1,
-  "total_tokens": 1490
+  "total_tokens": 1505
 }

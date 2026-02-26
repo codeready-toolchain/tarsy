@@ -1,19 +1,19 @@
 [
   {
     "agent": "LogAnalyzer",
-    "content": "Let me search the logs for error patterns.",
-    "event_type": "llm_thinking",
-    "metadata": {
-      "source": "native"
-    },
+    "content": "Find all error patterns in the last 30 minutes",
+    "event_type": "task_assigned",
     "sequence": 1,
     "status": "completed"
   },
   {
     "agent": "LogAnalyzer",
-    "content": "Find all error patterns in the last 30 minutes",
-    "event_type": "task_assigned",
-    "sequence": 1,
+    "content": "Let me search the logs for error patterns.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 2,
     "status": "completed"
   },
   {
@@ -26,7 +26,7 @@
       "server_name": "test-mcp",
       "tool_name": "search_logs"
     },
-    "sequence": 2,
+    "sequence": 3,
     "status": "completed"
   },
   {
@@ -36,21 +36,21 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "LogAnalyzer",
-    "content": "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.",
-    "event_type": "llm_response",
     "sequence": 4,
     "status": "completed"
   },
   {
     "agent": "LogAnalyzer",
     "content": "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.",
-    "event_type": "final_analysis",
+    "event_type": "llm_response",
     "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "LogAnalyzer",
+    "content": "Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.",
+    "event_type": "final_analysis",
+    "sequence": 6,
     "status": "completed"
   },
   {

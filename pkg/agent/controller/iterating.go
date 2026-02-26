@@ -31,7 +31,10 @@ func (c *IteratingController) Run(
 	totalUsage := agent.TokenUsage{}
 	state := &agent.IterationState{MaxIterations: maxIter}
 	msgSeq := 0
-	eventSeq := 0
+
+	// Initialize eventSeq from DB to avoid collisions with events created
+	// before this loop starts (e.g., task_assigned from orchestrator dispatch).
+	eventSeq, _ := execCtx.Services.Timeline.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
 
 	// 1. Build initial conversation via prompt builder
 	if execCtx.PromptBuilder == nil {

@@ -19,10 +19,10 @@
   "final_analysis": "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
   "has_parallel_stages": true,
   "id": "{SESSION_ID}",
-  "input_tokens": 2100,
+  "input_tokens": 2110,
   "llm_interaction_count": 22,
   "mcp_interaction_count": 21,
-  "output_tokens": 440,
+  "output_tokens": 445,
   "runbook_url": null,
   "stages": [
     {
@@ -275,5 +275,5 @@
   "started_at": "{TIMESTAMP}",
   "status": "completed",
   "total_stages": 8,
-  "total_tokens": 2540
+  "total_tokens": 2555
 }
