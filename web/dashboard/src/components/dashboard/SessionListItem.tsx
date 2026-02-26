@@ -26,11 +26,13 @@ import {
   Summarize,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
+import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface SessionListItemProps {
@@ -111,9 +113,9 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                     </Typography>
                   </Box>
                   <Divider sx={{ mb: 1.5 }} />
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {session.executive_summary}
-                  </Typography>
+                  <Box sx={executiveSummaryMarkdownStyles}>
+                    <ReactMarkdown>{session.executive_summary}</ReactMarkdown>
+                  </Box>
                 </Card>
               </Popover>
             </>
