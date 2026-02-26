@@ -2234,6 +2234,19 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
 	}
 
+	// The orchestrator loop timing is non-deterministic: the sub-agent may
+	// complete before or after the orchestrator's 2nd LLM call. Provide
+	// responses for both paths — each text response carries the final answer
+	// so the assert passes regardless of scheduling order.
+	//
+	// Fast sub-agent (2 orchestrator calls):
+	//   iter 1: dispatch_agent → sub-agent starts & completes
+	//   iter 2: drain picks up result → LLM call 2 → text (final) → stop
+	//
+	// Slow sub-agent (3 orchestrator calls):
+	//   iter 1: dispatch_agent → sub-agent still running
+	//   iter 2: drain empty → LLM call 2 → text → HasPending → wait → result → continue
+	//   iter 3: LLM call 3 → text (final) → stop
 	llm := &routingMockLLM{
 		orchestratorResp: []mockLLMResponse{
 			// Orchestrator call 1: dispatch a sub-agent
@@ -2244,11 +2257,11 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 					Arguments: `{"name":"GeneralWorker","task":"Analyze the alert data for root cause"}`,
 				},
 			}},
-			// Orchestrator call 2: intermediate (while sub-agent is pending)
+			// Orchestrator call 2: final analysis (fast path) or intermediate (slow path)
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Waiting for sub-agent analysis."},
+				&agent.TextChunk{Content: "Root cause: memory pressure on pod-1 based on sub-agent analysis."},
 			}},
-			// Orchestrator call 3: final analysis after receiving sub-agent result
+			// Orchestrator call 3: final analysis (slow path only — unused in fast path)
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Root cause: memory pressure on pod-1 based on sub-agent analysis."},
 			}},
