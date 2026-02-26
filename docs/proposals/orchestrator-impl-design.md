@@ -1128,9 +1128,24 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Detect orchestrator type in `executeAgent` (via `resolvedConfig.Type`) → create runner + composite executor
 - Wire `SubAgentDeps` from session executor fields
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
-- End-to-end integration test
+- Integration test
 
-### PR6: Dashboard
+### PR6: E2E Tests
+- New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use
+- New config: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure, used for cancellation cascade test
+- **Happy path** (`orchestrator_test.go`): orchestrator dispatches 2 sub-agents via `dispatch_agent` tool calls in a single iteration, results arrive and are drained before the next LLM call, orchestrator produces final answer
+  - DB assertions: 1 stage, 3 executions (orchestrator + 2 sub-agents); sub-agent `parent_execution_id` links to orchestrator; `task` field set on sub-agent executions; `task_assigned` timeline events for each sub-agent; `final_analysis` for orchestrator
+  - API assertions: `GetSession` returns completed session with `final_analysis`; `GetTraceList` shows orchestrator execution with nested sub-agent executions
+  - WS event sequence in `testdata/expected_events.go`: `OrchestratorExpectedEvents` covering session/stage/execution status for orchestrator and sub-agents, timeline events (`task_assigned`, `llm_tool_call` for `dispatch_agent`, sub-agent `final_analysis`, orchestrator `final_analysis`)
+  - sub-agent makes MCP tool calls during its execution → tool results appear in sub-agent timeline. Verifies the sub-agent's own `ToolExecutor` (not the `CompositeToolExecutor`) routes MCP calls correctly.
+  - Golden files: session, stages, timeline, trace list, trace interaction details (orchestrator dispatch iterations + sub-agent iterations)
+- **Wait path**: orchestrator dispatches sub-agents, but sub-agents haven't finished yet when the LLM returns no tool calls → controller blocks on `SubAgentCollector.WaitForResult` → sub-agent finishes → result injected → LLM gets another iteration → final answer. Uses `WaitCh` on sub-agent LLM entries to control timing.
+- **Sub-agent failure**: one sub-agent receives LLM error → `[Sub-agent failed]` result injected into orchestrator conversation → orchestrator produces final answer referencing the failure. Assertions: failed sub-agent execution has `status=failed` and `error_message` set; orchestrator execution `status=completed`; session `status=completed`
+- **Cancellation cascade** (`orchestrator_cancel_test.go`): orchestrator dispatches sub-agents, session is cancelled via API while sub-agents are running. Uses `BlockUntilCancelled` on sub-agent LLM entries. Assertions: all executions end in `cancelled` status; `SubAgentRunner.CancelAll` + `WaitAll` ensure clean goroutine shutdown.
+- **Orchestrator with `list_agents`**: orchestrator calls `list_agents` tool to check sub-agent status mid-execution. Verifies the status summary tool works end-to-end.
+- **Executive summary**: verify orchestrator's `final_analysis` flows through to executive summary generation (same as regular agents — no special handling needed, but should be covered)
+
+### PR7: Dashboard
 - Tree view: orchestrator → sub-agents (backend API already returns nested `SubAgents` in `ExecutionOverview` — see PR2)
 - Sub-agent status, timelines, results
 - Real-time updates via existing WebSocket events

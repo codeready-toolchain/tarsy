@@ -41,6 +41,18 @@ func TestFormatAgentCatalog_PureReasoningAgent(t *testing.T) {
 	assert.Contains(t, result, "Tools: none (pure reasoning)")
 }
 
+func TestFormatAgentCatalog_BothMCPAndNativeTools(t *testing.T) {
+	entries := []config.SubAgentEntry{
+		{Name: "HybridAgent", Description: "Has both tool types", MCPServers: []string{"loki"}, NativeTools: []string{"google_search"}},
+	}
+	result := formatAgentCatalog(entries)
+
+	assert.Contains(t, result, "**HybridAgent**: Has both tool types")
+	assert.Contains(t, result, "MCP tools: loki")
+	assert.Contains(t, result, "Native tools: google_search")
+	assert.NotContains(t, result, "pure reasoning")
+}
+
 func TestFormatAgentCatalog_MultipleAgents(t *testing.T) {
 	entries := []config.SubAgentEntry{
 		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},

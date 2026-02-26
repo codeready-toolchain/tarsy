@@ -44,12 +44,15 @@ func formatAgentCatalog(entries []config.SubAgentEntry) string {
 
 	for _, e := range entries {
 		sb.WriteString(fmt.Sprintf("\n- **%s**: %s\n", e.Name, e.Description))
-		switch {
-		case len(e.MCPServers) > 0:
+		hasMCP := len(e.MCPServers) > 0
+		hasNative := len(e.NativeTools) > 0
+		if hasMCP {
 			sb.WriteString(fmt.Sprintf("  MCP tools: %s\n", strings.Join(e.MCPServers, ", ")))
-		case len(e.NativeTools) > 0:
+		}
+		if hasNative {
 			sb.WriteString(fmt.Sprintf("  Native tools: %s\n", strings.Join(e.NativeTools, ", ")))
-		default:
+		}
+		if !hasMCP && !hasNative {
 			sb.WriteString("  Tools: none (pure reasoning)\n")
 		}
 	}

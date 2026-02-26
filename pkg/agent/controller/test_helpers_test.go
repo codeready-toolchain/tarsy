@@ -203,9 +203,10 @@ func (m *mockSubAgentCollector) TryDrainResult() (agent.ConversationMessage, boo
 	return msg, true
 }
 
-func (m *mockSubAgentCollector) WaitForResult(_ context.Context) (agent.ConversationMessage, error) {
+func (m *mockSubAgentCollector) WaitForResult(ctx context.Context) (agent.ConversationMessage, error) {
 	if m.waitIdx >= len(m.waitResults) {
-		return agent.ConversationMessage{}, context.Canceled
+		<-ctx.Done()
+		return agent.ConversationMessage{}, ctx.Err()
 	}
 	msg := m.waitResults[m.waitIdx]
 	var err error

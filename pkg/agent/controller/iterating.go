@@ -163,7 +163,14 @@ func (c *IteratingController) Run(
 		} else {
 			// No tool calls — check for pending sub-agents before treating as final
 			if collector := execCtx.SubAgentCollector; collector != nil && collector.HasPending() {
-				// Store the assistant's intermediate response before waiting
+				// Persist the assistant's intermediate response before waiting
+				assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+				if storeErr != nil {
+					iterCancel()
+					return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
+				}
+				recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+
 				if resp.Text != "" {
 					messages = append(messages, agent.ConversationMessage{
 						Role:    agent.RoleAssistant,
@@ -174,7 +181,11 @@ func (c *IteratingController) Run(
 				msg, waitErr := collector.WaitForResult(ctx)
 				if waitErr != nil {
 					iterCancel()
-					break
+					return &agent.ExecutionResult{
+						Status:     agent.ExecutionStatusFailed,
+						Error:      fmt.Errorf("sub-agent wait cancelled: %w", waitErr),
+						TokensUsed: totalUsage,
+					}, nil
 				}
 				messages = append(messages, msg)
 				storeObservationMessage(ctx, execCtx, msg.Content, &msgSeq)

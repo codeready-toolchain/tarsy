@@ -781,17 +781,13 @@ func TestIteratingController_DrainAndWait(t *testing.T) {
 	require.True(t, foundWait, "third LLM call should include waited sub-agent result")
 }
 
-func TestIteratingController_WaitErrorBreaksLoop(t *testing.T) {
-	// WaitForResult fails → loop breaks → forced conclusion
+func TestIteratingController_WaitErrorReturnsFailed(t *testing.T) {
+	// WaitForResult fails → return failed result immediately (no forceConclusion)
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			// Iteration 1: no tool calls → triggers wait (which fails)
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Waiting for sub-agents..."},
-			}},
-			// Forced conclusion call (no tools)
-			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Forced conclusion: partial results."},
 			}},
 		},
 	}
@@ -809,9 +805,9 @@ func TestIteratingController_WaitErrorBreaksLoop(t *testing.T) {
 	ctrl := NewIteratingController()
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
-	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
-	require.Contains(t, result.FinalAnalysis, "Forced conclusion")
-	require.Equal(t, 2, llm.callCount, "one iteration + forced conclusion")
+	require.Equal(t, agent.ExecutionStatusFailed, result.Status)
+	require.Contains(t, result.Error.Error(), "sub-agent wait cancelled")
+	require.Equal(t, 1, llm.callCount)
 }
 
 func TestIteratingController_NilCollectorSkipsDrainWait(t *testing.T) {
