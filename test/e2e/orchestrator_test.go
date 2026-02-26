@@ -139,8 +139,9 @@ func TestE2E_Orchestrator(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
+		baseline := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
-		time.Sleep(50 * time.Millisecond)
+		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
 	}()
 
@@ -504,8 +505,9 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
+		baseline := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
-		time.Sleep(50 * time.Millisecond)
+		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
 	}()
 
@@ -721,8 +723,9 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
+		baseline := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
-		time.Sleep(50 * time.Millisecond)
+		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(phase1Gate)
 	}()
 
@@ -901,8 +904,9 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
+		baseline := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
-		time.Sleep(50 * time.Millisecond)
+		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
 	}()
 
@@ -1016,8 +1020,9 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 	go func() {
 		<-orchIter2Ready
+		baseline := app.CountLLMInteractions(sessionID)
 		close(orchIter2Gate)
-		time.Sleep(50 * time.Millisecond)
+		app.AwaitLLMInteractionIncrease(sessionID, baseline)
 		close(subAgentGate)
 	}()
 
@@ -1143,7 +1148,11 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 	app.WaitForSessionStatus(t, sessionID, "in_progress")
 
 	// Wait for LogAnalyzer to be blocked, then release GeneralWorker.
-	<-laBlocked
+	select {
+	case <-laBlocked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for LogAnalyzer to enter BlockUntilCancelled")
+	}
 	close(subAgentGate)
 
 	app.WaitForSessionStatus(t, sessionID, "completed")

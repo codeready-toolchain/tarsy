@@ -18,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
@@ -369,6 +370,35 @@ func (app *TestApp) WaitForNSessionsInStatus(t *testing.T, n int, status string)
 		return lastCount == n
 	}, 30*time.Second, 100*time.Millisecond,
 		"expected %d sessions in status %q, last saw %d", n, status, lastCount)
+}
+
+// ────────────────────────────────────────────────────────────
+// Goroutine-safe DB polling (no t.FailNow — safe from non-test goroutines)
+// ────────────────────────────────────────────────────────────
+
+// CountLLMInteractions returns the current LLM interaction count for a session.
+func (app *TestApp) CountLLMInteractions(sessionID string) int {
+	n, _ := app.EntClient.LLMInteraction.Query().
+		Where(llminteraction.SessionID(sessionID)).
+		Count(context.Background())
+	return n
+}
+
+// AwaitLLMInteractionIncrease polls until the LLM interaction count exceeds
+// the given baseline, indicating the orchestrator has recorded a new response.
+// Falls back after 30s to prevent infinite hangs; the test's own timeout
+// will catch any real problem.
+func (app *TestApp) AwaitLLMInteractionIncrease(sessionID string, baseline int) {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		n, err := app.EntClient.LLMInteraction.Query().
+			Where(llminteraction.SessionID(sessionID)).
+			Count(context.Background())
+		if err == nil && n > baseline {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // ────────────────────────────────────────────────────────────
