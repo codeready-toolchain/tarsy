@@ -65,13 +65,15 @@ type AgentExecutionEdges struct {
 	LlmInteractions []*LLMInteraction `json:"llm_interactions,omitempty"`
 	// McpInteractions holds the value of the mcp_interactions edge.
 	McpInteractions []*MCPInteraction `json:"mcp_interactions,omitempty"`
+	// SubAgentTimelineEvents holds the value of the sub_agent_timeline_events edge.
+	SubAgentTimelineEvents []*TimelineEvent `json:"sub_agent_timeline_events,omitempty"`
 	// SubAgents holds the value of the sub_agents edge.
 	SubAgents []*AgentExecution `json:"sub_agents,omitempty"`
 	// Parent holds the value of the parent edge.
 	Parent *AgentExecution `json:"parent,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [9]bool
 }
 
 // StageOrErr returns the Stage value or an error if the edge
@@ -132,10 +134,19 @@ func (e AgentExecutionEdges) McpInteractionsOrErr() ([]*MCPInteraction, error) {
 	return nil, &NotLoadedError{edge: "mcp_interactions"}
 }
 
+// SubAgentTimelineEventsOrErr returns the SubAgentTimelineEvents value or an error if the edge
+// was not loaded in eager-loading.
+func (e AgentExecutionEdges) SubAgentTimelineEventsOrErr() ([]*TimelineEvent, error) {
+	if e.loadedTypes[6] {
+		return e.SubAgentTimelineEvents, nil
+	}
+	return nil, &NotLoadedError{edge: "sub_agent_timeline_events"}
+}
+
 // SubAgentsOrErr returns the SubAgents value or an error if the edge
 // was not loaded in eager-loading.
 func (e AgentExecutionEdges) SubAgentsOrErr() ([]*AgentExecution, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[7] {
 		return e.SubAgents, nil
 	}
 	return nil, &NotLoadedError{edge: "sub_agents"}
@@ -146,7 +157,7 @@ func (e AgentExecutionEdges) SubAgentsOrErr() ([]*AgentExecution, error) {
 func (e AgentExecutionEdges) ParentOrErr() (*AgentExecution, error) {
 	if e.Parent != nil {
 		return e.Parent, nil
-	} else if e.loadedTypes[7] {
+	} else if e.loadedTypes[8] {
 		return nil, &NotFoundError{label: agentexecution.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
@@ -310,6 +321,11 @@ func (_m *AgentExecution) QueryLlmInteractions() *LLMInteractionQuery {
 // QueryMcpInteractions queries the "mcp_interactions" edge of the AgentExecution entity.
 func (_m *AgentExecution) QueryMcpInteractions() *MCPInteractionQuery {
 	return NewAgentExecutionClient(_m.config).QueryMcpInteractions(_m)
+}
+
+// QuerySubAgentTimelineEvents queries the "sub_agent_timeline_events" edge of the AgentExecution entity.
+func (_m *AgentExecution) QuerySubAgentTimelineEvents() *TimelineEventQuery {
+	return NewAgentExecutionClient(_m.config).QuerySubAgentTimelineEvents(_m)
 }
 
 // QuerySubAgents queries the "sub_agents" edge of the AgentExecution entity.

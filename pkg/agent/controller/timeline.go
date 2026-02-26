@@ -14,6 +14,25 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
+// parentExecID extracts the parent orchestrator's execution ID from the
+// execution context. Returns "" for non-sub-agents (the omitempty JSON tag
+// on payload structs ensures it is omitted from the wire format).
+func parentExecID(execCtx *agent.ExecutionContext) string {
+	if execCtx.SubAgent != nil {
+		return execCtx.SubAgent.ParentExecID
+	}
+	return ""
+}
+
+// parentExecIDPtr returns the parent orchestrator's execution ID as a *string
+// for ent nullable fields. Returns nil for non-sub-agents.
+func parentExecIDPtr(execCtx *agent.ExecutionContext) *string {
+	if execCtx.SubAgent != nil && execCtx.SubAgent.ParentExecID != "" {
+		return &execCtx.SubAgent.ParentExecID
+	}
+	return nil
+}
+
 // createTimelineEvent creates a new timeline event with content and publishes
 // it for real-time delivery via WebSocket.
 //
@@ -33,14 +52,15 @@ func createTimelineEvent(
 	*eventSeq++
 
 	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      execCtx.SessionID,
-		StageID:        &execCtx.StageID,
-		ExecutionID:    &execCtx.ExecutionID,
-		SequenceNumber: *eventSeq,
-		EventType:      eventType,
-		Status:         timelineevent.StatusCompleted,
-		Content:        content,
-		Metadata:       metadata,
+		SessionID:         execCtx.SessionID,
+		StageID:           &execCtx.StageID,
+		ExecutionID:       &execCtx.ExecutionID,
+		ParentExecutionID: parentExecIDPtr(execCtx),
+		SequenceNumber:    *eventSeq,
+		EventType:         eventType,
+		Status:            timelineevent.StatusCompleted,
+		Content:           content,
+		Metadata:          metadata,
 	})
 	if err != nil {
 		slog.Error("Failed to create timeline event",
@@ -70,14 +90,15 @@ func publishTimelineCreated(
 			SessionID: execCtx.SessionID,
 			Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
 		},
-		EventID:        event.ID,
-		StageID:        execCtx.StageID,
-		ExecutionID:    execCtx.ExecutionID,
-		EventType:      eventType,
-		Status:         timelineevent.StatusCompleted,
-		Content:        content,
-		Metadata:       metadata,
-		SequenceNumber: seqNum,
+		EventID:           event.ID,
+		StageID:           execCtx.StageID,
+		ExecutionID:       execCtx.ExecutionID,
+		ParentExecutionID: parentExecID(execCtx),
+		EventType:         eventType,
+		Status:            timelineevent.StatusCompleted,
+		Content:           content,
+		Metadata:          metadata,
+		SequenceNumber:    seqNum,
 	})
 	if publishErr != nil {
 		slog.Warn("Failed to publish timeline event",
@@ -96,6 +117,7 @@ func finalizeStreamingEvent(
 	eventType timelineevent.EventType,
 	content, label string,
 ) {
+	pid := parentExecID(execCtx)
 	if content != "" {
 		if complErr := execCtx.Services.Timeline.CompleteTimelineEvent(ctx, eventID, content, nil, nil); complErr != nil {
 			slog.Warn("Failed to complete streaming "+label+" event",
@@ -108,10 +130,11 @@ func finalizeStreamingEvent(
 					SessionID: execCtx.SessionID,
 					Timestamp: time.Now().Format(time.RFC3339Nano),
 				},
-				EventID:   eventID,
-				EventType: eventType,
-				Content:   content,
-				Status:    timelineevent.StatusCompleted,
+				EventID:           eventID,
+				ParentExecutionID: pid,
+				EventType:         eventType,
+				Content:           content,
+				Status:            timelineevent.StatusCompleted,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish "+label+" completed",
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -139,10 +162,11 @@ func finalizeStreamingEvent(
 				SessionID: execCtx.SessionID,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
 			},
-			EventID:   eventID,
-			EventType: eventType,
-			Content:   failContent,
-			Status:    timelineevent.StatusFailed,
+			EventID:           eventID,
+			ParentExecutionID: pid,
+			EventType:         eventType,
+			Content:           failContent,
+			Status:            timelineevent.StatusFailed,
 		}); pubErr != nil {
 			slog.Warn("Failed to publish "+label+" failure",
 				"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -162,6 +186,7 @@ func markStreamingEventsFailed(
 	thinkingEventID, textEventID string,
 	streamErr error,
 ) {
+	pid := parentExecID(execCtx)
 	failEvent := func(eventID string, eventType timelineevent.EventType) {
 		if eventID == "" {
 			return
@@ -185,10 +210,11 @@ func markStreamingEventsFailed(
 					SessionID: execCtx.SessionID,
 					Timestamp: time.Now().Format(time.RFC3339Nano),
 				},
-				EventID:   eventID,
-				EventType: eventType,
-				Status:    timelineevent.StatusFailed,
-				Content:   failContent,
+				EventID:           eventID,
+				ParentExecutionID: pid,
+				EventType:         eventType,
+				Status:            timelineevent.StatusFailed,
+				Content:           failContent,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish streaming event failure",
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -225,13 +251,14 @@ func createToolCallEvent(
 
 	// Create event with empty content (streaming lifecycle — content set on completion)
 	event, err := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      execCtx.SessionID,
-		StageID:        &execCtx.StageID,
-		ExecutionID:    &execCtx.ExecutionID,
-		SequenceNumber: *eventSeq,
-		EventType:      timelineevent.EventTypeLlmToolCall,
-		Content:        "",
-		Metadata:       metadata,
+		SessionID:         execCtx.SessionID,
+		StageID:           &execCtx.StageID,
+		ExecutionID:       &execCtx.ExecutionID,
+		ParentExecutionID: parentExecIDPtr(execCtx),
+		SequenceNumber:    *eventSeq,
+		EventType:         timelineevent.EventTypeLlmToolCall,
+		Content:           "",
+		Metadata:          metadata,
 	})
 	if err != nil {
 		return nil, err
@@ -245,14 +272,15 @@ func createToolCallEvent(
 				SessionID: execCtx.SessionID,
 				Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
 			},
-			EventID:        event.ID,
-			StageID:        execCtx.StageID,
-			ExecutionID:    execCtx.ExecutionID,
-			EventType:      timelineevent.EventTypeLlmToolCall,
-			Status:         timelineevent.StatusStreaming,
-			Content:        "",
-			Metadata:       metadata,
-			SequenceNumber: *eventSeq,
+			EventID:           event.ID,
+			StageID:           execCtx.StageID,
+			ExecutionID:       execCtx.ExecutionID,
+			ParentExecutionID: parentExecID(execCtx),
+			EventType:         timelineevent.EventTypeLlmToolCall,
+			Status:            timelineevent.StatusStreaming,
+			Content:           "",
+			Metadata:          metadata,
+			SequenceNumber:    *eventSeq,
 		}); pubErr != nil {
 			slog.Warn("Failed to publish tool call created",
 				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -303,11 +331,12 @@ func completeToolCallEvent(
 				SessionID: execCtx.SessionID,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
 			},
-			EventID:   event.ID,
-			EventType: timelineevent.EventTypeLlmToolCall,
-			Content:   content,
-			Status:    timelineevent.StatusCompleted,
-			Metadata:  completionMeta,
+			EventID:           event.ID,
+			ParentExecutionID: parentExecID(execCtx),
+			EventType:         timelineevent.EventTypeLlmToolCall,
+			Content:           content,
+			Status:            timelineevent.StatusCompleted,
+			Metadata:          completionMeta,
 		}); pubErr != nil {
 			slog.Warn("Failed to publish tool call completed",
 				"event_id", event.ID, "session_id", execCtx.SessionID, "error", pubErr)

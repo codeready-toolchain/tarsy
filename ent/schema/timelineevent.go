@@ -34,6 +34,11 @@ func (TimelineEvent) Fields() []ent.Field {
 			Nillable().
 			Immutable().
 			Comment("Which agent — nil for session-level events (e.g. executive_summary)"),
+		field.String("parent_execution_id").
+			Optional().
+			Nillable().
+			Immutable().
+			Comment("For sub-agent events: the parent orchestrator's execution ID"),
 
 		// Timeline Ordering
 		field.Int("sequence_number").
@@ -125,6 +130,11 @@ func (TimelineEvent) Edges() []ent.Edge {
 		edge.From("agent_execution", AgentExecution.Type).
 			Ref("timeline_events").
 			Field("execution_id").
+			Unique().
+			Immutable(),
+		edge.From("parent_execution", AgentExecution.Type).
+			Ref("sub_agent_timeline_events").
+			Field("parent_execution_id").
 			Unique().
 			Immutable(),
 		edge.From("llm_interaction", LLMInteraction.Type).

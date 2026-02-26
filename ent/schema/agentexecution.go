@@ -94,6 +94,7 @@ func (AgentExecution) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("mcp_interactions", MCPInteraction.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("sub_agent_timeline_events", TimelineEvent.Type),
 		// Orchestrator sub-agent hierarchy (self-referential)
 		edge.To("sub_agents", AgentExecution.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),

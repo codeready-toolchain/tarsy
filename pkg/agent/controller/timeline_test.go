@@ -10,6 +10,78 @@ import (
 )
 
 // ============================================================================
+// parentExecID / parentExecIDPtr tests
+// ============================================================================
+
+func TestParentExecID(t *testing.T) {
+	tests := []struct {
+		name     string
+		subAgent *agent.SubAgentContext
+		want     string
+	}{
+		{
+			name:     "nil SubAgent returns empty",
+			subAgent: nil,
+			want:     "",
+		},
+		{
+			name:     "SubAgent with ParentExecID",
+			subAgent: &agent.SubAgentContext{Task: "do stuff", ParentExecID: "exec-orch-123"},
+			want:     "exec-orch-123",
+		},
+		{
+			name:     "SubAgent with empty ParentExecID",
+			subAgent: &agent.SubAgentContext{Task: "do stuff", ParentExecID: ""},
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			execCtx := &agent.ExecutionContext{SubAgent: tt.subAgent}
+			assert.Equal(t, tt.want, parentExecID(execCtx))
+		})
+	}
+}
+
+func TestParentExecIDPtr(t *testing.T) {
+	tests := []struct {
+		name     string
+		subAgent *agent.SubAgentContext
+		wantNil  bool
+		wantVal  string
+	}{
+		{
+			name:     "nil SubAgent returns nil",
+			subAgent: nil,
+			wantNil:  true,
+		},
+		{
+			name:     "SubAgent with ParentExecID returns pointer",
+			subAgent: &agent.SubAgentContext{Task: "do stuff", ParentExecID: "exec-orch-123"},
+			wantNil:  false,
+			wantVal:  "exec-orch-123",
+		},
+		{
+			name:     "SubAgent with empty ParentExecID returns nil",
+			subAgent: &agent.SubAgentContext{Task: "do stuff", ParentExecID: ""},
+			wantNil:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			execCtx := &agent.ExecutionContext{SubAgent: tt.subAgent}
+			got := parentExecIDPtr(execCtx)
+			if tt.wantNil {
+				assert.Nil(t, got)
+			} else {
+				require.NotNil(t, got)
+				assert.Equal(t, tt.wantVal, *got)
+			}
+		})
+	}
+}
+
+// ============================================================================
 // formatCodeExecution tests
 // ============================================================================
 

@@ -169,13 +169,14 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 			"execution_id", executionID, "error", seqErr)
 	}
 	_, _ = r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      r.sessionID,
-		StageID:        &r.stageID,
-		ExecutionID:    &executionID,
-		SequenceNumber: maxSeq + 1,
-		EventType:      timelineevent.EventTypeTaskAssigned,
-		Status:         timelineevent.StatusCompleted,
-		Content:        task,
+		SessionID:         r.sessionID,
+		StageID:           &r.stageID,
+		ExecutionID:       &executionID,
+		ParentExecutionID: &parentID,
+		SequenceNumber:    maxSeq + 1,
+		EventType:         timelineevent.EventTypeTaskAssigned,
+		Status:            timelineevent.StatusCompleted,
+		Content:           task,
 	})
 
 	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)

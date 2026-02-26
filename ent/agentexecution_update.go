@@ -303,6 +303,21 @@ func (_u *AgentExecutionUpdate) AddMcpInteractions(v ...*MCPInteraction) *AgentE
 	return _u.AddMcpInteractionIDs(ids...)
 }
 
+// AddSubAgentTimelineEventIDs adds the "sub_agent_timeline_events" edge to the TimelineEvent entity by IDs.
+func (_u *AgentExecutionUpdate) AddSubAgentTimelineEventIDs(ids ...string) *AgentExecutionUpdate {
+	_u.mutation.AddSubAgentTimelineEventIDs(ids...)
+	return _u
+}
+
+// AddSubAgentTimelineEvents adds the "sub_agent_timeline_events" edges to the TimelineEvent entity.
+func (_u *AgentExecutionUpdate) AddSubAgentTimelineEvents(v ...*TimelineEvent) *AgentExecutionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSubAgentTimelineEventIDs(ids...)
+}
+
 // AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
 func (_u *AgentExecutionUpdate) AddSubAgentIDs(ids ...string) *AgentExecutionUpdate {
 	_u.mutation.AddSubAgentIDs(ids...)
@@ -424,6 +439,27 @@ func (_u *AgentExecutionUpdate) RemoveMcpInteractions(v ...*MCPInteraction) *Age
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMcpInteractionIDs(ids...)
+}
+
+// ClearSubAgentTimelineEvents clears all "sub_agent_timeline_events" edges to the TimelineEvent entity.
+func (_u *AgentExecutionUpdate) ClearSubAgentTimelineEvents() *AgentExecutionUpdate {
+	_u.mutation.ClearSubAgentTimelineEvents()
+	return _u
+}
+
+// RemoveSubAgentTimelineEventIDs removes the "sub_agent_timeline_events" edge to TimelineEvent entities by IDs.
+func (_u *AgentExecutionUpdate) RemoveSubAgentTimelineEventIDs(ids ...string) *AgentExecutionUpdate {
+	_u.mutation.RemoveSubAgentTimelineEventIDs(ids...)
+	return _u
+}
+
+// RemoveSubAgentTimelineEvents removes "sub_agent_timeline_events" edges to TimelineEvent entities.
+func (_u *AgentExecutionUpdate) RemoveSubAgentTimelineEvents(v ...*TimelineEvent) *AgentExecutionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSubAgentTimelineEventIDs(ids...)
 }
 
 // ClearSubAgents clears all "sub_agents" edges to the AgentExecution entity.
@@ -741,6 +777,51 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(mcpinteraction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SubAgentTimelineEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSubAgentTimelineEventsIDs(); len(nodes) > 0 && !_u.mutation.SubAgentTimelineEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SubAgentTimelineEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -1114,6 +1195,21 @@ func (_u *AgentExecutionUpdateOne) AddMcpInteractions(v ...*MCPInteraction) *Age
 	return _u.AddMcpInteractionIDs(ids...)
 }
 
+// AddSubAgentTimelineEventIDs adds the "sub_agent_timeline_events" edge to the TimelineEvent entity by IDs.
+func (_u *AgentExecutionUpdateOne) AddSubAgentTimelineEventIDs(ids ...string) *AgentExecutionUpdateOne {
+	_u.mutation.AddSubAgentTimelineEventIDs(ids...)
+	return _u
+}
+
+// AddSubAgentTimelineEvents adds the "sub_agent_timeline_events" edges to the TimelineEvent entity.
+func (_u *AgentExecutionUpdateOne) AddSubAgentTimelineEvents(v ...*TimelineEvent) *AgentExecutionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSubAgentTimelineEventIDs(ids...)
+}
+
 // AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
 func (_u *AgentExecutionUpdateOne) AddSubAgentIDs(ids ...string) *AgentExecutionUpdateOne {
 	_u.mutation.AddSubAgentIDs(ids...)
@@ -1235,6 +1331,27 @@ func (_u *AgentExecutionUpdateOne) RemoveMcpInteractions(v ...*MCPInteraction) *
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMcpInteractionIDs(ids...)
+}
+
+// ClearSubAgentTimelineEvents clears all "sub_agent_timeline_events" edges to the TimelineEvent entity.
+func (_u *AgentExecutionUpdateOne) ClearSubAgentTimelineEvents() *AgentExecutionUpdateOne {
+	_u.mutation.ClearSubAgentTimelineEvents()
+	return _u
+}
+
+// RemoveSubAgentTimelineEventIDs removes the "sub_agent_timeline_events" edge to TimelineEvent entities by IDs.
+func (_u *AgentExecutionUpdateOne) RemoveSubAgentTimelineEventIDs(ids ...string) *AgentExecutionUpdateOne {
+	_u.mutation.RemoveSubAgentTimelineEventIDs(ids...)
+	return _u
+}
+
+// RemoveSubAgentTimelineEvents removes "sub_agent_timeline_events" edges to TimelineEvent entities.
+func (_u *AgentExecutionUpdateOne) RemoveSubAgentTimelineEvents(v ...*TimelineEvent) *AgentExecutionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSubAgentTimelineEventIDs(ids...)
 }
 
 // ClearSubAgents clears all "sub_agents" edges to the AgentExecution entity.
@@ -1582,6 +1699,51 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(mcpinteraction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SubAgentTimelineEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSubAgentTimelineEventsIDs(); len(nodes) > 0 && !_u.mutation.SubAgentTimelineEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SubAgentTimelineEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentTimelineEventsTable,
+			Columns: []string{agentexecution.SubAgentTimelineEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(timelineevent.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

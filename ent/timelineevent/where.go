@@ -80,6 +80,11 @@ func ExecutionID(v string) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldEQ(FieldExecutionID, v))
 }
 
+// ParentExecutionID applies equality check predicate on the "parent_execution_id" field. It's identical to ParentExecutionIDEQ.
+func ParentExecutionID(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldEQ(FieldParentExecutionID, v))
+}
+
 // SequenceNumber applies equality check predicate on the "sequence_number" field. It's identical to SequenceNumberEQ.
 func SequenceNumber(v int) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldEQ(FieldSequenceNumber, v))
@@ -323,6 +328,81 @@ func ExecutionIDEqualFold(v string) predicate.TimelineEvent {
 // ExecutionIDContainsFold applies the ContainsFold predicate on the "execution_id" field.
 func ExecutionIDContainsFold(v string) predicate.TimelineEvent {
 	return predicate.TimelineEvent(sql.FieldContainsFold(FieldExecutionID, v))
+}
+
+// ParentExecutionIDEQ applies the EQ predicate on the "parent_execution_id" field.
+func ParentExecutionIDEQ(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldEQ(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDNEQ applies the NEQ predicate on the "parent_execution_id" field.
+func ParentExecutionIDNEQ(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldNEQ(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDIn applies the In predicate on the "parent_execution_id" field.
+func ParentExecutionIDIn(vs ...string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldIn(FieldParentExecutionID, vs...))
+}
+
+// ParentExecutionIDNotIn applies the NotIn predicate on the "parent_execution_id" field.
+func ParentExecutionIDNotIn(vs ...string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldNotIn(FieldParentExecutionID, vs...))
+}
+
+// ParentExecutionIDGT applies the GT predicate on the "parent_execution_id" field.
+func ParentExecutionIDGT(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldGT(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDGTE applies the GTE predicate on the "parent_execution_id" field.
+func ParentExecutionIDGTE(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldGTE(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDLT applies the LT predicate on the "parent_execution_id" field.
+func ParentExecutionIDLT(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldLT(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDLTE applies the LTE predicate on the "parent_execution_id" field.
+func ParentExecutionIDLTE(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldLTE(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDContains applies the Contains predicate on the "parent_execution_id" field.
+func ParentExecutionIDContains(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldContains(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDHasPrefix applies the HasPrefix predicate on the "parent_execution_id" field.
+func ParentExecutionIDHasPrefix(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldHasPrefix(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDHasSuffix applies the HasSuffix predicate on the "parent_execution_id" field.
+func ParentExecutionIDHasSuffix(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldHasSuffix(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDIsNil applies the IsNil predicate on the "parent_execution_id" field.
+func ParentExecutionIDIsNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldIsNull(FieldParentExecutionID))
+}
+
+// ParentExecutionIDNotNil applies the NotNil predicate on the "parent_execution_id" field.
+func ParentExecutionIDNotNil() predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldNotNull(FieldParentExecutionID))
+}
+
+// ParentExecutionIDEqualFold applies the EqualFold predicate on the "parent_execution_id" field.
+func ParentExecutionIDEqualFold(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldEqualFold(FieldParentExecutionID, v))
+}
+
+// ParentExecutionIDContainsFold applies the ContainsFold predicate on the "parent_execution_id" field.
+func ParentExecutionIDContainsFold(v string) predicate.TimelineEvent {
+	return predicate.TimelineEvent(sql.FieldContainsFold(FieldParentExecutionID, v))
 }
 
 // SequenceNumberEQ applies the EQ predicate on the "sequence_number" field.
@@ -771,6 +851,29 @@ func HasAgentExecution() predicate.TimelineEvent {
 func HasAgentExecutionWith(preds ...predicate.AgentExecution) predicate.TimelineEvent {
 	return predicate.TimelineEvent(func(s *sql.Selector) {
 		step := newAgentExecutionStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasParentExecution applies the HasEdge predicate on the "parent_execution" edge.
+func HasParentExecution() predicate.TimelineEvent {
+	return predicate.TimelineEvent(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ParentExecutionTable, ParentExecutionColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasParentExecutionWith applies the HasEdge predicate on the "parent_execution" edge with a given conditions (other predicates).
+func HasParentExecutionWith(preds ...predicate.AgentExecution) predicate.TimelineEvent {
+	return predicate.TimelineEvent(func(s *sql.Selector) {
+		step := newParentExecutionStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

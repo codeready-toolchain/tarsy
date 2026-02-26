@@ -120,6 +120,48 @@ func TestGetTimelineHandler_WithEvents(t *testing.T) {
 	assert.Equal(t, timelineevent.EventTypeLlmToolCall, events[2].EventType)
 	assert.Equal(t, "get_pods", events[2].Content)
 	assert.Equal(t, "get_pods", events[2].Metadata["tool_name"])
+
+	// All events are top-level (no parent) — parent_execution_id should be nil.
+	for _, ev := range events {
+		assert.Nil(t, ev.ParentExecutionID)
+	}
+}
+
+func TestGetTimelineHandler_SubAgentParentExecutionID(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	timelineSvc := services.NewTimelineService(client.Client)
+
+	session := createTimelineTestSession(t, client.Client)
+	stageID, execID := createTimelineTestStageAndExecution(t, client.Client, session.ID)
+
+	// Create a sub-agent event with parent_execution_id set.
+	_, err := timelineSvc.CreateTimelineEvent(context.Background(), models.CreateTimelineEventRequest{
+		SessionID:         session.ID,
+		StageID:           &stageID,
+		ExecutionID:       &execID,
+		ParentExecutionID: &execID, // self-referencing for simplicity
+		SequenceNumber:    1,
+		EventType:         timelineevent.EventTypeTaskAssigned,
+		Status:            timelineevent.StatusCompleted,
+		Content:           "Investigate the pods",
+	})
+	require.NoError(t, err)
+
+	s := &Server{timelineService: timelineSvc}
+	e := timelineTestEcho(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+session.ID+"/timeline", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var events []*ent.TimelineEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &events))
+	require.Len(t, events, 1)
+
+	require.NotNil(t, events[0].ParentExecutionID, "sub-agent event should have parent_execution_id in JSON")
+	assert.Equal(t, execID, *events[0].ParentExecutionID)
 }
 
 // ── Helpers ──────────────────────────────────────────────────

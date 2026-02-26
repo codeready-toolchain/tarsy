@@ -59,6 +59,20 @@ func (_c *TimelineEventCreate) SetNillableExecutionID(v *string) *TimelineEventC
 	return _c
 }
 
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (_c *TimelineEventCreate) SetParentExecutionID(v string) *TimelineEventCreate {
+	_c.mutation.SetParentExecutionID(v)
+	return _c
+}
+
+// SetNillableParentExecutionID sets the "parent_execution_id" field if the given value is not nil.
+func (_c *TimelineEventCreate) SetNillableParentExecutionID(v *string) *TimelineEventCreate {
+	if v != nil {
+		_c.SetParentExecutionID(*v)
+	}
+	return _c
+}
+
 // SetSequenceNumber sets the "sequence_number" field.
 func (_c *TimelineEventCreate) SetSequenceNumber(v int) *TimelineEventCreate {
 	_c.mutation.SetSequenceNumber(v)
@@ -186,6 +200,11 @@ func (_c *TimelineEventCreate) SetNillableAgentExecutionID(id *string) *Timeline
 // SetAgentExecution sets the "agent_execution" edge to the AgentExecution entity.
 func (_c *TimelineEventCreate) SetAgentExecution(v *AgentExecution) *TimelineEventCreate {
 	return _c.SetAgentExecutionID(v.ID)
+}
+
+// SetParentExecution sets the "parent_execution" edge to the AgentExecution entity.
+func (_c *TimelineEventCreate) SetParentExecution(v *AgentExecution) *TimelineEventCreate {
+	return _c.SetParentExecutionID(v.ID)
 }
 
 // SetLlmInteraction sets the "llm_interaction" edge to the LLMInteraction entity.
@@ -395,6 +414,23 @@ func (_c *TimelineEventCreate) createSpec() (*TimelineEvent, *sqlgraph.CreateSpe
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ExecutionID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ParentExecutionIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   timelineevent.ParentExecutionTable,
+			Columns: []string{timelineevent.ParentExecutionColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ParentExecutionID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.LlmInteractionIDs(); len(nodes) > 0 {

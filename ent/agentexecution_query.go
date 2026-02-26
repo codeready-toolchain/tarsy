@@ -26,19 +26,20 @@ import (
 // AgentExecutionQuery is the builder for querying AgentExecution entities.
 type AgentExecutionQuery struct {
 	config
-	ctx                 *QueryContext
-	order               []agentexecution.OrderOption
-	inters              []Interceptor
-	predicates          []predicate.AgentExecution
-	withStage           *StageQuery
-	withSession         *AlertSessionQuery
-	withTimelineEvents  *TimelineEventQuery
-	withMessages        *MessageQuery
-	withLlmInteractions *LLMInteractionQuery
-	withMcpInteractions *MCPInteractionQuery
-	withSubAgents       *AgentExecutionQuery
-	withParent          *AgentExecutionQuery
-	modifiers           []func(*sql.Selector)
+	ctx                        *QueryContext
+	order                      []agentexecution.OrderOption
+	inters                     []Interceptor
+	predicates                 []predicate.AgentExecution
+	withStage                  *StageQuery
+	withSession                *AlertSessionQuery
+	withTimelineEvents         *TimelineEventQuery
+	withMessages               *MessageQuery
+	withLlmInteractions        *LLMInteractionQuery
+	withMcpInteractions        *MCPInteractionQuery
+	withSubAgentTimelineEvents *TimelineEventQuery
+	withSubAgents              *AgentExecutionQuery
+	withParent                 *AgentExecutionQuery
+	modifiers                  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -200,6 +201,28 @@ func (_q *AgentExecutionQuery) QueryMcpInteractions() *MCPInteractionQuery {
 			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, selector),
 			sqlgraph.To(mcpinteraction.Table, mcpinteraction.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.McpInteractionsTable, agentexecution.McpInteractionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySubAgentTimelineEvents chains the current query on the "sub_agent_timeline_events" edge.
+func (_q *AgentExecutionQuery) QuerySubAgentTimelineEvents() *TimelineEventQuery {
+	query := (&TimelineEventClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, selector),
+			sqlgraph.To(timelineevent.Table, timelineevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.SubAgentTimelineEventsTable, agentexecution.SubAgentTimelineEventsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -438,19 +461,20 @@ func (_q *AgentExecutionQuery) Clone() *AgentExecutionQuery {
 		return nil
 	}
 	return &AgentExecutionQuery{
-		config:              _q.config,
-		ctx:                 _q.ctx.Clone(),
-		order:               append([]agentexecution.OrderOption{}, _q.order...),
-		inters:              append([]Interceptor{}, _q.inters...),
-		predicates:          append([]predicate.AgentExecution{}, _q.predicates...),
-		withStage:           _q.withStage.Clone(),
-		withSession:         _q.withSession.Clone(),
-		withTimelineEvents:  _q.withTimelineEvents.Clone(),
-		withMessages:        _q.withMessages.Clone(),
-		withLlmInteractions: _q.withLlmInteractions.Clone(),
-		withMcpInteractions: _q.withMcpInteractions.Clone(),
-		withSubAgents:       _q.withSubAgents.Clone(),
-		withParent:          _q.withParent.Clone(),
+		config:                     _q.config,
+		ctx:                        _q.ctx.Clone(),
+		order:                      append([]agentexecution.OrderOption{}, _q.order...),
+		inters:                     append([]Interceptor{}, _q.inters...),
+		predicates:                 append([]predicate.AgentExecution{}, _q.predicates...),
+		withStage:                  _q.withStage.Clone(),
+		withSession:                _q.withSession.Clone(),
+		withTimelineEvents:         _q.withTimelineEvents.Clone(),
+		withMessages:               _q.withMessages.Clone(),
+		withLlmInteractions:        _q.withLlmInteractions.Clone(),
+		withMcpInteractions:        _q.withMcpInteractions.Clone(),
+		withSubAgentTimelineEvents: _q.withSubAgentTimelineEvents.Clone(),
+		withSubAgents:              _q.withSubAgents.Clone(),
+		withParent:                 _q.withParent.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -521,6 +545,17 @@ func (_q *AgentExecutionQuery) WithMcpInteractions(opts ...func(*MCPInteractionQ
 		opt(query)
 	}
 	_q.withMcpInteractions = query
+	return _q
+}
+
+// WithSubAgentTimelineEvents tells the query-builder to eager-load the nodes that are connected to
+// the "sub_agent_timeline_events" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AgentExecutionQuery) WithSubAgentTimelineEvents(opts ...func(*TimelineEventQuery)) *AgentExecutionQuery {
+	query := (&TimelineEventClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSubAgentTimelineEvents = query
 	return _q
 }
 
@@ -624,13 +659,14 @@ func (_q *AgentExecutionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 	var (
 		nodes       = []*AgentExecution{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [9]bool{
 			_q.withStage != nil,
 			_q.withSession != nil,
 			_q.withTimelineEvents != nil,
 			_q.withMessages != nil,
 			_q.withLlmInteractions != nil,
 			_q.withMcpInteractions != nil,
+			_q.withSubAgentTimelineEvents != nil,
 			_q.withSubAgents != nil,
 			_q.withParent != nil,
 		}
@@ -696,6 +732,15 @@ func (_q *AgentExecutionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 			func(n *AgentExecution) { n.Edges.McpInteractions = []*MCPInteraction{} },
 			func(n *AgentExecution, e *MCPInteraction) {
 				n.Edges.McpInteractions = append(n.Edges.McpInteractions, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSubAgentTimelineEvents; query != nil {
+		if err := _q.loadSubAgentTimelineEvents(ctx, query, nodes,
+			func(n *AgentExecution) { n.Edges.SubAgentTimelineEvents = []*TimelineEvent{} },
+			func(n *AgentExecution, e *TimelineEvent) {
+				n.Edges.SubAgentTimelineEvents = append(n.Edges.SubAgentTimelineEvents, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -895,6 +940,39 @@ func (_q *AgentExecutionQuery) loadMcpInteractions(ctx context.Context, query *M
 		node, ok := nodeids[fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "execution_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AgentExecutionQuery) loadSubAgentTimelineEvents(ctx context.Context, query *TimelineEventQuery, nodes []*AgentExecution, init func(*AgentExecution), assign func(*AgentExecution, *TimelineEvent)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AgentExecution)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(timelineevent.FieldParentExecutionID)
+	}
+	query.Where(predicate.TimelineEvent(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(agentexecution.SubAgentTimelineEventsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ParentExecutionID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "parent_execution_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "parent_execution_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

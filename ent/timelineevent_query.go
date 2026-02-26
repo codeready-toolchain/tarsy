@@ -24,16 +24,17 @@ import (
 // TimelineEventQuery is the builder for querying TimelineEvent entities.
 type TimelineEventQuery struct {
 	config
-	ctx                *QueryContext
-	order              []timelineevent.OrderOption
-	inters             []Interceptor
-	predicates         []predicate.TimelineEvent
-	withSession        *AlertSessionQuery
-	withStage          *StageQuery
-	withAgentExecution *AgentExecutionQuery
-	withLlmInteraction *LLMInteractionQuery
-	withMcpInteraction *MCPInteractionQuery
-	modifiers          []func(*sql.Selector)
+	ctx                 *QueryContext
+	order               []timelineevent.OrderOption
+	inters              []Interceptor
+	predicates          []predicate.TimelineEvent
+	withSession         *AlertSessionQuery
+	withStage           *StageQuery
+	withAgentExecution  *AgentExecutionQuery
+	withParentExecution *AgentExecutionQuery
+	withLlmInteraction  *LLMInteractionQuery
+	withMcpInteraction  *MCPInteractionQuery
+	modifiers           []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -129,6 +130,28 @@ func (_q *TimelineEventQuery) QueryAgentExecution() *AgentExecutionQuery {
 			sqlgraph.From(timelineevent.Table, timelineevent.FieldID, selector),
 			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, timelineevent.AgentExecutionTable, timelineevent.AgentExecutionColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryParentExecution chains the current query on the "parent_execution" edge.
+func (_q *TimelineEventQuery) QueryParentExecution() *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(timelineevent.Table, timelineevent.FieldID, selector),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, timelineevent.ParentExecutionTable, timelineevent.ParentExecutionColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -367,16 +390,17 @@ func (_q *TimelineEventQuery) Clone() *TimelineEventQuery {
 		return nil
 	}
 	return &TimelineEventQuery{
-		config:             _q.config,
-		ctx:                _q.ctx.Clone(),
-		order:              append([]timelineevent.OrderOption{}, _q.order...),
-		inters:             append([]Interceptor{}, _q.inters...),
-		predicates:         append([]predicate.TimelineEvent{}, _q.predicates...),
-		withSession:        _q.withSession.Clone(),
-		withStage:          _q.withStage.Clone(),
-		withAgentExecution: _q.withAgentExecution.Clone(),
-		withLlmInteraction: _q.withLlmInteraction.Clone(),
-		withMcpInteraction: _q.withMcpInteraction.Clone(),
+		config:              _q.config,
+		ctx:                 _q.ctx.Clone(),
+		order:               append([]timelineevent.OrderOption{}, _q.order...),
+		inters:              append([]Interceptor{}, _q.inters...),
+		predicates:          append([]predicate.TimelineEvent{}, _q.predicates...),
+		withSession:         _q.withSession.Clone(),
+		withStage:           _q.withStage.Clone(),
+		withAgentExecution:  _q.withAgentExecution.Clone(),
+		withParentExecution: _q.withParentExecution.Clone(),
+		withLlmInteraction:  _q.withLlmInteraction.Clone(),
+		withMcpInteraction:  _q.withMcpInteraction.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -414,6 +438,17 @@ func (_q *TimelineEventQuery) WithAgentExecution(opts ...func(*AgentExecutionQue
 		opt(query)
 	}
 	_q.withAgentExecution = query
+	return _q
+}
+
+// WithParentExecution tells the query-builder to eager-load the nodes that are connected to
+// the "parent_execution" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TimelineEventQuery) WithParentExecution(opts ...func(*AgentExecutionQuery)) *TimelineEventQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withParentExecution = query
 	return _q
 }
 
@@ -517,10 +552,11 @@ func (_q *TimelineEventQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 	var (
 		nodes       = []*TimelineEvent{}
 		_spec       = _q.querySpec()
-		loadedTypes = [5]bool{
+		loadedTypes = [6]bool{
 			_q.withSession != nil,
 			_q.withStage != nil,
 			_q.withAgentExecution != nil,
+			_q.withParentExecution != nil,
 			_q.withLlmInteraction != nil,
 			_q.withMcpInteraction != nil,
 		}
@@ -561,6 +597,12 @@ func (_q *TimelineEventQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 	if query := _q.withAgentExecution; query != nil {
 		if err := _q.loadAgentExecution(ctx, query, nodes, nil,
 			func(n *TimelineEvent, e *AgentExecution) { n.Edges.AgentExecution = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withParentExecution; query != nil {
+		if err := _q.loadParentExecution(ctx, query, nodes, nil,
+			func(n *TimelineEvent, e *AgentExecution) { n.Edges.ParentExecution = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -672,6 +714,38 @@ func (_q *TimelineEventQuery) loadAgentExecution(ctx context.Context, query *Age
 	}
 	return nil
 }
+func (_q *TimelineEventQuery) loadParentExecution(ctx context.Context, query *AgentExecutionQuery, nodes []*TimelineEvent, init func(*TimelineEvent), assign func(*TimelineEvent, *AgentExecution)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*TimelineEvent)
+	for i := range nodes {
+		if nodes[i].ParentExecutionID == nil {
+			continue
+		}
+		fk := *nodes[i].ParentExecutionID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(agentexecution.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "parent_execution_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 func (_q *TimelineEventQuery) loadLlmInteraction(ctx context.Context, query *LLMInteractionQuery, nodes []*TimelineEvent, init func(*TimelineEvent), assign func(*TimelineEvent, *LLMInteraction)) error {
 	ids := make([]string, 0, len(nodes))
 	nodeids := make(map[string][]*TimelineEvent)
@@ -773,6 +847,9 @@ func (_q *TimelineEventQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withAgentExecution != nil {
 			_spec.Node.AddColumnOnce(timelineevent.FieldExecutionID)
+		}
+		if _q.withParentExecution != nil {
+			_spec.Node.AddColumnOnce(timelineevent.FieldParentExecutionID)
 		}
 		if _q.withLlmInteraction != nil {
 			_spec.Node.AddColumnOnce(timelineevent.FieldLlmInteractionID)

@@ -51,46 +51,49 @@ const (
 // AgentExecutionMutation represents an operation that mutates the AgentExecution nodes in the graph.
 type AgentExecutionMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *string
-	agent_name              *string
-	agent_index             *int
-	addagent_index          *int
-	status                  *agentexecution.Status
-	started_at              *time.Time
-	completed_at            *time.Time
-	duration_ms             *int
-	addduration_ms          *int
-	error_message           *string
-	llm_backend             *string
-	llm_provider            *string
-	task                    *string
-	clearedFields           map[string]struct{}
-	stage                   *string
-	clearedstage            bool
-	session                 *string
-	clearedsession          bool
-	timeline_events         map[string]struct{}
-	removedtimeline_events  map[string]struct{}
-	clearedtimeline_events  bool
-	messages                map[string]struct{}
-	removedmessages         map[string]struct{}
-	clearedmessages         bool
-	llm_interactions        map[string]struct{}
-	removedllm_interactions map[string]struct{}
-	clearedllm_interactions bool
-	mcp_interactions        map[string]struct{}
-	removedmcp_interactions map[string]struct{}
-	clearedmcp_interactions bool
-	sub_agents              map[string]struct{}
-	removedsub_agents       map[string]struct{}
-	clearedsub_agents       bool
-	parent                  *string
-	clearedparent           bool
-	done                    bool
-	oldValue                func(context.Context) (*AgentExecution, error)
-	predicates              []predicate.AgentExecution
+	op                               Op
+	typ                              string
+	id                               *string
+	agent_name                       *string
+	agent_index                      *int
+	addagent_index                   *int
+	status                           *agentexecution.Status
+	started_at                       *time.Time
+	completed_at                     *time.Time
+	duration_ms                      *int
+	addduration_ms                   *int
+	error_message                    *string
+	llm_backend                      *string
+	llm_provider                     *string
+	task                             *string
+	clearedFields                    map[string]struct{}
+	stage                            *string
+	clearedstage                     bool
+	session                          *string
+	clearedsession                   bool
+	timeline_events                  map[string]struct{}
+	removedtimeline_events           map[string]struct{}
+	clearedtimeline_events           bool
+	messages                         map[string]struct{}
+	removedmessages                  map[string]struct{}
+	clearedmessages                  bool
+	llm_interactions                 map[string]struct{}
+	removedllm_interactions          map[string]struct{}
+	clearedllm_interactions          bool
+	mcp_interactions                 map[string]struct{}
+	removedmcp_interactions          map[string]struct{}
+	clearedmcp_interactions          bool
+	sub_agent_timeline_events        map[string]struct{}
+	removedsub_agent_timeline_events map[string]struct{}
+	clearedsub_agent_timeline_events bool
+	sub_agents                       map[string]struct{}
+	removedsub_agents                map[string]struct{}
+	clearedsub_agents                bool
+	parent                           *string
+	clearedparent                    bool
+	done                             bool
+	oldValue                         func(context.Context) (*AgentExecution, error)
+	predicates                       []predicate.AgentExecution
 }
 
 var _ ent.Mutation = (*AgentExecutionMutation)(nil)
@@ -1067,6 +1070,60 @@ func (m *AgentExecutionMutation) ResetMcpInteractions() {
 	m.removedmcp_interactions = nil
 }
 
+// AddSubAgentTimelineEventIDs adds the "sub_agent_timeline_events" edge to the TimelineEvent entity by ids.
+func (m *AgentExecutionMutation) AddSubAgentTimelineEventIDs(ids ...string) {
+	if m.sub_agent_timeline_events == nil {
+		m.sub_agent_timeline_events = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.sub_agent_timeline_events[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSubAgentTimelineEvents clears the "sub_agent_timeline_events" edge to the TimelineEvent entity.
+func (m *AgentExecutionMutation) ClearSubAgentTimelineEvents() {
+	m.clearedsub_agent_timeline_events = true
+}
+
+// SubAgentTimelineEventsCleared reports if the "sub_agent_timeline_events" edge to the TimelineEvent entity was cleared.
+func (m *AgentExecutionMutation) SubAgentTimelineEventsCleared() bool {
+	return m.clearedsub_agent_timeline_events
+}
+
+// RemoveSubAgentTimelineEventIDs removes the "sub_agent_timeline_events" edge to the TimelineEvent entity by IDs.
+func (m *AgentExecutionMutation) RemoveSubAgentTimelineEventIDs(ids ...string) {
+	if m.removedsub_agent_timeline_events == nil {
+		m.removedsub_agent_timeline_events = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.sub_agent_timeline_events, ids[i])
+		m.removedsub_agent_timeline_events[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSubAgentTimelineEvents returns the removed IDs of the "sub_agent_timeline_events" edge to the TimelineEvent entity.
+func (m *AgentExecutionMutation) RemovedSubAgentTimelineEventsIDs() (ids []string) {
+	for id := range m.removedsub_agent_timeline_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SubAgentTimelineEventsIDs returns the "sub_agent_timeline_events" edge IDs in the mutation.
+func (m *AgentExecutionMutation) SubAgentTimelineEventsIDs() (ids []string) {
+	for id := range m.sub_agent_timeline_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSubAgentTimelineEvents resets all changes to the "sub_agent_timeline_events" edge.
+func (m *AgentExecutionMutation) ResetSubAgentTimelineEvents() {
+	m.sub_agent_timeline_events = nil
+	m.clearedsub_agent_timeline_events = false
+	m.removedsub_agent_timeline_events = nil
+}
+
 // AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by ids.
 func (m *AgentExecutionMutation) AddSubAgentIDs(ids ...string) {
 	if m.sub_agents == nil {
@@ -1570,7 +1627,7 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AgentExecutionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.stage != nil {
 		edges = append(edges, agentexecution.EdgeStage)
 	}
@@ -1588,6 +1645,9 @@ func (m *AgentExecutionMutation) AddedEdges() []string {
 	}
 	if m.mcp_interactions != nil {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.sub_agent_timeline_events != nil {
+		edges = append(edges, agentexecution.EdgeSubAgentTimelineEvents)
 	}
 	if m.sub_agents != nil {
 		edges = append(edges, agentexecution.EdgeSubAgents)
@@ -1634,6 +1694,12 @@ func (m *AgentExecutionMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case agentexecution.EdgeSubAgentTimelineEvents:
+		ids := make([]ent.Value, 0, len(m.sub_agent_timeline_events))
+		for id := range m.sub_agent_timeline_events {
+			ids = append(ids, id)
+		}
+		return ids
 	case agentexecution.EdgeSubAgents:
 		ids := make([]ent.Value, 0, len(m.sub_agents))
 		for id := range m.sub_agents {
@@ -1650,7 +1716,7 @@ func (m *AgentExecutionMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AgentExecutionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.removedtimeline_events != nil {
 		edges = append(edges, agentexecution.EdgeTimelineEvents)
 	}
@@ -1662,6 +1728,9 @@ func (m *AgentExecutionMutation) RemovedEdges() []string {
 	}
 	if m.removedmcp_interactions != nil {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.removedsub_agent_timeline_events != nil {
+		edges = append(edges, agentexecution.EdgeSubAgentTimelineEvents)
 	}
 	if m.removedsub_agents != nil {
 		edges = append(edges, agentexecution.EdgeSubAgents)
@@ -1697,6 +1766,12 @@ func (m *AgentExecutionMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case agentexecution.EdgeSubAgentTimelineEvents:
+		ids := make([]ent.Value, 0, len(m.removedsub_agent_timeline_events))
+		for id := range m.removedsub_agent_timeline_events {
+			ids = append(ids, id)
+		}
+		return ids
 	case agentexecution.EdgeSubAgents:
 		ids := make([]ent.Value, 0, len(m.removedsub_agents))
 		for id := range m.removedsub_agents {
@@ -1709,7 +1784,7 @@ func (m *AgentExecutionMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AgentExecutionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.clearedstage {
 		edges = append(edges, agentexecution.EdgeStage)
 	}
@@ -1727,6 +1802,9 @@ func (m *AgentExecutionMutation) ClearedEdges() []string {
 	}
 	if m.clearedmcp_interactions {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.clearedsub_agent_timeline_events {
+		edges = append(edges, agentexecution.EdgeSubAgentTimelineEvents)
 	}
 	if m.clearedsub_agents {
 		edges = append(edges, agentexecution.EdgeSubAgents)
@@ -1753,6 +1831,8 @@ func (m *AgentExecutionMutation) EdgeCleared(name string) bool {
 		return m.clearedllm_interactions
 	case agentexecution.EdgeMcpInteractions:
 		return m.clearedmcp_interactions
+	case agentexecution.EdgeSubAgentTimelineEvents:
+		return m.clearedsub_agent_timeline_events
 	case agentexecution.EdgeSubAgents:
 		return m.clearedsub_agents
 	case agentexecution.EdgeParent:
@@ -1799,6 +1879,9 @@ func (m *AgentExecutionMutation) ResetEdge(name string) error {
 		return nil
 	case agentexecution.EdgeMcpInteractions:
 		m.ResetMcpInteractions()
+		return nil
+	case agentexecution.EdgeSubAgentTimelineEvents:
+		m.ResetSubAgentTimelineEvents()
 		return nil
 	case agentexecution.EdgeSubAgents:
 		m.ResetSubAgents()
@@ -13515,31 +13598,33 @@ func (m *StageMutation) ResetEdge(name string) error {
 // TimelineEventMutation represents an operation that mutates the TimelineEvent nodes in the graph.
 type TimelineEventMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *string
-	sequence_number        *int
-	addsequence_number     *int
-	created_at             *time.Time
-	updated_at             *time.Time
-	event_type             *timelineevent.EventType
-	status                 *timelineevent.Status
-	content                *string
-	metadata               *map[string]interface{}
-	clearedFields          map[string]struct{}
-	session                *string
-	clearedsession         bool
-	stage                  *string
-	clearedstage           bool
-	agent_execution        *string
-	clearedagent_execution bool
-	llm_interaction        *string
-	clearedllm_interaction bool
-	mcp_interaction        *string
-	clearedmcp_interaction bool
-	done                   bool
-	oldValue               func(context.Context) (*TimelineEvent, error)
-	predicates             []predicate.TimelineEvent
+	op                      Op
+	typ                     string
+	id                      *string
+	sequence_number         *int
+	addsequence_number      *int
+	created_at              *time.Time
+	updated_at              *time.Time
+	event_type              *timelineevent.EventType
+	status                  *timelineevent.Status
+	content                 *string
+	metadata                *map[string]interface{}
+	clearedFields           map[string]struct{}
+	session                 *string
+	clearedsession          bool
+	stage                   *string
+	clearedstage            bool
+	agent_execution         *string
+	clearedagent_execution  bool
+	parent_execution        *string
+	clearedparent_execution bool
+	llm_interaction         *string
+	clearedllm_interaction  bool
+	mcp_interaction         *string
+	clearedmcp_interaction  bool
+	done                    bool
+	oldValue                func(context.Context) (*TimelineEvent, error)
+	predicates              []predicate.TimelineEvent
 }
 
 var _ ent.Mutation = (*TimelineEventMutation)(nil)
@@ -13778,6 +13863,55 @@ func (m *TimelineEventMutation) ExecutionIDCleared() bool {
 func (m *TimelineEventMutation) ResetExecutionID() {
 	m.agent_execution = nil
 	delete(m.clearedFields, timelineevent.FieldExecutionID)
+}
+
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (m *TimelineEventMutation) SetParentExecutionID(s string) {
+	m.parent_execution = &s
+}
+
+// ParentExecutionID returns the value of the "parent_execution_id" field in the mutation.
+func (m *TimelineEventMutation) ParentExecutionID() (r string, exists bool) {
+	v := m.parent_execution
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentExecutionID returns the old "parent_execution_id" field's value of the TimelineEvent entity.
+// If the TimelineEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TimelineEventMutation) OldParentExecutionID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentExecutionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentExecutionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentExecutionID: %w", err)
+	}
+	return oldValue.ParentExecutionID, nil
+}
+
+// ClearParentExecutionID clears the value of the "parent_execution_id" field.
+func (m *TimelineEventMutation) ClearParentExecutionID() {
+	m.parent_execution = nil
+	m.clearedFields[timelineevent.FieldParentExecutionID] = struct{}{}
+}
+
+// ParentExecutionIDCleared returns if the "parent_execution_id" field was cleared in this mutation.
+func (m *TimelineEventMutation) ParentExecutionIDCleared() bool {
+	_, ok := m.clearedFields[timelineevent.FieldParentExecutionID]
+	return ok
+}
+
+// ResetParentExecutionID resets all changes to the "parent_execution_id" field.
+func (m *TimelineEventMutation) ResetParentExecutionID() {
+	m.parent_execution = nil
+	delete(m.clearedFields, timelineevent.FieldParentExecutionID)
 }
 
 // SetSequenceNumber sets the "sequence_number" field.
@@ -14257,6 +14391,33 @@ func (m *TimelineEventMutation) ResetAgentExecution() {
 	m.clearedagent_execution = false
 }
 
+// ClearParentExecution clears the "parent_execution" edge to the AgentExecution entity.
+func (m *TimelineEventMutation) ClearParentExecution() {
+	m.clearedparent_execution = true
+	m.clearedFields[timelineevent.FieldParentExecutionID] = struct{}{}
+}
+
+// ParentExecutionCleared reports if the "parent_execution" edge to the AgentExecution entity was cleared.
+func (m *TimelineEventMutation) ParentExecutionCleared() bool {
+	return m.ParentExecutionIDCleared() || m.clearedparent_execution
+}
+
+// ParentExecutionIDs returns the "parent_execution" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ParentExecutionID instead. It exists only for internal usage by the builders.
+func (m *TimelineEventMutation) ParentExecutionIDs() (ids []string) {
+	if id := m.parent_execution; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetParentExecution resets all changes to the "parent_execution" edge.
+func (m *TimelineEventMutation) ResetParentExecution() {
+	m.parent_execution = nil
+	m.clearedparent_execution = false
+}
+
 // ClearLlmInteraction clears the "llm_interaction" edge to the LLMInteraction entity.
 func (m *TimelineEventMutation) ClearLlmInteraction() {
 	m.clearedllm_interaction = true
@@ -14345,7 +14506,7 @@ func (m *TimelineEventMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TimelineEventMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.session != nil {
 		fields = append(fields, timelineevent.FieldSessionID)
 	}
@@ -14354,6 +14515,9 @@ func (m *TimelineEventMutation) Fields() []string {
 	}
 	if m.agent_execution != nil {
 		fields = append(fields, timelineevent.FieldExecutionID)
+	}
+	if m.parent_execution != nil {
+		fields = append(fields, timelineevent.FieldParentExecutionID)
 	}
 	if m.sequence_number != nil {
 		fields = append(fields, timelineevent.FieldSequenceNumber)
@@ -14396,6 +14560,8 @@ func (m *TimelineEventMutation) Field(name string) (ent.Value, bool) {
 		return m.StageID()
 	case timelineevent.FieldExecutionID:
 		return m.ExecutionID()
+	case timelineevent.FieldParentExecutionID:
+		return m.ParentExecutionID()
 	case timelineevent.FieldSequenceNumber:
 		return m.SequenceNumber()
 	case timelineevent.FieldCreatedAt:
@@ -14429,6 +14595,8 @@ func (m *TimelineEventMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldStageID(ctx)
 	case timelineevent.FieldExecutionID:
 		return m.OldExecutionID(ctx)
+	case timelineevent.FieldParentExecutionID:
+		return m.OldParentExecutionID(ctx)
 	case timelineevent.FieldSequenceNumber:
 		return m.OldSequenceNumber(ctx)
 	case timelineevent.FieldCreatedAt:
@@ -14476,6 +14644,13 @@ func (m *TimelineEventMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExecutionID(v)
+		return nil
+	case timelineevent.FieldParentExecutionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentExecutionID(v)
 		return nil
 	case timelineevent.FieldSequenceNumber:
 		v, ok := value.(int)
@@ -14591,6 +14766,9 @@ func (m *TimelineEventMutation) ClearedFields() []string {
 	if m.FieldCleared(timelineevent.FieldExecutionID) {
 		fields = append(fields, timelineevent.FieldExecutionID)
 	}
+	if m.FieldCleared(timelineevent.FieldParentExecutionID) {
+		fields = append(fields, timelineevent.FieldParentExecutionID)
+	}
 	if m.FieldCleared(timelineevent.FieldMetadata) {
 		fields = append(fields, timelineevent.FieldMetadata)
 	}
@@ -14620,6 +14798,9 @@ func (m *TimelineEventMutation) ClearField(name string) error {
 	case timelineevent.FieldExecutionID:
 		m.ClearExecutionID()
 		return nil
+	case timelineevent.FieldParentExecutionID:
+		m.ClearParentExecutionID()
+		return nil
 	case timelineevent.FieldMetadata:
 		m.ClearMetadata()
 		return nil
@@ -14645,6 +14826,9 @@ func (m *TimelineEventMutation) ResetField(name string) error {
 		return nil
 	case timelineevent.FieldExecutionID:
 		m.ResetExecutionID()
+		return nil
+	case timelineevent.FieldParentExecutionID:
+		m.ResetParentExecutionID()
 		return nil
 	case timelineevent.FieldSequenceNumber:
 		m.ResetSequenceNumber()
@@ -14679,7 +14863,7 @@ func (m *TimelineEventMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *TimelineEventMutation) AddedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 6)
 	if m.session != nil {
 		edges = append(edges, timelineevent.EdgeSession)
 	}
@@ -14688,6 +14872,9 @@ func (m *TimelineEventMutation) AddedEdges() []string {
 	}
 	if m.agent_execution != nil {
 		edges = append(edges, timelineevent.EdgeAgentExecution)
+	}
+	if m.parent_execution != nil {
+		edges = append(edges, timelineevent.EdgeParentExecution)
 	}
 	if m.llm_interaction != nil {
 		edges = append(edges, timelineevent.EdgeLlmInteraction)
@@ -14714,6 +14901,10 @@ func (m *TimelineEventMutation) AddedIDs(name string) []ent.Value {
 		if id := m.agent_execution; id != nil {
 			return []ent.Value{*id}
 		}
+	case timelineevent.EdgeParentExecution:
+		if id := m.parent_execution; id != nil {
+			return []ent.Value{*id}
+		}
 	case timelineevent.EdgeLlmInteraction:
 		if id := m.llm_interaction; id != nil {
 			return []ent.Value{*id}
@@ -14728,7 +14919,7 @@ func (m *TimelineEventMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *TimelineEventMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 6)
 	return edges
 }
 
@@ -14740,7 +14931,7 @@ func (m *TimelineEventMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *TimelineEventMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 6)
 	if m.clearedsession {
 		edges = append(edges, timelineevent.EdgeSession)
 	}
@@ -14749,6 +14940,9 @@ func (m *TimelineEventMutation) ClearedEdges() []string {
 	}
 	if m.clearedagent_execution {
 		edges = append(edges, timelineevent.EdgeAgentExecution)
+	}
+	if m.clearedparent_execution {
+		edges = append(edges, timelineevent.EdgeParentExecution)
 	}
 	if m.clearedllm_interaction {
 		edges = append(edges, timelineevent.EdgeLlmInteraction)
@@ -14769,6 +14963,8 @@ func (m *TimelineEventMutation) EdgeCleared(name string) bool {
 		return m.clearedstage
 	case timelineevent.EdgeAgentExecution:
 		return m.clearedagent_execution
+	case timelineevent.EdgeParentExecution:
+		return m.clearedparent_execution
 	case timelineevent.EdgeLlmInteraction:
 		return m.clearedllm_interaction
 	case timelineevent.EdgeMcpInteraction:
@@ -14789,6 +14985,9 @@ func (m *TimelineEventMutation) ClearEdge(name string) error {
 		return nil
 	case timelineevent.EdgeAgentExecution:
 		m.ClearAgentExecution()
+		return nil
+	case timelineevent.EdgeParentExecution:
+		m.ClearParentExecution()
 		return nil
 	case timelineevent.EdgeLlmInteraction:
 		m.ClearLlmInteraction()
@@ -14812,6 +15011,9 @@ func (m *TimelineEventMutation) ResetEdge(name string) error {
 		return nil
 	case timelineevent.EdgeAgentExecution:
 		m.ResetAgentExecution()
+		return nil
+	case timelineevent.EdgeParentExecution:
+		m.ResetParentExecution()
 		return nil
 	case timelineevent.EdgeLlmInteraction:
 		m.ResetLlmInteraction()

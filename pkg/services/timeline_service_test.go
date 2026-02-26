@@ -154,6 +154,41 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		assert.Nil(t, event.StageID, "session-level event should have nil stage_id")
 		assert.Nil(t, event.ExecutionID, "session-level event should have nil execution_id")
 	})
+
+	t.Run("creates sub-agent event with parent_execution_id", func(t *testing.T) {
+		req := models.CreateTimelineEventRequest{
+			SessionID:         session.ID,
+			StageID:           &stg.ID,
+			ExecutionID:       &exec.ID,
+			ParentExecutionID: &exec.ID, // self-referencing for test simplicity
+			SequenceNumber:    200,
+			EventType:         timelineevent.EventTypeTaskAssigned,
+			Status:            timelineevent.StatusCompleted,
+			Content:           "Analyze the logs",
+		}
+
+		event, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, event.ParentExecutionID)
+		assert.Equal(t, exec.ID, *event.ParentExecutionID)
+		assert.Equal(t, "Analyze the logs", event.Content)
+	})
+
+	t.Run("creates regular event with nil parent_execution_id", func(t *testing.T) {
+		req := models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			StageID:        &stg.ID,
+			ExecutionID:    &exec.ID,
+			SequenceNumber: 201,
+			EventType:      timelineevent.EventTypeLlmResponse,
+			Status:         timelineevent.StatusCompleted,
+			Content:        "Regular agent response",
+		}
+
+		event, err := timelineService.CreateTimelineEvent(ctx, req)
+		require.NoError(t, err)
+		assert.Nil(t, event.ParentExecutionID, "regular event should have nil parent_execution_id")
+	})
 }
 
 func TestTimelineService_UpdateTimelineEvent(t *testing.T) {

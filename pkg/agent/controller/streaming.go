@@ -175,6 +175,8 @@ func callLLMWithStreaming(
 	// Track streaming timeline events
 	var thinkingEventID, textEventID string
 	var thinkingCreateFailed, textCreateFailed bool
+	pid := parentExecID(execCtx)
+	pidPtr := parentExecIDPtr(execCtx)
 
 	callback := func(chunkType string, delta string) {
 		if delta == "" {
@@ -191,13 +193,14 @@ func callLLMWithStreaming(
 				*eventSeq++
 				thinkingMeta := mergeMetadata(map[string]interface{}{"source": "native"}, extra)
 				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-					SessionID:      execCtx.SessionID,
-					StageID:        &execCtx.StageID,
-					ExecutionID:    &execCtx.ExecutionID,
-					SequenceNumber: *eventSeq,
-					EventType:      timelineevent.EventTypeLlmThinking,
-					Content:        "",
-					Metadata:       thinkingMeta,
+					SessionID:         execCtx.SessionID,
+					StageID:           &execCtx.StageID,
+					ExecutionID:       &execCtx.ExecutionID,
+					ParentExecutionID: pidPtr,
+					SequenceNumber:    *eventSeq,
+					EventType:         timelineevent.EventTypeLlmThinking,
+					Content:           "",
+					Metadata:          thinkingMeta,
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming thinking event", "session_id", execCtx.SessionID, "error", createErr)
@@ -211,14 +214,15 @@ func callLLMWithStreaming(
 						SessionID: execCtx.SessionID,
 						Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
 					},
-					EventID:        thinkingEventID,
-					StageID:        execCtx.StageID,
-					ExecutionID:    execCtx.ExecutionID,
-					EventType:      timelineevent.EventTypeLlmThinking,
-					Status:         timelineevent.StatusStreaming,
-					Content:        "",
-					Metadata:       thinkingMeta,
-					SequenceNumber: *eventSeq,
+					EventID:           thinkingEventID,
+					StageID:           execCtx.StageID,
+					ExecutionID:       execCtx.ExecutionID,
+					ParentExecutionID: pid,
+					EventType:         timelineevent.EventTypeLlmThinking,
+					Status:            timelineevent.StatusStreaming,
+					Content:           "",
+					Metadata:          thinkingMeta,
+					SequenceNumber:    *eventSeq,
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming thinking created",
 						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -232,8 +236,9 @@ func callLLMWithStreaming(
 					SessionID: execCtx.SessionID,
 					Timestamp: time.Now().Format(time.RFC3339Nano),
 				},
-				EventID: thinkingEventID,
-				Delta:   delta,
+				EventID:           thinkingEventID,
+				ParentExecutionID: pid,
+				Delta:             delta,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish thinking stream chunk",
 					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -246,13 +251,14 @@ func callLLMWithStreaming(
 			if textEventID == "" {
 				*eventSeq++
 				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-					SessionID:      execCtx.SessionID,
-					StageID:        &execCtx.StageID,
-					ExecutionID:    &execCtx.ExecutionID,
-					SequenceNumber: *eventSeq,
-					EventType:      timelineevent.EventTypeLlmResponse,
-					Content:        "",
-					Metadata:       extra, // nil when not forced conclusion
+					SessionID:         execCtx.SessionID,
+					StageID:           &execCtx.StageID,
+					ExecutionID:       &execCtx.ExecutionID,
+					ParentExecutionID: pidPtr,
+					SequenceNumber:    *eventSeq,
+					EventType:         timelineevent.EventTypeLlmResponse,
+					Content:           "",
+					Metadata:          extra, // nil when not forced conclusion
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming text event", "session_id", execCtx.SessionID, "error", createErr)
@@ -266,14 +272,15 @@ func callLLMWithStreaming(
 						SessionID: execCtx.SessionID,
 						Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
 					},
-					EventID:        textEventID,
-					StageID:        execCtx.StageID,
-					ExecutionID:    execCtx.ExecutionID,
-					EventType:      timelineevent.EventTypeLlmResponse,
-					Status:         timelineevent.StatusStreaming,
-					Content:        "",
-					Metadata:       extra, // nil when not forced conclusion
-					SequenceNumber: *eventSeq,
+					EventID:           textEventID,
+					StageID:           execCtx.StageID,
+					ExecutionID:       execCtx.ExecutionID,
+					ParentExecutionID: pid,
+					EventType:         timelineevent.EventTypeLlmResponse,
+					Status:            timelineevent.StatusStreaming,
+					Content:           "",
+					Metadata:          extra, // nil when not forced conclusion
+					SequenceNumber:    *eventSeq,
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming text created",
 						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -286,8 +293,9 @@ func callLLMWithStreaming(
 					SessionID: execCtx.SessionID,
 					Timestamp: time.Now().Format(time.RFC3339Nano),
 				},
-				EventID: textEventID,
-				Delta:   delta,
+				EventID:           textEventID,
+				ParentExecutionID: pid,
+				Delta:             delta,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish text stream chunk",
 					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)

@@ -191,6 +191,7 @@ func callSummarizationLLMWithStreaming(
 	// Track streaming timeline event
 	var summaryEventID string
 	var eventCreateFailed bool
+	pid := parentExecID(execCtx)
 
 	metadata := map[string]interface{}{
 		"server_name":     serverID,
@@ -214,13 +215,14 @@ func callSummarizationLLMWithStreaming(
 			// First text chunk — create streaming mcp_tool_summary TimelineEvent
 			*eventSeq++
 			event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-				SessionID:      execCtx.SessionID,
-				StageID:        &execCtx.StageID,
-				ExecutionID:    &execCtx.ExecutionID,
-				SequenceNumber: *eventSeq,
-				EventType:      timelineevent.EventTypeMcpToolSummary,
-				Content:        "",
-				Metadata:       metadata,
+				SessionID:         execCtx.SessionID,
+				StageID:           &execCtx.StageID,
+				ExecutionID:       &execCtx.ExecutionID,
+				ParentExecutionID: parentExecIDPtr(execCtx),
+				SequenceNumber:    *eventSeq,
+				EventType:         timelineevent.EventTypeMcpToolSummary,
+				Content:           "",
+				Metadata:          metadata,
 			})
 			if createErr != nil {
 				slog.Warn("Failed to create streaming summary event", "session_id", execCtx.SessionID, "error", createErr)
@@ -234,14 +236,15 @@ func callSummarizationLLMWithStreaming(
 					SessionID: execCtx.SessionID,
 					Timestamp: event.CreatedAt.Format(time.RFC3339Nano),
 				},
-				EventID:        summaryEventID,
-				StageID:        execCtx.StageID,
-				ExecutionID:    execCtx.ExecutionID,
-				EventType:      timelineevent.EventTypeMcpToolSummary,
-				Status:         timelineevent.StatusStreaming,
-				Content:        "",
-				Metadata:       metadata,
-				SequenceNumber: *eventSeq,
+				EventID:           summaryEventID,
+				StageID:           execCtx.StageID,
+				ExecutionID:       execCtx.ExecutionID,
+				ParentExecutionID: pid,
+				EventType:         timelineevent.EventTypeMcpToolSummary,
+				Status:            timelineevent.StatusStreaming,
+				Content:           "",
+				Metadata:          metadata,
+				SequenceNumber:    *eventSeq,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish streaming summary created",
 					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -255,8 +258,9 @@ func callSummarizationLLMWithStreaming(
 				SessionID: execCtx.SessionID,
 				Timestamp: time.Now().Format(time.RFC3339Nano),
 			},
-			EventID: summaryEventID,
-			Delta:   delta,
+			EventID:           summaryEventID,
+			ParentExecutionID: pid,
+			Delta:             delta,
 		}); pubErr != nil {
 			slog.Warn("Failed to publish summary stream chunk",
 				"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
@@ -278,10 +282,11 @@ func callSummarizationLLMWithStreaming(
 					SessionID: execCtx.SessionID,
 					Timestamp: time.Now().Format(time.RFC3339Nano),
 				},
-				EventID:   summaryEventID,
-				EventType: timelineevent.EventTypeMcpToolSummary,
-				Content:   failContent,
-				Status:    timelineevent.StatusFailed,
+				EventID:           summaryEventID,
+				ParentExecutionID: pid,
+				EventType:         timelineevent.EventTypeMcpToolSummary,
+				Content:           failContent,
+				Status:            timelineevent.StatusFailed,
 			}); pubErr != nil {
 				slog.Warn("Failed to publish summary failure",
 					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)

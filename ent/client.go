@@ -493,6 +493,22 @@ func (c *AgentExecutionClient) QueryMcpInteractions(_m *AgentExecution) *MCPInte
 	return query
 }
 
+// QuerySubAgentTimelineEvents queries the sub_agent_timeline_events edge of a AgentExecution.
+func (c *AgentExecutionClient) QuerySubAgentTimelineEvents(_m *AgentExecution) *TimelineEventQuery {
+	query := (&TimelineEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, id),
+			sqlgraph.To(timelineevent.Table, timelineevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.SubAgentTimelineEventsTable, agentexecution.SubAgentTimelineEventsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QuerySubAgents queries the sub_agents edge of a AgentExecution.
 func (c *AgentExecutionClient) QuerySubAgents(_m *AgentExecution) *AgentExecutionQuery {
 	query := (&AgentExecutionClient{config: c.config}).Query()
@@ -2488,6 +2504,22 @@ func (c *TimelineEventClient) QueryAgentExecution(_m *TimelineEvent) *AgentExecu
 			sqlgraph.From(timelineevent.Table, timelineevent.FieldID, id),
 			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, timelineevent.AgentExecutionTable, timelineevent.AgentExecutionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryParentExecution queries the parent_execution edge of a TimelineEvent.
+func (c *TimelineEventClient) QueryParentExecution(_m *TimelineEvent) *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(timelineevent.Table, timelineevent.FieldID, id),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, timelineevent.ParentExecutionTable, timelineevent.ParentExecutionColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
