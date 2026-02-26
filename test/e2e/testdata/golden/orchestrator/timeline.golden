@@ -70,7 +70,7 @@
     "metadata": {
       "arguments": "{\"name\":\"LogAnalyzer\",\"task\":\"Find all error patterns in the last 30 minutes\"}",
       "is_error": false,
-      "server_name": "",
+      "server_name": "orchestrator",
       "tool_name": "dispatch_agent"
     },
     "sequence": 2,

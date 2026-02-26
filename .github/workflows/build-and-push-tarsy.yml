@@ -30,8 +30,13 @@ jobs:
 
       - name: Set version SHAs
         run: |
-          echo "COMMIT_SHORT_SHA=$(git rev-parse --short ${GITHUB_SHA})" >> ${GITHUB_ENV}
-          echo "DASHBOARD_SHORT_SHA=$(git log -1 --format=%h -- web/dashboard/)" >> ${GITHUB_ENV}
+          COMMIT_SHORT_SHA="$(git rev-parse --short "${GITHUB_SHA}")"
+          DASHBOARD_SHORT_SHA="$(git log -1 --format=%h -- web/dashboard/)"
+          if [ -z "${DASHBOARD_SHORT_SHA}" ]; then
+            DASHBOARD_SHORT_SHA="${COMMIT_SHORT_SHA}"
+          fi
+          echo "COMMIT_SHORT_SHA=${COMMIT_SHORT_SHA}" >> "${GITHUB_ENV}"
+          echo "DASHBOARD_SHORT_SHA=${DASHBOARD_SHORT_SHA}" >> "${GITHUB_ENV}"
 
       - name: Build image
         id: build-image

@@ -3,7 +3,7 @@
   "duration_ms": {DURATION_MS},
   "id": "{INTERACTION_ID_4}",
   "interaction_type": "tool_call",
-  "server_name": "",
+  "server_name": "orchestrator",
   "tool_name": "dispatch_agent"
 }
 

@@ -81,6 +81,11 @@ type subAgentExecution struct {
 	done        chan struct{}
 }
 
+// OrchestrationServerName is the synthetic server_name recorded in MCP
+// interaction records for orchestration tools (dispatch_agent, etc.).
+// Dashboards can use this to distinguish orchestration from real MCP calls.
+const OrchestrationServerName = "orchestrator"
+
 // Orchestration tool names. Plain names (no dots) — naturally separated
 // from MCP tools which use server.tool format.
 const (
@@ -88,6 +93,11 @@ const (
 	ToolCancelAgent   = "cancel_agent"
 	ToolListAgents    = "list_agents"
 )
+
+// IsOrchestrationTool reports whether name is a known orchestration tool.
+func IsOrchestrationTool(name string) bool {
+	return orchestrationToolNames[name]
+}
 
 // orchestrationTools defines the tool set exposed to the orchestrator LLM.
 var orchestrationTools = []agent.ToolDefinition{
