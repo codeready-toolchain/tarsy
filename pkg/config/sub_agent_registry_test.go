@@ -158,6 +158,35 @@ func TestBuildSubAgentRegistry_WithBuiltinAgents(t *testing.T) {
 	}
 }
 
+func TestSubAgentRegistry_Get(t *testing.T) {
+	agents := map[string]*AgentConfig{
+		"LogAnalyzer":   {Description: "Analyzes logs", MCPServers: []string{"loki"}},
+		"MetricChecker": {Description: "Checks metrics"},
+	}
+	registry := BuildSubAgentRegistry(agents)
+
+	t.Run("found", func(t *testing.T) {
+		entry, ok := registry.Get("LogAnalyzer")
+		require.True(t, ok)
+		assert.Equal(t, "LogAnalyzer", entry.Name)
+		assert.Equal(t, "Analyzes logs", entry.Description)
+		assert.Equal(t, []string{"loki"}, entry.MCPServers)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		_, ok := registry.Get("NonExistent")
+		assert.False(t, ok)
+	})
+
+	t.Run("returns defensive copy", func(t *testing.T) {
+		entry, ok := registry.Get("LogAnalyzer")
+		require.True(t, ok)
+		entry.MCPServers[0] = "mutated"
+		original, _ := registry.Get("LogAnalyzer")
+		assert.Equal(t, "loki", original.MCPServers[0])
+	})
+}
+
 func TestSubAgentRegistry_Filter(t *testing.T) {
 	agents := map[string]*AgentConfig{
 		"A": {Description: "Agent A"},
