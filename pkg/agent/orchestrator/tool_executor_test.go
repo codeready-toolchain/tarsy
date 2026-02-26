@@ -257,8 +257,11 @@ func TestCompositeToolExecutor_Close_NilMCPExecutor(t *testing.T) {
 }
 
 func TestCompositeToolExecutor_Close_Timeout(t *testing.T) {
+	origTimeout := closeTimeout
+	closeTimeout = 100 * time.Millisecond
+	defer func() { closeTimeout = origTimeout }()
+
 	runner := newMinimalRunner(5)
-	// Create an execution that never completes
 	runner.mu.Lock()
 	runner.executions["stuck"] = &subAgentExecution{
 		executionID: "stuck",
@@ -271,11 +274,6 @@ func TestCompositeToolExecutor_Close_Timeout(t *testing.T) {
 	registry := config.BuildSubAgentRegistry(nil)
 	c := NewCompositeToolExecutor(nil, runner, registry)
 
-	// Override the close timeout to be short for testing purposes.
-	// Close() uses a hard-coded 30s timeout internally, so we test that
-	// it at least doesn't panic and returns within a reasonable time.
-	// For a more thorough test, we'd need to inject the timeout, but
-	// that's not worth the API complexity.
 	done := make(chan struct{})
 	go func() {
 		_ = c.Close()
@@ -284,8 +282,7 @@ func TestCompositeToolExecutor_Close_Timeout(t *testing.T) {
 
 	select {
 	case <-done:
-		// Close returned (may have timed out internally, that's fine)
-	case <-time.After(35 * time.Second):
-		t.Fatal("Close did not return within 35 seconds")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not return within 2 seconds")
 	}
 }

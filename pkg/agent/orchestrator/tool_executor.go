@@ -14,6 +14,10 @@ import (
 // Compile-time check that CompositeToolExecutor implements agent.ToolExecutor.
 var _ agent.ToolExecutor = (*CompositeToolExecutor)(nil)
 
+// closeTimeout is the maximum time Close() waits for sub-agent goroutines
+// to finish. Package-level var to allow tests to use a short duration.
+var closeTimeout = 30 * time.Second
+
 // CompositeToolExecutor wraps an MCP tool executor and adds orchestration tools
 // (dispatch_agent, cancel_agent, list_agents). It routes calls by name: known
 // orchestration tool names go to the SubAgentRunner; everything else goes to
@@ -79,7 +83,7 @@ func (c *CompositeToolExecutor) Execute(ctx context.Context, call agent.ToolCall
 func (c *CompositeToolExecutor) Close() error {
 	c.runner.CancelAll()
 
-	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	waitCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
 	c.runner.WaitAll(waitCtx)
 

@@ -77,7 +77,6 @@ type subAgentExecution struct {
 	agentName   string
 	task        string
 	status      agent.ExecutionStatus
-	result      *agent.ExecutionResult
 	cancel      func()
 	done        chan struct{}
 }

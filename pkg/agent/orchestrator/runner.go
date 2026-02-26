@@ -20,6 +20,9 @@ import (
 type SubAgentRunner struct {
 	mu         sync.Mutex
 	executions map[string]*subAgentExecution
+	// Slots reserved by in-flight Dispatch calls that passed the concurrency
+	// check but haven't registered in executions yet. Protected by mu.
+	reserved int
 
 	// Buffered channel for completed sub-agent results.
 	// Capacity = MaxConcurrentAgents to prevent goroutine blocking.
@@ -76,6 +79,8 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		return "", fmt.Errorf("%w: %s", ErrAgentNotFound, name)
 	}
 
+	// Reserve a slot atomically with the concurrency check to prevent TOCTOU
+	// races where concurrent Dispatch calls both pass the check.
 	r.mu.Lock()
 	activeCount := 0
 	for _, exec := range r.executions {
@@ -83,11 +88,23 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 			activeCount++
 		}
 	}
-	if activeCount >= r.guardrails.MaxConcurrentAgents {
+	if activeCount+r.reserved >= r.guardrails.MaxConcurrentAgents {
 		r.mu.Unlock()
 		return "", fmt.Errorf("%w: limit is %d", ErrMaxConcurrentAgents, r.guardrails.MaxConcurrentAgents)
 	}
+	r.reserved++
 	r.mu.Unlock()
+
+	// Release the reservation on any error path. On success, it's released
+	// when the execution is registered in r.executions.
+	releaseReservation := true
+	defer func() {
+		if releaseReservation {
+			r.mu.Lock()
+			r.reserved--
+			r.mu.Unlock()
+		}
+	}()
 
 	agentIndex := int(atomic.AddInt32(&r.nextSubAgentIndex, 1))
 
@@ -142,8 +159,12 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		done:        make(chan struct{}),
 	}
 
+	// Register the execution and release the reservation in a single lock hold
+	// so concurrent Dispatch calls see a consistent count.
 	r.mu.Lock()
 	r.executions[executionID] = subExec
+	r.reserved--
+	releaseReservation = false
 	r.mu.Unlock()
 
 	atomic.AddInt32(&r.pending, 1)
