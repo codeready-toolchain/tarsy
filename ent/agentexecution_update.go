@@ -203,6 +203,46 @@ func (_u *AgentExecutionUpdate) ClearLlmProvider() *AgentExecutionUpdate {
 	return _u
 }
 
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (_u *AgentExecutionUpdate) SetParentExecutionID(v string) *AgentExecutionUpdate {
+	_u.mutation.SetParentExecutionID(v)
+	return _u
+}
+
+// SetNillableParentExecutionID sets the "parent_execution_id" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableParentExecutionID(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetParentExecutionID(*v)
+	}
+	return _u
+}
+
+// ClearParentExecutionID clears the value of the "parent_execution_id" field.
+func (_u *AgentExecutionUpdate) ClearParentExecutionID() *AgentExecutionUpdate {
+	_u.mutation.ClearParentExecutionID()
+	return _u
+}
+
+// SetTask sets the "task" field.
+func (_u *AgentExecutionUpdate) SetTask(v string) *AgentExecutionUpdate {
+	_u.mutation.SetTask(v)
+	return _u
+}
+
+// SetNillableTask sets the "task" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableTask(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetTask(*v)
+	}
+	return _u
+}
+
+// ClearTask clears the value of the "task" field.
+func (_u *AgentExecutionUpdate) ClearTask() *AgentExecutionUpdate {
+	_u.mutation.ClearTask()
+	return _u
+}
+
 // AddTimelineEventIDs adds the "timeline_events" edge to the TimelineEvent entity by IDs.
 func (_u *AgentExecutionUpdate) AddTimelineEventIDs(ids ...string) *AgentExecutionUpdate {
 	_u.mutation.AddTimelineEventIDs(ids...)
@@ -261,6 +301,40 @@ func (_u *AgentExecutionUpdate) AddMcpInteractions(v ...*MCPInteraction) *AgentE
 		ids[i] = v[i].ID
 	}
 	return _u.AddMcpInteractionIDs(ids...)
+}
+
+// AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
+func (_u *AgentExecutionUpdate) AddSubAgentIDs(ids ...string) *AgentExecutionUpdate {
+	_u.mutation.AddSubAgentIDs(ids...)
+	return _u
+}
+
+// AddSubAgents adds the "sub_agents" edges to the AgentExecution entity.
+func (_u *AgentExecutionUpdate) AddSubAgents(v ...*AgentExecution) *AgentExecutionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSubAgentIDs(ids...)
+}
+
+// SetParentID sets the "parent" edge to the AgentExecution entity by ID.
+func (_u *AgentExecutionUpdate) SetParentID(id string) *AgentExecutionUpdate {
+	_u.mutation.SetParentID(id)
+	return _u
+}
+
+// SetNillableParentID sets the "parent" edge to the AgentExecution entity by ID if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableParentID(id *string) *AgentExecutionUpdate {
+	if id != nil {
+		_u = _u.SetParentID(*id)
+	}
+	return _u
+}
+
+// SetParent sets the "parent" edge to the AgentExecution entity.
+func (_u *AgentExecutionUpdate) SetParent(v *AgentExecution) *AgentExecutionUpdate {
+	return _u.SetParentID(v.ID)
 }
 
 // Mutation returns the AgentExecutionMutation object of the builder.
@@ -350,6 +424,33 @@ func (_u *AgentExecutionUpdate) RemoveMcpInteractions(v ...*MCPInteraction) *Age
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMcpInteractionIDs(ids...)
+}
+
+// ClearSubAgents clears all "sub_agents" edges to the AgentExecution entity.
+func (_u *AgentExecutionUpdate) ClearSubAgents() *AgentExecutionUpdate {
+	_u.mutation.ClearSubAgents()
+	return _u
+}
+
+// RemoveSubAgentIDs removes the "sub_agents" edge to AgentExecution entities by IDs.
+func (_u *AgentExecutionUpdate) RemoveSubAgentIDs(ids ...string) *AgentExecutionUpdate {
+	_u.mutation.RemoveSubAgentIDs(ids...)
+	return _u
+}
+
+// RemoveSubAgents removes "sub_agents" edges to AgentExecution entities.
+func (_u *AgentExecutionUpdate) RemoveSubAgents(v ...*AgentExecution) *AgentExecutionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSubAgentIDs(ids...)
+}
+
+// ClearParent clears the "parent" edge to the AgentExecution entity.
+func (_u *AgentExecutionUpdate) ClearParent() *AgentExecutionUpdate {
+	_u.mutation.ClearParent()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -460,6 +561,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.Task(); ok {
+		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
+	}
+	if _u.mutation.TaskCleared() {
+		_spec.ClearField(agentexecution.FieldTask, field.TypeString)
 	}
 	if _u.mutation.TimelineEventsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -634,6 +741,80 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(mcpinteraction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SubAgentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSubAgentsIDs(); len(nodes) > 0 && !_u.mutation.SubAgentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SubAgentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ParentCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   agentexecution.ParentTable,
+			Columns: []string{agentexecution.ParentColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ParentIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   agentexecution.ParentTable,
+			Columns: []string{agentexecution.ParentColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -833,6 +1014,46 @@ func (_u *AgentExecutionUpdateOne) ClearLlmProvider() *AgentExecutionUpdateOne {
 	return _u
 }
 
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (_u *AgentExecutionUpdateOne) SetParentExecutionID(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetParentExecutionID(v)
+	return _u
+}
+
+// SetNillableParentExecutionID sets the "parent_execution_id" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableParentExecutionID(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetParentExecutionID(*v)
+	}
+	return _u
+}
+
+// ClearParentExecutionID clears the value of the "parent_execution_id" field.
+func (_u *AgentExecutionUpdateOne) ClearParentExecutionID() *AgentExecutionUpdateOne {
+	_u.mutation.ClearParentExecutionID()
+	return _u
+}
+
+// SetTask sets the "task" field.
+func (_u *AgentExecutionUpdateOne) SetTask(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetTask(v)
+	return _u
+}
+
+// SetNillableTask sets the "task" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableTask(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetTask(*v)
+	}
+	return _u
+}
+
+// ClearTask clears the value of the "task" field.
+func (_u *AgentExecutionUpdateOne) ClearTask() *AgentExecutionUpdateOne {
+	_u.mutation.ClearTask()
+	return _u
+}
+
 // AddTimelineEventIDs adds the "timeline_events" edge to the TimelineEvent entity by IDs.
 func (_u *AgentExecutionUpdateOne) AddTimelineEventIDs(ids ...string) *AgentExecutionUpdateOne {
 	_u.mutation.AddTimelineEventIDs(ids...)
@@ -891,6 +1112,40 @@ func (_u *AgentExecutionUpdateOne) AddMcpInteractions(v ...*MCPInteraction) *Age
 		ids[i] = v[i].ID
 	}
 	return _u.AddMcpInteractionIDs(ids...)
+}
+
+// AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
+func (_u *AgentExecutionUpdateOne) AddSubAgentIDs(ids ...string) *AgentExecutionUpdateOne {
+	_u.mutation.AddSubAgentIDs(ids...)
+	return _u
+}
+
+// AddSubAgents adds the "sub_agents" edges to the AgentExecution entity.
+func (_u *AgentExecutionUpdateOne) AddSubAgents(v ...*AgentExecution) *AgentExecutionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSubAgentIDs(ids...)
+}
+
+// SetParentID sets the "parent" edge to the AgentExecution entity by ID.
+func (_u *AgentExecutionUpdateOne) SetParentID(id string) *AgentExecutionUpdateOne {
+	_u.mutation.SetParentID(id)
+	return _u
+}
+
+// SetNillableParentID sets the "parent" edge to the AgentExecution entity by ID if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableParentID(id *string) *AgentExecutionUpdateOne {
+	if id != nil {
+		_u = _u.SetParentID(*id)
+	}
+	return _u
+}
+
+// SetParent sets the "parent" edge to the AgentExecution entity.
+func (_u *AgentExecutionUpdateOne) SetParent(v *AgentExecution) *AgentExecutionUpdateOne {
+	return _u.SetParentID(v.ID)
 }
 
 // Mutation returns the AgentExecutionMutation object of the builder.
@@ -980,6 +1235,33 @@ func (_u *AgentExecutionUpdateOne) RemoveMcpInteractions(v ...*MCPInteraction) *
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMcpInteractionIDs(ids...)
+}
+
+// ClearSubAgents clears all "sub_agents" edges to the AgentExecution entity.
+func (_u *AgentExecutionUpdateOne) ClearSubAgents() *AgentExecutionUpdateOne {
+	_u.mutation.ClearSubAgents()
+	return _u
+}
+
+// RemoveSubAgentIDs removes the "sub_agents" edge to AgentExecution entities by IDs.
+func (_u *AgentExecutionUpdateOne) RemoveSubAgentIDs(ids ...string) *AgentExecutionUpdateOne {
+	_u.mutation.RemoveSubAgentIDs(ids...)
+	return _u
+}
+
+// RemoveSubAgents removes "sub_agents" edges to AgentExecution entities.
+func (_u *AgentExecutionUpdateOne) RemoveSubAgents(v ...*AgentExecution) *AgentExecutionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSubAgentIDs(ids...)
+}
+
+// ClearParent clears the "parent" edge to the AgentExecution entity.
+func (_u *AgentExecutionUpdateOne) ClearParent() *AgentExecutionUpdateOne {
+	_u.mutation.ClearParent()
+	return _u
 }
 
 // Where appends a list predicates to the AgentExecutionUpdate builder.
@@ -1120,6 +1402,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	}
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.Task(); ok {
+		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
+	}
+	if _u.mutation.TaskCleared() {
+		_spec.ClearField(agentexecution.FieldTask, field.TypeString)
 	}
 	if _u.mutation.TimelineEventsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1294,6 +1582,80 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(mcpinteraction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SubAgentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSubAgentsIDs(); len(nodes) > 0 && !_u.mutation.SubAgentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SubAgentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ParentCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   agentexecution.ParentTable,
+			Columns: []string{agentexecution.ParentColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ParentIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   agentexecution.ParentTable,
+			Columns: []string{agentexecution.ParentColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

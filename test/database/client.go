@@ -25,8 +25,10 @@ func NewTestClient(t *testing.T) *database.Client {
 	// Get the driver for GIN index creation
 	drv := entsql.OpenDB(dialect.Postgres, db)
 
-	// Create GIN indexes
+	// Create indexes that Ent auto-migration doesn't handle.
 	err := database.CreateGINIndexes(ctx, drv)
+	require.NoError(t, err)
+	err = database.CreatePartialUniqueIndexes(ctx, drv)
 	require.NoError(t, err)
 
 	// Wrap in our client type

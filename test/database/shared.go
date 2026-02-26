@@ -57,6 +57,8 @@ func NewSharedTestDB(t *testing.T) *SharedTestDB {
 
 	err = database.CreateGINIndexes(ctx, drv)
 	require.NoError(t, err)
+	err = database.CreatePartialUniqueIndexes(ctx, drv)
+	require.NoError(t, err)
 
 	// Close the migration client — each replica creates its own.
 	_ = entClient.Close()

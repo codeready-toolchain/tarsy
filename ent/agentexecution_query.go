@@ -36,6 +36,8 @@ type AgentExecutionQuery struct {
 	withMessages        *MessageQuery
 	withLlmInteractions *LLMInteractionQuery
 	withMcpInteractions *MCPInteractionQuery
+	withSubAgents       *AgentExecutionQuery
+	withParent          *AgentExecutionQuery
 	modifiers           []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -198,6 +200,50 @@ func (_q *AgentExecutionQuery) QueryMcpInteractions() *MCPInteractionQuery {
 			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, selector),
 			sqlgraph.To(mcpinteraction.Table, mcpinteraction.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.McpInteractionsTable, agentexecution.McpInteractionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySubAgents chains the current query on the "sub_agents" edge.
+func (_q *AgentExecutionQuery) QuerySubAgents() *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, selector),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.SubAgentsTable, agentexecution.SubAgentsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryParent chains the current query on the "parent" edge.
+func (_q *AgentExecutionQuery) QueryParent() *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, selector),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, agentexecution.ParentTable, agentexecution.ParentColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -403,6 +449,8 @@ func (_q *AgentExecutionQuery) Clone() *AgentExecutionQuery {
 		withMessages:        _q.withMessages.Clone(),
 		withLlmInteractions: _q.withLlmInteractions.Clone(),
 		withMcpInteractions: _q.withMcpInteractions.Clone(),
+		withSubAgents:       _q.withSubAgents.Clone(),
+		withParent:          _q.withParent.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -473,6 +521,28 @@ func (_q *AgentExecutionQuery) WithMcpInteractions(opts ...func(*MCPInteractionQ
 		opt(query)
 	}
 	_q.withMcpInteractions = query
+	return _q
+}
+
+// WithSubAgents tells the query-builder to eager-load the nodes that are connected to
+// the "sub_agents" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AgentExecutionQuery) WithSubAgents(opts ...func(*AgentExecutionQuery)) *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSubAgents = query
+	return _q
+}
+
+// WithParent tells the query-builder to eager-load the nodes that are connected to
+// the "parent" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AgentExecutionQuery) WithParent(opts ...func(*AgentExecutionQuery)) *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withParent = query
 	return _q
 }
 
@@ -554,13 +624,15 @@ func (_q *AgentExecutionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 	var (
 		nodes       = []*AgentExecution{}
 		_spec       = _q.querySpec()
-		loadedTypes = [6]bool{
+		loadedTypes = [8]bool{
 			_q.withStage != nil,
 			_q.withSession != nil,
 			_q.withTimelineEvents != nil,
 			_q.withMessages != nil,
 			_q.withLlmInteractions != nil,
 			_q.withMcpInteractions != nil,
+			_q.withSubAgents != nil,
+			_q.withParent != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -625,6 +697,19 @@ func (_q *AgentExecutionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 			func(n *AgentExecution, e *MCPInteraction) {
 				n.Edges.McpInteractions = append(n.Edges.McpInteractions, e)
 			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSubAgents; query != nil {
+		if err := _q.loadSubAgents(ctx, query, nodes,
+			func(n *AgentExecution) { n.Edges.SubAgents = []*AgentExecution{} },
+			func(n *AgentExecution, e *AgentExecution) { n.Edges.SubAgents = append(n.Edges.SubAgents, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withParent; query != nil {
+		if err := _q.loadParent(ctx, query, nodes, nil,
+			func(n *AgentExecution, e *AgentExecution) { n.Edges.Parent = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -815,6 +900,71 @@ func (_q *AgentExecutionQuery) loadMcpInteractions(ctx context.Context, query *M
 	}
 	return nil
 }
+func (_q *AgentExecutionQuery) loadSubAgents(ctx context.Context, query *AgentExecutionQuery, nodes []*AgentExecution, init func(*AgentExecution), assign func(*AgentExecution, *AgentExecution)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AgentExecution)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(agentexecution.FieldParentExecutionID)
+	}
+	query.Where(predicate.AgentExecution(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(agentexecution.SubAgentsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ParentExecutionID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "parent_execution_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "parent_execution_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AgentExecutionQuery) loadParent(ctx context.Context, query *AgentExecutionQuery, nodes []*AgentExecution, init func(*AgentExecution), assign func(*AgentExecution, *AgentExecution)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*AgentExecution)
+	for i := range nodes {
+		if nodes[i].ParentExecutionID == nil {
+			continue
+		}
+		fk := *nodes[i].ParentExecutionID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(agentexecution.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "parent_execution_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 
 func (_q *AgentExecutionQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
@@ -849,6 +999,9 @@ func (_q *AgentExecutionQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withSession != nil {
 			_spec.Node.AddColumnOnce(agentexecution.FieldSessionID)
+		}
+		if _q.withParent != nil {
+			_spec.Node.AddColumnOnce(agentexecution.FieldParentExecutionID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

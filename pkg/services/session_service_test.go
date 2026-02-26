@@ -933,6 +933,136 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, int64(60), eo2.TotalTokens)
 	})
 
+	t.Run("returns sub-agents nested under orchestrator", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("orchestrator test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Orchestration").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		orchestrator := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("Orchestrator").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		task1 := "Find 5xx errors"
+		sub1 := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("LogAnalyzer").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendNativeGemini)).
+			SetParentExecutionID(orchestrator.ID).
+			SetTask(task1).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		task2 := "Check latency metrics"
+		sub2 := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("MetricChecker").
+			SetAgentIndex(2).
+			SetLlmBackend(string(config.LLMBackendNativeGemini)).
+			SetParentExecutionID(orchestrator.ID).
+			SetTask(task2).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		// Create LLM interactions for token aggregation.
+		for _, exec := range []struct {
+			id     string
+			tokens [3]int
+		}{
+			{orchestrator.ID, [3]int{100, 30, 130}},
+			{sub1.ID, [3]int{200, 50, 250}},
+			{sub2.ID, [3]int{150, 40, 190}},
+		} {
+			client.LLMInteraction.Create().
+				SetID(uuid.New().String()).
+				SetSessionID(sess.ID).
+				SetStageID(stg.ID).
+				SetExecutionID(exec.id).
+				SetInteractionType(llminteraction.InteractionTypeIteration).
+				SetModelName("test-model").
+				SetLlmRequest(map[string]interface{}{}).
+				SetLlmResponse(map[string]interface{}{}).
+				SetInputTokens(exec.tokens[0]).
+				SetOutputTokens(exec.tokens[1]).
+				SetTotalTokens(exec.tokens[2]).
+				SaveX(ctx)
+		}
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.Len(t, detail.Stages, 1)
+		require.Len(t, detail.Stages[0].Executions, 1, "only the top-level orchestrator should appear")
+
+		orch := detail.Stages[0].Executions[0]
+		assert.Equal(t, orchestrator.ID, orch.ExecutionID)
+		assert.Equal(t, "Orchestrator", orch.AgentName)
+		assert.Nil(t, orch.ParentExecutionID)
+		assert.Nil(t, orch.Task)
+		assert.Equal(t, int64(100), orch.InputTokens)
+
+		require.Len(t, orch.SubAgents, 2)
+
+		sa1 := orch.SubAgents[0]
+		assert.Equal(t, sub1.ID, sa1.ExecutionID)
+		assert.Equal(t, "LogAnalyzer", sa1.AgentName)
+		assert.Equal(t, 1, sa1.AgentIndex)
+		require.NotNil(t, sa1.ParentExecutionID)
+		assert.Equal(t, orchestrator.ID, *sa1.ParentExecutionID)
+		require.NotNil(t, sa1.Task)
+		assert.Equal(t, task1, *sa1.Task)
+		assert.Equal(t, int64(200), sa1.InputTokens)
+
+		sa2 := orch.SubAgents[1]
+		assert.Equal(t, sub2.ID, sa2.ExecutionID)
+		assert.Equal(t, "MetricChecker", sa2.AgentName)
+		assert.Equal(t, 2, sa2.AgentIndex)
+		require.NotNil(t, sa2.ParentExecutionID)
+		assert.Equal(t, orchestrator.ID, *sa2.ParentExecutionID)
+		require.NotNil(t, sa2.Task)
+		assert.Equal(t, task2, *sa2.Task)
+		assert.Equal(t, int64(150), sa2.InputTokens)
+	})
+
 	t.Run("chat_enabled false when chain explicitly disables chat", func(t *testing.T) {
 		sessionID := seedDashboardSession(t, client.Client,
 			"chat disabled test", "test-no-chat", "chat-disabled-chain",

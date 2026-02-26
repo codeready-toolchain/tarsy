@@ -493,6 +493,38 @@ func (c *AgentExecutionClient) QueryMcpInteractions(_m *AgentExecution) *MCPInte
 	return query
 }
 
+// QuerySubAgents queries the sub_agents edge of a AgentExecution.
+func (c *AgentExecutionClient) QuerySubAgents(_m *AgentExecution) *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, id),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, agentexecution.SubAgentsTable, agentexecution.SubAgentsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryParent queries the parent edge of a AgentExecution.
+func (c *AgentExecutionClient) QueryParent(_m *AgentExecution) *AgentExecutionQuery {
+	query := (&AgentExecutionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(agentexecution.Table, agentexecution.FieldID, id),
+			sqlgraph.To(agentexecution.Table, agentexecution.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, agentexecution.ParentTable, agentexecution.ParentColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *AgentExecutionClient) Hooks() []Hook {
 	return c.hooks.AgentExecution

@@ -41,6 +41,10 @@ type AgentExecution struct {
 	LlmBackend string `json:"llm_backend,omitempty"`
 	// Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')
 	LlmProvider *string `json:"llm_provider,omitempty"`
+	// For orchestrator sub-agents: links to the parent orchestrator execution
+	ParentExecutionID *string `json:"parent_execution_id,omitempty"`
+	// Task description from orchestrator dispatch
+	Task *string `json:"task,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AgentExecutionQuery when eager-loading is set.
 	Edges        AgentExecutionEdges `json:"edges"`
@@ -61,9 +65,13 @@ type AgentExecutionEdges struct {
 	LlmInteractions []*LLMInteraction `json:"llm_interactions,omitempty"`
 	// McpInteractions holds the value of the mcp_interactions edge.
 	McpInteractions []*MCPInteraction `json:"mcp_interactions,omitempty"`
+	// SubAgents holds the value of the sub_agents edge.
+	SubAgents []*AgentExecution `json:"sub_agents,omitempty"`
+	// Parent holds the value of the parent edge.
+	Parent *AgentExecution `json:"parent,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [6]bool
+	loadedTypes [8]bool
 }
 
 // StageOrErr returns the Stage value or an error if the edge
@@ -124,6 +132,26 @@ func (e AgentExecutionEdges) McpInteractionsOrErr() ([]*MCPInteraction, error) {
 	return nil, &NotLoadedError{edge: "mcp_interactions"}
 }
 
+// SubAgentsOrErr returns the SubAgents value or an error if the edge
+// was not loaded in eager-loading.
+func (e AgentExecutionEdges) SubAgentsOrErr() ([]*AgentExecution, error) {
+	if e.loadedTypes[6] {
+		return e.SubAgents, nil
+	}
+	return nil, &NotLoadedError{edge: "sub_agents"}
+}
+
+// ParentOrErr returns the Parent value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e AgentExecutionEdges) ParentOrErr() (*AgentExecution, error) {
+	if e.Parent != nil {
+		return e.Parent, nil
+	} else if e.loadedTypes[7] {
+		return nil, &NotFoundError{label: agentexecution.Label}
+	}
+	return nil, &NotLoadedError{edge: "parent"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -131,7 +159,7 @@ func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentexecution.FieldAgentIndex, agentexecution.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider:
+		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider, agentexecution.FieldParentExecutionID, agentexecution.FieldTask:
 			values[i] = new(sql.NullString)
 		case agentexecution.FieldStartedAt, agentexecution.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -227,6 +255,20 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 				_m.LlmProvider = new(string)
 				*_m.LlmProvider = value.String
 			}
+		case agentexecution.FieldParentExecutionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field parent_execution_id", values[i])
+			} else if value.Valid {
+				_m.ParentExecutionID = new(string)
+				*_m.ParentExecutionID = value.String
+			}
+		case agentexecution.FieldTask:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field task", values[i])
+			} else if value.Valid {
+				_m.Task = new(string)
+				*_m.Task = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -268,6 +310,16 @@ func (_m *AgentExecution) QueryLlmInteractions() *LLMInteractionQuery {
 // QueryMcpInteractions queries the "mcp_interactions" edge of the AgentExecution entity.
 func (_m *AgentExecution) QueryMcpInteractions() *MCPInteractionQuery {
 	return NewAgentExecutionClient(_m.config).QueryMcpInteractions(_m)
+}
+
+// QuerySubAgents queries the "sub_agents" edge of the AgentExecution entity.
+func (_m *AgentExecution) QuerySubAgents() *AgentExecutionQuery {
+	return NewAgentExecutionClient(_m.config).QuerySubAgents(_m)
+}
+
+// QueryParent queries the "parent" edge of the AgentExecution entity.
+func (_m *AgentExecution) QueryParent() *AgentExecutionQuery {
+	return NewAgentExecutionClient(_m.config).QueryParent(_m)
 }
 
 // Update returns a builder for updating this AgentExecution.
@@ -333,6 +385,16 @@ func (_m *AgentExecution) String() string {
 	builder.WriteString(", ")
 	if v := _m.LlmProvider; v != nil {
 		builder.WriteString("llm_provider=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ParentExecutionID; v != nil {
+		builder.WriteString("parent_execution_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.Task; v != nil {
+		builder.WriteString("task=")
 		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')

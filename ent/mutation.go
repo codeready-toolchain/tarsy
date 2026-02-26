@@ -65,6 +65,7 @@ type AgentExecutionMutation struct {
 	error_message           *string
 	llm_backend             *string
 	llm_provider            *string
+	task                    *string
 	clearedFields           map[string]struct{}
 	stage                   *string
 	clearedstage            bool
@@ -82,6 +83,11 @@ type AgentExecutionMutation struct {
 	mcp_interactions        map[string]struct{}
 	removedmcp_interactions map[string]struct{}
 	clearedmcp_interactions bool
+	sub_agents              map[string]struct{}
+	removedsub_agents       map[string]struct{}
+	clearedsub_agents       bool
+	parent                  *string
+	clearedparent           bool
 	done                    bool
 	oldValue                func(context.Context) (*AgentExecution, error)
 	predicates              []predicate.AgentExecution
@@ -693,6 +699,104 @@ func (m *AgentExecutionMutation) ResetLlmProvider() {
 	delete(m.clearedFields, agentexecution.FieldLlmProvider)
 }
 
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (m *AgentExecutionMutation) SetParentExecutionID(s string) {
+	m.parent = &s
+}
+
+// ParentExecutionID returns the value of the "parent_execution_id" field in the mutation.
+func (m *AgentExecutionMutation) ParentExecutionID() (r string, exists bool) {
+	v := m.parent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentExecutionID returns the old "parent_execution_id" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldParentExecutionID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentExecutionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentExecutionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentExecutionID: %w", err)
+	}
+	return oldValue.ParentExecutionID, nil
+}
+
+// ClearParentExecutionID clears the value of the "parent_execution_id" field.
+func (m *AgentExecutionMutation) ClearParentExecutionID() {
+	m.parent = nil
+	m.clearedFields[agentexecution.FieldParentExecutionID] = struct{}{}
+}
+
+// ParentExecutionIDCleared returns if the "parent_execution_id" field was cleared in this mutation.
+func (m *AgentExecutionMutation) ParentExecutionIDCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldParentExecutionID]
+	return ok
+}
+
+// ResetParentExecutionID resets all changes to the "parent_execution_id" field.
+func (m *AgentExecutionMutation) ResetParentExecutionID() {
+	m.parent = nil
+	delete(m.clearedFields, agentexecution.FieldParentExecutionID)
+}
+
+// SetTask sets the "task" field.
+func (m *AgentExecutionMutation) SetTask(s string) {
+	m.task = &s
+}
+
+// Task returns the value of the "task" field in the mutation.
+func (m *AgentExecutionMutation) Task() (r string, exists bool) {
+	v := m.task
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTask returns the old "task" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldTask(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTask is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTask requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTask: %w", err)
+	}
+	return oldValue.Task, nil
+}
+
+// ClearTask clears the value of the "task" field.
+func (m *AgentExecutionMutation) ClearTask() {
+	m.task = nil
+	m.clearedFields[agentexecution.FieldTask] = struct{}{}
+}
+
+// TaskCleared returns if the "task" field was cleared in this mutation.
+func (m *AgentExecutionMutation) TaskCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldTask]
+	return ok
+}
+
+// ResetTask resets all changes to the "task" field.
+func (m *AgentExecutionMutation) ResetTask() {
+	m.task = nil
+	delete(m.clearedFields, agentexecution.FieldTask)
+}
+
 // ClearStage clears the "stage" edge to the Stage entity.
 func (m *AgentExecutionMutation) ClearStage() {
 	m.clearedstage = true
@@ -963,6 +1067,100 @@ func (m *AgentExecutionMutation) ResetMcpInteractions() {
 	m.removedmcp_interactions = nil
 }
 
+// AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by ids.
+func (m *AgentExecutionMutation) AddSubAgentIDs(ids ...string) {
+	if m.sub_agents == nil {
+		m.sub_agents = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.sub_agents[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSubAgents clears the "sub_agents" edge to the AgentExecution entity.
+func (m *AgentExecutionMutation) ClearSubAgents() {
+	m.clearedsub_agents = true
+}
+
+// SubAgentsCleared reports if the "sub_agents" edge to the AgentExecution entity was cleared.
+func (m *AgentExecutionMutation) SubAgentsCleared() bool {
+	return m.clearedsub_agents
+}
+
+// RemoveSubAgentIDs removes the "sub_agents" edge to the AgentExecution entity by IDs.
+func (m *AgentExecutionMutation) RemoveSubAgentIDs(ids ...string) {
+	if m.removedsub_agents == nil {
+		m.removedsub_agents = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.sub_agents, ids[i])
+		m.removedsub_agents[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSubAgents returns the removed IDs of the "sub_agents" edge to the AgentExecution entity.
+func (m *AgentExecutionMutation) RemovedSubAgentsIDs() (ids []string) {
+	for id := range m.removedsub_agents {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SubAgentsIDs returns the "sub_agents" edge IDs in the mutation.
+func (m *AgentExecutionMutation) SubAgentsIDs() (ids []string) {
+	for id := range m.sub_agents {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSubAgents resets all changes to the "sub_agents" edge.
+func (m *AgentExecutionMutation) ResetSubAgents() {
+	m.sub_agents = nil
+	m.clearedsub_agents = false
+	m.removedsub_agents = nil
+}
+
+// SetParentID sets the "parent" edge to the AgentExecution entity by id.
+func (m *AgentExecutionMutation) SetParentID(id string) {
+	m.parent = &id
+}
+
+// ClearParent clears the "parent" edge to the AgentExecution entity.
+func (m *AgentExecutionMutation) ClearParent() {
+	m.clearedparent = true
+	m.clearedFields[agentexecution.FieldParentExecutionID] = struct{}{}
+}
+
+// ParentCleared reports if the "parent" edge to the AgentExecution entity was cleared.
+func (m *AgentExecutionMutation) ParentCleared() bool {
+	return m.ParentExecutionIDCleared() || m.clearedparent
+}
+
+// ParentID returns the "parent" edge ID in the mutation.
+func (m *AgentExecutionMutation) ParentID() (id string, exists bool) {
+	if m.parent != nil {
+		return *m.parent, true
+	}
+	return
+}
+
+// ParentIDs returns the "parent" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ParentID instead. It exists only for internal usage by the builders.
+func (m *AgentExecutionMutation) ParentIDs() (ids []string) {
+	if id := m.parent; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetParent resets all changes to the "parent" edge.
+func (m *AgentExecutionMutation) ResetParent() {
+	m.parent = nil
+	m.clearedparent = false
+}
+
 // Where appends a list predicates to the AgentExecutionMutation builder.
 func (m *AgentExecutionMutation) Where(ps ...predicate.AgentExecution) {
 	m.predicates = append(m.predicates, ps...)
@@ -997,7 +1195,7 @@ func (m *AgentExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 13)
 	if m.stage != nil {
 		fields = append(fields, agentexecution.FieldStageID)
 	}
@@ -1031,6 +1229,12 @@ func (m *AgentExecutionMutation) Fields() []string {
 	if m.llm_provider != nil {
 		fields = append(fields, agentexecution.FieldLlmProvider)
 	}
+	if m.parent != nil {
+		fields = append(fields, agentexecution.FieldParentExecutionID)
+	}
+	if m.task != nil {
+		fields = append(fields, agentexecution.FieldTask)
+	}
 	return fields
 }
 
@@ -1061,6 +1265,10 @@ func (m *AgentExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.LlmBackend()
 	case agentexecution.FieldLlmProvider:
 		return m.LlmProvider()
+	case agentexecution.FieldParentExecutionID:
+		return m.ParentExecutionID()
+	case agentexecution.FieldTask:
+		return m.Task()
 	}
 	return nil, false
 }
@@ -1092,6 +1300,10 @@ func (m *AgentExecutionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldLlmBackend(ctx)
 	case agentexecution.FieldLlmProvider:
 		return m.OldLlmProvider(ctx)
+	case agentexecution.FieldParentExecutionID:
+		return m.OldParentExecutionID(ctx)
+	case agentexecution.FieldTask:
+		return m.OldTask(ctx)
 	}
 	return nil, fmt.Errorf("unknown AgentExecution field %s", name)
 }
@@ -1178,6 +1390,20 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLlmProvider(v)
 		return nil
+	case agentexecution.FieldParentExecutionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentExecutionID(v)
+		return nil
+	case agentexecution.FieldTask:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTask(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution field %s", name)
 }
@@ -1250,6 +1476,12 @@ func (m *AgentExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(agentexecution.FieldLlmProvider) {
 		fields = append(fields, agentexecution.FieldLlmProvider)
 	}
+	if m.FieldCleared(agentexecution.FieldParentExecutionID) {
+		fields = append(fields, agentexecution.FieldParentExecutionID)
+	}
+	if m.FieldCleared(agentexecution.FieldTask) {
+		fields = append(fields, agentexecution.FieldTask)
+	}
 	return fields
 }
 
@@ -1278,6 +1510,12 @@ func (m *AgentExecutionMutation) ClearField(name string) error {
 		return nil
 	case agentexecution.FieldLlmProvider:
 		m.ClearLlmProvider()
+		return nil
+	case agentexecution.FieldParentExecutionID:
+		m.ClearParentExecutionID()
+		return nil
+	case agentexecution.FieldTask:
+		m.ClearTask()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution nullable field %s", name)
@@ -1320,13 +1558,19 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 	case agentexecution.FieldLlmProvider:
 		m.ResetLlmProvider()
 		return nil
+	case agentexecution.FieldParentExecutionID:
+		m.ResetParentExecutionID()
+		return nil
+	case agentexecution.FieldTask:
+		m.ResetTask()
+		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AgentExecutionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 8)
 	if m.stage != nil {
 		edges = append(edges, agentexecution.EdgeStage)
 	}
@@ -1344,6 +1588,12 @@ func (m *AgentExecutionMutation) AddedEdges() []string {
 	}
 	if m.mcp_interactions != nil {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.sub_agents != nil {
+		edges = append(edges, agentexecution.EdgeSubAgents)
+	}
+	if m.parent != nil {
+		edges = append(edges, agentexecution.EdgeParent)
 	}
 	return edges
 }
@@ -1384,13 +1634,23 @@ func (m *AgentExecutionMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case agentexecution.EdgeSubAgents:
+		ids := make([]ent.Value, 0, len(m.sub_agents))
+		for id := range m.sub_agents {
+			ids = append(ids, id)
+		}
+		return ids
+	case agentexecution.EdgeParent:
+		if id := m.parent; id != nil {
+			return []ent.Value{*id}
+		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AgentExecutionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 8)
 	if m.removedtimeline_events != nil {
 		edges = append(edges, agentexecution.EdgeTimelineEvents)
 	}
@@ -1402,6 +1662,9 @@ func (m *AgentExecutionMutation) RemovedEdges() []string {
 	}
 	if m.removedmcp_interactions != nil {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.removedsub_agents != nil {
+		edges = append(edges, agentexecution.EdgeSubAgents)
 	}
 	return edges
 }
@@ -1434,13 +1697,19 @@ func (m *AgentExecutionMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case agentexecution.EdgeSubAgents:
+		ids := make([]ent.Value, 0, len(m.removedsub_agents))
+		for id := range m.removedsub_agents {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AgentExecutionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 8)
 	if m.clearedstage {
 		edges = append(edges, agentexecution.EdgeStage)
 	}
@@ -1458,6 +1727,12 @@ func (m *AgentExecutionMutation) ClearedEdges() []string {
 	}
 	if m.clearedmcp_interactions {
 		edges = append(edges, agentexecution.EdgeMcpInteractions)
+	}
+	if m.clearedsub_agents {
+		edges = append(edges, agentexecution.EdgeSubAgents)
+	}
+	if m.clearedparent {
+		edges = append(edges, agentexecution.EdgeParent)
 	}
 	return edges
 }
@@ -1478,6 +1753,10 @@ func (m *AgentExecutionMutation) EdgeCleared(name string) bool {
 		return m.clearedllm_interactions
 	case agentexecution.EdgeMcpInteractions:
 		return m.clearedmcp_interactions
+	case agentexecution.EdgeSubAgents:
+		return m.clearedsub_agents
+	case agentexecution.EdgeParent:
+		return m.clearedparent
 	}
 	return false
 }
@@ -1491,6 +1770,9 @@ func (m *AgentExecutionMutation) ClearEdge(name string) error {
 		return nil
 	case agentexecution.EdgeSession:
 		m.ClearSession()
+		return nil
+	case agentexecution.EdgeParent:
+		m.ClearParent()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution unique edge %s", name)
@@ -1517,6 +1799,12 @@ func (m *AgentExecutionMutation) ResetEdge(name string) error {
 		return nil
 	case agentexecution.EdgeMcpInteractions:
 		m.ResetMcpInteractions()
+		return nil
+	case agentexecution.EdgeSubAgents:
+		m.ResetSubAgents()
+		return nil
+	case agentexecution.EdgeParent:
+		m.ResetParent()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentExecution edge %s", name)

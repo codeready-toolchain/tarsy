@@ -140,6 +140,34 @@ func (_c *AgentExecutionCreate) SetNillableLlmProvider(v *string) *AgentExecutio
 	return _c
 }
 
+// SetParentExecutionID sets the "parent_execution_id" field.
+func (_c *AgentExecutionCreate) SetParentExecutionID(v string) *AgentExecutionCreate {
+	_c.mutation.SetParentExecutionID(v)
+	return _c
+}
+
+// SetNillableParentExecutionID sets the "parent_execution_id" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableParentExecutionID(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetParentExecutionID(*v)
+	}
+	return _c
+}
+
+// SetTask sets the "task" field.
+func (_c *AgentExecutionCreate) SetTask(v string) *AgentExecutionCreate {
+	_c.mutation.SetTask(v)
+	return _c
+}
+
+// SetNillableTask sets the "task" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableTask(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetTask(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *AgentExecutionCreate) SetID(v string) *AgentExecutionCreate {
 	_c.mutation.SetID(v)
@@ -214,6 +242,40 @@ func (_c *AgentExecutionCreate) AddMcpInteractions(v ...*MCPInteraction) *AgentE
 		ids[i] = v[i].ID
 	}
 	return _c.AddMcpInteractionIDs(ids...)
+}
+
+// AddSubAgentIDs adds the "sub_agents" edge to the AgentExecution entity by IDs.
+func (_c *AgentExecutionCreate) AddSubAgentIDs(ids ...string) *AgentExecutionCreate {
+	_c.mutation.AddSubAgentIDs(ids...)
+	return _c
+}
+
+// AddSubAgents adds the "sub_agents" edges to the AgentExecution entity.
+func (_c *AgentExecutionCreate) AddSubAgents(v ...*AgentExecution) *AgentExecutionCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSubAgentIDs(ids...)
+}
+
+// SetParentID sets the "parent" edge to the AgentExecution entity by ID.
+func (_c *AgentExecutionCreate) SetParentID(id string) *AgentExecutionCreate {
+	_c.mutation.SetParentID(id)
+	return _c
+}
+
+// SetNillableParentID sets the "parent" edge to the AgentExecution entity by ID if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableParentID(id *string) *AgentExecutionCreate {
+	if id != nil {
+		_c = _c.SetParentID(*id)
+	}
+	return _c
+}
+
+// SetParent sets the "parent" edge to the AgentExecution entity.
+func (_c *AgentExecutionCreate) SetParent(v *AgentExecution) *AgentExecutionCreate {
+	return _c.SetParentID(v.ID)
 }
 
 // Mutation returns the AgentExecutionMutation object of the builder.
@@ -359,6 +421,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
 		_node.LlmProvider = &value
 	}
+	if value, ok := _c.mutation.Task(); ok {
+		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
+		_node.Task = &value
+	}
 	if nodes := _c.mutation.StageIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -455,6 +521,39 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SubAgentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   agentexecution.SubAgentsTable,
+			Columns: []string{agentexecution.SubAgentsColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ParentIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   agentexecution.ParentTable,
+			Columns: []string{agentexecution.ParentColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(agentexecution.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ParentExecutionID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

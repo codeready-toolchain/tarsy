@@ -30,3 +30,28 @@ func CreateGINIndexes(ctx context.Context, driver *sql.Driver) error {
 
 	return nil
 }
+
+// CreatePartialUniqueIndexes creates PostgreSQL partial unique indexes that
+// Ent/Atlas cannot express. These must match the constraints in
+// 20260225235224_add_orchestrator_sub_agent_fields.up.sql.
+func CreatePartialUniqueIndexes(ctx context.Context, driver *sql.Driver) error {
+	db := driver.DB()
+
+	_, err := db.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS agentexecution_stage_id_agent_index_top_level
+		ON agent_executions (stage_id, agent_index)
+		WHERE parent_execution_id IS NULL`)
+	if err != nil {
+		return fmt.Errorf("failed to create top-level agent index: %w", err)
+	}
+
+	_, err = db.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS agentexecution_parent_execution_id_agent_index_sub_agent
+		ON agent_executions (parent_execution_id, agent_index)
+		WHERE parent_execution_id IS NOT NULL`)
+	if err != nil {
+		return fmt.Errorf("failed to create sub-agent index: %w", err)
+	}
+
+	return nil
+}

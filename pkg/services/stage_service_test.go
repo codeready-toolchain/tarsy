@@ -913,3 +913,372 @@ func TestStageService_GetActiveStageForChat(t *testing.T) {
 		assert.True(t, IsValidationError(err))
 	})
 }
+
+func TestStageService_CreateAgentExecution_SubAgent(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Orchestrator Stage",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	// Create the orchestrator execution (top-level, no parent).
+	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "Orchestrator",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+	assert.Nil(t, orchestrator.ParentExecutionID)
+	assert.Nil(t, orchestrator.Task)
+
+	t.Run("creates sub-agent with parent and task", func(t *testing.T) {
+		task := "Find all 5xx errors in the last 30 minutes"
+		req := models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "LogAnalyzer",
+			AgentIndex:        1,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		}
+
+		sub, err := stageService.CreateAgentExecution(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, sub.ParentExecutionID)
+		assert.Equal(t, orchestrator.ID, *sub.ParentExecutionID)
+		require.NotNil(t, sub.Task)
+		assert.Equal(t, task, *sub.Task)
+
+		// Round-trip: re-read from DB.
+		reloaded, err := client.AgentExecution.Get(ctx, sub.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.ParentExecutionID)
+		assert.Equal(t, orchestrator.ID, *reloaded.ParentExecutionID)
+		require.NotNil(t, reloaded.Task)
+		assert.Equal(t, task, *reloaded.Task)
+	})
+
+	t.Run("sub-agent index independent of parent index", func(t *testing.T) {
+		// Both the orchestrator and the sub-agent above have the same stage_id.
+		// The partial unique indexes allow them to have independent index spaces.
+		task := "Check latency metrics"
+		sub, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "MetricChecker",
+			AgentIndex:        2,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, sub.AgentIndex)
+
+		allExecs, err := stageService.GetAgentExecutions(ctx, stg.ID)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(allExecs), 3) // orchestrator + at least 2 sub-agents
+	})
+
+	t.Run("rejects duplicate top-level agent index in same stage", func(t *testing.T) {
+		_, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "DuplicateTopLevel",
+			AgentIndex: 1, // conflicts with the orchestrator created above
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.Error(t, err)
+		assert.True(t, ent.IsConstraintError(err), "expected constraint error, got: %v", err)
+	})
+
+	t.Run("rejects duplicate sub-agent index under same parent", func(t *testing.T) {
+		task := "Duplicate task"
+		_, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         "DuplicateSubAgent",
+			AgentIndex:        1, // conflicts with first sub-agent created above
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.Error(t, err)
+		assert.True(t, ent.IsConstraintError(err), "expected constraint error, got: %v", err)
+	})
+}
+
+func TestStageService_UpdateStageStatus_ExcludesSubAgents(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Orchestrator Stage",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	// Create orchestrator and complete it.
+	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "Orchestrator",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, orchestrator.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, orchestrator.ID, agentexecution.StatusCompleted, "")
+	require.NoError(t, err)
+
+	// Create a sub-agent and mark it failed.
+	task := "Analyze logs"
+	sub, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:           stg.ID,
+		SessionID:         session.ID,
+		AgentName:         "LogAnalyzer",
+		AgentIndex:        1,
+		LLMBackend:        config.LLMBackendNativeGemini,
+		ParentExecutionID: &orchestrator.ID,
+		Task:              &task,
+	})
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, sub.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, sub.ID, agentexecution.StatusFailed, "sub-agent error")
+	require.NoError(t, err)
+
+	// Stage status should be completed (based on orchestrator only, ignoring sub-agent).
+	err = stageService.UpdateStageStatus(ctx, stg.ID)
+	require.NoError(t, err)
+
+	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusCompleted, updated.Status,
+		"stage should be completed: sub-agent failure must not affect stage status")
+}
+
+func TestStageService_GetSubAgentExecutions(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "Orchestrator",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	// Create 3 sub-agents.
+	for i := 1; i <= 3; i++ {
+		task := fmt.Sprintf("Task %d", i)
+		_, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         fmt.Sprintf("SubAgent%d", i),
+			AgentIndex:        i,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("returns sub-agents ordered by index", func(t *testing.T) {
+		subs, err := stageService.GetSubAgentExecutions(ctx, orchestrator.ID)
+		require.NoError(t, err)
+		assert.Len(t, subs, 3)
+		for i, sub := range subs {
+			assert.Equal(t, i+1, sub.AgentIndex)
+			assert.Equal(t, fmt.Sprintf("SubAgent%d", i+1), sub.AgentName)
+		}
+	})
+
+	t.Run("returns empty for nonexistent parent", func(t *testing.T) {
+		subs, err := stageService.GetSubAgentExecutions(ctx, "nonexistent-id")
+		require.NoError(t, err)
+		assert.Empty(t, subs)
+	})
+
+	t.Run("validates parent_execution_id required", func(t *testing.T) {
+		_, err := stageService.GetSubAgentExecutions(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
+func TestStageService_GetExecutionTree(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "Orchestrator",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	// Create 2 sub-agents.
+	for i := 1; i <= 2; i++ {
+		task := fmt.Sprintf("Task %d", i)
+		_, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         fmt.Sprintf("SubAgent%d", i),
+			AgentIndex:        i,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("loads execution with sub-agents", func(t *testing.T) {
+		tree, err := stageService.GetExecutionTree(ctx, orchestrator.ID)
+		require.NoError(t, err)
+		assert.Equal(t, orchestrator.ID, tree.ID)
+		require.NotNil(t, tree.Edges.SubAgents)
+		assert.Len(t, tree.Edges.SubAgents, 2)
+		assert.Equal(t, "SubAgent1", tree.Edges.SubAgents[0].AgentName)
+		assert.Equal(t, "SubAgent2", tree.Edges.SubAgents[1].AgentName)
+	})
+
+	t.Run("returns ErrNotFound for missing execution", func(t *testing.T) {
+		_, err := stageService.GetExecutionTree(ctx, "nonexistent")
+		assert.Equal(t, ErrNotFound, err)
+	})
+
+	t.Run("validates execution_id required", func(t *testing.T) {
+		_, err := stageService.GetExecutionTree(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
+func TestStageService_SubAgentCascadeDelete(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "cascade test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "Orchestrator",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	var subIDs []string
+	for i := 1; i <= 2; i++ {
+		task := fmt.Sprintf("Task %d", i)
+		sub, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:           stg.ID,
+			SessionID:         session.ID,
+			AgentName:         fmt.Sprintf("Sub%d", i),
+			AgentIndex:        i,
+			LLMBackend:        config.LLMBackendNativeGemini,
+			ParentExecutionID: &orchestrator.ID,
+			Task:              &task,
+		})
+		require.NoError(t, err)
+		subIDs = append(subIDs, sub.ID)
+	}
+
+	// Delete the parent orchestrator.
+	err = client.AgentExecution.DeleteOneID(orchestrator.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	// Sub-agents should be cascade-deleted.
+	for _, id := range subIDs {
+		_, err := client.AgentExecution.Get(ctx, id)
+		assert.True(t, ent.IsNotFound(err), "sub-agent %s should be cascade-deleted", id)
+	}
+}
