@@ -2286,9 +2286,10 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 
 	var orchestratorExec, subAgentExec *ent.AgentExecution
 	for _, e := range execs {
-		if e.AgentName == "OrchestratorAgent" {
+		switch e.AgentName {
+		case "OrchestratorAgent":
 			orchestratorExec = e
-		} else if e.AgentName == "GeneralWorker" {
+		case "GeneralWorker":
 			subAgentExec = e
 		}
 	}
