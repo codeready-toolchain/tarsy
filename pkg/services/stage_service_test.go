@@ -1076,8 +1076,8 @@ func TestStageService_CreateAgentExecution_SubAgent(t *testing.T) {
 
 		task := "Cross-session"
 		_, err = stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-			StageID:           stg.ID,            // same stage as parent
-			SessionID:         otherSession.ID,   // different session
+			StageID:           stg.ID,          // same stage as parent
+			SessionID:         otherSession.ID, // different session
 			AgentName:         "CrossSession",
 			AgentIndex:        1,
 			LLMBackend:        config.LLMBackendNativeGemini,
