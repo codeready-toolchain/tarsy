@@ -97,6 +97,14 @@ func TestBuiltinAgents(t *testing.T) {
 			wantCustomInstructions:  true,
 			customInstructionsMatch: "You are GeneralWorker",
 		},
+		{
+			name:                    "Orchestrator",
+			agentID:                 "Orchestrator",
+			wantDesc:                "Dynamic investigation orchestrator that dispatches specialized sub-agents",
+			wantType:                AgentTypeOrchestrator,
+			wantCustomInstructions:  true,
+			customInstructionsMatch: "investigation orchestrator",
+		},
 	}
 
 	for _, tt := range tests {
@@ -179,6 +187,30 @@ func TestBuiltinSynthesisAgentHasNoMCPServers(t *testing.T) {
 	require.True(t, exists)
 
 	assert.Empty(t, agent.MCPServers, "SynthesisAgent should not have MCP servers (it never calls tools)")
+}
+
+func TestBuiltinOrchestratorAgentProperties(t *testing.T) {
+	cfg := GetBuiltinConfig()
+	agent, exists := cfg.Agents["Orchestrator"]
+	require.True(t, exists)
+
+	assert.Equal(t, AgentTypeOrchestrator, agent.Type)
+	assert.Empty(t, agent.MCPServers, "Orchestrator should not have MCP servers (sub-agents have them)")
+	assert.Nil(t, agent.NativeTools, "Orchestrator should not set native tools")
+	assert.Empty(t, agent.LLMBackend, "Orchestrator should inherit LLM backend from defaults")
+}
+
+func TestBuiltinOrchestratorExcludedFromSubAgentRegistry(t *testing.T) {
+	cfg := GetBuiltinConfig()
+	agents := mergeAgents(cfg.Agents, nil)
+	registry := BuildSubAgentRegistry(agents)
+
+	_, found := registry.Get("Orchestrator")
+	assert.False(t, found, "Orchestrator should not appear in SubAgentRegistry")
+
+	// Other described agents should still be present.
+	_, found = registry.Get("GeneralWorker")
+	assert.True(t, found, "GeneralWorker should appear in SubAgentRegistry")
 }
 
 func TestBuiltinMCPServers(t *testing.T) {

@@ -220,13 +220,42 @@ GeneralWorker:
 
 **Use cases:** synthesize sub-agent findings, draft incident summaries, compare multiple data points, analyze error messages.
 
+### Orchestrator
+
+Built-in orchestrator agent — users can reference it by name in chains without defining it themselves. Uses `AgentTypeOrchestrator` which triggers orchestrator wiring in `executeAgent`. No MCP servers (delegates tool usage to sub-agents). No LLM backend or native tools (inherits from defaults). Auto-excluded from the `SubAgentRegistry` by the `agent.Type == AgentTypeOrchestrator` filter.
+
+```yaml
+Orchestrator:
+  type: orchestrator
+  description: "Dynamic investigation orchestrator that dispatches specialized sub-agents"
+  custom_instructions: |
+    You are Orchestrator, a dynamic investigation orchestrator.
+    You analyze alerts by dispatching specialized sub-agents in parallel,
+    collecting their results, and producing a comprehensive root cause analysis.
+
+    Strategy:
+    1. Analyze the alert to identify what needs investigation
+    2. Dispatch relevant sub-agents in parallel for independent investigation tracks
+    3. As results arrive, assess whether follow-up investigation is needed
+    4. When all relevant data is collected, produce a final root cause analysis
+
+    Principles:
+    - Dispatch agents for independent tasks in parallel
+    - Cancel agents whose work is no longer needed based on earlier findings
+    - Be specific in task descriptions — include relevant context from the alert
+    - Synthesize all findings into a clear root cause analysis
+```
+
+The `custom_instructions` only contains strategy and principles. Universal operational mechanics (result delivery, agent catalog) are system-injected for all orchestrators — see [Orchestrator system prompt](#orchestrator-system-prompt) below.
+
 ### Built-in agent summary
 
-| Agent | Native Tools | MCP | Purpose |
-|-------|-------------|-----|---------|
-| WebResearcher | google_search, url_context | none | Web research and URL analysis |
-| CodeExecutor | code_execution | none | Python computation and analysis |
-| GeneralWorker | none | none | Reasoning, summarization, drafting |
+| Agent | Type | Native Tools | MCP | Purpose |
+|-------|------|-------------|-----|---------|
+| Orchestrator | orchestrator | none | none | Dispatches and coordinates sub-agents |
+| WebResearcher | default | google_search, url_context | none | Web research and URL analysis |
+| CodeExecutor | default | code_execution | none | Python computation and analysis |
+| GeneralWorker | default | none | none | Reasoning, summarization, drafting |
 
 These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible.
 
@@ -897,9 +926,38 @@ Find all 5xx errors for service-X in the last 30 min. Report: error count,
 top error messages, time pattern.
 ```
 
-The system message still includes `custom_instructions` + MCP instructions (Tier 1-3). The task text comes from `execCtx.SubAgent.Task`.
+The system message includes Tier 1-3 instructions (`custom_instructions` + MCP instructions) followed by a `subAgentFocus` block that is auto-injected for **all** sub-agents (built-in and custom):
+
+```
+You are a sub-agent dispatched by an orchestrator for a specific task.
+
+Rules:
+- Focus exclusively on your assigned task — do not investigate unrelated areas.
+- Your final response is automatically reported back to the orchestrator. Do not address the user directly.
+- Be concise: state what you found, key evidence, and any relevant details the orchestrator should know.
+- If you have tools available, use them to complete your task. If not, use reasoning alone.
+```
+
+This replaces the generic `taskFocus` ("Focus on investigation and providing recommendations for human operators to execute.") which was misleading for sub-agents — they report to the orchestrator, not to human operators. The task text comes from `execCtx.SubAgent.Task`.
 
 See [questions](orchestrator-impl-questions.md), Q8.
+
+### Orchestrator result delivery prompt
+
+The orchestrator system prompt includes a `orchestratorResultDelivery` block that is auto-injected for **all** orchestrators (built-in and custom), alongside the agent catalog and task focus:
+
+```
+## Result Delivery
+
+Sub-agent results appear automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled]. You do not need to poll for them.
+If you have no more tool calls but sub-agents are still running, the system automatically waits — you do not need to take any action to stay alive.
+You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or continue waiting.
+When all relevant results are collected, produce your final analysis.
+```
+
+This separation means:
+- **System-injected for all orchestrators**: agent catalog + result delivery + task focus (universal mechanics)
+- **`custom_instructions` per-agent**: strategy, principles, domain guidance (customizable by operators)
 
 ## Agent Factory Changes
 
