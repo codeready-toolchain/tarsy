@@ -20,6 +20,11 @@ type LLMScriptEntry struct {
 	BlockUntilCancelled bool            // Block Generate() until ctx is cancelled
 	WaitCh              <-chan struct{} // Block Generate() until closed, then return normal response
 	OnBlock             chan<- struct{} // Notified when Generate() enters its blocking path (BlockUntilCancelled or WaitCh)
+
+	// RewriteChunks dynamically modifies chunks at Generate-time using the
+	// current conversation. Used when tool call arguments depend on prior
+	// results (e.g., cancel_agent needs an execution_id from dispatch_agent).
+	RewriteChunks func(messages []agent.ConversationMessage, chunks []agent.Chunk) []agent.Chunk
 }
 
 // ScriptedLLMClient implements agent.LLMClient with a dual-dispatch mock:
@@ -107,6 +112,10 @@ func (c *ScriptedLLMClient) Generate(ctx context.Context, input *agent.GenerateI
 			&agent.TextChunk{Content: entry.Text},
 			&agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
 		}
+	}
+
+	if entry.RewriteChunks != nil {
+		chunks = entry.RewriteChunks(input.Messages, chunks)
 	}
 
 	ch := make(chan agent.Chunk, len(chunks))

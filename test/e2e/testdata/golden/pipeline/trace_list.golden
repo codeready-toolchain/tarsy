@@ -4,8 +4,11 @@
       "created_at": "{TIMESTAMP}",
       "duration_ms": {DURATION_MS},
       "id": "{INTERACTION_ID_43}",
+      "input_tokens": 10,
       "interaction_type": "executive_summary",
-      "model_name": "test-model-fast"
+      "model_name": "test-model-fast",
+      "output_tokens": 5,
+      "total_tokens": 15
     }
   ],
   "stages": [

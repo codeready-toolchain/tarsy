@@ -148,14 +148,16 @@ Follows the same override pattern as `mcp_servers`, `llm_provider`, `max_iterati
 ```yaml
 agent_chains:
   focused-investigation:
-    sub_agents: [LogAnalyzer, MetricChecker]    # Chain-level (most common)
+    # sub_agents: [...]                         # Chain-level (optional, broadest)
     stages:
       - name: investigate
         # sub_agents: [...]                     # Stage-level (optional)
         agents:
           - name: MyOrchestrator
-            # sub_agents: [...]                 # Stage-agent level (optional)
+            sub_agents: [LogAnalyzer, MetricChecker]  # Stage-agent level (recommended)
 ```
+
+Stage-agent level is recommended — it makes the orchestrator-to-sub-agent relationship explicit. Chain and stage levels are useful when multiple orchestrators share the same sub-agent pool.
 
 If omitted at all levels, the orchestrator sees the full global registry (all agents with `description`).
 
@@ -212,8 +214,8 @@ GeneralWorker:
   type: default
   description: "General-purpose agent for analysis, summarization, reasoning, and other tasks"
   custom_instructions: |
-    You are a general-purpose worker. Complete the assigned task
-    thoroughly and concisely.
+    You are GeneralWorker, a general-purpose agent.
+    Complete the assigned task thoroughly and concisely.
 ```
 
 **Use cases:** synthesize sub-agent findings, draft incident summaries, compare multiple data points, analyze error messages.
@@ -351,6 +353,8 @@ var orchestrationTools = []agent.ToolDefinition{
 > **Decision:** Plain names (`dispatch_agent`, `cancel_agent`, `list_agents`) — see [questions](orchestrator-impl-questions.md), Q3.
 
 MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. The `CompositeToolExecutor` routes by matching the known orchestration tool names.
+
+**Observability:** When orchestration tool calls are recorded as `MCPInteraction` records, they use `server_name: "orchestrator"` (via `OrchestrationServerName` constant) instead of an empty string. This lets dashboards distinguish orchestration tool calls from real MCP server calls by checking `server_name == "orchestrator"`.
 
 ## CompositeToolExecutor — DECIDED
 
@@ -1134,20 +1138,29 @@ New: the dashboard queries `parent_execution_id` to build the trace tree.
 - Set `ExecutionContext.SubAgentCollector` (via `orchestrator.NewResultCollector`) and `SubAgentCatalog` for orchestrator agents; `SubAgent` set by `SubAgentRunner.Dispatch`
 - Integration tests
 
-### PR6: E2E Tests
-- New config: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` list, two sub-agents (LogAnalyzer with MCP tools, GeneralWorker pure reasoning), and an MCP server for the orchestrator's own use
-- New config: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure, used for cancellation cascade test
-- **Happy path** (`orchestrator_test.go`): orchestrator dispatches 2 sub-agents via `dispatch_agent` tool calls in a single iteration, results arrive and are drained before the next LLM call, orchestrator produces final answer
-  - DB assertions: 1 stage, 3 executions (orchestrator + 2 sub-agents); sub-agent `parent_execution_id` links to orchestrator; `task` field set on sub-agent executions; `task_assigned` timeline events for each sub-agent; `final_analysis` for orchestrator
-  - API assertions: `GetSession` returns completed session with `final_analysis`; `GetTraceList` shows orchestrator execution with nested sub-agent executions
-  - WS event sequence in `testdata/expected_events.go`: `OrchestratorExpectedEvents` covering session/stage/execution status for orchestrator and sub-agents, timeline events (`task_assigned`, `llm_tool_call` for `dispatch_agent`, sub-agent `final_analysis`, orchestrator `final_analysis`)
-  - sub-agent makes MCP tool calls during its execution → tool results appear in sub-agent timeline. Verifies the sub-agent's own `ToolExecutor` (not the `CompositeToolExecutor`) routes MCP calls correctly.
-  - Golden files: session, stages, timeline, trace list, trace interaction details (orchestrator dispatch iterations + sub-agent iterations)
-- **Wait path**: orchestrator dispatches sub-agents, but sub-agents haven't finished yet when the LLM returns no tool calls → controller blocks on `SubAgentCollector.WaitForResult` → sub-agent finishes → result injected → LLM gets another iteration → final answer. Uses `WaitCh` on sub-agent LLM entries to control timing.
-- **Sub-agent failure**: one sub-agent receives LLM error → `[Sub-agent failed]` result injected into orchestrator conversation → orchestrator produces final answer referencing the failure. Assertions: failed sub-agent execution has `status=failed` and `error_message` set; orchestrator execution `status=completed`; session `status=completed`
-- **Cancellation cascade** (`orchestrator_cancel_test.go`): orchestrator dispatches sub-agents, session is cancelled via API while sub-agents are running. Uses `BlockUntilCancelled` on sub-agent LLM entries. Assertions: all executions end in `cancelled` status; `SubAgentRunner.CancelAll` + `WaitAll` ensure clean goroutine shutdown.
-- **Orchestrator with `list_agents`**: orchestrator calls `list_agents` tool to check sub-agent status mid-execution. Verifies the status summary tool works end-to-end.
-- **Executive summary**: verify orchestrator's `final_analysis` flows through to executive summary generation (same as regular agents — no special handling needed, but should be covered)
+### PR6: E2E Tests ✅ DONE
+- **Config**: `testdata/configs/orchestrator/tarsy.yaml` — orchestrator agent (`type: orchestrator`) with `sub_agents` at stage-agent level, one custom sub-agent (LogAnalyzer with MCP tools, `max_iterations: 2`) and one built-in sub-agent (GeneralWorker, used as-is with no overrides). This mix tests both custom agent definition and built-in agent reuse — the production-realistic pattern.
+- **Config**: `testdata/configs/orchestrator-cancel/tarsy.yaml` — same structure with `defaults.max_iterations: 1` for cancellation test (prevents retry loops after context cancellation).
+- **7 E2E tests** covering deterministic golden-file verification, realistic multi-agent scenarios, reactive multi-phase dispatch, failure handling, tool coverage (dispatch/list/cancel), and cascading cancellation:
+
+1. **`TestE2E_Orchestrator`** (deterministic golden files): dispatches single sub-agent (LogAnalyzer) with MCP tools. Single sub-agent keeps orchestrator iteration count deterministic (3 iterations) for stable golden files. Uses `WaitCh` to force the wait path — sub-agent is gated until the orchestrator's iteration 2 enters `WaitForResult`. Verifies: DB records (stage, executions, parent_execution_id, task, timeline events), API responses (session status, trace list with nested sub-agents), WS events (`OrchestratorExpectedEvents`), golden files (session, stages, timeline, trace list, per-interaction trace details including sub-agent MCP tool calls), executive summary generation.
+
+2. **`TestE2E_OrchestratorMultiAgent`** (realistic production scenario): dispatches both LogAnalyzer (MCP tools) and GeneralWorker (built-in, pure reasoning). Asserts on end results only — no golden files, no iteration count assertions. Verifies: 3 executions all completed, correct parent-child relationships, task fields, trace API nesting (2 sub-agents under orchestrator), executive summary, WS session completion.
+
+3. **`TestE2E_OrchestratorMultiPhase`** (reactive multi-phase dispatch): Phase 1 dispatches LogAnalyzer and GeneralWorker in parallel. After receiving their results, Phase 2 reactively dispatches GeneralWorker *again* with a follow-up remediation task derived from earlier findings. Tests the same built-in agent dispatched twice with different tasks (severity assessment vs remediation analysis). Verifies: 4 executions (orchestrator + 3 sub-agents), 2 GeneralWorker executions with different tasks, 3 `dispatch_agent` tool calls across 2 phases, trace API nesting with 3 sub-agents.
+
+4. **`TestE2E_OrchestratorSubAgentFailure`**: dispatches LogAnalyzer (LLM errors, `max_iterations: 2` → 2 retry entries) and GeneralWorker (succeeds). Verifies: orchestrator completes despite sub-agent failure, failed sub-agent has `status=failed` and `error_message`, session completes.
+
+5. **`TestE2E_OrchestratorListAgents`**: dispatches both sub-agents, then calls `list_agents` tool to check status mid-execution. Verifies: `list_agents` tool call appears in timeline, all 3 executions complete.
+
+6. **`TestE2E_OrchestratorCancelSpecific`** (`cancel_agent` tool): dispatches LogAnalyzer (blocks via `BlockUntilCancelled`) and GeneralWorker (completes quickly). After GeneralWorker completes, orchestrator calls `cancel_agent` with LogAnalyzer's execution_id. Uses `RewriteChunks` callback on `ScriptedLLMClient` to dynamically inject the real execution_id from the conversation history (extracted from `dispatch_agent` tool result). Verifies: LogAnalyzer `status=cancelled`, GeneralWorker `status=completed`, `cancel_agent` tool call in timeline, 2 sub-agents in trace API.
+
+7. **`TestE2E_OrchestratorCancellation`** (`orchestrator_cancel_test.go`): dispatches sub-agents, session cancelled via API while sub-agents are running. Uses `BlockUntilCancelled` on sub-agent LLM entries + `OnBlock` synchronization to ensure sub-agents are running before cancel. Verifies: all executions end in `cancelled` status, clean goroutine shutdown.
+
+- **Bug fixes** discovered during E2E test review:
+  - **Executive summary tokens**: `generateExecutiveSummary` now captures `UsageChunk` from the LLM stream and records `InputTokens`/`OutputTokens`/`TotalTokens` on the LLM interaction. Previously tokens were silently dropped.
+  - **Timeline sequence collision**: Sub-agent executions had `task_assigned` (sequence 1) colliding with the first `llm_thinking` (also sequence 1). Fixed by adding `GetMaxSequenceForExecution` to `TimelineService` and initializing the controller's `eventSeq` from the DB rather than from 0.
+  - **Orchestration tool `server_name`**: `dispatch_agent`/`cancel_agent`/`list_agents` tool calls are now recorded with `server_name: "orchestrator"` instead of `""`, enabling dashboard distinction between orchestration and real MCP calls.
 
 ### PR7: Dashboard
 - Tree view: orchestrator → sub-agents (backend API already returns nested `SubAgents` in `ExecutionOverview` — see PR2)

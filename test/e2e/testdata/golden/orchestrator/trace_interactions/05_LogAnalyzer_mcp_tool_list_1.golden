@@ -1,0 +1,14 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_7}",
+  "interaction_type": "tool_list",
+  "server_name": "test-mcp"
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  {
+    "description": "test tool: search_logs",
+    "name": "search_logs"
+  }
+]

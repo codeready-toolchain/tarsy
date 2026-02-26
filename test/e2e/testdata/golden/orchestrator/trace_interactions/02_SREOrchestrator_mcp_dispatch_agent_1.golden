@@ -1,0 +1,20 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_4}",
+  "interaction_type": "tool_call",
+  "server_name": "orchestrator",
+  "tool_name": "dispatch_agent"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "name": "LogAnalyzer",
+  "task": "Find all error patterns in the last 30 minutes"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "{\"execution_id\":\"{EXEC_ID_2}\",\"status\":\"accepted\"}",
+  "is_error": false
+}

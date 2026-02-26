@@ -1,0 +1,60 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_6}",
+  "input_tokens": 200,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 2,
+    "messages_count": 4
+  },
+  "llm_response": {
+    "text_length": 82,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 40,
+  "thinking_content": "Found significant error patterns in the logs.",
+  "total_tokens": 240
+}
+
+=== MESSAGE: system ===
+## General SRE Agent Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze alerts thoroughly and provide actionable insights based on:
+1. Alert information and context
+2. Associated runbook procedures
+3. Real-time system data from available tools
+
+Always be specific, reference actual data, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Agent-Specific Instructions
+
+You are LogAnalyzer, you analyze logs to find error patterns.
+
+Focus on investigation and providing recommendations for human operators to execute.
+
+=== MESSAGE: user ===
+## Task
+
+Find all error patterns in the last 30 minutes
+
+=== MESSAGE: assistant ===
+(tool calls only)
+--- TOOL_CALLS ---
+[la-call-1] test-mcp__search_logs({"query":"error OR 5xx","timerange":"30m"})
+
+=== MESSAGE: tool (la-call-1, test-mcp__search_logs) ===
+[{"timestamp":"{TIMESTAMP}","level":"error","service":"payment","message":"OOM killed"},{"timestamp":"{TIMESTAMP}","level":"error","service":"payment","message":"connection refused"}]
+
+=== MESSAGE: assistant ===
+Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.
+

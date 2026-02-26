@@ -1,0 +1,129 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_1}",
+  "input_tokens": 200,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 0,
+    "tool_calls_count": 1
+  },
+  "model_name": "test-model",
+  "output_tokens": 40,
+  "thinking_content": "I need to investigate this alert. Let me dispatch LogAnalyzer to check error patterns.",
+  "total_tokens": 240
+}
+
+=== MESSAGE: system ===
+## General SRE Agent Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze alerts thoroughly and provide actionable insights based on:
+1. Alert information and context
+2. Associated runbook procedures
+3. Real-time system data from available tools
+
+Always be specific, reference actual data, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Agent-Specific Instructions
+
+You are SREOrchestrator, you investigate alerts by dispatching specialized sub-agents.
+
+## Available Sub-Agents
+
+You can dispatch these agents using the dispatch_agent tool.
+Results are delivered automatically when each sub-agent finishes — do not poll.
+Use cancel_agent to stop unnecessary work. Use list_agents to check status.
+
+- **GeneralWorker**: General-purpose agent for analysis, summarization, reasoning, and other tasks
+  Tools: none (pure reasoning)
+
+- **LogAnalyzer**: Analyzes logs for error patterns and anomalies
+  MCP tools: test-mcp
+
+
+Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators.
+
+=== MESSAGE: user ===
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-orchestrator
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Payment service 5xx errors spiking
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+````markdown
+<!-- RUNBOOK START -->
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+<!-- RUNBOOK END -->
+````
+
+## Previous Stage Data
+No previous stage data is available for this alert. This is the first stage of analysis.
+
+## Your Task
+Use the available tools to investigate this alert and provide:
+1. Root cause analysis
+2. Current system state assessment
+3. Specific remediation steps for human operators
+4. Prevention recommendations
+
+Be thorough in your investigation before providing the final answer.
+
+=== MESSAGE: assistant ===
+(tool calls only)
+--- TOOL_CALLS ---
+[orch-call-1] dispatch_agent({"name":"LogAnalyzer","task":"Find all error patterns in the last 30 minutes"})
+

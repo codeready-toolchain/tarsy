@@ -1,12 +1,9 @@
 [
   {
     "agent": "ChatAgent",
-    "content": "The user wants current SLO status. Let me query Prometheus.",
-    "event_type": "llm_thinking",
-    "metadata": {
-      "source": "native"
-    },
-    "sequence": 1,
+    "content": "What caused the OOM kill for pod-1?",
+    "event_type": "user_question",
+    "sequence": 1000000,
     "status": "completed"
   },
   {
@@ -16,21 +13,14 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "Let me check the current SLO metrics for pod-1.",
-    "event_type": "llm_response",
-    "sequence": 2,
+    "sequence": 1000001,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Let me check the current pod status to explain the OOM kill.",
     "event_type": "llm_response",
-    "sequence": 2,
+    "sequence": 1000002,
     "status": "completed"
   },
   {
@@ -43,30 +33,7 @@
       "server_name": "test-mcp",
       "tool_name": "get_pods"
     },
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "[{\"slo\":\"availability\",\"target\":0.999,\"current\":0.95,\"pod\":\"pod-1\",\"violation\":true}]",
-    "event_type": "llm_tool_call",
-    "metadata": {
-      "arguments": "{\"pod\":\"pod-1\"}",
-      "is_error": false,
-      "server_name": "prometheus-mcp",
-      "tool_name": "query_slo"
-    },
-    "sequence": 3,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "The SLO data shows the availability target is not being met.",
-    "event_type": "llm_thinking",
-    "metadata": {
-      "source": "native"
-    },
-    "sequence": 4,
+    "sequence": 1000003,
     "status": "completed"
   },
   {
@@ -79,14 +46,7 @@
       "summarization_model": "test-model",
       "tool_name": "get_pods"
     },
-    "sequence": 4,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
-    "event_type": "llm_response",
-    "sequence": 5,
+    "sequence": 1000004,
     "status": "completed"
   },
   {
@@ -96,42 +56,82 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 5,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
-    "event_type": "final_analysis",
-    "sequence": 6,
+    "sequence": 1000005,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue.",
     "event_type": "llm_response",
-    "sequence": 6,
+    "sequence": 1000006,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue.",
     "event_type": "final_analysis",
-    "sequence": 7,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "What caused the OOM kill for pod-1?",
-    "event_type": "user_question",
-    "sequence": 1000000,
+    "sequence": 1000007,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "What are the current SLO metrics for pod-1?",
     "event_type": "user_question",
-    "sequence": 1000001,
+    "sequence": 1000008,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "The user wants current SLO status. Let me query Prometheus.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1000009,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Let me check the current SLO metrics for pod-1.",
+    "event_type": "llm_response",
+    "sequence": 1000010,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "[{\"slo\":\"availability\",\"target\":0.999,\"current\":0.95,\"pod\":\"pod-1\",\"violation\":true}]",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"pod\":\"pod-1\"}",
+      "is_error": false,
+      "server_name": "prometheus-mcp",
+      "tool_name": "query_slo"
+    },
+    "sequence": 1000011,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "The SLO data shows the availability target is not being met.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1000012,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
+    "event_type": "llm_response",
+    "sequence": 1000013,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
+    "event_type": "final_analysis",
+    "sequence": 1000014,
     "status": "completed"
   },
   {

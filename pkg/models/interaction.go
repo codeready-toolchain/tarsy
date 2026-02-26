@@ -57,6 +57,7 @@ type TraceExecutionGroup struct {
 	AgentName       string                   `json:"agent_name"`
 	LLMInteractions []LLMInteractionListItem `json:"llm_interactions"`
 	MCPInteractions []MCPInteractionListItem `json:"mcp_interactions"`
+	SubAgents       []TraceExecutionGroup    `json:"sub_agents,omitempty"`
 }
 
 // LLMInteractionListItem contains metadata for collapsed list view.

@@ -133,6 +133,7 @@ func buildTraceListResponse(
 	}
 
 	// Build two-level response: stages → executions → interactions.
+	// Sub-agent executions are nested under their parent orchestrator execution.
 	var stageGroups []models.TraceStageGroup
 	for _, stg := range stages {
 		sg := models.TraceStageGroup{
@@ -141,31 +142,28 @@ func buildTraceListResponse(
 		}
 
 		// Eager-loaded agent executions, sorted by agent_index for deterministic order.
-		executions := stg.Edges.AgentExecutions
-		sort.Slice(executions, func(i, j int) bool {
-			return executions[i].AgentIndex < executions[j].AgentIndex
+		allExecs := stg.Edges.AgentExecutions
+		sort.Slice(allExecs, func(i, j int) bool {
+			return allExecs[i].AgentIndex < allExecs[j].AgentIndex
 		})
 
-		for _, exec := range executions {
-			eg := models.TraceExecutionGroup{
-				ExecutionID: exec.ID,
-				AgentName:   exec.AgentName,
+		// Split into top-level and sub-agent executions.
+		subByParent := make(map[string][]*ent.AgentExecution)
+		var topLevel []*ent.AgentExecution
+		for _, exec := range allExecs {
+			if exec.ParentExecutionID != nil {
+				subByParent[*exec.ParentExecutionID] = append(subByParent[*exec.ParentExecutionID], exec)
+			} else {
+				topLevel = append(topLevel, exec)
 			}
+		}
 
-			// Map LLM interactions to list items.
-			for _, li := range llmByExec[exec.ID] {
-				eg.LLMInteractions = append(eg.LLMInteractions, toLLMListItem(li))
-			}
-			if eg.LLMInteractions == nil {
-				eg.LLMInteractions = []models.LLMInteractionListItem{}
-			}
+		for _, exec := range topLevel {
+			eg := buildTraceExecutionGroup(exec, llmByExec, mcpByExec)
 
-			// Map MCP interactions to list items.
-			for _, mi := range mcpByExec[exec.ID] {
-				eg.MCPInteractions = append(eg.MCPInteractions, toMCPListItem(mi))
-			}
-			if eg.MCPInteractions == nil {
-				eg.MCPInteractions = []models.MCPInteractionListItem{}
+			// Nest sub-agent executions under their parent.
+			for _, sub := range subByParent[exec.ID] {
+				eg.SubAgents = append(eg.SubAgents, buildTraceExecutionGroup(sub, llmByExec, mcpByExec))
 			}
 
 			sg.Executions = append(sg.Executions, eg)
@@ -184,6 +182,31 @@ func buildTraceListResponse(
 		Stages:              stageGroups,
 		SessionInteractions: sessionLLM,
 	}
+}
+
+// buildTraceExecutionGroup creates a TraceExecutionGroup for a single execution.
+func buildTraceExecutionGroup(
+	exec *ent.AgentExecution,
+	llmByExec map[string][]*ent.LLMInteraction,
+	mcpByExec map[string][]*ent.MCPInteraction,
+) models.TraceExecutionGroup {
+	eg := models.TraceExecutionGroup{
+		ExecutionID: exec.ID,
+		AgentName:   exec.AgentName,
+	}
+	for _, li := range llmByExec[exec.ID] {
+		eg.LLMInteractions = append(eg.LLMInteractions, toLLMListItem(li))
+	}
+	if eg.LLMInteractions == nil {
+		eg.LLMInteractions = []models.LLMInteractionListItem{}
+	}
+	for _, mi := range mcpByExec[exec.ID] {
+		eg.MCPInteractions = append(eg.MCPInteractions, toMCPListItem(mi))
+	}
+	if eg.MCPInteractions == nil {
+		eg.MCPInteractions = []models.MCPInteractionListItem{}
+	}
+	return eg
 }
 
 // ────────────────────────────────────────────────────────────

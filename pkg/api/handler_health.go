@@ -60,7 +60,7 @@ func (s *Server) healthHandler(c *echo.Context) error {
 
 	return c.JSON(httpStatus, &HealthResponse{
 		Status:  status,
-		Version: version.Full(),
+		Version: version.GitCommit,
 		Checks:  checks,
 	})
 }

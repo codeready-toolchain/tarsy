@@ -1,17 +1,17 @@
 {
   "created_at": "{TIMESTAMP}",
   "duration_ms": {DURATION_MS},
-  "id": "{INTERACTION_ID_43}",
+  "id": "{INTERACTION_ID_9}",
   "input_tokens": 10,
   "interaction_type": "executive_summary",
   "llm_request": {
     "messages_count": 2
   },
   "llm_response": {
-    "text_length": 71,
+    "text_length": 89,
     "tool_calls_count": 0
   },
-  "model_name": "test-model-fast",
+  "model_name": "test-model",
   "output_tokens": 5,
   "total_tokens": 15
 }
@@ -31,11 +31,11 @@ CRITICAL RULES:
 Analysis to summarize:
 
 =================================================================================
-Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
+Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.
 =================================================================================
 
 Executive Summary (1-4 lines, facts only):
 
 === MESSAGE: assistant ===
-Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.
+Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.
 

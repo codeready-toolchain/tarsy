@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -53,8 +54,10 @@ func executeToolCall(
 	normalizedName := mcp.NormalizeToolName(call.Name)
 	serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
 	if splitErr != nil {
-		serverID = ""
 		toolName = call.Name
+		if orchestrator.IsOrchestrationTool(toolName) {
+			serverID = orchestrator.OrchestrationServerName
+		}
 	}
 
 	// Publish execution progress: gathering_info

@@ -95,7 +95,7 @@ func TestBuiltinAgents(t *testing.T) {
 			wantDesc:                "General-purpose agent for analysis, summarization, reasoning, and other tasks",
 			wantType:                AgentTypeDefault,
 			wantCustomInstructions:  true,
-			customInstructionsMatch: "general-purpose worker",
+			customInstructionsMatch: "You are GeneralWorker",
 		},
 	}
 

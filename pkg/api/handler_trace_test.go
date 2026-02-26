@@ -177,6 +177,63 @@ func TestBuildTraceListResponse_StageWithNoExecutions(t *testing.T) {
 	assert.NotNil(t, resp.SessionInteractions)  // Not nil — clean JSON.
 }
 
+func TestBuildTraceListResponse_SubAgentNesting(t *testing.T) {
+	now := time.Now()
+	parentExecID := "exec-orch"
+
+	stages := []*ent.Stage{
+		{
+			ID:        "stg-1",
+			StageName: "orchestrate",
+			Edges: ent.StageEdges{
+				AgentExecutions: []*ent.AgentExecution{
+					{ID: "exec-orch", AgentName: "Orchestrator", AgentIndex: 1},
+					{ID: "exec-sub-1", AgentName: "LogAnalyzer", AgentIndex: 1, ParentExecutionID: &parentExecID},
+					{ID: "exec-sub-2", AgentName: "GeneralWorker", AgentIndex: 2, ParentExecutionID: &parentExecID},
+				},
+			},
+		},
+	}
+
+	execOrch, execSub1, execSub2 := "exec-orch", "exec-sub-1", "exec-sub-2"
+	llmInteractions := []*ent.LLMInteraction{
+		{ID: "llm-orch", ExecutionID: &execOrch, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+		{ID: "llm-sub1", ExecutionID: &execSub1, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+		{ID: "llm-sub2", ExecutionID: &execSub2, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
+	}
+
+	toolName := "search_logs"
+	mcpInteractions := []*ent.MCPInteraction{
+		{ID: "mcp-sub1", ExecutionID: "exec-sub-1", InteractionType: mcpinteraction.InteractionTypeToolCall, ServerName: "test-mcp", ToolName: &toolName, CreatedAt: now},
+	}
+
+	resp := buildTraceListResponse(stages, llmInteractions, mcpInteractions)
+
+	require.Len(t, resp.Stages, 1)
+	// Only the top-level orchestrator execution should be at the stage level.
+	require.Len(t, resp.Stages[0].Executions, 1)
+	orch := resp.Stages[0].Executions[0]
+	assert.Equal(t, "exec-orch", orch.ExecutionID)
+	assert.Equal(t, "Orchestrator", orch.AgentName)
+	require.Len(t, orch.LLMInteractions, 1)
+	assert.Equal(t, "llm-orch", orch.LLMInteractions[0].ID)
+
+	// Sub-agents should be nested under the orchestrator.
+	require.Len(t, orch.SubAgents, 2)
+	assert.Equal(t, "exec-sub-1", orch.SubAgents[0].ExecutionID)
+	assert.Equal(t, "LogAnalyzer", orch.SubAgents[0].AgentName)
+	require.Len(t, orch.SubAgents[0].LLMInteractions, 1)
+	assert.Equal(t, "llm-sub1", orch.SubAgents[0].LLMInteractions[0].ID)
+	require.Len(t, orch.SubAgents[0].MCPInteractions, 1)
+	assert.Equal(t, "mcp-sub1", orch.SubAgents[0].MCPInteractions[0].ID)
+
+	assert.Equal(t, "exec-sub-2", orch.SubAgents[1].ExecutionID)
+	assert.Equal(t, "GeneralWorker", orch.SubAgents[1].AgentName)
+	require.Len(t, orch.SubAgents[1].LLMInteractions, 1)
+	assert.Equal(t, "llm-sub2", orch.SubAgents[1].LLMInteractions[0].ID)
+	assert.Empty(t, orch.SubAgents[1].MCPInteractions)
+}
+
 // ============================================================================
 // toLLMListItem tests
 // ============================================================================

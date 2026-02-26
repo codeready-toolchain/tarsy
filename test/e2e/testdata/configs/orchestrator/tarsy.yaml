@@ -1,0 +1,39 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  SREOrchestrator:
+    type: orchestrator
+    description: "SRE investigation orchestrator"
+    custom_instructions: "You are SREOrchestrator, you investigate alerts by dispatching specialized sub-agents."
+    orchestrator:
+      max_concurrent_agents: 5
+      agent_timeout: 300s
+  LogAnalyzer:
+    description: "Analyzes logs for error patterns and anomalies"
+    mcp_servers: [test-mcp]
+    max_iterations: 2
+    custom_instructions: "You are LogAnalyzer, you analyze logs to find error patterns."
+  # GeneralWorker: built-in agent used as-is (no overrides)
+
+agent_chains:
+  orchestrator-chain:
+    alert_types: [test-orchestrator]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: orchestrate
+        agents:
+          - name: SREOrchestrator
+            sub_agents: [LogAnalyzer, GeneralWorker]

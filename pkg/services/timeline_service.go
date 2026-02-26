@@ -270,6 +270,27 @@ func (s *TimelineService) GetMaxSequenceNumber(ctx context.Context, sessionID st
 	return event.SequenceNumber, nil
 }
 
+// GetMaxSequenceForExecution returns the maximum sequence number for an
+// execution's timeline events. Returns 0 if no events exist.
+func (s *TimelineService) GetMaxSequenceForExecution(ctx context.Context, executionID string) (int, error) {
+	if executionID == "" {
+		return 0, NewValidationError("executionID", "required")
+	}
+
+	event, err := s.client.TimelineEvent.Query().
+		Where(timelineevent.ExecutionIDEQ(executionID)).
+		Order(ent.Desc(timelineevent.FieldSequenceNumber)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to get max sequence for execution: %w", err)
+	}
+
+	return event.SequenceNumber, nil
+}
+
 // GetAgentTimeline retrieves all events for an agent execution
 func (s *TimelineService) GetAgentTimeline(ctx context.Context, executionID string) ([]*ent.TimelineEvent, error) {
 	if executionID == "" {

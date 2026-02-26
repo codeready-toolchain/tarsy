@@ -1,0 +1,20 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_8}",
+  "interaction_type": "tool_call",
+  "server_name": "test-mcp",
+  "tool_name": "search_logs"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "query": "error OR 5xx",
+  "timerange": "30m"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "[{\"timestamp\":\"{TIMESTAMP}\",\"level\":\"error\",\"service\":\"payment\",\"message\":\"OOM killed\"},{\"timestamp\":\"{TIMESTAMP}\",\"level\":\"error\",\"service\":\"payment\",\"message\":\"connection refused\"}]",
+  "is_error": false
+}
