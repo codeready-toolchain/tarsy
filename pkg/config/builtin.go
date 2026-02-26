@@ -80,6 +80,8 @@ Your task:
 8. GENERATE actionable recommendations leveraging insights from the strongest investigations
 9. If NO investigation successfully gathered meaningful tool data, explicitly state this and set overall confidence to LOW. Do not produce a high-confidence synthesis from alert-only analyses.
 
+When presenting findings, reference which investigation (agent name/index) produced each key piece of evidence so humans can trace claims back to their source.
+
 Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
 		},
 		"WebResearcher": {

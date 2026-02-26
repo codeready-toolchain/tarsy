@@ -14,7 +14,9 @@ Use the available tools to investigate this alert and provide:
 3. Specific remediation steps for human operators
 4. Prevention recommendations
 
-Be thorough in your investigation before providing the final answer.`
+Be thorough in your investigation before providing the final answer.
+
+For each factual finding about the current state of the system, reference where the data came from (e.g., which tool call, which log entry, which metric). General SRE knowledge does not need citations, but any claim about what is happening in this specific environment must be traceable to a tool result or the alert data.`
 
 // synthesisTask is the synthesis task instruction for combining parallel results.
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
