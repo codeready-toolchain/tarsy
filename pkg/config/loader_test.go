@@ -230,6 +230,74 @@ agent_chains:
 	assert.Equal(t, SubAgentRefs{{Name: "worker-agent"}}, chain.Stages[0].Agents[0].SubAgents)
 }
 
+func TestLoadTarsyYAML_SubAgentRefsLongForm(t *testing.T) {
+	configDir := t.TempDir()
+
+	yamlContent := `
+agents:
+  worker-agent:
+    description: "Worker"
+  analyzer:
+    description: "Analyzer"
+  orch-agent:
+    type: orchestrator
+    description: "Orchestrator"
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    sub_agents:
+      - name: worker-agent
+        max_iterations: 5
+        llm_provider: fast-provider
+      - analyzer
+    stages:
+      - name: "stage1"
+        sub_agents:
+          - name: analyzer
+            llm_backend: langchain
+            mcp_servers: [grafana]
+        agents:
+          - name: "orch-agent"
+            sub_agents:
+              - name: worker-agent
+                max_iterations: 3
+              - name: analyzer
+                llm_provider: cheap-provider
+`
+	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	loader := &configLoader{configDir: configDir}
+	cfg, err := loader.loadTarsyYAML()
+	require.NoError(t, err)
+
+	chain := cfg.AgentChains["test-chain"]
+
+	// Chain-level: mixed long-form + short-form
+	require.Len(t, chain.SubAgents, 2)
+	assert.Equal(t, "worker-agent", chain.SubAgents[0].Name)
+	assert.Equal(t, "fast-provider", chain.SubAgents[0].LLMProvider)
+	assert.Equal(t, 5, *chain.SubAgents[0].MaxIterations)
+	assert.Equal(t, "analyzer", chain.SubAgents[1].Name)
+	assert.Empty(t, chain.SubAgents[1].LLMProvider)
+
+	// Stage-level: long-form with llm_backend and mcp_servers
+	stageRefs := chain.Stages[0].SubAgents
+	require.Len(t, stageRefs, 1)
+	assert.Equal(t, "analyzer", stageRefs[0].Name)
+	assert.Equal(t, LLMBackendLangChain, stageRefs[0].LLMBackend)
+	assert.Equal(t, []string{"grafana"}, stageRefs[0].MCPServers)
+
+	// Stage-agent-level: long-form overrides
+	agentRefs := chain.Stages[0].Agents[0].SubAgents
+	require.Len(t, agentRefs, 2)
+	assert.Equal(t, "worker-agent", agentRefs[0].Name)
+	assert.Equal(t, 3, *agentRefs[0].MaxIterations)
+	assert.Equal(t, "analyzer", agentRefs[1].Name)
+	assert.Equal(t, "cheap-provider", agentRefs[1].LLMProvider)
+}
+
 func TestLoadLLMProvidersYAML(t *testing.T) {
 	configDir := t.TempDir()
 

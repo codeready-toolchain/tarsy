@@ -171,6 +171,53 @@ func TestSubAgentRunner_Dispatch_MaxConcurrentExceeded(t *testing.T) {
 	assert.ErrorIs(t, err, ErrMaxConcurrentAgents)
 }
 
+func TestSubAgentRunner_OverridesMap(t *testing.T) {
+	registry := config.BuildSubAgentRegistry(map[string]*config.AgentConfig{
+		"AgentA": {Description: "Agent A"},
+		"AgentB": {Description: "Agent B"},
+	})
+	maxIter := 5
+
+	t.Run("nil refs produces empty overrides", func(t *testing.T) {
+		runner := NewSubAgentRunner(
+			context.Background(), &SubAgentDeps{},
+			"parent", "sess", "stg", registry,
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			nil,
+		)
+		assert.Empty(t, runner.overrides)
+	})
+
+	t.Run("refs with overrides populates map", func(t *testing.T) {
+		refs := config.SubAgentRefs{
+			{Name: "AgentA", LLMProvider: "fast", MaxIterations: &maxIter},
+			{Name: "AgentB"},
+		}
+		runner := NewSubAgentRunner(
+			context.Background(), &SubAgentDeps{},
+			"parent", "sess", "stg", registry,
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			refs,
+		)
+		require.Len(t, runner.overrides, 2)
+		assert.Equal(t, "fast", runner.overrides["AgentA"].LLMProvider)
+		assert.Equal(t, 5, *runner.overrides["AgentA"].MaxIterations)
+		assert.Equal(t, "", runner.overrides["AgentB"].LLMProvider)
+		assert.Nil(t, runner.overrides["AgentB"].MaxIterations)
+	})
+
+	t.Run("dispatch without override uses zero-value ref", func(t *testing.T) {
+		runner := NewSubAgentRunner(
+			context.Background(), &SubAgentDeps{},
+			"parent", "sess", "stg", registry,
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			nil,
+		)
+		ref := runner.overrides["NonExistent"]
+		assert.Equal(t, config.SubAgentRef{}, ref)
+	})
+}
+
 // ─── Dispatch integration tests (testcontainers DB + mock agent) ────────────
 
 func TestSubAgentRunner_Dispatch_Success(t *testing.T) {
@@ -402,6 +449,43 @@ func TestSubAgentRunner_Dispatch_SetsParentExecutionAndTask(t *testing.T) {
 	assert.Equal(t, "check DB linkage", *dbExec.Task)
 
 	assert.Equal(t, "TestAgent", dbExec.AgentName)
+}
+
+// ─── Dispatch with per-reference overrides (integration) ────────────────────
+
+func TestSubAgentRunner_Dispatch_WithOverrides(t *testing.T) {
+	ctx := context.Background()
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "done with override",
+		}, nil
+	})
+	defer cleanup()
+
+	// Add a second LLM provider to the config so the override is valid.
+	runner.deps.Config.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model", MaxToolResultTokens: 10000},
+		"fast-provider": {Type: config.LLMProviderTypeGoogle, Model: "fast-model", MaxToolResultTokens: 10000},
+	})
+
+	// Set per-reference overrides: TestAgent gets fast-provider.
+	runner.overrides = map[string]config.SubAgentRef{
+		"TestAgent": {Name: "TestAgent", LLMProvider: "fast-provider"},
+	}
+
+	execID, err := runner.Dispatch(ctx, "TestAgent", "overridden task")
+	require.NoError(t, err)
+
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	// Verify the DB record reflects the overridden provider.
+	dbExec, err := runner.deps.StageService.GetAgentExecutionByID(ctx, execID)
+	require.NoError(t, err)
+	require.NotNil(t, dbExec.LlmProvider, "llm_provider should be set")
+	assert.Equal(t, "fast-provider", *dbExec.LlmProvider,
+		"execution should use overridden LLM provider, not the default")
 }
 
 // ─── CancelAll idempotent ───────────────────────────────────────────────────
