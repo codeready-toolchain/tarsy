@@ -227,7 +227,8 @@ func TestBuiltinMCPServers(t *testing.T) {
 		assert.NotNil(t, server.DataMasking)
 		assert.True(t, server.DataMasking.Enabled)
 		assert.NotNil(t, server.Summarization)
-		assert.True(t, server.Summarization.Enabled)
+		require.NotNil(t, server.Summarization.Enabled)
+		assert.True(t, *server.Summarization.Enabled)
 	})
 }
 

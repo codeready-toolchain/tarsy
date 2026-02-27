@@ -435,7 +435,7 @@ func (v *Validator) validateMCPServers() error {
 		}
 
 		// Validate summarization configuration
-		if server.Summarization != nil && server.Summarization.Enabled {
+		if server.Summarization != nil && !server.Summarization.SummarizationDisabled() {
 			if server.Summarization.SizeThresholdTokens < 100 {
 				return NewValidationError("mcp_server", serverID, "summarization.size_threshold_tokens", fmt.Errorf("must be at least 100"))
 			}

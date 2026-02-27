@@ -162,7 +162,7 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 				Patterns:      []string{"certificate", "token", "email"},
 			},
 			Summarization: &SummarizationConfig{
-				Enabled:              true,
+				Enabled:              BoolPtr(true),
 				SizeThresholdTokens:  DefaultSizeThresholdTokens,
 				SummaryMaxTokenLimit: 1000,
 			},
