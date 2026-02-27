@@ -271,7 +271,7 @@ func callSummarizationLLMWithStreaming(
 		}
 	}
 
-	resp, err := collectStreamWithCallback(stream, callback)
+	resp, err := collectStreamWithCallback(stream, callback, nil)
 	if err != nil {
 		// Mark streaming event as failed if it was created
 		if summaryEventID != "" {

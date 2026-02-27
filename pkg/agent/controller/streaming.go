@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -12,6 +13,18 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
+
+// PartialOutputError wraps an LLM error that occurred after partial output
+// was produced. Callers can inspect PartialText to include it in retry context.
+type PartialOutputError struct {
+	Cause           error
+	PartialText     string
+	PartialThinking string
+	IsLoop          bool // true when caused by degenerate loop detection
+}
+
+func (e *PartialOutputError) Error() string { return e.Cause.Error() }
+func (e *PartialOutputError) Unwrap() error { return e.Cause }
 
 // LLMResponse holds the fully-collected response from a streaming LLM call.
 type LLMResponse struct {
@@ -25,9 +38,9 @@ type LLMResponse struct {
 
 // collectStream drains an LLM chunk channel into a complete LLMResponse.
 // Returns an error if an ErrorChunk is received.
-// Delegates to collectStreamWithCallback with a nil callback.
+// Delegates to collectStreamWithCallback with a nil callback and no loop detection.
 func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
-	return collectStreamWithCallback(stream, nil)
+	return collectStreamWithCallback(stream, nil, nil)
 }
 
 // callLLM performs a single LLM call with context cancellation support.
@@ -64,21 +77,82 @@ const ChunkTypeText = "text"
 // ChunkTypeThinking identifies a thinking content delta in stream callbacks.
 const ChunkTypeThinking = "thinking"
 
+// Loop detection parameters.
+const (
+	loopCheckInterval = 2000 // check for loops every N chars of accumulated text
+	loopMinPatternLen = 30   // shortest repeating unit to look for
+	loopMaxPatternLen = 500  // longest repeating unit to try
+	loopMinRepeats    = 5    // how many consecutive repetitions trigger detection
+	loopWindowSize    = 6000 // only inspect the tail of the text buffer
+)
+
+// detectTextLoop checks the tail of text for a substring that repeats at
+// least loopMinRepeats times consecutively. Returns true and the byte offset
+// where the first repetition starts (safe truncation point).
+func detectTextLoop(text string) (bool, int) {
+	n := len(text)
+	window := loopWindowSize
+	if window > n {
+		window = n
+	}
+	tail := text[n-window:]
+
+	for patLen := loopMinPatternLen; patLen <= loopMaxPatternLen; patLen++ {
+		if patLen*(loopMinRepeats+1) > len(tail) {
+			break
+		}
+		pattern := tail[len(tail)-patLen:]
+		count := 1
+		pos := len(tail) - patLen*2
+		for pos >= 0 && tail[pos:pos+patLen] == pattern {
+			count++
+			pos -= patLen
+		}
+		if count >= loopMinRepeats {
+			truncateAt := n - (count * patLen)
+			return true, truncateAt
+		}
+	}
+	return false, 0
+}
+
 // collectStreamWithCallback collects a stream while calling back for real-time delivery.
 // The callback is optional (nil = buffered mode, same as collectStream).
+// cancelStream is called to abort the gRPC stream when a degenerate loop is
+// detected; pass nil to disable loop detection.
 func collectStreamWithCallback(
 	stream <-chan agent.Chunk,
 	callback StreamCallback,
+	cancelStream func(),
 ) (*LLMResponse, error) {
 	resp := &LLMResponse{}
 	var textBuf, thinkingBuf strings.Builder
+	var lastLoopCheck int
+	loopDetected := false
 
 	for chunk := range stream {
 		switch c := chunk.(type) {
 		case *agent.TextChunk:
+			if loopDetected {
+				continue // discard further text after loop detected
+			}
 			textBuf.WriteString(c.Content)
 			if callback != nil {
 				callback(ChunkTypeText, c.Content)
+			}
+			// Periodic loop detection
+			if cancelStream != nil && textBuf.Len()-lastLoopCheck >= loopCheckInterval {
+				lastLoopCheck = textBuf.Len()
+				if detected, truncAt := detectTextLoop(textBuf.String()); detected {
+					loopLen := textBuf.Len() - truncAt
+					slog.Warn("Detected degenerate loop in LLM text output, cancelling stream",
+						"text_len", textBuf.Len(), "truncate_at", truncAt, "loop_chars", loopLen)
+					text := textBuf.String()[:truncAt]
+					textBuf.Reset()
+					textBuf.WriteString(text)
+					loopDetected = true
+					cancelStream()
+				}
 			}
 		case *agent.ThinkingChunk:
 			thinkingBuf.WriteString(c.Content)
@@ -106,13 +180,30 @@ func collectStreamWithCallback(
 				ThinkingTokens: c.ThinkingTokens,
 			}
 		case *agent.ErrorChunk:
-			return nil, fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-				c.Message, c.Code, c.Retryable)
+			if loopDetected {
+				continue // expected error from stream cancellation
+			}
+			return nil, &PartialOutputError{
+				Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+					c.Message, c.Code, c.Retryable),
+				PartialText:     textBuf.String(),
+				PartialThinking: thinkingBuf.String(),
+			}
 		}
 	}
 
 	resp.Text = textBuf.String()
 	resp.ThinkingText = thinkingBuf.String()
+
+	if loopDetected {
+		return nil, &PartialOutputError{
+			Cause:           fmt.Errorf("LLM output stuck in repetitive loop, cancelled after %d chars of text", len(resp.Text)),
+			PartialText:     resp.Text,
+			PartialThinking: resp.ThinkingText,
+			IsLoop:          true,
+		}
+	}
+
 	return resp, nil
 }
 
@@ -303,16 +394,27 @@ func callLLMWithStreaming(
 		}
 	}
 
-	resp, err := collectStreamWithCallback(stream, callback)
+	resp, err := collectStreamWithCallback(stream, callback, llmCancel)
 	if err != nil {
-		// Mark any streaming timeline events as failed so they don't stay
-		// stuck at status "streaming" indefinitely.
-		// Use a detached context with timeout: the caller's context (iterCtx)
-		// is likely already cancelled/expired (e.g. DeadlineExceeded), but
-		// the DB cleanup must still complete.
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cleanupCancel()
-		markStreamingEventsFailed(cleanupCtx, execCtx, thinkingEventID, textEventID, err)
+		var poe *PartialOutputError
+		if errors.As(err, &poe) && poe.IsLoop {
+			// Loop detected: finalize streaming events with truncated text
+			// (the valid portion before the loop started).
+			if thinkingEventID != "" {
+				finalizeStreamingEvent(ctx, execCtx, thinkingEventID, timelineevent.EventTypeLlmThinking, poe.PartialThinking, "thinking")
+			}
+			if textEventID != "" {
+				finalizeStreamingEvent(ctx, execCtx, textEventID, timelineevent.EventTypeLlmResponse, poe.PartialText, "text")
+			}
+		} else {
+			// Stream error: mark events as failed so they don't stay stuck
+			// at status "streaming" indefinitely.
+			// Use a detached context: the caller's context (iterCtx) is likely
+			// already cancelled/expired, but the DB cleanup must still complete.
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cleanupCancel()
+			markStreamingEventsFailed(cleanupCtx, execCtx, thinkingEventID, textEventID, err)
+		}
 		return nil, err
 	}
 

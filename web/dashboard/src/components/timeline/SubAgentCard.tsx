@@ -35,7 +35,6 @@ interface SubAgentCardProps {
   executionStatus?: { status: string; stageId: string; agentIndex: number };
   progressStatus?: string;
   fallbackAgentName?: string;
-  fallbackTask?: string;
   shouldAutoCollapse?: (item: FlowItem) => boolean;
   onToggleItemExpansion?: (item: FlowItem) => void;
   expandAllReasoning?: boolean;
@@ -50,7 +49,6 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   executionStatus,
   progressStatus,
   fallbackAgentName,
-  fallbackTask,
   shouldAutoCollapse,
   onToggleItemExpansion,
   expandAllReasoning = false,
@@ -63,7 +61,6 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const eo = executionOverview;
   const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
   const agentName = eo?.agent_name || fallbackAgentName || 'Sub-Agent';
-  const task = eo?.task || fallbackTask;
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
   const isRunning = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);

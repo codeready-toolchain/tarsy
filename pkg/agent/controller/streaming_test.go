@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +116,7 @@ func TestCollectStream(t *testing.T) {
 		assert.Nil(t, resp.Groundings)
 	})
 
-	t.Run("error chunk returns error", func(t *testing.T) {
+	t.Run("error chunk returns error with partial output", func(t *testing.T) {
 		ch := make(chan agent.Chunk, 2)
 		ch <- &agent.TextChunk{Content: "partial"}
 		ch <- &agent.ErrorChunk{Message: "rate limited", Code: "429", Retryable: true}
@@ -127,6 +128,10 @@ func TestCollectStream(t *testing.T) {
 		assert.Contains(t, err.Error(), "rate limited")
 		assert.Contains(t, err.Error(), "429")
 		assert.Contains(t, err.Error(), "retryable: true")
+
+		var poe *PartialOutputError
+		require.ErrorAs(t, err, &poe)
+		assert.Equal(t, "partial", poe.PartialText)
 	})
 
 	t.Run("empty stream returns empty response", func(t *testing.T) {
@@ -206,7 +211,7 @@ func TestCollectStreamWithCallback_NilCallback(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello world", resp.Text)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
@@ -231,7 +236,7 @@ func TestCollectStreamWithCallback_TextCallback(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback)
+	resp, err := collectStreamWithCallback(ch, callback, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello world", resp.Text)
 
@@ -262,7 +267,7 @@ func TestCollectStreamWithCallback_ThinkingAndTextCallbacks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "The answer is 42."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback)
+	resp, err := collectStreamWithCallback(ch, callback, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "The answer is 42.", resp.Text)
 	assert.Equal(t, "Let me think...", resp.ThinkingText)
@@ -288,11 +293,16 @@ func TestCollectStreamWithCallback_ErrorChunk(t *testing.T) {
 		callbackCount++
 	}
 
-	resp, err := collectStreamWithCallback(ch, callback)
-	assert.Nil(t, resp)
+	_, err := collectStreamWithCallback(ch, callback, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rate limit exceeded")
 	assert.Equal(t, 1, callbackCount) // Only the first text chunk callback fired
+
+	// Should be a PartialOutputError with partial text preserved
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, "partial ", poe.PartialText)
+	assert.False(t, poe.IsLoop)
 }
 
 func TestCollectStreamWithCallback_ToolCalls(t *testing.T) {
@@ -301,7 +311,7 @@ func TestCollectStreamWithCallback_ToolCalls(t *testing.T) {
 	ch <- &agent.ToolCallChunk{CallID: "tc-1", Name: "get_pods", Arguments: `{"namespace":"default"}`}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Let me check that.", resp.Text)
 	require.Len(t, resp.ToolCalls, 1)
@@ -312,7 +322,7 @@ func TestCollectStreamWithCallback_EmptyStream(t *testing.T) {
 	ch := make(chan agent.Chunk)
 	close(ch) // Immediately closed — no chunks
 
-	resp, err := collectStreamWithCallback(ch, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "", resp.Text)
 	assert.Equal(t, "", resp.ThinkingText)
@@ -333,7 +343,7 @@ func TestCollectStreamWithCallback_GroundingChunks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "Based on search results..."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Based on search results...", resp.Text)
 	require.Len(t, resp.Groundings, 1)
@@ -348,12 +358,152 @@ func TestCollectStreamWithCallback_CodeExecutionChunks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "Executed successfully."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Executed successfully.", resp.Text)
 	require.Len(t, resp.CodeExecutions, 2)
 	assert.Equal(t, "print('hello')", resp.CodeExecutions[0].Code)
 	assert.Equal(t, "hello", resp.CodeExecutions[1].Result)
+}
+
+// ============================================================================
+// detectTextLoop tests
+// ============================================================================
+
+func TestDetectTextLoop(t *testing.T) {
+	t.Run("no loop in short text", func(t *testing.T) {
+		detected, _ := detectTextLoop("Hello world, this is normal text.")
+		assert.False(t, detected)
+	})
+
+	t.Run("no loop in long non-repetitive text", func(t *testing.T) {
+		var b strings.Builder
+		for i := 0; i < 200; i++ {
+			fmt.Fprintf(&b, "Line %d: unique content here.\n", i)
+		}
+		detected, _ := detectTextLoop(b.String())
+		assert.False(t, detected)
+	})
+
+	t.Run("detects exact repetition", func(t *testing.T) {
+		pattern := "Wait, I'll just do it.\n\nEnd of thinking.\n\n"
+		prefix := "This is the valid start of the response.\n\n"
+		text := prefix + strings.Repeat(pattern, 10)
+		detected, truncAt := detectTextLoop(text)
+		assert.True(t, detected)
+		assert.Equal(t, len(prefix), truncAt)
+	})
+
+	t.Run("detects real-world Gemini loop pattern", func(t *testing.T) {
+		pattern := "Actually, I'll just provide the final response.\n\nWait, I'll just do it.\n\nEnd of thinking.\n\n"
+		prefix := "Here is the investigation summary with some real content that should be preserved.\n\n"
+		text := prefix + strings.Repeat(pattern, 20)
+		detected, truncAt := detectTextLoop(text)
+		assert.True(t, detected)
+		assert.Equal(t, len(prefix), truncAt)
+		assert.Equal(t, prefix, text[:truncAt])
+	})
+
+	t.Run("does not trigger below minimum repeats", func(t *testing.T) {
+		// Pattern is long enough but only repeats 3 times (below threshold of 5)
+		pattern := "This is a long enough pattern that repeats a few times.\n"
+		text := "some prefix text\n" + strings.Repeat(pattern, 3)
+		detected, _ := detectTextLoop(text)
+		assert.False(t, detected)
+	})
+
+	t.Run("threshold requires minimum repeats", func(t *testing.T) {
+		pattern := strings.Repeat("x", 50) // 50-char pattern
+		text := "prefix" + strings.Repeat(pattern, 3)
+		detected, _ := detectTextLoop(text)
+		// Only 3 repeats, below loopMinRepeats (5)
+		assert.False(t, detected)
+	})
+}
+
+func TestCollectStreamWithCallback_LoopDetection(t *testing.T) {
+	pattern := "Wait, I'll just do it.\n\nEnd of thinking.\n\n"
+	prefix := "Here is a valid investigation summary.\n\n"
+
+	// Build chunks: valid prefix + loop
+	ch := make(chan agent.Chunk, 200)
+	ch <- &agent.TextChunk{Content: prefix}
+	for i := 0; i < 100; i++ {
+		ch <- &agent.TextChunk{Content: pattern}
+	}
+	close(ch)
+
+	cancelled := false
+	cancel := func() { cancelled = true }
+
+	_, err := collectStreamWithCallback(ch, nil, cancel)
+	require.Error(t, err)
+	assert.True(t, cancelled, "cancelStream should have been called")
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.True(t, poe.IsLoop)
+	assert.Equal(t, prefix, poe.PartialText, "partial text should be the valid prefix without the loop")
+}
+
+func TestCollectStreamWithCallback_ErrorPreservesPartialOutput(t *testing.T) {
+	ch := make(chan agent.Chunk, 5)
+	ch <- &agent.TextChunk{Content: "First part of response. "}
+	ch <- &agent.TextChunk{Content: "Second part. "}
+	ch <- &agent.ThinkingChunk{Content: "Let me think..."}
+	ch <- &agent.ErrorChunk{Message: "stream interrupted", Code: "partial_stream_error", Retryable: false}
+	close(ch)
+
+	_, err := collectStreamWithCallback(ch, nil, nil)
+	require.Error(t, err)
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, "First part of response. Second part. ", poe.PartialText)
+	assert.Equal(t, "Let me think...", poe.PartialThinking)
+	assert.False(t, poe.IsLoop)
+	assert.Contains(t, poe.Error(), "stream interrupted")
+}
+
+// ============================================================================
+// buildRetryMessage tests
+// ============================================================================
+
+func TestBuildRetryMessage(t *testing.T) {
+	t.Run("plain error", func(t *testing.T) {
+		msg := buildRetryMessage(fmt.Errorf("connection reset"))
+		assert.Contains(t, msg, "Error from previous attempt")
+		assert.Contains(t, msg, "connection reset")
+	})
+
+	t.Run("loop error", func(t *testing.T) {
+		msg := buildRetryMessage(&PartialOutputError{
+			Cause:  fmt.Errorf("loop detected"),
+			IsLoop: true,
+		})
+		assert.Contains(t, msg, "repetitive output loop")
+		assert.Contains(t, msg, "direct, concise response")
+	})
+
+	t.Run("partial output error with text", func(t *testing.T) {
+		msg := buildRetryMessage(&PartialOutputError{
+			Cause:       fmt.Errorf("Google API 500"),
+			PartialText: "Here is my analysis of the issue...",
+		})
+		assert.Contains(t, msg, "Google API 500")
+		assert.Contains(t, msg, "Here is my analysis")
+		assert.Contains(t, msg, "continue from where you left off")
+	})
+
+	t.Run("partial output truncated when long", func(t *testing.T) {
+		longText := strings.Repeat("x", 5000)
+		msg := buildRetryMessage(&PartialOutputError{
+			Cause:       fmt.Errorf("timeout"),
+			PartialText: longText,
+		})
+		assert.Less(t, len(msg), 3000, "message should be truncated")
+		assert.Contains(t, msg, "...")
+	})
 }
 
 // ============================================================================
@@ -430,7 +580,7 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150, ThinkingTokens: 20}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback)
+	resp, err := collectStreamWithCallback(ch, callback, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Answer: 42", resp.Text)
 	assert.Equal(t, "Hmm...", resp.ThinkingText)
