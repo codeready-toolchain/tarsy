@@ -131,7 +131,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 - **Three transport types**: stdio (command-line servers), HTTP (JSON-RPC endpoints), SSE (Server-Sent Events)
 - **Per-agent-execution isolation** -- each agent execution gets its own MCP Client with independent sessions
 - **Data masking** with hybrid approach: code-based structural maskers (K8s Secrets) + regex patterns
-- **Tool result summarization** -- large MCP results are automatically summarized by an LLM call before being sent back to the investigating agent
+- **Tool result summarization** -- enabled by default for all MCP servers; large results (>5K tokens) are automatically summarized by an LLM call before being sent back to the investigating agent (can be disabled per-server)
 - **Health monitoring** -- background service checks server health, attempts recovery, surfaces warnings
 
 ### 6. LLM Multi-Provider Support

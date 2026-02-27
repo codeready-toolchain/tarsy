@@ -41,7 +41,7 @@ type MaskingPattern struct {
 
 // DefaultSizeThresholdTokens is the default token count above which MCP
 // responses are summarized (when summarization is enabled).
-const DefaultSizeThresholdTokens = 10000
+const DefaultSizeThresholdTokens = 5000
 
 // SummarizationConfig defines when and how to summarize large MCP responses
 type SummarizationConfig struct {

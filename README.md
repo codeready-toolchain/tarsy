@@ -79,7 +79,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Flexible Alert Processing**: Accept arbitrary text payloads from any monitoring system
 - **Optional Runbook Integration**: Fetch supplemental guidance from GitHub repositories to steer agent behavior
 - **Data Masking**: Hybrid masking combining structural analysis (Kubernetes Secrets) with regex patterns to protect sensitive data
-- **Tool Result Summarization**: LLM-powered summarization of verbose MCP outputs to reduce token usage and improve reasoning
+- **Tool Result Summarization**: Enabled by default — LLM-powered summarization of verbose MCP outputs (>5K tokens) to reduce token usage and improve reasoning
 
 ### Observability & Operations
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization

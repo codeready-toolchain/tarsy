@@ -52,17 +52,26 @@ func maybeSummarize(
 	}
 
 	serverConfig, err := registry.Get(serverID)
-	if err != nil || serverConfig.Summarization == nil || !serverConfig.Summarization.Enabled {
+	if err != nil {
 		return &SummarizationResult{Content: rawContent}, nil
 	}
 
-	sumConfig := serverConfig.Summarization
+	// Summarization is enabled by default; only skip if explicitly disabled
+	if serverConfig.Summarization != nil && !serverConfig.Summarization.Enabled {
+		return &SummarizationResult{Content: rawContent}, nil
+	}
 
-	// 2. Estimate token count
+	// 2. Estimate token count and resolve effective config (defaults for nil)
 	estimatedTokens := mcp.EstimateTokens(rawContent)
-	threshold := sumConfig.SizeThresholdTokens
-	if threshold <= 0 {
-		threshold = config.DefaultSizeThresholdTokens
+	threshold := config.DefaultSizeThresholdTokens
+	maxSummaryTokens := 1000
+	if serverConfig.Summarization != nil {
+		if serverConfig.Summarization.SizeThresholdTokens > 0 {
+			threshold = serverConfig.Summarization.SizeThresholdTokens
+		}
+		if serverConfig.Summarization.SummaryMaxTokenLimit > 0 {
+			maxSummaryTokens = serverConfig.Summarization.SummaryMaxTokenLimit
+		}
 	}
 
 	if estimatedTokens <= threshold {
@@ -77,11 +86,6 @@ func maybeSummarize(
 	// Publish execution progress: distilling
 	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseDistilling,
 		fmt.Sprintf("Summarizing %s.%s (%d tokens)", serverID, toolName, estimatedTokens))
-
-	maxSummaryTokens := sumConfig.SummaryMaxTokenLimit
-	if maxSummaryTokens <= 0 {
-		maxSummaryTokens = 1000 // Default max summary tokens
-	}
 
 	// 4. Safety-net truncate for summarization input
 	truncatedForLLM := mcp.TruncateForSummarization(rawContent)

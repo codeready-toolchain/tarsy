@@ -65,10 +65,10 @@ func TestBuildConversationContext(t *testing.T) {
 func TestMaybeSummarize(t *testing.T) {
 	ctx := t.Context()
 
-	t.Run("returns raw content when summarization disabled", func(t *testing.T) {
+	t.Run("returns raw content when below default threshold with nil config", func(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
-				Summarization: nil,
+				Summarization: nil, // nil = enabled with defaults
 			},
 		})
 		pb := prompt.NewPromptBuilder(registry)
@@ -86,7 +86,7 @@ func TestMaybeSummarize(t *testing.T) {
 		assert.False(t, result.WasSummarized)
 	})
 
-	t.Run("returns raw content when below threshold", func(t *testing.T) {
+	t.Run("returns raw content when below explicit threshold", func(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
@@ -162,6 +162,34 @@ func TestMaybeSummarize(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "content", result.Content)
 		assert.False(t, result.WasSummarized)
+	})
+
+	t.Run("triggers summarization with nil config above default threshold", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summarized output"}}},
+			},
+		}
+
+		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+			"test-server": {
+				Summarization: nil, // nil = enabled with defaults (threshold = DefaultSizeThresholdTokens)
+			},
+		})
+		pb := prompt.NewPromptBuilder(registry)
+
+		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
+		execCtx.PromptBuilder = pb
+
+		// DefaultSizeThresholdTokens is 5000 tokens ≈ 20000 chars
+		largeContent := strings.Repeat("event-data ", 2500) // ~27500 chars ≈ 6875 tokens > 5000
+		eventSeq := 0
+		result, err := maybeSummarize(ctx, execCtx, "test-server", "get_events",
+			largeContent, "[user]: check events", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Summarized output")
+		assert.Contains(t, result.Content, "[NOTE: The output from test-server.get_events was")
 	})
 
 	t.Run("triggers summarization above threshold", func(t *testing.T) {

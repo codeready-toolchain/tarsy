@@ -165,10 +165,13 @@ mcp_servers:
       #     replacement: "[MASKED_CUSTOM]"
       #     description: "Custom secret pattern"
     
-    summarization:
-      enabled: true
-      # size_threshold_tokens: 10000  # Default: 10000 (omit to use default)
-      summary_max_token_limit: 1000
+    # Summarization is enabled by default for all MCP servers.
+    # Large tool results (>5000 tokens) are automatically summarized by an LLM call.
+    # To customize thresholds or disable, uncomment below:
+    # summarization:
+    #   enabled: false                  # Set to false to disable (default: true)
+    #   size_threshold_tokens: 8000     # Override default (5000 tokens)
+    #   summary_max_token_limit: 1000   # Max tokens in summary (default: 1000)
 
   # Example: ArgoCD MCP server
   argocd-server:
@@ -195,9 +198,9 @@ mcp_servers:
       pattern_groups: ["kubernetes"]
       patterns: ["certificate", "token"]
     
+    # Override default summarization threshold for ArgoCD (smaller results are useful)
     summarization:
-      enabled: true
-      size_threshold_tokens: 3000
+      size_threshold_tokens: 3000     # Summarize above 3000 tokens (default: 5000)
 
   # Example: HTTP-based MCP server
   monitoring-server:
@@ -218,9 +221,9 @@ mcp_servers:
       enabled: true
       patterns: ["email", "token"]
     
+    # Disable summarization for this server (monitoring data should be kept raw)
     summarization:
-      enabled: true
-      size_threshold_tokens: 4000
+      enabled: false
 
 # =============================================================================
 # CUSTOM AGENT DEFINITIONS
