@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha } from '@mui/material';
+import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
   AccountTree,
 } from '@mui/icons-material';
+
+const pulse = keyframes`
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+`;
 import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
@@ -92,7 +97,9 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
         borderLeft: 3,
         borderColor: getBorderColor(effectiveStatus),
         borderRadius: 1,
-        bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
+        bgcolor: (theme) => isRunning
+          ? alpha(theme.palette.info.main, 0.03)
+          : alpha(theme.palette.grey[500], 0.04),
         border: 1,
         borderRightColor: 'divider',
         borderTopColor: 'divider',
@@ -113,7 +120,11 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           '&:hover': hasContent ? { bgcolor: (theme) => alpha(theme.palette.grey[500], 0.06) } : {},
         }}
       >
-        <AccountTree sx={{ fontSize: 18, color: 'text.secondary' }} />
+        <AccountTree sx={{
+          fontSize: 18,
+          color: isRunning ? 'info.main' : 'text.secondary',
+          ...(isRunning && { animation: `${pulse} 1.5s ease-in-out infinite` }),
+        }} />
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>

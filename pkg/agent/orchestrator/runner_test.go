@@ -3,10 +3,12 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -488,6 +490,75 @@ func TestSubAgentRunner_Dispatch_WithOverrides(t *testing.T) {
 		"execution should use overridden LLM provider, not the default")
 }
 
+// ─── Execution status WS events (integration) ──────────────────────────────
+
+func TestSubAgentRunner_Dispatch_PublishesExecutionStatusEvents(t *testing.T) {
+	ctx := context.Background()
+	publisher := &recordingEventPublisher{}
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "done",
+		}, nil
+	})
+	defer cleanup()
+	runner.deps.EventPublisher = publisher
+
+	execID, err := runner.Dispatch(ctx, "TestAgent", "status event task")
+	require.NoError(t, err)
+
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	statuses := publisher.executionStatuses()
+	require.GreaterOrEqual(t, len(statuses), 2, "expected at least active + terminal status events")
+
+	// First event: active
+	active := statuses[0]
+	assert.Equal(t, execID, active.ExecutionID)
+	assert.Equal(t, runner.parentExecID, active.ParentExecutionID, "active event must carry parent_execution_id")
+	assert.Equal(t, runner.stageID, active.StageID)
+	assert.Equal(t, string(agentexecution.StatusActive), active.Status)
+	assert.Equal(t, runner.sessionID, active.SessionID)
+	assert.Greater(t, active.AgentIndex, 0, "agent_index should be positive")
+
+	// Last event: terminal (completed)
+	terminal := statuses[len(statuses)-1]
+	assert.Equal(t, execID, terminal.ExecutionID)
+	assert.Equal(t, runner.parentExecID, terminal.ParentExecutionID, "terminal event must carry parent_execution_id")
+	assert.Equal(t, string(agentexecution.StatusCompleted), terminal.Status)
+}
+
+func TestSubAgentRunner_Dispatch_PublishesFailedStatus(t *testing.T) {
+	ctx := context.Background()
+	publisher := &recordingEventPublisher{}
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return nil, fmt.Errorf("boom")
+	})
+	defer cleanup()
+	runner.deps.EventPublisher = publisher
+
+	_, err := runner.Dispatch(ctx, "TestAgent", "failing task")
+	require.NoError(t, err)
+
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	statuses := publisher.executionStatuses()
+	require.GreaterOrEqual(t, len(statuses), 2)
+
+	terminal := statuses[len(statuses)-1]
+	assert.Equal(t, string(agentexecution.StatusFailed), terminal.Status)
+	assert.NotEmpty(t, terminal.ErrorMessage)
+	assert.Equal(t, runner.parentExecID, terminal.ParentExecutionID)
+}
+
+func TestSubAgentRunner_PublishSubAgentStatus_NilPublisher(t *testing.T) {
+	r := newMinimalRunner(1)
+	// deps.EventPublisher is nil — must not panic
+	r.publishSubAgentStatus(context.Background(), "exec-1", 1, "active", "")
+}
+
 // ─── CancelAll idempotent ───────────────────────────────────────────────────
 
 func TestSubAgentRunner_CancelAll_Idempotent(t *testing.T) {
@@ -578,6 +649,7 @@ func (c *mockController) Run(ctx context.Context, _ *agent.ExecutionContext, _ s
 
 // Compile-time check that noopEventPublisher satisfies agent.EventPublisher.
 var _ agent.EventPublisher = noopEventPublisher{}
+var _ agent.EventPublisher = &recordingEventPublisher{}
 
 // noopEventPublisher satisfies agent.EventPublisher with no-ops.
 type noopEventPublisher struct{}
@@ -611,6 +683,28 @@ func (noopEventPublisher) PublishExecutionProgress(_ context.Context, _ string, 
 }
 func (noopEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ events.ExecutionStatusPayload) error {
 	return nil
+}
+
+// recordingEventPublisher embeds noopEventPublisher and records execution.status payloads.
+type recordingEventPublisher struct {
+	noopEventPublisher
+	mu      sync.Mutex
+	statEvs []events.ExecutionStatusPayload
+}
+
+func (r *recordingEventPublisher) PublishExecutionStatus(_ context.Context, _ string, p events.ExecutionStatusPayload) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.statEvs = append(r.statEvs, p)
+	return nil
+}
+
+func (r *recordingEventPublisher) executionStatuses() []events.ExecutionStatusPayload {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cp := make([]events.ExecutionStatusPayload, len(r.statEvs))
+	copy(cp, r.statEvs)
+	return cp
 }
 
 // setupIntegrationRunner creates a fully wired SubAgentRunner backed by

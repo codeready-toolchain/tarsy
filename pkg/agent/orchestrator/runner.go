@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -162,6 +164,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		slog.Warn("Failed to mark sub-agent execution as active",
 			"execution_id", executionID, "error", updateErr)
 	}
+	r.publishSubAgentStatus(ctx, executionID, agentIndex, string(agentexecution.StatusActive), "")
 
 	maxSeq, seqErr := r.deps.TimelineService.GetMaxSequenceForExecution(ctx, executionID)
 	if seqErr != nil {
@@ -185,6 +188,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		executionID: executionID,
 		agentName:   name,
 		task:        task,
+		agentIndex:  agentIndex,
 		status:      agent.ExecutionStatusActive,
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -298,6 +302,7 @@ func (r *SubAgentRunner) completeSubAgent(
 		slog.Warn("Failed to update sub-agent execution status",
 			"execution_id", exec.executionID, "status", status, "error", updateErr)
 	}
+	r.publishSubAgentStatus(context.Background(), exec.executionID, exec.agentIndex, string(entStatus), errMsg)
 
 	result := &SubAgentResult{
 		ExecutionID: exec.executionID,
@@ -314,6 +319,31 @@ func (r *SubAgentRunner) completeSubAgent(
 	select {
 	case r.resultsCh <- result:
 	case <-r.closeCh:
+	}
+}
+
+// publishSubAgentStatus publishes an execution.status WS event for a sub-agent.
+// Best-effort: logs on failure, never aborts. agentIndex may be 0 when unknown
+// (e.g. terminal status from completeSubAgent which doesn't track the index).
+func (r *SubAgentRunner) publishSubAgentStatus(ctx context.Context, executionID string, agentIndex int, status, errMsg string) {
+	if r.deps.EventPublisher == nil {
+		return
+	}
+	if err := r.deps.EventPublisher.PublishExecutionStatus(ctx, r.sessionID, events.ExecutionStatusPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeExecutionStatus,
+			SessionID: r.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		StageID:           r.stageID,
+		ExecutionID:       executionID,
+		ParentExecutionID: r.parentExecID,
+		AgentIndex:        agentIndex,
+		Status:            status,
+		ErrorMessage:      errMsg,
+	}); err != nil {
+		slog.Warn("Failed to publish sub-agent execution status",
+			"session_id", r.sessionID, "execution_id", executionID, "status", status, "error", err)
 	}
 }
 
