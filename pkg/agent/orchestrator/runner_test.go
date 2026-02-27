@@ -559,6 +559,48 @@ func TestSubAgentRunner_PublishSubAgentStatus_NilPublisher(t *testing.T) {
 	r.publishSubAgentStatus(context.Background(), "exec-1", 1, "active", "")
 }
 
+// ─── Task-assigned timeline WS event (integration) ──────────────────────────
+
+func TestSubAgentRunner_Dispatch_PublishesTaskAssignedTimelineEvent(t *testing.T) {
+	ctx := context.Background()
+	publisher := &recordingEventPublisher{}
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "done",
+		}, nil
+	})
+	defer cleanup()
+	runner.deps.EventPublisher = publisher
+
+	execID, err := runner.Dispatch(ctx, "TestAgent", "investigate the issue")
+	require.NoError(t, err)
+
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	created := publisher.timelineCreated()
+	require.NotEmpty(t, created, "expected at least one timeline_event.created for task_assigned")
+
+	var taskEvent *events.TimelineCreatedPayload
+	for i := range created {
+		if created[i].EventType == "task_assigned" {
+			taskEvent = &created[i]
+			break
+		}
+	}
+	require.NotNil(t, taskEvent, "no task_assigned event found in published timeline events")
+
+	assert.Equal(t, runner.sessionID, taskEvent.SessionID)
+	assert.Equal(t, runner.stageID, taskEvent.StageID)
+	assert.Equal(t, execID, taskEvent.ExecutionID)
+	assert.Equal(t, runner.parentExecID, taskEvent.ParentExecutionID)
+	assert.Equal(t, "investigate the issue", taskEvent.Content)
+	assert.Equal(t, "completed", string(taskEvent.Status))
+	assert.NotEmpty(t, taskEvent.EventID)
+	assert.Greater(t, taskEvent.SequenceNumber, 0)
+}
+
 // ─── CancelAll idempotent ───────────────────────────────────────────────────
 
 func TestSubAgentRunner_CancelAll_Idempotent(t *testing.T) {
@@ -685,11 +727,13 @@ func (noopEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ 
 	return nil
 }
 
-// recordingEventPublisher embeds noopEventPublisher and records execution.status payloads.
+// recordingEventPublisher embeds noopEventPublisher and records execution.status
+// and timeline_event.created payloads for assertion.
 type recordingEventPublisher struct {
 	noopEventPublisher
-	mu      sync.Mutex
-	statEvs []events.ExecutionStatusPayload
+	mu          sync.Mutex
+	statEvs     []events.ExecutionStatusPayload
+	timelineEvs []events.TimelineCreatedPayload
 }
 
 func (r *recordingEventPublisher) PublishExecutionStatus(_ context.Context, _ string, p events.ExecutionStatusPayload) error {
@@ -699,11 +743,26 @@ func (r *recordingEventPublisher) PublishExecutionStatus(_ context.Context, _ st
 	return nil
 }
 
+func (r *recordingEventPublisher) PublishTimelineCreated(_ context.Context, _ string, p events.TimelineCreatedPayload) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.timelineEvs = append(r.timelineEvs, p)
+	return nil
+}
+
 func (r *recordingEventPublisher) executionStatuses() []events.ExecutionStatusPayload {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cp := make([]events.ExecutionStatusPayload, len(r.statEvs))
 	copy(cp, r.statEvs)
+	return cp
+}
+
+func (r *recordingEventPublisher) timelineCreated() []events.TimelineCreatedPayload {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cp := make([]events.TimelineCreatedPayload, len(r.timelineEvs))
+	copy(cp, r.timelineEvs)
 	return cp
 }
 
