@@ -225,12 +225,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
               size="small"
               color="primary"
               variant="outlined"
-              sx={{
-                height: 24,
-                minWidth: 24,
-                '& .MuiChip-label': { px: 0, display: 'none' },
-                '& .MuiChip-icon': { mx: 0 },
-              }}
+              sx={iconOnlyChipSx}
             />
           </Tooltip>
         )}
