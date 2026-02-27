@@ -593,9 +593,13 @@ func TestNilExecutionResultGuard(t *testing.T) {
 				return s.Status == alertsession.StatusInProgress
 			})
 
-		// Cancel the session via the pool (simulates API-triggered cancellation)
-		cancelled := pool.CancelSession(session.ID)
-		require.True(t, cancelled, "CancelSession should find the active session")
+		// Cancel the session via the pool (simulates API-triggered cancellation).
+		// Retry because there's a window between the DB status becoming
+		// in_progress (claimNextSession) and the session being registered in
+		// the pool's in-memory cancel map (RegisterSession).
+		awaitCondition(t, 5*time.Second, 10*time.Millisecond,
+			"CancelSession should find the active session",
+			func() bool { return pool.CancelSession(session.ID) })
 
 		// Wait for the executor to finish and status to be persisted
 		awaitCondition(t, 5*time.Second, 50*time.Millisecond,

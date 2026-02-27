@@ -168,6 +168,7 @@ func TestBuildFunctionCallingMessages_OrchestratorMode(t *testing.T) {
 	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 	require.Len(t, messages, 2)
 
+	assert.Contains(t, messages[0].Content, "Orchestrator Strategy")
 	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
 	assert.Contains(t, messages[0].Content, "LogAnalyzer")
 	assert.Contains(t, messages[1].Content, "Alert Details")

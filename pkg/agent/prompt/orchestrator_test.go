@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -88,6 +89,9 @@ func TestBuildOrchestratorMessages_SystemIncludesCatalog(t *testing.T) {
 
 	system := messages[0]
 	assert.Equal(t, agent.RoleSystem, system.Role)
+	// Auto-injected orchestrator behavioral instructions
+	assert.Contains(t, system.Content, "Orchestrator Strategy")
+	assert.Contains(t, system.Content, "Dispatch relevant sub-agents in parallel")
 	assert.Contains(t, system.Content, "Available Sub-Agents")
 	assert.Contains(t, system.Content, "LogAnalyzer")
 	assert.Contains(t, system.Content, "GeneralWorker")
@@ -101,6 +105,57 @@ func TestBuildOrchestratorMessages_SystemIncludesCatalog(t *testing.T) {
 	assert.Contains(t, system.Content, "K8s server instructions.")
 	// Tier 3: custom instructions from agent config
 	assert.Contains(t, system.Content, "Be thorough.")
+}
+
+func TestBuildOrchestratorMessages_PromptLayerOrder(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeOrchestrator
+	execCtx.Config.CustomInstructions = "Domain-specific security instructions."
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs"},
+	}
+
+	messages := builder.buildOrchestratorMessages(execCtx, "")
+	system := messages[0].Content
+
+	// Verify ordering: Tier 1 → Tier 3 (custom) → behavioral → catalog → delivery → focus
+	tier1Pos := strings.Index(system, "General SRE Agent Instructions")
+	customPos := strings.Index(system, "Domain-specific security instructions.")
+	behavioralPos := strings.Index(system, "Orchestrator Strategy")
+	catalogPos := strings.Index(system, "Available Sub-Agents")
+	deliveryPos := strings.Index(system, "Result Delivery")
+	focusPos := strings.Index(system, orchestratorTaskFocus)
+
+	require.Greater(t, tier1Pos, -1, "Tier 1 should be present")
+	require.Greater(t, customPos, -1, "Custom instructions should be present")
+	require.Greater(t, behavioralPos, -1, "Behavioral instructions should be present")
+	require.Greater(t, catalogPos, -1, "Catalog should be present")
+	require.Greater(t, deliveryPos, -1, "Delivery should be present")
+	require.Greater(t, focusPos, -1, "Focus should be present")
+
+	assert.Less(t, tier1Pos, customPos, "Tier 1 should come before custom instructions")
+	assert.Less(t, customPos, behavioralPos, "Custom instructions should come before behavioral (via ComposeInstructions)")
+	assert.Less(t, behavioralPos, catalogPos, "Behavioral should come before catalog")
+	assert.Less(t, catalogPos, deliveryPos, "Catalog should come before delivery")
+	assert.Less(t, deliveryPos, focusPos, "Delivery should come before focus")
+}
+
+func TestBuildOrchestratorMessages_NoCustomInstructions(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeOrchestrator
+	execCtx.Config.CustomInstructions = "" // Built-in Orchestrator case
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{}
+
+	messages := builder.buildOrchestratorMessages(execCtx, "")
+	system := messages[0].Content
+
+	// Behavioral instructions still present even without custom instructions
+	assert.Contains(t, system, "Orchestrator Strategy")
+	assert.Contains(t, system, "Dispatch relevant sub-agents in parallel")
+	// No stale "Agent-Specific Instructions" header when custom instructions are empty
+	assert.NotContains(t, system, "Agent-Specific Instructions")
 }
 
 func TestBuildOrchestratorMessages_UserIncludesAlert(t *testing.T) {

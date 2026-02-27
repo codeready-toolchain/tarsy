@@ -130,6 +130,20 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeSynthesis, resolved.Type)
 	})
 
+	t.Run("stage-agent type overrides agent definition type", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{
+			Name: "KubernetesAgent",
+			Type: config.AgentTypeOrchestrator,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
+		require.NoError(t, err)
+
+		assert.Equal(t, config.AgentTypeOrchestrator, resolved.Type)
+	})
+
 	t.Run("falls back to DefaultLLMBackend when no level sets backend", func(t *testing.T) {
 		noBackendCfg := &config.Config{
 			Defaults: &config.Defaults{

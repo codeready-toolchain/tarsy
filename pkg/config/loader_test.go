@@ -197,6 +197,11 @@ agent_chains:
         agents:
           - name: "orch-agent"
             sub_agents: ["worker-agent"]
+      - name: "stage2"
+        agents:
+          - name: "worker-agent"
+            type: orchestrator
+            sub_agents: ["worker-agent"]
 `
 	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(config), 0644)
 	require.NoError(t, err)
@@ -228,6 +233,14 @@ agent_chains:
 
 	// Stage-agent-level sub_agents
 	assert.Equal(t, SubAgentRefs{{Name: "worker-agent"}}, chain.Stages[0].Agents[0].SubAgents)
+
+	// Stage-agent type override parsed from YAML
+	stage2Agent := chain.Stages[1].Agents[0]
+	assert.Equal(t, "worker-agent", stage2Agent.Name)
+	assert.Equal(t, AgentTypeOrchestrator, stage2Agent.Type)
+
+	// Stage 1 agent has no type override
+	assert.Equal(t, AgentType(""), chain.Stages[0].Agents[0].Type)
 }
 
 func TestLoadTarsyYAML_SubAgentRefsLongForm(t *testing.T) {

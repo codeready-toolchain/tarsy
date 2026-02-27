@@ -316,6 +316,11 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 			return fmt.Errorf("%s: agent '%s' not found", stageRef, agentConfig.Name)
 		}
 
+		// Validate agent-level type if specified
+		if agentConfig.Type != "" && !agentConfig.Type.IsValid() {
+			return fmt.Errorf("%s: agent '%s' has invalid type: %s", stageRef, agentConfig.Name, agentConfig.Type)
+		}
+
 		// Validate agent-level LLM backend if specified
 		if agentConfig.LLMBackend != "" && !agentConfig.LLMBackend.IsValid() {
 			return fmt.Errorf("%s: agent '%s' has invalid llm_backend: %s", stageRef, agentConfig.Name, agentConfig.LLMBackend)
