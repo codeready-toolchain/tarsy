@@ -200,7 +200,8 @@ Refactoring it into a typed stage:
 
 3. **Remove special-casing:**
    - Remove the `executiveSummarySeqNum = 999_999` sentinel. The stage infrastructure handles timeline ordering via `stage_index`.
-   - Remove the `executive_summary` LLM interaction type. The interaction is recorded through standard agent execution flow.
+   - Stop _creating_ new interactions with `interaction_type: "executive_summary"`. New exec summary interactions use the standard agent execution flow (type: `"llm"`). **Retain the `executive_summary` enum value** in the DB schema and Go constants for backward compatibility — existing rows in the database reference it.
+   - Similarly, **retain the `timelineevent.EventTypeExecutiveSummary`** enum value for backward compatibility with existing timeline event records. New exec summary stages use standard stage-based timeline events instead.
    - Remove the manual progress publishing (`publishSessionProgress`, `publishExecutionProgressFromExecutor`). Stage creation and status publishing handle this.
 
 4. **Keep the session-level `executive_summary` field** as a denormalized copy for quick access (session list, Slack notifications). After the exec summary stage completes, the executor extracts the summary from the stage result and sets it on `ExecutionResult.ExecutiveSummary`, which the worker persists to the session record — same as today.
@@ -279,8 +280,11 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 | Controller | `pkg/agent/controller/` | New `ExecSummaryController` or reuse `SingleShotController` |
 | Agent factory | `pkg/agent/factory.go` | Wire exec summary agent type (if new) |
 | Config enums | `pkg/config/enums.go` | Add `AgentTypeExecSummary` (if new agent type needed) |
-| Context builders | `pkg/queue/executor.go` | Update `buildStageContext()`, `extractFinalAnalysis()` to filter by stage type |
+| Context builders | `pkg/queue/executor.go` | Add explicit stage-type filter guards to `buildStageContext()`, `extractFinalAnalysis()` (safety — behavior unchanged, they already operate on the correct slice) |
 | Event helpers | `pkg/queue/executor_helpers.go` | Update `publishStageStatus` call for exec summary |
+| Trace handler | `pkg/api/handler_trace.go` | Exec summary interactions move from session-level `SessionInteractions` to a `TraceStageGroup` (they now have a `stage_id`) |
+| Trace DTO | `pkg/models/interaction.go` | Update `SessionInteractions` doc — exec summary is no longer session-level |
+| WS payloads | `pkg/events/payloads.go` | Update `InteractionCreatedPayload.StageID` comment — exec summary now has a stage |
 | Tests | Various `_test.go` files | Update exec summary tests, add stage-type filtering tests |
 
 ### Risk
@@ -320,15 +324,16 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 
 ### PR 2: Executive Summary as Typed Stage (behavioral change)
 
-1. **Agent/controller:** Decide between reusing `SingleShotController` or creating `ExecSummaryController`. Wire in agent factory if needed.
-2. **Config resolution:** Create `ResolveExecSummaryConfig()` to handle `executive_summary_provider` → `llm_provider` → defaults hierarchy, or adapt existing resolution.
+1. **Agent/controller:** Reuse `SingleShotController` with an exec-summary-specific prompt builder. Create a factory function (e.g., `NewExecSummaryController`) analogous to `NewSynthesisController` — it constructs a `SingleShotController` with the exec summary system prompt and passes `finalAnalysis` as `prevStageContext`. If prompt construction diverges significantly from synthesis, extract into a dedicated `ExecSummaryController`.
+2. **Config resolution:** Create `ResolveExecSummaryConfig()` to handle `executive_summary_provider` → `llm_provider` → defaults hierarchy, or adapt existing resolution. This function returns a `SingleShotConfig` with the resolved provider, model, and the exec summary prompt.
 3. **Executor refactoring:** Replace `generateExecutiveSummary()` with:
    - Create Stage record (type: `exec_summary`, name: "Executive Summary")
    - Create AgentExecution record
    - Run agent through standard framework
    - Extract summary from agent result
    - Set `ExecutionResult.ExecutiveSummary` from stage result
-4. **Remove special-casing:** Remove `executiveSummarySeqNum`, `executive_summary` interaction type, manual progress publishing.
-5. **Context builders:** Update `buildStageContext()` and `extractFinalAnalysis()` to explicitly filter by stage type (`investigation` + `synthesis`).
-6. **Publish stage status:** Add `"exec_summary"` to the `publishStageStatus` call for the exec summary stage.
-7. **Tests:** Verify exec summary still produces same output, fails-open, populates session field. Add stage-type filtering tests for context builders.
+4. **Remove special-casing:** Remove `executiveSummarySeqNum`. Stop creating new `executive_summary` interaction types and `EventTypeExecutiveSummary` timeline events (retain enum values for backward compatibility). Remove manual progress publishing.
+5. **Context builders:** Add explicit stage-type guard checks to `buildStageContext()` and `extractFinalAnalysis()` — filter to `investigation` + `synthesis` only. This is a safety measure; these functions already operate on the correct slice, but explicit type checks prevent accidental inclusion of exec summary/scoring stages if the calling code changes.
+6. **Trace handler:** Update `handler_trace.go` to handle exec summary interactions appearing inside a stage group instead of session-level `SessionInteractions`. Update `SessionInteractions` doc in `interaction.go`.
+7. **Publish stage status:** Add `"exec_summary"` to the `publishStageStatus` call for the exec summary stage.
+8. **Tests:** Verify exec summary still produces same output, fails-open, populates session field. Add stage-type filtering tests for context builders. Verify trace API returns exec summary within its stage group.

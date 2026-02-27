@@ -88,13 +88,13 @@ _Considered and rejected: Option A (separate migration file — requires two ste
 
 ## Q6: Should this be a single PR or phased?
 
-### Option A: Single PR
+### Option B: Two PRs
 
-- **Pro:** Less overhead — no intermediate states, no partial feature.
-- **Pro:** The total change is small: ~15 files touched, mostly adding one field to structs and one parameter to function calls.
-- **Pro:** Easier to review as a coherent whole — tightly coupled changes form one feature.
-- **Con:** Larger diff (but still manageable).
+- **Pro:** Separates risk: PR 1 is additive (new field, no behavior change), PR 2 is behavioral (exec summary refactoring).
+- **Pro:** PR 1 can ship and soak independently before the riskier PR 2.
+- **Pro:** Easier to review — each PR has a clear scope.
+- **Con:** Two review cycles instead of one.
 
-**Decision:** Option A — single PR. The change is small and tightly coupled.
+**Decision:** Option B — two PRs. PR 1 adds the `stage_type` field and wires it into creation paths, API, and WS (additive, ~15 files). PR 2 refactors executive summary into a typed stage (behavioral change). Clean separation of risk.
 
-_Considered and rejected: Option B (two PRs — unnecessary overhead for this size), Option C (five PRs — trivially small individual PRs, confusing intermediate states)._
+_Considered and rejected: Option A (single PR — scope expanded with exec summary refactoring, mixing additive and behavioral changes in one PR increases review complexity and risk), Option C (five PRs — trivially small individual PRs, confusing intermediate states)._
