@@ -232,7 +232,11 @@ const StageContent: React.FC<StageContentProps> = ({
     return map;
   }, [executionOverviews]);
 
-  // Build set of sub-agent execution IDs and overview map (from REST data)
+  // Build set of sub-agent execution IDs from three sources:
+  // 1. REST session detail: executionOverviews[].sub_agents
+  // 2. FlowItem.parentExecutionId (REST timeline events carry parent_execution_id)
+  // 3. WS execution.status events routed to subAgentExecutionStatuses
+  // This ensures sub-agents are identified even before session detail is re-fetched.
   const { subAgentIds, subAgentOverviewMap } = useMemo(() => {
     const ids = new Set<string>();
     const overviews = new Map<string, ExecutionOverview>();
@@ -246,8 +250,20 @@ const StageContent: React.FC<StageContentProps> = ({
         }
       }
     }
+    // Items with parentExecutionId are sub-agent items
+    for (const item of items) {
+      if (item.parentExecutionId && item.executionId) {
+        ids.add(item.executionId);
+      }
+    }
+    // WS execution statuses for sub-agents
+    if (subAgentExecutionStatuses) {
+      for (const execId of subAgentExecutionStatuses.keys()) {
+        ids.add(execId);
+      }
+    }
     return { subAgentIds: ids, subAgentOverviewMap: overviews };
-  }, [executionOverviews]);
+  }, [executionOverviews, items, subAgentExecutionStatuses]);
 
   // Get streaming items grouped by execution
   const streamingByExecution = useMemo(() => {
@@ -409,12 +425,26 @@ const StageContent: React.FC<StageContentProps> = ({
     return null;
   };
 
-  // Check if a FlowItem is a dispatch_agent tool result (mcp_tool_summary)
-  const isDispatchToolResult = (item: FlowItem): boolean => {
-    return item.type === FLOW_ITEM.TOOL_SUMMARY
-      && item.metadata?.server_name === 'orchestrator'
-      && item.metadata?.tool_name === 'dispatch_agent';
+  const isOrchestrationTool = (item: FlowItem, toolName: string): boolean => {
+    return item.metadata?.server_name === 'orchestrator'
+      && item.metadata?.tool_name === toolName;
   };
+
+  const renderSubAgentCard = (subExecId: string) => (
+    <SubAgentCard
+      key={`sub-${subExecId}`}
+      executionOverview={subAgentOverviewMap.get(subExecId)}
+      items={subAgentItemsByExec.get(subExecId) || []}
+      streamingEvents={subAgentStreamingByExec.get(subExecId)}
+      executionStatus={subAgentExecutionStatuses?.get(subExecId)}
+      progressStatus={subAgentProgressStatuses?.get(subExecId)}
+      shouldAutoCollapse={shouldAutoCollapse}
+      onToggleItemExpansion={onToggleItemExpansion}
+      expandAllReasoning={expandAllReasoning}
+      expandAllToolCalls={expandAllToolCalls}
+      isItemCollapsible={isItemCollapsible}
+    />
+  );
 
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
@@ -431,12 +461,34 @@ const StageContent: React.FC<StageContentProps> = ({
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
 
-    // Track which sub-agents have been rendered inline (anchored to dispatch tool calls)
+    // Track which sub-agents have been rendered inline (anchored to dispatch tool results)
     const renderedSubAgents = new Set<string>();
 
-    // Build list of elements with sub-agent cards interleaved after dispatch_agent results
     const elements: React.ReactNode[] = [];
     for (const item of execution.items) {
+      // dispatch_agent tool call — replace with SubAgentCard.
+      // The llm_tool_call content is the result JSON after completion
+      // (e.g. {"execution_id":"...","status":"accepted"}). No mcp_tool_summary
+      // is created because the result is too short for summarization.
+      if (item.type === FLOW_ITEM.TOOL_CALL && isOrchestrationTool(item, 'dispatch_agent')) {
+        const subExecId = extractDispatchExecId(item.content);
+        if (subExecId) {
+          renderedSubAgents.add(subExecId);
+          elements.push(renderSubAgentCard(subExecId));
+        }
+        continue;
+      }
+
+      // dispatch_agent tool summary (rare — only if result was long enough to summarize)
+      if (item.type === FLOW_ITEM.TOOL_SUMMARY && isOrchestrationTool(item, 'dispatch_agent')) {
+        const subExecId = extractDispatchExecId(item.content);
+        if (subExecId && !renderedSubAgents.has(subExecId)) {
+          renderedSubAgents.add(subExecId);
+          elements.push(renderSubAgentCard(subExecId));
+        }
+        continue;
+      }
+
       elements.push(
         <TimelineItem
           key={item.id}
@@ -448,33 +500,10 @@ const StageContent: React.FC<StageContentProps> = ({
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
         />,
       );
-
-      // After a dispatch_agent tool result, render the matching SubAgentCard
-      if (isDispatchToolResult(item)) {
-        const subExecId = extractDispatchExecId(item.content);
-        if (subExecId && (subAgentOverviewMap.has(subExecId) || subAgentItemsByExec.has(subExecId) || subAgentStreamingByExec.has(subExecId))) {
-          renderedSubAgents.add(subExecId);
-          elements.push(
-            <SubAgentCard
-              key={`sub-${subExecId}`}
-              executionOverview={subAgentOverviewMap.get(subExecId)}
-              items={subAgentItemsByExec.get(subExecId) || []}
-              streamingEvents={subAgentStreamingByExec.get(subExecId)}
-              executionStatus={subAgentExecutionStatuses?.get(subExecId)}
-              progressStatus={subAgentProgressStatuses?.get(subExecId)}
-              shouldAutoCollapse={shouldAutoCollapse}
-              onToggleItemExpansion={onToggleItemExpansion}
-              expandAllReasoning={expandAllReasoning}
-              expandAllToolCalls={expandAllToolCalls}
-              isItemCollapsible={isItemCollapsible}
-            />,
-          );
-        }
-      }
     }
 
-    // Render any sub-agents not anchored to a dispatch tool call (e.g. REST data loaded
-    // before tool call items arrive, or tool call metadata doesn't match)
+    // Render any sub-agents not anchored to a dispatch tool result (e.g. sub-agent
+    // known from WS events or REST overviews before tool summary items arrive)
     const allSubAgentExecIds = new Set([
       ...subAgentOverviewMap.keys(),
       ...subAgentItemsByExec.keys(),
@@ -482,21 +511,7 @@ const StageContent: React.FC<StageContentProps> = ({
     ]);
     for (const subExecId of allSubAgentExecIds) {
       if (!renderedSubAgents.has(subExecId)) {
-        elements.push(
-          <SubAgentCard
-            key={`sub-${subExecId}`}
-            executionOverview={subAgentOverviewMap.get(subExecId)}
-            items={subAgentItemsByExec.get(subExecId) || []}
-            streamingEvents={subAgentStreamingByExec.get(subExecId)}
-            executionStatus={subAgentExecutionStatuses?.get(subExecId)}
-            progressStatus={subAgentProgressStatuses?.get(subExecId)}
-            shouldAutoCollapse={shouldAutoCollapse}
-            onToggleItemExpansion={onToggleItemExpansion}
-            expandAllReasoning={expandAllReasoning}
-            expandAllToolCalls={expandAllToolCalls}
-            isItemCollapsible={isItemCollapsible}
-          />,
-        );
+        elements.push(renderSubAgentCard(subExecId));
       }
     }
 

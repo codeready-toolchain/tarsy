@@ -10,10 +10,10 @@ import (
 
 const orchestratorResultDelivery = `## Result Delivery
 
-Sub-agent results appear automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled]. You do not need to poll for them.
-If you have no more tool calls but sub-agents are still running, the system automatically waits — you do not need to take any action to stay alive.
-You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or continue waiting.
-When all relevant results are collected, produce your final analysis.`
+Sub-agent results are delivered to you automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled].
+**Do NOT call list_agents to poll for status.** The system pushes results to you — there is no need to check.
+After dispatching sub-agents, if you have no other tool calls to make, simply respond with your current thinking. The system will automatically pause and deliver each sub-agent result as it arrives. You do not need to loop, poll, or take any action to stay alive.
+You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or produce your final analysis once all relevant results are collected.`
 
 const orchestratorTaskFocus = "Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators."
 
@@ -46,7 +46,7 @@ func formatAgentCatalog(entries []config.SubAgentEntry) string {
 	var sb strings.Builder
 	sb.WriteString("## Available Sub-Agents\n\n")
 	sb.WriteString("You can dispatch these agents using the dispatch_agent tool.\n")
-	sb.WriteString("Use cancel_agent to stop unnecessary work. Use list_agents to check status.\n")
+	sb.WriteString("Use cancel_agent to stop unnecessary work.\n")
 
 	for _, e := range entries {
 		sb.WriteString(fmt.Sprintf("\n- **%s**: %s\n", e.Name, e.Description))

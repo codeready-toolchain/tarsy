@@ -68,7 +68,18 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
   const isRunning = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
-  const hasContent = items.length > 0 || streamingEvents.length > 0;
+
+  // Dedup: exclude streaming events whose ID matches a completed item.
+  // This guards against stale streaming entries that survive when a
+  // timeline_event.completed WS payload is truncated (parent_execution_id
+  // stripped) and cleanup targets the wrong streaming map.
+  const completedIds = React.useMemo(() => new Set(items.map((i) => i.id)), [items]);
+  const dedupedStreaming = React.useMemo(
+    () => streamingEvents.filter(([key]) => !completedIds.has(key)),
+    [streamingEvents, completedIds],
+  );
+
+  const hasContent = items.length > 0 || dedupedStreaming.length > 0;
 
   const tokenData = eo && (eo.input_tokens > 0 || eo.output_tokens > 0)
     ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
@@ -176,7 +187,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
               />
             ))}
 
-            {streamingEvents.map(([key, streamItem]) => (
+            {dedupedStreaming.map(([key, streamItem]) => (
               <StreamingContentRenderer key={key} item={streamItem} />
             ))}
 

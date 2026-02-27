@@ -259,6 +259,8 @@ export function SessionDetailPage() {
     sequenceNumber: number;
     metadata?: Record<string, unknown> | null;
     createdAt?: string;
+    isSubAgent?: boolean;
+    parentExecutionId?: string;
   }>>(new Map());
 
   // applyFreshTimeline separates streaming events from completed events and
@@ -275,6 +277,7 @@ export function SessionDetailPage() {
       if (ev.status === TIMELINE_STATUS.STREAMING && !skipStreaming) {
         // Keep streaming events in the streaming system, not in timelineEvents.
         // Ensure metadata ref is populated for the completed handler.
+        const isSubAgentEv = !!ev.parent_execution_id;
         if (!streamingMetaRef.current.has(ev.id)) {
           streamingMetaRef.current.set(ev.id, {
             eventType: ev.event_type,
@@ -283,21 +286,24 @@ export function SessionDetailPage() {
             sequenceNumber: ev.sequence_number,
             metadata: ev.metadata,
             createdAt: ev.created_at || undefined,
+            isSubAgent: isSubAgentEv,
           });
-          // Also add to streamingEvents if not already tracked (covers the
-          // case where the REST fetch discovers a streaming event that we
-          // missed the WebSocket timeline_event.created for).
-          setStreamingEvents((prev) => {
+          // Also add to the correct streaming map if not already tracked
+          // (covers the case where the REST fetch discovers a streaming
+          // event that we missed the WebSocket timeline_event.created for).
+          const streamItem: ExtendedStreamingItem = {
+            eventType: ev.event_type,
+            content: ev.content || '',
+            stageId: ev.stage_id || undefined,
+            executionId: ev.execution_id || undefined,
+            sequenceNumber: ev.sequence_number,
+            metadata: ev.metadata || undefined,
+          };
+          const setTarget = isSubAgentEv ? setSubAgentStreamingEvents : setStreamingEvents;
+          setTarget((prev) => {
             if (prev.has(ev.id)) return prev;
             const next = new Map(prev);
-            next.set(ev.id, {
-              eventType: ev.event_type,
-              content: ev.content || '',
-              stageId: ev.stage_id || undefined,
-              executionId: ev.execution_id || undefined,
-              sequenceNumber: ev.sequence_number,
-              metadata: ev.metadata || undefined,
-            });
+            next.set(ev.id, streamItem);
             return next;
           });
         }
@@ -308,10 +314,11 @@ export function SessionDetailPage() {
 
     setTimelineEvents(completedEvents);
 
-    // Clean up streamingEvents: remove entries that are now completed in REST
-    // (handles the case where the timeline_event.completed WS message was lost).
+    // Clean up streaming maps: remove entries that are now completed in REST
+    // (handles the case where the timeline_event.completed WS message was
+    // lost or truncated, leaving a stale streaming entry).
     const completedIds = new Set(completedEvents.map(ev => ev.id));
-    setStreamingEvents((prev) => {
+    const cleanupMap = (prev: Map<string, ExtendedStreamingItem>) => {
       let changed = false;
       const next = new Map(prev);
       for (const eventId of prev.keys()) {
@@ -322,7 +329,9 @@ export function SessionDetailPage() {
         }
       }
       return changed ? next : prev;
-    });
+    };
+    setStreamingEvents(cleanupMap);
+    setSubAgentStreamingEvents(cleanupMap);
 
     knownEventIdsRef.current = ids;
   }, []);
@@ -520,6 +529,8 @@ export function SessionDetailPage() {
                 sequenceNumber: payload.sequence_number,
                 metadata: payload.metadata || null,
                 createdAt: payload.timestamp,
+                isSubAgent,
+                parentExecutionId: payload.parent_execution_id || undefined,
               });
             }
             const streamItem: ExtendedStreamingItem = {
@@ -547,6 +558,7 @@ export function SessionDetailPage() {
               session_id: payload.session_id,
               stage_id: payload.stage_id || null,
               execution_id: payload.execution_id || null,
+              parent_execution_id: payload.parent_execution_id || null,
               sequence_number: payload.sequence_number,
               event_type: payload.event_type,
               status: payload.status,
@@ -618,14 +630,20 @@ export function SessionDetailPage() {
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
           const isTruncated = !!(data as Record<string, unknown>).truncated;
-          const isSubAgentCompleted = !!payload.parent_execution_id;
-
           // Read streaming metadata from synchronous ref (reliable, not
           // subject to React batching). Then clean up both ref and state.
           const meta = streamingMetaRef.current.get(payload.event_id);
           streamingMetaRef.current.delete(payload.event_id);
 
-          // Remove from the correct streaming state map
+          // Determine sub-agent membership from the stored metadata first
+          // (immune to payload truncation — truncated NOTIFY payloads strip
+          // parent_execution_id), then fall back to the payload field.
+          const isSubAgentCompleted = meta?.isSubAgent ?? !!payload.parent_execution_id;
+
+          // Remove from the correct streaming state map.
+          // Also attempt removal from the other map as a safety net:
+          // if the sub-agent flag was lost (e.g. created event was also
+          // truncated), the entry may live in the wrong map.
           const removeFromMap = (prev: Map<string, ExtendedStreamingItem>) => {
             if (!prev.has(payload.event_id)) return prev;
             const next = new Map(prev);
@@ -636,6 +654,12 @@ export function SessionDetailPage() {
             setSubAgentStreamingEvents(removeFromMap);
           } else {
             setStreamingEvents(removeFromMap);
+          }
+          // Belt-and-suspenders: also try the other map
+          if (isSubAgentCompleted) {
+            setStreamingEvents(removeFromMap);
+          } else {
+            setSubAgentStreamingEvents(removeFromMap);
           }
 
           // ── Truncated payload handling ──────────────────────────
@@ -688,6 +712,7 @@ export function SessionDetailPage() {
                 session_id: id,
                 stage_id: meta?.stageId ?? null,
                 execution_id: meta?.executionId ?? null,
+                parent_execution_id: meta?.parentExecutionId ?? payload.parent_execution_id ?? null,
                 sequence_number: meta?.sequenceNumber ?? 0,
                 event_type: meta?.eventType ?? payload.event_type,
                 status: payload.status,

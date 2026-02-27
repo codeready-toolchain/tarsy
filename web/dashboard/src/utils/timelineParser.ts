@@ -33,6 +33,7 @@ export interface FlowItem {
   type: FlowItemType;
   stageId?: string;
   executionId?: string;
+  parentExecutionId?: string;
   content: string;
   metadata?: Record<string, unknown>;
   status: string;
@@ -120,6 +121,7 @@ function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOvervi
     type,
     stageId: event.stage_id || undefined,
     executionId: event.execution_id || undefined,
+    parentExecutionId: event.parent_execution_id || undefined,
     content: event.content,
     metadata,
     status: event.status,
