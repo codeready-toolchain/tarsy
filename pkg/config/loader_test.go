@@ -897,7 +897,6 @@ mcp_servers:
       type: "http"
       url: "https://example.com/mcp"
     summarization:
-      enabled: true
       summary_max_token_limit: 1200
 agent_chains: {}
 `
@@ -910,7 +909,8 @@ agent_chains: {}
 	server, err := cfg.MCPServerRegistry.Get("my-server")
 	require.NoError(t, err)
 	require.NotNil(t, server.Summarization)
-	assert.True(t, server.Summarization.Enabled)
+	assert.Nil(t, server.Summarization.Enabled, "Enabled should be nil when omitted from YAML")
+	assert.False(t, server.Summarization.SummarizationDisabled(), "nil Enabled means enabled by default")
 	assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens,
 		"size_threshold_tokens should default to %d when not specified", DefaultSizeThresholdTokens)
 	assert.Equal(t, 1200, server.Summarization.SummaryMaxTokenLimit)

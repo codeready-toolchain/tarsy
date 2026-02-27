@@ -494,8 +494,22 @@ func TestValidateMCPServers(t *testing.T) {
 						Command: "test",
 					},
 					Summarization: &SummarizationConfig{
-						Enabled:             true,
 						SizeThresholdTokens: 5000,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid summarization with threshold-only config (no enabled field)",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 3000,
 					},
 				},
 			},
@@ -510,7 +524,6 @@ func TestValidateMCPServers(t *testing.T) {
 						Command: "test",
 					},
 					Summarization: &SummarizationConfig{
-						Enabled:             true,
 						SizeThresholdTokens: 50,
 					},
 				},

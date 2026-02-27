@@ -123,7 +123,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 
 	// 5. Apply MCP server defaults (before validation)
 	for _, server := range mcpServers {
-		if server.Summarization != nil && server.Summarization.Enabled && server.Summarization.SizeThresholdTokens == 0 {
+		if server.Summarization != nil && !server.Summarization.SummarizationDisabled() && server.Summarization.SizeThresholdTokens == 0 {
 			server.Summarization.SizeThresholdTokens = DefaultSizeThresholdTokens
 		}
 	}

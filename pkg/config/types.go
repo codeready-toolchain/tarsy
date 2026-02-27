@@ -41,14 +41,23 @@ type MaskingPattern struct {
 
 // DefaultSizeThresholdTokens is the default token count above which MCP
 // responses are summarized (when summarization is enabled).
-const DefaultSizeThresholdTokens = 10000
+const DefaultSizeThresholdTokens = 5000
 
-// SummarizationConfig defines when and how to summarize large MCP responses
+// SummarizationConfig defines when and how to summarize large MCP responses.
+// Enabled is a *bool: nil means "use default" (enabled), explicit false disables.
 type SummarizationConfig struct {
-	Enabled              bool `yaml:"enabled"`
-	SizeThresholdTokens  int  `yaml:"size_threshold_tokens,omitempty" validate:"omitempty,min=100"`
-	SummaryMaxTokenLimit int  `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
+	Enabled              *bool `yaml:"enabled,omitempty"`
+	SizeThresholdTokens  int   `yaml:"size_threshold_tokens,omitempty" validate:"omitempty,min=100"`
+	SummaryMaxTokenLimit int   `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
 }
+
+// SummarizationDisabled returns true only when Enabled is explicitly set to false.
+func (c *SummarizationConfig) SummarizationDisabled() bool {
+	return c.Enabled != nil && !*c.Enabled
+}
+
+// BoolPtr returns a pointer to b. Convenience for *bool struct fields.
+func BoolPtr(b bool) *bool { return &b }
 
 // StageAgentConfig represents an agent reference with stage-level overrides
 // Used in stage.agents[] array (even for single-agent stages)

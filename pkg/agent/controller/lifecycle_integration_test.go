@@ -210,7 +210,6 @@ func TestIteratingController_SummarizationIntegration(t *testing.T) {
 	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 		"k8s": {
 			Summarization: &config.SummarizationConfig{
-				Enabled:              true,
 				SizeThresholdTokens:  100, // Low threshold to trigger summarization
 				SummaryMaxTokenLimit: 500,
 			},
@@ -266,7 +265,6 @@ func TestIteratingController_SummarizationFailOpen(t *testing.T) {
 	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 		"k8s": {
 			Summarization: &config.SummarizationConfig{
-				Enabled:             true,
 				SizeThresholdTokens: 100,
 			},
 		},
@@ -470,7 +468,6 @@ func TestGoogleNativeController_SummarizationIntegration(t *testing.T) {
 	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 		"k8s": {
 			Summarization: &config.SummarizationConfig{
-				Enabled:              true,
 				SizeThresholdTokens:  100, // Low threshold to trigger summarization
 				SummaryMaxTokenLimit: 500,
 			},
@@ -528,7 +525,6 @@ func TestGoogleNativeController_SummarizationFailOpen(t *testing.T) {
 	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 		"k8s": {
 			Summarization: &config.SummarizationConfig{
-				Enabled:             true,
 				SizeThresholdTokens: 100,
 			},
 		},
