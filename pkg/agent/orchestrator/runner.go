@@ -181,8 +181,11 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		Status:            timelineevent.StatusCompleted,
 		Content:           task,
 	})
-	if taskErr == nil && r.deps.EventPublisher != nil {
-		_ = r.deps.EventPublisher.PublishTimelineCreated(ctx, r.sessionID, events.TimelineCreatedPayload{
+	if taskErr != nil {
+		slog.Warn("Failed to create sub-agent task timeline event",
+			"session_id", r.sessionID, "stage_id", r.stageID, "execution_id", executionID, "error", taskErr)
+	} else if r.deps.EventPublisher != nil {
+		if pubErr := r.deps.EventPublisher.PublishTimelineCreated(ctx, r.sessionID, events.TimelineCreatedPayload{
 			BasePayload: events.BasePayload{
 				Type:      events.EventTypeTimelineCreated,
 				SessionID: r.sessionID,
@@ -196,7 +199,11 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 			Status:            timelineevent.StatusCompleted,
 			Content:           task,
 			SequenceNumber:    maxSeq + 1,
-		})
+		}); pubErr != nil {
+			slog.Warn("Failed to publish sub-agent task timeline event",
+				"session_id", r.sessionID, "stage_id", r.stageID, "execution_id", executionID,
+				"event_id", taskEvent.ID, "error", pubErr)
+		}
 	}
 
 	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)
@@ -312,14 +319,21 @@ func (r *SubAgentRunner) completeSubAgent(
 	exec.status = status
 	r.mu.Unlock()
 
+	// Use a detached context with a short deadline: the parent context may
+	// already be cancelled (orchestrator shutdown), but we still need to
+	// persist the final status. The timeout prevents indefinite blocking if
+	// the DB or publisher is unresponsive.
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+
 	entStatus := mapToEntStatus(status)
 	if updateErr := r.deps.StageService.UpdateAgentExecutionStatus(
-		context.Background(), exec.executionID, entStatus, errMsg,
+		cleanupCtx, exec.executionID, entStatus, errMsg,
 	); updateErr != nil {
 		slog.Warn("Failed to update sub-agent execution status",
 			"execution_id", exec.executionID, "status", status, "error", updateErr)
 	}
-	r.publishSubAgentStatus(context.Background(), exec.executionID, exec.agentIndex, string(entStatus), errMsg)
+	r.publishSubAgentStatus(cleanupCtx, exec.executionID, exec.agentIndex, string(entStatus), errMsg)
 
 	result := &SubAgentResult{
 		ExecutionID: exec.executionID,

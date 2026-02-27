@@ -5,11 +5,6 @@ import {
   ExpandLess,
   Hub,
 } from '@mui/icons-material';
-
-const pulse = keyframes`
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.85); }
-`;
 import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
@@ -28,6 +23,11 @@ import {
   getStageStatusColor,
   getStageStatusDisplayName,
 } from '../trace/traceHelpers';
+
+const pulse = keyframes`
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+`;
 
 interface SubAgentCardProps {
   executionOverview?: ExecutionOverview;

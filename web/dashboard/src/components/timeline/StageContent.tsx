@@ -191,6 +191,30 @@ function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
   }));
 }
 
+// ── Pure helpers for orchestration tool items ──────────────────────────────
+
+const extractDispatchExecId = (content: string): string | null => {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.execution_id) return parsed.execution_id;
+  } catch { /* not JSON, ignore */ }
+  return null;
+};
+
+const isOrchestrationTool = (item: FlowItem, toolName: string): boolean => {
+  return item.metadata?.server_name === 'orchestrator'
+    && item.metadata?.tool_name === toolName;
+};
+
+const parseDispatchArgs = (item: FlowItem): { name?: string; task?: string } => {
+  const raw = item.metadata?.arguments;
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return { name: parsed?.name, task: parsed?.task };
+  } catch { return {}; }
+};
+
 /**
  * StageContent — unified renderer for stage items.
  *
@@ -415,29 +439,6 @@ const StageContent: React.FC<StageContentProps> = ({
     });
     return result;
   }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
-
-  // Try to extract execution_id from a dispatch_agent tool result content
-  const extractDispatchExecId = (content: string): string | null => {
-    try {
-      const parsed = JSON.parse(content);
-      if (parsed?.execution_id) return parsed.execution_id;
-    } catch { /* not JSON, ignore */ }
-    return null;
-  };
-
-  const isOrchestrationTool = (item: FlowItem, toolName: string): boolean => {
-    return item.metadata?.server_name === 'orchestrator'
-      && item.metadata?.tool_name === toolName;
-  };
-
-  const parseDispatchArgs = (item: FlowItem): { name?: string; task?: string } => {
-    const raw = item.metadata?.arguments;
-    if (!raw) return {};
-    try {
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      return { name: parsed?.name, task: parsed?.task };
-    } catch { return {}; }
-  };
 
   const renderSubAgentCard = (subExecId: string, dispatchItem?: FlowItem) => {
     const fallback = dispatchItem ? parseDispatchArgs(dispatchItem) : {};
