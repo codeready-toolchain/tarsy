@@ -41,6 +41,13 @@ interface SessionListItemProps {
   searchTerm: string;
 }
 
+const iconOnlyChipSx = {
+  height: 24,
+  minWidth: 24,
+  '& .MuiChip-label': { px: 0, display: 'none' },
+  '& .MuiChip-icon': { mx: 0 },
+} as const;
+
 export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
   const navigate = useNavigate();
   const [summaryAnchorEl, setSummaryAnchorEl] = useState<HTMLElement | null>(null);
@@ -134,12 +141,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                 size="small"
                 color="secondary"
                 variant="outlined"
-                sx={{
-                  height: 24,
-                  minWidth: 24,
-                  '& .MuiChip-label': { px: 0, display: 'none' },
-                  '& .MuiChip-icon': { mx: 0 },
-                }}
+                sx={iconOnlyChipSx}
               />
             </Tooltip>
           )}
@@ -150,12 +152,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                 size="small"
                 color="secondary"
                 variant="outlined"
-                sx={{
-                  height: 24,
-                  minWidth: 24,
-                  '& .MuiChip-label': { px: 0, display: 'none' },
-                  '& .MuiChip-icon': { mx: 0 },
-                }}
+                sx={iconOnlyChipSx}
               />
             </Tooltip>
           )}
