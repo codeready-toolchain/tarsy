@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, Chip, Collapse, IconButton, Alert, LinearProgress, alpha, keyframes } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
-  AccountTree,
+  Hub,
 } from '@mui/icons-material';
 
 const pulse = keyframes`
@@ -24,7 +24,6 @@ import {
   CANCELLED_EXECUTION_STATUSES,
 } from '../../constants/sessionStatus';
 import {
-  getStageStatusIcon,
   getStageStatusColor,
   getStageStatusDisplayName,
 } from '../trace/traceHelpers';
@@ -44,16 +43,6 @@ interface SubAgentCardProps {
   isItemCollapsible?: (item: FlowItem) => boolean;
 }
 
-const getBorderColor = (status: string): string => {
-  switch (status) {
-    case EXECUTION_STATUS.COMPLETED: return 'success.main';
-    case EXECUTION_STATUS.FAILED:
-    case EXECUTION_STATUS.TIMED_OUT: return 'error.main';
-    case EXECUTION_STATUS.CANCELLED: return 'grey.400';
-    default: return 'info.main';
-  }
-};
-
 const SubAgentCard: React.FC<SubAgentCardProps> = ({
   executionOverview,
   items,
@@ -69,6 +58,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   isItemCollapsible,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => { setExpanded(expandAllToolCalls); }, [expandAllToolCalls]);
 
   const eo = executionOverview;
   const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
@@ -78,11 +68,6 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
   const isRunning = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
 
-
-  // Dedup: exclude streaming events whose ID matches a completed item.
-  // This guards against stale streaming entries that survive when a
-  // timeline_event.completed WS payload is truncated (parent_execution_id
-  // stripped) and cleanup targets the wrong streaming map.
   const completedIds = React.useMemo(() => new Set(items.map((i) => i.id)), [items]);
   const dedupedStreaming = React.useMemo(
     () => streamingEvents.filter(([key]) => !completedIds.has(key)),
@@ -97,57 +82,72 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   return (
     <Box
-      sx={{
-        my: 1.5,
-        borderLeft: 3,
-        borderColor: getBorderColor(effectiveStatus),
-        borderRadius: 1,
-        bgcolor: (theme) => isRunning
-          ? alpha(theme.palette.info.main, 0.03)
-          : alpha(theme.palette.grey[500], 0.04),
-        border: 1,
-        borderRightColor: 'divider',
-        borderTopColor: 'divider',
-        borderBottomColor: 'divider',
+      sx={(theme) => ({
+        ml: 4, my: 1, mr: 1,
+        border: '2px solid',
+        borderColor: alpha(theme.palette.secondary.main, 0.5),
+        borderRadius: 1.5,
+        bgcolor: alpha(theme.palette.secondary.main, 0.08),
+        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
         overflow: 'hidden',
-      }}
+      })}
     >
       {isRunning && (
-        <LinearProgress
-          variant="indeterminate"
-          sx={{ height: 2, borderRadius: 0 }}
-        />
+        <LinearProgress variant="indeterminate" sx={{ height: 2, borderRadius: 0 }} />
       )}
-      {/* Collapsed header — always visible */}
+
+      {/* Header — always visible */}
       <Box
         onClick={() => hasContent && setExpanded(!expanded)}
-        sx={{
-          px: 2,
-          py: 1.5,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
+        sx={(theme) => ({
+          display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, minWidth: 0,
           cursor: hasContent ? 'pointer' : 'default',
-          '&:hover': hasContent ? { bgcolor: (theme) => alpha(theme.palette.grey[500], 0.06) } : {},
-        }}
+          transition: 'background-color 0.2s ease',
+          '&:hover': hasContent ? { bgcolor: alpha(theme.palette.secondary.main, 0.12) } : {},
+        })}
       >
-        <AccountTree sx={{
-          fontSize: 18,
-          color: isRunning ? 'info.main' : 'text.secondary',
+        <Hub sx={(theme) => ({
+          fontSize: 18, flexShrink: 0,
+          color: theme.palette.secondary.main,
           ...(isRunning && { animation: `${pulse} 1.5s ease-in-out infinite` }),
-        }} />
+        })} />
+        <Typography
+          variant="body2"
+          sx={(theme) => ({ fontWeight: 700, fontSize: '0.9rem', color: theme.palette.secondary.main, whiteSpace: 'nowrap', flexShrink: 0 })}
+        >
+          Sub-agent
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={(theme) => ({ fontWeight: 400, fontSize: '0.9rem', color: theme.palette.secondary.main, whiteSpace: 'nowrap', flexShrink: 0 })}
+        >
+          {agentName}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {!isRunning && eo?.duration_ms != null && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
+            {formatDurationMs(eo.duration_ms)}
+          </Typography>
+        )}
+        <IconButton size="small" sx={{ p: 0.25, flexShrink: 0 }}>
+          {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </IconButton>
+      </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {getStageStatusIcon(effectiveStatus)}
-              {agentName}
-            </Typography>
+      {/* Expanded content */}
+      <Collapse in={expanded} timeout={300}>
+        <Box sx={{ borderTop: 1, borderColor: 'divider' }}>
+          {/* Info bar with badge + tokens */}
+          <Box sx={(theme) => ({
+            px: 1.5, py: 0.75,
+            bgcolor: alpha(theme.palette.secondary.main, 0.04),
+            display: 'flex', alignItems: 'center', gap: 1,
+          })}>
             <Chip
               label={getStageStatusDisplayName(effectiveStatus)}
               size="small"
               color={getStageStatusColor(effectiveStatus)}
-              sx={{ height: 18, fontSize: '0.65rem' }}
+              sx={{ height: 16, fontSize: '0.6rem' }}
             />
             {progressStatus && isRunning && (
               <Chip
@@ -155,48 +155,16 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
                 size="small"
                 color="info"
                 variant="outlined"
-                sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
+                sx={{ height: 16, fontSize: '0.6rem', fontStyle: 'italic' }}
               />
-            )}
-            {eo?.duration_ms != null && (
-              <Typography variant="caption" color="text.secondary">
-                {formatDurationMs(eo.duration_ms)}
-              </Typography>
             )}
             {tokenData && (
               <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
             )}
           </Box>
 
-          {task && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                display: 'block',
-                mt: 0.5,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: expanded ? 'normal' : 'nowrap',
-                maxWidth: expanded ? 'none' : '100%',
-              }}
-            >
-              {task}
-            </Typography>
-          )}
-        </Box>
-
-        {hasContent && (
-          <IconButton size="small" sx={{ ml: 'auto' }}>
-            {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-          </IconButton>
-        )}
-      </Box>
-
-      {/* Expanded content — sub-agent's own timeline */}
-      <Collapse in={expanded} timeout={300}>
-        <Box sx={{ px: 2, pb: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, pt: 1 }}>
+          {/* Timeline */}
+          <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
             {items.map((item) => (
               <TimelineItem
                 key={item.id}

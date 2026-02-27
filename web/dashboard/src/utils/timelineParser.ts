@@ -108,13 +108,17 @@ function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOvervi
   const stage = event.stage_id ? stageMap.get(event.stage_id) : undefined;
   const isParallel = stage?.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none';
 
-  // Enrich metadata with computed duration_ms for thinking events
   let metadata = event.metadata || undefined;
+
   if (type === FLOW_ITEM.THINKING && metadata?.duration_ms == null) {
     const durationMs = computeEventDurationMs(event);
     if (durationMs != null) {
       metadata = { ...metadata, duration_ms: durationMs };
     }
+  }
+
+  if (event.event_type === TIMELINE_EVENT_TYPES.TASK_ASSIGNED) {
+    metadata = { ...metadata, author: 'Task' };
   }
 
   return {
