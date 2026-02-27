@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Alert, LinearProgress, alpha, keyframes } from '@mui/material';
+import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
   Hub,
+  CheckCircle,
 } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
@@ -19,10 +20,6 @@ import {
   FAILED_EXECUTION_STATUSES,
   CANCELLED_EXECUTION_STATUSES,
 } from '../../constants/sessionStatus';
-import {
-  getStageStatusColor,
-  getStageStatusDisplayName,
-} from '../trace/traceHelpers';
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -64,6 +61,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const agentName = eo?.agent_name || fallbackAgentName || 'Sub-Agent';
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
+  const isCompleted = effectiveStatus === EXECUTION_STATUS.COMPLETED;
   const isRunning = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
 
   const completedIds = React.useMemo(() => new Set(items.map((i) => i.id)), [items]);
@@ -84,17 +82,14 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
     <Box
       sx={(theme) => ({
         ml: 4, my: 1, mr: 1,
-        border: '2px solid',
-        borderColor: alpha(theme.palette[accentKey].main, 0.5),
+        border: isRunning ? '2px dashed' : '2px solid',
+        borderColor: alpha(theme.palette[accentKey].main, isRunning ? 0.4 : 0.5),
         borderRadius: 1.5,
-        bgcolor: alpha(theme.palette[accentKey].main, 0.08),
+        bgcolor: alpha(theme.palette[accentKey].main, isRunning ? 0.05 : 0.08),
         boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
         overflow: 'hidden',
       })}
     >
-      {isRunning && (
-        <LinearProgress variant="indeterminate" sx={{ height: 2, borderRadius: 0 }} />
-      )}
 
       {/* Header — always visible */}
       <Box
@@ -124,6 +119,18 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           {agentName}
         </Typography>
         <Box sx={{ flex: 1 }} />
+        {isCompleted && (
+          <CheckCircle sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
+        )}
+        {progressStatus && isRunning && (
+          <Chip
+            label={progressStatus}
+            size="small"
+            color="info"
+            variant="outlined"
+            sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', flexShrink: 0 }}
+          />
+        )}
         {!isRunning && eo?.duration_ms != null && (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
             {formatDurationMs(eo.duration_ms)}
@@ -137,31 +144,15 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
       {/* Expanded content */}
       <Collapse in={expanded} timeout={300}>
         <Box sx={{ borderTop: 1, borderColor: 'divider' }}>
-          {/* Info bar with badge + tokens */}
-          <Box sx={(theme) => ({
-            px: 1.5, py: 0.75,
-            bgcolor: alpha(theme.palette[accentKey].main, 0.04),
-            display: 'flex', alignItems: 'center', gap: 1,
-          })}>
-            <Chip
-              label={getStageStatusDisplayName(effectiveStatus)}
-              size="small"
-              color={getStageStatusColor(effectiveStatus)}
-              sx={{ height: 16, fontSize: '0.6rem' }}
-            />
-            {progressStatus && isRunning && (
-              <Chip
-                label={progressStatus}
-                size="small"
-                color="info"
-                variant="outlined"
-                sx={{ height: 16, fontSize: '0.6rem', fontStyle: 'italic' }}
-              />
-            )}
-            {tokenData && (
+          {tokenData && (
+            <Box sx={(theme) => ({
+              px: 1.5, py: 0.75,
+              bgcolor: alpha(theme.palette[accentKey].main, 0.04),
+              display: 'flex', alignItems: 'center', gap: 1,
+            })}>
               <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
-            )}
-          </Box>
+            </Box>
+          )}
 
           {/* Timeline */}
           <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
