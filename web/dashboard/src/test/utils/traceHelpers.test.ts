@@ -234,6 +234,46 @@ describe('countStageInteractions', () => {
     expect(counts.llm).toBe(3);
     expect(counts.mcp).toBe(1);
     expect(counts.total).toBe(4);
+    expect(counts.subAgentCount).toBe(0);
+  });
+
+  it('includes sub-agent interactions in counts', () => {
+    const stage = makeStageGroup({
+      executions: [
+        makeExecution({
+          llm_interactions: [
+            { id: 'l1', interaction_type: 'iteration', model_name: 'g', created_at: '' },
+          ],
+          mcp_interactions: [
+            { id: 'm1', interaction_type: 'tool_call', server_name: 's', created_at: '' },
+          ],
+          sub_agents: [
+            makeExecution({
+              execution_id: 'sub-1',
+              llm_interactions: [
+                { id: 'sl1', interaction_type: 'iteration', model_name: 'g', created_at: '' },
+                { id: 'sl2', interaction_type: 'iteration', model_name: 'g', created_at: '' },
+              ],
+              mcp_interactions: [
+                { id: 'sm1', interaction_type: 'tool_call', server_name: 's', created_at: '' },
+              ],
+            }),
+            makeExecution({
+              execution_id: 'sub-2',
+              llm_interactions: [],
+              mcp_interactions: [
+                { id: 'sm2', interaction_type: 'tool_call', server_name: 's', created_at: '' },
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const counts = countStageInteractions(stage);
+    expect(counts.llm).toBe(3); // 1 parent + 2 sub-1
+    expect(counts.mcp).toBe(3); // 1 parent + 1 sub-1 + 1 sub-2
+    expect(counts.total).toBe(6);
+    expect(counts.subAgentCount).toBe(2);
   });
 });
 
@@ -266,6 +306,28 @@ describe('findExecutionOverview', () => {
     const stage = makeStageOverview({ id: 'stage-1', executions: [makeExecutionOverview()] });
     const session = makeSessionDetail([stage]);
     expect(findExecutionOverview(session, 'nonexistent')).toBeUndefined();
+  });
+
+  it('finds sub-agent execution nested within parent', () => {
+    const subExec = makeExecutionOverview({ execution_id: 'sub-exec-1', agent_name: 'SubAgent' });
+    const parentExec = makeExecutionOverview({
+      execution_id: 'parent-exec',
+      sub_agents: [subExec],
+    });
+    const stage = makeStageOverview({ id: 'stage-1', executions: [parentExec] });
+    const session = makeSessionDetail([stage]);
+    expect(findExecutionOverview(session, 'sub-exec-1')).toBe(subExec);
+  });
+
+  it('finds parent execution even when sub_agents present', () => {
+    const subExec = makeExecutionOverview({ execution_id: 'sub-exec-1' });
+    const parentExec = makeExecutionOverview({
+      execution_id: 'parent-exec',
+      sub_agents: [subExec],
+    });
+    const stage = makeStageOverview({ id: 'stage-1', executions: [parentExec] });
+    const session = makeSessionDetail([stage]);
+    expect(findExecutionOverview(session, 'parent-exec')).toBe(parentExec);
   });
 });
 

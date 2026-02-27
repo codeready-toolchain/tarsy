@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -107,8 +108,8 @@ func (c *IteratingController) Run(
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
 			state.RecordFailure(err.Error(), isTimeoutError(err))
 
-			// Add error context as user message
-			errMsg := fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
+			// Build retry message based on error type
+			errMsg := buildRetryMessage(err)
 			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: errMsg})
 			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
 			continue
@@ -311,4 +312,34 @@ func (c *IteratingController) forceConclusion(
 		FinalAnalysis: resp.Text,
 		TokensUsed:    *totalUsage,
 	}, nil
+}
+
+// buildRetryMessage crafts an error context message for the LLM based on the
+// error type. For loop errors it instructs directness; for partial stream
+// errors it includes the partial output for continuity.
+func buildRetryMessage(err error) string {
+	var poe *PartialOutputError
+	if !errors.As(err, &poe) {
+		return fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
+	}
+
+	if poe.IsLoop {
+		return "Your previous response got stuck in a repetitive output loop and was cancelled. " +
+			"Please provide a direct, concise response. Do not deliberate excessively."
+	}
+
+	if poe.PartialText != "" {
+		partial := poe.PartialText
+		const maxPartialLen = 2000
+		if len(partial) > maxPartialLen {
+			partial = partial[:maxPartialLen] + "..."
+		}
+		return fmt.Sprintf(
+			"Error from previous attempt: %s\n\nYour partial response before the error:\n---\n%s\n---\n\n"+
+				"Please continue from where you left off or provide a complete response.",
+			poe.Cause.Error(), partial,
+		)
+	}
+
+	return fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
 }

@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -162,13 +164,14 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		slog.Warn("Failed to mark sub-agent execution as active",
 			"execution_id", executionID, "error", updateErr)
 	}
+	r.publishSubAgentStatus(ctx, executionID, agentIndex, string(agentexecution.StatusActive), "")
 
 	maxSeq, seqErr := r.deps.TimelineService.GetMaxSequenceForExecution(ctx, executionID)
 	if seqErr != nil {
 		slog.Warn("Failed to get max sequence for new execution",
 			"execution_id", executionID, "error", seqErr)
 	}
-	_, _ = r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+	taskEvent, taskErr := r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:         r.sessionID,
 		StageID:           &r.stageID,
 		ExecutionID:       &executionID,
@@ -178,6 +181,30 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		Status:            timelineevent.StatusCompleted,
 		Content:           task,
 	})
+	if taskErr != nil {
+		slog.Warn("Failed to create sub-agent task timeline event",
+			"session_id", r.sessionID, "stage_id", r.stageID, "execution_id", executionID, "error", taskErr)
+	} else if r.deps.EventPublisher != nil {
+		if pubErr := r.deps.EventPublisher.PublishTimelineCreated(ctx, r.sessionID, events.TimelineCreatedPayload{
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCreated,
+				SessionID: r.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID:           taskEvent.ID,
+			StageID:           r.stageID,
+			ExecutionID:       executionID,
+			ParentExecutionID: parentID,
+			EventType:         timelineevent.EventTypeTaskAssigned,
+			Status:            timelineevent.StatusCompleted,
+			Content:           task,
+			SequenceNumber:    maxSeq + 1,
+		}); pubErr != nil {
+			slog.Warn("Failed to publish sub-agent task timeline event",
+				"session_id", r.sessionID, "stage_id", r.stageID, "execution_id", executionID,
+				"event_id", taskEvent.ID, "error", pubErr)
+		}
+	}
 
 	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)
 
@@ -185,6 +212,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		executionID: executionID,
 		agentName:   name,
 		task:        task,
+		agentIndex:  agentIndex,
 		status:      agent.ExecutionStatusActive,
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -291,13 +319,21 @@ func (r *SubAgentRunner) completeSubAgent(
 	exec.status = status
 	r.mu.Unlock()
 
+	// Use a detached context with a short deadline: the parent context may
+	// already be cancelled (orchestrator shutdown), but we still need to
+	// persist the final status. The timeout prevents indefinite blocking if
+	// the DB or publisher is unresponsive.
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+
 	entStatus := mapToEntStatus(status)
 	if updateErr := r.deps.StageService.UpdateAgentExecutionStatus(
-		context.Background(), exec.executionID, entStatus, errMsg,
+		cleanupCtx, exec.executionID, entStatus, errMsg,
 	); updateErr != nil {
 		slog.Warn("Failed to update sub-agent execution status",
 			"execution_id", exec.executionID, "status", status, "error", updateErr)
 	}
+	r.publishSubAgentStatus(cleanupCtx, exec.executionID, exec.agentIndex, string(entStatus), errMsg)
 
 	result := &SubAgentResult{
 		ExecutionID: exec.executionID,
@@ -314,6 +350,31 @@ func (r *SubAgentRunner) completeSubAgent(
 	select {
 	case r.resultsCh <- result:
 	case <-r.closeCh:
+	}
+}
+
+// publishSubAgentStatus publishes an execution.status WS event for a sub-agent.
+// Best-effort: logs on failure, never aborts. agentIndex may be 0 when unknown
+// (e.g. terminal status from completeSubAgent which doesn't track the index).
+func (r *SubAgentRunner) publishSubAgentStatus(ctx context.Context, executionID string, agentIndex int, status, errMsg string) {
+	if r.deps.EventPublisher == nil {
+		return
+	}
+	if err := r.deps.EventPublisher.PublishExecutionStatus(ctx, r.sessionID, events.ExecutionStatusPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeExecutionStatus,
+			SessionID: r.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		StageID:           r.stageID,
+		ExecutionID:       executionID,
+		ParentExecutionID: r.parentExecID,
+		AgentIndex:        agentIndex,
+		Status:            status,
+		ErrorMessage:      errMsg,
+	}); err != nil {
+		slog.Warn("Failed to publish sub-agent execution status",
+			"session_id", r.sessionID, "execution_id", executionID, "status", status, "error", err)
 	}
 }
 

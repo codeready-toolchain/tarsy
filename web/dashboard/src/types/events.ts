@@ -9,6 +9,7 @@ export interface TimelineCreatedPayload {
   session_id: string;
   stage_id?: string;
   execution_id?: string;
+  parent_execution_id?: string;
   event_type: string;
   status: string;
   content: string;
@@ -22,6 +23,7 @@ export interface TimelineCompletedPayload {
   type: 'timeline_event.completed';
   session_id: string;
   event_id: string;
+  parent_execution_id?: string;
   event_type: string;
   content: string;
   status: string;
@@ -34,6 +36,7 @@ export interface StreamChunkPayload {
   type: 'stream.chunk';
   session_id: string;
   event_id: string;
+  parent_execution_id?: string;
   delta: string;
   timestamp: string;
 }
@@ -95,6 +98,7 @@ export interface ExecutionProgressPayload {
   session_id: string;
   stage_id: string;
   execution_id: string;
+  parent_execution_id?: string;
   phase: string;
   message: string;
   timestamp: string;
@@ -106,6 +110,7 @@ export interface ExecutionStatusPayload {
   session_id: string;
   stage_id: string;
   execution_id: string;
+  parent_execution_id?: string;
   agent_index: number;
   status: string;
   error_message?: string;

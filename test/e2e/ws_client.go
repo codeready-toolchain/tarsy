@@ -50,14 +50,34 @@ func WSConnect(ctx context.Context, wsURL string) (*WSClient, error) {
 	return c, nil
 }
 
-// Subscribe sends a subscribe action for the given channel.
+// Subscribe sends a subscribe action for the given channel and waits for
+// the server to confirm. This ensures the LISTEN + auto-catchup has completed
+// before the caller proceeds, avoiding a race where events are checked before
+// the server has delivered catchup events.
 func (c *WSClient) Subscribe(channel string) error {
 	msg := map[string]string{
 		"action":  "subscribe",
 		"channel": channel,
 	}
 	data, _ := json.Marshal(msg)
-	return c.conn.Write(c.ctx, websocket.MessageText, data)
+	if err := c.conn.Write(c.ctx, websocket.MessageText, data); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, e := range c.Events() {
+			if e.Type == "subscription.confirmed" && e.Parsed["channel"] == channel {
+				return nil
+			}
+		}
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("client closed while waiting for subscription.confirmed on channel %s: %w", channel, c.ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("timed out waiting for subscription.confirmed on channel %s", channel)
 }
 
 // Events returns a snapshot of all collected events.

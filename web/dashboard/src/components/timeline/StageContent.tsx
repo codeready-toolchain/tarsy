@@ -13,6 +13,7 @@ import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
+import SubAgentCard from './SubAgentCard';
 import {
   EXECUTION_STATUS,
   TERMINAL_EXECUTION_STATUSES,
@@ -40,6 +41,12 @@ interface StageContentProps {
    *  stageId is used to filter out executions belonging to other stages.
    *  agentIndex (1-based) preserves chain config ordering for deterministic tab order. */
   executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  /** Sub-agent streaming events (events with parent_execution_id) */
+  subAgentStreamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
+  /** Sub-agent execution statuses (events with parent_execution_id) */
+  subAgentExecutionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  /** Sub-agent progress statuses (events with parent_execution_id) */
+  subAgentProgressStatuses?: Map<string, string>;
   onSelectedAgentChange?: (executionId: string | null) => void;
 }
 
@@ -184,6 +191,30 @@ function groupItemsByExecution(items: FlowItem[]): ExecutionGroup[] {
   }));
 }
 
+// ── Pure helpers for orchestration tool items ──────────────────────────────
+
+const extractDispatchExecId = (content: string): string | null => {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.execution_id) return parsed.execution_id;
+  } catch { /* not JSON, ignore */ }
+  return null;
+};
+
+const isOrchestrationTool = (item: FlowItem, toolName: string): boolean => {
+  return item.metadata?.server_name === 'orchestrator'
+    && item.metadata?.tool_name === toolName;
+};
+
+const parseDispatchArgs = (item: FlowItem): { name?: string; task?: string } => {
+  const raw = item.metadata?.arguments;
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return { name: parsed?.name, task: parsed?.task };
+  } catch { return {}; }
+};
+
 /**
  * StageContent — unified renderer for stage items.
  *
@@ -204,6 +235,9 @@ const StageContent: React.FC<StageContentProps> = ({
   isItemCollapsible,
   agentProgressStatuses = new Map(),
   executionStatuses,
+  subAgentStreamingEvents,
+  subAgentExecutionStatuses,
+  subAgentProgressStatuses,
   onSelectedAgentChange,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
@@ -221,6 +255,39 @@ const StageContent: React.FC<StageContentProps> = ({
     }
     return map;
   }, [executionOverviews]);
+
+  // Build set of sub-agent execution IDs from three sources:
+  // 1. REST session detail: executionOverviews[].sub_agents
+  // 2. FlowItem.parentExecutionId (REST timeline events carry parent_execution_id)
+  // 3. WS execution.status events routed to subAgentExecutionStatuses
+  // This ensures sub-agents are identified even before session detail is re-fetched.
+  const { subAgentIds, subAgentOverviewMap } = useMemo(() => {
+    const ids = new Set<string>();
+    const overviews = new Map<string, ExecutionOverview>();
+    if (executionOverviews) {
+      for (const eo of executionOverviews) {
+        if (eo.sub_agents) {
+          for (const sub of eo.sub_agents) {
+            ids.add(sub.execution_id);
+            overviews.set(sub.execution_id, sub);
+          }
+        }
+      }
+    }
+    // Items with parentExecutionId are sub-agent items
+    for (const item of items) {
+      if (item.parentExecutionId && item.executionId) {
+        ids.add(item.executionId);
+      }
+    }
+    // WS execution statuses for sub-agents
+    if (subAgentExecutionStatuses) {
+      for (const execId of subAgentExecutionStatuses.keys()) {
+        ids.add(execId);
+      }
+    }
+    return { subAgentIds: ids, subAgentOverviewMap: overviews };
+  }, [executionOverviews, items, subAgentExecutionStatuses]);
 
   // Get streaming items grouped by execution
   const streamingByExecution = useMemo(() => {
@@ -301,7 +368,9 @@ const StageContent: React.FC<StageContentProps> = ({
       }
     }
 
-    const merged = [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups];
+    // Filter out sub-agent executions — they render inside SubAgentCard, not as tabs
+    const merged = [...executions, ...streamOnlyGroups, ...overviewGroups, ...statusOnlyGroups]
+      .filter(e => !subAgentIds.has(e.executionId));
 
     // Sort by agent_index (1-based, from chain config) for deterministic tab order.
     // Resolve agent_index from REST execution overviews or real-time WS statuses.
@@ -316,7 +385,7 @@ const StageContent: React.FC<StageContentProps> = ({
     });
 
     return merged;
-  }, [executions, streamingByExecution, executionOverviews, executionStatuses, execOverviewMap]);
+  }, [executions, streamingByExecution, executionOverviews, executionStatuses, execOverviewMap, subAgentIds]);
 
   // Detect multi-agent from BOTH completed items and active streaming events
   // so the tabbed interface appears immediately, not only after items complete.
@@ -335,6 +404,30 @@ const StageContent: React.FC<StageContentProps> = ({
     }
   }, [selectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
 
+  // Group sub-agent streaming events by execution ID
+  const subAgentStreamingByExec = useMemo(() => {
+    const byExec = new Map<string, Array<[string, StreamingItem]>>();
+    if (!subAgentStreamingEvents) return byExec;
+    for (const [eventId, event] of subAgentStreamingEvents) {
+      const execId = event.executionId || '';
+      if (!execId) continue;
+      if (!byExec.has(execId)) byExec.set(execId, []);
+      byExec.get(execId)!.push([eventId, event]);
+    }
+    return byExec;
+  }, [subAgentStreamingEvents]);
+
+  // Group sub-agent timeline items (from REST) by execution ID
+  const subAgentItemsByExec = useMemo(() => {
+    const byExec = new Map<string, FlowItem[]>();
+    for (const group of executions) {
+      if (subAgentIds.has(group.executionId)) {
+        byExec.set(group.executionId, group.items);
+      }
+    }
+    return byExec;
+  }, [executions, subAgentIds]);
+
   // Check if any parallel agent is still running (for "Waiting for other agents...")
   const hasOtherActiveAgents = useMemo(() => {
     if (!isMultiAgent) return false;
@@ -346,6 +439,26 @@ const StageContent: React.FC<StageContentProps> = ({
     });
     return result;
   }, [isMultiAgent, mergedExecutions, execOverviewMap, executionStatuses]);
+
+  const renderSubAgentCard = (subExecId: string, dispatchItem?: FlowItem) => {
+    const fallback = dispatchItem ? parseDispatchArgs(dispatchItem) : {};
+    return (
+      <SubAgentCard
+        key={`sub-${subExecId}`}
+        executionOverview={subAgentOverviewMap.get(subExecId)}
+        items={subAgentItemsByExec.get(subExecId) || []}
+        streamingEvents={subAgentStreamingByExec.get(subExecId)}
+        executionStatus={subAgentExecutionStatuses?.get(subExecId)}
+        progressStatus={subAgentProgressStatuses?.get(subExecId)}
+        fallbackAgentName={fallback.name}
+        shouldAutoCollapse={shouldAutoCollapse}
+        onToggleItemExpansion={onToggleItemExpansion}
+        expandAllReasoning={expandAllReasoning}
+        expandAllToolCalls={expandAllToolCalls}
+        isItemCollapsible={isItemCollapsible}
+      />
+    );
+  };
 
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
@@ -362,27 +475,69 @@ const StageContent: React.FC<StageContentProps> = ({
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
     const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
 
+    // Track which sub-agents have been rendered inline (anchored to dispatch tool results)
+    const renderedSubAgents = new Set<string>();
 
+    const elements: React.ReactNode[] = [];
+    for (const item of execution.items) {
+      // dispatch_agent tool call — replace with SubAgentCard.
+      // The llm_tool_call content is the result JSON after completion
+      // (e.g. {"execution_id":"...","status":"accepted"}). No mcp_tool_summary
+      // is created because the result is too short for summarization.
+      if (item.type === FLOW_ITEM.TOOL_CALL && isOrchestrationTool(item, 'dispatch_agent')) {
+        const subExecId = extractDispatchExecId(item.content);
+        if (subExecId) {
+          renderedSubAgents.add(subExecId);
+          elements.push(renderSubAgentCard(subExecId, item));
+        }
+        continue;
+      }
+
+      // dispatch_agent tool summary (rare — only if result was long enough to summarize)
+      if (item.type === FLOW_ITEM.TOOL_SUMMARY && isOrchestrationTool(item, 'dispatch_agent')) {
+        const subExecId = extractDispatchExecId(item.content);
+        if (subExecId && !renderedSubAgents.has(subExecId)) {
+          renderedSubAgents.add(subExecId);
+          elements.push(renderSubAgentCard(subExecId, item));
+        }
+        continue;
+      }
+
+      elements.push(
+        <TimelineItem
+          key={item.id}
+          item={item}
+          isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
+          onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
+          expandAll={expandAllReasoning}
+          expandAllToolCalls={expandAllToolCalls}
+          isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
+        />,
+      );
+    }
+
+    // Render any sub-agents not anchored to a dispatch tool result (e.g. sub-agent
+    // known from WS events or REST overviews before tool summary items arrive)
+    const allSubAgentExecIds = new Set([
+      ...subAgentOverviewMap.keys(),
+      ...subAgentItemsByExec.keys(),
+      ...subAgentStreamingByExec.keys(),
+    ]);
+    for (const subExecId of allSubAgentExecIds) {
+      if (!renderedSubAgents.has(subExecId)) {
+        elements.push(renderSubAgentCard(subExecId));
+      }
+    }
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {execution.items.map((item) => (
-          <TimelineItem
-            key={item.id}
-            item={item}
-            isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
-            onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
-            expandAll={expandAllReasoning}
-            expandAllToolCalls={expandAllToolCalls}
-            isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
-          />
-        ))}
+        {elements}
 
         {executionStreamingItems.map(([key, streamItem]) => (
           <StreamingContentRenderer key={key} item={streamItem} />
         ))}
 
-        {!hasDbItems && !hasStreamingItems && !isExecutionActive && (
+        {!hasDbItems && !hasStreamingItems && !isExecutionActive && allSubAgentExecIds.size === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
             No reasoning steps available for this agent
           </Typography>

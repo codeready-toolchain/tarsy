@@ -33,6 +33,7 @@ export interface FlowItem {
   type: FlowItemType;
   stageId?: string;
   executionId?: string;
+  parentExecutionId?: string;
   content: string;
   metadata?: Record<string, unknown>;
   status: string;
@@ -80,6 +81,7 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
   [TIMELINE_EVENT_TYPES.CODE_EXECUTION]: FLOW_ITEM.CODE_EXECUTION,
   [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: FLOW_ITEM.SEARCH_RESULT,
   [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: FLOW_ITEM.URL_CONTEXT,
+  [TIMELINE_EVENT_TYPES.TASK_ASSIGNED]: FLOW_ITEM.USER_QUESTION,
   [TIMELINE_EVENT_TYPES.ERROR]: FLOW_ITEM.ERROR,
 };
 
@@ -106,8 +108,8 @@ function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOvervi
   const stage = event.stage_id ? stageMap.get(event.stage_id) : undefined;
   const isParallel = stage?.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none';
 
-  // Enrich metadata with computed duration_ms for thinking events
   let metadata = event.metadata || undefined;
+
   if (type === FLOW_ITEM.THINKING && metadata?.duration_ms == null) {
     const durationMs = computeEventDurationMs(event);
     if (durationMs != null) {
@@ -115,11 +117,16 @@ function eventToFlowItem(event: TimelineEvent, stageMap: Map<string, StageOvervi
     }
   }
 
+  if (event.event_type === TIMELINE_EVENT_TYPES.TASK_ASSIGNED) {
+    metadata = { ...metadata, author: 'Task' };
+  }
+
   return {
     id: event.id,
     type,
     stageId: event.stage_id || undefined,
     executionId: event.execution_id || undefined,
+    parentExecutionId: event.parent_execution_id || undefined,
     content: event.content,
     metadata,
     status: event.status,

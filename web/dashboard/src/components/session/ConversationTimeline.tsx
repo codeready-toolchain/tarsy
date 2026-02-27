@@ -60,6 +60,12 @@ interface ConversationTimelineProps {
   agentProgressStatuses?: Map<string, string>;
   /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId, agentIndex}) */
   executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  /** Sub-agent streaming events (events with parent_execution_id) */
+  subAgentStreamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
+  /** Sub-agent execution statuses (events with parent_execution_id) */
+  subAgentExecutionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  /** Sub-agent progress statuses (events with parent_execution_id) */
+  subAgentProgressStatuses?: Map<string, string>;
   /** Chain ID for the header display */
   chainId?: string;
   /** Whether a chat stage is currently in progress (session may be terminal) */
@@ -89,6 +95,9 @@ export default function ConversationTimeline({
   streamingEvents,
   agentProgressStatuses,
   executionStatuses,
+  subAgentStreamingEvents,
+  subAgentExecutionStatuses,
+  subAgentProgressStatuses,
   chainId,
   chatStageInProgress,
   chatStageIds,
@@ -432,6 +441,9 @@ export default function ConversationTimeline({
                   isItemCollapsible={isItemCollapsible}
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
+                  subAgentStreamingEvents={subAgentStreamingEvents}
+                  subAgentExecutionStatuses={subAgentExecutionStatuses}
+                  subAgentProgressStatuses={subAgentProgressStatuses}
                   onSelectedAgentChange={handleSelectedAgentChange}
                 />
               </Collapse>

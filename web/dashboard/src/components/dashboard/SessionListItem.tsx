@@ -23,6 +23,7 @@ import {
   OpenInNew,
   Chat as ChatIcon,
   CallSplit,
+  Hub,
   Summarize,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -39,6 +40,13 @@ interface SessionListItemProps {
   session: DashboardSessionItem;
   searchTerm: string;
 }
+
+const iconOnlyChipSx = {
+  height: 24,
+  minWidth: 24,
+  '& .MuiChip-label': { px: 0, display: 'none' },
+  '& .MuiChip-icon': { mx: 0 },
+} as const;
 
 export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
   const navigate = useNavigate();
@@ -123,24 +131,32 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Box>
       </TableCell>
 
-      {/* Parallel stages indicator */}
-      <TableCell sx={{ width: 40, textAlign: 'center', px: 0.5 }}>
-        {session.has_parallel_stages && (
-          <Tooltip title="Parallel Agents - Multiple agents run in parallel">
-            <Chip
-              icon={<CallSplit sx={{ fontSize: '0.875rem' }} />}
-              size="small"
-              color="secondary"
-              variant="outlined"
-              sx={{
-                height: 24,
-                minWidth: 24,
-                '& .MuiChip-label': { px: 0, display: 'none' },
-                '& .MuiChip-icon': { mx: 0 },
-              }}
-            />
-          </Tooltip>
-        )}
+      {/* Parallel / Sub-agent indicators */}
+      <TableCell sx={{ width: 60, textAlign: 'center', px: 0.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+          {session.has_parallel_stages && (
+            <Tooltip title="Parallel Agents - Multiple agents run in parallel">
+              <Chip
+                icon={<CallSplit sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+          {session.has_sub_agents && (
+            <Tooltip title="Orchestrator - Sub-agents dispatched">
+              <Chip
+                icon={<Hub sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+        </Box>
       </TableCell>
 
       {/* Alert Type */}
@@ -209,12 +225,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
               size="small"
               color="primary"
               variant="outlined"
-              sx={{
-                height: 24,
-                minWidth: 24,
-                '& .MuiChip-label': { px: 0, display: 'none' },
-                '& .MuiChip-icon': { mx: 0 },
-              }}
+              sx={iconOnlyChipSx}
             />
           </Tooltip>
         )}

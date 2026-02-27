@@ -4,7 +4,7 @@
 
 ## What is TARSy?
 
-TARSy is an **AI-powered incident analysis system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations for engineers to act upon.
+TARSy is an **AI-powered incident analysis system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations for engineers to act upon. For complex investigations, an **orchestrator agent** can dynamically dispatch sub-agents based on LLM reasoning, enabling adaptive multi-phase workflows.
 
 The **Go Orchestrator** owns all orchestration logic: session management, chain execution, MCP tool execution, prompt building, conversation management, and real-time WebSocket streaming. The **Python LLM Service** is a stateless gRPC microservice that handles LLM provider interactions (Gemini, OpenAI, Anthropic, xAI, VertexAI), existing solely because LLM provider SDKs have best support in Python.
 
@@ -102,7 +102,7 @@ A stateless gRPC microservice with a single RPC: `Generate(GenerateRequest) retu
 
 The Python service has zero orchestration state and zero MCP knowledge. It receives messages + config via gRPC, calls the LLM provider API, and streams response chunks back.
 
-### 3. Sequential Agent Chains
+### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
 - Each chain consists of **sequential stages** with data accumulating between stages
@@ -110,22 +110,37 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
 - **Replica execution** for running the same agent multiple times with different providers for comparison
+- **Dynamic orchestration** -- an orchestrator agent in a chain stage uses LLM reasoning to dispatch sub-agents at runtime, react to partial results, and synthesize findings adaptively
 
 ### 4. Specialized Agents & Controllers
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Two controller types** (text-based ReAct parsing was completely removed):
 
-- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider)
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also used by orchestrator agents with push-based sub-agent result injection.
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis (and future scoring)
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
-### 5. MCP Integration & Tool Management
+### 5. Orchestrator Agent
+
+The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration**. Instead of following a predefined chain of agents, the orchestrator uses LLM reasoning to decide which agents to invoke, what tasks to give them, and how to combine their results — all at runtime. It is a standard TARSy agent (`type: orchestrator`) with three additional tools:
+
+- **`dispatch_agent`** — fire-and-forget sub-agent dispatch, returns immediately
+- **`cancel_agent`** — cancel a running sub-agent
+- **`list_agents`** — check status of all dispatched sub-agents
+
+Sub-agent results are **pushed automatically** into the orchestrator's conversation — no polling. The controller drains available results before each LLM call and waits when the LLM is idle but sub-agents are pending, enabling multi-phase investigation flows.
+
+Sub-agents are regular TARSy agents discovered via a `SubAgentRegistry` (agents with a `description` field). They run through the same execution path as any agent, creating real `AgentExecution` records linked to the orchestrator via `parent_execution_id`. Four new built-in agents ship with the orchestrator: **Orchestrator**, **WebResearcher** (Gemini google_search + url_context), **CodeExecutor** (Gemini code_execution), and **GeneralWorker** (pure reasoning).
+
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md)
+
+### 6. MCP Integration & Tool Management
 
 - **Go MCP SDK v1.3.0** for external tool integration (kubectl, ArgoCD, monitoring, etc.)
 - **Three transport types**: stdio (command-line servers), HTTP (JSON-RPC endpoints), SSE (Server-Sent Events)
@@ -134,7 +149,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 - **Tool result summarization** -- enabled by default for all MCP servers; large results (>5K tokens) are automatically summarized by an LLM call before being sent back to the investigating agent (can be disabled per-server)
 - **Health monitoring** -- background service checks server health, attempts recovery, surfaces warnings
 
-### 6. LLM Multi-Provider Support
+### 7. LLM Multi-Provider Support
 
 Built-in support for multiple AI providers with zero-configuration defaults:
 
@@ -148,18 +163,19 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 
 **Per-chain/stage provider configuration**: Different stages can use different LLM providers for cost/performance optimization. Native thinking mode available for Gemini models with exposed internal reasoning.
 
-### 7. Real-time Dashboard
+### 8. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
 - **Session list** with filtering by status, alert type, chain, date range, and search
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
 - **Parallel execution tabs** for viewing multiple agent results side by side
-- **Trace view** with hierarchical LLM/MCP interaction details for debugging
+- **Orchestrator sub-agent cards** inline in the conversation timeline, with collapsible sub-agent detail and real-time streaming
+- **Trace view** with hierarchical LLM/MCP interaction details for debugging, including nested sub-agent traces
 - **Alert submission interface** with MCP tool override selection
 - **System status page** showing MCP server health and system warnings
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
-### 8. Follow-up Chat
+### 9. Follow-up Chat
 
 - **Interactive investigation continuation** after sessions reach terminal state (completed, failed, timed out)
 - **Context preservation** -- chat agent receives the full investigation timeline as context
@@ -167,7 +183,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Unified timeline** -- chat messages appear inline with investigation stages
 - **Real-time streaming** -- follow-up responses stream through the same WebSocket infrastructure
 
-### 9. Slack Notifications
+### 10. Slack Notifications
 
 TARSy can automatically send Slack notifications when alert processing starts (for Slack-originated alerts) and reaches a terminal status (completed, failed, timed out, cancelled). The system supports both standard channel notifications and threaded replies to alert messages via fingerprint correlation.
 
@@ -353,6 +369,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New Agent Types**: Add custom agents via `agents` section in `tarsy.yaml` with MCP servers, instructions, LLM backend, and iteration configuration
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
+- **Dynamic Orchestration**: Use `type: orchestrator` agents in chains for LLM-driven sub-agent dispatch with configurable guardrails (`max_concurrent_agents`, `agent_timeout`, `max_budget`) and `sub_agents` overrides at chain/stage/agent level
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)

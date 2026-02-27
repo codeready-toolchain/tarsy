@@ -21,7 +21,7 @@ import {
   TableSortLabel,
   Tooltip,
 } from '@mui/material';
-import { Refresh, SearchOff, CallSplit, Chat as ChatIcon } from '@mui/icons-material';
+import { Refresh, SearchOff, CallSplit, Hub, Chat as ChatIcon } from '@mui/icons-material';
 import { SessionListItem } from './SessionListItem.tsx';
 import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
@@ -112,18 +112,30 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Parallel indicator */}
-                  <TableCell sx={{ width: 40, px: 0.5, textAlign: 'center' }}>
-                    <Tooltip title="Parallel Agents" arrow>
-                      <CallSplit
-                        sx={{
-                          fontSize: '1.1rem',
-                          color: 'secondary.main',
-                          verticalAlign: 'middle',
-                          cursor: 'help',
-                        }}
-                      />
-                    </Tooltip>
+                  {/* Parallel / Sub-agent indicators */}
+                  <TableCell sx={{ width: 60, px: 0.5, textAlign: 'center' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+                      <Tooltip title="Parallel Agents" arrow>
+                        <CallSplit
+                          sx={{
+                            fontSize: '1.1rem',
+                            color: 'secondary.main',
+                            verticalAlign: 'middle',
+                            cursor: 'help',
+                          }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Orchestrator / Sub-agents" arrow>
+                        <Hub
+                          sx={{
+                            fontSize: '1.1rem',
+                            color: 'secondary.main',
+                            verticalAlign: 'middle',
+                            cursor: 'help',
+                          }}
+                        />
+                      </Tooltip>
+                    </Box>
                   </TableCell>
 
                   {/* Type — sortable */}

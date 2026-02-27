@@ -71,6 +71,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 ### Agent Architecture
 - **Configuration-Based Agents**: Deploy new agents and chain definitions via YAML without code changes
 - **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent, replica, and comparison parallelism for A/B testing providers or strategies
+- **Dynamic Orchestration with Sub-Agents**: Orchestrator agents use LLM reasoning to dispatch specialized sub-agents at runtime, react to partial results, and synthesize findings -- replacing static parallel chains with adaptive, multi-phase investigation flows
 - **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
 - **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
@@ -111,14 +112,14 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 ### How It Works
 
 1. **Alert arrives** from monitoring systems with flexible text payload
-2. **Orchestrator selects** appropriate agent chain based on alert type
+2. **Chain selected** based on alert type -- static parallel chains or dynamic orchestrator
 3. **Runbook injected** (optional) -- if configured, fetches supplemental guidance from GitHub to steer agent behavior
-4. **Agents investigate in parallel** -- each stage launches multiple agents concurrently (different providers, strategies, or focus areas) for independent analysis
-5. **Synthesis agent merges results** -- a dedicated LLM call critically evaluates parallel findings and produces a unified root cause analysis
+4. **Agents investigate** -- static chains launch parallel agents per stage; orchestrator agents dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
+5. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrators synthesize within the same execution as results arrive
 6. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
 7. **Comprehensive analysis** provided to engineers with actionable recommendations
 8. **Follow-up chat available** after investigation completes
-9. **Full audit trail** captured with stage-level detail
+9. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
 ### Components
 

@@ -1,11 +1,8 @@
 /**
- * ParallelExecutionTabs — tabbed view for parallel agent executions.
+ * SubAgentTabs — tabbed view for orchestrator sub-agent executions in the trace view.
  *
- * Aggregate summary box with status counts, duration, and token usage.
- * One tab per agent execution, each with metadata and interaction list.
- *
- * Visual pattern from old dashboard's ParallelStageExecutionTabs.tsx,
- * data layer rewritten for new TraceExecutionGroup and ExecutionOverview types.
+ * Structurally similar to ParallelExecutionTabs but operates on sub_agents[]
+ * nested within a TraceExecutionGroup rather than top-level stage executions.
  */
 
 import { useState } from 'react';
@@ -19,8 +16,9 @@ import {
   Alert,
   alpha,
 } from '@mui/material';
+import { AccountTree } from '@mui/icons-material';
 
-import type { TraceStageGroup } from '../../types/trace';
+import type { TraceExecutionGroup } from '../../types/trace';
 import type { SessionDetailResponse, ExecutionOverview } from '../../types/session';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import { formatDurationMs, formatTimestamp } from '../../utils/format';
@@ -35,142 +33,100 @@ import {
   mergeAndSortInteractions,
 } from './traceHelpers';
 import InteractionCard from './InteractionCard';
-import SubAgentTabs from './SubAgentTabs';
 
-interface ParallelExecutionTabsProps {
-  stage: TraceStageGroup;
+interface SubAgentTabsProps {
+  subAgents: TraceExecutionGroup[];
   session: SessionDetailResponse;
 }
 
-export default function ParallelExecutionTabs({ stage, session }: ParallelExecutionTabsProps) {
+export default function SubAgentTabs({ subAgents, session }: SubAgentTabsProps) {
   const [activeTab, setActiveTab] = useState(0);
 
-  // Gather execution overviews from session detail
-  const executionOverviews = stage.executions
-    .map((exec) => findExecutionOverview(session, exec.execution_id))
+  const executionOverviews = subAgents
+    .map((sub) => findExecutionOverview(session, sub.execution_id))
     .filter((e): e is ExecutionOverview => e != null);
 
   const statusCounts = getExecutionStatusCounts(executionOverviews);
   const aggregateTokens = getAggregateTotalTokens(executionOverviews);
   const aggregateDuration = getAggregateDuration(executionOverviews);
 
-  const currentExecution = stage.executions[activeTab];
-  const currentOverview = currentExecution
-    ? findExecutionOverview(session, currentExecution.execution_id)
+  const currentSub = subAgents[activeTab];
+  const currentOverview = currentSub
+    ? findExecutionOverview(session, currentSub.execution_id)
     : undefined;
-  const interactions = currentExecution ? mergeAndSortInteractions(currentExecution) : [];
+  const interactions = currentSub ? mergeAndSortInteractions(currentSub) : [];
 
   return (
-    <Box>
-      {/* Aggregate Summary Box */}
+    <Box sx={{ mt: 2 }}>
+      {/* Sub-Agents header */}
       <Box
         sx={(theme) => ({
           p: 2,
           mb: 2,
-          bgcolor: alpha(theme.palette.secondary.main, 0.04),
+          bgcolor: alpha(theme.palette.info.main, 0.04),
           border: 1,
-          borderColor: alpha(theme.palette.secondary.main, 0.2),
+          borderColor: alpha(theme.palette.info.main, 0.2),
           borderRadius: 2,
         })}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <AccountTree sx={{ fontSize: 18, color: 'info.main' }} />
           <Chip
-            label="Parallel Execution"
+            label="Sub-Agents"
             size="small"
-            color="secondary"
+            color="info"
             sx={{ fontWeight: 600 }}
           />
           <Typography variant="body2" color="text.secondary">
-            {stage.executions.length} agents
+            {subAgents.length} agent{subAgents.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
-          {/* Status counts */}
           {statusCounts.completed > 0 && (
-            <Chip
-              label={`${statusCounts.completed} completed`}
-              size="small"
-              color="success"
-              variant="outlined"
-              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-            />
+            <Chip label={`${statusCounts.completed} completed`} size="small" color="success" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />
           )}
           {statusCounts.failed > 0 && (
-            <Chip
-              label={`${statusCounts.failed} failed`}
-              size="small"
-              color="error"
-              variant="outlined"
-              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-            />
+            <Chip label={`${statusCounts.failed} failed`} size="small" color="error" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />
           )}
           {statusCounts.active > 0 && (
-            <Chip
-              label={`${statusCounts.active} running`}
-              size="small"
-              color="primary"
-              variant="outlined"
-              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-            />
-          )}
-          {statusCounts.pending > 0 && (
-            <Chip
-              label={`${statusCounts.pending} pending`}
-              size="small"
-              variant="outlined"
-              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-            />
+            <Chip label={`${statusCounts.active} running`} size="small" color="primary" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />
           )}
           {statusCounts.cancelled > 0 && (
-            <Chip
-              label={`${statusCounts.cancelled} cancelled`}
-              size="small"
-              color="warning"
-              variant="outlined"
-              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-            />
+            <Chip label={`${statusCounts.cancelled} cancelled`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />
           )}
-
-          {/* Duration */}
           {aggregateDuration != null && (
             <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
               Max duration: {formatDurationMs(aggregateDuration)}
             </Typography>
           )}
-
-          {/* Tokens */}
           {aggregateTokens.total_tokens > 0 && (
-            <TokenUsageDisplay
-              tokenData={aggregateTokens}
-              variant="inline"
-              size="small"
-            />
+            <TokenUsageDisplay tokenData={aggregateTokens} variant="inline" size="small" />
           )}
         </Box>
       </Box>
 
-      {/* Agent tabs */}
+      {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs
           value={activeTab}
           onChange={(_, newValue) => setActiveTab(newValue)}
           variant="scrollable"
           scrollButtons="auto"
-          aria-label="Agent execution tabs"
+          aria-label="Sub-agent execution tabs"
         >
-          {stage.executions.map((exec, idx) => {
-            const overview = findExecutionOverview(session, exec.execution_id);
+          {subAgents.map((sub, idx) => {
+            const overview = findExecutionOverview(session, sub.execution_id);
             const statusColor = overview ? getStageStatusColor(overview.status) : 'default';
             const statusIcon = overview ? getStageStatusIcon(overview.status) : undefined;
             return (
               <Tab
-                key={exec.execution_id}
+                key={sub.execution_id}
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     {statusIcon}
                     <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'none' }}>
-                      {exec.agent_name}
+                      {sub.agent_name}
                     </Typography>
                     <Chip
                       label={overview?.status ?? 'unknown'}
@@ -181,8 +137,8 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                     />
                   </Box>
                 }
-                id={`execution-tab-${idx}`}
-                aria-controls={`execution-tabpanel-${idx}`}
+                id={`sub-agent-tab-${idx}`}
+                aria-controls={`sub-agent-tabpanel-${idx}`}
               />
             );
           })}
@@ -192,22 +148,12 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
       {/* Tab panel */}
       <Box
         role="tabpanel"
-        id={`execution-tabpanel-${activeTab}`}
-        aria-labelledby={`execution-tab-${activeTab}`}
+        id={`sub-agent-tabpanel-${activeTab}`}
+        aria-labelledby={`sub-agent-tab-${activeTab}`}
         sx={{ pt: 2 }}
       >
-        {/* Execution metadata */}
         {currentOverview && (
-          <Box
-            sx={{
-              p: 2,
-              mb: 2,
-              bgcolor: 'grey.50',
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
+          <Box sx={{ p: 2, mb: 2, bgcolor: 'grey.50', border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Stack spacing={1}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
@@ -218,9 +164,7 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                   <Chip
                     label={getStageStatusDisplayName(currentOverview.status)}
                     size="small"
-                    color={getStageStatusColor(currentOverview.status) === 'default'
-                      ? undefined
-                      : getStageStatusColor(currentOverview.status)}
+                    color={getStageStatusColor(currentOverview.status) === 'default' ? undefined : getStageStatusColor(currentOverview.status)}
                     sx={{ fontWeight: 600, fontSize: '0.75rem', height: 22 }}
                   />
                 </Box>
@@ -235,6 +179,11 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                   </Typography>
                 )}
               </Box>
+              {currentOverview.task && (
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Task:</strong> {currentOverview.task}
+                </Typography>
+              )}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {currentOverview.started_at && (
                   <Typography variant="body2" color="text.secondary">
@@ -252,7 +201,6 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                   </Typography>
                 )}
               </Box>
-
               {currentOverview.total_tokens > 0 && (
                 <TokenUsageDisplay
                   tokenData={{
@@ -271,14 +219,12 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
           </Box>
         )}
 
-        {/* Error alert */}
         {currentOverview?.error_message && (
           <Alert severity="error" sx={{ mb: 2 }}>
             <Typography variant="body2">{currentOverview.error_message}</Typography>
           </Alert>
         )}
 
-        {/* Interaction list */}
         {interactions.length > 0 ? (
           <Stack spacing={2}>
             {interactions.map((interaction) => (
@@ -289,15 +235,10 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
               />
             ))}
           </Stack>
-        ) : !currentExecution?.sub_agents?.length ? (
+        ) : (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-            No interactions recorded for this execution
+            No interactions recorded for this sub-agent
           </Typography>
-        ) : null}
-
-        {/* Sub-agent tabs (for orchestrator executions in parallel stages) */}
-        {currentExecution?.sub_agents && currentExecution.sub_agents.length > 0 && (
-          <SubAgentTabs subAgents={currentExecution.sub_agents} session={session} />
         )}
       </Box>
     </Box>
