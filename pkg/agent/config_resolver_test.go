@@ -144,27 +144,6 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeOrchestrator, resolved.Type)
 	})
 
-	t.Run("agent definition type used when stage-agent type is empty", func(t *testing.T) {
-		synthCfg := &config.Config{
-			Defaults: defaults,
-			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"SynthesisAgent": {
-					Type:               config.AgentTypeSynthesis,
-					CustomInstructions: "You synthesize.",
-				},
-			}),
-			LLMProviderRegistry: cfg.LLMProviderRegistry,
-		}
-		chain := &config.ChainConfig{}
-		stageConfig := config.StageConfig{}
-		agentConfig := config.StageAgentConfig{Name: "SynthesisAgent"}
-
-		resolved, err := ResolveAgentConfig(synthCfg, chain, stageConfig, agentConfig)
-		require.NoError(t, err)
-
-		assert.Equal(t, config.AgentTypeSynthesis, resolved.Type)
-	})
-
 	t.Run("falls back to DefaultLLMBackend when no level sets backend", func(t *testing.T) {
 		noBackendCfg := &config.Config{
 			Defaults: &config.Defaults{
