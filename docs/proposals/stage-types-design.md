@@ -43,6 +43,8 @@ Five values:
 | `exec_summary` | Executive summary of the investigation | `executor.go` (refactored) | PR 2 |
 | `scoring` | Quality evaluation | `ScoringExecutor` (Phase 2) | Reserved |
 
+All five values are defined in the ent enum from PR 1, but `exec_summary` and `scoring` have no creation path until their respective phases. Stage creation is internal-only (`StageService.CreateStage` has no API endpoint) — only executor code calls it, so no service-level whitelist is needed; the ent enum provides schema-level validation, and the absence of a code path is sufficient protection.
+
 Stage types enable composable context filtering:
 
 | Need | Stage types included |
@@ -83,6 +85,9 @@ type CreateStageRequest struct {
 stageType := stage.StageTypeInvestigation // default
 if req.StageType != "" {
     stageType = stage.StageType(req.StageType)
+    if err := stage.StageTypeValidator(stageType); err != nil {
+        return nil, NewValidationError("stage_type", fmt.Sprintf("invalid: %q", req.StageType))
+    }
 }
 
 builder := s.client.Stage.Create().
@@ -90,7 +95,7 @@ builder := s.client.Stage.Create().
     SetStageType(stageType)
 ```
 
-Validation: ent enum validation rejects unknown values automatically.
+Explicit service-level validation — consistent with the existing `ParallelType`/`SuccessPolicy` validation pattern in `CreateStage`. Ent generates `StageTypeValidator` (a switch over all enum constants, same shape as `ParallelTypeValidator`/`SuccessPolicyValidator`), so no hand-maintained map is needed.
 
 ### Creation Path Changes
 
