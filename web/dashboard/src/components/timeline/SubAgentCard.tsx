@@ -14,6 +14,7 @@ import type { FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
+import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
 import { formatDurationMs } from '../../utils/format';
@@ -77,14 +78,16 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
     ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
     : null;
 
+  const accentKey = isFailed ? 'error' : isCancelled ? 'warning' : 'secondary';
+
   return (
     <Box
       sx={(theme) => ({
         ml: 4, my: 1, mr: 1,
         border: '2px solid',
-        borderColor: alpha(theme.palette.secondary.main, 0.5),
+        borderColor: alpha(theme.palette[accentKey].main, 0.5),
         borderRadius: 1.5,
-        bgcolor: alpha(theme.palette.secondary.main, 0.08),
+        bgcolor: alpha(theme.palette[accentKey].main, 0.08),
         boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
         overflow: 'hidden',
       })}
@@ -100,23 +103,23 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, minWidth: 0,
           cursor: hasContent ? 'pointer' : 'default',
           transition: 'background-color 0.2s ease',
-          '&:hover': hasContent ? { bgcolor: alpha(theme.palette.secondary.main, 0.12) } : {},
+          '&:hover': hasContent ? { bgcolor: alpha(theme.palette[accentKey].main, 0.12) } : {},
         })}
       >
         <Hub sx={(theme) => ({
           fontSize: 18, flexShrink: 0,
-          color: theme.palette.secondary.main,
+          color: theme.palette[accentKey].main,
           ...(isRunning && { animation: `${pulse} 1.5s ease-in-out infinite` }),
         })} />
         <Typography
           variant="body2"
-          sx={(theme) => ({ fontWeight: 700, fontSize: '0.9rem', color: theme.palette.secondary.main, whiteSpace: 'nowrap', flexShrink: 0 })}
+          sx={(theme) => ({ fontWeight: 700, fontSize: '0.9rem', color: theme.palette[accentKey].main, whiteSpace: 'nowrap', flexShrink: 0 })}
         >
           Sub-agent
         </Typography>
         <Typography
           variant="body2"
-          sx={(theme) => ({ fontWeight: 400, fontSize: '0.9rem', color: theme.palette.secondary.main, whiteSpace: 'nowrap', flexShrink: 0 })}
+          sx={(theme) => ({ fontWeight: 400, fontSize: '0.9rem', color: theme.palette[accentKey].main, whiteSpace: 'nowrap', flexShrink: 0 })}
         >
           {agentName}
         </Typography>
@@ -137,7 +140,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           {/* Info bar with badge + tokens */}
           <Box sx={(theme) => ({
             px: 1.5, py: 0.75,
-            bgcolor: alpha(theme.palette.secondary.main, 0.04),
+            bgcolor: alpha(theme.palette[accentKey].main, 0.04),
             display: 'flex', alignItems: 'center', gap: 1,
           })}>
             <Chip
@@ -177,6 +180,10 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             {dedupedStreaming.map(([key, streamItem]) => (
               <StreamingContentRenderer key={key} item={streamItem} />
             ))}
+
+            {isRunning && (
+              <ProcessingIndicator message={progressStatus || 'Processing...'} />
+            )}
 
             {!hasContent && !isRunning && (
               <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>

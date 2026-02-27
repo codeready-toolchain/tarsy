@@ -450,7 +450,6 @@ const StageContent: React.FC<StageContentProps> = ({
         executionStatus={subAgentExecutionStatuses?.get(subExecId)}
         progressStatus={subAgentProgressStatuses?.get(subExecId)}
         fallbackAgentName={fallback.name}
-        fallbackTask={fallback.task}
         shouldAutoCollapse={shouldAutoCollapse}
         onToggleItemExpansion={onToggleItemExpansion}
         expandAllReasoning={expandAllReasoning}
