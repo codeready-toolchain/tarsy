@@ -102,7 +102,6 @@ func TestBuiltinAgents(t *testing.T) {
 			agentID:  "Orchestrator",
 			wantDesc: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
 			wantType: AgentTypeOrchestrator,
-			// No CustomInstructions — behavioral strategy is auto-injected by the prompt builder.
 		},
 	}
 

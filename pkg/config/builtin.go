@@ -114,8 +114,6 @@ Complete the assigned task thoroughly and concisely.`,
 		"Orchestrator": {
 			Description: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
 			Type:        AgentTypeOrchestrator,
-			// No CustomInstructions — orchestrator behavioral strategy is auto-injected
-			// by the prompt builder for all orchestrator agents (built-in and custom).
 		},
 	}
 }

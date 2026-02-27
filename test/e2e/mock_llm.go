@@ -139,17 +139,15 @@ func (c *ScriptedLLMClient) CallCount() int {
 // nextEntry selects the next script entry using dual dispatch.
 // Must be called with c.mu held.
 func (c *ScriptedLLMClient) nextEntry(input *agent.GenerateInput) (*LLMScriptEntry, error) {
-	// Extract agent name from system prompt for routing.
 	agentName := extractAgentName(input)
 
-	// Try routed dispatch first.
-	if agentName != "" {
-		if entries, ok := c.routes[agentName]; ok {
-			idx := c.routeIndex[agentName]
-			if idx < len(entries) {
-				c.routeIndex[agentName] = idx + 1
-				return &entries[idx], nil
-			}
+	// Try routed dispatch: exact name match first, then prompt-based fallback.
+	if resolved := c.resolveRoute(agentName, input); resolved != "" {
+		entries := c.routes[resolved]
+		idx := c.routeIndex[resolved]
+		if idx < len(entries) {
+			c.routeIndex[resolved] = idx + 1
+			return &entries[idx], nil
 		}
 	}
 
@@ -164,11 +162,63 @@ func (c *ScriptedLLMClient) nextEntry(input *agent.GenerateInput) (*LLMScriptEnt
 		agentName, c.seqIndex, len(c.sequential))
 }
 
-// extractAgentName extracts the agent name from the system prompt's
-// custom instructions section. The prompt builder places custom instructions
-// under "## Agent-Specific Instructions", so we look for "You are <Name>"
-// within that section to avoid matching the generic "You are an expert SRE"
-// from the general instructions.
+// resolveRoute returns the route key to use. It first tries an exact match on
+// the name extracted from custom instructions. If that fails (e.g. the agent
+// has no custom instructions), it falls back to checking whether any registered
+// route key appears in the system prompt as a word boundary match.
+func (c *ScriptedLLMClient) resolveRoute(extractedName string, input *agent.GenerateInput) string {
+	if _, ok := c.routes[extractedName]; ok {
+		return extractedName
+	}
+
+	systemPrompt := extractSystemPrompt(input)
+	if systemPrompt == "" {
+		return ""
+	}
+	for key := range c.routes {
+		if containsWord(systemPrompt, key) {
+			return key
+		}
+	}
+	return ""
+}
+
+func extractSystemPrompt(input *agent.GenerateInput) string {
+	for _, msg := range input.Messages {
+		if msg.Role == agent.RoleSystem {
+			return msg.Content
+		}
+	}
+	return ""
+}
+
+// containsWord checks if s contains word as a standalone token (bounded by
+// non-letter characters or string edges).
+func containsWord(s, word string) bool {
+	for i := 0; ; {
+		idx := strings.Index(s[i:], word)
+		if idx < 0 {
+			return false
+		}
+		start := i + idx
+		end := start + len(word)
+		leftOK := start == 0 || !isLetter(s[start-1])
+		rightOK := end == len(s) || !isLetter(s[end])
+		if leftOK && rightOK {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+func isLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// extractAgentName tries to extract the agent name from the system prompt's
+// custom instructions section ("You are <Name>" inside "## Agent-Specific
+// Instructions"). Returns "" when the section is absent or has no identity
+// pattern. The caller (resolveRoute) handles the fallback.
 func extractAgentName(input *agent.GenerateInput) string {
 	for _, msg := range input.Messages {
 		if msg.Role == agent.RoleSystem {
