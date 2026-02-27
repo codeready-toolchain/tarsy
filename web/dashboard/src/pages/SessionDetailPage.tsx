@@ -188,6 +188,18 @@ export function SessionDetailPage() {
     () => new Map(),
   );
 
+  // Sub-agent state maps: events with parent_execution_id are routed here
+  // instead of the top-level maps, so they render inside SubAgentCard.
+  const [subAgentStreamingEvents, setSubAgentStreamingEvents] = useState<Map<string, ExtendedStreamingItem>>(
+    () => new Map(),
+  );
+  const [subAgentExecutionStatuses, setSubAgentExecutionStatuses] = useState<Map<string, { status: string; stageId: string; agentIndex: number }>>(
+    () => new Map(),
+  );
+  const [subAgentProgressStatuses, setSubAgentProgressStatuses] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+
   // --- View / navigation ---
   const view = 'reasoning' as const;
 
@@ -363,6 +375,9 @@ export function SessionDetailPage() {
     setProgressStatus('Processing...');
     setAgentProgressStatuses(new Map());
     setExecutionStatuses(new Map());
+    setSubAgentStreamingEvents(new Map());
+    setSubAgentExecutionStatuses(new Map());
+    setSubAgentProgressStatuses(new Map());
     chatStageIdRef.current = null;
     setChatStageIds(new Set());
 
@@ -472,6 +487,7 @@ export function SessionDetailPage() {
         if (eventType === EVENT_TIMELINE_CREATED) {
           const payload = data as unknown as TimelineCreatedPayload;
           const isTruncated = !!(data as Record<string, unknown>).truncated;
+          const isSubAgent = !!payload.parent_execution_id;
 
           // Truncated payloads only have type, event_id, session_id — re-fetch.
           // The backend truncates NOTIFY payloads exceeding PostgreSQL's ~8KB
@@ -506,19 +522,20 @@ export function SessionDetailPage() {
                 createdAt: payload.timestamp,
               });
             }
-            // Add to streaming map (skip if already present to preserve
-            // accumulated content from stream.chunk deltas).
-            setStreamingEvents((prev) => {
+            const streamItem: ExtendedStreamingItem = {
+              eventType: payload.event_type,
+              content: payload.content || '',
+              stageId: payload.stage_id,
+              executionId: payload.execution_id,
+              sequenceNumber: payload.sequence_number,
+              metadata: payload.metadata || undefined,
+            };
+            // Route to sub-agent or top-level streaming map
+            const setTarget = isSubAgent ? setSubAgentStreamingEvents : setStreamingEvents;
+            setTarget((prev) => {
               if (prev.has(payload.event_id)) return prev;
               const next = new Map(prev);
-              next.set(payload.event_id, {
-                eventType: payload.event_type,
-                content: payload.content || '',
-                stageId: payload.stage_id,
-                executionId: payload.execution_id,
-                sequenceNumber: payload.sequence_number,
-                metadata: payload.metadata || undefined,
-              });
+              next.set(payload.event_id, streamItem);
               return next;
             });
           } else {
@@ -576,7 +593,7 @@ export function SessionDetailPage() {
         // --- stream.chunk ---
         if (eventType === EVENT_STREAM_CHUNK) {
           const payload = data as unknown as StreamChunkPayload;
-          setStreamingEvents((prev) => {
+          const updateFn = (prev: Map<string, ExtendedStreamingItem>) => {
             const existing = prev.get(payload.event_id);
             if (!existing) return prev;
             const next = new Map(prev);
@@ -585,7 +602,15 @@ export function SessionDetailPage() {
               content: existing.content + payload.delta,
             });
             return next;
-          });
+          };
+          // Try sub-agent map first if parent_execution_id is set;
+          // also try the other map as fallback (the created event
+          // determines which map the entry lives in).
+          if (payload.parent_execution_id) {
+            setSubAgentStreamingEvents(updateFn);
+          } else {
+            setStreamingEvents(updateFn);
+          }
           return;
         }
 
@@ -593,19 +618,25 @@ export function SessionDetailPage() {
         if (eventType === EVENT_TIMELINE_COMPLETED) {
           const payload = data as unknown as TimelineCompletedPayload;
           const isTruncated = !!(data as Record<string, unknown>).truncated;
+          const isSubAgentCompleted = !!payload.parent_execution_id;
 
           // Read streaming metadata from synchronous ref (reliable, not
           // subject to React batching). Then clean up both ref and state.
           const meta = streamingMetaRef.current.get(payload.event_id);
           streamingMetaRef.current.delete(payload.event_id);
 
-          // Remove from streaming state
-          setStreamingEvents((prev) => {
+          // Remove from the correct streaming state map
+          const removeFromMap = (prev: Map<string, ExtendedStreamingItem>) => {
             if (!prev.has(payload.event_id)) return prev;
             const next = new Map(prev);
             next.delete(payload.event_id);
             return next;
-          });
+          };
+          if (isSubAgentCompleted) {
+            setSubAgentStreamingEvents(removeFromMap);
+          } else {
+            setStreamingEvents(removeFromMap);
+          }
 
           // ── Truncated payload handling ──────────────────────────
           // The backend truncates NOTIFY payloads that exceed PostgreSQL's
@@ -684,6 +715,7 @@ export function SessionDetailPage() {
           // when the session is cancelled mid-execution.
           if (isTerminalStatus(payload.status as SessionStatus)) {
             setStreamingEvents(new Map());
+            setSubAgentStreamingEvents(new Map());
             streamingMetaRef.current.clear();
 
             Promise.all([
@@ -756,6 +788,9 @@ export function SessionDetailPage() {
           if (payload.status === EXECUTION_STATUS.STARTED) {
             setAgentProgressStatuses(new Map());
             setExecutionStatuses(new Map());
+            setSubAgentStreamingEvents(new Map());
+            setSubAgentExecutionStatuses(new Map());
+            setSubAgentProgressStatuses(new Map());
 
             // Re-fetch session detail to get execution overviews (agent names,
             // LLM providers, iteration strategies) for parallel agents.
@@ -796,11 +831,19 @@ export function SessionDetailPage() {
           // Fall back to raw message if
           // the phase isn't in the map (shouldn't happen, but defensive).
           const phaseMessage = PHASE_STATUS_MESSAGE[payload.phase] || payload.message;
-          setAgentProgressStatuses((prev) => {
-            const next = new Map(prev);
-            next.set(payload.execution_id, phaseMessage);
-            return next;
-          });
+          if (payload.parent_execution_id) {
+            setSubAgentProgressStatuses((prev) => {
+              const next = new Map(prev);
+              next.set(payload.execution_id, phaseMessage);
+              return next;
+            });
+          } else {
+            setAgentProgressStatuses((prev) => {
+              const next = new Map(prev);
+              next.set(payload.execution_id, phaseMessage);
+              return next;
+            });
+          }
           // Do NOT update session-level progressStatus here.
           // Per-agent progress must stay isolated in agentProgressStatuses so that
           // the "Waiting for other agents..." check in ConversationTimeline works
@@ -814,11 +857,20 @@ export function SessionDetailPage() {
         // agent terminal status without waiting for the entire stage to complete.
         if (eventType === EVENT_EXECUTION_STATUS) {
           const payload = data as unknown as ExecutionStatusPayload;
-          setExecutionStatuses((prev) => {
-            const next = new Map(prev);
-            next.set(payload.execution_id, { status: payload.status, stageId: payload.stage_id, agentIndex: payload.agent_index });
-            return next;
-          });
+          const entry = { status: payload.status, stageId: payload.stage_id, agentIndex: payload.agent_index };
+          if (payload.parent_execution_id) {
+            setSubAgentExecutionStatuses((prev) => {
+              const next = new Map(prev);
+              next.set(payload.execution_id, entry);
+              return next;
+            });
+          } else {
+            setExecutionStatuses((prev) => {
+              const next = new Map(prev);
+              next.set(payload.execution_id, entry);
+              return next;
+            });
+          }
           return;
         }
 
@@ -1211,6 +1263,9 @@ export function SessionDetailPage() {
                   streamingEvents={streamingEvents}
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
+                  subAgentStreamingEvents={subAgentStreamingEvents}
+                  subAgentExecutionStatuses={subAgentExecutionStatuses}
+                  subAgentProgressStatuses={subAgentProgressStatuses}
                   chainId={session.chain_id}
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}

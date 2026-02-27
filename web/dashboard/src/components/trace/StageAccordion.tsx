@@ -39,6 +39,7 @@ import {
   mergeAndSortInteractions,
 } from './traceHelpers';
 import ParallelExecutionTabs from './ParallelExecutionTabs';
+import SubAgentTabs from './SubAgentTabs';
 import InteractionCard from './InteractionCard';
 
 interface StageAccordionProps {
@@ -61,6 +62,9 @@ export default function StageAccordion({
   const duration = computeStageDuration(stageOverview);
   const status = stageOverview?.status ?? 'unknown';
   const statusColor = getStageStatusColor(status);
+
+  // Detect orchestrator: any execution has sub_agents
+  const hasSubAgents = stage.executions.some((e) => (e.sub_agents?.length ?? 0) > 0);
 
   // Single-agent execution info
   const singleExecution = !isParallel && stage.executions.length === 1 ? stage.executions[0] : null;
@@ -137,6 +141,18 @@ export default function StageAccordion({
             <Typography variant="body2" color="text.secondary">
               {agentNames[0]}
             </Typography>
+          )}
+
+          {/* Sub-agents badge */}
+          {counts.subAgentCount > 0 && (
+            <Chip
+              icon={<CallSplit sx={{ fontSize: '1rem' }} />}
+              label={`${counts.subAgentCount} sub-agent${counts.subAgentCount !== 1 ? 's' : ''}`}
+              size="small"
+              color="info"
+              variant="outlined"
+              sx={{ fontWeight: 600, fontSize: '0.7rem' }}
+            />
           )}
 
           {/* Interaction count badges */}
@@ -269,10 +285,15 @@ export default function StageAccordion({
                   />
                 ))}
               </Stack>
-            ) : (
+            ) : !hasSubAgents ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
                 No interactions recorded for this stage
               </Typography>
+            ) : null}
+
+            {/* Sub-agent tabs (for orchestrator executions) */}
+            {hasSubAgents && singleExecution?.sub_agents && singleExecution.sub_agents.length > 0 && (
+              <SubAgentTabs subAgents={singleExecution.sub_agents} session={session} />
             )}
           </Box>
         )}

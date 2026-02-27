@@ -251,19 +251,28 @@ export function mergeAndSortInteractions(execution: TraceExecutionGroup): Unifie
   );
 }
 
-/** Count total interactions across all executions in a stage. */
+/** Count total interactions across all executions in a stage (including sub-agents). */
 export function countStageInteractions(stage: TraceStageGroup): {
   total: number;
   llm: number;
   mcp: number;
+  subAgentCount: number;
 } {
   let llm = 0;
   let mcp = 0;
+  let subAgentCount = 0;
   for (const exec of stage.executions) {
     llm += exec.llm_interactions.length;
     mcp += exec.mcp_interactions.length;
+    if (exec.sub_agents?.length) {
+      subAgentCount += exec.sub_agents.length;
+      for (const sub of exec.sub_agents) {
+        llm += sub.llm_interactions.length;
+        mcp += sub.mcp_interactions.length;
+      }
+    }
   }
-  return { total: llm + mcp, llm, mcp };
+  return { total: llm + mcp, llm, mcp, subAgentCount };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -278,14 +287,18 @@ export function findStageOverview(
   return session.stages?.find((s) => s.id === stageId);
 }
 
-/** Find the ExecutionOverview from session detail for a trace execution. */
+/** Find the ExecutionOverview from session detail for a trace execution.
+ *  Searches nested sub_agents as well. */
 export function findExecutionOverview(
   session: SessionDetailResponse,
   executionId: string,
 ): ExecutionOverview | undefined {
   for (const stage of session.stages ?? []) {
-    const exec = stage.executions?.find((e) => e.execution_id === executionId);
-    if (exec) return exec;
+    for (const exec of stage.executions ?? []) {
+      if (exec.execution_id === executionId) return exec;
+      const sub = exec.sub_agents?.find((s) => s.execution_id === executionId);
+      if (sub) return sub;
+    }
   }
   return undefined;
 }
@@ -459,6 +472,29 @@ export function formatStageForCopy(
       }
       content += '\n';
     }
+
+    // Sub-agent interactions (indented under parent)
+    if (exec.sub_agents?.length) {
+      for (const sub of exec.sub_agents) {
+        content += `    --- Sub-Agent: ${sub.agent_name} ---\n`;
+        const subInteractions = mergeAndSortInteractions(sub);
+        for (const interaction of subInteractions) {
+          if (interaction.kind === 'llm') {
+            content += `    [LLM] ${computeLLMStepDescription(interaction as LLMInteractionListItem)}`;
+          } else {
+            content += `    [MCP] ${computeMCPStepDescription(interaction as MCPInteractionListItem)}`;
+          }
+          if (interaction.duration_ms != null) {
+            content += ` (${formatDurationMs(interaction.duration_ms)})`;
+          }
+          if (interaction.error_message) {
+            content += ` ERROR: ${interaction.error_message}`;
+          }
+          content += '\n';
+        }
+      }
+    }
+
     content += '\n';
   }
 

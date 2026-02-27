@@ -123,6 +123,9 @@ export interface ExecutionOverview {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  parent_execution_id?: string | null;
+  task?: string | null;
+  sub_agents?: ExecutionOverview[];
 }
 
 /** Session summary response. */
@@ -158,6 +161,7 @@ export interface TimelineEvent {
   session_id: string;
   stage_id: string | null;
   execution_id: string | null;
+  parent_execution_id?: string | null;
   sequence_number: number;
   event_type: string;
   status: string;
