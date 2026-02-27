@@ -90,7 +90,7 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:             true,
+					Enabled:             config.BoolPtr(true),
 					SizeThresholdTokens: 5000,
 				},
 			},
@@ -114,7 +114,7 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:             false,
+					Enabled:             config.BoolPtr(false),
 					SizeThresholdTokens: 100,
 				},
 			},
@@ -202,7 +202,6 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:              true,
 					SizeThresholdTokens:  100, // Low threshold
 					SummaryMaxTokenLimit: 500,
 				},
@@ -238,7 +237,6 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:              true,
 					SizeThresholdTokens:  100,
 					SummaryMaxTokenLimit: 500,
 				},
@@ -297,7 +295,6 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:             true,
 					SizeThresholdTokens: 100,
 				},
 			},
@@ -326,7 +323,6 @@ func TestMaybeSummarize(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
-					Enabled:             true,
 					SizeThresholdTokens: 100,
 				},
 			},

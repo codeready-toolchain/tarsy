@@ -57,7 +57,7 @@ func maybeSummarize(
 	}
 
 	// Summarization is enabled by default; only skip if explicitly disabled
-	if serverConfig.Summarization != nil && !serverConfig.Summarization.Enabled {
+	if serverConfig.Summarization != nil && serverConfig.Summarization.SummarizationDisabled() {
 		return &SummarizationResult{Content: rawContent}, nil
 	}
 
