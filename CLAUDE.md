@@ -41,16 +41,7 @@ Follow the same pattern:
 
 ## 📋 Available Commands
 
-Commands in `.cursor/commands/` are available for explicit invocation:
-
-- `/analyze-only` - Analysis without code changes
-- `/create-backend-tests` - Generate Go backend tests
-- `/create-dashboard-tests` - Generate dashboard tests
-- `/create-python-tests` - Generate Python tests
-- `/lint-and-fix` - Run linter and fix issues
-- `/pr-comment` - PR review context
-- `/promote-to-adr` - Move implemented proposal to `docs/adr/` as numbered ADR
-- `/research` - Internet research
+When a user invokes a `/command-name`, scan `.cursor/commands/` for a matching `command-name.md` file, read it, and follow its instructions.
 
 **Note**: Commands are only executed when explicitly requested by the user.
 
