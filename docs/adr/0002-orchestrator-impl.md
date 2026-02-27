@@ -41,7 +41,7 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 
 ### High-Level
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  Existing TARSy Chain                                       │
 │                                                             │
@@ -79,7 +79,7 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 
 ### Components
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Session Executor                                                    │
 │                                                                      │
@@ -140,7 +140,7 @@ This means the LLM can dispatch across multiple iterations, see results as soon 
 
 ### Example Flow
 
-```
+```text
 Orchestrator receives: "Alert: service-X 5xx rate at 15%"
 
 Iteration 1 — LLM dispatches parallel investigations:
@@ -171,7 +171,7 @@ Iteration 5 — Final response:
 
 ### Context Flow
 
-```
+```text
 Alert data + prior agent results
         │
         ▼
@@ -337,7 +337,7 @@ This enables multi-phase orchestration: dispatch → wait → react → dispatch
 
 ### Orchestrator Final Response vs. Stage Synthesis
 
-```
+```text
 Current parallel pattern:              Orchestrator pattern:
 
 Stage:                                 Stage:
@@ -372,7 +372,7 @@ Detected via `execCtx.Config.Type == AgentTypeOrchestrator` inside `BuildFunctio
 
 Example agent catalog:
 
-```
+```text
 ## Available Sub-Agents
 
 You can dispatch these agents using the dispatch_agent tool.
@@ -390,7 +390,7 @@ Results are delivered automatically when each sub-agent finishes — do not poll
 
 Detected via `execCtx.SubAgent != nil`. Sub-agents get a clean task-focused user message (`## Task\n\n{task text}`) instead of the investigation template. The system message includes the agent's own `custom_instructions` + MCP instructions + an auto-injected `subAgentFocus` block:
 
-```
+```text
 You are a sub-agent dispatched by an orchestrator for a specific task.
 
 Rules:
@@ -456,7 +456,7 @@ Sub-agent executions publish the same events as regular executions (`execution.s
 
 Full trace tree with parent-child linking:
 
-```
+```text
 Execution: exec-001 (Orchestrator)
 ├── Sub-execution: exec-abc (LogAnalyzer)
 │   ├── MCP tool call: loki.query_range(...)

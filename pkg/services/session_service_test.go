@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
@@ -1314,10 +1315,57 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 				assert.Equal(t, 1, s.TotalStages)
 				assert.Equal(t, 1, s.CompletedStages)
 				assert.Equal(t, false, s.HasParallelStages)
+				assert.Equal(t, false, s.HasSubAgents)
 				return
 			}
 		}
 		t.Fatal("session B not found in list")
+	})
+
+	t.Run("has_sub_agents flag", func(t *testing.T) {
+		// Create a session with an orchestrator execution that has a sub-agent.
+		orchSessionID := seedDashboardSession(t, client.Client,
+			"Orch data", "orchestrator", "orch-chain", 100, 50, 150, 0)
+
+		// Find the execution created by seedDashboardSession.
+		orchExecs := client.AgentExecution.Query().
+			Where(agentexecution.SessionID(orchSessionID)).
+			AllX(ctx)
+		require.Len(t, orchExecs, 1)
+		parentExecID := orchExecs[0].ID
+
+		// Look up the stage ID from the parent execution.
+		orchStages := client.Stage.Query().
+			Where(stage.SessionID(orchSessionID)).
+			AllX(ctx)
+		require.Len(t, orchStages, 1)
+		stageID := orchStages[0].ID
+
+		// Create a sub-agent execution with parent_execution_id set.
+		client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(orchSessionID).
+			SetStageID(stageID).
+			SetAgentName("SubAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetStartedAt(time.Now()).
+			SetStatus("completed").
+			SetParentExecutionID(parentExecID).
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		for _, s := range result.Sessions {
+			if s.ID == orchSessionID {
+				assert.True(t, s.HasSubAgents, "session with sub-agent execution should have HasSubAgents=true")
+			} else {
+				assert.False(t, s.HasSubAgents, "session %s without sub-agents should have HasSubAgents=false", s.ID)
+			}
+		}
 	})
 }
 

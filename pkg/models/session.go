@@ -84,6 +84,7 @@ type DashboardSessionItem struct {
 	TotalStages         int        `json:"total_stages"`
 	CompletedStages     int        `json:"completed_stages"`
 	HasParallelStages   bool       `json:"has_parallel_stages"`
+	HasSubAgents        bool       `json:"has_sub_agents"`
 	ChatMessageCount    int        `json:"chat_message_count"`
 	CurrentStageIndex   *int       `json:"current_stage_index"`
 	CurrentStageID      *string    `json:"current_stage_id"`

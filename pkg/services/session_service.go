@@ -759,7 +759,8 @@ type dashboardRow struct {
 	MCPCount        int   `sql:"mcp_count"`
 	TotalStages     int   `sql:"total_stages"`
 	CompletedStages int   `sql:"completed_stages"`
-	HasParallel     int   `sql:"has_parallel"` // 0/1, mapped to bool on output
+	HasParallel     int   `sql:"has_parallel"`    // 0/1, mapped to bool on output
+	HasSubAgents    int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
 	ChatMsgCount    int   `sql:"chat_msg_count"`
 }
 
@@ -912,6 +913,10 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND parallel_type IS NOT NULL) THEN 1 ELSE 0 END)", sid),
 				"has_parallel",
 			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM agent_executions WHERE session_id = %s AND parent_execution_id IS NOT NULL) THEN 1 ELSE 0 END)", sid),
+				"has_sub_agents",
+			)
 
 			// Chat message count (chat_user_messages → chats → session).
 			sel.AppendSelectAs(
@@ -962,6 +967,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			TotalStages:         row.TotalStages,
 			CompletedStages:     row.CompletedStages,
 			HasParallelStages:   row.HasParallel != 0,
+			HasSubAgents:        row.HasSubAgents != 0,
 			ChatMessageCount:    row.ChatMsgCount,
 			CurrentStageIndex:   row.CurrentStageIndex,
 			CurrentStageID:      row.CurrentStageID,

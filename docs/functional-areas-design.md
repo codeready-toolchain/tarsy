@@ -33,7 +33,7 @@ TARSy is an AI-powered incident analysis system built on a Go/Python split archi
 
 ### Core Processing Pipeline
 - [3. Chain Management & Execution](#3-chain-management--execution)
-- [4. Agent Architecture & Controller System](#4-agent-architecture--controller-system)
+- [4. Agent Architecture, Controllers & Orchestration](#4-agent-architecture-controllers--orchestration)
 - [5. MCP Integration & Tool Management](#5-mcp-integration--tool-management)
 - [6. LLM Integration & Multi-Provider Support](#6-llm-integration--multi-provider-support)
 
@@ -207,10 +207,11 @@ graph TB
 
 | Registry | Package | Lookup | Key Fields |
 |----------|---------|--------|------------|
-| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, Type, LLMBackend, MaxIterations |
-| `ChainRegistry` | `pkg/config/` | `Get(id)`, `GetByAlertType(type)` | AlertTypes, Stages[], Chat, LLMProvider, MCPServers |
+| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, Type, LLMBackend, MaxIterations, Orchestrator |
+| `ChainRegistry` | `pkg/config/` | `Get(id)`, `GetByAlertType(type)` | AlertTypes, Stages[], Chat, LLMProvider, MCPServers, SubAgents |
 | `MCPServerRegistry` | `pkg/config/` | `Get(id)` | Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `pkg/config/` | `Get(name)`, `GetAll()` | Type, Model, APIKeyEnv, BaseURL, NativeTools |
+| `SubAgentRegistry` | `pkg/config/` | `GetAll()`, `Get(name)` | Available sub-agents (agents with description), filtered by `sub_agents` override |
 
 #### Configuration Loading Process
 
@@ -229,7 +230,8 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- AgentType, LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (including `orchestrator`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
 
 ---
 
@@ -344,15 +346,15 @@ Non-stage components (executive summary, follow-up chat) use chain-level provide
 
 ---
 
-### 4. Agent Architecture & Controller System
-**Purpose**: Agent framework and controller system
-**Key Responsibility**: Agent behavior and iteration patterns
+### 4. Agent Architecture, Controllers & Orchestration
+**Purpose**: Agent framework, controller system, and dynamic orchestration
+**Key Responsibility**: Agent behavior, iteration patterns, and LLM-driven sub-agent dispatch
 
-Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent) and YAML-configured agents.
+Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, Orchestrator, WebResearcher, CodeExecutor, GeneralWorker) and YAML-configured agents.
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -364,6 +366,10 @@ graph TB
         KA["KubernetesAgent (built-in)"]
         SA["SynthesisAgent (built-in)"]
         CA["ChatAgent (built-in)"]
+        OA["Orchestrator (built-in)"]
+        WR["WebResearcher (built-in)"]
+        CE["CodeExecutor (built-in)"]
+        GW["GeneralWorker (built-in)"]
         YA["YAML-configured agents"]
     end
 
@@ -380,10 +386,18 @@ graph TB
     BA --> KA
     BA --> SA
     BA --> CA
+    BA --> OA
+    BA --> WR
+    BA --> CE
+    BA --> GW
     BA --> YA
 
     KA -.-> FC
     CA -.-> FC
+    OA -.-> FC
+    WR -.-> FC
+    CE -.-> FC
+    GW -.-> FC
     SA -.-> SC
     YA -.-> FC
     YA -.-> SC
@@ -415,6 +429,7 @@ type Controller interface {
 | AgentType | Controller | Pattern | Use Case |
 |-----------|-----------|---------|----------|
 | `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
+| `"orchestrator"` | IteratingController | Iterating + push-based sub-agent results | Dynamic multi-agent orchestration |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
 
@@ -441,6 +456,27 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
 
 Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results (and future scoring). Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
 
+#### Orchestrator Agent (`pkg/agent/orchestrator/`)
+
+The orchestrator agent (`type: orchestrator`) uses the same `IteratingController` with two additions to the iteration loop:
+
+1. **Before each LLM call**: non-blocking drain of available sub-agent results
+2. **At loop exit** (no tool calls): if sub-agents are pending, blocking wait instead of terminating
+
+**Key components**:
+
+- **`CompositeToolExecutor`** (`pkg/agent/orchestrator/composite_executor.go`) — wraps MCP tools + orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`) into a single `ToolExecutor`. Routes by name: orchestration tools go to `SubAgentRunner`, everything else delegates to MCP.
+- **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations).
+- **`SubAgentRegistry`** (`pkg/config/sub_agent_registry.go`) — agents with a `description` field, filtered by optional `sub_agents` override at chain/stage/agent level.
+
+**Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as `[Sub-agent completed]` user-role message.
+
+**DB model**: Sub-agents create real `AgentExecution` records with `parent_execution_id` linking to the orchestrator, plus a `task` field for the dispatch description.
+
+**Built-in agents**: Orchestrator, WebResearcher (google_search + url_context), CodeExecutor (code_execution), GeneralWorker (pure reasoning).
+
+**For detailed design**: See [ADR-0002: Orchestrator Agent](../adr/0002-orchestrator-impl.md)
+
 #### Instruction Composition
 
 **Three-tier system** (`pkg/agent/prompt/builder.go`):
@@ -465,15 +501,16 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
 - `pkg/agent/base_agent.go` -- BaseAgent with Controller delegation
-- `pkg/agent/controller/iterating.go` -- IteratingController
+- `pkg/agent/controller/iterating.go` -- IteratingController (includes sub-agent drain/wait for orchestrators)
 - `pkg/agent/controller/single_shot.go` -- SingleShotController
 - `pkg/agent/controller/tool_execution.go` -- Shared tool execution logic
 - `pkg/agent/controller/summarize.go` -- Tool result summarization
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
-- `pkg/agent/prompt/` -- PromptBuilder, templates, instructions
+- `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
+- `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations)
 - `pkg/agent/iteration.go` -- IterationState tracking
-- `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext
+- `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
 
 ---
 
@@ -551,6 +588,8 @@ Controller: LLM returns ToolCallChunk with "server__tool" + JSON args
 #### Per-Agent-Execution Isolation
 
 Every agent execution gets its own `Client` instance with independent MCP SDK sessions. Created via `createToolExecutor()` in the executor, torn down via `defer Close()`. No shared state between agents or stages.
+
+For orchestrator agents, the MCP `ToolExecutor` is wrapped by `CompositeToolExecutor` (see [Agent Architecture](#4-agent-architecture-controllers--orchestration)), which adds orchestration tools while delegating MCP calls to the underlying executor.
 
 #### Hierarchical MCP Server Configuration
 
@@ -760,8 +799,10 @@ func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload) error      
 The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
 
 **Event Types**:
-- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `chat.created`, `chat.user_message`
+- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`
 - **Transient** (NOTIFY only): `stream.chunk` (LLM token deltas)
+
+All event payloads include `parent_execution_id` when present, enabling the dashboard to route sub-agent events without cross-referencing.
 
 **Event Channels**:
 - `sessions` -- global session lifecycle events
@@ -827,10 +868,10 @@ AlertSession (session metadata, status, alert data)
 `id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
-`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `status`, `error_message`, timestamps
+`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
 
 **TimelineEvent** (`ent/schema/timelineevent.go`):
-`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
+`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `parent_execution_id` (nullable — for sub-agent event partitioning), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result/task_assigned), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
 
 **Message** (`ent/schema/message.go`):
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
@@ -960,6 +1001,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Streaming pattern**: `timeline_event.created` -> `stream.chunk` (token deltas) -> `timeline_event.completed`
 - **Event-notification pattern**: Trace page debounces WebSocket events and re-fetches via REST
 - **Optimistic UI**: Chat injects temporary `user_question` items before server confirmation
+- **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 
 #### State Management
 
@@ -979,6 +1021,7 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 **Key Implementation Files**:
 - `web/dashboard/src/pages/` -- Page components
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
+- `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/services/websocketService.ts` -- WebSocket with reconnect + catchup
 - `web/dashboard/src/services/api.ts` -- Axios-based API client with retry
 - `web/dashboard/src/hooks/` -- useChatState, useVersionMonitor, useAdvancedAutoScroll

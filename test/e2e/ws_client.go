@@ -71,7 +71,11 @@ func (c *WSClient) Subscribe(channel string) error {
 				return nil
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("client closed while waiting for subscription.confirmed on channel %s: %w", channel, c.ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 	return fmt.Errorf("timed out waiting for subscription.confirmed on channel %s", channel)
 }
