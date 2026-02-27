@@ -171,7 +171,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		slog.Warn("Failed to get max sequence for new execution",
 			"execution_id", executionID, "error", seqErr)
 	}
-	_, _ = r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+	taskEvent, taskErr := r.deps.TimelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 		SessionID:         r.sessionID,
 		StageID:           &r.stageID,
 		ExecutionID:       &executionID,
@@ -181,6 +181,23 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		Status:            timelineevent.StatusCompleted,
 		Content:           task,
 	})
+	if taskErr == nil && r.deps.EventPublisher != nil {
+		_ = r.deps.EventPublisher.PublishTimelineCreated(ctx, r.sessionID, events.TimelineCreatedPayload{
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCreated,
+				SessionID: r.sessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID:           taskEvent.ID,
+			StageID:           r.stageID,
+			ExecutionID:       executionID,
+			ParentExecutionID: parentID,
+			EventType:         timelineevent.EventTypeTaskAssigned,
+			Status:            timelineevent.StatusCompleted,
+			Content:           task,
+			SequenceNumber:    maxSeq + 1,
+		})
+	}
 
 	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)
 

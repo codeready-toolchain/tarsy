@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes } from '@mui/material';
+import { Box, Typography, Chip, Collapse, IconButton, Alert, LinearProgress, alpha, keyframes } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
@@ -35,6 +35,8 @@ interface SubAgentCardProps {
   streamingEvents?: Array<[string, StreamingItem]>;
   executionStatus?: { status: string; stageId: string; agentIndex: number };
   progressStatus?: string;
+  fallbackAgentName?: string;
+  fallbackTask?: string;
   shouldAutoCollapse?: (item: FlowItem) => boolean;
   onToggleItemExpansion?: (item: FlowItem) => void;
   expandAllReasoning?: boolean;
@@ -58,6 +60,8 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   streamingEvents = [],
   executionStatus,
   progressStatus,
+  fallbackAgentName,
+  fallbackTask,
   shouldAutoCollapse,
   onToggleItemExpansion,
   expandAllReasoning = false,
@@ -68,11 +72,12 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   const eo = executionOverview;
   const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
-  const agentName = eo?.agent_name || 'Sub-Agent';
-  const task = eo?.task;
+  const agentName = eo?.agent_name || fallbackAgentName || 'Sub-Agent';
+  const task = eo?.task || fallbackTask;
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
   const isRunning = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
+
 
   // Dedup: exclude streaming events whose ID matches a completed item.
   // This guards against stale streaming entries that survive when a
@@ -107,6 +112,12 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
         overflow: 'hidden',
       }}
     >
+      {isRunning && (
+        <LinearProgress
+          variant="indeterminate"
+          sx={{ height: 2, borderRadius: 0 }}
+        />
+      )}
       {/* Collapsed header — always visible */}
       <Box
         onClick={() => hasContent && setExpanded(!expanded)}

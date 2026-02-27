@@ -430,21 +430,35 @@ const StageContent: React.FC<StageContentProps> = ({
       && item.metadata?.tool_name === toolName;
   };
 
-  const renderSubAgentCard = (subExecId: string) => (
-    <SubAgentCard
-      key={`sub-${subExecId}`}
-      executionOverview={subAgentOverviewMap.get(subExecId)}
-      items={subAgentItemsByExec.get(subExecId) || []}
-      streamingEvents={subAgentStreamingByExec.get(subExecId)}
-      executionStatus={subAgentExecutionStatuses?.get(subExecId)}
-      progressStatus={subAgentProgressStatuses?.get(subExecId)}
-      shouldAutoCollapse={shouldAutoCollapse}
-      onToggleItemExpansion={onToggleItemExpansion}
-      expandAllReasoning={expandAllReasoning}
-      expandAllToolCalls={expandAllToolCalls}
-      isItemCollapsible={isItemCollapsible}
-    />
-  );
+  const parseDispatchArgs = (item: FlowItem): { name?: string; task?: string } => {
+    const raw = item.metadata?.arguments;
+    if (!raw) return {};
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return { name: parsed?.name, task: parsed?.task };
+    } catch { return {}; }
+  };
+
+  const renderSubAgentCard = (subExecId: string, dispatchItem?: FlowItem) => {
+    const fallback = dispatchItem ? parseDispatchArgs(dispatchItem) : {};
+    return (
+      <SubAgentCard
+        key={`sub-${subExecId}`}
+        executionOverview={subAgentOverviewMap.get(subExecId)}
+        items={subAgentItemsByExec.get(subExecId) || []}
+        streamingEvents={subAgentStreamingByExec.get(subExecId)}
+        executionStatus={subAgentExecutionStatuses?.get(subExecId)}
+        progressStatus={subAgentProgressStatuses?.get(subExecId)}
+        fallbackAgentName={fallback.name}
+        fallbackTask={fallback.task}
+        shouldAutoCollapse={shouldAutoCollapse}
+        onToggleItemExpansion={onToggleItemExpansion}
+        expandAllReasoning={expandAllReasoning}
+        expandAllToolCalls={expandAllToolCalls}
+        isItemCollapsible={isItemCollapsible}
+      />
+    );
+  };
 
   // ── Shared renderer for a single execution's items ──
   const renderExecutionItems = (execution: ExecutionGroup) => {
@@ -474,7 +488,7 @@ const StageContent: React.FC<StageContentProps> = ({
         const subExecId = extractDispatchExecId(item.content);
         if (subExecId) {
           renderedSubAgents.add(subExecId);
-          elements.push(renderSubAgentCard(subExecId));
+          elements.push(renderSubAgentCard(subExecId, item));
         }
         continue;
       }
@@ -484,7 +498,7 @@ const StageContent: React.FC<StageContentProps> = ({
         const subExecId = extractDispatchExecId(item.content);
         if (subExecId && !renderedSubAgents.has(subExecId)) {
           renderedSubAgents.add(subExecId);
-          elements.push(renderSubAgentCard(subExecId));
+          elements.push(renderSubAgentCard(subExecId, item));
         }
         continue;
       }
