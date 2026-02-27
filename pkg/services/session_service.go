@@ -759,7 +759,7 @@ type dashboardRow struct {
 	MCPCount        int   `sql:"mcp_count"`
 	TotalStages     int   `sql:"total_stages"`
 	CompletedStages int   `sql:"completed_stages"`
-	HasParallel     int   `sql:"has_parallel"`    // 0/1, mapped to bool on output
+	HasParallel     int   `sql:"has_parallel"`   // 0/1, mapped to bool on output
 	HasSubAgents    int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
 	ChatMsgCount    int   `sql:"chat_msg_count"`
 }
