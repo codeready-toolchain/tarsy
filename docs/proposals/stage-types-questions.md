@@ -1,6 +1,6 @@
 # Stage Types — Design Questions
 
-**Status:** Open — decisions pending
+**Status:** All decisions made
 **Related:** [Design document](stage-types-design.md)
 
 Each question has options with trade-offs and a recommendation. Go through them one by one to form the design, then update the design document.
