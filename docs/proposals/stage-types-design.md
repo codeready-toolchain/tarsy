@@ -196,7 +196,18 @@ Refactoring it into a typed stage:
 
 1. **Create a Stage record** (type: `exec_summary`, name: "Executive Summary") and an AgentExecution record, using the standard stage infrastructure. The `dbStageIndex` continues incrementing naturally after the last investigation/synthesis stage.
 
-2. **Run through the agent framework.** The exec summary is a single LLM call with no tools. Use the existing `SingleShotController` (or a dedicated `ExecSummaryController` if the prompt construction differs enough). The controller receives `finalAnalysis` as `prevStageContext` and returns the summary as `FinalAnalysis` in the `ExecutionResult`.
+2. **Run through the agent framework.** The exec summary is a single LLM call with no tools — reuse `SingleShotController` (see decision rationale below). Add a `NewExecSummaryController(pb)` factory function that wires a `SingleShotConfig` with a `BuildMessages` adapter, `ThinkingFallback: false`, and `InteractionLabel: "exec_summary"`. The controller receives `finalAnalysis` as `prevStageContext` and returns the summary as `FinalAnalysis` in the `ExecutionResult`.
+
+   **Why `SingleShotController` is the right fit (not a new controller):**
+
+   The current `generateExecutiveSummary()` does: (1) build a system + user message pair from static templates, (2) make a single LLM call, (3) return the text. This maps directly to `SingleShotController.Run()` which does the same thing plus standard message storage, timeline events, and interaction recording — exactly the infrastructure we want exec summary to gain.
+
+   Key differences from synthesis that are handled by `SingleShotConfig`:
+   - **Prompt building:** Exec summary uses `BuildExecutiveSummarySystemPrompt()` + `BuildExecutiveSummaryUserPrompt(prevStageContext)` — two simple static-template functions, unlike synthesis which uses `composeSynthesisInstructions(execCtx)` for config-aware instruction assembly. The `BuildMessages` function in the config adapts the existing prompt methods to the `func(*ExecutionContext, string) []ConversationMessage` signature with a trivial closure.
+   - **No thinking fallback:** Exec summary doesn't use `ThinkingFallback` (set to `false`), unlike synthesis (set to `true`).
+   - **Interaction label:** `"exec_summary"` instead of `"synthesis"`.
+
+   A dedicated `ExecSummaryController` would only be warranted if future requirements add: multi-turn conversation (like `ScoringController`), custom retry/extraction logic, lifecycle hooks not supported by `SingleShotConfig`, or a fundamentally different context schema (e.g., needing `ExecutionContext` fields beyond `prevStageContext`). None of these apply today.
 
 3. **Remove special-casing:**
    - Remove the `executiveSummarySeqNum = 999_999` sentinel. The stage infrastructure handles timeline ordering via `stage_index`.
@@ -324,8 +335,12 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 
 ### PR 2: Executive Summary as Typed Stage (behavioral change)
 
-1. **Agent/controller:** Reuse `SingleShotController` with an exec-summary-specific prompt builder. Create a factory function (e.g., `NewExecSummaryController`) analogous to `NewSynthesisController` — it constructs a `SingleShotController` with the exec summary system prompt and passes `finalAnalysis` as `prevStageContext`. If prompt construction diverges significantly from synthesis, extract into a dedicated `ExecSummaryController`.
-2. **Config resolution:** Create `ResolveExecSummaryConfig()` to handle `executive_summary_provider` → `llm_provider` → defaults hierarchy, or adapt existing resolution. This function returns a `SingleShotConfig` with the resolved provider, model, and the exec summary prompt.
+1. **Agent/controller:** Add `NewExecSummaryController(pb PromptBuilder) *SingleShotController` to `single_shot.go` (pattern: identical to `NewSynthesisController`). It returns `NewSingleShotController(SingleShotConfig{...})` with:
+   - `BuildMessages`: closure that calls `pb.BuildExecutiveSummarySystemPrompt()` and `pb.BuildExecutiveSummaryUserPrompt(prevStageContext)`, returning a `[]ConversationMessage` with system + user roles. The `execCtx` parameter is unused (exec summary prompts are context-independent static templates).
+   - `ThinkingFallback: false` — exec summary expects a direct text response, not thinking output.
+   - `InteractionLabel: "exec_summary"`.
+   - Add `config.AgentTypeExecSummary` constant and wire it in `controller/factory.go`'s switch: `case config.AgentTypeExecSummary: return NewExecSummaryController(execCtx.PromptBuilder), nil`.
+2. **Config resolution:** Add `ResolveExecSummaryConfig()` in `config_resolver.go`. It resolves the LLM provider using the existing chain hierarchy: `chain.ExecutiveSummaryProvider` → `chain.LLMProvider` → `defaults.LLMProvider`. It returns the resolved `*config.LLMProviderConfig` and backend string, which the executor uses to populate the agent's `ExecutionContext.Config`. This mirrors the inline resolution in today's `generateExecutiveSummary()` (lines 188–210 of `executor_synthesis.go`) but extracted into a reusable function.
 3. **Executor refactoring:** Replace `generateExecutiveSummary()` with:
    - Create Stage record (type: `exec_summary`, name: "Executive Summary")
    - Create AgentExecution record
