@@ -441,3 +441,19 @@ agent_chains:
               - name: GeneralWorker               # built-in: pure reasoning / summarization
                 mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
                 max_iterations: 5
+
+  # Custom agent as orchestrator — stage-level type override
+  # The agent's global definition stays unchanged (no type: orchestrator there).
+  # The type override applies only in this chain stage.
+  # security-investigation:
+  #   alert_types: ["SecurityInvestigation"]
+  #   description: "Deep orchestrated security investigation"
+  #   stages:
+  #     - name: "investigate"
+  #       agents:
+  #         - name: "SecurityInvestigationAgent"
+  #           type: orchestrator                    # promote to orchestrator for this stage
+  #           sub_agents:
+  #             - name: KubernetesAgent
+  #             - name: WebResearcher
+  #             - name: GeneralWorker

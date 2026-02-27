@@ -165,7 +165,9 @@ func (c *ScriptedLLMClient) nextEntry(input *agent.GenerateInput) (*LLMScriptEnt
 // resolveRoute returns the route key to use. It first tries an exact match on
 // the name extracted from custom instructions. If that fails (e.g. the agent
 // has no custom instructions), it falls back to checking whether any registered
-// route key appears in the system prompt as a word boundary match.
+// route key appears in a markdown section header (## lines) of the system
+// prompt. This avoids false positives from agent names in the sub-agent catalog
+// (e.g. "- **LogAnalyzer**: ..."). When multiple keys match, the longest wins.
 func (c *ScriptedLLMClient) resolveRoute(extractedName string, input *agent.GenerateInput) string {
 	if _, ok := c.routes[extractedName]; ok {
 		return extractedName
@@ -175,12 +177,15 @@ func (c *ScriptedLLMClient) resolveRoute(extractedName string, input *agent.Gene
 	if systemPrompt == "" {
 		return ""
 	}
+	var best string
 	for key := range c.routes {
-		if containsWord(systemPrompt, key) {
-			return key
+		if containsWordInHeaders(systemPrompt, key) {
+			if best == "" || len(key) > len(best) {
+				best = key
+			}
 		}
 	}
-	return ""
+	return best
 }
 
 func extractSystemPrompt(input *agent.GenerateInput) string {
@@ -190,6 +195,17 @@ func extractSystemPrompt(input *agent.GenerateInput) string {
 		}
 	}
 	return ""
+}
+
+// containsWordInHeaders checks if word appears as a standalone token in any
+// markdown section header (lines starting with "## ").
+func containsWordInHeaders(s, word string) bool {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, "## ") && containsWord(line, word) {
+			return true
+		}
+	}
+	return false
 }
 
 // containsWord checks if s contains word as a standalone token (bounded by

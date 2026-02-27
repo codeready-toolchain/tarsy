@@ -334,6 +334,8 @@ Each agent operates with three tiers of knowledge composed into its system promp
 2. **MCP Server Instructions**: Tool-specific guidance from each configured MCP server
 3. **Agent Custom Instructions**: Domain expertise specific to the agent's specialty area
 
+For **orchestrator agents** (`type: orchestrator`), an additional behavioral layer is auto-injected after the three tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. This layer is injected automatically by the prompt builder so that both the built-in `Orchestrator` and custom agents promoted to orchestrator type receive identical behavioral guidance without duplicating it in custom instructions.
+
 Additionally, **runbook content** (fetched from GitHub or using a configured default) is injected into the user prompt for alert-specific investigation procedures.
 
 ## Deployment Architecture
@@ -369,7 +371,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New Agent Types**: Add custom agents via `agents` section in `tarsy.yaml` with MCP servers, instructions, LLM backend, and iteration configuration
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
-- **Dynamic Orchestration**: Use `type: orchestrator` agents in chains for LLM-driven sub-agent dispatch with configurable guardrails (`max_concurrent_agents`, `agent_timeout`, `max_budget`) and `sub_agents` overrides at chain/stage/agent level
+- **Dynamic Orchestration**: Use `type: orchestrator` agents in chains for LLM-driven sub-agent dispatch with configurable guardrails (`max_concurrent_agents`, `agent_timeout`, `max_budget`) and `sub_agents` overrides at chain/stage/agent level. Agent `type` can be overridden at the stage-agent level, allowing a custom investigation agent to act as an orchestrator in a specific chain without modifying its global definition
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)

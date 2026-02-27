@@ -486,6 +486,17 @@ System prompt = General SRE instructions
               + Agent custom instructions
 ```
 
+For **orchestrator agents**, the prompt builder auto-injects additional layers after the three tiers:
+```
+System prompt = Tier 1-3 (above)
+              + Orchestrator behavioral strategy (auto-injected)
+              + Sub-agent catalog
+              + Result delivery mechanics
+              + Task focus
+```
+
+This auto-injection means custom agents with `type: orchestrator` receive the same orchestration guidance as the built-in `Orchestrator` without duplicating behavioral instructions in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context (e.g., security investigation principles).
+
 **PromptBuilder** methods:
 - `BuildFunctionCallingMessages()` -- system + user messages for investigation
 - `BuildSynthesisMessages()` -- system + user for synthesis
@@ -508,7 +519,7 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
-- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations)
+- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
 
