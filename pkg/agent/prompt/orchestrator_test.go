@@ -88,6 +88,9 @@ func TestBuildOrchestratorMessages_SystemIncludesCatalog(t *testing.T) {
 
 	system := messages[0]
 	assert.Equal(t, agent.RoleSystem, system.Role)
+	// Auto-injected orchestrator behavioral instructions
+	assert.Contains(t, system.Content, "Orchestrator Strategy")
+	assert.Contains(t, system.Content, "Dispatch relevant sub-agents in parallel")
 	assert.Contains(t, system.Content, "Available Sub-Agents")
 	assert.Contains(t, system.Content, "LogAnalyzer")
 	assert.Contains(t, system.Content, "GeneralWorker")

@@ -79,12 +79,18 @@ func ResolveAgentConfig(
 		mcpServers = agentConfig.MCPServers
 	}
 
+	// Resolve agent type (agentDef → agentConfig)
+	agentType := agentDef.Type
+	if agentConfig.Type != "" {
+		agentType = agentConfig.Type
+	}
+
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
 		AgentName:          agentConfig.Name,
-		Type:               agentDef.Type,
+		Type:               agentType,
 		LLMBackend:         backend,
 		LLMProvider:        resolvedProvider,
 		LLMProviderName:    providerName,

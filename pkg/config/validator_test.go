@@ -1115,6 +1115,47 @@ func TestValidateStageComprehensive(t *testing.T) {
 			errMsg:    "must specify at least one agent",
 		},
 		{
+			name: "stage with invalid agent type",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name: "test-agent",
+						Type: "invalid-type",
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "invalid type",
+		},
+		{
+			name: "stage with valid agent type override",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name: "test-agent",
+						Type: AgentTypeOrchestrator,
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
+		{
 			name: "stage with invalid agent LLM backend",
 			stage: StageConfig{
 				Name: "stage1",

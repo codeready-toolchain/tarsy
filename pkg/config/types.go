@@ -64,6 +64,7 @@ func BoolPtr(b bool) *bool { return &b }
 // Parallel execution occurs when: len(agents) > 1 OR replicas > 1
 type StageAgentConfig struct {
 	Name          string       `yaml:"name" validate:"required"`
+	Type          AgentType    `yaml:"type,omitempty"`
 	LLMProvider   string       `yaml:"llm_provider,omitempty"`
 	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
 	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
