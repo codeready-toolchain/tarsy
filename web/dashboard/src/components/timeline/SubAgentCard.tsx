@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes } from '@mui/material';
+import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes, useTheme } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
@@ -70,57 +70,69 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
     [streamingEvents, completedIds],
   );
 
+  const theme = useTheme();
   const hasContent = items.length > 0 || dedupedStreaming.length > 0;
 
   const tokenData = eo && (eo.input_tokens > 0 || eo.output_tokens > 0)
     ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
     : null;
 
-  const accentKey = isFailed ? 'error' : isCancelled ? 'warning' : 'secondary';
+  const accentColor = isFailed
+    ? theme.palette.error.main
+    : isCancelled
+      ? theme.palette.grey[600]
+      : theme.palette.secondary.main;
 
   return (
     <Box
-      sx={(theme) => ({
+      sx={{
         ml: 4, my: 1, mr: 1,
         border: isRunning ? '2px dashed' : '2px solid',
-        borderColor: alpha(theme.palette[accentKey].main, isRunning ? 0.4 : 0.5),
+        borderColor: alpha(accentColor, isRunning ? 0.4 : 0.5),
         borderRadius: 1.5,
-        bgcolor: alpha(theme.palette[accentKey].main, isRunning ? 0.05 : 0.08),
+        bgcolor: alpha(accentColor, isRunning ? 0.05 : 0.08),
         boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
         overflow: 'hidden',
-      })}
+      }}
     >
 
       {/* Header — always visible */}
       <Box
         onClick={() => hasContent && setExpanded(!expanded)}
-        sx={(theme) => ({
+        sx={{
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, minWidth: 0,
           cursor: hasContent ? 'pointer' : 'default',
           transition: 'background-color 0.2s ease',
-          '&:hover': hasContent ? { bgcolor: alpha(theme.palette[accentKey].main, 0.12) } : {},
-        })}
+          '&:hover': hasContent ? { bgcolor: alpha(accentColor, 0.12) } : {},
+        }}
       >
-        <Hub sx={(theme) => ({
+        <Hub sx={{
           fontSize: 18, flexShrink: 0,
-          color: theme.palette[accentKey].main,
+          color: accentColor,
           ...(isRunning && { animation: `${pulse} 1.5s ease-in-out infinite` }),
-        })} />
+        }} />
         <Typography
           variant="body2"
-          sx={(theme) => ({ fontWeight: 700, fontSize: '0.9rem', color: theme.palette[accentKey].main, whiteSpace: 'nowrap', flexShrink: 0 })}
+          sx={{ fontWeight: 700, fontSize: '0.9rem', color: accentColor, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           Sub-agent
         </Typography>
         <Typography
           variant="body2"
-          sx={(theme) => ({ fontWeight: 400, fontSize: '0.9rem', color: theme.palette[accentKey].main, whiteSpace: 'nowrap', flexShrink: 0 })}
+          sx={{ fontWeight: 400, fontSize: '0.9rem', color: accentColor, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           {agentName}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {isCompleted && (
           <CheckCircle sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
+        )}
+        {isCancelled && (
+          <Chip
+            label="Cancelled"
+            size="small"
+            sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0, bgcolor: 'grey.300', color: 'grey.700' }}
+          />
         )}
         {progressStatus && isRunning && (
           <Chip
@@ -145,11 +157,11 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
       <Collapse in={expanded} timeout={300}>
         <Box sx={{ borderTop: 1, borderColor: 'divider' }}>
           {tokenData && (
-            <Box sx={(theme) => ({
+            <Box sx={{
               px: 1.5, py: 0.75,
-              bgcolor: alpha(theme.palette[accentKey].main, 0.04),
+              bgcolor: alpha(accentColor, 0.04),
               display: 'flex', alignItems: 'center', gap: 1,
-            })}>
+            }}>
               <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
             </Box>
           )}

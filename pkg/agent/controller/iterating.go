@@ -105,6 +105,21 @@ func (c *IteratingController) Run(
 
 		if err != nil {
 			iterCancel()
+
+			// If the parent context is cancelled/expired, return immediately
+			// instead of burning through retry iterations with the same error.
+			if ctx.Err() != nil {
+				status := agent.ExecutionStatusCancelled
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					status = agent.ExecutionStatusTimedOut
+				}
+				return &agent.ExecutionResult{
+					Status:     status,
+					Error:      fmt.Errorf("execution interrupted: %w", err),
+					TokensUsed: totalUsage,
+				}, nil
+			}
+
 			var poe *PartialOutputError
 			isRecoverablePartial := errors.As(err, &poe) && !poe.IsLoop
 			if isRecoverablePartial {
@@ -198,9 +213,15 @@ func (c *IteratingController) Run(
 				msg, waitErr := collector.WaitForResult(ctx)
 				if waitErr != nil {
 					iterCancel()
+					status := agent.ExecutionStatusFailed
+					if errors.Is(waitErr, context.DeadlineExceeded) {
+						status = agent.ExecutionStatusTimedOut
+					} else if errors.Is(waitErr, context.Canceled) {
+						status = agent.ExecutionStatusCancelled
+					}
 					return &agent.ExecutionResult{
-						Status:     agent.ExecutionStatusFailed,
-						Error:      fmt.Errorf("sub-agent wait cancelled: %w", waitErr),
+						Status:     status,
+						Error:      fmt.Errorf("sub-agent wait interrupted: %w", waitErr),
 						TokensUsed: totalUsage,
 					}, nil
 				}
