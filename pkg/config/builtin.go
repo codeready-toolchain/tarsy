@@ -172,7 +172,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Google Gemini ---
 		"google-default": {
 			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3-flash-preview",
+			Model:               "gemini-3.1-flash-image-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
 			NativeTools:         geminiNativeTools(),
@@ -180,6 +180,13 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		"gemini-3-flash": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-3-flash-preview",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools(),
+		},
+		"gemini-3.1-flash": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3.1-flash-image-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
 			NativeTools:         geminiNativeTools(),
