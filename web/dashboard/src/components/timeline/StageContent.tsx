@@ -529,7 +529,7 @@ const StageContent: React.FC<StageContentProps> = ({
     for (const subExecId of allSubAgentExecIds) {
       if (renderedSubAgents.has(subExecId)) continue;
       const parentId = subAgentParentMap.get(subExecId);
-      if (parentId && parentId !== execution.executionId) continue;
+      if (!parentId || parentId !== execution.executionId) continue;
       elements.push(renderSubAgentCard(subExecId));
     }
 
