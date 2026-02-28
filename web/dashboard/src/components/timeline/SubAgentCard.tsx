@@ -127,6 +127,13 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
         {isCompleted && (
           <CheckCircle sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
         )}
+        {isCancelled && (
+          <Chip
+            label="Cancelled"
+            size="small"
+            sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0, bgcolor: 'grey.300', color: 'grey.700' }}
+          />
+        )}
         {progressStatus && isRunning && (
           <Chip
             label={progressStatus}
