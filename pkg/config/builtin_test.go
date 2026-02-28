@@ -269,6 +269,13 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey:   true,
 		},
 		{
+			name:          "gemini-3.1-flash",
+			providerID:    "gemini-3.1-flash",
+			wantType:      LLMProviderTypeGoogle,
+			wantMinTokens: 900000,
+			checkAPIKey:   true,
+		},
+		{
 			name:          "gemini-3.1-pro",
 			providerID:    "gemini-3.1-pro",
 			wantType:      LLMProviderTypeGoogle,
