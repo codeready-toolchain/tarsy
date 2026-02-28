@@ -890,6 +890,31 @@ func TestIteratingController_WaitTimeoutReturnsTimedOut(t *testing.T) {
 	require.Equal(t, 1, llm.callCount)
 }
 
+func TestIteratingController_LLMErrorWithCancelledContextReturnsCancelled(t *testing.T) {
+	// When the parent context is cancelled during an LLM call, the controller
+	// should return cancelled immediately instead of retrying through max iterations.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{err: fmt.Errorf("gRPC Generate call failed: %w", context.Canceled)},
+		},
+		onGenerate: func(_ int) { cancel() },
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(ctx, execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCancelled, result.Status)
+	require.Contains(t, result.Error.Error(), "execution interrupted")
+	require.Equal(t, 1, llm.callCount)
+}
+
 func TestIteratingController_NilCollectorSkipsDrainWait(t *testing.T) {
 	// With nil SubAgentCollector, controller behaves exactly as before —
 	// no drain, no wait, just the normal iteration loop.

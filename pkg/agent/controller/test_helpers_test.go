@@ -37,6 +37,10 @@ type mockLLMClient struct {
 	// capture enables recording all inputs across calls (not just the last one).
 	capture        bool
 	capturedInputs []*agent.GenerateInput
+
+	// onGenerate is called before processing the response, allowing tests to
+	// perform side-effects (e.g. cancel a context) at call time.
+	onGenerate func(callIndex int)
 }
 
 func (m *mockLLMClient) Generate(_ context.Context, input *agent.GenerateInput) (<-chan agent.Chunk, error) {
@@ -45,6 +49,9 @@ func (m *mockLLMClient) Generate(_ context.Context, input *agent.GenerateInput) 
 	m.lastInput = input
 	if m.capture {
 		m.capturedInputs = append(m.capturedInputs, input)
+	}
+	if m.onGenerate != nil {
+		m.onGenerate(idx)
 	}
 
 	if idx >= len(m.responses) {
