@@ -332,10 +332,14 @@ func TestIteratingController_RecoversFromPartialStreamError(t *testing.T) {
 		},
 	}
 
-	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	executor := &mockToolExecutor{
+		tools: []agent.ToolDefinition{
+			{Name: "k8s.get_pods", Description: "Get pods"},
+		},
+	}
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-	execCtx.Config.MaxIterations = 1
+	execCtx.Config.MaxIterations = 2
 	ctrl := NewIteratingController()
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -355,6 +359,11 @@ func TestIteratingController_RecoversFromPartialStreamError(t *testing.T) {
 		}
 	}
 	require.True(t, foundRetryWithPartial, "follow-up LLM call should include partial output retry context")
+
+	// Verify the second call used the regular iteration path (with tools), not forceConclusion (no tools).
+	require.NotNil(t, llm.capturedInputs[1].Tools, "second call should carry iteration tools")
+	require.Len(t, llm.capturedInputs[1].Tools, 1, "second call should be regular iteration, not forceConclusion")
+	require.Equal(t, "k8s.get_pods", llm.capturedInputs[1].Tools[0].Name)
 }
 
 func TestIteratingController_TextAlongsideToolCalls(t *testing.T) {
