@@ -105,8 +105,16 @@ func (c *IteratingController) Run(
 
 		if err != nil {
 			iterCancel()
-			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
-			state.RecordFailure(err.Error(), isTimeoutError(err))
+			var poe *PartialOutputError
+			isRecoverablePartial := errors.As(err, &poe) && !poe.IsLoop
+			if isRecoverablePartial {
+				// Google can fail mid-stream after emitting partial output.
+				// Treat as recoverable: continue with retry context without
+				// marking this iteration as a hard failure.
+			} else {
+				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
+				state.RecordFailure(err.Error(), isTimeoutError(err))
+			}
 
 			// Build retry message based on error type
 			errMsg := buildRetryMessage(err)

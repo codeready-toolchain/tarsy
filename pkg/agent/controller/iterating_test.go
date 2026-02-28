@@ -313,6 +313,59 @@ func TestIteratingController_LLMErrorRecovery(t *testing.T) {
 	require.Equal(t, "All systems operational.", result.FinalAnalysis)
 }
 
+func TestIteratingController_RecoversFromPartialStreamError(t *testing.T) {
+	partial := "Partial analysis before provider failure."
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: partial},
+				&agent.ErrorChunk{
+					Message:   "Stream failed after partial output (30 chunks): [test-id] Google API server error: 500 INTERNAL",
+					Code:      "partial_stream_error",
+					Retryable: false,
+				},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Recovered and completed."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{
+		tools: []agent.ToolDefinition{
+			{Name: "k8s.get_pods", Description: "Get pods"},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.MaxIterations = 2
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Recovered and completed.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount, "controller should issue a follow-up LLM call after partial stream failure")
+
+	// The second call should include the retry context with partial output.
+	require.Len(t, llm.capturedInputs, 2)
+	foundRetryWithPartial := false
+	for _, msg := range llm.capturedInputs[1].Messages {
+		if strings.Contains(msg.Content, "Your partial response before the error:") &&
+			strings.Contains(msg.Content, partial) {
+			foundRetryWithPartial = true
+			break
+		}
+	}
+	require.True(t, foundRetryWithPartial, "follow-up LLM call should include partial output retry context")
+
+	// Verify the second call used the regular iteration path (with tools), not forceConclusion (no tools).
+	require.NotNil(t, llm.capturedInputs[1].Tools, "second call should carry iteration tools")
+	require.Len(t, llm.capturedInputs[1].Tools, 1, "second call should be regular iteration, not forceConclusion")
+	require.Equal(t, "k8s.get_pods", llm.capturedInputs[1].Tools[0].Name)
+}
+
 func TestIteratingController_TextAlongsideToolCalls(t *testing.T) {
 	// LLM returns text AND tool calls — text should be recorded as llm_response
 	llm := &mockLLMClient{
