@@ -261,15 +261,17 @@ const StageContent: React.FC<StageContentProps> = ({
   // 2. FlowItem.parentExecutionId (REST timeline events carry parent_execution_id)
   // 3. WS execution.status events routed to subAgentExecutionStatuses
   // This ensures sub-agents are identified even before session detail is re-fetched.
-  const { subAgentIds, subAgentOverviewMap } = useMemo(() => {
+  const { subAgentIds, subAgentOverviewMap, subAgentParentMap } = useMemo(() => {
     const ids = new Set<string>();
     const overviews = new Map<string, ExecutionOverview>();
+    const parentMap = new Map<string, string>();
     if (executionOverviews) {
       for (const eo of executionOverviews) {
         if (eo.sub_agents) {
           for (const sub of eo.sub_agents) {
             ids.add(sub.execution_id);
             overviews.set(sub.execution_id, sub);
+            parentMap.set(sub.execution_id, eo.execution_id);
           }
         }
       }
@@ -278,6 +280,7 @@ const StageContent: React.FC<StageContentProps> = ({
     for (const item of items) {
       if (item.parentExecutionId && item.executionId) {
         ids.add(item.executionId);
+        parentMap.set(item.executionId, item.parentExecutionId);
       }
     }
     // WS execution statuses for sub-agents
@@ -286,7 +289,7 @@ const StageContent: React.FC<StageContentProps> = ({
         ids.add(execId);
       }
     }
-    return { subAgentIds: ids, subAgentOverviewMap: overviews };
+    return { subAgentIds: ids, subAgentOverviewMap: overviews, subAgentParentMap: parentMap };
   }, [executionOverviews, items, subAgentExecutionStatuses]);
 
   // Get streaming items grouped by execution
@@ -524,9 +527,10 @@ const StageContent: React.FC<StageContentProps> = ({
       ...subAgentStreamingByExec.keys(),
     ]);
     for (const subExecId of allSubAgentExecIds) {
-      if (!renderedSubAgents.has(subExecId)) {
-        elements.push(renderSubAgentCard(subExecId));
-      }
+      if (renderedSubAgents.has(subExecId)) continue;
+      const parentId = subAgentParentMap.get(subExecId);
+      if (!parentId || parentId !== execution.executionId) continue;
+      elements.push(renderSubAgentCard(subExecId));
     }
 
     return (
