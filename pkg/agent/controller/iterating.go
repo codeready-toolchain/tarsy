@@ -198,9 +198,15 @@ func (c *IteratingController) Run(
 				msg, waitErr := collector.WaitForResult(ctx)
 				if waitErr != nil {
 					iterCancel()
+					status := agent.ExecutionStatusFailed
+					if errors.Is(waitErr, context.DeadlineExceeded) {
+						status = agent.ExecutionStatusTimedOut
+					} else if errors.Is(waitErr, context.Canceled) {
+						status = agent.ExecutionStatusCancelled
+					}
 					return &agent.ExecutionResult{
-						Status:     agent.ExecutionStatusFailed,
-						Error:      fmt.Errorf("sub-agent wait cancelled: %w", waitErr),
+						Status:     status,
+						Error:      fmt.Errorf("sub-agent wait interrupted: %w", waitErr),
 						TokensUsed: totalUsage,
 					}, nil
 				}
