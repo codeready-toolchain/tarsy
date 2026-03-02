@@ -352,7 +352,14 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
-                logger.exception("[%s] Non-retryable error", request_id)
+                logger.exception(
+                    "[%s] Non-retryable error: model=%s, messages=%d, contents=%d, "
+                    "content_roles=%s, tools=%d",
+                    request_id, config.model, len(list(request.messages)),
+                    len(contents),
+                    [c.role for c in contents],
+                    len(list(request.tools)),
+                )
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
                         message=f"Generation failed: {e}",
@@ -399,8 +406,13 @@ class GoogleNativeProvider(LLMProvider):
         # Buffer grounding metadata (available on the candidate level,
         # typically on the last chunk of a streaming response).
         last_grounding_metadata = None
-        # Collect original Content objects for caching (SDK Chat pattern).
-        turn_contents: List[genai_types.Content] = []
+        # Accumulate a single merged Content per turn so that replay produces
+        # exactly one model Content, preserving the alternating user/model
+        # role sequence that the Gemini API requires.  Without merging,
+        # each streaming chunk would become a separate Content(role="model")
+        # on replay, violating the alternating-roles constraint and causing
+        # 400 INVALID_ARGUMENT from the Gemini API.
+        merged_content: Optional[genai_types.Content] = None
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -444,8 +456,11 @@ class GoogleNativeProvider(LLMProvider):
                             )
                         continue
 
-                    # Cache the original Content for replay in subsequent calls.
-                    turn_contents.append(candidate.content)
+                    # Merge into a single Content for replay in subsequent calls.
+                    if merged_content is None:
+                        merged_content = candidate.content
+                    else:
+                        merged_content.parts.extend(candidate.content.parts)
 
                     for part in candidate.content.parts:
                         # Thinking content
@@ -511,9 +526,9 @@ class GoogleNativeProvider(LLMProvider):
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
-        # Cache model Content for this turn (only on success).
-        if turn_contents and execution_id:
-            self._cache_model_turn(execution_id, turn_contents)
+        # Cache merged model Content for this turn (only on success).
+        if merged_content is not None and execution_id:
+            self._cache_model_turn(execution_id, [merged_content])
 
         # Yield grounding metadata after content (before usage)
         if last_grounding_metadata is not None:
