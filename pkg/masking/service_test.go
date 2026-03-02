@@ -428,6 +428,20 @@ FAKE-CERT-DATA-NOT-REAL
 				`"token": "[MASKED_TOKEN]"`,
 		},
 		{
+			name:    "token masks command-line --token flag --key value",
+			pattern: "token",
+			input:   `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset --token xxx --key value`,
+			expected: `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset ` +
+				`"token": "[MASKED_TOKEN]" --key value`,
+		},
+		{
+			name:    "token masks command-line --token=flag --key=value",
+			pattern: "token",
+			input:   `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset --token=xxx --key=value`,
+			expected: `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset ` +
+				`"token": "[MASKED_TOKEN]" --key=value`,
+		},
+		{
 			name:     "email masks standard email",
 			pattern:  "email",
 			input:    `contact: user@example.com`,
