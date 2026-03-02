@@ -200,8 +200,9 @@ class GoogleNativeProvider(LLMProvider):
         If MCP tools are present, native tools are suppressed
         (mutual exclusivity per Gemini API constraint).
 
-        Image model variants don't support url_context; it is silently
-        filtered out to avoid 400 errors from the Gemini API.
+        Image model variants only support google_search; url_context and
+        code_execution are filtered out to avoid 400 errors from the
+        Gemini API.  Any skipped tools are logged at INFO level.
         """
         result_tools: List[genai_types.Tool] = []
 

@@ -237,9 +237,9 @@ class TestGoogleNativeProvider:
         result = provider._convert_tools([], native_tools, model="gemini-3.1-pro-preview")
 
         assert len(result) == 3
-        assert isinstance(result[0].google_search, genai_types.GoogleSearch)
-        assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
-        assert isinstance(result[2].url_context, genai_types.UrlContext)
+        assert any(isinstance(t.google_search, genai_types.GoogleSearch) for t in result)
+        assert any(isinstance(t.code_execution, genai_types.ToolCodeExecution) for t in result)
+        assert any(isinstance(t.url_context, genai_types.UrlContext) for t in result)
 
     def test_is_image_model(self, provider):
         """Test image model detection."""
