@@ -353,22 +353,17 @@ class TestGoogleNativeProvider:
         assert contents[0].parts[2].function_call.name == "server__tool"
         assert contents[0].parts[2].thought_signature == b"fc-sig"
 
-    def test_convert_messages_merged_cache_produces_alternating_roles(self, provider):
-        """Test that a merged Content cache yields alternating user/model roles.
-
-        Reproduces the production 400 INVALID_ARGUMENT scenario: streaming
-        chunks were cached as separate Content objects, creating consecutive
-        model Contents on replay.  After the fix, parts are merged into one
-        Content per turn.
-        """
-        execution_id = "exec-merged"
-        # Simulate what _stream_with_timeout now does: merge all chunk parts
-        # into a single Content (previously each chunk was a separate Content).
-        merged = genai_types.Content(
+    def test_convert_messages_multi_chunk_cache_replays_all_contents(self, provider):
+        """Test that multiple cached Content objects (one per streaming chunk)
+        are all replayed in the conversation, matching the SDK Chat pattern."""
+        execution_id = "exec-chunks"
+        chunk1 = genai_types.Content(
+            role="model",
+            parts=[genai_types.Part(text="thinking...", thought=True, thought_signature=b"sig-1")],
+        )
+        chunk2 = genai_types.Content(
             role="model",
             parts=[
-                genai_types.Part(text="thinking paragraph 1", thought=True, thought_signature=b"sig-1"),
-                genai_types.Part(text="thinking paragraph 2", thought=True, thought_signature=b"sig-2"),
                 genai_types.Part(
                     function_call=genai_types.FunctionCall(
                         name="kubernetes-server__configuration_contexts_list", args={}
@@ -377,11 +372,10 @@ class TestGoogleNativeProvider:
                 ),
             ],
         )
-        provider._cache_model_turn(execution_id, [merged])
+        provider._cache_model_turn(execution_id, [chunk1, chunk2])
 
         messages = [
-            pb.ConversationMessage(role="system", content="You are an agent."),
-            pb.ConversationMessage(role="user", content="Investigate alert."),
+            pb.ConversationMessage(role="user", content="Investigate."),
             pb.ConversationMessage(
                 role="assistant",
                 content="",
@@ -394,21 +388,20 @@ class TestGoogleNativeProvider:
             pb.ConversationMessage(
                 role="tool",
                 tool_name="kubernetes-server.configuration_contexts_list",
-                content='{"text": "context list here"}',
+                content='{"text": "context list"}',
             ),
         ]
 
-        system, contents = provider._convert_messages(messages, execution_id)
+        _, contents = provider._convert_messages(messages, execution_id)
 
-        assert system == "You are an agent."
-        assert len(contents) == 3  # user, model (merged), user (tool result)
+        # user, model (chunk1), model (chunk2), user (tool result)
+        assert len(contents) == 4
         assert contents[0].role == "user"
         assert contents[1].role == "model"
-        assert contents[2].role == "user"
-        # The model Content should have all 3 parts merged
-        assert len(contents[1].parts) == 3
         assert contents[1].parts[0].thought is True
-        assert contents[1].parts[2].function_call is not None
+        assert contents[2].role == "model"
+        assert contents[2].parts[0].function_call is not None
+        assert contents[3].role == "user"
 
     def test_convert_messages_fallback_on_cache_miss(self, provider):
         """Test that proto reconstruction is used when cache is empty."""

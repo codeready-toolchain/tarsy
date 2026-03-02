@@ -352,13 +352,27 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
+                content_summary = []
+                for c in contents:
+                    parts_info = []
+                    for p in (c.parts or []):
+                        if hasattr(p, "thought") and p.thought:
+                            parts_info.append("thought")
+                        elif hasattr(p, "function_call") and p.function_call:
+                            parts_info.append(f"fc:{p.function_call.name}")
+                        elif hasattr(p, "function_response") and p.function_response:
+                            parts_info.append(f"fr:{p.function_response.name}")
+                        elif hasattr(p, "text") and p.text:
+                            parts_info.append(f"text:{len(p.text)}ch")
+                        else:
+                            parts_info.append("other")
+                    content_summary.append(f"{c.role}[{','.join(parts_info)}]")
                 logger.exception(
-                    "[%s] Non-retryable error: model=%s, messages=%d, contents=%d, "
-                    "content_roles=%s, tools=%d",
+                    "[%s] Non-retryable error: model=%s, messages=%d, "
+                    "contents=%d, tools=%d, content_structure=%s",
                     request_id, config.model, len(list(request.messages)),
-                    len(contents),
-                    [c.role for c in contents],
-                    len(list(request.tools)),
+                    len(contents), len(list(request.tools)),
+                    " | ".join(content_summary),
                 )
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
@@ -406,13 +420,8 @@ class GoogleNativeProvider(LLMProvider):
         # Buffer grounding metadata (available on the candidate level,
         # typically on the last chunk of a streaming response).
         last_grounding_metadata = None
-        # Accumulate a single merged Content per turn so that replay produces
-        # exactly one model Content, preserving the alternating user/model
-        # role sequence that the Gemini API requires.  Without merging,
-        # each streaming chunk would become a separate Content(role="model")
-        # on replay, violating the alternating-roles constraint and causing
-        # 400 INVALID_ARGUMENT from the Gemini API.
-        merged_content: Optional[genai_types.Content] = None
+        # Collect original Content objects for caching (SDK Chat pattern).
+        turn_contents: List[genai_types.Content] = []
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -456,11 +465,8 @@ class GoogleNativeProvider(LLMProvider):
                             )
                         continue
 
-                    # Merge into a single Content for replay in subsequent calls.
-                    if merged_content is None:
-                        merged_content = candidate.content
-                    else:
-                        merged_content.parts.extend(candidate.content.parts)
+                    # Cache the original Content for replay in subsequent calls.
+                    turn_contents.append(candidate.content)
 
                     for part in candidate.content.parts:
                         # Thinking content
@@ -526,9 +532,9 @@ class GoogleNativeProvider(LLMProvider):
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
-        # Cache merged model Content for this turn (only on success).
-        if merged_content is not None and execution_id:
-            self._cache_model_turn(execution_id, [merged_content])
+        # Cache model Content for this turn (only on success).
+        if turn_contents and execution_id:
+            self._cache_model_turn(execution_id, turn_contents)
 
         # Yield grounding metadata after content (before usage)
         if last_grounding_metadata is not None:
