@@ -1090,10 +1090,14 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 		},
 	})
 
-	// LogAnalyzer: LLM errors (gated). Two entries to cover max_iterations=2.
+	// LogAnalyzer: LLM errors (gated). Two entries to cover max_iterations=2,
+	// plus one for forced conclusion attempt.
 	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
 		WaitCh: subAgentGate,
 		Error:  fmt.Errorf("model overloaded"),
+	})
+	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
+		Error: fmt.Errorf("model overloaded"),
 	})
 	llm.AddRouted("LogAnalyzer", LLMScriptEntry{
 		Error: fmt.Errorf("model overloaded"),

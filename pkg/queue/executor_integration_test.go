@@ -825,6 +825,10 @@ func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
 				&agent.TextChunk{Content: "Agent 1 found the issue."},
 			}},
 			{err: fmt.Errorf("LLM timeout")},
+			// Agent 2 forced conclusion (attempted after max iterations)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Agent 2 could not complete due to errors."},
+			}},
 			// Synthesis agent (runs because stage succeeded with >1 agent)
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesized from 1 successful agent."},
@@ -1659,6 +1663,10 @@ func TestExecutor_ReplicaMixedResultsPolicyAny(t *testing.T) {
 				&agent.TextChunk{Content: "Replica 1 OK."},
 			}},
 			{err: fmt.Errorf("Replica 2 LLM error")},
+			// Replica 2 forced conclusion (attempted after max iterations)
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Replica 2 could not complete due to errors."},
+			}},
 			// Synthesis (stage completed because policy=any)
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesized from 1 successful replica."},

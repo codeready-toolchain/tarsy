@@ -266,15 +266,6 @@ func (c *IteratingController) forceConclusion(
 	msgSeq *int,
 	eventSeq *int,
 ) (*agent.ExecutionResult, error) {
-	if state.LastInteractionFailed {
-		return &agent.ExecutionResult{
-			Status: agent.ExecutionStatusFailed,
-			Error: fmt.Errorf("max iterations (%d) reached with last interaction failed: %s",
-				state.MaxIterations, state.LastErrorMessage),
-			TokensUsed: *totalUsage,
-		}, nil
-	}
-
 	// Publish execution progress: concluding
 	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseConcluding,
 		fmt.Sprintf("Forcing conclusion after %d iterations", state.CurrentIteration))

@@ -35,7 +35,11 @@ func TestE2E_FailureResilience(t *testing.T) {
 
 	// ── Stage 1: analysis (parallel, policy=any) ──
 
-	// Routed: Analyzer — LLM error (max_iterations=1 → fails immediately).
+	// Routed: Analyzer — LLM error (max_iterations=1 → fails after forced conclusion).
+	llm.AddRouted("Analyzer", LLMScriptEntry{
+		Error: fmt.Errorf("LLM service unavailable"),
+	})
+	// Analyzer forced conclusion (attempted after max iterations, also fails).
 	llm.AddRouted("Analyzer", LLMScriptEntry{
 		Error: fmt.Errorf("LLM service unavailable"),
 	})
@@ -161,8 +165,8 @@ func TestE2E_FailureResilience(t *testing.T) {
 	}
 
 	// ── LLM call count ──
-	// Analyzer (1 error) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error) = 6
-	assert.Equal(t, 6, llm.CallCount())
+	// Analyzer (1 error + 1 forced conclusion) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error) = 7
+	assert.Equal(t, 7, llm.CallCount())
 
 	// ── Timeline API assertions ──
 	apiTimeline := app.GetTimeline(t, sessionID)

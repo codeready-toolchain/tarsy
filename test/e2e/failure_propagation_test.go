@@ -51,6 +51,10 @@ func TestE2E_FailurePropagation(t *testing.T) {
 	llm.AddRouted("CheckerB", LLMScriptEntry{
 		Error: fmt.Errorf("LLM service unavailable"),
 	})
+	// CheckerB forced conclusion (attempted after max iterations, also fails).
+	llm.AddRouted("CheckerB", LLMScriptEntry{
+		Error: fmt.Errorf("LLM service unavailable"),
+	})
 
 	// No entries for stage 3 (Finalizer) — it should never start.
 
@@ -115,8 +119,8 @@ func TestE2E_FailurePropagation(t *testing.T) {
 	assert.Equal(t, "failed", execByName["CheckerB"], "CheckerB should have failed")
 
 	// ── LLM call count ──
-	// Preparer (1) + CheckerA (1) + CheckerB (1 — error counts as a call) = 3
-	assert.Equal(t, 3, llm.CallCount())
+	// Preparer (1) + CheckerA (1) + CheckerB (1 error + 1 forced conclusion) = 4
+	assert.Equal(t, 4, llm.CallCount())
 
 	// ── Timeline API assertions ──
 	// Verify timeline events through the API (not DB) — this is what the dashboard uses.

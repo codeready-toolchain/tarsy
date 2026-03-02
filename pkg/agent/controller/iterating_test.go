@@ -255,8 +255,8 @@ func TestIteratingController_PrevStageContext(t *testing.T) {
 	require.True(t, found, "previous stage context not found in LLM messages")
 }
 
-func TestIteratingController_ForcedConclusionWithFailedLast(t *testing.T) {
-	// Tool calls succeed but last LLM call errors — forced conclusion should fail
+func TestIteratingController_ForcedConclusionWithFailedLastLLM(t *testing.T) {
+	// Last LLM call errors — forced conclusion should still be attempted
 	var responses []mockLLMResponse
 	for i := 0; i < 2; i++ {
 		responses = append(responses, mockLLMResponse{
@@ -268,6 +268,12 @@ func TestIteratingController_ForcedConclusionWithFailedLast(t *testing.T) {
 	// 3rd iteration (last): LLM error
 	responses = append(responses, mockLLMResponse{
 		err: fmt.Errorf("connection reset"),
+	})
+	// Forced conclusion response (called without tools after max iterations)
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Despite issues, the system appears healthy."},
+		},
 	})
 
 	llm := &mockLLMClient{responses: responses}
@@ -286,9 +292,50 @@ func TestIteratingController_ForcedConclusionWithFailedLast(t *testing.T) {
 
 	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
-	require.Equal(t, agent.ExecutionStatusFailed, result.Status)
-	require.NotNil(t, result.Error)
-	require.Contains(t, result.Error.Error(), "max iterations")
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "system appears healthy")
+}
+
+func TestIteratingController_ForcedConclusionWithFailedToolCall(t *testing.T) {
+	// Tool call fails on the last iteration — forced conclusion should still succeed.
+	// This covers the case where an MCP tool returns an error (not a tarsy issue),
+	// and we happen to hit the iteration limit right after.
+	var responses []mockLLMResponse
+	for i := 0; i < 3; i++ {
+		responses = append(responses, mockLLMResponse{
+			chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: fmt.Sprintf("call-%d", i), Name: "k8s.exec_command", Arguments: "{}"},
+			},
+		})
+	}
+	// Forced conclusion response
+	responses = append(responses, mockLLMResponse{
+		chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "The exec command was denied, but investigation is complete."},
+		},
+	})
+
+	llm := &mockLLMClient{responses: responses}
+	tools := []agent.ToolDefinition{{Name: "k8s.exec_command", Description: "Execute command"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"k8s.exec_command": {
+				Content: "Error: admission webhook denied the request",
+				IsError: true,
+			},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 3
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "investigation is complete")
 }
 
 func TestIteratingController_LLMErrorRecovery(t *testing.T) {
