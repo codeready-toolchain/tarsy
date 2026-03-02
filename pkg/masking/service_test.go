@@ -373,35 +373,32 @@ data:
 }
 
 func TestBuiltinPatternRegression(t *testing.T) {
-	// Table-driven regression tests for each of the 15 built-in patterns.
+	// Table-driven regression tests for built-in regex masking patterns.
 	svc := NewService(config.NewMCPServerRegistry(nil), AlertMaskingConfig{})
 
 	tests := []struct {
-		name        string
-		pattern     string
-		input       string
-		shouldMask  bool
-		maskContain string
+		name     string
+		pattern  string
+		input    string
+		expected string
 	}{
 		{
-			name:        "api_key masks standard format",
-			pattern:     "api_key",
-			input:       `api_key: "FAKE-API-KEY-NOT-REAL-XXXXXXXXXXXX"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_API_KEY]",
+			name:     "api_key masks standard format",
+			pattern:  "api_key",
+			input:    `api_key: "FAKE-API-KEY-NOT-REAL-XXXXXXXXXXXX"`,
+			expected: `"api_key": "[MASKED_API_KEY]"`,
 		},
 		{
-			name:        "password masks standard format",
-			pattern:     "password",
-			input:       `password: "FAKE-PASSWORD-NOT-REAL"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_PASSWORD]",
+			name:     "password masks standard format",
+			pattern:  "password",
+			input:    `password: "FAKE-PASSWORD-NOT-REAL"`,
+			expected: `"password": "[MASKED_PASSWORD]"`,
 		},
 		{
-			name:       "password does not mask short value",
-			pattern:    "password",
-			input:      `password: "short"`,
-			shouldMask: false,
+			name:     "password does not mask short value",
+			pattern:  "password",
+			input:    `password: "short"`,
+			expected: `password: "short"`,
 		},
 		{
 			name:    "certificate masks PEM block",
@@ -409,92 +406,86 @@ func TestBuiltinPatternRegression(t *testing.T) {
 			input: `-----BEGIN CERTIFICATE-----
 FAKE-CERT-DATA-NOT-REAL
 -----END CERTIFICATE-----`,
-			shouldMask:  true,
-			maskContain: "[MASKED_CERTIFICATE]",
+			expected: `[MASKED_CERTIFICATE]`,
 		},
 		{
-			name:        "certificate_authority_data masks k8s CA",
-			pattern:     "certificate_authority_data",
-			input:       `certificate-authority-data: FAKECERTDATANOTREALDATAXXXXXXXXXX`,
-			shouldMask:  true,
-			maskContain: "[MASKED_CA_CERTIFICATE]",
+			name:     "certificate_authority_data masks k8s CA",
+			pattern:  "certificate_authority_data",
+			input:    `certificate-authority-data: FAKECERTDATANOTREALDATAXXXXXXXXXX`,
+			expected: `certificate-authority-data: [MASKED_CA_CERTIFICATE]`,
 		},
 		{
-			name:        "token masks bearer token",
-			pattern:     "token",
-			input:       `bearer: FAKE-JWT-TOKEN-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
-			shouldMask:  true,
-			maskContain: "[MASKED_TOKEN]",
+			name:     "token masks bearer token",
+			pattern:  "token",
+			input:    `bearer: FAKE-JWT-TOKEN-NOT-REAL-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+			expected: `"token": "[MASKED_TOKEN]"`,
 		},
 		{
-			name:        "email masks standard email",
-			pattern:     "email",
-			input:       `contact: user@example.com`,
-			shouldMask:  true,
-			maskContain: "[MASKED_EMAIL]",
+			name:    "token masks command-line --token flag",
+			pattern: "token",
+			input:   `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset --token xxx`,
+			expected: `command-line: /usr/bin/python3 /usr/local/bin/hf upload RotnivaRit/dataset /workdir/ --repo-type dataset ` +
+				`"token": "[MASKED_TOKEN]"`,
 		},
 		{
-			name:        "ssh_key masks RSA public key",
-			pattern:     "ssh_key",
-			input:       `ssh-rsa FAKENOTREALRSAPUBLICKEYXXXXXXXXXXXXXX user@host`,
-			shouldMask:  true,
-			maskContain: "[MASKED_SSH_KEY]",
+			name:     "email masks standard email",
+			pattern:  "email",
+			input:    `contact: user@example.com`,
+			expected: `contact: [MASKED_EMAIL]`,
 		},
 		{
-			name:        "private_key masks standard format",
-			pattern:     "private_key",
-			input:       `private_key: "sk_test_FAKE_NOT_REAL_XXXXX"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_PRIVATE_KEY]",
+			name:     "ssh_key masks RSA public key",
+			pattern:  "ssh_key",
+			input:    `ssh-rsa FAKENOTREALRSAPUBLICKEYXXXXXXXXXXXXXX user@host`,
+			expected: `[MASKED_SSH_KEY] user@host`,
 		},
 		{
-			name:        "secret_key masks standard format",
-			pattern:     "secret_key",
-			input:       `secret_key: "sec_FAKE_NOT_REAL_XXXXXXX"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_SECRET_KEY]",
+			name:     "private_key masks standard format",
+			pattern:  "private_key",
+			input:    `private_key: "sk_test_FAKE_NOT_REAL_XXXXX"`,
+			expected: `"private_key": "[MASKED_PRIVATE_KEY]"`,
 		},
 		{
-			name:        "aws_access_key masks AKIA format",
-			pattern:     "aws_access_key",
-			input:       `aws_access_key_id: "AKIAFAKENOTREALSECRET"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_AWS_KEY]",
+			name:     "secret_key masks standard format",
+			pattern:  "secret_key",
+			input:    `secret_key: "sec_FAKE_NOT_REAL_XXXXXXX"`,
+			expected: `"secret_key": "[MASKED_SECRET_KEY]"`,
 		},
 		{
-			name:        "github_token masks ghp format",
-			pattern:     "github_token",
-			input:       `github_token: ghp_FAKE_NOT_REAL_GITHUB_TOKEN_XXXXXXXXXXXX`,
-			shouldMask:  true,
-			maskContain: "[MASKED_GITHUB_TOKEN]",
+			name:     "aws_access_key masks AKIA format",
+			pattern:  "aws_access_key",
+			input:    `aws_access_key_id: "AKIA1234567890ABCDEF"`,
+			expected: `"aws_access_key_id": "[MASKED_AWS_KEY]"`,
 		},
 		{
-			name:        "slack_token masks xoxb format",
-			pattern:     "slack_token",
-			input:       `SLACK_TOKEN=xoxb-FAKE-NOT-REAL-SLACK-BOT-TOKEN-XXXXXXXXXX`,
-			shouldMask:  true,
-			maskContain: "[MASKED_SLACK_TOKEN]",
+			name:     "github_token masks ghp format",
+			pattern:  "github_token",
+			input:    `ghp_FAKE_NOT_REAL_GITHUB_TOKEN_XXXXXXXXXXXX`,
+			expected: `[MASKED_GITHUB_TOKEN]`,
 		},
 		{
-			name:        "base64_secret masks long base64",
-			pattern:     "base64_secret",
-			input:       `data: RkFLRS1CQVNFNTY0LUZBVEFMT05HLU5PVC1SRUFMLURYWFJJU1hYWFhYWFhYWFhYWFg=`,
-			shouldMask:  true,
-			maskContain: "[MASKED_BASE64_VALUE]",
+			name:     "slack_token masks xoxb format",
+			pattern:  "slack_token",
+			input:    `SLACK_TOKEN=xoxb-FAKE-NOT-REAL-SLACK-BOT-TOKEN-XXXXXXXXXX`,
+			expected: `SLACK_TOKEN=[MASKED_SLACK_TOKEN]`,
 		},
 		{
-			name:        "base64_short masks short base64 value",
-			pattern:     "base64_short",
-			input:       `key: dGVzdA==`,
-			shouldMask:  true,
-			maskContain: "[MASKED_SHORT_BASE64]",
+			name:     "base64_secret masks long base64",
+			pattern:  "base64_secret",
+			input:    `data: RkFLRS1CQVNFNjQtTk9UX1JFQUxfREFUQQ`,
+			expected: `data: [MASKED_BASE64_VALUE]`,
 		},
 		{
-			name:        "aws_secret_key masks 40 char format",
-			pattern:     "aws_secret_key",
-			input:       `aws_secret_access_key: "FAKESECRETNOTREAL1234567890XXXXXXXXXXXABC"`,
-			shouldMask:  true,
-			maskContain: "[MASKED_AWS_SECRET]",
+			name:     "base64_short masks short base64 value",
+			pattern:  "base64_short",
+			input:    `key: dGVzdA==`,
+			expected: `key: [MASKED_SHORT_BASE64]`,
+		},
+		{
+			name:     "aws_secret_key masks 40 char format",
+			pattern:  "aws_secret_key",
+			input:    `aws_secret_access_key: "FAKESECRETNOTREAL1234567890XXXXXXXXXXXXX"`,
+			expected: `"aws_secret_access_key": "[MASKED_AWS_SECRET]"`,
 		},
 	}
 
@@ -504,12 +495,7 @@ FAKE-CERT-DATA-NOT-REAL
 			require.True(t, exists, "Pattern %s should exist", tt.pattern)
 
 			result := cp.Regex.ReplaceAllString(tt.input, cp.Replacement)
-			if tt.shouldMask {
-				assert.NotEqual(t, tt.input, result, "Should have masked the input")
-				assert.Contains(t, result, tt.maskContain)
-			} else {
-				assert.Equal(t, tt.input, result, "Should not have masked the input")
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

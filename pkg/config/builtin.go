@@ -297,7 +297,7 @@ func initBuiltinMaskingPatterns() map[string]MaskingPattern {
 			Description: "K8s CA data",
 		},
 		"token": {
-			Pattern:     `(?i)(?:token|bearer|jwt)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?`,
+			Pattern:     `(?i)(?:(?:token|bearer|jwt)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_\-\.]{20,})["\']?|--token(?:=|\s+)(?:"[^"\n]+"|'[^'\n]+'|[^\s"']+))`,
 			Replacement: `"token": "[MASKED_TOKEN]"`,
 			Description: "Access tokens",
 		},
