@@ -211,6 +211,33 @@ func TestBuiltinOrchestratorExcludedFromSubAgentRegistry(t *testing.T) {
 	assert.True(t, found, "GeneralWorker should appear in SubAgentRegistry")
 }
 
+func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
+	cfg := GetBuiltinConfig()
+
+	imageProviders := []string{"google-default", "gemini-3.1-flash"}
+	for _, name := range imageProviders {
+		t.Run(name, func(t *testing.T) {
+			p, exists := cfg.LLMProviders[name]
+			require.True(t, exists)
+			assert.Contains(t, p.Model, "image", "provider %s should use an image model", name)
+			assert.False(t, p.NativeTools[GoogleNativeToolURLContext],
+				"url_context must be disabled for image model provider %s", name)
+			assert.True(t, p.NativeTools[GoogleNativeToolGoogleSearch],
+				"google_search should remain enabled for %s", name)
+		})
+	}
+
+	nonImageProviders := []string{"gemini-3-flash", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro"}
+	for _, name := range nonImageProviders {
+		t.Run(name+" has url_context", func(t *testing.T) {
+			p, exists := cfg.LLMProviders[name]
+			require.True(t, exists)
+			assert.True(t, p.NativeTools[GoogleNativeToolURLContext],
+				"url_context should be enabled for non-image provider %s", name)
+		})
+	}
+}
+
 func TestBuiltinMCPServers(t *testing.T) {
 	cfg := GetBuiltinConfig()
 

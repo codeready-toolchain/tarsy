@@ -213,6 +213,38 @@ class TestGoogleNativeProvider:
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
         assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
 
+    def test_convert_tools_url_context_skipped_for_image_models(self, provider):
+        """Test that url_context is filtered out for image model variants."""
+        native_tools = {
+            "google_search": True,
+            "url_context": True,
+        }
+
+        result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image-preview")
+
+        assert len(result) == 1
+        assert isinstance(result[0].google_search, genai_types.GoogleSearch)
+
+    def test_convert_tools_url_context_allowed_for_non_image_models(self, provider):
+        """Test that url_context is kept for non-image models."""
+        native_tools = {
+            "google_search": True,
+            "url_context": True,
+        }
+
+        result = provider._convert_tools([], native_tools, model="gemini-3.1-pro-preview")
+
+        assert len(result) == 2
+        assert isinstance(result[0].google_search, genai_types.GoogleSearch)
+        assert isinstance(result[1].url_context, genai_types.UrlContext)
+
+    def test_is_image_model(self, provider):
+        """Test image model detection."""
+        assert GoogleNativeProvider._is_image_model("gemini-3.1-flash-image-preview")
+        assert GoogleNativeProvider._is_image_model("gemini-3.1-flash-IMAGE-preview")
+        assert not GoogleNativeProvider._is_image_model("gemini-3.1-pro-preview")
+        assert not GoogleNativeProvider._is_image_model("gemini-2.5-flash")
+
     def test_convert_tools_mcp_suppresses_native(self, provider):
         """Test that MCP tools suppress native tools."""
         tools = [pb.ToolDefinition(name="server.tool", description="A tool")]
@@ -336,6 +368,54 @@ class TestGoogleNativeProvider:
         assert len(contents[0].parts) == 2
         assert contents[0].parts[0].text == "response text"
         assert contents[0].parts[1].function_call.name == "server__tool"
+
+    def test_convert_messages_unknown_role_raises(self, provider):
+        """Test that unknown message role raises ValueError."""
+        messages = [pb.ConversationMessage(role="unknown", content="test")]
+        with pytest.raises(ValueError, match="Unrecognized message role 'unknown' at index 0"):
+            provider._convert_messages(messages)
+
+    def test_convert_messages_invalid_json_tool_args(self, provider):
+        """Test that invalid JSON in tool call arguments falls back to empty args."""
+        messages = [
+            pb.ConversationMessage(
+                role="assistant",
+                content="",
+                tool_calls=[pb.ToolCall(id="tc1", name="server.tool", arguments="not-json")],
+            ),
+        ]
+        _, contents = provider._convert_messages(messages)
+        assert contents[0].parts[0].function_call.args == {}
+
+    def test_convert_messages_tool_result_invalid_json(self, provider):
+        """Test that invalid JSON in tool result falls back to text wrapper."""
+        messages = [
+            pb.ConversationMessage(
+                role="tool",
+                tool_name="server.tool",
+                content="plain text result",
+            ),
+        ]
+        _, contents = provider._convert_messages(messages)
+        assert contents[0].parts[0].function_response.response == {"text": "plain text result"}
+
+    def test_model_content_cache_ttl_expiry(self, provider):
+        """Test that expired cache entries are evicted."""
+        import time
+        from llm.providers.google_native import MODEL_CONTENT_CACHE_TTL
+
+        execution_id = "exec-expired"
+        content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="old")]
+        )
+        provider._cache_model_turn(execution_id, [content])
+
+        # Manually backdate the timestamp beyond TTL
+        turns, _ = provider._model_contents[execution_id]
+        provider._model_contents[execution_id] = (turns, time.time() - MODEL_CONTENT_CACHE_TTL - 1)
+
+        assert provider._get_cached_model_turns(execution_id) == []
+        assert execution_id not in provider._model_contents
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
@@ -582,6 +662,211 @@ class TestGoogleNativeProvider:
         assert responses[1].HasField("error")
         assert responses[1].error.code == "partial_stream_error"
         assert responses[1].is_final
+
+
+class TestStreamPartTypes:
+    """Test that _stream_with_timeout handles all Gemini part types."""
+
+    @staticmethod
+    def _make_chunk(parts, grounding_metadata=None, usage_metadata=None):
+        """Build a mock Gemini streaming chunk with the given parts."""
+        mock_candidate = MagicMock()
+        mock_candidate.content = MagicMock()
+        mock_candidate.content.parts = parts
+        mock_candidate.grounding_metadata = grounding_metadata
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
+        mock_chunk.usage_metadata = usage_metadata
+        return mock_chunk
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_stream_thinking_part(self, mock_client_class, provider):
+        """Test that thinking parts yield ThinkingDelta."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_part = MagicMock()
+        mock_part.thought = True
+        mock_part.text = "Let me think about this..."
+        mock_part.function_call = None
+        mock_part.executable_code = None
+        mock_part.code_execution_result = None
+
+        chunk = self._make_chunk([mock_part])
+
+        async def mock_stream():
+            yield chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        thinking = [r for r in responses if r.HasField("thinking")]
+        assert len(thinking) == 1
+        assert thinking[0].thinking.content == "Let me think about this..."
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_stream_function_call_part(self, mock_client_class, provider):
+        """Test that function_call parts yield ToolCallDelta."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_part = MagicMock()
+        mock_part.thought = False
+        mock_part.text = None
+        mock_part.function_call = MagicMock()
+        mock_part.function_call.name = "kubernetes__get_pods"
+        mock_part.function_call.args = {"namespace": "default"}
+        mock_part.executable_code = None
+        mock_part.code_execution_result = None
+
+        chunk = self._make_chunk([mock_part])
+
+        async def mock_stream():
+            yield chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Check pods")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        tool_calls = [r for r in responses if r.HasField("tool_call")]
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_call.name == "kubernetes.get_pods"
+        assert '"namespace"' in tool_calls[0].tool_call.arguments
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_stream_code_execution_parts(self, mock_client_class, provider):
+        """Test that executable_code and code_execution_result yield CodeExecutionDelta."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        code_part = MagicMock()
+        code_part.thought = False
+        code_part.text = None
+        code_part.function_call = None
+        code_part.executable_code = MagicMock()
+        code_part.executable_code.code = "print(2+2)"
+        code_part.code_execution_result = None
+
+        result_part = MagicMock()
+        result_part.thought = False
+        result_part.text = None
+        result_part.function_call = None
+        result_part.executable_code = None
+        result_part.code_execution_result = MagicMock()
+        result_part.code_execution_result.output = "4"
+
+        chunk = self._make_chunk([code_part, result_part])
+
+        async def mock_stream():
+            yield chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Calculate")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        code_exec = [r for r in responses if r.HasField("code_execution")]
+        assert len(code_exec) == 2
+        assert code_exec[0].code_execution.code == "print(2+2)"
+        assert code_exec[1].code_execution.result == "4"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_stream_mixed_thinking_and_text(self, mock_client_class, provider):
+        """Test stream with thinking followed by text (typical Gemini 2.5+ pattern)."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        thinking_part = MagicMock()
+        thinking_part.thought = True
+        thinking_part.text = "Reasoning..."
+        thinking_part.function_call = None
+        thinking_part.executable_code = None
+        thinking_part.code_execution_result = None
+
+        text_part = MagicMock()
+        text_part.thought = False
+        text_part.text = "The answer is 42."
+        text_part.function_call = None
+        text_part.executable_code = None
+        text_part.code_execution_result = None
+
+        chunk1 = self._make_chunk([thinking_part])
+        chunk2 = self._make_chunk([text_part])
+
+        async def mock_stream():
+            yield chunk1
+            yield chunk2
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Think")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        thinking = [r for r in responses if r.HasField("thinking")]
+        text = [r for r in responses if r.HasField("text")]
+        assert len(thinking) == 1
+        assert thinking[0].thinking.content == "Reasoning..."
+        assert len(text) == 1
+        assert text[0].text.content == "The answer is 42."
 
 
 class TestBuildGroundingDelta:

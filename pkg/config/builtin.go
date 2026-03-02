@@ -168,6 +168,15 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		}
 	}
 
+	// Image model variants don't support url_context (API returns 400).
+	geminiImageNativeTools := func() map[GoogleNativeTool]bool {
+		return map[GoogleNativeTool]bool{
+			GoogleNativeToolGoogleSearch:  true,
+			GoogleNativeToolCodeExecution: false,
+			GoogleNativeToolURLContext:    false,
+		}
+	}
+
 	return map[string]LLMProviderConfig{
 		// --- Google Gemini ---
 		"google-default": {
@@ -175,7 +184,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			Model:               "gemini-3.1-flash-image-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			NativeTools:         geminiImageNativeTools(),
 		},
 		"gemini-3-flash": {
 			Type:                LLMProviderTypeGoogle,
@@ -189,7 +198,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			Model:               "gemini-3.1-flash-image-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			NativeTools:         geminiImageNativeTools(),
 		},
 		"gemini-3.1-pro": {
 			Type:                LLMProviderTypeGoogle,

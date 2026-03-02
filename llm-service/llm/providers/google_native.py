@@ -186,13 +186,22 @@ class GoogleNativeProvider(LLMProvider):
 
         return system_instruction, contents
 
+    @staticmethod
+    def _is_image_model(model: str) -> bool:
+        """Check if the model is an image-generation variant (limited native tool support)."""
+        return "image" in model.lower()
+
     def _convert_tools(
-        self, tools: List[pb.ToolDefinition], native_tools: Dict[str, bool]
+        self, tools: List[pb.ToolDefinition], native_tools: Dict[str, bool],
+        model: str = "",
     ) -> Optional[List[genai_types.Tool]]:
         """Convert proto tool definitions to genai Tool objects.
 
         If MCP tools are present, native tools are suppressed
         (mutual exclusivity per Gemini API constraint).
+
+        Image model variants don't support url_context; it is silently
+        filtered out to avoid 400 errors from the Gemini API.
         """
         result_tools: List[genai_types.Tool] = []
 
@@ -217,12 +226,15 @@ class GoogleNativeProvider(LLMProvider):
 
         # Add native tools (only when no MCP tools)
         if not has_mcp_tools and native_tools:
+            is_image = self._is_image_model(model)
             if native_tools.get("google_search"):
                 result_tools.append(genai_types.Tool(google_search=genai_types.GoogleSearch()))
             if native_tools.get("code_execution"):
                 result_tools.append(genai_types.Tool(code_execution=genai_types.ToolCodeExecution()))
-            if native_tools.get("url_context"):
+            if native_tools.get("url_context") and not is_image:
                 result_tools.append(genai_types.Tool(url_context=genai_types.UrlContext()))
+            elif native_tools.get("url_context") and is_image:
+                logger.info("Skipping url_context for image model %s (not supported)", model)
 
         return result_tools if result_tools else None
 
@@ -278,7 +290,7 @@ class GoogleNativeProvider(LLMProvider):
                 list(request.messages), request.execution_id
             )
             native_tools = dict(config.native_tools) if config.native_tools else {}
-            tools = self._convert_tools(list(request.tools), native_tools)
+            tools = self._convert_tools(list(request.tools), native_tools, model=config.model)
         except ValueError as e:
             yield pb.GenerateResponse(
                 error=pb.ErrorInfo(message=str(e), code="invalid_request", retryable=False),

@@ -88,6 +88,18 @@ class TestLangChainProviderMessageConversion:
         with pytest.raises(ValueError, match="Unrecognized message role 'unknown'"):
             provider._convert_messages(messages)
 
+    def test_assistant_invalid_json_tool_args(self, provider):
+        """Test that invalid JSON in tool call args falls back to empty dict."""
+        messages = [
+            pb.ConversationMessage(
+                role="assistant",
+                content="",
+                tool_calls=[pb.ToolCall(id="tc1", name="server.tool", arguments="not-json")],
+            ),
+        ]
+        result = provider._convert_messages(messages)
+        assert result[0].tool_calls[0]["args"] == {}
+
     def test_full_conversation(self, provider):
         messages = [
             pb.ConversationMessage(role="system", content="Be helpful"),
@@ -449,6 +461,61 @@ class TestLangChainProviderStreaming:
         assert usage_responses[0].usage.total_tokens == 30
 
     @pytest.mark.asyncio
+    async def test_stream_gemini_list_content_thinking_and_text(self, provider):
+        """Test Gemini list-content fallback: thinking + text from chunk.content list."""
+        chunk = AIMessageChunk(content=[
+            {"type": "thinking", "thinking": "Let me reason..."},
+            {"type": "text", "text": "The answer."},
+        ])
+        chunk.usage_metadata = None
+
+        async def mock_astream(messages):
+            yield chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        thinking = [r for r in responses if r.HasField("thinking")]
+        text = [r for r in responses if r.HasField("text")]
+        assert len(thinking) == 1
+        assert thinking[0].thinking.content == "Let me reason..."
+        assert len(text) == 1
+        assert text[0].text.content == "The answer."
+
+    @pytest.mark.asyncio
+    async def test_stream_usage_metadata_as_object(self, provider):
+        """Test usage_metadata accessed via getattr (non-dict, e.g. NamedTuple)."""
+        usage_obj = MagicMock()
+        usage_obj.input_tokens = 50
+        usage_obj.output_tokens = 25
+        usage_obj.total_tokens = 75
+
+        chunk = AIMessageChunk(content="Response")
+        chunk.usage_metadata = usage_obj
+
+        async def mock_astream(messages):
+            yield chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage = [r for r in responses if r.HasField("usage")]
+        assert len(usage) == 1
+        assert usage[0].usage.input_tokens == 50
+        assert usage[0].usage.output_tokens == 25
+        assert usage[0].usage.total_tokens == 75
+
+    @pytest.mark.asyncio
     async def test_stream_empty_response_raises_retryable(self, provider):
         """Test that empty response raises _RetryableError."""
         async def mock_astream(messages):
@@ -650,3 +717,64 @@ class TestLangChainProviderGenerate:
         assert "Unsupported provider" in responses[0].error.message
         assert responses[0].error.code == "invalid_request"
         assert responses[0].is_final
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_invalid_messages(self, provider):
+        """Test that invalid messages yield error before streaming."""
+        with patch.object(provider, "_get_or_create_model", return_value=MagicMock()):
+            request = pb.GenerateRequest(
+                session_id="sess-1",
+                execution_id="exec-1",
+                llm_config=pb.LLMConfig(
+                    backend="langchain",
+                    provider="openai",
+                    model="o4-mini",
+                    api_key_env="TEST_KEY",
+                ),
+                messages=[pb.ConversationMessage(role="bad_role", content="test")],
+            )
+
+            responses = []
+            async for resp in provider.generate(request):
+                responses.append(resp)
+
+            assert len(responses) == 1
+            assert responses[0].HasField("error")
+            assert responses[0].error.code == "invalid_request"
+            assert "Unrecognized message role" in responses[0].error.message
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_non_retryable_exception(self, provider):
+        """Test that non-retryable exceptions yield provider_error."""
+        async def exploding_stream(messages):
+            raise RuntimeError("Something unexpected")
+            yield  # make it an async generator
+
+        class ExplodingModel:
+            def astream(self, messages):
+                return exploding_stream(messages)
+
+        with patch.object(provider, "_get_or_create_model", return_value=ExplodingModel()):
+            request = pb.GenerateRequest(
+                session_id="sess-1",
+                execution_id="exec-1",
+                llm_config=pb.LLMConfig(
+                    backend="langchain",
+                    provider="openai",
+                    model="o4-mini",
+                    api_key_env="TEST_KEY",
+                ),
+                messages=[pb.ConversationMessage(role="user", content="Hi")],
+            )
+
+            responses = []
+            async for resp in provider.generate(request):
+                responses.append(resp)
+
+            assert len(responses) == 1
+            assert responses[0].HasField("error")
+            assert responses[0].error.code == "provider_error"
+            assert "Something unexpected" in responses[0].error.message
+            assert responses[0].is_final
