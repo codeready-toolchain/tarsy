@@ -213,11 +213,12 @@ class TestGoogleNativeProvider:
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
         assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
 
-    def test_convert_tools_url_context_skipped_for_image_models(self, provider):
-        """Test that url_context is filtered out for image model variants."""
+    def test_convert_tools_image_model_only_keeps_google_search(self, provider):
+        """Test that url_context and code_execution are filtered out for image models."""
         native_tools = {
             "google_search": True,
             "url_context": True,
+            "code_execution": True,
         }
 
         result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image-preview")
@@ -225,18 +226,20 @@ class TestGoogleNativeProvider:
         assert len(result) == 1
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
 
-    def test_convert_tools_url_context_allowed_for_non_image_models(self, provider):
-        """Test that url_context is kept for non-image models."""
+    def test_convert_tools_non_image_model_keeps_all(self, provider):
+        """Test that all native tools are kept for non-image models."""
         native_tools = {
             "google_search": True,
             "url_context": True,
+            "code_execution": True,
         }
 
         result = provider._convert_tools([], native_tools, model="gemini-3.1-pro-preview")
 
-        assert len(result) == 2
+        assert len(result) == 3
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
-        assert isinstance(result[1].url_context, genai_types.UrlContext)
+        assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
+        assert isinstance(result[2].url_context, genai_types.UrlContext)
 
     def test_is_image_model(self, provider):
         """Test image model detection."""
