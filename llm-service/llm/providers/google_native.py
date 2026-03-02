@@ -352,7 +352,28 @@ class GoogleNativeProvider(LLMProvider):
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
-                logger.exception("[%s] Non-retryable error", request_id)
+                content_summary = []
+                for c in contents:
+                    parts_info = []
+                    for p in (c.parts or []):
+                        if hasattr(p, "thought") and p.thought:
+                            parts_info.append("thought")
+                        elif hasattr(p, "function_call") and p.function_call:
+                            parts_info.append(f"fc:{p.function_call.name}")
+                        elif hasattr(p, "function_response") and p.function_response:
+                            parts_info.append(f"fr:{p.function_response.name}")
+                        elif hasattr(p, "text") and p.text:
+                            parts_info.append(f"text:{len(p.text)}ch")
+                        else:
+                            parts_info.append("other")
+                    content_summary.append(f"{c.role}[{','.join(parts_info)}]")
+                logger.exception(
+                    "[%s] Non-retryable error: model=%s, messages=%d, "
+                    "contents=%d, tools=%d, content_structure=%s",
+                    request_id, config.model, len(list(request.messages)),
+                    len(contents), len(list(request.tools)),
+                    " | ".join(content_summary),
+                )
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
                         message=f"Generation failed: {e}",

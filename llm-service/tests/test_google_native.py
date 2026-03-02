@@ -353,6 +353,56 @@ class TestGoogleNativeProvider:
         assert contents[0].parts[2].function_call.name == "server__tool"
         assert contents[0].parts[2].thought_signature == b"fc-sig"
 
+    def test_convert_messages_multi_chunk_cache_replays_all_contents(self, provider):
+        """Test that multiple cached Content objects (one per streaming chunk)
+        are all replayed in the conversation, matching the SDK Chat pattern."""
+        execution_id = "exec-chunks"
+        chunk1 = genai_types.Content(
+            role="model",
+            parts=[genai_types.Part(text="thinking...", thought=True, thought_signature=b"sig-1")],
+        )
+        chunk2 = genai_types.Content(
+            role="model",
+            parts=[
+                genai_types.Part(
+                    function_call=genai_types.FunctionCall(
+                        name="kubernetes-server__configuration_contexts_list", args={}
+                    ),
+                    thought_signature=b"sig-fc",
+                ),
+            ],
+        )
+        provider._cache_model_turn(execution_id, [chunk1, chunk2])
+
+        messages = [
+            pb.ConversationMessage(role="user", content="Investigate."),
+            pb.ConversationMessage(
+                role="assistant",
+                content="",
+                tool_calls=[pb.ToolCall(
+                    id="tc1",
+                    name="kubernetes-server.configuration_contexts_list",
+                    arguments="{}",
+                )],
+            ),
+            pb.ConversationMessage(
+                role="tool",
+                tool_name="kubernetes-server.configuration_contexts_list",
+                content='{"text": "context list"}',
+            ),
+        ]
+
+        _, contents = provider._convert_messages(messages, execution_id)
+
+        # user, model (chunk1), model (chunk2), user (tool result)
+        assert len(contents) == 4
+        assert contents[0].role == "user"
+        assert contents[1].role == "model"
+        assert contents[1].parts[0].thought is True
+        assert contents[2].role == "model"
+        assert contents[2].parts[0].function_call is not None
+        assert contents[3].role == "user"
+
     def test_convert_messages_fallback_on_cache_miss(self, provider):
         """Test that proto reconstruction is used when cache is empty."""
         messages = [
