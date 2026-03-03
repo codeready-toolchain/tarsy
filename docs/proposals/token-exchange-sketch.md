@@ -43,12 +43,20 @@ User (browser/API client)
   → MCP calls use shared bearer_token from tarsy.yaml
 ```
 
+### Trusted-proxy boundary
+
+Token exchange elevates the stakes for header trust: a forged bearer token doesn't just spoof identity — it grants MCP tool access as another user.
+
+TARSy's deployment model guarantees header integrity: the auth proxies (oauth2-proxy, kube-rbac-proxy) run in the same container as TARSy, only the proxy ports are exposed, and clients have no network path to reach TARSy directly. Header spoofing is not possible without compromising the pod itself. The same guarantee applies to the [session authorization sketch](session-authorization-sketch.md), which depends on the same headers for Casbin role resolution.
+
+**Operator responsibility:** The ingress must strip client-supplied identity/forwarding headers (`X-Forwarded-User`, `X-Forwarded-Groups`, `Authorization`, etc.) before forwarding to the proxy, so the proxy always sets them from scratch with validated values.
+
 ### Proposed flow with token exchange
 
 ```
 User (browser/API client)
-  → oauth2-proxy / kube-rbac-proxy (validates identity)
-  → TARSy API (extracts author AND user's bearer token)
+  → oauth2-proxy / kube-rbac-proxy (validates identity, sets trusted headers)
+  → TARSy API (extracts author AND user's bearer token from trusted proxy only)
   → Session created with author + encrypted user token in DB
   → Worker claims session, decrypts user token
   → MCP ClientFactory creates Client (user token in Go context)
@@ -63,7 +71,7 @@ User (browser/API client)
 
 ```
 User sends POST /sessions/:id/chat/messages
-  → TARSy API extracts fresh bearer token from the HTTP request
+  → TARSy API extracts fresh bearer token from the trusted proxy request
   → Token placed in Go context
   → ChatMessageExecutor uses token directly for MCP calls
   → No DB storage needed — user is actively making requests
@@ -86,7 +94,8 @@ User sends POST /sessions/:id/chat/messages
 | Token encryption | new `pkg/crypto/` or similar | AES-GCM encrypt/decrypt for DB storage |
 | Session executor | `pkg/queue/executor.go` | Decrypt token, place in context before MCP calls |
 | Session cleanup | `pkg/queue/executor.go` | Wipe token on terminal status |
-| DB schema | `ent/schema/alertsession.go` | Add encrypted `user_token` field |
+| Token janitor | `pkg/queue/` or `cmd/` | Background goroutine to clear expired tokens (defense-in-depth) |
+| DB schema | `ent/schema/alertsession.go` | Add encrypted `user_token` and `token_expires_at` fields |
 
 ## Key Concepts
 
@@ -110,10 +119,20 @@ When per-user auth is configured (`forward_user_token` or `token_exchange`) but 
 
 - User's bearer token is captured at the API boundary (`submitAlertHandler`)
 - Encrypted with AES-GCM using a key from env var / Kubernetes Secret
-- Stored on the session row in the database
+- Stored on the session row with a `token_expires_at` timestamp (default: `now() + 30m`)
 - Decrypted by the worker when it claims the session
-- **Wiped atomically** (`SET user_token = NULL`) when the session reaches a terminal state (completed, failed, timed out, cancelled)
+- **Wiped atomically** (`SET user_token = NULL, token_expires_at = NULL`) when the session reaches a terminal state (completed, failed, timed out, cancelled)
 - Token only exists in the DB for the session's active lifecycle (typically seconds to minutes)
+
+**Defense-in-depth: periodic janitor.** A background goroutine (`runTokenCleanup`) runs on a configurable interval (default: every 5 minutes) and clears any tokens past their hard TTL:
+
+```sql
+UPDATE alert_sessions
+SET user_token = NULL, token_expires_at = NULL
+WHERE user_token IS NOT NULL AND token_expires_at < now()
+```
+
+This catches stuck sessions, crashed workers, or any edge case where terminal-state cleanup doesn't fire. Configuration via env vars: `TOKEN_TTL` (default `30m`), `TOKEN_JANITOR_INTERVAL` (default `5m`, `0` to disable).
 
 Chat messages do not use stored tokens — the user is actively making requests, so their fresh token arrives with each HTTP call.
 

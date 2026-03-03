@@ -122,9 +122,15 @@ The WebSocket (`GET /api/v1/ws`) streams real-time session events. Currently, al
 - **Con:** Requires checking authorization for every event broadcast, which adds overhead.
 - **Con:** The event publisher needs access to the authorization context (user identity + groups).
 
-**Decision:** Option A — filter server-side for correctness. Can be phased: start with REST authorization, add WebSocket filtering as a fast follow using the same Casbin enforcer.
+**Decision:** Option A — filter server-side for correctness. The WebSocket endpoint **must not** be left unprotected when REST authorization is enabled — this would leak session metadata (titles, statuses, project names) to unauthorized users via real-time events.
 
-_Considered and rejected: Option B (client subscribes to specific IDs — client could manipulate subscriptions to access unauthorized sessions), Option C (defer — inconsistent UX, users see real-time updates for sessions they can't access)._
+**Hard gate:** When `authorization.enabled: true`, the `/api/v1/ws` handler must either:
+1. Apply the same Casbin enforcer to filter events per-connection (preferred — ship in the same release as REST authZ), **or**
+2. Reject WebSocket connections with HTTP 403 and a clear log message (`"WebSocket connections rejected: authorization enabled but WebSocket filtering not yet implemented"`) until filtering is implemented.
+
+Option 2 is acceptable as a temporary gate during development, but must not ship to production without a clear deprecation timeline. The default posture is fail-closed: if in doubt, reject the connection.
+
+_Considered and rejected: Option B (client subscribes to specific IDs — client could manipulate subscriptions to access unauthorized sessions), Option C (defer — inconsistent UX, users see real-time updates for sessions they can't access), phased rollout without a gate (leaks session metadata via WebSocket while REST is locked down)._
 
 ---
 

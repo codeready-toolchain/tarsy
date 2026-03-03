@@ -110,11 +110,17 @@ Authorization is enforced at the **API layer** — the security boundary. Every 
 | `POST /api/v1/sessions/:id/chat/messages` | `update` | Session's project is authorized |
 | `GET /api/v1/sessions/:id/chat` | `get` | Session's project is authorized |
 | `DELETE /api/v1/sessions/:id` | `delete` | Session's project is authorized |
-| `GET /api/v1/ws` | `get` | Filter events to authorized projects (phased) |
+| `GET /api/v1/ws` | `get` | Filter events to authorized projects, or reject with 403 (see hard gate) |
 
 ### WebSocket authorization
 
-WebSocket events are filtered server-side before broadcasting — unauthorized events never reach the client. This uses the same Casbin enforcer as REST endpoints. Implementation can be phased: REST authorization first, WebSocket filtering as a fast follow.
+WebSocket events are filtered server-side before broadcasting — unauthorized events never reach the client. This uses the same Casbin enforcer as REST endpoints.
+
+**Hard gate requirement:** When `authorization.enabled: true`, the `/api/v1/ws` handler must enforce authorization from day one. Either:
+1. Filter events per-connection using the same Casbin enforcer (preferred — ship with REST authZ), or
+2. Reject connections with HTTP 403 and log `"WebSocket connections rejected: authorization enabled but WebSocket filtering not yet implemented"` until filtering lands.
+
+Leaving the WebSocket endpoint open while REST is locked down would leak session metadata (titles, statuses, project names) to unauthorized users.
 
 ### Configuration shape
 
@@ -150,6 +156,12 @@ authorization:
 | kube-rbac-proxy | `X-Remote-User` | API client identity |
 | kube-rbac-proxy | `X-Remote-Group` | API client groups |
 
+### Header trust
+
+The identity headers listed above are **only trustworthy when set by a trusted reverse proxy** (oauth2-proxy, kube-rbac-proxy). TARSy's deployment model guarantees this: the proxies run in the same container as TARSy, only the proxy ports are exposed, and clients have no network path to reach TARSy directly. This means header spoofing is not possible without compromising the pod itself.
+
+**Operator responsibility:** The ingress must strip client-supplied identity headers (`X-Forwarded-User`, `X-Forwarded-Groups`, etc.) before forwarding to the proxy, so the proxy always sets them from scratch with validated values. For nginx-ingress this is `proxy_set_header X-Forwarded-User "";` etc.
+
 ### Key integration points
 
 | Component | File | Change |
@@ -159,7 +171,7 @@ authorization:
 | Session handler | `pkg/api/handler_session.go` | Filter session list by authorized projects |
 | Session detail | `pkg/api/handler_session.go` | Check `get` permission on session's project |
 | Chat handler | `pkg/api/handler_chat.go` | Check `update` permission on session's project |
-| WebSocket | `pkg/api/ws.go` (or similar) | Filter events by authorized projects (phased) |
+| WebSocket | `pkg/api/handler_ws.go` | Filter events by authorized projects, or 403 gate (same release as REST authZ) |
 | Config | `pkg/config/` | New `AuthorizationConfig` with Casbin policy |
 | Casbin enforcer | new `pkg/authz/` | Load model + policies, expose `Enforce()` / `GetAuthorizedProjects()` |
 | DB schema | `ent/schema/alertsession.go` | Add `project` field (required, indexed) |

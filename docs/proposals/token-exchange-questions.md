@@ -39,6 +39,15 @@ User tokens arrive at the API layer (HTTP request handler) but sessions are exec
 
 **Decision:** Option A — encrypted token in the database. TARSy is single-process, queue delays are typically seconds, and lazy exchange at call time means we only need the original token (not pre-exchanged per-server tokens). Encryption key from env var or Kubernetes Secret. Token is wiped (`SET user_token = NULL`) atomically when the session reaches a terminal state, so it only exists in the DB for the session's active lifecycle. Migrating to Vault is a straightforward follow-up if security requirements evolve.
 
+**Defense-in-depth: hard TTL + periodic janitor.** Terminal-state cleanup is the primary mechanism, but tokens must not persist indefinitely if cleanup fails (stuck sessions, crashed workers, unhandled edge cases):
+
+- **`token_expires_at` field:** Set when storing `user_token`, computed as `now() + TOKEN_TTL`. Default TTL: 30 minutes (well above typical session duration of 2-10 minutes, but bounds the worst case).
+- **Periodic janitor:** A background goroutine (`runTokenCleanup`) runs on a configurable interval, executing `UPDATE alert_sessions SET user_token = NULL WHERE user_token IS NOT NULL AND token_expires_at < now()`. Logs each cleanup at `INFO` level with the number of expired tokens cleared.
+- **Configuration** (env vars / Kubernetes Secret):
+  - `TOKEN_TTL` — hard expiry for stored tokens (default: `30m`)
+  - `TOKEN_JANITOR_INTERVAL` — how often the janitor runs (default: `5m`, set to `0` to disable)
+- **Terminal-state cleanup still runs first.** The janitor is a safety net, not the primary mechanism. Normal flow: session completes → token wiped immediately. Janitor catches anything that slips through.
+
 _Considered and rejected: Option B (in-memory cache — lost on restart, constrains multi-replica scaling), Option C (external secret store — significantly higher complexity for initial implementation, can be a follow-up), Option D (eager exchange at API time — requires knowing all MCP servers upfront, wastes exchanges for servers that may not be called, doesn't work well with dynamic sub-agent delegation)._
 
 ---
