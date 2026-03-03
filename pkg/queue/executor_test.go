@@ -364,8 +364,8 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			agentDef: &config.AgentConfig{},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        300 * time.Second,
-				MaxBudget:           600 * time.Second,
+				AgentTimeout:        420 * time.Second,
+				MaxBudget:           900 * time.Second,
 			},
 		},
 		{
@@ -382,7 +382,7 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 10,
 				AgentTimeout:        60 * time.Second,
-				MaxBudget:           600 * time.Second,
+				MaxBudget:           900 * time.Second,
 			},
 		},
 		{
@@ -417,7 +417,7 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        300 * time.Second,
+				AgentTimeout:        420 * time.Second,
 				MaxBudget:           30 * time.Second,
 			},
 		},
@@ -433,8 +433,8 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        300 * time.Second,
-				MaxBudget:           600 * time.Second,
+				AgentTimeout:        420 * time.Second,
+				MaxBudget:           900 * time.Second,
 			},
 		},
 	}

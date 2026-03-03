@@ -82,7 +82,9 @@ type ResolvedAgentConfig struct {
 	LLMProvider        *config.LLMProviderConfig
 	LLMProviderName    string // The resolved provider key (for observability / DB records)
 	MaxIterations      int
-	IterationTimeout   time.Duration // Per-iteration timeout (default: 120s)
+	IterationTimeout   time.Duration // Overall per-iteration ceiling (default: 6m)
+	LLMCallTimeout     time.Duration // Per-LLM-streaming-call timeout (default: 5m)
+	ToolCallTimeout    time.Duration // Per-MCP-tool-call timeout (default: 1m)
 	MCPServers         []string
 	CustomInstructions string
 

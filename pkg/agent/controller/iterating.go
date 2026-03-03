@@ -93,8 +93,10 @@ func (c *IteratingController) Run(
 		iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
 		startTime := time.Now()
 
-		// Call LLM WITH tools and streaming (native function calling)
-		streamed, err := callLLMWithStreaming(iterCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+		// Call LLM WITH tools and streaming (native function calling).
+		// LLM call gets its own sub-timeout within the iteration budget.
+		llmCtx, llmCancel := context.WithTimeout(iterCtx, execCtx.Config.LLMCallTimeout)
+		streamed, err := callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
 			Messages:    messages,
@@ -102,6 +104,7 @@ func (c *IteratingController) Run(
 			Tools:       tools, // Tools bound for native calling
 			Backend:     execCtx.Config.LLMBackend,
 		}, &eventSeq)
+		llmCancel()
 
 		if err != nil {
 			iterCancel()
@@ -284,8 +287,10 @@ func (c *IteratingController) forceConclusion(
 		"max_iterations":    state.MaxIterations,
 	}
 
-	// Call LLM WITHOUT tools with streaming — forces text-only response
-	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+	// Call LLM WITHOUT tools with streaming — forces text-only response.
+	// Apply LLM call timeout (the parent ctx is the session context here).
+	llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
+	streamed, err := callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
 		ExecutionID: execCtx.ExecutionID,
 		Messages:    messages,
@@ -293,6 +298,7 @@ func (c *IteratingController) forceConclusion(
 		Tools:       nil, // No tools — force conclusion
 		Backend:     execCtx.Config.LLMBackend,
 	}, eventSeq, forcedMeta)
+	llmCancel()
 	if err != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
 		return &agent.ExecutionResult{

@@ -27,11 +27,11 @@ queue:
   poll_interval_jitter: 500ms
 
   # Session processing timeout (max time per session)
-  session_timeout: 15m
+  session_timeout: 20m
 
   # Graceful shutdown timeout (should match session_timeout)
   # Kubernetes terminationGracePeriodSeconds must be >= this value
-  graceful_shutdown_timeout: 15m
+  graceful_shutdown_timeout: 20m
 
   # Orphan detection: scans for stuck in_progress sessions with stale heartbeats
   orphan_detection_interval: 5m

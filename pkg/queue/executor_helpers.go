@@ -412,8 +412,8 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentConfig) *orchestrator.OrchestratorGuardrails {
 	const (
 		defaultMaxConcurrent = 5
-		defaultAgentTimeout  = 300 * time.Second
-		defaultMaxBudget     = 600 * time.Second
+		defaultAgentTimeout  = 420 * time.Second
+		defaultMaxBudget     = 900 * time.Second
 	)
 
 	g := &orchestrator.OrchestratorGuardrails{
