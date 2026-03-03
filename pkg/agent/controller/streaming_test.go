@@ -602,6 +602,12 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 
 type noopEventPublisher struct{}
 
+// recordingEventPublisher wraps noopEventPublisher and records PublishStreamChunk calls.
+type recordingEventPublisher struct {
+	noopEventPublisher
+	chunkCalls []events.StreamChunkPayload
+}
+
 func (noopEventPublisher) PublishTimelineCreated(context.Context, string, events.TimelineCreatedPayload) error {
 	return nil
 }
@@ -609,6 +615,11 @@ func (noopEventPublisher) PublishTimelineCompleted(context.Context, string, even
 	return nil
 }
 func (noopEventPublisher) PublishStreamChunk(context.Context, string, events.StreamChunkPayload) error {
+	return nil
+}
+
+func (r *recordingEventPublisher) PublishStreamChunk(_ context.Context, _ string, payload events.StreamChunkPayload) error {
+	r.chunkCalls = append(r.chunkCalls, payload)
 	return nil
 }
 func (noopEventPublisher) PublishSessionStatus(context.Context, string, events.SessionStatusPayload) error {
@@ -722,4 +733,142 @@ func TestCallLLMWithStreaming_ExpiredContextCleanup(t *testing.T) {
 		assert.Contains(t, evt.Content, "Streaming failed",
 			"event %s content should indicate streaming failure", evt.ID)
 	}
+}
+
+// ============================================================================
+// callLLMWithStreaming — chunk batching tests
+// ============================================================================
+
+func TestCallLLMWithStreaming_ChunkBatching(t *testing.T) {
+	t.Run("rapid chunks batched into fewer publishes", func(t *testing.T) {
+		recorder := &recordingEventPublisher{}
+		execCtx := newTestExecCtx(t, nil, nil)
+		execCtx.EventPublisher = recorder
+
+		numChunks := 20
+		chunks := make([]agent.Chunk, 0, numChunks+1)
+		for i := 0; i < numChunks; i++ {
+			chunks = append(chunks, &agent.TextChunk{Content: fmt.Sprintf("chunk-%d ", i)})
+		}
+		chunks = append(chunks, &agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30})
+
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{{chunks: chunks}},
+		}
+
+		eventSeq := 0
+		resp, err := callLLMWithStreaming(context.Background(), execCtx, llm, &agent.GenerateInput{}, &eventSeq)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+
+		var expected strings.Builder
+		for i := 0; i < numChunks; i++ {
+			fmt.Fprintf(&expected, "chunk-%d ", i)
+		}
+		assert.Equal(t, expected.String(), resp.Text)
+
+		// Buffered chunks process within a single 100ms flush window,
+		// so batching should produce far fewer PublishStreamChunk calls.
+		assert.Less(t, len(recorder.chunkCalls), numChunks,
+			"expected fewer publishes (%d) than chunks (%d)", len(recorder.chunkCalls), numChunks)
+
+		var totalDelta strings.Builder
+		for _, call := range recorder.chunkCalls {
+			totalDelta.WriteString(call.Delta)
+		}
+		assert.Equal(t, expected.String(), totalDelta.String(),
+			"concatenated deltas must equal full text")
+	})
+
+	t.Run("thinking and text batched independently", func(t *testing.T) {
+		recorder := &recordingEventPublisher{}
+		execCtx := newTestExecCtx(t, nil, nil)
+		execCtx.EventPublisher = recorder
+
+		chunks := []agent.Chunk{
+			&agent.ThinkingChunk{Content: "thought-1 "},
+			&agent.ThinkingChunk{Content: "thought-2 "},
+			&agent.ThinkingChunk{Content: "thought-3 "},
+			&agent.TextChunk{Content: "text-1 "},
+			&agent.TextChunk{Content: "text-2 "},
+			&agent.TextChunk{Content: "text-3 "},
+		}
+
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{{chunks: chunks}},
+		}
+
+		eventSeq := 0
+		resp, err := callLLMWithStreaming(context.Background(), execCtx, llm, &agent.GenerateInput{}, &eventSeq)
+		require.NoError(t, err)
+		assert.Equal(t, "text-1 text-2 text-3 ", resp.Text)
+		assert.Equal(t, "thought-1 thought-2 thought-3 ", resp.ThinkingText)
+
+		var thinkingDeltas, textDeltas strings.Builder
+		for _, call := range recorder.chunkCalls {
+			if call.EventID != "" {
+				// We can distinguish by checking which event ID the delta belongs to;
+				// query DB to find out which is thinking vs text.
+				dbEvts, dbErr := execCtx.Services.Timeline.GetAgentTimeline(
+					context.Background(), execCtx.ExecutionID,
+				)
+				require.NoError(t, dbErr)
+				for _, evt := range dbEvts {
+					if evt.ID == call.EventID {
+						switch evt.EventType {
+						case timelineevent.EventTypeLlmThinking:
+							thinkingDeltas.WriteString(call.Delta)
+						case timelineevent.EventTypeLlmResponse:
+							textDeltas.WriteString(call.Delta)
+						}
+					}
+				}
+			}
+		}
+		assert.Equal(t, "thought-1 thought-2 thought-3 ", thinkingDeltas.String())
+		assert.Equal(t, "text-1 text-2 text-3 ", textDeltas.String())
+	})
+
+	t.Run("no publisher falls back to simple collection", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, nil, nil)
+		execCtx.EventPublisher = nil
+
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "hello"},
+			}}},
+		}
+
+		eventSeq := 0
+		resp, err := callLLMWithStreaming(context.Background(), execCtx, llm, &agent.GenerateInput{}, &eventSeq)
+		require.NoError(t, err)
+		assert.Equal(t, "hello", resp.Text)
+		assert.False(t, resp.TextEventCreated)
+		assert.False(t, resp.ThinkingEventCreated)
+	})
+
+	t.Run("empty deltas do not create events", func(t *testing.T) {
+		recorder := &recordingEventPublisher{}
+		execCtx := newTestExecCtx(t, nil, nil)
+		execCtx.EventPublisher = recorder
+
+		chunks := []agent.Chunk{
+			&agent.TextChunk{Content: ""},
+			&agent.TextChunk{Content: ""},
+			&agent.ThinkingChunk{Content: ""},
+		}
+
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{{chunks: chunks}},
+		}
+
+		eventSeq := 0
+		resp, err := callLLMWithStreaming(context.Background(), execCtx, llm, &agent.GenerateInput{}, &eventSeq)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Text)
+		assert.Empty(t, resp.ThinkingText)
+		assert.Empty(t, recorder.chunkCalls, "no PublishStreamChunk calls for empty deltas")
+		assert.False(t, resp.TextEventCreated)
+		assert.False(t, resp.ThinkingEventCreated)
+	})
 }

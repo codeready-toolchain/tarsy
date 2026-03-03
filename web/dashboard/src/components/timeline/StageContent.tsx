@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Box, Typography, Chip, Alert, alpha } from '@mui/material';
 import {
   CheckCircle,
@@ -30,7 +30,7 @@ interface StageContentProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   // Auto-collapse system
   shouldAutoCollapse?: (item: FlowItem) => boolean;
-  onToggleItemExpansion?: (item: FlowItem) => void;
+  onToggleItemExpansion?: (itemId: string) => void;
   expandAllReasoning?: boolean;
   expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
@@ -60,12 +60,12 @@ function TabPanel({ children, value, index, ...other }: TabPanelProps) {
   return (
     <div
       role="tabpanel"
-      hidden={value !== index}
       id={`reasoning-tabpanel-${index}`}
       aria-labelledby={`reasoning-tab-${index}`}
+      style={{ display: value === index ? 'block' : 'none' }}
       {...other}
     >
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+      <Box sx={{ pt: 2 }}>{children}</Box>
     </div>
   );
 }
@@ -394,17 +394,19 @@ const StageContent: React.FC<StageContentProps> = ({
   // so the tabbed interface appears immediately, not only after items complete.
   const isMultiAgent = mergedExecutions.length > 1;
 
-  // Notify parent when selected tab changes (parallel stages only).
-  // Non-parallel stages clear the selection so the "Waiting for other agents..."
-  // logic in ConversationTimeline doesn't use a stale agent ID from a previous
-  // parallel stage.
+  // Notify parent when selected agent actually changes (parallel stages only).
+  // Uses a ref to skip redundant calls when mergedExecutions array identity
+  // changes but the selected execution ID is the same.
+  const prevSelectedExecIdRef = useRef<string | null | undefined>(undefined);
   React.useEffect(() => {
     if (!onSelectedAgentChange) return;
-    if (isMultiAgent && mergedExecutions[selectedTab]) {
-      onSelectedAgentChange(mergedExecutions[selectedTab].executionId);
-    } else if (!isMultiAgent) {
-      onSelectedAgentChange(null);
-    }
+    const newExecId = isMultiAgent && mergedExecutions[selectedTab]
+      ? mergedExecutions[selectedTab].executionId
+      : !isMultiAgent ? null : undefined;
+    if (newExecId === undefined) return;
+    if (newExecId === prevSelectedExecIdRef.current) return;
+    prevSelectedExecIdRef.current = newExecId;
+    onSelectedAgentChange(newExecId);
   }, [selectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
 
   // Group sub-agent streaming events by execution ID
@@ -511,7 +513,7 @@ const StageContent: React.FC<StageContentProps> = ({
           key={item.id}
           item={item}
           isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
-          onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
+          onToggleAutoCollapse={onToggleItemExpansion}
           expandAll={expandAllReasoning}
           expandAllToolCalls={expandAllToolCalls}
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}

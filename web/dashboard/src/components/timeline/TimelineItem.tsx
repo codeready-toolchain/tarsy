@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import ThinkingItem from './ThinkingItem';
 import ResponseItem from './ResponseItem';
@@ -11,7 +11,7 @@ import ErrorItem from './ErrorItem';
 interface TimelineItemProps {
   item: FlowItem;
   isAutoCollapsed?: boolean;
-  onToggleAutoCollapse?: () => void;
+  onToggleAutoCollapse?: (itemId: string) => void;
   expandAll?: boolean;
   expandAllToolCalls?: boolean;
   isCollapsible?: boolean;
@@ -29,6 +29,9 @@ function TimelineItem({
   expandAllToolCalls = false,
   isCollapsible = false,
 }: TimelineItemProps) {
+  const handleToggle = useCallback(() => {
+    onToggleAutoCollapse?.(item.id);
+  }, [onToggleAutoCollapse, item.id]);
   // Hide response/executive_summary items with empty content. Defense-in-depth
   // for truncated WS payloads that may slip through the truncation handler.
   if ((!item.content || !item.content.trim()) && (item.type === FLOW_ITEM.RESPONSE || item.type === FLOW_ITEM.EXECUTIVE_SUMMARY)) {
@@ -41,7 +44,7 @@ function TimelineItem({
         <ThinkingItem
           item={item}
           isAutoCollapsed={isAutoCollapsed}
-          onToggleAutoCollapse={onToggleAutoCollapse}
+          onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
         />
@@ -52,7 +55,7 @@ function TimelineItem({
         <ResponseItem
           item={item}
           isAutoCollapsed={isAutoCollapsed}
-          onToggleAutoCollapse={onToggleAutoCollapse}
+          onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
         />
@@ -64,7 +67,7 @@ function TimelineItem({
         <ResponseItem
           item={item}
           isAutoCollapsed={isAutoCollapsed}
-          onToggleAutoCollapse={onToggleAutoCollapse}
+          onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
         />
@@ -78,7 +81,7 @@ function TimelineItem({
         <ToolSummaryItem
           item={item}
           isAutoCollapsed={isAutoCollapsed}
-          onToggleAutoCollapse={onToggleAutoCollapse}
+          onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
         />

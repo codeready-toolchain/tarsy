@@ -238,6 +238,54 @@ export function SessionDetailPage() {
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
 
+  // --- Stream chunk batching ---
+  // stream.chunk events arrive at 30-60/sec during multi-agent chains.
+  // Accumulate deltas in refs and flush to state on a 150ms throttle
+  // (~7 updates/sec) to keep the UI responsive while content grows.
+  const pendingChunksRef = useRef<Map<string, { delta: string; isSubAgent: boolean }>>(new Map());
+  const chunkFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushPendingChunks = useCallback(() => {
+    chunkFlushTimerRef.current = null;
+    const pending = pendingChunksRef.current;
+    if (pending.size === 0) return;
+
+    const topLevel = new Map<string, string>();
+    const subAgent = new Map<string, string>();
+    for (const [eventId, { delta, isSubAgent }] of pending) {
+      const target = isSubAgent ? subAgent : topLevel;
+      target.set(eventId, (target.get(eventId) || '') + delta);
+    }
+    pending.clear();
+
+    if (topLevel.size > 0) {
+      setStreamingEvents((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [eventId, delta] of topLevel) {
+          const existing = next.get(eventId);
+          if (!existing) continue;
+          next.set(eventId, { ...existing, content: existing.content + delta });
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }
+    if (subAgent.size > 0) {
+      setSubAgentStreamingEvents((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [eventId, delta] of subAgent) {
+          const existing = next.get(eventId);
+          if (!existing) continue;
+          next.set(eventId, { ...existing, content: existing.content + delta });
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }
+  }, []);
+
   // --- Truncation re-fetch debounce ---
   // When truncated WS payloads arrive (content > 8KB), we re-fetch the full
   // timeline from the REST API. Multiple truncated events can arrive in quick
@@ -481,16 +529,15 @@ export function SessionDetailPage() {
 
     websocketService.connect();
 
-    const handler = (data: Record<string, unknown>) => {
-      try {
-        const eventType = data.type as string | undefined;
-        if (!eventType) return;
+    // Buffer for batching non-chunk WS events. All buffered events are
+    // processed in a single synchronous flush so React 18 batches the
+    // resulting setState calls into one render.
+    const eventBuffer: Record<string, unknown>[] = [];
+    let wsFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-        // --- catchup.overflow → full reload ---
-        if (eventType === EVENT_CATCHUP_OVERFLOW) {
-          loadData();
-          return;
-        }
+    const processEvent = (data: Record<string, unknown>) => {
+      const eventType = data.type as string | undefined;
+      if (!eventType) return;
 
         // --- timeline_event.created ---
         if (eventType === EVENT_TIMELINE_CREATED) {
@@ -598,30 +645,6 @@ export function SessionDetailPage() {
               }
               return [...prev, realEvent];
             });
-          }
-          return;
-        }
-
-        // --- stream.chunk ---
-        if (eventType === EVENT_STREAM_CHUNK) {
-          const payload = data as unknown as StreamChunkPayload;
-          const updateFn = (prev: Map<string, ExtendedStreamingItem>) => {
-            const existing = prev.get(payload.event_id);
-            if (!existing) return prev;
-            const next = new Map(prev);
-            next.set(payload.event_id, {
-              ...existing,
-              content: existing.content + payload.delta,
-            });
-            return next;
-          };
-          // Try sub-agent map first if parent_execution_id is set;
-          // also try the other map as fallback (the created event
-          // determines which map the entry lives in).
-          if (payload.parent_execution_id) {
-            setSubAgentStreamingEvents(updateFn);
-          } else {
-            setStreamingEvents(updateFn);
           }
           return;
         }
@@ -909,6 +932,62 @@ export function SessionDetailPage() {
           });
           return;
         }
+    };
+
+    const flushWsEvents = () => {
+      wsFlushTimer = null;
+      const batch = eventBuffer.splice(0);
+      for (const data of batch) {
+        processEvent(data);
+      }
+    };
+
+    const handler = (data: Record<string, unknown>) => {
+      try {
+        const eventType = data.type as string | undefined;
+        if (!eventType) return;
+
+        // Immediate: catchup overflow triggers full reload
+        if (eventType === EVENT_CATCHUP_OVERFLOW) {
+          loadData();
+          return;
+        }
+
+        // Immediate: stream.chunk has its own batching via pendingChunksRef
+        if (eventType === EVENT_STREAM_CHUNK) {
+          const payload = data as unknown as StreamChunkPayload;
+          const existing = pendingChunksRef.current.get(payload.event_id);
+          if (existing) {
+            existing.delta += payload.delta;
+          } else {
+            pendingChunksRef.current.set(payload.event_id, {
+              delta: payload.delta,
+              isSubAgent: !!payload.parent_execution_id,
+            });
+          }
+          if (chunkFlushTimerRef.current === null) {
+            chunkFlushTimerRef.current = setTimeout(flushPendingChunks, 150);
+          }
+          return;
+        }
+
+        // timeline_event.created with streaming status must be processed
+        // immediately — it creates the Map entry that stream.chunk depends on.
+        // Buffering it would cause chunks arriving during the delay to be lost.
+        if (eventType === EVENT_TIMELINE_CREATED) {
+          const status = (data as Record<string, unknown>).status as string | undefined;
+          if (status === TIMELINE_STATUS.STREAMING) {
+            processEvent(data);
+            return;
+          }
+        }
+
+        // All other events: buffer and flush together so React batches
+        // all setState calls into a single render.
+        eventBuffer.push(data);
+        if (wsFlushTimer === null) {
+          wsFlushTimer = setTimeout(flushWsEvents, 150);
+        }
       } catch {
         // Ignore malformed WS payloads
       }
@@ -918,8 +997,9 @@ export function SessionDetailPage() {
 
     return () => {
       unsubscribe();
+      if (wsFlushTimer !== null) clearTimeout(wsFlushTimer);
     };
-  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline]);
+  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline, flushPendingChunks]);
 
   // ────────────────────────────────────────────────────────────
   // Auto-scroll lifecycle
@@ -978,10 +1058,11 @@ export function SessionDetailPage() {
     }
   }, [session, loading]);
 
-  // Cleanup disable timeout on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (disableTimeoutRef.current) clearTimeout(disableTimeoutRef.current);
+      if (chunkFlushTimerRef.current !== null) clearTimeout(chunkFlushTimerRef.current);
     };
   }, []);
 
@@ -1063,11 +1144,11 @@ export function SessionDetailPage() {
       // Enable auto-scroll for chat response
       setAutoScrollEnabled(true);
     }
-  }, [chatState]);
+  }, [chatState.sendMessage]);
 
   const handleCancelChat = useCallback(() => {
     chatState.cancelExecution();
-  }, [chatState]);
+  }, [chatState.cancelExecution]);
 
   const handleCollapseAnalysis = useCallback(() => {
     setCollapseCounter((prev) => prev + 1);

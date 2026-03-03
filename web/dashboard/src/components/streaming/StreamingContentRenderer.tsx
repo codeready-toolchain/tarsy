@@ -1,13 +1,9 @@
 import { memo, useEffect, useRef } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 import TypewriterText from './TypewriterText';
-import { 
-  hasMarkdownSyntax, 
-  remarkPlugins,
-  thoughtMarkdownComponents 
-} from '../../utils/markdownComponents';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
+import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /**
  * StreamingItem for the streaming content renderer.
@@ -28,19 +24,14 @@ interface StreamingContentRendererProps {
 // (matching completed ThinkingItem).
 
 const ThinkingBlock = memo(({ content }: { content: string }) => {
-  const hasMarkdown = hasMarkdownSyntax(content);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll the container as new stream chunks arrive.
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [content]);
 
-  // The label (💭 Thinking...) renders immediately for instant feedback.
-  // The gray content box only appears once the typewriter has produced visible
-  // text, avoiding the brief empty box flash.
   return (
     <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
       <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
@@ -56,7 +47,7 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
         >
           Thinking...
         </Typography>
-        <TypewriterText text={content} speed={3}>
+        <TypewriterText text={content} speed={8} tickInterval={50}>
           {(displayText) => {
             if (!displayText) return null;
             return (
@@ -76,30 +67,16 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
                   }
                 })}
               >
-                {hasMarkdown ? (
-                  <Box
-                    sx={{
-                      '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                      {displayText}
-                    </ReactMarkdown>
-                  </Box>
-                ) : (
-                  <Typography
-                    variant="body1"
-                    sx={{
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                      lineHeight: 1.7, fontSize: '1rem',
-                      color: 'text.secondary', fontStyle: 'italic',
-                    }}
-                  >
-                    {displayText}
-                  </Typography>
-                )}
+                <Typography
+                  variant="body1"
+                  sx={{
+                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    lineHeight: 1.7, fontSize: '1rem',
+                    color: 'text.secondary', fontStyle: 'italic',
+                  }}
+                >
+                  {displayText}
+                </Typography>
               </Box>
             );
           }}
@@ -129,31 +106,19 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     return <ThinkingBlock content={item.content || ''} />;
   }
 
-  // Response (llm_response) — intermediate iterations
-  // Don't render empty responses (event created but no content yet, or empty tool-only iteration)
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_RESPONSE) {
     if (!item.content || !item.content.trim()) return null;
-    const hasMarkdown = hasMarkdownSyntax(item.content);
     return (
       <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
         <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
           💬
         </Typography>
-        <TypewriterText text={item.content} speed={3}>
+        <TypewriterText text={item.content} speed={8} tickInterval={50}>
           {(displayText) => (
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                  {displayText}
-                </ReactMarkdown>
-              ) : (
-                <Typography 
-                  variant="body1" 
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-                >
-                  {displayText}
-                </Typography>
-              )}
+            <Box sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
+              <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                {displayText}
+              </ReactMarkdown>
             </Box>
           )}
         </TypewriterText>
@@ -161,10 +126,8 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     );
   }
   
-  // Tool result summary (mcp_tool_summary)
   if (item.eventType === TIMELINE_EVENT_TYPES.MCP_TOOL_SUMMARY) {
     const isPlaceholder = item.content === 'Summarizing tool results...';
-    const hasMarkdown = !isPlaceholder && hasMarkdownSyntax(item.content);
     
     return (
       <Box sx={{ mb: 1.5 }}>
@@ -196,22 +159,13 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               {item.content}
             </Typography>
           ) : (
-            <TypewriterText text={item.content} speed={3}>
+            <TypewriterText text={item.content} speed={8} tickInterval={50}>
               {(displayText) => (
-                hasMarkdown ? (
-                  <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' } }}>
-                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                      {displayText}
-                    </ReactMarkdown>
-                  </Box>
-                ) : (
-                  <Typography
-                    variant="body1"
-                    sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.secondary' }}
-                  >
+                <Box sx={{ color: 'text.secondary' }}>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                     {displayText}
-                  </Typography>
-                )
+                  </ReactMarkdown>
+                </Box>
               )}
             </TypewriterText>
           )}
@@ -220,9 +174,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     );
   }
   
-  // Final analysis
   if (item.eventType === TIMELINE_EVENT_TYPES.FINAL_ANALYSIS) {
-    const hasMarkdown = hasMarkdownSyntax(item.content);
     return (
       <Box sx={{ mb: 2, mt: 3 }}>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5 }}>
@@ -239,23 +191,12 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             FINAL ANSWER
           </Typography>
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0, ml: 4 }}>
-          <TypewriterText text={item.content} speed={3}>
+        <Box sx={{ flex: 1, minWidth: 0, ml: 4, color: 'text.primary' }}>
+          <TypewriterText text={item.content} speed={8} tickInterval={50}>
             {(displayText) => (
-              hasMarkdown ? (
-                <Box sx={{ color: 'text.primary' }}>
-                  <ReactMarkdown urlTransform={defaultUrlTransform} components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins}>
-                    {displayText}
-                  </ReactMarkdown>
-                </Box>
-              ) : (
-                <Typography 
-                  variant="body1" 
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-                >
-                  {displayText}
-                </Typography>
-              )
+              <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                {displayText}
+              </ReactMarkdown>
             )}
           </TypewriterText>
         </Box>
@@ -316,30 +257,19 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     );
   }
 
-  // Executive summary
   if (item.eventType === TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY) {
     if (!item.content || !item.content.trim()) return null;
-    const hasMarkdown = hasMarkdownSyntax(item.content);
     return (
       <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
         <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
           ✨
         </Typography>
-        <TypewriterText text={item.content} speed={3}>
+        <TypewriterText text={item.content} speed={8} tickInterval={50}>
           {(displayText) => (
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                  {displayText}
-                </ReactMarkdown>
-              ) : (
-                <Typography 
-                  variant="body1" 
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-                >
-                  {displayText}
-                </Typography>
-              )}
+            <Box sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
+              <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                {displayText}
+              </ReactMarkdown>
             </Box>
           )}
         </TypewriterText>

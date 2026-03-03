@@ -4,20 +4,26 @@ import type { ReactNode } from 'react';
 interface TypewriterTextProps {
   text: string;
   speed?: number; // ms per character (default: 3)
+  tickInterval?: number; // ms between state updates (default: 150)
   onComplete?: () => void;
   children?: (displayText: string, isAnimating: boolean) => ReactNode;
 }
 
 /**
- * Typewriter effect component for streaming content
- * 
+ * Typewriter effect component for streaming content.
+ *
+ * Uses a throttled setInterval (default 150ms) instead of requestAnimationFrame
+ * so downstream renderers (e.g. ReactMarkdown) are invoked ~7 times/sec
+ * rather than 60, keeping CPU usage low on large growing content.
+ *
  * Behavior:
  * - Growing text (e.g., "Hello" → "Hello World"): continues from current position
  * - Non-growing text (e.g., "Hello" → "Goodbye"): resets and starts fresh animation
  */
 export default function TypewriterText({ 
   text, 
-  speed = 3, 
+  speed = 3,
+  tickInterval = 150,
   onComplete,
   children 
 }: TypewriterTextProps) {
@@ -26,15 +32,15 @@ export default function TypewriterText({
   
   const targetTextRef = useRef('');
   const displayedLengthRef = useRef(0);
-  const animationFrameRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
   const completedRef = useRef(false);
-  
+
   useEffect(() => {
     if (!text) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
       setDisplayedText('');
       setIsAnimating(false);
@@ -49,11 +55,6 @@ export default function TypewriterText({
     
     if (previousTarget === text) return;
     
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
     const isGrowing = text.startsWith(previousTarget);
     if (!isGrowing) {
       displayedLengthRef.current = 0;
@@ -64,8 +65,11 @@ export default function TypewriterText({
     completedRef.current = false;
     lastUpdateTimeRef.current = performance.now();
     
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - lastUpdateTimeRef.current;
+    if (timerRef.current) return; // interval already running
+
+    timerRef.current = setInterval(() => {
+      const now = performance.now();
+      const elapsed = now - lastUpdateTimeRef.current;
       const target = targetTextRef.current;
       const charsToAdd = Math.floor(elapsed / speed);
       
@@ -73,28 +77,26 @@ export default function TypewriterText({
         const newLength = Math.min(displayedLengthRef.current + charsToAdd, target.length);
         displayedLengthRef.current = newLength;
         setDisplayedText(target.slice(0, newLength));
-        lastUpdateTimeRef.current = currentTime;
+        lastUpdateTimeRef.current = now;
         
         if (newLength >= target.length) {
           setIsAnimating(false);
           completedRef.current = true;
-          animationFrameRef.current = null;
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
           onComplete?.();
-          return;
         }
       }
-      
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-    
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, [text, speed, onComplete]);
+    }, tickInterval);
+  }, [text, speed, tickInterval, onComplete]);
   
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, []);
