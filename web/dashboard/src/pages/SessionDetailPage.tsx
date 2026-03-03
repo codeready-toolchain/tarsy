@@ -250,13 +250,17 @@ export function SessionDetailPage() {
     const pending = pendingChunksRef.current;
     if (pending.size === 0) return;
 
+    // Snapshot and clear. New chunks arriving between now and the
+    // setState updater execution will create fresh entries in pending.
+    const snapshot = new Map(pending);
+    pending.clear();
+
     const topLevel = new Map<string, string>();
     const subAgent = new Map<string, string>();
-    for (const [eventId, { delta, isSubAgent }] of pending) {
+    for (const [eventId, { delta, isSubAgent }] of snapshot) {
       const target = isSubAgent ? subAgent : topLevel;
       target.set(eventId, (target.get(eventId) || '') + delta);
     }
-    pending.clear();
 
     if (topLevel.size > 0) {
       setStreamingEvents((prev) => {
@@ -264,7 +268,17 @@ export function SessionDetailPage() {
         const next = new Map(prev);
         for (const [eventId, delta] of topLevel) {
           const existing = next.get(eventId);
-          if (!existing) continue;
+          if (!existing) {
+            // Entry not in streaming map yet (created event hasn't arrived).
+            // Re-queue into pending so the next flush can retry. Prepend
+            // the old delta to any new chunks that arrived since the snapshot.
+            const curr = pending.get(eventId);
+            pending.set(eventId, {
+              delta: curr ? delta + curr.delta : delta,
+              isSubAgent: false,
+            });
+            continue;
+          }
           next.set(eventId, { ...existing, content: existing.content + delta });
           changed = true;
         }
@@ -277,7 +291,14 @@ export function SessionDetailPage() {
         const next = new Map(prev);
         for (const [eventId, delta] of subAgent) {
           const existing = next.get(eventId);
-          if (!existing) continue;
+          if (!existing) {
+            const curr = pending.get(eventId);
+            pending.set(eventId, {
+              delta: curr ? delta + curr.delta : delta,
+              isSubAgent: true,
+            });
+            continue;
+          }
           next.set(eventId, { ...existing, content: existing.content + delta });
           changed = true;
         }
@@ -1010,6 +1031,11 @@ export function SessionDetailPage() {
     return () => {
       unsubscribe();
       if (wsFlushTimer !== null) clearTimeout(wsFlushTimer);
+      if (chunkFlushTimerRef.current !== null) {
+        clearTimeout(chunkFlushTimerRef.current);
+        chunkFlushTimerRef.current = null;
+      }
+      pendingChunksRef.current.clear();
     };
   }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline, flushPendingChunks, chatState.onStageStarted, chatState.onStageTerminal]);
 

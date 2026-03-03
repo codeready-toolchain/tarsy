@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Typography, Chip, Alert, alpha } from '@mui/material';
 import {
   CheckCircle,
@@ -63,8 +63,14 @@ interface TabPanelProps {
 // freeze background content and break streaming).
 function TabPanel({ renderContent, value, index, ...other }: TabPanelProps) {
   const active = value === index;
-  const hasBeenActiveRef = useRef(active);
-  if (active) hasBeenActiveRef.current = true;
+  const [hasBeenActive, setHasBeenActive] = useState(active);
+  useEffect(() => {
+    if (active && !hasBeenActive) setHasBeenActive(true);
+  }, [active, hasBeenActive]);
+
+  // `active` provides immediate rendering on first activation (no flash);
+  // `hasBeenActive` keeps the panel mounted after deactivation.
+  const shouldRender = active || hasBeenActive;
   return (
     <div
       role="tabpanel"
@@ -74,7 +80,7 @@ function TabPanel({ renderContent, value, index, ...other }: TabPanelProps) {
       aria-labelledby={`reasoning-tab-${index}`}
       {...other}
     >
-      {hasBeenActiveRef.current && <Box sx={{ pt: 2 }}>{renderContent()}</Box>}
+      {shouldRender && <Box sx={{ pt: 2 }}>{renderContent()}</Box>}
     </div>
   );
 }
