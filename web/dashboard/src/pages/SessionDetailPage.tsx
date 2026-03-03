@@ -1011,7 +1011,7 @@ export function SessionDetailPage() {
       unsubscribe();
       if (wsFlushTimer !== null) clearTimeout(wsFlushTimer);
     };
-  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline, flushPendingChunks]);
+  }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline, flushPendingChunks, chatState.onStageStarted, chatState.onStageTerminal]);
 
   // ────────────────────────────────────────────────────────────
   // Auto-scroll lifecycle

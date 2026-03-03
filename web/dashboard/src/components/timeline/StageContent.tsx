@@ -51,17 +51,20 @@ interface StageContentProps {
 }
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  renderContent: () => React.ReactNode;
   index: number;
   value: number;
 }
 
-// TabPanel keeps inactive children mounted (display:none) instead of
-// unmounting them. This preserves streaming state when switching between
-// parallel agent tabs, avoiding TypewriterText restarts. The hidden
-// attribute + aria-hidden ensure screen readers skip inactive panels.
-function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+// Keeps inactive panels mounted (hidden) to preserve streaming state across
+// tab switches.  Uses a render prop so renderContent() is never invoked for
+// tabs the user has not yet visited.  Once activated, the panel re-renders
+// normally to receive live streaming updates (caching the ReactNode would
+// freeze background content and break streaming).
+function TabPanel({ renderContent, value, index, ...other }: TabPanelProps) {
   const active = value === index;
+  const hasBeenActiveRef = useRef(active);
+  if (active) hasBeenActiveRef.current = true;
   return (
     <div
       role="tabpanel"
@@ -71,7 +74,7 @@ function TabPanel({ children, value, index, ...other }: TabPanelProps) {
       aria-labelledby={`reasoning-tab-${index}`}
       {...other}
     >
-      <Box sx={{ pt: 2 }}>{children}</Box>
+      {hasBeenActiveRef.current && <Box sx={{ pt: 2 }}>{renderContent()}</Box>}
     </div>
   );
 }
@@ -403,11 +406,16 @@ const StageContent: React.FC<StageContentProps> = ({
   // Notify parent when selected agent actually changes (parallel stages only).
   // Uses a ref to skip redundant calls when mergedExecutions array identity
   // changes but the selected execution ID is the same.
+  // Clamps selectedTab when the execution list shrinks to avoid out-of-range index.
   const prevSelectedExecIdRef = useRef<string | null | undefined>(undefined);
   React.useEffect(() => {
+    const clampedIndex = Math.max(0, Math.min(selectedTab, mergedExecutions.length - 1));
+    if (clampedIndex !== selectedTab) {
+      setSelectedTab(clampedIndex);
+    }
     if (!onSelectedAgentChange) return;
-    const newExecId = isMultiAgent && mergedExecutions[selectedTab]
-      ? mergedExecutions[selectedTab].executionId
+    const newExecId = isMultiAgent && mergedExecutions[clampedIndex]
+      ? mergedExecutions[clampedIndex].executionId
       : !isMultiAgent ? null : undefined;
     if (newExecId === undefined) return;
     if (newExecId === prevSelectedExecIdRef.current) return;
@@ -720,9 +728,12 @@ const StageContent: React.FC<StageContentProps> = ({
 
       {/* Tab panels */}
       {mergedExecutions.map((execution, index) => (
-        <TabPanel key={execution.executionId} value={selectedTab} index={index}>
-          {renderExecutionItems(execution)}
-        </TabPanel>
+        <TabPanel
+          key={execution.executionId}
+          value={selectedTab}
+          index={index}
+          renderContent={() => renderExecutionItems(execution)}
+        />
       ))}
     </Box>
   );
