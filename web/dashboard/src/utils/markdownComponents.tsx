@@ -98,9 +98,12 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
     marginBottom: 0.5,
     lineHeight: 1.6,
   },
-  // Tables
+  // Tables — wrapper provides horizontal scroll for narrow containers
   '& table': {
-    width: '100%',
+    display: 'block',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    maxWidth: '100%',
     borderCollapse: 'collapse',
     margin: '12px 0',
     fontSize: '0.9rem',
@@ -112,12 +115,117 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
     borderBottom: '2px solid',
     borderColor: alpha(theme.palette.divider, 0.8),
     backgroundColor: alpha(theme.palette.grey[900], 0.04),
+    whiteSpace: 'nowrap',
   },
   '& td': {
     padding: '6px 12px',
     borderBottom: '1px solid',
     borderColor: alpha(theme.palette.divider, 0.4),
   },
+});
+
+interface TableStyleOptions {
+  tableMarginY: number;
+  fontSize: string;
+  thPadding: string;
+  thBgColor: string;
+  tdPadding: string;
+}
+
+function createTableRenderers(opts: TableStyleOptions) {
+  return {
+    table: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', my: opts.tableMarginY }}>
+          <Box
+            component="table"
+            sx={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: opts.fontSize,
+            }}
+            {...safeProps}
+          >
+            {children}
+          </Box>
+        </Box>
+      );
+    },
+    thead: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return <Box component="thead" {...safeProps}>{children}</Box>;
+    },
+    tbody: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return <Box component="tbody" {...safeProps}>{children}</Box>;
+    },
+    tr: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="tr"
+          sx={{ '&:last-child td': { borderBottom: 'none' } }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+    th: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="th"
+          sx={{
+            textAlign: 'left',
+            fontWeight: 600,
+            p: opts.thPadding,
+            borderBottom: '2px solid',
+            borderColor: 'divider',
+            bgcolor: opts.thBgColor,
+            fontSize: opts.fontSize,
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+    td: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="td"
+          sx={{
+            p: opts.tdPadding,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            fontSize: opts.fontSize,
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+  };
+}
+
+const finalAnswerTableRenderers = createTableRenderers({
+  tableMarginY: 1.5,
+  fontSize: '0.875rem',
+  thPadding: '8px 12px',
+  thBgColor: 'action.hover',
+  tdPadding: '6px 12px',
+});
+
+const thoughtTableRenderers = createTableRenderers({
+  tableMarginY: 1,
+  fontSize: '0.9em',
+  thPadding: '6px 10px',
+  thBgColor: 'grey.100',
+  tdPadding: '4px 10px',
 });
 
 /**
@@ -337,81 +445,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
-  table: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box sx={{ overflowX: 'auto', my: 1.5 }}>
-        <Box
-          component="table"
-          sx={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '0.9rem',
-          }}
-          {...safeProps}
-        >
-          {children}
-        </Box>
-      </Box>
-    );
-  },
-  thead: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return <Box component="thead" {...safeProps}>{children}</Box>;
-  },
-  tbody: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return <Box component="tbody" {...safeProps}>{children}</Box>;
-  },
-  tr: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="tr"
-        sx={{ '&:last-child td': { borderBottom: 'none' } }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
-  th: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="th"
-        sx={{
-          textAlign: 'left',
-          fontWeight: 600,
-          p: '8px 12px',
-          borderBottom: '2px solid',
-          borderColor: 'divider',
-          bgcolor: 'action.hover',
-          fontSize: '0.875rem',
-        }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
-  td: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="td"
-        sx={{
-          p: '6px 12px',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          fontSize: '0.875rem',
-        }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
+  ...finalAnswerTableRenderers,
 };
 
 /**
@@ -527,79 +561,5 @@ export const thoughtMarkdownComponents = {
       </Typography>
     );
   },
-  table: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box sx={{ overflowX: 'auto', my: 1 }}>
-        <Box
-          component="table"
-          sx={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '0.9em',
-          }}
-          {...safeProps}
-        >
-          {children}
-        </Box>
-      </Box>
-    );
-  },
-  thead: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return <Box component="thead" {...safeProps}>{children}</Box>;
-  },
-  tbody: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return <Box component="tbody" {...safeProps}>{children}</Box>;
-  },
-  tr: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="tr"
-        sx={{ '&:last-child td': { borderBottom: 'none' } }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
-  th: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="th"
-        sx={{
-          textAlign: 'left',
-          fontWeight: 600,
-          p: '6px 10px',
-          borderBottom: '2px solid',
-          borderColor: 'divider',
-          bgcolor: 'grey.100',
-          fontSize: '0.9em',
-        }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
-  td: (props: MdProps) => {
-    const { node: _node, children, ...safeProps } = props;
-    return (
-      <Box
-        component="td"
-        sx={{
-          p: '4px 10px',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          fontSize: '0.9em',
-        }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
+  ...thoughtTableRenderers,
 };
