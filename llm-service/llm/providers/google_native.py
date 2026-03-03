@@ -401,7 +401,7 @@ class GoogleNativeProvider(LLMProvider):
         contents: List[genai_types.Content],
         gen_config: genai_types.GenerateContentConfig,
         request_id: str,
-        timeout_seconds: int = 180,
+        timeout_seconds: int = 300,
         execution_id: str = "",
     ) -> AsyncIterator[pb.GenerateResponse]:
         """Stream from the Gemini API with timeout handling.

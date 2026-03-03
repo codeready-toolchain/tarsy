@@ -365,7 +365,7 @@ class LangChainProvider(LLMProvider):
         model,
         messages: List[BaseMessage],
         request_id: str,
-        timeout_seconds: int = 180,
+        timeout_seconds: int = 300,
     ) -> AsyncIterator[pb.GenerateResponse]:
         """Stream LangChain response, converting to proto chunks.
 
