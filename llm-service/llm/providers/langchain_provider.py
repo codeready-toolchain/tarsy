@@ -193,7 +193,7 @@ class LangChainProvider(LLMProvider):
             if "claude" in model_lower or "anthropic" in model_lower:
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
                 thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
-                max_tokens = thinking_kwargs.pop("max_tokens", 32000)
+                max_tokens = thinking_kwargs.pop("max_tokens", 64000)
                 return ChatAnthropicVertex(
                     model=config.model,
                     project=config.project,
