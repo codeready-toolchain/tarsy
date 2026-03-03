@@ -182,8 +182,8 @@ class TestLangChainProviderReasoningConfig:
     def test_anthropic_thinking(self, model):
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)
         assert result["thinking"]["type"] == "enabled"
-        assert result["thinking"]["budget_tokens"] == 16000
-        assert result["max_tokens"] == 32000
+        assert result["thinking"]["budget_tokens"] == 32000
+        assert result["max_tokens"] == 64000
 
 
 

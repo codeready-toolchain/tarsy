@@ -249,10 +249,10 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Vertex AI ---
 		"vertexai-default": {
 			Type:                LLMProviderTypeVertexAI,
-			Model:               "claude-sonnet-4-6@20260217", // Claude Sonnet 4.6 on Vertex AI
-			ProjectEnv:          "GOOGLE_CLOUD_PROJECT",       // Standard GCP project ID env var
-			LocationEnv:         "GOOGLE_CLOUD_LOCATION",      // Standard GCP location env var
-			MaxToolResultTokens: 900000,                       // Conservative for 1M context (beta)
+			Model:               "claude-sonnet-4-6",     // Claude Sonnet 4.6 on Vertex AI
+			ProjectEnv:          "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
+			LocationEnv:         "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
+			MaxToolResultTokens: 900000,                  // Conservative for 1M context (beta)
 		},
 	}
 }
