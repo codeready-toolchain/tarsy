@@ -120,8 +120,8 @@ class LangChainProvider(LLMProvider):
         to match the signature of the other _get_*_kwargs helpers.
         """
         return {
-            "thinking": {"type": "enabled", "budget_tokens": 16000},
-            "max_tokens": 32000,
+            "thinking": {"type": "enabled", "budget_tokens": 32000},
+            "max_tokens": 64000,
         }
 
     def _create_chat_model(self, config: pb.LLMConfig):
@@ -193,15 +193,15 @@ class LangChainProvider(LLMProvider):
             if "claude" in model_lower or "anthropic" in model_lower:
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
                 thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
-                base_kwargs = {
-                    "model": config.model,
-                    "project": config.project,
-                    "location": config.location,
-                    "streaming": True,
-                    "max_tokens": 32000,
-                }
-                base_kwargs.update(thinking_kwargs)
-                return ChatAnthropicVertex(**base_kwargs)
+                max_tokens = thinking_kwargs.pop("max_tokens", 32000)
+                return ChatAnthropicVertex(
+                    model=config.model,
+                    project=config.project,
+                    location=config.location,
+                    streaming=True,
+                    max_tokens=max_tokens,
+                    model_kwargs=thinking_kwargs,
+                )
             else:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 thinking_kwargs = self._get_google_thinking_kwargs(config.model)
