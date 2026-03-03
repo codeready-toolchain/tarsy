@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Typography, Chip, Alert, alpha } from '@mui/material';
 import {
   CheckCircle,
@@ -30,7 +30,7 @@ interface StageContentProps {
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   // Auto-collapse system
   shouldAutoCollapse?: (item: FlowItem) => boolean;
-  onToggleItemExpansion?: (item: FlowItem) => void;
+  onToggleItemExpansion?: (itemId: string) => void;
   expandAllReasoning?: boolean;
   expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
@@ -51,21 +51,36 @@ interface StageContentProps {
 }
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  renderContent: () => React.ReactNode;
   index: number;
   value: number;
 }
 
-function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+// Keeps inactive panels mounted (hidden) to preserve streaming state across
+// tab switches.  Uses a render prop so renderContent() is never invoked for
+// tabs the user has not yet visited.  Once activated, the panel re-renders
+// normally to receive live streaming updates (caching the ReactNode would
+// freeze background content and break streaming).
+function TabPanel({ renderContent, value, index, ...other }: TabPanelProps) {
+  const active = value === index;
+  const [hasBeenActive, setHasBeenActive] = useState(active);
+  useEffect(() => {
+    if (active && !hasBeenActive) setHasBeenActive(true);
+  }, [active, hasBeenActive]);
+
+  // `active` provides immediate rendering on first activation (no flash);
+  // `hasBeenActive` keeps the panel mounted after deactivation.
+  const shouldRender = active || hasBeenActive;
   return (
     <div
       role="tabpanel"
-      hidden={value !== index}
+      hidden={!active}
+      aria-hidden={!active}
       id={`reasoning-tabpanel-${index}`}
       aria-labelledby={`reasoning-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+      {shouldRender && <Box sx={{ pt: 2 }}>{renderContent()}</Box>}
     </div>
   );
 }
@@ -394,17 +409,24 @@ const StageContent: React.FC<StageContentProps> = ({
   // so the tabbed interface appears immediately, not only after items complete.
   const isMultiAgent = mergedExecutions.length > 1;
 
-  // Notify parent when selected tab changes (parallel stages only).
-  // Non-parallel stages clear the selection so the "Waiting for other agents..."
-  // logic in ConversationTimeline doesn't use a stale agent ID from a previous
-  // parallel stage.
+  // Notify parent when selected agent actually changes (parallel stages only).
+  // Uses a ref to skip redundant calls when mergedExecutions array identity
+  // changes but the selected execution ID is the same.
+  // Clamps selectedTab when the execution list shrinks to avoid out-of-range index.
+  const prevSelectedExecIdRef = useRef<string | null | undefined>(undefined);
   React.useEffect(() => {
-    if (!onSelectedAgentChange) return;
-    if (isMultiAgent && mergedExecutions[selectedTab]) {
-      onSelectedAgentChange(mergedExecutions[selectedTab].executionId);
-    } else if (!isMultiAgent) {
-      onSelectedAgentChange(null);
+    const clampedIndex = Math.max(0, Math.min(selectedTab, mergedExecutions.length - 1));
+    if (clampedIndex !== selectedTab) {
+      setSelectedTab(clampedIndex);
     }
+    if (!onSelectedAgentChange) return;
+    const newExecId = isMultiAgent && mergedExecutions[clampedIndex]
+      ? mergedExecutions[clampedIndex].executionId
+      : !isMultiAgent ? null : undefined;
+    if (newExecId === undefined) return;
+    if (newExecId === prevSelectedExecIdRef.current) return;
+    prevSelectedExecIdRef.current = newExecId;
+    onSelectedAgentChange(newExecId);
   }, [selectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
 
   // Group sub-agent streaming events by execution ID
@@ -511,7 +533,7 @@ const StageContent: React.FC<StageContentProps> = ({
           key={item.id}
           item={item}
           isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
-          onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
+          onToggleAutoCollapse={onToggleItemExpansion}
           expandAll={expandAllReasoning}
           expandAllToolCalls={expandAllToolCalls}
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
@@ -712,9 +734,12 @@ const StageContent: React.FC<StageContentProps> = ({
 
       {/* Tab panels */}
       {mergedExecutions.map((execution, index) => (
-        <TabPanel key={execution.executionId} value={selectedTab} index={index}>
-          {renderExecutionItems(execution)}
-        </TabPanel>
+        <TabPanel
+          key={execution.executionId}
+          value={selectedTab}
+          index={index}
+          renderContent={() => renderExecutionItems(execution)}
+        />
       ))}
     </Box>
   );

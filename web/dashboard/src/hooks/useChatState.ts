@@ -7,7 +7,7 @@
  * centralized WS handler.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { sendChatMessage, cancelSession, handleAPIError } from '../services/api.ts';
 import { TIMELINE_EVENT_TYPES } from '../constants/eventTypes.ts';
 import type { TimelineEvent } from '../types/session.ts';
@@ -176,7 +176,7 @@ export function useChatState(sessionId: string): UseChatStateReturn {
     setError(null);
   }, []);
 
-  return {
+  return useMemo(() => ({
     sendingMessage,
     canceling,
     chatStageId,
@@ -186,5 +186,5 @@ export function useChatState(sessionId: string): UseChatStateReturn {
     onStageStarted,
     onStageTerminal,
     clearError,
-  };
+  }), [sendingMessage, canceling, chatStageId, error, sendMessage, cancelExecution, onStageStarted, onStageTerminal, clearError]);
 }

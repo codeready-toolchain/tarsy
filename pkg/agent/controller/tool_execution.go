@@ -70,9 +70,11 @@ func executeToolCall(
 		slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
 	}
 
-	// Step 3: Execute the tool
+	// Step 3: Execute the tool with its own timeout within the iteration budget.
+	toolCtx, toolCancel := context.WithTimeout(ctx, execCtx.Config.ToolCallTimeout)
 	startTime := time.Now()
-	result, toolErr := execCtx.ToolExecutor.Execute(ctx, call)
+	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, call)
+	toolCancel()
 	if toolErr != nil {
 		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)

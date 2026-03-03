@@ -33,9 +33,9 @@ const (
 	// ReinitTimeout is the deadline for recreating an MCP session during recovery.
 	ReinitTimeout = 10 * time.Second
 
-	// OperationTimeout is the per-call deadline for CallTool and ListTools.
-	// Set conservatively: some tools are legitimately slow. The iteration timeout
-	// (120s) is the hard ceiling above this.
+	// OperationTimeout is the per-call deadline for ListTools and reinit.
+	// Tool calls are separately governed by ToolCallTimeout (default 1m)
+	// applied in the controller layer; this remains as defense-in-depth.
 	OperationTimeout = 90 * time.Second
 
 	// RetryBackoffMin is the minimum jittered backoff between retries.

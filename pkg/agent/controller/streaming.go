@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -269,18 +270,85 @@ func callLLMWithStreaming(
 	pid := parentExecID(execCtx)
 	pidPtr := parentExecIDPtr(execCtx)
 
+	// Batch stream.chunk deltas: accumulate per-event deltas and publish
+	// combined deltas every chunkFlushInterval. Reduces pg_notify calls
+	// from ~50/sec to ~10/sec per active stream.
+	const chunkFlushInterval = 100 * time.Millisecond
+	var mu sync.Mutex
+	var pendingThinkingDelta, pendingTextDelta string
+	lastChunkFlush := time.Now()
+
+	// flushPendingDeltas publishes accumulated deltas. Caller must hold mu.
+	flushPendingDeltas := func() {
+		if pendingThinkingDelta != "" && thinkingEventID != "" {
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID:           thinkingEventID,
+				ParentExecutionID: pid,
+				Delta:             pendingThinkingDelta,
+			}); pubErr != nil {
+				slog.Warn("Failed to publish thinking stream chunk",
+					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+			pendingThinkingDelta = ""
+		}
+		if pendingTextDelta != "" && textEventID != "" {
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID:           textEventID,
+				ParentExecutionID: pid,
+				Delta:             pendingTextDelta,
+			}); pubErr != nil {
+				slog.Warn("Failed to publish text stream chunk",
+					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+			pendingTextDelta = ""
+		}
+		lastChunkFlush = time.Now()
+	}
+
+	// Periodic flusher ensures buffered deltas are published even when
+	// the stream is sparse (no new chunks arriving to trigger inline flush).
+	flusherDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(chunkFlushInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				flushPendingDeltas()
+				mu.Unlock()
+			case <-flusherDone:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	callback := func(chunkType string, delta string) {
 		if delta == "" {
-			return // Skip empty chunks — nothing to create or publish
+			return
 		}
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		switch chunkType {
 		case ChunkTypeThinking:
 			if thinkingCreateFailed {
-				return // event creation already failed — skip to avoid retry spam
+				return
 			}
 			if thinkingEventID == "" {
-				// First thinking chunk — create streaming TimelineEvent
 				*eventSeq++
 				thinkingMeta := mergeMetadata(map[string]interface{}{"source": "native"}, extra)
 				event, createErr := execCtx.Services.Timeline.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
@@ -319,25 +387,11 @@ func callLLMWithStreaming(
 						"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
 				}
 			}
-			// Publish only the new delta — clients concatenate locally.
-			// This keeps each pg_notify payload small (avoids 8 KB limit).
-			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-				BasePayload: events.BasePayload{
-					Type:      events.EventTypeStreamChunk,
-					SessionID: execCtx.SessionID,
-					Timestamp: time.Now().Format(time.RFC3339Nano),
-				},
-				EventID:           thinkingEventID,
-				ParentExecutionID: pid,
-				Delta:             delta,
-			}); pubErr != nil {
-				slog.Warn("Failed to publish thinking stream chunk",
-					"event_id", thinkingEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+			pendingThinkingDelta += delta
 
 		case ChunkTypeText:
 			if textCreateFailed {
-				return // event creation already failed — skip to avoid retry spam
+				return
 			}
 			if textEventID == "" {
 				*eventSeq++
@@ -349,7 +403,7 @@ func callLLMWithStreaming(
 					SequenceNumber:    *eventSeq,
 					EventType:         timelineevent.EventTypeLlmResponse,
 					Content:           "",
-					Metadata:          extra, // nil when not forced conclusion
+					Metadata:          extra,
 				})
 				if createErr != nil {
 					slog.Warn("Failed to create streaming text event", "session_id", execCtx.SessionID, "error", createErr)
@@ -370,31 +424,26 @@ func callLLMWithStreaming(
 					EventType:         timelineevent.EventTypeLlmResponse,
 					Status:            timelineevent.StatusStreaming,
 					Content:           "",
-					Metadata:          extra, // nil when not forced conclusion
+					Metadata:          extra,
 					SequenceNumber:    *eventSeq,
 				}); pubErr != nil {
 					slog.Warn("Failed to publish streaming text created",
 						"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
 				}
 			}
-			// Publish only the new delta — clients concatenate locally.
-			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
-				BasePayload: events.BasePayload{
-					Type:      events.EventTypeStreamChunk,
-					SessionID: execCtx.SessionID,
-					Timestamp: time.Now().Format(time.RFC3339Nano),
-				},
-				EventID:           textEventID,
-				ParentExecutionID: pid,
-				Delta:             delta,
-			}); pubErr != nil {
-				slog.Warn("Failed to publish text stream chunk",
-					"event_id", textEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+			pendingTextDelta += delta
+		}
+
+		if time.Since(lastChunkFlush) >= chunkFlushInterval {
+			flushPendingDeltas()
 		}
 	}
 
 	resp, err := collectStreamWithCallback(stream, callback, llmCancel)
+	close(flusherDone)
+	mu.Lock()
+	flushPendingDeltas()
+	mu.Unlock()
 	if err != nil {
 		var poe *PartialOutputError
 		if errors.As(err, &poe) && poe.IsLoop {

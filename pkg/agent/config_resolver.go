@@ -15,11 +15,17 @@ const DefaultMaxIterations = 20
 // backend and matches the typical production default.
 const DefaultLLMBackend = config.LLMBackendLangChain
 
-// DefaultIterationTimeout is the default per-iteration timeout.
+// DefaultIterationTimeout is the overall per-iteration timeout.
 // Each iteration (LLM call + tool execution) gets its own context.WithTimeout
 // derived from the parent session context. This prevents a single stuck
 // iteration from consuming the entire session budget.
-const DefaultIterationTimeout = 120 * time.Second
+const DefaultIterationTimeout = 6 * time.Minute
+
+// DefaultLLMCallTimeout caps a single LLM streaming call within an iteration.
+const DefaultLLMCallTimeout = 5 * time.Minute
+
+// DefaultToolCallTimeout caps a single MCP tool call within an iteration.
+const DefaultToolCallTimeout = 1 * time.Minute
 
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
@@ -96,6 +102,8 @@ func ResolveAgentConfig(
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
+		LLMCallTimeout:     DefaultLLMCallTimeout,
+		ToolCallTimeout:    DefaultToolCallTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 	}, nil
@@ -210,6 +218,8 @@ func ResolveChatAgentConfig(
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
+		LLMCallTimeout:     DefaultLLMCallTimeout,
+		ToolCallTimeout:    DefaultToolCallTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 	}, nil
@@ -303,6 +313,8 @@ func ResolveScoringConfig(
 		LLMProviderName:    providerName,
 		MaxIterations:      maxIter,
 		IterationTimeout:   DefaultIterationTimeout,
+		LLMCallTimeout:     DefaultLLMCallTimeout,
+		ToolCallTimeout:    DefaultToolCallTimeout,
 		MCPServers:         mcpServers,
 		CustomInstructions: agentDef.CustomInstructions,
 	}, nil

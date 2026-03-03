@@ -8,6 +8,7 @@ import {
   CardContent,
   Button,
 } from '@mui/material';
+import { Virtuoso } from 'react-virtuoso';
 import {
   ExpandMore,
   ExpandLess,
@@ -177,13 +178,13 @@ export default function ConversationTimeline({
     [manualOverrides, animatingCollapseIds, chatStageIds],
   );
 
-  const toggleItemExpansion = useCallback((item: FlowItem) => {
+  const toggleItemExpansion = useCallback((itemId: string) => {
     setManualOverrides((prev) => {
       const next = new Set(prev);
-      if (next.has(item.id)) {
-        next.delete(item.id);
+      if (next.has(itemId)) {
+        next.delete(itemId);
       } else {
-        next.add(item.id);
+        next.add(itemId);
       }
       return next;
     });
@@ -389,67 +390,68 @@ export default function ConversationTimeline({
 
       {/* Content area */}
       <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
-        {stageGroups.map((group, index) => {
-          // Manual override takes precedence, otherwise auto-collapse Synthesis stages
-          const isCollapsed = stageCollapseOverrides.has(group.stageId)
-            ? stageCollapseOverrides.get(group.stageId)!
-            : shouldAutoCollapseStage(group, isActive);
+        <Virtuoso
+          useWindowScroll
+          data={stageGroups}
+          increaseViewportBy={{ top: 400, bottom: 800 }}
+          computeItemKey={(index, group) => group.stageId ? `${group.stageId}-${index}` : `group-${index}`}
+          itemContent={(_index, group) => {
+            const isCollapsed = stageCollapseOverrides.has(group.stageId)
+              ? stageCollapseOverrides.get(group.stageId)!
+              : shouldAutoCollapseStage(group, isActive);
+            const stageStreamingMap = streamingByStage.get(group.stageId);
 
-          // Get streaming events for this stage
-          const stageStreamingMap = streamingByStage.get(group.stageId);
+            return (
+              <Box>
+                {group.stageId && (
+                  <StageSeparator
+                    item={{
+                      id: `stage-sep-${group.stageId}`,
+                      type: 'stage_separator',
+                      stageId: group.stageId,
+                      content: group.stageName,
+                      metadata: {
+                        stage_index: group.stageIndex,
+                        stage_status: group.stageStatus,
+                      },
+                      status: group.stageStatus,
+                      timestamp: '',
+                      sequenceNumber: 0,
+                    }}
+                    isCollapsed={isCollapsed}
+                    onToggleCollapse={() => {
+                      setStageCollapseOverrides((prev) => {
+                        const next = new Map(prev);
+                        next.set(group.stageId, !isCollapsed);
+                        return next;
+                      });
+                    }}
+                  />
+                )}
 
-          return (
-            <Box key={group.stageId ? `${group.stageId}-${index}` : `group-${index}`}>
-              {/* Stage separator */}
-              {group.stageId && (
-                <StageSeparator
-                  item={{
-                    id: `stage-sep-${group.stageId}`,
-                    type: 'stage_separator',
-                    stageId: group.stageId,
-                    content: group.stageName,
-                    metadata: {
-                      stage_index: group.stageIndex,
-                      stage_status: group.stageStatus,
-                    },
-                    status: group.stageStatus,
-                    timestamp: '',
-                    sequenceNumber: 0,
-                  }}
-                  isCollapsed={isCollapsed}
-                  onToggleCollapse={() => {
-                    setStageCollapseOverrides((prev) => {
-                      const next = new Map(prev);
-                      next.set(group.stageId, !isCollapsed);
-                      return next;
-                    });
-                  }}
-                />
-              )}
-
-              {/* Stage items (collapsible) */}
-              <Collapse in={!isCollapsed} timeout={400}>
-                <StageContent
-                  items={group.items}
-                  stageId={group.stageId}
-                  executionOverviews={stageMap.get(group.stageId)?.executions}
-                  streamingEvents={stageStreamingMap}
-                  shouldAutoCollapse={shouldAutoCollapse}
-                  onToggleItemExpansion={toggleItemExpansion}
-                  expandAllReasoning={expandAllReasoning}
-                  expandAllToolCalls={expandAllToolCalls}
-                  isItemCollapsible={isItemCollapsible}
-                  agentProgressStatuses={agentProgressStatuses}
-                  executionStatuses={executionStatuses}
-                  subAgentStreamingEvents={subAgentStreamingEvents}
-                  subAgentExecutionStatuses={subAgentExecutionStatuses}
-                  subAgentProgressStatuses={subAgentProgressStatuses}
-                  onSelectedAgentChange={handleSelectedAgentChange}
-                />
-              </Collapse>
-            </Box>
-          );
-        })}
+                <Collapse in={!isCollapsed} timeout={400}>
+                  <StageContent
+                    items={group.items}
+                    stageId={group.stageId}
+                    executionOverviews={stageMap.get(group.stageId)?.executions}
+                    streamingEvents={stageStreamingMap}
+                    shouldAutoCollapse={shouldAutoCollapse}
+                    onToggleItemExpansion={toggleItemExpansion}
+                    expandAllReasoning={expandAllReasoning}
+                    expandAllToolCalls={expandAllToolCalls}
+                    isItemCollapsible={isItemCollapsible}
+                    agentProgressStatuses={agentProgressStatuses}
+                    executionStatuses={executionStatuses}
+                    subAgentStreamingEvents={subAgentStreamingEvents}
+                    subAgentExecutionStatuses={subAgentExecutionStatuses}
+                    subAgentProgressStatuses={subAgentProgressStatuses}
+                    onSelectedAgentChange={handleSelectedAgentChange}
+                  />
+                </Collapse>
+              </Box>
+            );
+          }}
+        />
 
         {/* Ungrouped streaming events (no stageId), excluding executive_summary */}
         {streamingByStage.get('__ungrouped__') &&
@@ -463,40 +465,24 @@ export default function ConversationTimeline({
         {(isActive || chatStageInProgress) && (() => {
           let displayStatus = progressStatus || 'Processing...';
 
-          // For chat stages, default to "Processing..." since session-level
-          // progressStatus may be stale from the original investigation.
           if (chatStageInProgress && !isActive) {
             displayStatus = 'Processing...';
           }
 
-          // For single-agent stages (no tab selected), prefer the per-agent
-          // progress message so the UI shows "Investigating...", "Distilling...",
-          // etc. instead of the session-level status which may still be
-          // "Processing...".  Session-level progressStatus is only updated by
-          // session.progress events (stage transitions), while per-agent phases
-          // arrive via execution.progress and feed agentProgressStatuses only.
           if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
             const singleAgentStatus = agentProgressStatuses.values().next().value;
             if (singleAgentStatus) displayStatus = singleAgentStatus;
           }
 
-          // For parallel stages: show the selected agent's per-agent progress
-          // (e.g. "Investigating...", "Distilling...").  If the agent has
-          // reached a terminal state and siblings are still running, override
-          // with "Waiting for other agents...".
           if (selectedAgentExecutionId) {
-            // Show the selected agent's progress phase (active agents)
             const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);
             if (agentStatus) {
               displayStatus = agentStatus;
             }
 
-            // Check terminal status from multiple sources (WS execution.status + REST overviews)
-            // to handle timing gaps where the WS event hasn't arrived yet.
             const wsEntry = executionStatuses?.get(selectedAgentExecutionId);
             const isSelectedTerminal = (() => {
               if (wsEntry && TERMINAL_EXECUTION_STATUSES.has(wsEntry.status)) return true;
-              // Fall back to execution overviews from REST stage data
               for (const stage of stages) {
                 const eo = stage.executions?.find(e => e.execution_id === selectedAgentExecutionId);
                 if (eo && TERMINAL_EXECUTION_STATUSES.has(eo.status)) return true;
@@ -505,21 +491,17 @@ export default function ConversationTimeline({
             })();
 
             if (isSelectedTerminal) {
-              // Find the stage this agent belongs to
               const stageId = wsEntry?.stageId
                 || stages.find(s => s.executions?.some(e => e.execution_id === selectedAgentExecutionId))?.id;
 
               if (stageId) {
-                // Check if other executions in the SAME stage are still running
                 const othersRunning =
-                  // From WS execution statuses
                   (executionStatuses ? Array.from(executionStatuses.entries()).some(
                     ([id, entry]) =>
                       id !== selectedAgentExecutionId &&
                       entry.stageId === stageId &&
                       !TERMINAL_EXECUTION_STATUSES.has(entry.status),
                   ) : false) ||
-                  // From REST execution overviews
                   (stages.find(s => s.id === stageId)?.executions?.some(
                     e => e.execution_id !== selectedAgentExecutionId &&
                       !TERMINAL_EXECUTION_STATUSES.has(e.status),

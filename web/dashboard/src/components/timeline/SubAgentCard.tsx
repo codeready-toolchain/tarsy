@@ -34,7 +34,7 @@ interface SubAgentCardProps {
   progressStatus?: string;
   fallbackAgentName?: string;
   shouldAutoCollapse?: (item: FlowItem) => boolean;
-  onToggleItemExpansion?: (item: FlowItem) => void;
+  onToggleItemExpansion?: (itemId: string) => void;
   expandAllReasoning?: boolean;
   expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
@@ -173,7 +173,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
                 key={item.id}
                 item={item}
                 isAutoCollapsed={shouldAutoCollapse ? shouldAutoCollapse(item) : false}
-                onToggleAutoCollapse={onToggleItemExpansion ? () => onToggleItemExpansion(item) : undefined}
+                onToggleAutoCollapse={onToggleItemExpansion}
                 expandAll={expandAllReasoning}
                 expandAllToolCalls={expandAllToolCalls}
                 isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
