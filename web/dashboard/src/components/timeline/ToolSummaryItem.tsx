@@ -1,11 +1,10 @@
 import { memo } from 'react';
 import { Box, Collapse, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
-import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import type { FlowItem } from '../../utils/timelineParser';
 
@@ -66,7 +65,7 @@ function ToolSummaryItem({
             <Box sx={{ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: '2px solid rgba(237, 108, 2, 0.2)' }}>
               {hasMarkdown ? (
                 <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' }, color: 'text.secondary' }}>
-                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                     {item.content || ''}
                   </ReactMarkdown>
                 </Box>

@@ -1,11 +1,10 @@
 import { memo } from 'react';
 import { Box, Typography, Collapse } from '@mui/material';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
-import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 
@@ -74,7 +73,7 @@ function ResponseItem({
                   <ReactMarkdown
                     urlTransform={defaultUrlTransform}
                     components={thoughtMarkdownComponents}
-                    remarkPlugins={[remarkBreaks]}
+                    remarkPlugins={remarkPlugins}
                     skipHtml
                   >
                     {item.content || ''}
@@ -103,7 +102,7 @@ function ResponseItem({
       <Box sx={{ flex: 1, minWidth: 0 }}>
         {hasMarkdown ? (
           <Box sx={{ color: 'text.primary' }}>
-            <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+            <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
               {item.content || ''}
             </ReactMarkdown>
           </Box>

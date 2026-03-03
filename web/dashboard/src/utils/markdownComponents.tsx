@@ -9,7 +9,15 @@ import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import CopyButton from '../components/shared/CopyButton';
+
+/**
+ * Shared remark plugins for all markdown renderers.
+ * remarkGfm enables tables, strikethrough, autolinks, and task lists.
+ */
+export const remarkPlugins = [remarkGfm, remarkBreaks];
 
 /**
  * Type for react-markdown component override props.
@@ -89,6 +97,26 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
   '& li': {
     marginBottom: 0.5,
     lineHeight: 1.6,
+  },
+  // Tables
+  '& table': {
+    width: '100%',
+    borderCollapse: 'collapse',
+    margin: '12px 0',
+    fontSize: '0.9rem',
+  },
+  '& th': {
+    textAlign: 'left',
+    fontWeight: 600,
+    padding: '8px 12px',
+    borderBottom: '2px solid',
+    borderColor: alpha(theme.palette.divider, 0.8),
+    backgroundColor: alpha(theme.palette.grey[900], 0.04),
+  },
+  '& td': {
+    padding: '6px 12px',
+    borderBottom: '1px solid',
+    borderColor: alpha(theme.palette.divider, 0.4),
   },
 });
 
@@ -309,6 +337,81 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
+  table: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box sx={{ overflowX: 'auto', my: 1.5 }}>
+        <Box
+          component="table"
+          sx={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: '0.9rem',
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      </Box>
+    );
+  },
+  thead: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return <Box component="thead" {...safeProps}>{children}</Box>;
+  },
+  tbody: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return <Box component="tbody" {...safeProps}>{children}</Box>;
+  },
+  tr: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="tr"
+        sx={{ '&:last-child td': { borderBottom: 'none' } }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
+  th: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="th"
+        sx={{
+          textAlign: 'left',
+          fontWeight: 600,
+          p: '8px 12px',
+          borderBottom: '2px solid',
+          borderColor: 'divider',
+          bgcolor: 'action.hover',
+          fontSize: '0.875rem',
+        }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
+  td: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="td"
+        sx={{
+          p: '6px 12px',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          fontSize: '0.875rem',
+        }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
 };
 
 /**
@@ -422,6 +525,81 @@ export const thoughtMarkdownComponents = {
       >
         {children}
       </Typography>
+    );
+  },
+  table: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box sx={{ overflowX: 'auto', my: 1 }}>
+        <Box
+          component="table"
+          sx={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: '0.9em',
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      </Box>
+    );
+  },
+  thead: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return <Box component="thead" {...safeProps}>{children}</Box>;
+  },
+  tbody: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return <Box component="tbody" {...safeProps}>{children}</Box>;
+  },
+  tr: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="tr"
+        sx={{ '&:last-child td': { borderBottom: 'none' } }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
+  th: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="th"
+        sx={{
+          textAlign: 'left',
+          fontWeight: 600,
+          p: '6px 10px',
+          borderBottom: '2px solid',
+          borderColor: 'divider',
+          bgcolor: 'grey.100',
+          fontSize: '0.9em',
+        }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
+    );
+  },
+  td: (props: MdProps) => {
+    const { node: _node, children, ...safeProps } = props;
+    return (
+      <Box
+        component="td"
+        sx={{
+          p: '4px 10px',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          fontSize: '0.9em',
+        }}
+        {...safeProps}
+      >
+        {children}
+      </Box>
     );
   },
 };

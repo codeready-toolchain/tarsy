@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { remarkPlugins } from '../../utils/markdownComponents';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
@@ -122,7 +123,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                   </Box>
                   <Divider sx={{ mb: 1.5 }} />
                   <Box sx={executiveSummaryMarkdownStyles}>
-                    <ReactMarkdown skipHtml>{session.executive_summary}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{session.executive_summary}</ReactMarkdown>
                   </Box>
                 </Card>
               </Popover>
