@@ -212,6 +212,8 @@ func markStreamingEventsTerminal(
 		switch status {
 		case timelineevent.StatusCancelled:
 			updateErr = execCtx.Services.Timeline.CancelTimelineEvent(ctx, eventID, content)
+		case timelineevent.StatusTimedOut:
+			updateErr = execCtx.Services.Timeline.TimeoutTimelineEvent(ctx, eventID, content)
 		default:
 			updateErr = execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, content)
 		}

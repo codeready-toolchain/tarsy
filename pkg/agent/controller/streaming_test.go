@@ -682,8 +682,8 @@ func (m *contextExpiryErrorLLMClient) Close() error { return nil }
 // TestCallLLMWithStreaming_ExpiredContextCleanup verifies the context-detachment
 // fix: when the parent context expires and the LLM stream returns an error,
 // streaming timeline events must be marked with a terminal status (not stuck at
-// "streaming"). Since the context was cancelled, the events should be marked as
-// "cancelled" rather than "failed".
+// "streaming"). Since the context used WithTimeout, ctx.Err() returns
+// DeadlineExceeded and events should be marked "timed_out".
 //
 // Reproduces the bug fixed in streaming.go where markStreamingEventsTerminal
 // used the caller's (expired) context for DB cleanup, causing silent failures.
@@ -730,10 +730,10 @@ func TestCallLLMWithStreaming_ExpiredContextCleanup(t *testing.T) {
 	for _, evt := range dbEvents {
 		assert.NotEqual(t, timelineevent.StatusStreaming, evt.Status,
 			"event %s (type=%s) should not be stuck at streaming status", evt.ID, evt.EventType)
-		assert.Equal(t, timelineevent.StatusCancelled, evt.Status,
-			"event %s (type=%s) should be marked as cancelled (context expired)", evt.ID, evt.EventType)
-		assert.Contains(t, evt.Content, "Streaming cancelled",
-			"event %s content should indicate streaming cancellation", evt.ID)
+		assert.Equal(t, timelineevent.StatusTimedOut, evt.Status,
+			"event %s (type=%s) should be marked as timed_out (context deadline exceeded)", evt.ID, evt.EventType)
+		assert.Contains(t, evt.Content, "Streaming timed out",
+			"event %s content should indicate streaming timeout", evt.ID)
 	}
 }
 

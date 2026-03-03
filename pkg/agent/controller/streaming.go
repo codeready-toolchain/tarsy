@@ -463,7 +463,9 @@ func callLLMWithStreaming(
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cleanupCancel()
 			evtStatus := timelineevent.StatusFailed
-			if ctx.Err() != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				evtStatus = timelineevent.StatusTimedOut
+			} else if ctx.Err() != nil {
 				evtStatus = timelineevent.StatusCancelled
 			}
 			markStreamingEventsTerminal(cleanupCtx, execCtx, thinkingEventID, textEventID, err, evtStatus)

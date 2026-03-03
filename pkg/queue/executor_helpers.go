@@ -70,6 +70,25 @@ func (e *RealSessionExecutor) mapCancellation(ctx context.Context) *ExecutionRes
 	}
 }
 
+// applySafetyNet overrides a "failed" execution result when the context
+// indicates cancellation or timeout. Returns a corrected result if the
+// override applies, or the original result unchanged.
+func applySafetyNet(result *ExecutionResult, ctxErr error, sessionTimeout time.Duration) *ExecutionResult {
+	if result.Status != alertsession.StatusFailed || ctxErr == nil {
+		return result
+	}
+	if ctxErr == context.DeadlineExceeded {
+		return &ExecutionResult{
+			Status: alertsession.StatusTimedOut,
+			Error:  fmt.Errorf("session timed out after %v", sessionTimeout),
+		}
+	}
+	return &ExecutionResult{
+		Status: alertsession.StatusCancelled,
+		Error:  context.Canceled,
+	}
+}
+
 // ────────────────────────────────────────────────────────────
 // Stage context
 // ────────────────────────────────────────────────────────────

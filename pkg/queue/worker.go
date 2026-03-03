@@ -225,19 +225,7 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	// 9. Safety net: override "failed" if context indicates cancel/timeout.
 	// Downstream code may return "failed" when the real cause was context
 	// cancellation (e.g. DB write failed on a cancelled context).
-	if result.Status == alertsession.StatusFailed && sessionCtx.Err() != nil {
-		if errors.Is(sessionCtx.Err(), context.DeadlineExceeded) {
-			result = &ExecutionResult{
-				Status: alertsession.StatusTimedOut,
-				Error:  fmt.Errorf("session timed out after %v", w.config.SessionTimeout),
-			}
-		} else {
-			result = &ExecutionResult{
-				Status: alertsession.StatusCancelled,
-				Error:  context.Canceled,
-			}
-		}
-	}
+	result = applySafetyNet(result, sessionCtx.Err(), w.config.SessionTimeout)
 
 	// 10. Stop heartbeat
 	cancelHeartbeat()
