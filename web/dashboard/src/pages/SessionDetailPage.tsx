@@ -947,8 +947,20 @@ export function SessionDetailPage() {
         const eventType = data.type as string | undefined;
         if (!eventType) return;
 
-        // Immediate: catchup overflow triggers full reload
+        // Immediate: catchup overflow triggers full reload.
+        // Clear all buffered realtime state first so nothing stale
+        // flushes on top of the freshly loaded data.
         if (eventType === EVENT_CATCHUP_OVERFLOW) {
+          if (wsFlushTimer !== null) {
+            clearTimeout(wsFlushTimer);
+            wsFlushTimer = null;
+          }
+          eventBuffer.splice(0);
+          if (chunkFlushTimerRef.current !== null) {
+            clearTimeout(chunkFlushTimerRef.current);
+            chunkFlushTimerRef.current = null;
+          }
+          pendingChunksRef.current.clear();
           loadData();
           return;
         }

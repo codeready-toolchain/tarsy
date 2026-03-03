@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -273,9 +274,11 @@ func callLLMWithStreaming(
 	// combined deltas every chunkFlushInterval. Reduces pg_notify calls
 	// from ~50/sec to ~10/sec per active stream.
 	const chunkFlushInterval = 100 * time.Millisecond
+	var mu sync.Mutex
 	var pendingThinkingDelta, pendingTextDelta string
 	lastChunkFlush := time.Now()
 
+	// flushPendingDeltas publishes accumulated deltas. Caller must hold mu.
 	flushPendingDeltas := func() {
 		if pendingThinkingDelta != "" && thinkingEventID != "" {
 			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
@@ -312,10 +315,33 @@ func callLLMWithStreaming(
 		lastChunkFlush = time.Now()
 	}
 
+	// Periodic flusher ensures buffered deltas are published even when
+	// the stream is sparse (no new chunks arriving to trigger inline flush).
+	flusherDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(chunkFlushInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				flushPendingDeltas()
+				mu.Unlock()
+			case <-flusherDone:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	callback := func(chunkType string, delta string) {
 		if delta == "" {
 			return
 		}
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		switch chunkType {
 		case ChunkTypeThinking:
@@ -414,7 +440,10 @@ func callLLMWithStreaming(
 	}
 
 	resp, err := collectStreamWithCallback(stream, callback, llmCancel)
-	flushPendingDeltas() // flush any remaining accumulated deltas
+	close(flusherDone)
+	mu.Lock()
+	flushPendingDeltas()
+	mu.Unlock()
 	if err != nil {
 		var poe *PartialOutputError
 		if errors.As(err, &poe) && poe.IsLoop {

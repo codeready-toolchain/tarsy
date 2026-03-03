@@ -56,13 +56,19 @@ interface TabPanelProps {
   value: number;
 }
 
+// TabPanel keeps inactive children mounted (display:none) instead of
+// unmounting them. This preserves streaming state when switching between
+// parallel agent tabs, avoiding TypewriterText restarts. The hidden
+// attribute + aria-hidden ensure screen readers skip inactive panels.
 function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+  const active = value === index;
   return (
     <div
       role="tabpanel"
+      hidden={!active}
+      aria-hidden={!active}
       id={`reasoning-tabpanel-${index}`}
       aria-labelledby={`reasoning-tab-${index}`}
-      style={{ display: value === index ? 'block' : 'none' }}
       {...other}
     >
       <Box sx={{ pt: 2 }}>{children}</Box>
