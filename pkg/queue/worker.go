@@ -231,16 +231,19 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	cancelHeartbeat()
 
 	// 11. Update terminal status (use background context — session ctx may be cancelled)
-	if err := w.updateSessionTerminalStatus(context.Background(), session, result); err != nil {
+	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer finalizeCancel()
+
+	if err := w.updateSessionTerminalStatus(finalizeCtx, session, result); err != nil {
 		log.Error("Failed to update session terminal status", "error", err)
 		return err
 	}
 
 	// 11a. Publish terminal session status event
-	w.publishSessionStatus(context.Background(), session.ID, result.Status)
+	w.publishSessionStatus(finalizeCtx, session.ID, result.Status)
 
 	// 11b. Send Slack terminal notification
-	w.notifySlackTerminal(context.Background(), session, result, slackThreadTS)
+	w.notifySlackTerminal(finalizeCtx, session, result, slackThreadTS)
 
 	// 12. Cleanup transient events after grace period (60s) to allow clients
 	// to receive final events before they are deleted.

@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -568,7 +570,11 @@ func TestTimelineService_FailTimelineEvent(t *testing.T) {
 	})
 }
 
-func TestTimelineService_CancelTimelineEvent(t *testing.T) {
+// setupTerminalEventFixture creates the DB entities needed to test terminal
+// timeline event methods (Cancel, Timeout). Returns the TimelineService,
+// underlying ent client, and a fresh streaming event.
+func setupTerminalEventFixture(t *testing.T) (*TimelineService, *database.Client, *ent.TimelineEvent) {
+	t.Helper()
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)
 	sessionService := setupTestSessionService(t, client.Client)
@@ -609,107 +615,66 @@ func TestTimelineService_CancelTimelineEvent(t *testing.T) {
 		Content:        "",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, timelineevent.StatusStreaming, event.Status)
+	require.Equal(t, timelineevent.StatusStreaming, event.Status)
 
-	t.Run("marks event as cancelled with content", func(t *testing.T) {
-		err := timelineService.CancelTimelineEvent(ctx, event.ID, "Streaming cancelled: context cancelled")
-		require.NoError(t, err)
-
-		updated, err := client.TimelineEvent.Get(ctx, event.ID)
-		require.NoError(t, err)
-		assert.Equal(t, timelineevent.StatusCancelled, updated.Status)
-		assert.Equal(t, "Streaming cancelled: context cancelled", updated.Content)
-	})
-
-	t.Run("returns ErrNotFound for missing event", func(t *testing.T) {
-		err := timelineService.CancelTimelineEvent(ctx, "nonexistent-id", "content")
-		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
-	})
-
-	t.Run("validates empty eventID", func(t *testing.T) {
-		err := timelineService.CancelTimelineEvent(ctx, "", "content")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-	})
-
-	t.Run("validates empty content", func(t *testing.T) {
-		err := timelineService.CancelTimelineEvent(ctx, event.ID, "")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-	})
+	return timelineService, client, event
 }
 
-func TestTimelineService_TimeoutTimelineEvent(t *testing.T) {
-	client := testdb.NewTestClient(t)
-	timelineService := NewTimelineService(client.Client)
-	sessionService := setupTestSessionService(t, client.Client)
-	stageService := NewStageService(client.Client)
-	ctx := context.Background()
+func TestTimelineService_TerminalStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  timelineevent.Status
+		content string
+		markFn  func(svc *TimelineService, ctx context.Context, eventID, content string) error
+	}{
+		{
+			name:    "CancelTimelineEvent",
+			status:  timelineevent.StatusCancelled,
+			content: "Streaming cancelled: context cancelled",
+			markFn:  (*TimelineService).CancelTimelineEvent,
+		},
+		{
+			name:    "TimeoutTimelineEvent",
+			status:  timelineevent.StatusTimedOut,
+			content: "Streaming timed out: deadline exceeded",
+			markFn:  (*TimelineService).TimeoutTimelineEvent,
+		},
+	}
 
-	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
-		SessionID: uuid.New().String(),
-		AlertData: "test",
-		AgentType: "kubernetes",
-		ChainID:   "k8s-analysis",
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, client, event := setupTerminalEventFixture(t)
+			ctx := context.Background()
 
-	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
-		SessionID:          session.ID,
-		StageName:          "Test",
-		StageIndex:         1,
-		ExpectedAgentCount: 1,
-	})
-	require.NoError(t, err)
+			t.Run("marks event with correct status and content", func(t *testing.T) {
+				err := tt.markFn(svc, ctx, event.ID, tt.content)
+				require.NoError(t, err)
 
-	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:    stg.ID,
-		SessionID:  session.ID,
-		AgentName:  "TestAgent",
-		AgentIndex: 1,
-		LLMBackend: config.LLMBackendLangChain,
-	})
-	require.NoError(t, err)
+				updated, err := client.TimelineEvent.Get(ctx, event.ID)
+				require.NoError(t, err)
+				assert.Equal(t, tt.status, updated.Status)
+				assert.Equal(t, tt.content, updated.Content)
+			})
 
-	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      session.ID,
-		StageID:        &stg.ID,
-		ExecutionID:    &exec.ID,
-		SequenceNumber: 1,
-		EventType:      timelineevent.EventTypeLlmThinking,
-		Content:        "",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, timelineevent.StatusStreaming, event.Status)
+			t.Run("returns ErrNotFound for missing event", func(t *testing.T) {
+				err := tt.markFn(svc, ctx, "nonexistent-id", "content")
+				require.Error(t, err)
+				assert.Equal(t, ErrNotFound, err)
+			})
 
-	t.Run("marks event as timed_out with content", func(t *testing.T) {
-		err := timelineService.TimeoutTimelineEvent(ctx, event.ID, "Streaming timed out: deadline exceeded")
-		require.NoError(t, err)
+			t.Run("validates empty eventID", func(t *testing.T) {
+				err := tt.markFn(svc, ctx, "", "content")
+				require.Error(t, err)
+				assert.True(t, IsValidationError(err))
+			})
 
-		updated, err := client.TimelineEvent.Get(ctx, event.ID)
-		require.NoError(t, err)
-		assert.Equal(t, timelineevent.StatusTimedOut, updated.Status)
-		assert.Equal(t, "Streaming timed out: deadline exceeded", updated.Content)
-	})
-
-	t.Run("returns ErrNotFound for missing event", func(t *testing.T) {
-		err := timelineService.TimeoutTimelineEvent(ctx, "nonexistent-id", "content")
-		require.Error(t, err)
-		assert.Equal(t, ErrNotFound, err)
-	})
-
-	t.Run("validates empty eventID", func(t *testing.T) {
-		err := timelineService.TimeoutTimelineEvent(ctx, "", "content")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-	})
-
-	t.Run("validates empty content", func(t *testing.T) {
-		err := timelineService.TimeoutTimelineEvent(ctx, event.ID, "")
-		require.Error(t, err)
-		assert.True(t, IsValidationError(err))
-	})
+			t.Run("validates empty content", func(t *testing.T) {
+				err := tt.markFn(svc, ctx, event.ID, "")
+				require.Error(t, err)
+				assert.True(t, IsValidationError(err))
+			})
+		})
+	}
 }
 
 func TestTimelineService_GetTimelines(t *testing.T) {
