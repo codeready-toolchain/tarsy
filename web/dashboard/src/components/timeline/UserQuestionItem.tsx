@@ -2,8 +2,7 @@ import { memo } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import { AccountCircle, Assignment } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
-import { thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface UserQuestionItemProps {
@@ -55,7 +54,7 @@ function UserQuestionItem({ item }: UserQuestionItemProps) {
           '& p:last-of-type': { mb: 0 },
         }}>
           <ReactMarkdown
-            remarkPlugins={[remarkBreaks]}
+            remarkPlugins={remarkPlugins}
             components={thoughtMarkdownComponents}
           >
             {item.content}

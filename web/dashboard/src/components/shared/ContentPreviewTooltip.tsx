@@ -7,6 +7,7 @@
 import { Tooltip, Paper } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { 
+  remarkPlugins,
   thoughtMarkdownComponents, 
   finalAnswerMarkdownComponents 
 } from '../../utils/markdownComponents';
@@ -61,7 +62,7 @@ export default function ContentPreviewTooltip({
             }
           }}
         >
-          <ReactMarkdown components={markdownComponents}>
+          <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
             {content}
           </ReactMarkdown>
         </Paper>

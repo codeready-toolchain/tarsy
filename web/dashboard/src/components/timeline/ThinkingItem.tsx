@@ -1,11 +1,10 @@
 import { memo } from 'react';
 import { Box, Typography, Collapse, alpha } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
-import { hasMarkdownSyntax, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { formatDurationMs } from '../../utils/format';
 import type { FlowItem } from '../../utils/timelineParser';
@@ -85,7 +84,7 @@ function ThinkingItem({
                     fontStyle: 'italic',
                   }}
                 >
-                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                     {item.content || ''}
                   </ReactMarkdown>
                 </Box>

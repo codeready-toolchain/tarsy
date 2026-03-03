@@ -5,8 +5,7 @@ import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
-import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents';
-import { finalAnswerMarkdownComponents } from '../../utils/markdownComponents';
+import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
 function copyToClipboard(text: string, onSuccess: () => void) {
@@ -162,7 +161,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                   <CopyButton text={summary} variant="icon" size="small" tooltip="Copy summary" />
                 </Box>
                 <Box sx={executiveSummaryMarkdownStyles}>
-                  <ReactMarkdown>{summary}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={remarkPlugins}>{summary}</ReactMarkdown>
                 </Box>
               </Box>
             </Box>
@@ -190,7 +189,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                 <CopyButton text={displayAnalysis} variant="icon" size="small" tooltip="Copy analysis" />
               </Box>
-              <ReactMarkdown urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
+              <ReactMarkdown remarkPlugins={remarkPlugins} urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
                 {displayAnalysis}
               </ReactMarkdown>
             </Paper>

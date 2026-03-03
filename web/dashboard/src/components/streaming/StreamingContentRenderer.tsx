@@ -1,10 +1,10 @@
 import { memo, useEffect, useRef } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import TypewriterText from './TypewriterText';
 import { 
   hasMarkdownSyntax, 
+  remarkPlugins,
   thoughtMarkdownComponents 
 } from '../../utils/markdownComponents';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
@@ -84,7 +84,7 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
                       fontStyle: 'italic',
                     }}
                   >
-                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                       {displayText}
                     </ReactMarkdown>
                   </Box>
@@ -143,7 +143,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                   {displayText}
                 </ReactMarkdown>
               ) : (
@@ -200,7 +200,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               {(displayText) => (
                 hasMarkdown ? (
                   <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' } }}>
-                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                       {displayText}
                     </ReactMarkdown>
                   </Box>
@@ -244,7 +244,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             {(displayText) => (
               hasMarkdown ? (
                 <Box sx={{ color: 'text.primary' }}>
-                  <ReactMarkdown urlTransform={defaultUrlTransform} components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]}>
+                  <ReactMarkdown urlTransform={defaultUrlTransform} components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins}>
                     {displayText}
                   </ReactMarkdown>
                 </Box>
@@ -329,7 +329,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               {hasMarkdown ? (
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={[remarkBreaks]} skipHtml>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                   {displayText}
                 </ReactMarkdown>
               ) : (

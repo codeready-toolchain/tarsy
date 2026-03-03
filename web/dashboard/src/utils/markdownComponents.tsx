@@ -9,7 +9,15 @@ import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import CopyButton from '../components/shared/CopyButton';
+
+/**
+ * Shared remark plugins for all markdown renderers.
+ * remarkGfm enables tables, strikethrough, autolinks, and task lists.
+ */
+export const remarkPlugins = [remarkGfm, remarkBreaks];
 
 /**
  * Type for react-markdown component override props.
@@ -90,6 +98,134 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
     marginBottom: 0.5,
     lineHeight: 1.6,
   },
+  // Tables — wrapper provides horizontal scroll for narrow containers
+  '& table': {
+    display: 'block',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    maxWidth: '100%',
+    borderCollapse: 'collapse',
+    margin: '12px 0',
+    fontSize: '0.9rem',
+  },
+  '& th': {
+    textAlign: 'left',
+    fontWeight: 600,
+    padding: '8px 12px',
+    borderBottom: '2px solid',
+    borderColor: alpha(theme.palette.divider, 0.8),
+    backgroundColor: alpha(theme.palette.grey[900], 0.04),
+    whiteSpace: 'nowrap',
+  },
+  '& td': {
+    padding: '6px 12px',
+    borderBottom: '1px solid',
+    borderColor: alpha(theme.palette.divider, 0.4),
+  },
+});
+
+interface TableStyleOptions {
+  tableMarginY: number;
+  fontSize: string;
+  thPadding: string;
+  thBgColor: string;
+  tdPadding: string;
+}
+
+function createTableRenderers(opts: TableStyleOptions) {
+  return {
+    table: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', my: opts.tableMarginY }}>
+          <Box
+            component="table"
+            sx={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: opts.fontSize,
+            }}
+            {...safeProps}
+          >
+            {children}
+          </Box>
+        </Box>
+      );
+    },
+    thead: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return <Box component="thead" {...safeProps}>{children}</Box>;
+    },
+    tbody: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return <Box component="tbody" {...safeProps}>{children}</Box>;
+    },
+    tr: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="tr"
+          sx={{ '&:last-child td': { borderBottom: 'none' } }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+    th: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="th"
+          sx={{
+            textAlign: 'left',
+            fontWeight: 600,
+            p: opts.thPadding,
+            borderBottom: '2px solid',
+            borderColor: 'divider',
+            bgcolor: opts.thBgColor,
+            fontSize: opts.fontSize,
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+    td: (props: MdProps) => {
+      const { node: _node, children, ...safeProps } = props;
+      return (
+        <Box
+          component="td"
+          sx={{
+            p: opts.tdPadding,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            fontSize: opts.fontSize,
+          }}
+          {...safeProps}
+        >
+          {children}
+        </Box>
+      );
+    },
+  };
+}
+
+const finalAnswerTableRenderers = createTableRenderers({
+  tableMarginY: 1.5,
+  fontSize: '0.875rem',
+  thPadding: '8px 12px',
+  thBgColor: 'action.hover',
+  tdPadding: '6px 12px',
+});
+
+const thoughtTableRenderers = createTableRenderers({
+  tableMarginY: 1,
+  fontSize: '0.9em',
+  thPadding: '6px 10px',
+  thBgColor: 'grey.100',
+  tdPadding: '4px 10px',
 });
 
 /**
@@ -309,6 +445,7 @@ export const finalAnswerMarkdownComponents = {
       </Box>
     );
   },
+  ...finalAnswerTableRenderers,
 };
 
 /**
@@ -424,4 +561,5 @@ export const thoughtMarkdownComponents = {
       </Typography>
     );
   },
+  ...thoughtTableRenderers,
 };
