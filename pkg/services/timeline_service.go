@@ -215,6 +215,33 @@ func (s *TimelineService) FailTimelineEvent(ctx context.Context, eventID string,
 	return nil
 }
 
+// CancelTimelineEvent marks a timeline event as cancelled with the given content.
+func (s *TimelineService) CancelTimelineEvent(ctx context.Context, eventID string, content string) error {
+	if eventID == "" {
+		return NewValidationError("eventID", "required")
+	}
+	if content == "" {
+		return NewValidationError("content", "required")
+	}
+
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	err := s.client.TimelineEvent.UpdateOneID(eventID).
+		SetStatus(timelineevent.StatusCancelled).
+		SetContent(content).
+		SetUpdatedAt(time.Now()).
+		Exec(writeCtx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to mark timeline event as cancelled: %w", err)
+	}
+
+	return nil
+}
+
 // GetSessionTimeline retrieves all events for a session
 func (s *TimelineService) GetSessionTimeline(ctx context.Context, sessionID string) ([]*ent.TimelineEvent, error) {
 	if sessionID == "" {

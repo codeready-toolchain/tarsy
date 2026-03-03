@@ -177,32 +177,49 @@ func finalizeStreamingEvent(
 	}
 }
 
-// markStreamingEventsFailed marks any in-flight streaming timeline events
-// as failed. Called when collectStreamWithCallback returns an error so that
-// events don't remain stuck at status "streaming" indefinitely.
-func markStreamingEventsFailed(
+// markStreamingEventsTerminal marks any in-flight streaming timeline events
+// with the given terminal status. Called when collectStreamWithCallback returns
+// an error so that events don't remain stuck at status "streaming" indefinitely.
+// Use StatusCancelled when the error was caused by context cancellation,
+// StatusTimedOut for timeouts, and StatusFailed for genuine failures.
+func markStreamingEventsTerminal(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	thinkingEventID, textEventID string,
 	streamErr error,
+	status timelineevent.Status,
 ) {
 	pid := parentExecID(execCtx)
-	failEvent := func(eventID string, eventType timelineevent.EventType) {
+	markEvent := func(eventID string, eventType timelineevent.EventType) {
 		if eventID == "" {
 			return
 		}
-		// Update DB status to failed with error message as content
-		failContent := "Streaming failed"
-		if streamErr != nil {
-			failContent = fmt.Sprintf("Streaming failed: %s", streamErr.Error())
+		var prefix string
+		switch status {
+		case timelineevent.StatusCancelled:
+			prefix = "Streaming cancelled"
+		case timelineevent.StatusTimedOut:
+			prefix = "Streaming timed out"
+		default:
+			prefix = "Streaming failed"
 		}
-		updateErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, failContent)
+		content := prefix
+		if streamErr != nil {
+			content = fmt.Sprintf("%s: %s", prefix, streamErr.Error())
+		}
+
+		var updateErr error
+		switch status {
+		case timelineevent.StatusCancelled:
+			updateErr = execCtx.Services.Timeline.CancelTimelineEvent(ctx, eventID, content)
+		default:
+			updateErr = execCtx.Services.Timeline.FailTimelineEvent(ctx, eventID, content)
+		}
 		if updateErr != nil {
-			slog.Warn("Failed to mark streaming event as failed",
-				"event_id", eventID, "session_id", execCtx.SessionID, "error", updateErr)
+			slog.Warn("Failed to mark streaming event terminal",
+				"event_id", eventID, "session_id", execCtx.SessionID, "status", status, "error", updateErr)
 			return
 		}
-		// Notify WebSocket clients
 		if execCtx.EventPublisher != nil {
 			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
 				BasePayload: events.BasePayload{
@@ -213,20 +230,20 @@ func markStreamingEventsFailed(
 				EventID:           eventID,
 				ParentExecutionID: pid,
 				EventType:         eventType,
-				Status:            timelineevent.StatusFailed,
-				Content:           failContent,
+				Status:            status,
+				Content:           content,
 			}); pubErr != nil {
-				slog.Warn("Failed to publish streaming event failure",
+				slog.Warn("Failed to publish streaming event terminal status",
 					"event_id", eventID, "session_id", execCtx.SessionID, "error", pubErr)
 			}
 		} else {
-			slog.Warn("EventPublisher is nil, skipping streaming event failure publish",
+			slog.Warn("EventPublisher is nil, skipping streaming event terminal publish",
 				"event_id", eventID, "session_id", execCtx.SessionID)
 		}
 	}
 
-	failEvent(thinkingEventID, timelineevent.EventTypeLlmThinking)
-	failEvent(textEventID, timelineevent.EventTypeLlmResponse)
+	markEvent(thinkingEventID, timelineevent.EventTypeLlmThinking)
+	markEvent(textEventID, timelineevent.EventTypeLlmResponse)
 }
 
 // createToolCallEvent creates a streaming llm_tool_call timeline event.

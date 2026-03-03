@@ -36,6 +36,14 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 		"stage_index", input.stageIndex,
 	)
 
+	if r := e.mapCancellation(ctx); r != nil {
+		return stageResult{
+			stageName: synthStageName,
+			status:    r.Status,
+			err:       r.Error,
+		}
+	}
+
 	// Create synthesis Stage DB record
 	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          input.session.ID,
@@ -45,6 +53,9 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 		// No parallel_type, no success_policy (single-agent synthesis)
 	})
 	if err != nil {
+		if r := e.mapCancellation(ctx); r != nil {
+			return stageResult{stageName: synthStageName, status: r.Status, err: r.Error}
+		}
 		logger.Error("Failed to create synthesis stage", "error", err)
 		return stageResult{
 			stageName: synthStageName,

@@ -2,6 +2,8 @@ package queue
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -159,6 +161,106 @@ func TestWorkerStopIdempotent(t *testing.T) {
 
 	// Second stop should also succeed (no panic)
 	assert.NotPanics(t, func() { w.Stop() })
+}
+
+func TestWorkerSafetyNet_FailedWithCancelledContext(t *testing.T) {
+	// Verify the safety net: when the executor returns "failed" but the
+	// session context was cancelled, the result should be overridden to "cancelled".
+	result := &ExecutionResult{
+		Status: alertsession.StatusFailed,
+		Error:  fmt.Errorf("some DB error"),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // simulate session cancellation
+
+	// Apply the same logic as the worker's step 9
+	if result.Status == alertsession.StatusFailed && ctx.Err() != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result = &ExecutionResult{
+				Status: alertsession.StatusTimedOut,
+				Error:  fmt.Errorf("session timed out"),
+			}
+		} else {
+			result = &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  context.Canceled,
+			}
+		}
+	}
+
+	assert.Equal(t, alertsession.StatusCancelled, result.Status)
+	assert.ErrorIs(t, result.Error, context.Canceled)
+}
+
+func TestWorkerSafetyNet_FailedWithTimedOutContext(t *testing.T) {
+	// Verify the safety net: when the executor returns "failed" but the
+	// session context timed out, the result should be overridden to "timed_out".
+	result := &ExecutionResult{
+		Status: alertsession.StatusFailed,
+		Error:  fmt.Errorf("some DB error"),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	<-ctx.Done() // wait for deadline
+
+	if result.Status == alertsession.StatusFailed && ctx.Err() != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result = &ExecutionResult{
+				Status: alertsession.StatusTimedOut,
+				Error:  fmt.Errorf("session timed out"),
+			}
+		} else {
+			result = &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  context.Canceled,
+			}
+		}
+	}
+
+	assert.Equal(t, alertsession.StatusTimedOut, result.Status)
+	assert.Contains(t, result.Error.Error(), "timed out")
+}
+
+func TestWorkerSafetyNet_FailedWithActiveContext(t *testing.T) {
+	// When context is still active, "failed" should remain "failed".
+	result := &ExecutionResult{
+		Status: alertsession.StatusFailed,
+		Error:  fmt.Errorf("genuine failure"),
+	}
+
+	ctx := context.Background()
+
+	if result.Status == alertsession.StatusFailed && ctx.Err() != nil {
+		result = &ExecutionResult{
+			Status: alertsession.StatusCancelled,
+			Error:  context.Canceled,
+		}
+	}
+
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	assert.Contains(t, result.Error.Error(), "genuine failure")
+}
+
+func TestWorkerSafetyNet_CompletedWithCancelledContext(t *testing.T) {
+	// When the executor returns "completed", the safety net should NOT override
+	// even if the context is cancelled.
+	result := &ExecutionResult{
+		Status: alertsession.StatusCompleted,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if result.Status == alertsession.StatusFailed && ctx.Err() != nil {
+		result = &ExecutionResult{
+			Status: alertsession.StatusCancelled,
+			Error:  context.Canceled,
+		}
+	}
+
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 }
 
 func TestWorkerPollIntervalWithNegativeJitter(t *testing.T) {

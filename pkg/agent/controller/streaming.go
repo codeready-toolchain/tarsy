@@ -456,13 +456,17 @@ func callLLMWithStreaming(
 				finalizeStreamingEvent(ctx, execCtx, textEventID, timelineevent.EventTypeLlmResponse, poe.PartialText, "text")
 			}
 		} else {
-			// Stream error: mark events as failed so they don't stay stuck
-			// at status "streaming" indefinitely.
+			// Stream error: mark events with the appropriate terminal status
+			// so they don't stay stuck at status "streaming" indefinitely.
 			// Use a detached context: the caller's context (iterCtx) is likely
 			// already cancelled/expired, but the DB cleanup must still complete.
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cleanupCancel()
-			markStreamingEventsFailed(cleanupCtx, execCtx, thinkingEventID, textEventID, err)
+			evtStatus := timelineevent.StatusFailed
+			if ctx.Err() != nil {
+				evtStatus = timelineevent.StatusCancelled
+			}
+			markStreamingEventsTerminal(cleanupCtx, execCtx, thinkingEventID, textEventID, err, evtStatus)
 		}
 		return nil, err
 	}
@@ -472,12 +476,17 @@ func callLLMWithStreaming(
 	// even when resp content is empty. Otherwise the event stays at "streaming"
 	// status indefinitely. The empty-delta guard above prevents event creation
 	// for purely empty chunks, but we handle the edge case defensively here.
+	// Use a detached context: the caller's context (iterCtx) may already be
+	// cancelled/expired, but the DB cleanup must still complete.
+	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer finalizeCancel()
+
 	if thinkingEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, thinkingEventID, timelineevent.EventTypeLlmThinking, resp.ThinkingText, "thinking")
+		finalizeStreamingEvent(finalizeCtx, execCtx, thinkingEventID, timelineevent.EventTypeLlmThinking, resp.ThinkingText, "thinking")
 	}
 
 	if textEventID != "" {
-		finalizeStreamingEvent(ctx, execCtx, textEventID, timelineevent.EventTypeLlmResponse, resp.Text, "text")
+		finalizeStreamingEvent(finalizeCtx, execCtx, textEventID, timelineevent.EventTypeLlmResponse, resp.Text, "text")
 	}
 
 	return &StreamedResponse{

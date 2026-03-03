@@ -222,22 +222,39 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 		}
 	}
 
-	// 9. Stop heartbeat
+	// 9. Safety net: override "failed" if context indicates cancel/timeout.
+	// Downstream code may return "failed" when the real cause was context
+	// cancellation (e.g. DB write failed on a cancelled context).
+	if result.Status == alertsession.StatusFailed && sessionCtx.Err() != nil {
+		if errors.Is(sessionCtx.Err(), context.DeadlineExceeded) {
+			result = &ExecutionResult{
+				Status: alertsession.StatusTimedOut,
+				Error:  fmt.Errorf("session timed out after %v", w.config.SessionTimeout),
+			}
+		} else {
+			result = &ExecutionResult{
+				Status: alertsession.StatusCancelled,
+				Error:  context.Canceled,
+			}
+		}
+	}
+
+	// 10. Stop heartbeat
 	cancelHeartbeat()
 
-	// 10. Update terminal status (use background context — session ctx may be cancelled)
+	// 11. Update terminal status (use background context — session ctx may be cancelled)
 	if err := w.updateSessionTerminalStatus(context.Background(), session, result); err != nil {
 		log.Error("Failed to update session terminal status", "error", err)
 		return err
 	}
 
-	// 10a. Publish terminal session status event
+	// 11a. Publish terminal session status event
 	w.publishSessionStatus(context.Background(), session.ID, result.Status)
 
-	// 10b. Send Slack terminal notification
+	// 11b. Send Slack terminal notification
 	w.notifySlackTerminal(context.Background(), session, result, slackThreadTS)
 
-	// 11. Cleanup transient events after grace period (60s) to allow clients
+	// 12. Cleanup transient events after grace period (60s) to allow clients
 	// to receive final events before they are deleted.
 	w.scheduleEventCleanup(session.ID)
 

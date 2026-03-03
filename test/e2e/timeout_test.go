@@ -112,10 +112,10 @@ func TestE2E_Timeout(t *testing.T) {
 	session1 := app.GetSession(t, session1ID)
 	assert.Equal(t, "timed_out", session1["status"])
 
-	// Error message should mention the deadline.
+	// Error message should mention the timeout.
 	errorMsg, _ := session1["error_message"].(string)
-	assert.Contains(t, errorMsg, "deadline exceeded",
-		"session 1 error message should mention deadline exceeded")
+	assert.Contains(t, errorMsg, "timed out",
+		"session 1 error message should mention timeout")
 
 	// Stage assertions: single "investigation" stage, timed_out.
 	stages1 := app.QueryStages(t, session1ID)

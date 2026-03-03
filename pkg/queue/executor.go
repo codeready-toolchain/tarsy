@@ -216,6 +216,9 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 		// Fail-fast: if stage didn't complete, stop the chain
 		if sr.status != alertsession.StatusCompleted {
+			if r := e.mapCancellation(ctx); r != nil {
+				return r
+			}
 			logger.Warn("Stage failed, stopping chain",
 				"stage_name", sr.stageName,
 				"stage_status", sr.status,
@@ -248,6 +251,9 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
+				if r := e.mapCancellation(ctx); r != nil {
+					return r
+				}
 				logger.Warn("Synthesis failed, stopping chain",
 					"stage_name", synthSr.stageName,
 					"stage_status", synthSr.status,
@@ -284,6 +290,10 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		} else {
 			execSummary = summary
 		}
+	}
+
+	if r := e.mapCancellation(ctx); r != nil {
+		return r
 	}
 
 	logger.Info("Session executor: execution completed",
@@ -336,6 +346,9 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		SuccessPolicy:      successPolicyPtr(input.stageConfig, policy),
 	})
 	if err != nil {
+		if r := e.mapCancellation(ctx); r != nil {
+			return stageResult{stageName: input.stageConfig.Name, status: r.Status, err: r.Error}
+		}
 		logger.Error("Failed to create stage", "error", err)
 		return stageResult{
 			stageName: input.stageConfig.Name,

@@ -348,6 +348,50 @@ func TestMapCancellation(t *testing.T) {
 	})
 }
 
+func TestMapCancellation_StageFailFast(t *testing.T) {
+	executor := &RealSessionExecutor{}
+
+	t.Run("cancelled context overrides failed stage status", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		// Simulate a stage returning "failed" (e.g. synthesis DB write failed)
+		stageStatus := alertsession.StatusFailed
+		if stageStatus != alertsession.StatusCompleted {
+			if r := executor.mapCancellation(ctx); r != nil {
+				assert.Equal(t, alertsession.StatusCancelled, r.Status)
+				assert.ErrorIs(t, r.Error, context.Canceled)
+				return
+			}
+		}
+		t.Fatal("mapCancellation should have returned non-nil for cancelled context")
+	})
+
+	t.Run("timed out context overrides failed stage status", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 0)
+		defer cancel()
+		<-ctx.Done()
+
+		stageStatus := alertsession.StatusFailed
+		if stageStatus != alertsession.StatusCompleted {
+			if r := executor.mapCancellation(ctx); r != nil {
+				assert.Equal(t, alertsession.StatusTimedOut, r.Status)
+				assert.Contains(t, r.Error.Error(), "timed out")
+				return
+			}
+		}
+		t.Fatal("mapCancellation should have returned non-nil for timed-out context")
+	})
+
+	t.Run("active context does not override failed stage status", func(t *testing.T) {
+		stageStatus := alertsession.StatusFailed
+		if stageStatus != alertsession.StatusCompleted {
+			r := executor.mapCancellation(context.Background())
+			assert.Nil(t, r, "active context should not trigger cancellation override")
+		}
+	})
+}
+
 func TestResolveOrchestratorGuardrails(t *testing.T) {
 	dur := func(d time.Duration) *time.Duration { return &d }
 	intPtr := func(i int) *int { return &i }
