@@ -245,3 +245,12 @@ func newTestServiceBundle(t *testing.T, entClient *ent.Client) *agent.ServiceBun
 		Stage:       services.NewStageService(entClient),
 	}
 }
+
+// makeFallbackEntry builds a ResolvedFallbackEntry for test setup.
+func makeFallbackEntry(providerName string, backend config.LLMBackend, model string) agent.ResolvedFallbackEntry {
+	return agent.ResolvedFallbackEntry{
+		ProviderName: providerName,
+		Backend:      backend,
+		Config:       &config.LLMProviderConfig{Model: model},
+	}
+}

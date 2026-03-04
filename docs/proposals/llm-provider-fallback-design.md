@@ -110,7 +110,7 @@ type FallbackState struct {
     CurrentProviderIndex    int      // -1 = primary, 0+ = fallback list index
     AttemptedProviders      []string // For observability
     FallbackReason          string   // Last error that triggered fallback
-    ConsecutiveNonRetryable int      // Counts consecutive provider_error/invalid_request (threshold: 1)
+    ConsecutiveNonRetryable int      // Counts consecutive provider_error/invalid_request (threshold: 2)
     ConsecutivePartialErrors int     // Counts consecutive partial_stream_error (threshold: 2)
 }
 ```

@@ -1007,11 +1007,7 @@ func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMProviderName = "primary-provider"
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
-		{
-			ProviderName: "fallback-provider",
-			Backend:      config.LLMBackendNativeGemini,
-			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
-		},
+		makeFallbackEntry("fallback-provider", config.LLMBackendNativeGemini, "fallback-model"),
 	}
 
 	ctrl := NewIteratingController()
@@ -1050,11 +1046,7 @@ func TestIteratingController_FallbackOnCredentials_Immediate(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMProviderName = "bad-creds-provider"
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
-		{
-			ProviderName: "good-provider",
-			Backend:      config.LLMBackendNativeGemini,
-			Config:       &config.LLMProviderConfig{Model: "good-model"},
-		},
+		makeFallbackEntry("good-provider", config.LLMBackendNativeGemini, "good-model"),
 	}
 
 	ctrl := NewIteratingController()
@@ -1090,11 +1082,7 @@ func TestIteratingController_FallbackProviderError_RequiresOneRetry(t *testing.T
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMProviderName = "primary"
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
-		{
-			ProviderName: "fallback",
-			Backend:      config.LLMBackendLangChain,
-			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
-		},
+		makeFallbackEntry("fallback", config.LLMBackendLangChain, "fallback-model"),
 	}
 
 	ctrl := NewIteratingController()
@@ -1143,11 +1131,7 @@ func TestIteratingController_FallbackInForcedConclusion(t *testing.T) {
 	execCtx.Config.MaxIterations = 1
 	execCtx.Config.LLMProviderName = "primary"
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
-		{
-			ProviderName: "fallback",
-			Backend:      config.LLMBackendNativeGemini,
-			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
-		},
+		makeFallbackEntry("fallback", config.LLMBackendNativeGemini, "fallback-model"),
 	}
 
 	ctrl := NewIteratingController()
@@ -1203,11 +1187,7 @@ func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMProviderName = "primary"
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
-		{
-			ProviderName: "fallback",
-			Backend:      config.LLMBackendLangChain,
-			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
-		},
+		makeFallbackEntry("fallback", config.LLMBackendLangChain, "fallback-model"),
 	}
 
 	ctrl := NewIteratingController()

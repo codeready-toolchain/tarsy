@@ -289,12 +289,7 @@ func (r *SubAgentRunner) runSubAgent(
 
 	result, err := agentInstance.Execute(ctx, execCtx, "")
 	if err != nil {
-		status := agent.ExecutionStatusFailed
-		if ctx.Err() == context.DeadlineExceeded {
-			status = agent.ExecutionStatusTimedOut
-		} else if ctx.Err() != nil {
-			status = agent.ExecutionStatusCancelled
-		}
+		status := agent.StatusFromErr(ctx.Err())
 		logger.Error("Sub-agent execution error", "error", err, "resolved_status", status)
 		r.completeSubAgent(exec, status, "", err.Error())
 		return

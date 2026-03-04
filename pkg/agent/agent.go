@@ -2,7 +2,10 @@
 // Agents investigate alerts using LLM calls and (optionally) MCP tools.
 package agent
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Agent defines the interface for all TARSy agents.
 // Agents are created per-execution (not shared between sessions).
@@ -30,6 +33,28 @@ const (
 	ExecutionStatusTimedOut  ExecutionStatus = "timed_out"
 	ExecutionStatusCancelled ExecutionStatus = "cancelled"
 )
+
+// StatusFromContextErr maps a context error to the appropriate ExecutionStatus.
+// Returns ("", false) if the context is still active.
+func StatusFromContextErr(ctx context.Context) (ExecutionStatus, bool) {
+	if ctx.Err() == nil {
+		return "", false
+	}
+	return StatusFromErr(ctx.Err()), true
+}
+
+// StatusFromErr maps an error to the appropriate ExecutionStatus.
+// Returns TimedOut for DeadlineExceeded, Cancelled for context.Canceled,
+// and Failed for everything else (including nil).
+func StatusFromErr(err error) ExecutionStatus {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ExecutionStatusTimedOut
+	}
+	if errors.Is(err, context.Canceled) {
+		return ExecutionStatusCancelled
+	}
+	return ExecutionStatusFailed
+}
 
 // ExecutionResult is returned by Agent.Execute().
 // Lightweight — all intermediate state was already written to DB during execution.

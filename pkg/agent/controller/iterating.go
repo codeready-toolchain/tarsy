@@ -113,11 +113,7 @@ func (c *IteratingController) Run(
 
 			// If the parent context is cancelled/expired, return immediately
 			// instead of burning through retry iterations with the same error.
-			if ctx.Err() != nil {
-				status := agent.ExecutionStatusCancelled
-				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-					status = agent.ExecutionStatusTimedOut
-				}
+			if status, done := agent.StatusFromContextErr(ctx); done {
 				return &agent.ExecutionResult{
 					Status:     status,
 					Error:      fmt.Errorf("execution interrupted: %w", err),
@@ -223,14 +219,8 @@ func (c *IteratingController) Run(
 				msg, waitErr := collector.WaitForResult(ctx)
 				if waitErr != nil {
 					iterCancel()
-					status := agent.ExecutionStatusFailed
-					if errors.Is(waitErr, context.DeadlineExceeded) {
-						status = agent.ExecutionStatusTimedOut
-					} else if errors.Is(waitErr, context.Canceled) {
-						status = agent.ExecutionStatusCancelled
-					}
 					return &agent.ExecutionResult{
-						Status:     status,
+						Status:     agent.StatusFromErr(waitErr),
 						Error:      fmt.Errorf("sub-agent wait interrupted: %w", waitErr),
 						TokensUsed: totalUsage,
 					}, nil
@@ -301,6 +291,13 @@ func (c *IteratingController) forceConclusion(
 	var streamed *StreamedResponse
 	var err error
 	for {
+		if status, done := agent.StatusFromContextErr(ctx); done {
+			return &agent.ExecutionResult{
+				Status:     status,
+				Error:      fmt.Errorf("forced conclusion interrupted: %w", ctx.Err()),
+				TokensUsed: *totalUsage,
+			}, nil
+		}
 		llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
 		streamed, err = callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,

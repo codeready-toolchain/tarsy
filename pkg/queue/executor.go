@@ -647,12 +647,7 @@ func (e *RealSessionExecutor) executeAgent(
 		// When the context is cancelled (e.g. user cancel), the agent may fail with
 		// an unrelated error (e.g. "failed to store assistant message") because it
 		// tried to operate on a cancelled context. Override to the correct status.
-		errStatus := agent.ExecutionStatusFailed
-		if ctx.Err() == context.DeadlineExceeded {
-			errStatus = agent.ExecutionStatusTimedOut
-		} else if ctx.Err() != nil {
-			errStatus = agent.ExecutionStatusCancelled
-		}
+		errStatus := agent.StatusFromErr(ctx.Err())
 		entErrStatus := mapAgentStatusToEntStatus(errStatus)
 		logger.Error("Agent execution error", "error", err, "resolved_status", errStatus)
 		if updateErr := input.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entErrStatus, err.Error()); updateErr != nil {
@@ -676,13 +671,8 @@ func (e *RealSessionExecutor) executeAgent(
 	if result != nil && ctx.Err() != nil &&
 		result.Status != agent.ExecutionStatusCancelled &&
 		result.Status != agent.ExecutionStatusTimedOut {
-		if ctx.Err() == context.DeadlineExceeded {
-			result.Status = agent.ExecutionStatusTimedOut
-			result.Error = ctx.Err()
-		} else {
-			result.Status = agent.ExecutionStatusCancelled
-			result.Error = ctx.Err()
-		}
+		result.Status = agent.StatusFromErr(ctx.Err())
+		result.Error = ctx.Err()
 	}
 
 	// Update AgentExecution status (use background context — ctx may be cancelled)

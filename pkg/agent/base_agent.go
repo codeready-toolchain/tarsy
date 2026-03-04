@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
@@ -53,13 +52,7 @@ func (a *BaseAgent) Execute(ctx context.Context, execCtx *ExecutionContext, prev
 	// Use errors.Is on the returned error (not ctx.Err()) so that a concurrent
 	// context expiration doesn't misclassify an unrelated failure as timed-out.
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return &ExecutionResult{Status: ExecutionStatusTimedOut, Error: err}, nil
-		}
-		if errors.Is(err, context.Canceled) {
-			return &ExecutionResult{Status: ExecutionStatusCancelled, Error: err}, nil
-		}
-		return &ExecutionResult{Status: ExecutionStatusFailed, Error: err}, nil
+		return &ExecutionResult{Status: StatusFromErr(err), Error: err}, nil
 	}
 
 	// 4. Defensive nil-check: ensure controller returned a valid result.

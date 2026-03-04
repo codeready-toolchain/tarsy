@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -31,13 +30,7 @@ func (a *ScoringAgent) Execute(ctx context.Context, execCtx *ExecutionContext, p
 	result, err := a.controller.Run(ctx, execCtx, prevStageContext)
 
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return &ExecutionResult{Status: ExecutionStatusTimedOut, Error: err}, nil
-		}
-		if errors.Is(err, context.Canceled) {
-			return &ExecutionResult{Status: ExecutionStatusCancelled, Error: err}, nil
-		}
-		return &ExecutionResult{Status: ExecutionStatusFailed, Error: err}, nil
+		return &ExecutionResult{Status: StatusFromErr(err), Error: err}, nil
 	}
 
 	if result == nil {

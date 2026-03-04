@@ -93,6 +93,17 @@ defaults:
   
   # Default success policy for parallel stages ("all" or "any")
   success_policy: "any"
+
+  # LLM provider fallback — ordered list of alternative providers to try when
+  # the primary provider fails (after Python-level retries are exhausted).
+  # Each entry specifies both provider and backend explicitly.
+  # Overridable per chain, stage, or agent.
+  # Validated at startup: all referenced providers must exist with valid credentials.
+  # fallback_providers:
+  #   - provider: "gemini-3.1-pro"
+  #     backend: "google-native"
+  #   - provider: "anthropic-vertex"
+  #     backend: "langchain"
   
   # Default scoring agent name (fallback when chain has no scoring config)
   scoring_agent: "ScoringAgent"
@@ -393,10 +404,15 @@ agent_chains:
           - name: "KubernetesAgent"
         replicas: 2  # Run KubernetesAgent twice
 
-  # Security incident chain
+  # Security incident chain (with chain-level fallback override)
   security-incident:
     alert_types: ["SecurityIncident", "IntrusionDetection"]
     description: "Security-focused investigation"
+    # Chain-level fallback overrides defaults.fallback_providers for all
+    # stages/agents in this chain. Can also be set per stage or per agent.
+    # fallback_providers:
+    #   - provider: "gemini-3.1-pro"
+    #     backend: "google-native"
     stages:
       - name: "triage"
         agents:

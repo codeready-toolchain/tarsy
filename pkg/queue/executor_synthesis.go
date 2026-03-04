@@ -259,6 +259,9 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	fallbackIdx := -1 // -1 = primary, 0+ = fallback index
 	clearCache := false
 	for {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("executive summary interrupted: %w", ctx.Err())
+		}
 		llmInput := &agent.GenerateInput{
 			SessionID:  session.ID,
 			Messages:   messages,

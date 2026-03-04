@@ -72,6 +72,13 @@ func (c *SingleShotController) Run(
 	var streamed *StreamedResponse
 	var err error
 	for {
+		if status, done := agent.StatusFromContextErr(ctx); done {
+			return &agent.ExecutionResult{
+				Status:     status,
+				Error:      fmt.Errorf("%s interrupted: %w", c.cfg.InteractionLabel, ctx.Err()),
+				TokensUsed: agent.TokenUsage{},
+			}, nil
+		}
 		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,

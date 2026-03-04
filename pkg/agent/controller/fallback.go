@@ -13,10 +13,10 @@ import (
 
 // Error code constants are defined in streaming.go as LLMErrorCode values.
 
-// Thresholds for consecutive error counters before fallback triggers.
+// Thresholds: fallback triggers when the consecutive error count reaches this value.
 const (
-	nonRetryableThreshold  = 1 // provider_error / invalid_request: fallback after 1 Go retry
-	partialStreamThreshold = 2 // partial_stream_error: fallback after 2 consecutive occurrences
+	nonRetryableThreshold  = 2 // provider_error / invalid_request: fallback after 2 consecutive errors
+	partialStreamThreshold = 2 // partial_stream_error: fallback after 2 consecutive errors
 )
 
 // FallbackState tracks fallback progress within a single execution.
@@ -59,7 +59,7 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		// inspect. Treat like a provider_error for fallback purposes.
 		s.ConsecutiveNonRetryable++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable > nonRetryableThreshold
+		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
 	}
 
 	if poe.IsLoop {
@@ -78,7 +78,7 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	case LLMErrorProviderError, LLMErrorInvalidRequest:
 		s.ConsecutiveNonRetryable++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable > nonRetryableThreshold
+		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
 
 	case LLMErrorPartialStreamError:
 		s.ConsecutivePartialErrors++
@@ -89,7 +89,7 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		// Unknown code — treat conservatively like provider_error
 		s.ConsecutiveNonRetryable++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable > nonRetryableThreshold
+		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
 	}
 }
 
@@ -128,6 +128,8 @@ func tryFallback(
 		return false
 	}
 
+	// Defensive: shouldFallback already rejects exhausted lists, but guard
+	// the slice access in case the two checks ever diverge.
 	nextIdx := state.CurrentProviderIndex + 1
 	if nextIdx >= len(execCtx.Config.ResolvedFallbackProviders) {
 		return false

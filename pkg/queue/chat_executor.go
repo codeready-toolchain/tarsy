@@ -369,35 +369,24 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	result, execErr := agentInstance.Execute(execCtx, agentExecCtx, "") // no prevStageContext for chat
 
 	// 11. Determine terminal status
-	terminalStatus := events.StageStatusFailed
 	agentStatus := agent.ExecutionStatusFailed
 	errMsg := ""
 	if execErr != nil {
 		errMsg = execErr.Error()
-		// Check if the error was due to cancellation/timeout
-		if execCtx.Err() == context.DeadlineExceeded {
-			agentStatus = agent.ExecutionStatusTimedOut
-			terminalStatus = events.StageStatusTimedOut
-		} else if execCtx.Err() != nil {
-			agentStatus = agent.ExecutionStatusCancelled
-			terminalStatus = events.StageStatusCancelled
+		if execCtx.Err() != nil {
+			agentStatus = agent.StatusFromErr(execCtx.Err())
 		}
 	} else if result != nil {
-		// Check if context was cancelled during execution even though agent returned OK
-		if execCtx.Err() == context.DeadlineExceeded {
-			agentStatus = agent.ExecutionStatusTimedOut
-			terminalStatus = events.StageStatusTimedOut
-		} else if execCtx.Err() != nil {
-			agentStatus = agent.ExecutionStatusCancelled
-			terminalStatus = events.StageStatusCancelled
+		if execCtx.Err() != nil {
+			agentStatus = agent.StatusFromErr(execCtx.Err())
 		} else {
 			agentStatus = result.Status
-			terminalStatus = mapChatAgentStatus(result.Status)
 		}
 		if result.Error != nil {
 			errMsg = result.Error.Error()
 		}
 	}
+	terminalStatus := mapChatAgentStatus(agentStatus)
 
 	// 12. Update AgentExecution terminal status (use background context — execCtx may be cancelled)
 	entStatus := mapAgentStatusToEntStatus(agentStatus)
