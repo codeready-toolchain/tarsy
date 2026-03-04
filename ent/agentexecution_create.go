@@ -140,6 +140,34 @@ func (_c *AgentExecutionCreate) SetNillableLlmProvider(v *string) *AgentExecutio
 	return _c
 }
 
+// SetOriginalLlmProvider sets the "original_llm_provider" field.
+func (_c *AgentExecutionCreate) SetOriginalLlmProvider(v string) *AgentExecutionCreate {
+	_c.mutation.SetOriginalLlmProvider(v)
+	return _c
+}
+
+// SetNillableOriginalLlmProvider sets the "original_llm_provider" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableOriginalLlmProvider(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetOriginalLlmProvider(*v)
+	}
+	return _c
+}
+
+// SetOriginalLlmBackend sets the "original_llm_backend" field.
+func (_c *AgentExecutionCreate) SetOriginalLlmBackend(v string) *AgentExecutionCreate {
+	_c.mutation.SetOriginalLlmBackend(v)
+	return _c
+}
+
+// SetNillableOriginalLlmBackend sets the "original_llm_backend" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableOriginalLlmBackend(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetOriginalLlmBackend(*v)
+	}
+	return _c
+}
+
 // SetParentExecutionID sets the "parent_execution_id" field.
 func (_c *AgentExecutionCreate) SetParentExecutionID(v string) *AgentExecutionCreate {
 	_c.mutation.SetParentExecutionID(v)
@@ -435,6 +463,14 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 	if value, ok := _c.mutation.LlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
 		_node.LlmProvider = &value
+	}
+	if value, ok := _c.mutation.OriginalLlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
+		_node.OriginalLlmProvider = &value
+	}
+	if value, ok := _c.mutation.OriginalLlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmBackend, field.TypeString, value)
+		_node.OriginalLlmBackend = &value
 	}
 	if value, ok := _c.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)

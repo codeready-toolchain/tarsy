@@ -63,13 +63,14 @@ func BoolPtr(b bool) *bool { return &b }
 // Used in stage.agents[] array (even for single-agent stages)
 // Parallel execution occurs when: len(agents) > 1 OR replicas > 1
 type StageAgentConfig struct {
-	Name          string       `yaml:"name" validate:"required"`
-	Type          AgentType    `yaml:"type,omitempty"`
-	LLMProvider   string       `yaml:"llm_provider,omitempty"`
-	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
-	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
-	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
-	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
+	Name              string                  `yaml:"name" validate:"required"`
+	Type              AgentType               `yaml:"type,omitempty"`
+	LLMProvider       string                  `yaml:"llm_provider,omitempty"`
+	LLMBackend        LLMBackend              `yaml:"llm_backend,omitempty"`
+	MaxIterations     *int                    `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	MCPServers        []string                `yaml:"mcp_servers,omitempty"`
+	SubAgents         SubAgentRefs            `yaml:"sub_agents,omitempty"`
+	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 }
 
 // SubAgentRef is a reference to a sub-agent with optional per-reference overrides.
@@ -152,6 +153,13 @@ func (r SubAgentRefs) Names() []string {
 		names[i] = ref.Name
 	}
 	return names
+}
+
+// FallbackProviderEntry is a single entry in the fallback provider list.
+// Each entry explicitly specifies both provider and backend.
+type FallbackProviderEntry struct {
+	Provider string     `yaml:"provider" validate:"required"`
+	Backend  LLMBackend `yaml:"backend" validate:"required"`
 }
 
 // SynthesisConfig defines synthesis agent configuration

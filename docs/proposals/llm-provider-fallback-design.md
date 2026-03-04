@@ -180,7 +180,7 @@ Startup fails if any check fails — a fallback list with broken entries gives a
 
 ## Implementation Plan
 
-### Phase 1: Configuration & Schema (P1)
+### Phase 1: Configuration & Schema (P1) - ✅ DONE
 
 **Goal:** Define the fallback configuration structure, schema changes, and startup validation. Everything downstream depends on this.
 

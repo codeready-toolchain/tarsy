@@ -23,6 +23,7 @@ message GenerateRequest {
   LLMConfig llm_config = 3;                 // Provider configuration
   repeated ToolDefinition tools = 4;         // Available tools (empty = no tools)
   string execution_id = 5;                  // AgentExecution ID — used by Python for thought signature cache key
+  bool clear_cache = 6;                     // Signal to clear provider content cache (e.g., on fallback provider switch)
 }
 
 // GenerateResponse is a streaming chunk from the LLM.

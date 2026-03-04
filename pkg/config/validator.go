@@ -111,6 +111,11 @@ func (v *Validator) validateDefaults() error {
 			fmt.Errorf("agent '%s' not found", defaults.ScoringAgent))
 	}
 
+	// Validate fallback providers if specified
+	if err := v.validateFallbackProviders(defaults.FallbackProviders, "defaults", "", "fallback_providers"); err != nil {
+		return err
+	}
+
 	// Validate alert masking configuration
 	if defaults.AlertMasking != nil && defaults.AlertMasking.Enabled {
 		builtin := GetBuiltinConfig()
@@ -276,6 +281,11 @@ func (v *Validator) validateChains() error {
 			return NewValidationError("chain", chainID, "llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.LLMProvider))
 		}
 
+		// Validate chain-level fallback providers if specified
+		if err := v.validateFallbackProviders(chain.FallbackProviders, "chain", chainID, "fallback_providers"); err != nil {
+			return err
+		}
+
 		// Validate chain-level max iterations if specified
 		if chain.MaxIterations != nil && *chain.MaxIterations < 1 {
 			return NewValidationError("chain", chainID, "max_iterations", fmt.Errorf("must be at least 1"))
@@ -347,6 +357,16 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		if err := v.validateSubAgentRefs(agentConfig.SubAgents, stageRef, agentConfig.Name, "sub_agents"); err != nil {
 			return err
 		}
+
+		// Validate agent-level fallback providers if specified
+		if err := v.validateFallbackProviders(agentConfig.FallbackProviders, stageRef, agentConfig.Name, "fallback_providers"); err != nil {
+			return err
+		}
+	}
+
+	// Validate stage-level fallback providers if specified
+	if err := v.validateFallbackProviders(stage.FallbackProviders, stageRef, "", "fallback_providers"); err != nil {
+		return err
 	}
 
 	// Validate stage-level sub_agents if specified
@@ -468,31 +488,11 @@ func (v *Validator) validateLLMProviders() error {
 			return NewValidationError("llm_provider", name, "model", fmt.Errorf("model required"))
 		}
 
-		// Only validate API key environment variable for providers that are actually referenced
+		// Only validate credentials for providers that are actually referenced
 		if referencedProviders[name] {
-			if provider.APIKeyEnv != "" {
-				if value := os.Getenv(provider.APIKeyEnv); value == "" {
-					return NewValidationError("llm_provider", name, "api_key_env", fmt.Errorf("environment variable %s is not set", provider.APIKeyEnv))
-				}
-			}
-		}
-
-		// Validate VertexAI-specific fields (only for referenced providers)
-		if referencedProviders[name] && provider.Type == LLMProviderTypeVertexAI {
-			if provider.CredentialsEnv != "" {
-				if value := os.Getenv(provider.CredentialsEnv); value == "" {
-					return NewValidationError("llm_provider", name, "credentials_env", fmt.Errorf("environment variable %s is not set", provider.CredentialsEnv))
-				}
-			}
-			if provider.ProjectEnv != "" {
-				if value := os.Getenv(provider.ProjectEnv); value == "" {
-					return NewValidationError("llm_provider", name, "project_env", fmt.Errorf("environment variable %s is not set", provider.ProjectEnv))
-				}
-			}
-			if provider.LocationEnv != "" {
-				if value := os.Getenv(provider.LocationEnv); value == "" {
-					return NewValidationError("llm_provider", name, "location_env", fmt.Errorf("environment variable %s is not set", provider.LocationEnv))
-				}
+			if missing := missingProviderEnvVar(provider); missing != "" {
+				return NewValidationError("llm_provider", name, "credentials",
+					fmt.Errorf("environment variable %s is not set", missing))
 			}
 		}
 
@@ -518,7 +518,17 @@ func (v *Validator) validateLLMProviders() error {
 func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 	referenced := make(map[string]bool)
 
-	// If no chain registry exists, no providers are referenced
+	// Default-level providers
+	if v.cfg.Defaults != nil {
+		if v.cfg.Defaults.LLMProvider != "" {
+			referenced[v.cfg.Defaults.LLMProvider] = true
+		}
+		for _, fb := range v.cfg.Defaults.FallbackProviders {
+			referenced[fb.Provider] = true
+		}
+	}
+
+	// If no chain registry exists, no chain-level providers are referenced
 	if v.cfg.ChainRegistry == nil {
 		return referenced
 	}
@@ -527,6 +537,18 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		// Chain-level LLM provider
 		if chain.LLMProvider != "" {
 			referenced[chain.LLMProvider] = true
+		}
+
+		// Chain-level fallback providers
+		for _, fb := range chain.FallbackProviders {
+			referenced[fb.Provider] = true
+		}
+
+		// Chain-level sub-agent providers
+		for _, ref := range chain.SubAgents {
+			if ref.LLMProvider != "" {
+				referenced[ref.LLMProvider] = true
+			}
 		}
 
 		// Chat-level LLM provider
@@ -541,10 +563,32 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 
 		// Stage-level LLM providers
 		for _, stage := range chain.Stages {
+			// Stage-level fallback providers
+			for _, fb := range stage.FallbackProviders {
+				referenced[fb.Provider] = true
+			}
+
+			// Stage-level sub-agent providers
+			for _, ref := range stage.SubAgents {
+				if ref.LLMProvider != "" {
+					referenced[ref.LLMProvider] = true
+				}
+			}
+
 			// Stage agent-level LLM providers
 			for _, agent := range stage.Agents {
 				if agent.LLMProvider != "" {
 					referenced[agent.LLMProvider] = true
+				}
+				// Agent-level fallback providers
+				for _, fb := range agent.FallbackProviders {
+					referenced[fb.Provider] = true
+				}
+				// Agent-level sub-agent providers
+				for _, ref := range agent.SubAgents {
+					if ref.LLMProvider != "" {
+						referenced[ref.LLMProvider] = true
+					}
 				}
 			}
 
@@ -593,6 +637,55 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 			if !v.cfg.MCPServerRegistry.Has(serverID) {
 				return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies MCP server '%s' which is not found", ref.Name, serverID))
 			}
+		}
+	}
+	return nil
+}
+
+// missingProviderEnvVar returns the name of the first required-but-unset
+// environment variable for the given provider, or "" if all are set.
+func missingProviderEnvVar(provider *LLMProviderConfig) string {
+	if provider.APIKeyEnv != "" {
+		if os.Getenv(provider.APIKeyEnv) == "" {
+			return provider.APIKeyEnv
+		}
+	}
+	if provider.Type == LLMProviderTypeVertexAI {
+		if provider.CredentialsEnv != "" && os.Getenv(provider.CredentialsEnv) == "" {
+			return provider.CredentialsEnv
+		}
+		if provider.ProjectEnv != "" && os.Getenv(provider.ProjectEnv) == "" {
+			return provider.ProjectEnv
+		}
+		if provider.LocationEnv != "" && os.Getenv(provider.LocationEnv) == "" {
+			return provider.LocationEnv
+		}
+	}
+	return ""
+}
+
+func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, section, name, field string) error {
+	for i, entry := range entries {
+		entryRef := fmt.Sprintf("%s[%d]", field, i)
+
+		// Provider must exist in the registry
+		if !v.cfg.LLMProviderRegistry.Has(entry.Provider) {
+			return NewValidationError(section, name, entryRef,
+				fmt.Errorf("LLM provider '%s' not found", entry.Provider))
+		}
+
+		// Backend must be valid
+		if !entry.Backend.IsValid() {
+			return NewValidationError(section, name, entryRef,
+				fmt.Errorf("invalid LLM backend: %s", entry.Backend))
+		}
+
+		// Credentials must be set
+		provider, _ := v.cfg.LLMProviderRegistry.Get(entry.Provider)
+		if missing := missingProviderEnvVar(provider); missing != "" {
+			return NewValidationError(section, name, entryRef,
+				fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
+					missing, entry.Provider))
 		}
 	}
 	return nil

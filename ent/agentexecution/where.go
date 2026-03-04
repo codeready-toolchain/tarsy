@@ -115,6 +115,16 @@ func LlmProvider(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldLlmProvider, v))
 }
 
+// OriginalLlmProvider applies equality check predicate on the "original_llm_provider" field. It's identical to OriginalLlmProviderEQ.
+func OriginalLlmProvider(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmBackend applies equality check predicate on the "original_llm_backend" field. It's identical to OriginalLlmBackendEQ.
+func OriginalLlmBackend(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmBackend, v))
+}
+
 // ParentExecutionID applies equality check predicate on the "parent_execution_id" field. It's identical to ParentExecutionIDEQ.
 func ParentExecutionID(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldParentExecutionID, v))
@@ -743,6 +753,156 @@ func LlmProviderEqualFold(v string) predicate.AgentExecution {
 // LlmProviderContainsFold applies the ContainsFold predicate on the "llm_provider" field.
 func LlmProviderContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldLlmProvider, v))
+}
+
+// OriginalLlmProviderEQ applies the EQ predicate on the "original_llm_provider" field.
+func OriginalLlmProviderEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderNEQ applies the NEQ predicate on the "original_llm_provider" field.
+func OriginalLlmProviderNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderIn applies the In predicate on the "original_llm_provider" field.
+func OriginalLlmProviderIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldOriginalLlmProvider, vs...))
+}
+
+// OriginalLlmProviderNotIn applies the NotIn predicate on the "original_llm_provider" field.
+func OriginalLlmProviderNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldOriginalLlmProvider, vs...))
+}
+
+// OriginalLlmProviderGT applies the GT predicate on the "original_llm_provider" field.
+func OriginalLlmProviderGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderGTE applies the GTE predicate on the "original_llm_provider" field.
+func OriginalLlmProviderGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderLT applies the LT predicate on the "original_llm_provider" field.
+func OriginalLlmProviderLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderLTE applies the LTE predicate on the "original_llm_provider" field.
+func OriginalLlmProviderLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderContains applies the Contains predicate on the "original_llm_provider" field.
+func OriginalLlmProviderContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderHasPrefix applies the HasPrefix predicate on the "original_llm_provider" field.
+func OriginalLlmProviderHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderHasSuffix applies the HasSuffix predicate on the "original_llm_provider" field.
+func OriginalLlmProviderHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderIsNil applies the IsNil predicate on the "original_llm_provider" field.
+func OriginalLlmProviderIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldOriginalLlmProvider))
+}
+
+// OriginalLlmProviderNotNil applies the NotNil predicate on the "original_llm_provider" field.
+func OriginalLlmProviderNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldOriginalLlmProvider))
+}
+
+// OriginalLlmProviderEqualFold applies the EqualFold predicate on the "original_llm_provider" field.
+func OriginalLlmProviderEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmProviderContainsFold applies the ContainsFold predicate on the "original_llm_provider" field.
+func OriginalLlmProviderContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalLlmProvider, v))
+}
+
+// OriginalLlmBackendEQ applies the EQ predicate on the "original_llm_backend" field.
+func OriginalLlmBackendEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendNEQ applies the NEQ predicate on the "original_llm_backend" field.
+func OriginalLlmBackendNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendIn applies the In predicate on the "original_llm_backend" field.
+func OriginalLlmBackendIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldOriginalLlmBackend, vs...))
+}
+
+// OriginalLlmBackendNotIn applies the NotIn predicate on the "original_llm_backend" field.
+func OriginalLlmBackendNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldOriginalLlmBackend, vs...))
+}
+
+// OriginalLlmBackendGT applies the GT predicate on the "original_llm_backend" field.
+func OriginalLlmBackendGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendGTE applies the GTE predicate on the "original_llm_backend" field.
+func OriginalLlmBackendGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendLT applies the LT predicate on the "original_llm_backend" field.
+func OriginalLlmBackendLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendLTE applies the LTE predicate on the "original_llm_backend" field.
+func OriginalLlmBackendLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendContains applies the Contains predicate on the "original_llm_backend" field.
+func OriginalLlmBackendContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendHasPrefix applies the HasPrefix predicate on the "original_llm_backend" field.
+func OriginalLlmBackendHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendHasSuffix applies the HasSuffix predicate on the "original_llm_backend" field.
+func OriginalLlmBackendHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendIsNil applies the IsNil predicate on the "original_llm_backend" field.
+func OriginalLlmBackendIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldOriginalLlmBackend))
+}
+
+// OriginalLlmBackendNotNil applies the NotNil predicate on the "original_llm_backend" field.
+func OriginalLlmBackendNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldOriginalLlmBackend))
+}
+
+// OriginalLlmBackendEqualFold applies the EqualFold predicate on the "original_llm_backend" field.
+func OriginalLlmBackendEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldOriginalLlmBackend, v))
+}
+
+// OriginalLlmBackendContainsFold applies the ContainsFold predicate on the "original_llm_backend" field.
+func OriginalLlmBackendContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalLlmBackend, v))
 }
 
 // ParentExecutionIDEQ applies the EQ predicate on the "parent_execution_id" field.

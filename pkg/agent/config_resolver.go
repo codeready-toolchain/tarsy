@@ -27,6 +27,14 @@ const DefaultLLMCallTimeout = 5 * time.Minute
 // DefaultToolCallTimeout caps a single MCP tool call within an iteration.
 const DefaultToolCallTimeout = 1 * time.Minute
 
+// DefaultInitialResponseTimeout is the max wait for the first streaming chunk
+// before treating the provider as unresponsive.
+const DefaultInitialResponseTimeout = 120 * time.Second
+
+// DefaultStallTimeout is the max gap between consecutive streaming chunks
+// before treating the stream as stalled.
+const DefaultStallTimeout = 60 * time.Second
+
 // ResolveAgentConfig builds the final agent configuration by applying
 // the hierarchy: defaults → agent definition → chain → stage → stage-agent.
 func ResolveAgentConfig(
@@ -91,21 +99,30 @@ func ResolveAgentConfig(
 		agentType = agentConfig.Type
 	}
 
+	// Resolve fallback providers (defaults → chain → stage → agentConfig)
+	fallbackProviders := resolveFallbackProviders(
+		defaults.FallbackProviders, chain.FallbackProviders,
+		stageConfig.FallbackProviders, agentConfig.FallbackProviders,
+	)
+
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
-		AgentName:          agentConfig.Name,
-		Type:               agentType,
-		LLMBackend:         backend,
-		LLMProvider:        resolvedProvider,
-		LLMProviderName:    providerName,
-		MaxIterations:      maxIter,
-		IterationTimeout:   DefaultIterationTimeout,
-		LLMCallTimeout:     DefaultLLMCallTimeout,
-		ToolCallTimeout:    DefaultToolCallTimeout,
-		MCPServers:         mcpServers,
-		CustomInstructions: agentDef.CustomInstructions,
+		AgentName:              agentConfig.Name,
+		Type:                   agentType,
+		LLMBackend:             backend,
+		LLMProvider:            resolvedProvider,
+		LLMProviderName:        providerName,
+		MaxIterations:          maxIter,
+		IterationTimeout:       DefaultIterationTimeout,
+		LLMCallTimeout:         DefaultLLMCallTimeout,
+		ToolCallTimeout:        DefaultToolCallTimeout,
+		MCPServers:             mcpServers,
+		CustomInstructions:     agentDef.CustomInstructions,
+		FallbackProviders:      fallbackProviders,
+		InitialResponseTimeout: DefaultInitialResponseTimeout,
+		StallTimeout:           DefaultStallTimeout,
 	}, nil
 }
 
@@ -205,6 +222,11 @@ func ResolveChatAgentConfig(
 		mcpServers = chatCfg.MCPServers
 	}
 
+	// Resolve fallback providers (defaults → chain; chatCfg has no fallback field)
+	fallbackProviders := resolveFallbackProviders(
+		defaults.FallbackProviders, chain.FallbackProviders,
+	)
+
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
@@ -212,16 +234,19 @@ func ResolveChatAgentConfig(
 		AgentName: agentName,
 		// Chat always uses the iterating function-calling controller,
 		// regardless of what the agent definition's Type field says.
-		Type:               config.AgentTypeDefault,
-		LLMBackend:         backend,
-		LLMProvider:        resolvedProvider,
-		LLMProviderName:    providerName,
-		MaxIterations:      maxIter,
-		IterationTimeout:   DefaultIterationTimeout,
-		LLMCallTimeout:     DefaultLLMCallTimeout,
-		ToolCallTimeout:    DefaultToolCallTimeout,
-		MCPServers:         mcpServers,
-		CustomInstructions: agentDef.CustomInstructions,
+		Type:                   config.AgentTypeDefault,
+		LLMBackend:             backend,
+		LLMProvider:            resolvedProvider,
+		LLMProviderName:        providerName,
+		MaxIterations:          maxIter,
+		IterationTimeout:       DefaultIterationTimeout,
+		LLMCallTimeout:         DefaultLLMCallTimeout,
+		ToolCallTimeout:        DefaultToolCallTimeout,
+		MCPServers:             mcpServers,
+		CustomInstructions:     agentDef.CustomInstructions,
+		FallbackProviders:      fallbackProviders,
+		InitialResponseTimeout: DefaultInitialResponseTimeout,
+		StallTimeout:           DefaultStallTimeout,
 	}, nil
 }
 
@@ -302,21 +327,29 @@ func ResolveScoringConfig(
 		mcpServers = scoringCfg.MCPServers
 	}
 
+	// Resolve fallback providers (defaults → chain; scoringCfg has no fallback field)
+	fallbackProviders := resolveFallbackProviders(
+		defaults.FallbackProviders, chain.FallbackProviders,
+	)
+
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
-		AgentName:          agentName,
-		Type:               config.AgentTypeScoring,
-		LLMBackend:         backend,
-		LLMProvider:        resolvedProvider,
-		LLMProviderName:    providerName,
-		MaxIterations:      maxIter,
-		IterationTimeout:   DefaultIterationTimeout,
-		LLMCallTimeout:     DefaultLLMCallTimeout,
-		ToolCallTimeout:    DefaultToolCallTimeout,
-		MCPServers:         mcpServers,
-		CustomInstructions: agentDef.CustomInstructions,
+		AgentName:              agentName,
+		Type:                   config.AgentTypeScoring,
+		LLMBackend:             backend,
+		LLMProvider:            resolvedProvider,
+		LLMProviderName:        providerName,
+		MaxIterations:          maxIter,
+		IterationTimeout:       DefaultIterationTimeout,
+		LLMCallTimeout:         DefaultLLMCallTimeout,
+		ToolCallTimeout:        DefaultToolCallTimeout,
+		MCPServers:             mcpServers,
+		CustomInstructions:     agentDef.CustomInstructions,
+		FallbackProviders:      fallbackProviders,
+		InitialResponseTimeout: DefaultInitialResponseTimeout,
+		StallTimeout:           DefaultStallTimeout,
 	}, nil
 }
 
@@ -365,6 +398,28 @@ func resolveLLMProvider(cfg *config.Config, providerNames ...string) (*config.LL
 		return nil, "", fmt.Errorf("LLM provider %q not found: %w", name, err)
 	}
 	return provider, name, nil
+}
+
+// resolveFallbackProviders returns the last non-nil fallback list from the
+// given overrides, listed in lowest-to-highest precedence order.
+// A non-nil empty slice is an explicit override that clears inherited values.
+// Returns nil when no override provides a value.
+func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []config.FallbackProviderEntry {
+	var result []config.FallbackProviderEntry
+	found := false
+	for _, o := range overrides {
+		if o != nil {
+			result = o
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	if len(result) == 0 {
+		return make([]config.FallbackProviderEntry, 0)
+	}
+	return append([]config.FallbackProviderEntry(nil), result...)
 }
 
 // resolveMaxIterations returns the last non-nil value from the given

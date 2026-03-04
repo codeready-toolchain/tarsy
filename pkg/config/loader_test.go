@@ -928,3 +928,74 @@ agent_chains: {}
 		"size_threshold_tokens should default to %d when not specified", DefaultSizeThresholdTokens)
 	assert.Equal(t, 1200, server.Summarization.SummaryMaxTokenLimit)
 }
+
+func TestLoadTarsyYAML_FallbackProviders(t *testing.T) {
+	configDir := t.TempDir()
+
+	yamlContent := `
+defaults:
+  llm_provider: "test-provider"
+  fallback_providers:
+    - provider: "fb-defaults"
+      backend: "google-native"
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    fallback_providers:
+      - provider: "fb-chain-1"
+        backend: "langchain"
+      - provider: "fb-chain-2"
+        backend: "google-native"
+    stages:
+      - name: "stage1"
+        fallback_providers:
+          - provider: "fb-stage"
+            backend: "langchain"
+        agents:
+          - name: "test-agent"
+            fallback_providers:
+              - provider: "fb-agent-1"
+                backend: "google-native"
+              - provider: "fb-agent-2"
+                backend: "langchain"
+              - provider: "fb-agent-3"
+                backend: "google-native"
+`
+	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	loader := &configLoader{configDir: configDir}
+	cfg, err := loader.loadTarsyYAML()
+	require.NoError(t, err)
+
+	// Defaults-level: single entry
+	require.NotNil(t, cfg.Defaults)
+	require.Len(t, cfg.Defaults.FallbackProviders, 1)
+	assert.Equal(t, "fb-defaults", cfg.Defaults.FallbackProviders[0].Provider)
+	assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.FallbackProviders[0].Backend)
+
+	chain := cfg.AgentChains["test-chain"]
+
+	// Chain-level: two entries, order preserved
+	require.Len(t, chain.FallbackProviders, 2)
+	assert.Equal(t, "fb-chain-1", chain.FallbackProviders[0].Provider)
+	assert.Equal(t, LLMBackendLangChain, chain.FallbackProviders[0].Backend)
+	assert.Equal(t, "fb-chain-2", chain.FallbackProviders[1].Provider)
+	assert.Equal(t, LLMBackendNativeGemini, chain.FallbackProviders[1].Backend)
+
+	// Stage-level: single entry
+	require.Len(t, chain.Stages[0].FallbackProviders, 1)
+	assert.Equal(t, "fb-stage", chain.Stages[0].FallbackProviders[0].Provider)
+
+	// Agent-level: three entries, order preserved
+	agentFB := chain.Stages[0].Agents[0].FallbackProviders
+	require.Len(t, agentFB, 3)
+	assert.Equal(t, "fb-agent-1", agentFB[0].Provider)
+	assert.Equal(t, "fb-agent-2", agentFB[1].Provider)
+	assert.Equal(t, "fb-agent-3", agentFB[2].Provider)
+}

@@ -203,6 +203,46 @@ func (_u *AgentExecutionUpdate) ClearLlmProvider() *AgentExecutionUpdate {
 	return _u
 }
 
+// SetOriginalLlmProvider sets the "original_llm_provider" field.
+func (_u *AgentExecutionUpdate) SetOriginalLlmProvider(v string) *AgentExecutionUpdate {
+	_u.mutation.SetOriginalLlmProvider(v)
+	return _u
+}
+
+// SetNillableOriginalLlmProvider sets the "original_llm_provider" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableOriginalLlmProvider(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetOriginalLlmProvider(*v)
+	}
+	return _u
+}
+
+// ClearOriginalLlmProvider clears the value of the "original_llm_provider" field.
+func (_u *AgentExecutionUpdate) ClearOriginalLlmProvider() *AgentExecutionUpdate {
+	_u.mutation.ClearOriginalLlmProvider()
+	return _u
+}
+
+// SetOriginalLlmBackend sets the "original_llm_backend" field.
+func (_u *AgentExecutionUpdate) SetOriginalLlmBackend(v string) *AgentExecutionUpdate {
+	_u.mutation.SetOriginalLlmBackend(v)
+	return _u
+}
+
+// SetNillableOriginalLlmBackend sets the "original_llm_backend" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableOriginalLlmBackend(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetOriginalLlmBackend(*v)
+	}
+	return _u
+}
+
+// ClearOriginalLlmBackend clears the value of the "original_llm_backend" field.
+func (_u *AgentExecutionUpdate) ClearOriginalLlmBackend() *AgentExecutionUpdate {
+	_u.mutation.ClearOriginalLlmBackend()
+	return _u
+}
+
 // SetParentExecutionID sets the "parent_execution_id" field.
 func (_u *AgentExecutionUpdate) SetParentExecutionID(v string) *AgentExecutionUpdate {
 	_u.mutation.SetParentExecutionID(v)
@@ -597,6 +637,18 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
+	}
+	if _u.mutation.OriginalLlmProviderCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalLlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmBackend, field.TypeString, value)
+	}
+	if _u.mutation.OriginalLlmBackendCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalLlmBackend, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
@@ -1095,6 +1147,46 @@ func (_u *AgentExecutionUpdateOne) ClearLlmProvider() *AgentExecutionUpdateOne {
 	return _u
 }
 
+// SetOriginalLlmProvider sets the "original_llm_provider" field.
+func (_u *AgentExecutionUpdateOne) SetOriginalLlmProvider(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetOriginalLlmProvider(v)
+	return _u
+}
+
+// SetNillableOriginalLlmProvider sets the "original_llm_provider" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableOriginalLlmProvider(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetOriginalLlmProvider(*v)
+	}
+	return _u
+}
+
+// ClearOriginalLlmProvider clears the value of the "original_llm_provider" field.
+func (_u *AgentExecutionUpdateOne) ClearOriginalLlmProvider() *AgentExecutionUpdateOne {
+	_u.mutation.ClearOriginalLlmProvider()
+	return _u
+}
+
+// SetOriginalLlmBackend sets the "original_llm_backend" field.
+func (_u *AgentExecutionUpdateOne) SetOriginalLlmBackend(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetOriginalLlmBackend(v)
+	return _u
+}
+
+// SetNillableOriginalLlmBackend sets the "original_llm_backend" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableOriginalLlmBackend(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetOriginalLlmBackend(*v)
+	}
+	return _u
+}
+
+// ClearOriginalLlmBackend clears the value of the "original_llm_backend" field.
+func (_u *AgentExecutionUpdateOne) ClearOriginalLlmBackend() *AgentExecutionUpdateOne {
+	_u.mutation.ClearOriginalLlmBackend()
+	return _u
+}
+
 // SetParentExecutionID sets the "parent_execution_id" field.
 func (_u *AgentExecutionUpdateOne) SetParentExecutionID(v string) *AgentExecutionUpdateOne {
 	_u.mutation.SetParentExecutionID(v)
@@ -1519,6 +1611,18 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	}
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
+	}
+	if _u.mutation.OriginalLlmProviderCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalLlmProvider, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalLlmBackend(); ok {
+		_spec.SetField(agentexecution.FieldOriginalLlmBackend, field.TypeString, value)
+	}
+	if _u.mutation.OriginalLlmBackendCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalLlmBackend, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
