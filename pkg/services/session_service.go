@@ -1136,7 +1136,7 @@ type fallbackEventMeta struct {
 func (s *SessionService) loadFallbackMetadata(ctx context.Context, sessionID string) (map[string]fallbackEventMeta, error) {
 	events, err := s.client.TimelineEvent.Query().
 		Where(
-			timelineevent.HasAgentExecutionWith(agentexecution.SessionIDEQ(sessionID)),
+			timelineevent.SessionIDEQ(sessionID),
 			timelineevent.EventTypeEQ(timelineevent.EventTypeProviderFallback),
 		).
 		All(ctx)

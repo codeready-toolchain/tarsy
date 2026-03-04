@@ -345,7 +345,7 @@ Chains support flexible LLM provider configuration with a resolution hierarchy:
 
 Non-stage components (executive summary, follow-up chat) use chain-level provider if defined, otherwise global default.
 
-**Fallback provider list** follows the same hierarchy: `defaults.fallback_providers` → chain-level → stage-level → agent-level. See [ADR-0003](../adr/0003-llm-provider-fallback.md).
+**Fallback provider list** follows the same hierarchy: `defaults.fallback_providers` → chain-level → stage-level → agent-level. See [ADR-0003](adr/0003-llm-provider-fallback.md).
 
 ---
 
@@ -478,7 +478,7 @@ The orchestrator agent (`type: orchestrator`) uses the same `IteratingController
 
 **Built-in agents**: Orchestrator, WebResearcher (google_search + url_context), CodeExecutor (code_execution), GeneralWorker (pure reasoning).
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](../adr/0002-orchestrator-impl.md)
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md)
 
 #### Instruction Composition
 
@@ -523,7 +523,7 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 
 **Adaptive timeouts** reduce time wasted on unresponsive providers. Implemented in `collectStreamWithCallback`: initial response timeout (120s default), stall timeout (60s default), and max call timeout (5m). Configurable per agent through the config hierarchy.
 
-**For detailed design**: See [ADR-0003: LLM Provider Fallback](../adr/0003-llm-provider-fallback.md)
+**For detailed design**: See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md)
 
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
