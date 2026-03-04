@@ -99,5 +99,7 @@ func (MCPInteraction) Indexes() []ent.Index {
 		index.Fields("execution_id", "created_at"),
 		// Stage's MCP calls
 		index.Fields("stage_id", "created_at"),
+		// Session-level MCP calls (dashboard aggregation)
+		index.Fields("session_id", "created_at"),
 	}
 }

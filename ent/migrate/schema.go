@@ -383,6 +383,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{McpInteractionsColumns[12], McpInteractionsColumns[1]},
 			},
+			{
+				Name:    "mcpinteraction_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{McpInteractionsColumns[11], McpInteractionsColumns[1]},
+			},
 		},
 	}
 	// MessagesColumns holds the columns for the "messages" table.
