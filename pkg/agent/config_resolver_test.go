@@ -1158,18 +1158,18 @@ func TestResolveFallbackProviders(t *testing.T) {
 
 func TestResolvedFallbackProviders(t *testing.T) {
 	primaryProvider := &config.LLMProviderConfig{
-		Type:    config.LLMProviderTypeGoogle,
-		Model:   "gemini-primary",
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-primary",
 		APIKeyEnv: "GOOGLE_API_KEY",
 	}
 	fallbackProvider1 := &config.LLMProviderConfig{
-		Type:    config.LLMProviderTypeGoogle,
-		Model:   "gemini-fallback-1",
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-fallback-1",
 		APIKeyEnv: "GOOGLE_API_KEY",
 	}
 	fallbackProvider2 := &config.LLMProviderConfig{
-		Type:    config.LLMProviderTypeOpenAI,
-		Model:   "gpt-fallback-2",
+		Type:      config.LLMProviderTypeOpenAI,
+		Model:     "gpt-fallback-2",
 		APIKeyEnv: "OPENAI_API_KEY",
 	}
 

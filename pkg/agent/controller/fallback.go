@@ -15,8 +15,8 @@ import (
 
 // Thresholds for consecutive error counters before fallback triggers.
 const (
-	nonRetryableThreshold    = 1 // provider_error / invalid_request: fallback after 1 Go retry
-	partialStreamThreshold   = 2 // partial_stream_error: fallback after 2 consecutive occurrences
+	nonRetryableThreshold  = 1 // provider_error / invalid_request: fallback after 1 Go retry
+	partialStreamThreshold = 2 // partial_stream_error: fallback after 2 consecutive occurrences
 )
 
 // FallbackState tracks fallback progress within a single execution.
@@ -24,7 +24,7 @@ const (
 type FallbackState struct {
 	OriginalProvider         string
 	OriginalBackend          config.LLMBackend
-	CurrentProviderIndex     int      // -1 = primary, 0+ = index into ResolvedFallbackProviders
+	CurrentProviderIndex     int // -1 = primary, 0+ = index into ResolvedFallbackProviders
 	AttemptedProviders       []string
 	FallbackReason           string
 	ConsecutiveNonRetryable  int // counts consecutive provider_error / invalid_request
