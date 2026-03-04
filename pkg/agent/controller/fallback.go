@@ -79,12 +79,12 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		// Guaranteed failure — fallback immediately
 		return true
 
-	case LLMErrorProviderError, LLMErrorInvalidRequest:
+	case LLMErrorProviderError, LLMErrorInvalidRequest, LLMErrorInitialTimeout:
 		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
 		return s.ConsecutiveProviderErrors >= providerErrorThreshold
 
-	case LLMErrorPartialStreamError:
+	case LLMErrorPartialStreamError, LLMErrorStallTimeout:
 		s.ConsecutivePartialErrors++
 		s.ConsecutiveProviderErrors = 0
 		return s.ConsecutivePartialErrors >= partialStreamThreshold

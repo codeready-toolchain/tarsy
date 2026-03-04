@@ -229,7 +229,7 @@ Tests:
 - `pkg/agent/controller/single_shot_test.go` — Fallback for single-shot calls
 - `llm-service/tests/test_google_native.py` — `clear_cache` flag clears `_model_contents`
 
-### Phase 3: Adaptive Timeouts (P3)
+### Phase 3: Adaptive Timeouts (P3) - ✅ DONE
 
 **Goal:** Reduce time wasted on unresponsive providers. Independent of fallback but makes it more effective.
 

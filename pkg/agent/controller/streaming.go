@@ -21,11 +21,13 @@ import (
 type LLMErrorCode string
 
 const (
-	LLMErrorMaxRetries         LLMErrorCode = "max_retries"          // Python already retried 3x
-	LLMErrorCredentials        LLMErrorCode = "credentials"          // missing or invalid API key
-	LLMErrorProviderError      LLMErrorCode = "provider_error"       // upstream provider failure
-	LLMErrorInvalidRequest     LLMErrorCode = "invalid_request"      // malformed request
-	LLMErrorPartialStreamError LLMErrorCode = "partial_stream_error" // error mid-stream after partial output
+	LLMErrorMaxRetries         LLMErrorCode = "max_retries"              // Python already retried 3x
+	LLMErrorCredentials        LLMErrorCode = "credentials"              // missing or invalid API key
+	LLMErrorProviderError      LLMErrorCode = "provider_error"           // upstream provider failure
+	LLMErrorInvalidRequest     LLMErrorCode = "invalid_request"          // malformed request
+	LLMErrorPartialStreamError LLMErrorCode = "partial_stream_error"     // error mid-stream after partial output
+	LLMErrorInitialTimeout     LLMErrorCode = "initial_response_timeout" // no chunks received within deadline
+	LLMErrorStallTimeout       LLMErrorCode = "stall_timeout"            // gap between chunks exceeded deadline
 )
 
 // PartialOutputError wraps an LLM error that occurred after partial output
@@ -56,7 +58,7 @@ type LLMResponse struct {
 // Returns an error if an ErrorChunk is received.
 // Delegates to collectStreamWithCallback with a nil callback and no loop detection.
 func collectStream(stream <-chan agent.Chunk) (*LLMResponse, error) {
-	return collectStreamWithCallback(stream, nil, nil)
+	return collectStreamWithCallback(stream, nil, nil, 0, 0)
 }
 
 // callLLM performs a single LLM call with context cancellation support.
@@ -134,78 +136,140 @@ func detectTextLoop(text string) (bool, int) {
 
 // collectStreamWithCallback collects a stream while calling back for real-time delivery.
 // The callback is optional (nil = buffered mode, same as collectStream).
-// cancelStream is called to abort the gRPC stream when a degenerate loop is
-// detected; pass nil to disable loop detection.
+// cancelStream is called to abort the gRPC stream when a degenerate loop or
+// adaptive timeout is detected; pass nil to disable loop detection.
+//
+// initialResponseTimeout: max wait for the first chunk (0 = disabled).
+// stallTimeout: max gap between consecutive chunks (0 = disabled).
 func collectStreamWithCallback(
 	stream <-chan agent.Chunk,
 	callback StreamCallback,
 	cancelStream func(),
+	initialResponseTimeout time.Duration,
+	stallTimeout time.Duration,
 ) (*LLMResponse, error) {
 	resp := &LLMResponse{}
 	var textBuf, thinkingBuf strings.Builder
 	var lastLoopCheck int
 	loopDetected := false
 
-	for chunk := range stream {
-		switch c := chunk.(type) {
-		case *agent.TextChunk:
-			if loopDetected {
-				continue // discard further text after loop detected
+	// Adaptive timeout setup. A nil channel blocks forever in select,
+	// effectively disabling that timeout branch.
+	firstChunkReceived := false
+	var timer *time.Timer
+	var timeoutCh <-chan time.Time
+
+	if initialResponseTimeout > 0 {
+		timer = time.NewTimer(initialResponseTimeout)
+		defer timer.Stop()
+		timeoutCh = timer.C
+	}
+
+loop:
+	for {
+		select {
+		case chunk, ok := <-stream:
+			if !ok {
+				break loop
 			}
-			textBuf.WriteString(c.Content)
-			if callback != nil {
-				callback(ChunkTypeText, c.Content)
+
+			// Adaptive timeout bookkeeping: switch/reset timer on chunk arrival.
+			if !firstChunkReceived {
+				firstChunkReceived = true
+				if stallTimeout > 0 {
+					if timer == nil {
+						timer = time.NewTimer(stallTimeout)
+						defer timer.Stop()
+					} else {
+						timer.Reset(stallTimeout)
+					}
+					timeoutCh = timer.C
+				} else if timer != nil {
+					timer.Stop()
+					timeoutCh = nil
+				}
+			} else if stallTimeout > 0 && timer != nil {
+				timer.Reset(stallTimeout)
 			}
-			// Periodic loop detection
-			if cancelStream != nil && textBuf.Len()-lastLoopCheck >= loopCheckInterval {
-				lastLoopCheck = textBuf.Len()
-				if detected, truncAt := detectTextLoop(textBuf.String()); detected {
-					loopLen := textBuf.Len() - truncAt
-					slog.Warn("Detected degenerate loop in LLM text output, cancelling stream",
-						"text_len", textBuf.Len(), "truncate_at", truncAt, "loop_chars", loopLen)
-					text := textBuf.String()[:truncAt]
-					textBuf.Reset()
-					textBuf.WriteString(text)
-					loopDetected = true
-					cancelStream()
+
+			switch c := chunk.(type) {
+			case *agent.TextChunk:
+				if loopDetected {
+					continue // discard further text after loop detected
+				}
+				textBuf.WriteString(c.Content)
+				if callback != nil {
+					callback(ChunkTypeText, c.Content)
+				}
+				// Periodic loop detection
+				if cancelStream != nil && textBuf.Len()-lastLoopCheck >= loopCheckInterval {
+					lastLoopCheck = textBuf.Len()
+					if detected, truncAt := detectTextLoop(textBuf.String()); detected {
+						loopLen := textBuf.Len() - truncAt
+						slog.Warn("Detected degenerate loop in LLM text output, cancelling stream",
+							"text_len", textBuf.Len(), "truncate_at", truncAt, "loop_chars", loopLen)
+						text := textBuf.String()[:truncAt]
+						textBuf.Reset()
+						textBuf.WriteString(text)
+						loopDetected = true
+						cancelStream()
+					}
+				}
+			case *agent.ThinkingChunk:
+				thinkingBuf.WriteString(c.Content)
+				if callback != nil {
+					callback(ChunkTypeThinking, c.Content)
+				}
+			case *agent.ToolCallChunk:
+				resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
+					ID:        c.CallID,
+					Name:      c.Name,
+					Arguments: c.Arguments,
+				})
+			case *agent.CodeExecutionChunk:
+				resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
+					Code:   c.Code,
+					Result: c.Result,
+				})
+			case *agent.GroundingChunk:
+				resp.Groundings = append(resp.Groundings, *c)
+			case *agent.UsageChunk:
+				resp.Usage = &agent.TokenUsage{
+					InputTokens:    c.InputTokens,
+					OutputTokens:   c.OutputTokens,
+					TotalTokens:    c.TotalTokens,
+					ThinkingTokens: c.ThinkingTokens,
+				}
+			case *agent.ErrorChunk:
+				if loopDetected {
+					continue // expected error from stream cancellation
+				}
+				return nil, &PartialOutputError{
+					Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+						c.Message, c.Code, c.Retryable),
+					PartialText:     textBuf.String(),
+					PartialThinking: thinkingBuf.String(),
+					Code:            LLMErrorCode(c.Code),
+					Retryable:       c.Retryable,
 				}
 			}
-		case *agent.ThinkingChunk:
-			thinkingBuf.WriteString(c.Content)
-			if callback != nil {
-				callback(ChunkTypeThinking, c.Content)
+
+		case <-timeoutCh:
+			if cancelStream != nil {
+				cancelStream()
 			}
-		case *agent.ToolCallChunk:
-			resp.ToolCalls = append(resp.ToolCalls, agent.ToolCall{
-				ID:        c.CallID,
-				Name:      c.Name,
-				Arguments: c.Arguments,
-			})
-		case *agent.CodeExecutionChunk:
-			resp.CodeExecutions = append(resp.CodeExecutions, agent.CodeExecutionChunk{
-				Code:   c.Code,
-				Result: c.Result,
-			})
-		case *agent.GroundingChunk:
-			resp.Groundings = append(resp.Groundings, *c)
-		case *agent.UsageChunk:
-			resp.Usage = &agent.TokenUsage{
-				InputTokens:    c.InputTokens,
-				OutputTokens:   c.OutputTokens,
-				TotalTokens:    c.TotalTokens,
-				ThinkingTokens: c.ThinkingTokens,
-			}
-		case *agent.ErrorChunk:
-			if loopDetected {
-				continue // expected error from stream cancellation
+			code := LLMErrorInitialTimeout
+			msg := fmt.Sprintf("no response from provider within %s", initialResponseTimeout)
+			if firstChunkReceived {
+				code = LLMErrorStallTimeout
+				msg = fmt.Sprintf("stream stalled: no data for %s", stallTimeout)
 			}
 			return nil, &PartialOutputError{
-				Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-					c.Message, c.Code, c.Retryable),
+				Cause:           fmt.Errorf("adaptive timeout: %s", msg),
 				PartialText:     textBuf.String(),
 				PartialThinking: thinkingBuf.String(),
-				Code:            LLMErrorCode(c.Code),
-				Retryable:       c.Retryable,
+				Code:            code,
+				Retryable:       true,
 			}
 		}
 	}
@@ -456,7 +520,8 @@ func callLLMWithStreaming(
 		}
 	}
 
-	resp, err := collectStreamWithCallback(stream, callback, llmCancel)
+	resp, err := collectStreamWithCallback(stream, callback, llmCancel,
+		execCtx.Config.InitialResponseTimeout, execCtx.Config.StallTimeout)
 	close(flusherDone)
 	mu.Lock()
 	flushPendingDeltas()

@@ -211,7 +211,7 @@ func TestCollectStreamWithCallback_NilCallback(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello world", resp.Text)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
@@ -236,7 +236,7 @@ func TestCollectStreamWithCallback_TextCallback(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback, nil)
+	resp, err := collectStreamWithCallback(ch, callback, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello world", resp.Text)
 
@@ -267,7 +267,7 @@ func TestCollectStreamWithCallback_ThinkingAndTextCallbacks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "The answer is 42."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback, nil)
+	resp, err := collectStreamWithCallback(ch, callback, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "The answer is 42.", resp.Text)
 	assert.Equal(t, "Let me think...", resp.ThinkingText)
@@ -293,7 +293,7 @@ func TestCollectStreamWithCallback_ErrorChunk(t *testing.T) {
 		callbackCount++
 	}
 
-	_, err := collectStreamWithCallback(ch, callback, nil)
+	_, err := collectStreamWithCallback(ch, callback, nil, 0, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rate limit exceeded")
 	assert.Equal(t, 1, callbackCount) // Only the first text chunk callback fired
@@ -313,7 +313,7 @@ func TestCollectStreamWithCallback_ToolCalls(t *testing.T) {
 	ch <- &agent.ToolCallChunk{CallID: "tc-1", Name: "get_pods", Arguments: `{"namespace":"default"}`}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Let me check that.", resp.Text)
 	require.Len(t, resp.ToolCalls, 1)
@@ -324,7 +324,7 @@ func TestCollectStreamWithCallback_EmptyStream(t *testing.T) {
 	ch := make(chan agent.Chunk)
 	close(ch) // Immediately closed — no chunks
 
-	resp, err := collectStreamWithCallback(ch, nil, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "", resp.Text)
 	assert.Equal(t, "", resp.ThinkingText)
@@ -345,7 +345,7 @@ func TestCollectStreamWithCallback_GroundingChunks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "Based on search results..."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Based on search results...", resp.Text)
 	require.Len(t, resp.Groundings, 1)
@@ -360,12 +360,115 @@ func TestCollectStreamWithCallback_CodeExecutionChunks(t *testing.T) {
 	ch <- &agent.TextChunk{Content: "Executed successfully."}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, nil, nil)
+	resp, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Executed successfully.", resp.Text)
 	require.Len(t, resp.CodeExecutions, 2)
 	assert.Equal(t, "print('hello')", resp.CodeExecutions[0].Code)
 	assert.Equal(t, "hello", resp.CodeExecutions[1].Result)
+}
+
+// ============================================================================
+// collectStreamWithCallback — adaptive timeout tests
+// ============================================================================
+
+func TestCollectStreamWithCallback_InitialResponseTimeout(t *testing.T) {
+	ch := make(chan agent.Chunk) // unbuffered, never sent to
+
+	cancelled := false
+	cancel := func() { cancelled = true }
+
+	_, err := collectStreamWithCallback(ch, nil, cancel, 50*time.Millisecond, 0)
+	require.Error(t, err)
+	assert.True(t, cancelled, "cancelStream should have been called")
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, LLMErrorInitialTimeout, poe.Code)
+	assert.True(t, poe.Retryable)
+	assert.Empty(t, poe.PartialText)
+	assert.Empty(t, poe.PartialThinking)
+	assert.Contains(t, poe.Error(), "no response from provider")
+}
+
+func TestCollectStreamWithCallback_StallTimeout(t *testing.T) {
+	ch := make(chan agent.Chunk, 2)
+	// Send one chunk immediately, then nothing — the stall timeout should fire.
+	ch <- &agent.TextChunk{Content: "partial response"}
+
+	cancelled := false
+	cancel := func() { cancelled = true }
+
+	_, err := collectStreamWithCallback(ch, nil, cancel, 0, 50*time.Millisecond)
+	require.Error(t, err)
+	assert.True(t, cancelled, "cancelStream should have been called")
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, LLMErrorStallTimeout, poe.Code)
+	assert.True(t, poe.Retryable)
+	assert.Equal(t, "partial response", poe.PartialText)
+	assert.Contains(t, poe.Error(), "stream stalled")
+}
+
+func TestCollectStreamWithCallback_StallTimeoutPreservesThinking(t *testing.T) {
+	ch := make(chan agent.Chunk, 3)
+	ch <- &agent.ThinkingChunk{Content: "analyzing..."}
+	ch <- &agent.TextChunk{Content: "partial"}
+
+	cancelled := false
+	cancel := func() { cancelled = true }
+
+	_, err := collectStreamWithCallback(ch, nil, cancel, 0, 50*time.Millisecond)
+	require.Error(t, err)
+	assert.True(t, cancelled)
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, LLMErrorStallTimeout, poe.Code)
+	assert.Equal(t, "partial", poe.PartialText)
+	assert.Equal(t, "analyzing...", poe.PartialThinking)
+}
+
+func TestCollectStreamWithCallback_InitialToStallTransition(t *testing.T) {
+	ch := make(chan agent.Chunk, 1)
+
+	// Send one chunk after a short delay (within initialResponseTimeout),
+	// then stop sending — stallTimeout should fire.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		ch <- &agent.TextChunk{Content: "first chunk"}
+	}()
+
+	cancelled := false
+	cancel := func() { cancelled = true }
+
+	_, err := collectStreamWithCallback(ch, nil, cancel,
+		200*time.Millisecond, 50*time.Millisecond)
+	require.Error(t, err)
+	assert.True(t, cancelled)
+
+	var poe *PartialOutputError
+	require.ErrorAs(t, err, &poe)
+	assert.Equal(t, LLMErrorStallTimeout, poe.Code,
+		"should be stall timeout (not initial) since a chunk was received")
+	assert.Equal(t, "first chunk", poe.PartialText)
+}
+
+func TestCollectStreamWithCallback_ActiveStreamNoTimeout(t *testing.T) {
+	ch := make(chan agent.Chunk, 5)
+	ch <- &agent.TextChunk{Content: "Hello "}
+	ch <- &agent.ThinkingChunk{Content: "thinking..."}
+	ch <- &agent.TextChunk{Content: "world"}
+	ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
+	close(ch)
+
+	resp, err := collectStreamWithCallback(ch, nil, nil, 200*time.Millisecond, 200*time.Millisecond)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello world", resp.Text)
+	assert.Equal(t, "thinking...", resp.ThinkingText)
+	require.NotNil(t, resp.Usage)
+	assert.Equal(t, 15, resp.Usage.TotalTokens)
 }
 
 // ============================================================================
@@ -438,7 +541,7 @@ func TestCollectStreamWithCallback_LoopDetection(t *testing.T) {
 	cancelled := false
 	cancel := func() { cancelled = true }
 
-	_, err := collectStreamWithCallback(ch, nil, cancel)
+	_, err := collectStreamWithCallback(ch, nil, cancel, 0, 0)
 	require.Error(t, err)
 	assert.True(t, cancelled, "cancelStream should have been called")
 
@@ -456,7 +559,7 @@ func TestCollectStreamWithCallback_ErrorPreservesPartialOutput(t *testing.T) {
 	ch <- &agent.ErrorChunk{Message: "stream interrupted", Code: "partial_stream_error", Retryable: false}
 	close(ch)
 
-	_, err := collectStreamWithCallback(ch, nil, nil)
+	_, err := collectStreamWithCallback(ch, nil, nil, 0, 0)
 	require.Error(t, err)
 
 	var poe *PartialOutputError
@@ -584,7 +687,7 @@ func TestCollectStreamWithCallback_AllChunkTypes(t *testing.T) {
 	ch <- &agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150, ThinkingTokens: 20}
 	close(ch)
 
-	resp, err := collectStreamWithCallback(ch, callback, nil)
+	resp, err := collectStreamWithCallback(ch, callback, nil, 0, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "Answer: 42", resp.Text)
 	assert.Equal(t, "Hmm...", resp.ThinkingText)

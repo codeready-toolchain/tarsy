@@ -206,6 +206,31 @@ func TestShouldFallback_UnknownCode_TreatedAsProviderError(t *testing.T) {
 	assert.True(t, result, "second consecutive unknown code should trigger")
 }
 
+func TestShouldFallback_InitialTimeout_AfterOneRetry(t *testing.T) {
+	state := newTestFallbackState()
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorInitialTimeout), providers)
+	assert.False(t, result, "first initial_response_timeout should not trigger fallback")
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
+
+	result = state.shouldFallback(makePartialError(LLMErrorInitialTimeout), providers)
+	assert.True(t, result, "second consecutive initial_response_timeout should trigger fallback")
+}
+
+func TestShouldFallback_StallTimeout_AfterTwo(t *testing.T) {
+	state := newTestFallbackState()
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorStallTimeout), providers)
+	assert.False(t, result, "first stall_timeout should not trigger fallback")
+	assert.Equal(t, 1, state.ConsecutivePartialErrors)
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors, "stall_timeout should increment partial counter, not provider")
+
+	result = state.shouldFallback(makePartialError(LLMErrorStallTimeout), providers)
+	assert.True(t, result, "second consecutive stall_timeout should trigger fallback")
+}
+
 func TestShouldFallback_MixedErrors_BreaksConsecutiveCount(t *testing.T) {
 	state := newTestFallbackState()
 	providers := fallbackProviders()
