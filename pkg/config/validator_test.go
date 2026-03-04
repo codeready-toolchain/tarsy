@@ -2754,6 +2754,34 @@ func TestValidateFallbackProviders(t *testing.T) {
 			errMsg:  "environment variable VERTEX_CREDS is not set",
 		},
 		{
+			name: "vertexai fallback requires project_env",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "vertex-fallback", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", ProjectEnv: "VERTEX_PROJECT", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable VERTEX_PROJECT is not set",
+		},
+		{
+			name: "vertexai fallback requires location_env",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "vertex-fallback", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", LocationEnv: "VERTEX_LOCATION", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable VERTEX_LOCATION is not set",
+		},
+		{
 			name: "multi-entry error on second entry",
 			defaults: &Defaults{
 				FallbackProviders: []FallbackProviderEntry{
@@ -2828,7 +2856,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 	}
 }
 
-func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
+func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
 			LLMProvider: "defaults-primary",
@@ -2836,7 +2864,7 @@ func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
 		},
-		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "Worker": {}}),
 		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
 		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
@@ -2845,15 +2873,24 @@ func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
 				FallbackProviders: []FallbackProviderEntry{
 					{Provider: "chain-fallback", Backend: LLMBackendLangChain},
 				},
+				SubAgents: SubAgentRefs{
+					{Name: "Worker", LLMProvider: "chain-subagent"},
+				},
 				Stages: []StageConfig{{
 					Name: "s1",
 					FallbackProviders: []FallbackProviderEntry{
 						{Provider: "stage-fallback", Backend: LLMBackendNativeGemini},
 					},
+					SubAgents: SubAgentRefs{
+						{Name: "Worker", LLMProvider: "stage-subagent"},
+					},
 					Agents: []StageAgentConfig{{
 						Name: "TestAgent",
 						FallbackProviders: []FallbackProviderEntry{
 							{Provider: "agent-fallback", Backend: LLMBackendLangChain},
+						},
+						SubAgents: SubAgentRefs{
+							{Name: "Worker", LLMProvider: "agent-subagent"},
 						},
 					}},
 				}},
@@ -2867,8 +2904,11 @@ func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
 	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
+	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
 	assert.True(t, referenced["stage-fallback"], "stage fallback provider should be referenced")
+	assert.True(t, referenced["stage-subagent"], "stage sub-agent provider should be referenced")
 	assert.True(t, referenced["agent-fallback"], "agent fallback provider should be referenced")
+	assert.True(t, referenced["agent-subagent"], "agent sub-agent provider should be referenced")
 }
 
 func intPtr(i int) *int {

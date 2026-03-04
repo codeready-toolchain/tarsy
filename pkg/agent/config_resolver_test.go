@@ -999,7 +999,7 @@ func TestResolveFallbackProviders(t *testing.T) {
 		assert.Equal(t, agentFallback, resolved.FallbackProviders)
 	})
 
-	t.Run("empty list does not override", func(t *testing.T) {
+	t.Run("empty list explicitly clears inherited", func(t *testing.T) {
 		cfg := &config.Config{
 			Defaults: &config.Defaults{
 				LLMProvider:       "google-default",
@@ -1011,6 +1011,25 @@ func TestResolveFallbackProviders(t *testing.T) {
 
 		resolved, err := ResolveAgentConfig(cfg,
 			&config.ChainConfig{FallbackProviders: []config.FallbackProviderEntry{}},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, resolved.FallbackProviders)
+	})
+
+	t.Run("nil slice does not override", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{},
 			config.StageConfig{},
 			config.StageAgentConfig{Name: "TestAgent"},
 		)

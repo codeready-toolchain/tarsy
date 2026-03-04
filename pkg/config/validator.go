@@ -564,6 +564,13 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 			referenced[fb.Provider] = true
 		}
 
+		// Chain-level sub-agent providers
+		for _, ref := range chain.SubAgents {
+			if ref.LLMProvider != "" {
+				referenced[ref.LLMProvider] = true
+			}
+		}
+
 		// Chat-level LLM provider
 		if chain.Chat != nil && chain.Chat.LLMProvider != "" {
 			referenced[chain.Chat.LLMProvider] = true
@@ -581,6 +588,13 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 				referenced[fb.Provider] = true
 			}
 
+			// Stage-level sub-agent providers
+			for _, ref := range stage.SubAgents {
+				if ref.LLMProvider != "" {
+					referenced[ref.LLMProvider] = true
+				}
+			}
+
 			// Stage agent-level LLM providers
 			for _, agent := range stage.Agents {
 				if agent.LLMProvider != "" {
@@ -589,6 +603,12 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 				// Agent-level fallback providers
 				for _, fb := range agent.FallbackProviders {
 					referenced[fb.Provider] = true
+				}
+				// Agent-level sub-agent providers
+				for _, ref := range agent.SubAgents {
+					if ref.LLMProvider != "" {
+						referenced[ref.LLMProvider] = true
+					}
 				}
 			}
 
@@ -667,11 +687,27 @@ func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, s
 						provider.APIKeyEnv, entry.Provider))
 			}
 		}
-		if provider.Type == LLMProviderTypeVertexAI && provider.CredentialsEnv != "" {
-			if val := os.Getenv(provider.CredentialsEnv); val == "" {
-				return NewValidationError(section, name, entryRef,
-					fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
-						provider.CredentialsEnv, entry.Provider))
+		if provider.Type == LLMProviderTypeVertexAI {
+			if provider.CredentialsEnv != "" {
+				if val := os.Getenv(provider.CredentialsEnv); val == "" {
+					return NewValidationError(section, name, entryRef,
+						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
+							provider.CredentialsEnv, entry.Provider))
+				}
+			}
+			if provider.ProjectEnv != "" {
+				if val := os.Getenv(provider.ProjectEnv); val == "" {
+					return NewValidationError(section, name, entryRef,
+						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
+							provider.ProjectEnv, entry.Provider))
+				}
+			}
+			if provider.LocationEnv != "" {
+				if val := os.Getenv(provider.LocationEnv); val == "" {
+					return NewValidationError(section, name, entryRef,
+						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
+							provider.LocationEnv, entry.Provider))
+				}
 			}
 		}
 	}

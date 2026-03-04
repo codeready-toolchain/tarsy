@@ -400,17 +400,20 @@ func resolveLLMProvider(cfg *config.Config, providerNames ...string) (*config.LL
 	return provider, name, nil
 }
 
-// resolveFallbackProviders returns the last non-empty fallback list from the
+// resolveFallbackProviders returns the last non-nil fallback list from the
 // given overrides, listed in lowest-to-highest precedence order.
+// A non-nil empty slice is an explicit override that clears inherited values.
 // Returns nil when no override provides a value.
 func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []config.FallbackProviderEntry {
 	var result []config.FallbackProviderEntry
+	found := false
 	for _, o := range overrides {
-		if len(o) > 0 {
+		if o != nil {
 			result = o
+			found = true
 		}
 	}
-	if result == nil {
+	if !found {
 		return nil
 	}
 	return append([]config.FallbackProviderEntry(nil), result...)
