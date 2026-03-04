@@ -148,10 +148,8 @@ func setupMigrationTestDB(t *testing.T) (*stdsql.DB, string) {
 func replaceDatabaseInConnString(connStr, newDB string) string {
 	// URI format: postgresql://user:pass@host:port/dbname?params
 	if strings.HasPrefix(connStr, "postgres://") || strings.HasPrefix(connStr, "postgresql://") {
-		// Find the path component (after host:port, before ?)
 		schemeEnd := strings.Index(connStr, "://") + 3
 		rest := connStr[schemeEnd:]
-		// Find the slash after host:port
 		slashIdx := strings.Index(rest, "/")
 		if slashIdx == -1 {
 			return connStr + "/" + newDB
@@ -163,7 +161,21 @@ func replaceDatabaseInConnString(connStr, newDB string) string {
 		}
 		return connStr[:schemeEnd] + rest[:slashIdx+1] + newDB + afterSlash[qIdx:]
 	}
-	return connStr
+
+	// Key-value format: host=localhost user=test dbname=olddb ...
+	tokens := strings.Fields(connStr)
+	found := false
+	for i, tok := range tokens {
+		if strings.HasPrefix(tok, "dbname=") {
+			tokens[i] = "dbname=" + newDB
+			found = true
+			break
+		}
+	}
+	if !found {
+		tokens = append(tokens, "dbname="+newDB)
+	}
+	return strings.Join(tokens, " ")
 }
 
 // extractSchemaName reads the search_path from an existing connection to
@@ -171,7 +183,7 @@ func replaceDatabaseInConnString(connStr, newDB string) string {
 func extractSchemaName(t *testing.T, db *stdsql.DB) string {
 	t.Helper()
 	var schema string
-	err := db.QueryRowContext(context.Background(), "SHOW search_path").Scan(&schema)
+	err := db.QueryRowContext(context.Background(), "SELECT current_schema()").Scan(&schema)
 	require.NoError(t, err)
 	return schema
 }
@@ -190,6 +202,7 @@ func queryTables(t *testing.T, db *stdsql.DB, schema string) []string {
 		require.NoError(t, rows.Scan(&name))
 		tables = append(tables, name)
 	}
+	require.NoError(t, rows.Err())
 	return tables
 }
 
@@ -208,6 +221,7 @@ func queryColumns(t *testing.T, db *stdsql.DB, schema, table string) []string {
 		require.NoError(t, rows.Scan(&name))
 		cols = append(cols, name)
 	}
+	require.NoError(t, rows.Err())
 	return cols
 }
 
@@ -216,12 +230,13 @@ type columnInfo struct {
 	Name     string
 	DataType string
 	Nullable string
+	UdtName  string
 }
 
 func queryColumnTypes(t *testing.T, db *stdsql.DB, schema, table string) []columnInfo {
 	t.Helper()
 	rows, err := db.QueryContext(context.Background(),
-		`SELECT column_name, data_type, is_nullable
+		`SELECT column_name, data_type, is_nullable, udt_name
 		 FROM information_schema.columns
 		 WHERE table_schema = $1 AND table_name = $2
 		 ORDER BY column_name`, schema, table)
@@ -231,9 +246,10 @@ func queryColumnTypes(t *testing.T, db *stdsql.DB, schema, table string) []colum
 	var cols []columnInfo
 	for rows.Next() {
 		var c columnInfo
-		require.NoError(t, rows.Scan(&c.Name, &c.DataType, &c.Nullable))
+		require.NoError(t, rows.Scan(&c.Name, &c.DataType, &c.Nullable, &c.UdtName))
 		cols = append(cols, c)
 	}
+	require.NoError(t, rows.Err())
 	return cols
 }
 
