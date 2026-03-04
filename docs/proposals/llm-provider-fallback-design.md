@@ -32,24 +32,31 @@ Fallback operates at the **Go controller level** (`pkg/agent/controller/iteratin
 ```
 Iteration N: LLM call fails (after Python retries exhausted)
     │
-    ├─ Partial output received? → NO fallback for this call
-    │                              (treat as recoverable, retry via iteration)
-    │
     ├─ Parent context cancelled? → Return immediately (session expired)
     │
-    └─ No partial output, retryable error:
+    ├─ Loop detection error? → Not a provider issue, no fallback
+    │
+    └─ Evaluate error code against trigger rules:
          │
-         ├─ Fallback providers available? 
-         │    │
-         │    ├─ YES → Select next fallback provider
-         │    │         Record fallback timeline event
-         │    │         Update execution metadata
-         │    │         Swap provider in execCtx.Config
-         │    │         Continue iteration loop with new provider
-         │    │
-         │    └─ NO → Record failure, continue as today
+         ├─ max_retries / credentials → Immediate fallback trigger
          │
-         └─ (All fallback providers exhausted → fail execution)
+         ├─ provider_error / invalid_request / partial_stream_error
+         │    → Increment consecutive counter; trigger after 2 consecutive
+         │      failures (1 Go retry on the same provider first)
+         │
+         └─ Fallback triggered?
+              │
+              ├─ Fallback providers available?
+              │    │
+              │    ├─ YES → Select next fallback provider
+              │    │         Record fallback timeline event
+              │    │         Update execution metadata
+              │    │         Swap provider in execCtx.Config
+              │    │         Continue iteration loop with new provider
+              │    │
+              │    └─ NO → Record failure, continue as today
+              │
+              └─ NO trigger → Retry iteration with same provider
 ```
 
 **Decision (Q1):** Fallback sticks for the rest of the execution. Each new execution (stage, sub-agent) starts fresh with the primary provider via `ResolveAgentConfig`.
@@ -110,7 +117,7 @@ type FallbackState struct {
     CurrentProviderIndex    int      // -1 = primary, 0+ = fallback list index
     AttemptedProviders      []string // For observability
     FallbackReason          string   // Last error that triggered fallback
-    ConsecutiveNonRetryable int      // Counts consecutive provider_error/invalid_request (threshold: 2)
+    ConsecutiveProviderErrors int     // Counts consecutive provider_error/invalid_request/transport (threshold: 2)
     ConsecutivePartialErrors int     // Counts consecutive partial_stream_error (threshold: 2)
 }
 ```

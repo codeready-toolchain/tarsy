@@ -271,6 +271,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 			Backend:    backend,
 			ClearCache: clearCache,
 		}
+		clearCache = false // consume once per provider switch
 
 		llmCtx, llmCancel := context.WithCancel(ctx)
 		ch, err := e.llmClient.Generate(llmCtx, llmInput)
@@ -292,7 +293,6 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				fallbackIdx = nextIdx
 				clearCache = true
 				retriedCurrentProvider = false
-				startTime = time.Now()
 				continue
 			}
 			return "", fmt.Errorf("executive summary LLM call failed: %w", err)
@@ -335,7 +335,6 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				fallbackIdx = nextIdx
 				clearCache = true
 				retriedCurrentProvider = false
-				startTime = time.Now()
 				continue
 			}
 			return "", chunkErr

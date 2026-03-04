@@ -15,7 +15,7 @@ import (
 
 // Thresholds: fallback triggers when the consecutive error count reaches this value.
 const (
-	nonRetryableThreshold  = 2 // provider_error / invalid_request: fallback after 2 consecutive errors
+	providerErrorThreshold = 2 // provider_error / invalid_request / transport: fallback after 2 consecutive errors
 	partialStreamThreshold = 2 // partial_stream_error: fallback after 2 consecutive errors
 )
 
@@ -27,7 +27,7 @@ type FallbackState struct {
 	CurrentProviderIndex     int // -1 = primary, 0+ = index into ResolvedFallbackProviders
 	AttemptedProviders       []string
 	FallbackReason           string
-	ConsecutiveNonRetryable  int // counts consecutive provider_error / invalid_request
+	ConsecutiveProviderErrors int // counts consecutive provider_error / invalid_request / transport failures
 	ConsecutivePartialErrors int // counts consecutive partial_stream_error
 	ClearCacheNeeded         bool
 }
@@ -57,9 +57,9 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	if !errors.As(err, &poe) {
 		// Not an LLM error (e.g. gRPC transport failure) — no error code to
 		// inspect. Treat like a provider_error for fallback purposes.
-		s.ConsecutiveNonRetryable++
+		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
+		return s.ConsecutiveProviderErrors >= providerErrorThreshold
 	}
 
 	if poe.IsLoop {
@@ -76,26 +76,26 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		return true
 
 	case LLMErrorProviderError, LLMErrorInvalidRequest:
-		s.ConsecutiveNonRetryable++
+		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
+		return s.ConsecutiveProviderErrors >= providerErrorThreshold
 
 	case LLMErrorPartialStreamError:
 		s.ConsecutivePartialErrors++
-		s.ConsecutiveNonRetryable = 0
+		s.ConsecutiveProviderErrors = 0
 		return s.ConsecutivePartialErrors >= partialStreamThreshold
 
 	default:
 		// Unknown code — treat conservatively like provider_error
-		s.ConsecutiveNonRetryable++
+		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveNonRetryable >= nonRetryableThreshold
+		return s.ConsecutiveProviderErrors >= providerErrorThreshold
 	}
 }
 
 // resetCounters resets consecutive error counters after a successful fallback switch.
 func (s *FallbackState) resetCounters() {
-	s.ConsecutiveNonRetryable = 0
+	s.ConsecutiveProviderErrors = 0
 	s.ConsecutivePartialErrors = 0
 }
 

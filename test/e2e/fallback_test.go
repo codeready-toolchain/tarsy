@@ -381,12 +381,12 @@ func TestE2E_FallbackParallelAgents(t *testing.T) {
 //   - Session completes with executive_summary populated
 //   - Agent execution has NO original_llm_provider (no agent-level fallback)
 //   - Executive summary was generated despite primary failure
-//   - LLM call count proves the exec summary required a retry/fallback
+//   - ClearCache=true and different model on the fallback call prove provider switch
 //
 // NOTE: The executive summary uses a standalone LLM call path
 // (executor_synthesis.go), not the agent controller. It does not create
 // provider_fallback timeline events or execution records, so we verify
-// the fallback indirectly via call count and successful summary output.
+// the fallback via CapturedInputs() (ClearCache flag + model change).
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_FallbackExecutiveSummary(t *testing.T) {
@@ -450,9 +450,22 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
 	assert.Empty(t, fallbackEvents, "no agent-level fallback should have occurred")
 
-	// ── LLM calls: Investigator (2) + exec summary (1 retry + 1 fallback success) = 5 ──
-	// The extra call proves the exec summary path retried before falling back.
-	assert.Equal(t, 5, llm.CallCount())
+	// ── LLM calls: Investigator (2) + exec summary (1 fail + 1 retry + 1 fallback) = 5 ──
+	inputs := llm.CapturedInputs()
+	require.Equal(t, 5, len(inputs))
+
+	// The last call (exec summary fallback) should prove a provider switch:
+	// ClearCache=true and a different model than the primary provider.
+	summaryFallbackCall := inputs[4]
+	assert.True(t, summaryFallbackCall.ClearCache,
+		"exec summary fallback call should have ClearCache=true")
+	assert.Equal(t, "test-fallback-1", summaryFallbackCall.Config.Model,
+		"exec summary fallback should use fallback-1 provider model")
+
+	// Earlier exec summary calls used the primary provider
+	assert.False(t, inputs[2].ClearCache, "first exec summary attempt should not clear cache")
+	assert.Equal(t, "test-primary", inputs[2].Config.Model,
+		"first exec summary attempt should use primary model")
 }
 
 // ────────────────────────────────────────────────────────────

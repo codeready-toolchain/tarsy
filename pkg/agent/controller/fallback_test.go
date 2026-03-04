@@ -139,17 +139,17 @@ func TestShouldFallback_ConsecutiveCounterReset(t *testing.T) {
 
 	// One provider_error — counter at 1
 	state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
-	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
 
-	// Partial stream error resets the non-retryable counter
+	// Partial stream error resets the provider error counter
 	state.shouldFallback(makePartialError(LLMErrorPartialStreamError), providers)
-	assert.Equal(t, 0, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors)
 	assert.Equal(t, 1, state.ConsecutivePartialErrors)
 
 	// Provider error resets the partial counter
 	state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
 	assert.Equal(t, 0, state.ConsecutivePartialErrors)
-	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
 }
 
 func TestShouldFallback_NonPartialError_TreatedAsProviderError(t *testing.T) {
@@ -188,16 +188,16 @@ func TestShouldFallback_MixedErrors_BreaksConsecutiveCount(t *testing.T) {
 	// provider_error → partial_stream_error → provider_error: none should trigger
 	// because consecutive counts reset when the error type changes.
 	state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
-	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
 
 	state.shouldFallback(makePartialError(LLMErrorPartialStreamError), providers)
-	assert.Equal(t, 0, state.ConsecutiveNonRetryable, "provider_error count reset by partial")
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors, "provider_error count reset by partial")
 	assert.Equal(t, 1, state.ConsecutivePartialErrors)
 
 	result := state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
 	assert.False(t, result, "alternating errors should never reach threshold")
 	assert.Equal(t, 0, state.ConsecutivePartialErrors, "partial count reset by provider_error")
-	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -224,11 +224,11 @@ func TestFallbackState_HasFallbackOccurred(t *testing.T) {
 
 func TestFallbackState_ResetCounters(t *testing.T) {
 	state := newTestFallbackState()
-	state.ConsecutiveNonRetryable = 3
+	state.ConsecutiveProviderErrors = 3
 	state.ConsecutivePartialErrors = 2
 
 	state.resetCounters()
-	assert.Equal(t, 0, state.ConsecutiveNonRetryable)
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors)
 	assert.Equal(t, 0, state.ConsecutivePartialErrors)
 }
 
@@ -248,7 +248,7 @@ func TestTryFallback_SwapsProviderAndRecordsEvents(t *testing.T) {
 
 	state := NewFallbackState(execCtx)
 	// Simulate immediate-fallback error
-	state.ConsecutiveNonRetryable = nonRetryableThreshold + 1
+	state.ConsecutiveProviderErrors = providerErrorThreshold + 1
 
 	eventSeq := 0
 	err := makePartialError(LLMErrorMaxRetries)
@@ -265,7 +265,7 @@ func TestTryFallback_SwapsProviderAndRecordsEvents(t *testing.T) {
 	assert.Equal(t, 0, state.CurrentProviderIndex)
 	assert.True(t, state.ClearCacheNeeded)
 	assert.Contains(t, state.AttemptedProviders, "fallback-1")
-	assert.Equal(t, 0, state.ConsecutiveNonRetryable, "counters should be reset")
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors, "counters should be reset")
 
 	// Verify timeline event was created (eventSeq should have incremented)
 	assert.Equal(t, 1, eventSeq, "a timeline event should have been created")
