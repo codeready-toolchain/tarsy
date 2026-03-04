@@ -830,8 +830,10 @@ func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload) error      
 The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
 
 **Event Types**:
-- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`, `provider_fallback`
+- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`
 - **Transient** (NOTIFY only): `stream.chunk` (LLM token deltas)
+
+Timeline event payloads carry an `event_type` field that distinguishes the kind of event (e.g., `llm_response`, `llm_tool_call`, `final_analysis`, `provider_fallback`). See the [TimelineEvent schema](#8-history--audit-trail) for the full list.
 
 All event payloads include `parent_execution_id` when present, enabling the dashboard to route sub-agent events without cross-referencing.
 
