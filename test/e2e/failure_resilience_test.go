@@ -81,6 +81,10 @@ func TestE2E_FailureResilience(t *testing.T) {
 	})
 
 	// ── Executive summary — LLM error (fail-open) ──
+	// Two entries: first attempt fails, retry also fails (retry-before-fallback).
+	llm.AddSequential(LLMScriptEntry{
+		Error: fmt.Errorf("executive summary model overloaded"),
+	})
 	llm.AddSequential(LLMScriptEntry{
 		Error: fmt.Errorf("executive summary model overloaded"),
 	})
@@ -165,8 +169,8 @@ func TestE2E_FailureResilience(t *testing.T) {
 	}
 
 	// ── LLM call count ──
-	// Analyzer (1 error + 1 forced conclusion) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error) = 7
-	assert.Equal(t, 7, llm.CallCount())
+	// Analyzer (1 error + 1 forced conclusion) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error + 1 retry) = 8
+	assert.Equal(t, 8, llm.CallCount())
 
 	// ── Timeline API assertions ──
 	apiTimeline := app.GetTimeline(t, sessionID)

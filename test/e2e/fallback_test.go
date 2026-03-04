@@ -445,10 +445,12 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 	assert.Equal(t, "completed", string(investigator.Status))
 	assert.Nil(t, investigator.OriginalLlmProvider, "Investigator should not have fallback (succeeded on primary)")
 
-	// ── No agent-level provider_fallback events (exec summary path doesn't create them) ──
+	// ── Executive summary creates a provider_fallback timeline event ──
 	timeline := app.QueryTimeline(t, sessionID)
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
-	assert.Empty(t, fallbackEvents, "no agent-level fallback should have occurred")
+	require.Len(t, fallbackEvents, 1, "exactly one provider_fallback event from exec summary")
+	assert.Equal(t, "primary-provider", fallbackEvents[0].Metadata["original_provider"])
+	assert.Equal(t, "fallback-1", fallbackEvents[0].Metadata["fallback_provider"])
 
 	// ── LLM calls: Investigator (2) + exec summary (1 fail + 1 retry + 1 fallback) = 5 ──
 	inputs := llm.CapturedInputs()

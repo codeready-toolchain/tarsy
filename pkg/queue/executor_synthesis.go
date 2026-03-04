@@ -255,6 +255,25 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 
 	// Single LLM call — no tools, consume full response from stream.
 	// Retry once on the same provider for transient errors, then fall back.
+	emitFallbackEvent := func(fromProvider string, toEntry agent.ResolvedFallbackEntry, reason string) {
+		_, evtErr := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+			SessionID:      session.ID,
+			SequenceNumber: executiveSummarySeqNum,
+			EventType:      timelineevent.EventTypeProviderFallback,
+			Status:         timelineevent.StatusCompleted,
+			Content:        fmt.Sprintf("Provider fallback: %s → %s", fromProvider, toEntry.ProviderName),
+			Metadata: map[string]any{
+				"original_provider": fromProvider,
+				"fallback_provider": toEntry.ProviderName,
+				"fallback_backend":  string(toEntry.Backend),
+				"reason":            reason,
+			},
+		})
+		if evtErr != nil {
+			logger.Warn("Failed to create provider_fallback timeline event", "error", evtErr)
+		}
+	}
+
 	var summary string
 	var usage agent.TokenUsage
 	fallbackIdx := -1 // -1 = primary, 0+ = fallback index
@@ -287,6 +306,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				logger.Info("Executive summary falling back to next provider",
 					"from_provider", providerName, "to_provider", entry.ProviderName,
 					"reason", err.Error())
+				emitFallbackEvent(providerName, entry, err.Error())
 				provider = entry.Config
 				providerName = entry.ProviderName
 				backend = entry.Backend
@@ -329,6 +349,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				logger.Info("Executive summary falling back to next provider",
 					"from_provider", providerName, "to_provider", entry.ProviderName,
 					"reason", chunkErr.Error())
+				emitFallbackEvent(providerName, entry, chunkErr.Error())
 				provider = entry.Config
 				providerName = entry.ProviderName
 				backend = entry.Backend

@@ -114,6 +114,31 @@ func TestShouldFallback_LoopError_NeverTriggers(t *testing.T) {
 	}
 }
 
+func TestShouldFallback_LoopError_BreaksConsecutiveStreak(t *testing.T) {
+	state := newTestFallbackState()
+	providers := fallbackProviders()
+
+	loopErr := &PartialOutputError{
+		Cause:  fmt.Errorf("loop detected"),
+		IsLoop: true,
+		Code:   LLMErrorPartialStreamError,
+	}
+
+	// provider_error → count=1
+	state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
+
+	// loop error resets the streak
+	state.shouldFallback(loopErr, providers)
+	assert.Equal(t, 0, state.ConsecutiveProviderErrors, "loop should reset provider streak")
+	assert.Equal(t, 0, state.ConsecutivePartialErrors, "loop should reset partial streak")
+
+	// Next provider_error starts from 0 again — no fallback
+	result := state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
+	assert.False(t, result, "provider_error after loop should not trigger (streak was reset)")
+	assert.Equal(t, 1, state.ConsecutiveProviderErrors)
+}
+
 func TestShouldFallback_EmptyFallbackList(t *testing.T) {
 	state := newTestFallbackState()
 

@@ -63,7 +63,11 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	}
 
 	if poe.IsLoop {
-		return false // loop detection is not a provider issue
+		// Loop detection is not a provider issue — break any consecutive streak
+		// so a subsequent provider error doesn't inherit the pre-loop count.
+		s.ConsecutiveProviderErrors = 0
+		s.ConsecutivePartialErrors = 0
+		return false
 	}
 
 	switch poe.Code {
