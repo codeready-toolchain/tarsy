@@ -2582,6 +2582,335 @@ func TestValidateSubAgents(t *testing.T) {
 	})
 }
 
+func TestValidateFallbackProviders(t *testing.T) {
+	baseAgents := map[string]*AgentConfig{
+		"TestAgent": {},
+	}
+
+	tests := []struct {
+		name      string
+		defaults  *Defaults
+		chains    map[string]*ChainConfig
+		providers map[string]*LLMProviderConfig
+		env       map[string]string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "valid defaults-level fallback",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "fallback-1", Backend: LLMBackendNativeGemini},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini-2.5-pro", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: false,
+		},
+		{
+			name: "defaults-level fallback with missing provider",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "nonexistent", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "LLM provider 'nonexistent' not found",
+		},
+		{
+			name: "defaults-level fallback with invalid backend",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "fallback-1", Backend: "invalid-backend"},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
+		},
+		{
+			name: "defaults-level fallback with missing credentials",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "fallback-1", Backend: LLMBackendNativeGemini},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{}, // FB_KEY not set
+			wantErr: true,
+			errMsg:  "environment variable FB_KEY is not set",
+		},
+		{
+			name: "chain-level fallback valid",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					FallbackProviders: []FallbackProviderEntry{
+						{Provider: "fallback-1", Backend: LLMBackendLangChain},
+					},
+					Stages: []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: false,
+		},
+		{
+			name: "chain-level fallback with missing provider",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					FallbackProviders: []FallbackProviderEntry{
+						{Provider: "ghost", Backend: LLMBackendLangChain},
+					},
+					Stages: []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "LLM provider 'ghost' not found",
+		},
+		{
+			name: "stage-level fallback valid",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{{
+						Name:              "s1",
+						Agents:            []StageAgentConfig{{Name: "TestAgent"}},
+						FallbackProviders: []FallbackProviderEntry{{Provider: "fallback-1", Backend: LLMBackendNativeGemini}},
+					}},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: false,
+		},
+		{
+			name: "agent-level fallback valid",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{{
+						Name: "s1",
+						Agents: []StageAgentConfig{{
+							Name:              "TestAgent",
+							FallbackProviders: []FallbackProviderEntry{{Provider: "fallback-1", Backend: LLMBackendLangChain}},
+						}},
+					}},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: false,
+		},
+		{
+			name: "agent-level fallback with invalid backend",
+			chains: map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{{
+						Name: "s1",
+						Agents: []StageAgentConfig{{
+							Name:              "TestAgent",
+							FallbackProviders: []FallbackProviderEntry{{Provider: "fallback-1", Backend: "bad"}},
+						}},
+					}},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
+		},
+		{
+			name: "vertexai fallback requires credentials_env",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "vertex-fallback", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", CredentialsEnv: "VERTEX_CREDS", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{}, // VERTEX_CREDS not set
+			wantErr: true,
+			errMsg:  "environment variable VERTEX_CREDS is not set",
+		},
+		{
+			name: "vertexai fallback requires project_env",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "vertex-fallback", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", ProjectEnv: "VERTEX_PROJECT", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable VERTEX_PROJECT is not set",
+		},
+		{
+			name: "vertexai fallback requires location_env",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "vertex-fallback", Backend: LLMBackendLangChain},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", LocationEnv: "VERTEX_LOCATION", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable VERTEX_LOCATION is not set",
+		},
+		{
+			name: "multi-entry error on second entry",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "good-provider", Backend: LLMBackendLangChain},
+					{Provider: "bad-provider", Backend: LLMBackendNativeGemini},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"good-provider": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "GOOD_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"GOOD_KEY": "secret"},
+			wantErr: true,
+			errMsg:  "LLM provider 'bad-provider' not found",
+		},
+		{
+			name: "empty fallback list is valid",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			chains := tt.chains
+			if chains == nil {
+				chains = map[string]*ChainConfig{
+					"chain1": {
+						AlertTypes: []string{"test"},
+						Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+					},
+				}
+			}
+
+			cfg := &Config{
+				Defaults:            tt.defaults,
+				AgentRegistry:       NewAgentRegistry(baseAgents),
+				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
+				MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+				ChainRegistry:       NewChainRegistry(chains),
+			}
+
+			validator := NewValidator(cfg)
+
+			// Test defaults-level validation
+			if tt.defaults != nil {
+				err := validator.validateDefaults()
+				if tt.wantErr {
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), tt.errMsg)
+				} else {
+					assert.NoError(t, err)
+				}
+				return
+			}
+
+			// Test chain/stage/agent-level validation
+			err := validator.validateChains()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T) {
+	cfg := &Config{
+		Defaults: &Defaults{
+			LLMProvider: "defaults-primary",
+			FallbackProviders: []FallbackProviderEntry{
+				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
+			},
+		},
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "Worker": {}}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+			"chain1": {
+				AlertTypes: []string{"test"},
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "chain-fallback", Backend: LLMBackendLangChain},
+				},
+				SubAgents: SubAgentRefs{
+					{Name: "Worker", LLMProvider: "chain-subagent"},
+				},
+				Stages: []StageConfig{{
+					Name: "s1",
+					FallbackProviders: []FallbackProviderEntry{
+						{Provider: "stage-fallback", Backend: LLMBackendNativeGemini},
+					},
+					SubAgents: SubAgentRefs{
+						{Name: "Worker", LLMProvider: "stage-subagent"},
+					},
+					Agents: []StageAgentConfig{{
+						Name: "TestAgent",
+						FallbackProviders: []FallbackProviderEntry{
+							{Provider: "agent-fallback", Backend: LLMBackendLangChain},
+						},
+						SubAgents: SubAgentRefs{
+							{Name: "Worker", LLMProvider: "agent-subagent"},
+						},
+					}},
+				}},
+			},
+		}),
+	}
+
+	validator := NewValidator(cfg)
+	referenced := validator.collectReferencedLLMProviders()
+
+	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
+	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
+	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
+	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
+	assert.True(t, referenced["stage-fallback"], "stage fallback provider should be referenced")
+	assert.True(t, referenced["stage-subagent"], "stage sub-agent provider should be referenced")
+	assert.True(t, referenced["agent-fallback"], "agent fallback provider should be referenced")
+	assert.True(t, referenced["agent-subagent"], "agent sub-agent provider should be referenced")
+}
+
 func intPtr(i int) *int {
 	return &i
 }

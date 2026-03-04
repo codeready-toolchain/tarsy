@@ -65,6 +65,8 @@ type AgentExecutionMutation struct {
 	error_message                    *string
 	llm_backend                      *string
 	llm_provider                     *string
+	original_llm_provider            *string
+	original_llm_backend             *string
 	task                             *string
 	clearedFields                    map[string]struct{}
 	stage                            *string
@@ -702,6 +704,104 @@ func (m *AgentExecutionMutation) ResetLlmProvider() {
 	delete(m.clearedFields, agentexecution.FieldLlmProvider)
 }
 
+// SetOriginalLlmProvider sets the "original_llm_provider" field.
+func (m *AgentExecutionMutation) SetOriginalLlmProvider(s string) {
+	m.original_llm_provider = &s
+}
+
+// OriginalLlmProvider returns the value of the "original_llm_provider" field in the mutation.
+func (m *AgentExecutionMutation) OriginalLlmProvider() (r string, exists bool) {
+	v := m.original_llm_provider
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalLlmProvider returns the old "original_llm_provider" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldOriginalLlmProvider(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalLlmProvider is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalLlmProvider requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalLlmProvider: %w", err)
+	}
+	return oldValue.OriginalLlmProvider, nil
+}
+
+// ClearOriginalLlmProvider clears the value of the "original_llm_provider" field.
+func (m *AgentExecutionMutation) ClearOriginalLlmProvider() {
+	m.original_llm_provider = nil
+	m.clearedFields[agentexecution.FieldOriginalLlmProvider] = struct{}{}
+}
+
+// OriginalLlmProviderCleared returns if the "original_llm_provider" field was cleared in this mutation.
+func (m *AgentExecutionMutation) OriginalLlmProviderCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldOriginalLlmProvider]
+	return ok
+}
+
+// ResetOriginalLlmProvider resets all changes to the "original_llm_provider" field.
+func (m *AgentExecutionMutation) ResetOriginalLlmProvider() {
+	m.original_llm_provider = nil
+	delete(m.clearedFields, agentexecution.FieldOriginalLlmProvider)
+}
+
+// SetOriginalLlmBackend sets the "original_llm_backend" field.
+func (m *AgentExecutionMutation) SetOriginalLlmBackend(s string) {
+	m.original_llm_backend = &s
+}
+
+// OriginalLlmBackend returns the value of the "original_llm_backend" field in the mutation.
+func (m *AgentExecutionMutation) OriginalLlmBackend() (r string, exists bool) {
+	v := m.original_llm_backend
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalLlmBackend returns the old "original_llm_backend" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldOriginalLlmBackend(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalLlmBackend is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalLlmBackend requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalLlmBackend: %w", err)
+	}
+	return oldValue.OriginalLlmBackend, nil
+}
+
+// ClearOriginalLlmBackend clears the value of the "original_llm_backend" field.
+func (m *AgentExecutionMutation) ClearOriginalLlmBackend() {
+	m.original_llm_backend = nil
+	m.clearedFields[agentexecution.FieldOriginalLlmBackend] = struct{}{}
+}
+
+// OriginalLlmBackendCleared returns if the "original_llm_backend" field was cleared in this mutation.
+func (m *AgentExecutionMutation) OriginalLlmBackendCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldOriginalLlmBackend]
+	return ok
+}
+
+// ResetOriginalLlmBackend resets all changes to the "original_llm_backend" field.
+func (m *AgentExecutionMutation) ResetOriginalLlmBackend() {
+	m.original_llm_backend = nil
+	delete(m.clearedFields, agentexecution.FieldOriginalLlmBackend)
+}
+
 // SetParentExecutionID sets the "parent_execution_id" field.
 func (m *AgentExecutionMutation) SetParentExecutionID(s string) {
 	m.parent = &s
@@ -1252,7 +1352,7 @@ func (m *AgentExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 15)
 	if m.stage != nil {
 		fields = append(fields, agentexecution.FieldStageID)
 	}
@@ -1285,6 +1385,12 @@ func (m *AgentExecutionMutation) Fields() []string {
 	}
 	if m.llm_provider != nil {
 		fields = append(fields, agentexecution.FieldLlmProvider)
+	}
+	if m.original_llm_provider != nil {
+		fields = append(fields, agentexecution.FieldOriginalLlmProvider)
+	}
+	if m.original_llm_backend != nil {
+		fields = append(fields, agentexecution.FieldOriginalLlmBackend)
 	}
 	if m.parent != nil {
 		fields = append(fields, agentexecution.FieldParentExecutionID)
@@ -1322,6 +1428,10 @@ func (m *AgentExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.LlmBackend()
 	case agentexecution.FieldLlmProvider:
 		return m.LlmProvider()
+	case agentexecution.FieldOriginalLlmProvider:
+		return m.OriginalLlmProvider()
+	case agentexecution.FieldOriginalLlmBackend:
+		return m.OriginalLlmBackend()
 	case agentexecution.FieldParentExecutionID:
 		return m.ParentExecutionID()
 	case agentexecution.FieldTask:
@@ -1357,6 +1467,10 @@ func (m *AgentExecutionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldLlmBackend(ctx)
 	case agentexecution.FieldLlmProvider:
 		return m.OldLlmProvider(ctx)
+	case agentexecution.FieldOriginalLlmProvider:
+		return m.OldOriginalLlmProvider(ctx)
+	case agentexecution.FieldOriginalLlmBackend:
+		return m.OldOriginalLlmBackend(ctx)
 	case agentexecution.FieldParentExecutionID:
 		return m.OldParentExecutionID(ctx)
 	case agentexecution.FieldTask:
@@ -1447,6 +1561,20 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLlmProvider(v)
 		return nil
+	case agentexecution.FieldOriginalLlmProvider:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalLlmProvider(v)
+		return nil
+	case agentexecution.FieldOriginalLlmBackend:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalLlmBackend(v)
+		return nil
 	case agentexecution.FieldParentExecutionID:
 		v, ok := value.(string)
 		if !ok {
@@ -1533,6 +1661,12 @@ func (m *AgentExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(agentexecution.FieldLlmProvider) {
 		fields = append(fields, agentexecution.FieldLlmProvider)
 	}
+	if m.FieldCleared(agentexecution.FieldOriginalLlmProvider) {
+		fields = append(fields, agentexecution.FieldOriginalLlmProvider)
+	}
+	if m.FieldCleared(agentexecution.FieldOriginalLlmBackend) {
+		fields = append(fields, agentexecution.FieldOriginalLlmBackend)
+	}
 	if m.FieldCleared(agentexecution.FieldParentExecutionID) {
 		fields = append(fields, agentexecution.FieldParentExecutionID)
 	}
@@ -1567,6 +1701,12 @@ func (m *AgentExecutionMutation) ClearField(name string) error {
 		return nil
 	case agentexecution.FieldLlmProvider:
 		m.ClearLlmProvider()
+		return nil
+	case agentexecution.FieldOriginalLlmProvider:
+		m.ClearOriginalLlmProvider()
+		return nil
+	case agentexecution.FieldOriginalLlmBackend:
+		m.ClearOriginalLlmBackend()
 		return nil
 	case agentexecution.FieldParentExecutionID:
 		m.ClearParentExecutionID()
@@ -1614,6 +1754,12 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 		return nil
 	case agentexecution.FieldLlmProvider:
 		m.ResetLlmProvider()
+		return nil
+	case agentexecution.FieldOriginalLlmProvider:
+		m.ResetOriginalLlmProvider()
+		return nil
+	case agentexecution.FieldOriginalLlmBackend:
+		m.ResetOriginalLlmBackend()
 		return nil
 	case agentexecution.FieldParentExecutionID:
 		m.ResetParentExecutionID()

@@ -41,6 +41,10 @@ type AgentExecution struct {
 	LlmBackend string `json:"llm_backend,omitempty"`
 	// Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')
 	LlmProvider *string `json:"llm_provider,omitempty"`
+	// Original provider before fallback (NULL = no fallback occurred)
+	OriginalLlmProvider *string `json:"original_llm_provider,omitempty"`
+	// Original backend before fallback (NULL = no fallback occurred)
+	OriginalLlmBackend *string `json:"original_llm_backend,omitempty"`
 	// For orchestrator sub-agents: links to the parent orchestrator execution
 	ParentExecutionID *string `json:"parent_execution_id,omitempty"`
 	// Task description from orchestrator dispatch
@@ -170,7 +174,7 @@ func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentexecution.FieldAgentIndex, agentexecution.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider, agentexecution.FieldParentExecutionID, agentexecution.FieldTask:
+		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider, agentexecution.FieldOriginalLlmProvider, agentexecution.FieldOriginalLlmBackend, agentexecution.FieldParentExecutionID, agentexecution.FieldTask:
 			values[i] = new(sql.NullString)
 		case agentexecution.FieldStartedAt, agentexecution.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -265,6 +269,20 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LlmProvider = new(string)
 				*_m.LlmProvider = value.String
+			}
+		case agentexecution.FieldOriginalLlmProvider:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field original_llm_provider", values[i])
+			} else if value.Valid {
+				_m.OriginalLlmProvider = new(string)
+				*_m.OriginalLlmProvider = value.String
+			}
+		case agentexecution.FieldOriginalLlmBackend:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field original_llm_backend", values[i])
+			} else if value.Valid {
+				_m.OriginalLlmBackend = new(string)
+				*_m.OriginalLlmBackend = value.String
 			}
 		case agentexecution.FieldParentExecutionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -401,6 +419,16 @@ func (_m *AgentExecution) String() string {
 	builder.WriteString(", ")
 	if v := _m.LlmProvider; v != nil {
 		builder.WriteString("llm_provider=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.OriginalLlmProvider; v != nil {
+		builder.WriteString("original_llm_provider=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.OriginalLlmBackend; v != nil {
+		builder.WriteString("original_llm_backend=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

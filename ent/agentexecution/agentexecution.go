@@ -36,6 +36,10 @@ const (
 	FieldLlmBackend = "llm_backend"
 	// FieldLlmProvider holds the string denoting the llm_provider field in the database.
 	FieldLlmProvider = "llm_provider"
+	// FieldOriginalLlmProvider holds the string denoting the original_llm_provider field in the database.
+	FieldOriginalLlmProvider = "original_llm_provider"
+	// FieldOriginalLlmBackend holds the string denoting the original_llm_backend field in the database.
+	FieldOriginalLlmBackend = "original_llm_backend"
 	// FieldParentExecutionID holds the string denoting the parent_execution_id field in the database.
 	FieldParentExecutionID = "parent_execution_id"
 	// FieldTask holds the string denoting the task field in the database.
@@ -145,6 +149,8 @@ var Columns = []string{
 	FieldErrorMessage,
 	FieldLlmBackend,
 	FieldLlmProvider,
+	FieldOriginalLlmProvider,
+	FieldOriginalLlmBackend,
 	FieldParentExecutionID,
 	FieldTask,
 }
@@ -250,6 +256,16 @@ func ByLlmBackend(opts ...sql.OrderTermOption) OrderOption {
 // ByLlmProvider orders the results by the llm_provider field.
 func ByLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLlmProvider, opts...).ToFunc()
+}
+
+// ByOriginalLlmProvider orders the results by the original_llm_provider field.
+func ByOriginalLlmProvider(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOriginalLlmProvider, opts...).ToFunc()
+}
+
+// ByOriginalLlmBackend orders the results by the original_llm_backend field.
+func ByOriginalLlmBackend(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOriginalLlmBackend, opts...).ToFunc()
 }
 
 // ByParentExecutionID orders the results by the parent_execution_id field.
