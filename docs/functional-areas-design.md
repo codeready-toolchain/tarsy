@@ -345,7 +345,7 @@ Chains support flexible LLM provider configuration with a resolution hierarchy:
 
 Non-stage components (executive summary, follow-up chat) use chain-level provider if defined, otherwise global default.
 
-**Fallback provider list** follows the same hierarchy: `defaults.fallback_providers` → chain-level → stage-level → agent-level. See [ADR-0003](adr/0003-llm-provider-fallback.md).
+**Fallback providers** are resolved with the following precedence (highest to lowest): agent-level → stage-level → chain-level → `defaults.fallback_providers`. The first non-nil list wins (an explicit empty list clears inherited values). See [ADR-0003](adr/0003-llm-provider-fallback.md).
 
 ---
 
