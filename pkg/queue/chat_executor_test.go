@@ -279,6 +279,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis",
 		StageIndex:         0,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	require.NoError(t, err)
 
@@ -296,6 +297,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis",
 		StageIndex:         2,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	require.NoError(t, err)
 
@@ -446,6 +448,7 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		StageName:          "Analysis",
 		StageIndex:         0,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	require.NoError(t, err)
 
@@ -470,7 +473,38 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 2. Single chat with two messages (unique constraint: one chat per session).
+	// 2. Exec-summary stage — should be skipped by buildChatContext (default: continue).
+	execSummaryStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Executive Summary",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeExecSummary),
+	})
+	require.NoError(t, err)
+
+	execSumExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    execSummaryStage.ID,
+		SessionID:  session.ID,
+		AgentName:  "exec-summary-agent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	execSumStageID := execSummaryStage.ID
+	execSumExecID := execSumExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &execSumStageID,
+		ExecutionID:    &execSumExecID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
+	})
+	require.NoError(t, err)
+
+	// 3. Single chat with two messages (unique constraint: one chat per session).
 	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
 		SessionID: session.ID,
 		CreatedBy: "test@example.com",
@@ -490,7 +524,7 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	prevChatStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
 		StageName:          "Chat Response",
-		StageIndex:         1,
+		StageIndex:         2,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeChat),
 		ChatID:             &chatID,
@@ -528,7 +562,7 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3. Current message — the one being answered now.
+	// 4. Current message — the one being answered now.
 	curMsg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
 		ChatID:  chat.ID,
 		Content: "What should we do?",
@@ -554,6 +588,8 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		"previous chat question should appear in context")
 	assert.Contains(t, result.InvestigationContext, "It crashed due to OOM.",
 		"previous chat answer should appear in context")
+	assert.NotContains(t, result.InvestigationContext, "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
+		"exec_summary stage should be skipped by default branch")
 }
 
 // ────────────────────────────────────────────────────────────
@@ -573,13 +609,13 @@ func TestChatMessageExecutor_FinishStage_MarksStageFailedWithoutExecutions(t *te
 		StageName:          "Chat Response",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeChat),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, stage.StatusPending, stg.Status)
 
 	executor := &ChatMessageExecutor{
 		stageService: stageService,
-		// eventPublisher is nil — publishStageStatus handles nil gracefully
 	}
 
 	executor.finishStage(stg.ID, session.ID, "Chat Response", 1, stage.StageTypeChat, events.StageStatusFailed, "chain not found")
@@ -605,6 +641,7 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 		StageName:          "Chat Response",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeChat),
 	})
 	require.NoError(t, err)
 

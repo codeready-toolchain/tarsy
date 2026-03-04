@@ -329,6 +329,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	if len(input.stageConfig.Agents) == 0 {
 		return stageResult{
 			stageName: input.stageConfig.Name,
+			stageType: stage.StageTypeInvestigation,
 			status:    alertsession.StatusFailed,
 			err:       fmt.Errorf("stage %q has no agents", input.stageConfig.Name),
 		}
@@ -350,11 +351,12 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
-			return stageResult{stageName: input.stageConfig.Name, status: r.Status, err: r.Error}
+			return stageResult{stageName: input.stageConfig.Name, stageType: stage.StageTypeInvestigation, status: r.Status, err: r.Error}
 		}
 		logger.Error("Failed to create stage", "error", err)
 		return stageResult{
 			stageName: input.stageConfig.Name,
+			stageType: stage.StageTypeInvestigation,
 			status:    alertsession.StatusFailed,
 			err:       fmt.Errorf("failed to create stage: %w", err),
 		}

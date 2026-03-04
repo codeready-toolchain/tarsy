@@ -41,6 +41,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	if r := e.mapCancellation(ctx); r != nil {
 		return stageResult{
 			stageName: synthStageName,
+			stageType: stage.StageTypeSynthesis,
 			status:    r.Status,
 			err:       r.Error,
 		}
@@ -56,11 +57,12 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
-			return stageResult{stageName: synthStageName, status: r.Status, err: r.Error}
+			return stageResult{stageName: synthStageName, stageType: stage.StageTypeSynthesis, status: r.Status, err: r.Error}
 		}
 		logger.Error("Failed to create synthesis stage", "error", err)
 		return stageResult{
 			stageName: synthStageName,
+			stageType: stage.StageTypeSynthesis,
 			status:    alertsession.StatusFailed,
 			err:       fmt.Errorf("failed to create synthesis stage: %w", err),
 		}
