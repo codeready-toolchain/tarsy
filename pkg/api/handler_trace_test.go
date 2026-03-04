@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/schema"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,6 +29,7 @@ func TestBuildTraceListResponse_StageWithNoInteractions(t *testing.T) {
 		{
 			ID:        "stg-1",
 			StageName: "investigation",
+			StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				AgentExecutions: []*ent.AgentExecution{
 					{ID: "exec-1", AgentName: "DataCollector", AgentIndex: 1},
@@ -40,6 +42,7 @@ func TestBuildTraceListResponse_StageWithNoInteractions(t *testing.T) {
 	require.Len(t, resp.Stages, 1)
 	assert.Equal(t, "stg-1", resp.Stages[0].StageID)
 	assert.Equal(t, "investigation", resp.Stages[0].StageName)
+	assert.Equal(t, "investigation", resp.Stages[0].StageType)
 	require.Len(t, resp.Stages[0].Executions, 1)
 	assert.Equal(t, "exec-1", resp.Stages[0].Executions[0].ExecutionID)
 	assert.Equal(t, "DataCollector", resp.Stages[0].Executions[0].AgentName)
@@ -57,6 +60,7 @@ func TestBuildTraceListResponse_GroupingAndSorting(t *testing.T) {
 		{
 			ID:        "stg-1",
 			StageName: "investigation",
+			StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				AgentExecutions: []*ent.AgentExecution{
 					{ID: "exec-1", AgentName: "Agent1", AgentIndex: 1},
@@ -66,6 +70,7 @@ func TestBuildTraceListResponse_GroupingAndSorting(t *testing.T) {
 		{
 			ID:        "stg-2",
 			StageName: "validation",
+			StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				// Deliberately out of order to verify sorting.
 				AgentExecutions: []*ent.AgentExecution{
@@ -131,7 +136,7 @@ func TestBuildTraceListResponse_SessionLevelInteractions(t *testing.T) {
 
 	stages := []*ent.Stage{
 		{
-			ID: "stg-1", StageName: "investigation",
+			ID: "stg-1", StageName: "investigation", StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				AgentExecutions: []*ent.AgentExecution{
 					{ID: "exec-1", AgentName: "Agent1", AgentIndex: 1},
@@ -165,6 +170,7 @@ func TestBuildTraceListResponse_StageWithNoExecutions(t *testing.T) {
 		{
 			ID:        "stg-1",
 			StageName: "empty-stage",
+			StageType: stage.StageTypeInvestigation,
 			// No AgentExecutions edge.
 		},
 	}
@@ -185,6 +191,7 @@ func TestBuildTraceListResponse_SubAgentNesting(t *testing.T) {
 		{
 			ID:        "stg-1",
 			StageName: "orchestrate",
+			StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				AgentExecutions: []*ent.AgentExecution{
 					{ID: "exec-orch", AgentName: "Orchestrator", AgentIndex: 1},

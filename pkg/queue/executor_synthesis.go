@@ -9,6 +9,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
@@ -51,7 +52,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 		StageName:          synthStageName,
 		StageIndex:         input.stageIndex + 1, // 1-based in DB
 		ExpectedAgentCount: 1,
-		// No parallel_type, no success_policy (single-agent synthesis)
+		StageType:          string(stage.StageTypeSynthesis),
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
@@ -67,7 +68,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, stage.StageTypeSynthesis, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
 		input.stageIndex, input.totalExpectedStages, 1,
 		"Synthesizing...")

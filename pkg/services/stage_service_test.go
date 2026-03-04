@@ -50,6 +50,7 @@ func TestStageService_CreateStage(t *testing.T) {
 		assert.Equal(t, req.StageIndex, stg.StageIndex)
 		assert.Equal(t, req.ExpectedAgentCount, stg.ExpectedAgentCount)
 		assert.Equal(t, stage.StatusPending, stg.Status)
+		assert.Equal(t, stage.StageTypeInvestigation, stg.StageType)
 		assert.Equal(t, stage.ParallelTypeMultiAgent, *stg.ParallelType)
 		assert.Equal(t, stage.SuccessPolicyAll, *stg.SuccessPolicy)
 	})
@@ -111,6 +112,58 @@ func TestStageService_CreateStage(t *testing.T) {
 			_, err := stageService.CreateStage(ctx, req)
 			require.NoError(t, err)
 		}
+	})
+}
+
+func TestStageService_CreateStage_StageType(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	t.Run("omitting StageType defaults to investigation", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Default Type",
+			StageIndex:         100,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, stage.StageTypeInvestigation, stg.StageType)
+	})
+
+	t.Run("explicit StageType persists correctly", func(t *testing.T) {
+		for i, st := range []string{"synthesis", "chat", "exec_summary", "scoring"} {
+			stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+				SessionID:          session.ID,
+				StageName:          "Type " + st,
+				StageIndex:         101 + i,
+				ExpectedAgentCount: 1,
+				StageType:          st,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, stage.StageType(st), stg.StageType)
+		}
+	})
+
+	t.Run("invalid StageType returns validation error", func(t *testing.T) {
+		_, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Bad Type",
+			StageIndex:         200,
+			ExpectedAgentCount: 1,
+			StageType:          "bogus",
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
 	})
 }
 

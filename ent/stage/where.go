@@ -385,6 +385,26 @@ func SuccessPolicyNotNil() predicate.Stage {
 	return predicate.Stage(sql.FieldNotNull(FieldSuccessPolicy))
 }
 
+// StageTypeEQ applies the EQ predicate on the "stage_type" field.
+func StageTypeEQ(v StageType) predicate.Stage {
+	return predicate.Stage(sql.FieldEQ(FieldStageType, v))
+}
+
+// StageTypeNEQ applies the NEQ predicate on the "stage_type" field.
+func StageTypeNEQ(v StageType) predicate.Stage {
+	return predicate.Stage(sql.FieldNEQ(FieldStageType, v))
+}
+
+// StageTypeIn applies the In predicate on the "stage_type" field.
+func StageTypeIn(vs ...StageType) predicate.Stage {
+	return predicate.Stage(sql.FieldIn(FieldStageType, vs...))
+}
+
+// StageTypeNotIn applies the NotIn predicate on the "stage_type" field.
+func StageTypeNotIn(vs ...StageType) predicate.Stage {
+	return predicate.Stage(sql.FieldNotIn(FieldStageType, vs...))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v Status) predicate.Stage {
 	return predicate.Stage(sql.FieldEQ(FieldStatus, v))

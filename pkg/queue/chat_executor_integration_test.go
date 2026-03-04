@@ -199,7 +199,9 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	require.GreaterOrEqual(t, len(publisher.stageStatuses), 2)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
 	assert.Equal(t, "Chat Response", publisher.stageStatuses[0].StageName)
+	assert.Equal(t, "chat", publisher.stageStatuses[0].StageType)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[len(publisher.stageStatuses)-1].Status)
+	assert.Equal(t, "chat", publisher.stageStatuses[len(publisher.stageStatuses)-1].StageType)
 
 	// Verify user_question timeline event was published via WS (prod bug fix).
 	// Without the PublishTimelineCreated call in chat_executor, the dashboard

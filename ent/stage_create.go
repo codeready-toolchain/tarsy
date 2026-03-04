@@ -80,6 +80,20 @@ func (_c *StageCreate) SetNillableSuccessPolicy(v *stage.SuccessPolicy) *StageCr
 	return _c
 }
 
+// SetStageType sets the "stage_type" field.
+func (_c *StageCreate) SetStageType(v stage.StageType) *StageCreate {
+	_c.mutation.SetStageType(v)
+	return _c
+}
+
+// SetNillableStageType sets the "stage_type" field if the given value is not nil.
+func (_c *StageCreate) SetNillableStageType(v *stage.StageType) *StageCreate {
+	if v != nil {
+		_c.SetStageType(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *StageCreate) SetStatus(v stage.Status) *StageCreate {
 	_c.mutation.SetStatus(v)
@@ -309,6 +323,10 @@ func (_c *StageCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *StageCreate) defaults() {
+	if _, ok := _c.mutation.StageType(); !ok {
+		v := stage.DefaultStageType
+		_c.mutation.SetStageType(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := stage.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -337,6 +355,14 @@ func (_c *StageCreate) check() error {
 	if v, ok := _c.mutation.SuccessPolicy(); ok {
 		if err := stage.SuccessPolicyValidator(v); err != nil {
 			return &ValidationError{Name: "success_policy", err: fmt.Errorf(`ent: validator failed for field "Stage.success_policy": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StageType(); !ok {
+		return &ValidationError{Name: "stage_type", err: errors.New(`ent: missing required field "Stage.stage_type"`)}
+	}
+	if v, ok := _c.mutation.StageType(); ok {
+		if err := stage.StageTypeValidator(v); err != nil {
+			return &ValidationError{Name: "stage_type", err: fmt.Errorf(`ent: validator failed for field "Stage.stage_type": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -404,6 +430,10 @@ func (_c *StageCreate) createSpec() (*Stage, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SuccessPolicy(); ok {
 		_spec.SetField(stage.FieldSuccessPolicy, field.TypeEnum, value)
 		_node.SuccessPolicy = &value
+	}
+	if value, ok := _c.mutation.StageType(); ok {
+		_spec.SetField(stage.FieldStageType, field.TypeEnum, value)
+		_node.StageType = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(stage.FieldStatus, field.TypeEnum, value)

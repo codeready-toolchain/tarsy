@@ -798,6 +798,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		require.Len(t, detail.Stages, 1)
 		assert.Equal(t, "analysis", detail.Stages[0].StageName)
 		assert.Equal(t, 1, detail.Stages[0].StageIndex)
+		assert.Equal(t, "investigation", detail.Stages[0].StageType)
 		assert.Equal(t, "completed", detail.Stages[0].Status)
 		assert.Equal(t, 1, detail.Stages[0].ExpectedAgentCount)
 

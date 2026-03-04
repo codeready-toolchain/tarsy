@@ -513,6 +513,7 @@ var (
 		{Name: "expected_agent_count", Type: field.TypeInt},
 		{Name: "parallel_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"multi_agent", "replica"}},
 		{Name: "success_policy", Type: field.TypeEnum, Nullable: true, Enums: []string{"all", "any"}},
+		{Name: "stage_type", Type: field.TypeEnum, Enums: []string{"investigation", "synthesis", "chat", "exec_summary", "scoring"}, Default: "investigation"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "active", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
@@ -530,19 +531,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "stages_alert_sessions_stages",
-				Columns:    []*schema.Column{StagesColumns[11]},
+				Columns:    []*schema.Column{StagesColumns[12]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "stages_chats_stages",
-				Columns:    []*schema.Column{StagesColumns[12]},
+				Columns:    []*schema.Column{StagesColumns[13]},
 				RefColumns: []*schema.Column{ChatsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "stages_chat_user_messages_stage",
-				Columns:    []*schema.Column{StagesColumns[13]},
+				Columns:    []*schema.Column{StagesColumns[14]},
 				RefColumns: []*schema.Column{ChatUserMessagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -551,7 +552,7 @@ var (
 			{
 				Name:    "stage_session_id_stage_index",
 				Unique:  true,
-				Columns: []*schema.Column{StagesColumns[11], StagesColumns[2]},
+				Columns: []*schema.Column{StagesColumns[12], StagesColumns[2]},
 			},
 		},
 	}

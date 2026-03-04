@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
@@ -211,7 +212,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		})
 
 		// Publish stage terminal status (use background context — ctx may be cancelled)
-		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, mapTerminalStatus(sr))
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, stage.StageTypeInvestigation, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -247,7 +248,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			}, sr)
 
 			// Publish synthesis stage terminal status (use background context — ctx may be cancelled)
-			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, mapTerminalStatus(synthSr))
+			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, stage.StageTypeSynthesis, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -359,7 +360,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stage.StageTypeInvestigation, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
 		input.stageIndex, input.totalExpectedStages, len(configs),
 		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))

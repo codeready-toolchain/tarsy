@@ -11953,6 +11953,7 @@ type StageMutation struct {
 	addexpected_agent_count  *int
 	parallel_type            *stage.ParallelType
 	success_policy           *stage.SuccessPolicy
+	stage_type               *stage.StageType
 	status                   *stage.Status
 	started_at               *time.Time
 	completed_at             *time.Time
@@ -12370,6 +12371,42 @@ func (m *StageMutation) SuccessPolicyCleared() bool {
 func (m *StageMutation) ResetSuccessPolicy() {
 	m.success_policy = nil
 	delete(m.clearedFields, stage.FieldSuccessPolicy)
+}
+
+// SetStageType sets the "stage_type" field.
+func (m *StageMutation) SetStageType(st stage.StageType) {
+	m.stage_type = &st
+}
+
+// StageType returns the value of the "stage_type" field in the mutation.
+func (m *StageMutation) StageType() (r stage.StageType, exists bool) {
+	v := m.stage_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStageType returns the old "stage_type" field's value of the Stage entity.
+// If the Stage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StageMutation) OldStageType(ctx context.Context) (v stage.StageType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStageType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStageType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStageType: %w", err)
+	}
+	return oldValue.StageType, nil
+}
+
+// ResetStageType resets all changes to the "stage_type" field.
+func (m *StageMutation) ResetStageType() {
+	m.stage_type = nil
 }
 
 // SetStatus sets the "status" field.
@@ -13108,7 +13145,7 @@ func (m *StageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *StageMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.session != nil {
 		fields = append(fields, stage.FieldSessionID)
 	}
@@ -13126,6 +13163,9 @@ func (m *StageMutation) Fields() []string {
 	}
 	if m.success_policy != nil {
 		fields = append(fields, stage.FieldSuccessPolicy)
+	}
+	if m.stage_type != nil {
+		fields = append(fields, stage.FieldStageType)
 	}
 	if m.status != nil {
 		fields = append(fields, stage.FieldStatus)
@@ -13168,6 +13208,8 @@ func (m *StageMutation) Field(name string) (ent.Value, bool) {
 		return m.ParallelType()
 	case stage.FieldSuccessPolicy:
 		return m.SuccessPolicy()
+	case stage.FieldStageType:
+		return m.StageType()
 	case stage.FieldStatus:
 		return m.Status()
 	case stage.FieldStartedAt:
@@ -13203,6 +13245,8 @@ func (m *StageMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldParallelType(ctx)
 	case stage.FieldSuccessPolicy:
 		return m.OldSuccessPolicy(ctx)
+	case stage.FieldStageType:
+		return m.OldStageType(ctx)
 	case stage.FieldStatus:
 		return m.OldStatus(ctx)
 	case stage.FieldStartedAt:
@@ -13267,6 +13311,13 @@ func (m *StageMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSuccessPolicy(v)
+		return nil
+	case stage.FieldStageType:
+		v, ok := value.(stage.StageType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStageType(v)
 		return nil
 	case stage.FieldStatus:
 		v, ok := value.(stage.Status)
@@ -13473,6 +13524,9 @@ func (m *StageMutation) ResetField(name string) error {
 		return nil
 	case stage.FieldSuccessPolicy:
 		m.ResetSuccessPolicy()
+		return nil
+	case stage.FieldStageType:
+		m.ResetStageType()
 		return nil
 	case stage.FieldStatus:
 		m.ResetStatus()

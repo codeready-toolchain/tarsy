@@ -68,6 +68,7 @@
       "parallel_type": null,
       "stage_index": 1,
       "stage_name": "orchestrate",
+      "stage_type": "investigation",
       "started_at": null,
       "status": "completed"
     }

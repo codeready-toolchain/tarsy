@@ -48,6 +48,7 @@ type TraceListResponse struct {
 type TraceStageGroup struct {
 	StageID    string                `json:"stage_id"`
 	StageName  string                `json:"stage_name"`
+	StageType  string                `json:"stage_type"`
 	Executions []TraceExecutionGroup `json:"executions"`
 }
 
