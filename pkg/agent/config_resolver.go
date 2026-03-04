@@ -416,6 +416,9 @@ func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []con
 	if !found {
 		return nil
 	}
+	if len(result) == 0 {
+		return make([]config.FallbackProviderEntry, 0)
+	}
 	return append([]config.FallbackProviderEntry(nil), result...)
 }
 

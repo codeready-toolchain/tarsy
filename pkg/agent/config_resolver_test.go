@@ -1015,6 +1015,7 @@ func TestResolveFallbackProviders(t *testing.T) {
 			config.StageAgentConfig{Name: "TestAgent"},
 		)
 		require.NoError(t, err)
+		assert.NotNil(t, resolved.FallbackProviders, "explicit empty should be non-nil")
 		assert.Empty(t, resolved.FallbackProviders)
 	})
 

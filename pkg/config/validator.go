@@ -488,31 +488,11 @@ func (v *Validator) validateLLMProviders() error {
 			return NewValidationError("llm_provider", name, "model", fmt.Errorf("model required"))
 		}
 
-		// Only validate API key environment variable for providers that are actually referenced
+		// Only validate credentials for providers that are actually referenced
 		if referencedProviders[name] {
-			if provider.APIKeyEnv != "" {
-				if value := os.Getenv(provider.APIKeyEnv); value == "" {
-					return NewValidationError("llm_provider", name, "api_key_env", fmt.Errorf("environment variable %s is not set", provider.APIKeyEnv))
-				}
-			}
-		}
-
-		// Validate VertexAI-specific fields (only for referenced providers)
-		if referencedProviders[name] && provider.Type == LLMProviderTypeVertexAI {
-			if provider.CredentialsEnv != "" {
-				if value := os.Getenv(provider.CredentialsEnv); value == "" {
-					return NewValidationError("llm_provider", name, "credentials_env", fmt.Errorf("environment variable %s is not set", provider.CredentialsEnv))
-				}
-			}
-			if provider.ProjectEnv != "" {
-				if value := os.Getenv(provider.ProjectEnv); value == "" {
-					return NewValidationError("llm_provider", name, "project_env", fmt.Errorf("environment variable %s is not set", provider.ProjectEnv))
-				}
-			}
-			if provider.LocationEnv != "" {
-				if value := os.Getenv(provider.LocationEnv); value == "" {
-					return NewValidationError("llm_provider", name, "location_env", fmt.Errorf("environment variable %s is not set", provider.LocationEnv))
-				}
+			if missing := missingProviderEnvVar(provider); missing != "" {
+				return NewValidationError("llm_provider", name, "credentials",
+					fmt.Errorf("environment variable %s is not set", missing))
 			}
 		}
 
@@ -662,6 +642,28 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 	return nil
 }
 
+// missingProviderEnvVar returns the name of the first required-but-unset
+// environment variable for the given provider, or "" if all are set.
+func missingProviderEnvVar(provider *LLMProviderConfig) string {
+	if provider.APIKeyEnv != "" {
+		if os.Getenv(provider.APIKeyEnv) == "" {
+			return provider.APIKeyEnv
+		}
+	}
+	if provider.Type == LLMProviderTypeVertexAI {
+		if provider.CredentialsEnv != "" && os.Getenv(provider.CredentialsEnv) == "" {
+			return provider.CredentialsEnv
+		}
+		if provider.ProjectEnv != "" && os.Getenv(provider.ProjectEnv) == "" {
+			return provider.ProjectEnv
+		}
+		if provider.LocationEnv != "" && os.Getenv(provider.LocationEnv) == "" {
+			return provider.LocationEnv
+		}
+	}
+	return ""
+}
+
 func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, section, name, field string) error {
 	for i, entry := range entries {
 		entryRef := fmt.Sprintf("%s[%d]", field, i)
@@ -678,37 +680,12 @@ func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, s
 				fmt.Errorf("invalid LLM backend: %s", entry.Backend))
 		}
 
-		// Credentials must be set (api_key_env or credentials_env)
+		// Credentials must be set
 		provider, _ := v.cfg.LLMProviderRegistry.Get(entry.Provider)
-		if provider.APIKeyEnv != "" {
-			if val := os.Getenv(provider.APIKeyEnv); val == "" {
-				return NewValidationError(section, name, entryRef,
-					fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
-						provider.APIKeyEnv, entry.Provider))
-			}
-		}
-		if provider.Type == LLMProviderTypeVertexAI {
-			if provider.CredentialsEnv != "" {
-				if val := os.Getenv(provider.CredentialsEnv); val == "" {
-					return NewValidationError(section, name, entryRef,
-						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
-							provider.CredentialsEnv, entry.Provider))
-				}
-			}
-			if provider.ProjectEnv != "" {
-				if val := os.Getenv(provider.ProjectEnv); val == "" {
-					return NewValidationError(section, name, entryRef,
-						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
-							provider.ProjectEnv, entry.Provider))
-				}
-			}
-			if provider.LocationEnv != "" {
-				if val := os.Getenv(provider.LocationEnv); val == "" {
-					return NewValidationError(section, name, entryRef,
-						fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
-							provider.LocationEnv, entry.Provider))
-				}
-			}
+		if missing := missingProviderEnvVar(provider); missing != "" {
+			return NewValidationError(section, name, entryRef,
+				fmt.Errorf("environment variable %s is not set (required by fallback provider '%s')",
+					missing, entry.Provider))
 		}
 	}
 	return nil
