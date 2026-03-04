@@ -132,6 +132,20 @@ func (_u *StageUpdate) ClearSuccessPolicy() *StageUpdate {
 	return _u
 }
 
+// SetStageType sets the "stage_type" field.
+func (_u *StageUpdate) SetStageType(v stage.StageType) *StageUpdate {
+	_u.mutation.SetStageType(v)
+	return _u
+}
+
+// SetNillableStageType sets the "stage_type" field if the given value is not nil.
+func (_u *StageUpdate) SetNillableStageType(v *stage.StageType) *StageUpdate {
+	if v != nil {
+		_u.SetStageType(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *StageUpdate) SetStatus(v stage.Status) *StageUpdate {
 	_u.mutation.SetStatus(v)
@@ -519,6 +533,11 @@ func (_u *StageUpdate) check() error {
 			return &ValidationError{Name: "success_policy", err: fmt.Errorf(`ent: validator failed for field "Stage.success_policy": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.StageType(); ok {
+		if err := stage.StageTypeValidator(v); err != nil {
+			return &ValidationError{Name: "stage_type", err: fmt.Errorf(`ent: validator failed for field "Stage.stage_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := stage.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Stage.status": %w`, err)}
@@ -574,6 +593,9 @@ func (_u *StageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.SuccessPolicyCleared() {
 		_spec.ClearField(stage.FieldSuccessPolicy, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.StageType(); ok {
+		_spec.SetField(stage.FieldStageType, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(stage.FieldStatus, field.TypeEnum, value)
@@ -1006,6 +1028,20 @@ func (_u *StageUpdateOne) ClearSuccessPolicy() *StageUpdateOne {
 	return _u
 }
 
+// SetStageType sets the "stage_type" field.
+func (_u *StageUpdateOne) SetStageType(v stage.StageType) *StageUpdateOne {
+	_u.mutation.SetStageType(v)
+	return _u
+}
+
+// SetNillableStageType sets the "stage_type" field if the given value is not nil.
+func (_u *StageUpdateOne) SetNillableStageType(v *stage.StageType) *StageUpdateOne {
+	if v != nil {
+		_u.SetStageType(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *StageUpdateOne) SetStatus(v stage.Status) *StageUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -1406,6 +1442,11 @@ func (_u *StageUpdateOne) check() error {
 			return &ValidationError{Name: "success_policy", err: fmt.Errorf(`ent: validator failed for field "Stage.success_policy": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.StageType(); ok {
+		if err := stage.StageTypeValidator(v); err != nil {
+			return &ValidationError{Name: "stage_type", err: fmt.Errorf(`ent: validator failed for field "Stage.stage_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := stage.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Stage.status": %w`, err)}
@@ -1478,6 +1519,9 @@ func (_u *StageUpdateOne) sqlSave(ctx context.Context) (_node *Stage, err error)
 	}
 	if _u.mutation.SuccessPolicyCleared() {
 		_spec.ClearField(stage.FieldSuccessPolicy, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.StageType(); ok {
+		_spec.SetField(stage.FieldStageType, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(stage.FieldStatus, field.TypeEnum, value)

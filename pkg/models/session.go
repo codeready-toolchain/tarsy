@@ -185,6 +185,7 @@ type StageOverview struct {
 	ID                 string              `json:"id"`
 	StageName          string              `json:"stage_name"`
 	StageIndex         int                 `json:"stage_index"`
+	StageType          string              `json:"stage_type"`
 	Status             string              `json:"status"`
 	ParallelType       *string             `json:"parallel_type"`
 	ExpectedAgentCount int                 `json:"expected_agent_count"`

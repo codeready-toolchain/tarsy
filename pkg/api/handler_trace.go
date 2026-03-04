@@ -139,6 +139,7 @@ func buildTraceListResponse(
 		sg := models.TraceStageGroup{
 			StageID:   stg.ID,
 			StageName: stg.StageName,
+			StageType: string(stg.StageType),
 		}
 
 		// Eager-loaded agent executions, sorted by agent_index for deterministic order.

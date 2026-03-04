@@ -100,7 +100,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_1}",
-      "stage_name": "investigation"
+      "stage_name": "investigation",
+      "stage_type": "investigation"
     },
     {
       "executions": [
@@ -182,7 +183,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_2}",
-      "stage_name": "remediation"
+      "stage_name": "remediation",
+      "stage_type": "investigation"
     },
     {
       "executions": [
@@ -272,7 +274,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_3}",
-      "stage_name": "validation"
+      "stage_name": "validation",
+      "stage_type": "investigation"
     },
     {
       "executions": [
@@ -295,7 +298,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_4}",
-      "stage_name": "validation - Synthesis"
+      "stage_name": "validation - Synthesis",
+      "stage_type": "synthesis"
     },
     {
       "executions": [
@@ -349,7 +353,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_5}",
-      "stage_name": "scaling-review"
+      "stage_name": "scaling-review",
+      "stage_type": "investigation"
     },
     {
       "executions": [
@@ -372,7 +377,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_6}",
-      "stage_name": "scaling-review - Synthesis"
+      "stage_name": "scaling-review - Synthesis",
+      "stage_type": "synthesis"
     },
     {
       "executions": [
@@ -436,7 +442,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_7}",
-      "stage_name": "Chat Response"
+      "stage_name": "Chat Response",
+      "stage_type": "chat"
     },
     {
       "executions": [
@@ -490,7 +497,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_8}",
-      "stage_name": "Chat Response"
+      "stage_name": "Chat Response",
+      "stage_type": "chat"
     }
   ]
 }

@@ -67,6 +67,7 @@ type StageStatusPayload struct {
 	StageID    string `json:"stage_id,omitempty"` // may be empty on "started" if stage creation hasn't happened yet
 	StageName  string `json:"stage_name"`         // human-readable stage name from config
 	StageIndex int    `json:"stage_index"`        // 1-based
+	StageType  string `json:"stage_type"`         // investigation, synthesis, chat
 	Status     string `json:"status"`             // started, completed, failed, timed_out, cancelled
 }
 

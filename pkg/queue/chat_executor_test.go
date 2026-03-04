@@ -279,6 +279,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis",
 		StageIndex:         0,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	require.NoError(t, err)
 
@@ -287,6 +288,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis - Synthesis",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeSynthesis),
 	})
 	require.NoError(t, err)
 
@@ -295,6 +297,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis",
 		StageIndex:         2,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	require.NoError(t, err)
 
@@ -303,6 +306,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageName:          "Analysis - Synthesis",
 		StageIndex:         3,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeSynthesis),
 	})
 	require.NoError(t, err)
 
@@ -428,6 +432,166 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 	assert.Equal(t, "What happened?", result.UserQuestion)
 }
 
+func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	ctx := context.Background()
+
+	stageService := services.NewStageService(client.Client)
+	timelineService := services.NewTimelineService(client.Client)
+	chatService := services.NewChatService(client.Client)
+
+	session := createChatTestSession(t, client.Client)
+
+	// 1. Investigation stage with an agent execution and timeline event.
+	investStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Analysis",
+		StageIndex:         0,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeInvestigation),
+	})
+	require.NoError(t, err)
+
+	investExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    investStage.ID,
+		SessionID:  session.ID,
+		AgentName:  "agent-1",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	investStageID := investStage.ID
+	investExecID := investExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &investStageID,
+		ExecutionID:    &investExecID,
+		SequenceNumber: 1,
+		EventType:      "llm_response",
+		Content:        "INVESTIGATION-FINDINGS",
+	})
+	require.NoError(t, err)
+
+	// 2. Exec-summary stage — should be skipped by buildChatContext (default: continue).
+	execSummaryStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Executive Summary",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeExecSummary),
+	})
+	require.NoError(t, err)
+
+	execSumExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    execSummaryStage.ID,
+		SessionID:  session.ID,
+		AgentName:  "exec-summary-agent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	execSumStageID := execSummaryStage.ID
+	execSumExecID := execSumExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &execSumStageID,
+		ExecutionID:    &execSumExecID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
+	})
+	require.NoError(t, err)
+
+	// 3. Single chat with two messages (unique constraint: one chat per session).
+	chat, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+		SessionID: session.ID,
+		CreatedBy: "test@example.com",
+	})
+	require.NoError(t, err)
+
+	prevMsg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+		ChatID:  chat.ID,
+		Content: "Why did it crash?",
+		Author:  "test@example.com",
+	})
+	require.NoError(t, err)
+
+	// Previous chat stage — identified by StageType, not ChatID.
+	chatID := chat.ID
+	prevMsgID := prevMsg.ID
+	prevChatStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Chat Response",
+		StageIndex:         2,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeChat),
+		ChatID:             &chatID,
+		ChatUserMessageID:  &prevMsgID,
+	})
+	require.NoError(t, err)
+
+	prevChatExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    prevChatStage.ID,
+		SessionID:  session.ID,
+		AgentName:  "ChatAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	prevChatStageID := prevChatStage.ID
+	prevChatExecID := prevChatExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &prevChatStageID,
+		ExecutionID:    &prevChatExecID,
+		SequenceNumber: 1,
+		EventType:      "user_question",
+		Content:        "Why did it crash?",
+	})
+	require.NoError(t, err)
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &prevChatStageID,
+		ExecutionID:    &prevChatExecID,
+		SequenceNumber: 2,
+		EventType:      "final_analysis",
+		Content:        "It crashed due to OOM.",
+	})
+	require.NoError(t, err)
+
+	// 4. Current message — the one being answered now.
+	curMsg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+		ChatID:  chat.ID,
+		Content: "What should we do?",
+		Author:  "test@example.com",
+	})
+	require.NoError(t, err)
+
+	executor := &ChatMessageExecutor{
+		stageService:    stageService,
+		timelineService: timelineService,
+	}
+
+	result := executor.buildChatContext(ctx, ChatExecuteInput{
+		Chat:    chat,
+		Message: curMsg,
+		Session: session,
+	})
+
+	assert.Equal(t, "What should we do?", result.UserQuestion)
+	assert.Contains(t, result.InvestigationContext, "INVESTIGATION-FINDINGS",
+		"investigation stage should be included in context")
+	assert.Contains(t, result.InvestigationContext, "Why did it crash?",
+		"previous chat question should appear in context")
+	assert.Contains(t, result.InvestigationContext, "It crashed due to OOM.",
+		"previous chat answer should appear in context")
+	assert.NotContains(t, result.InvestigationContext, "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
+		"exec_summary stage should be skipped by default branch")
+}
+
 // ────────────────────────────────────────────────────────────
 // finishStage / createFailedChatExecution tests
 // ────────────────────────────────────────────────────────────
@@ -445,16 +609,16 @@ func TestChatMessageExecutor_FinishStage_MarksStageFailedWithoutExecutions(t *te
 		StageName:          "Chat Response",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeChat),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, stage.StatusPending, stg.Status)
 
 	executor := &ChatMessageExecutor{
 		stageService: stageService,
-		// eventPublisher is nil — publishStageStatus handles nil gracefully
 	}
 
-	executor.finishStage(stg.ID, session.ID, "Chat Response", 1, events.StageStatusFailed, "chain not found")
+	executor.finishStage(stg.ID, session.ID, "Chat Response", 1, stage.StageTypeChat, events.StageStatusFailed, "chain not found")
 
 	// Stage must be failed in DB (previously would stay pending)
 	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
@@ -477,6 +641,7 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 		StageName:          "Chat Response",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeChat),
 	})
 	require.NoError(t, err)
 

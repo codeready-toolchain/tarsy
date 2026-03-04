@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
@@ -227,7 +228,7 @@ func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPubli
 
 // publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, status string) {
+func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, stageType stage.StageType, status string) {
 	if eventPublisher == nil {
 		return
 	}
@@ -240,6 +241,7 @@ func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher
 		StageID:    stageID,
 		StageName:  stageName,
 		StageIndex: stageIndex + 1, // 1-based for clients
+		StageType:  string(stageType),
 		Status:     status,
 	}); err != nil {
 		slog.Warn("Failed to publish stage status",

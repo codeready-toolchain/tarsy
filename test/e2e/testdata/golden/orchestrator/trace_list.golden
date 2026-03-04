@@ -106,7 +106,8 @@
         }
       ],
       "stage_id": "{STAGE_ID_1}",
-      "stage_name": "orchestrate"
+      "stage_name": "orchestrate",
+      "stage_type": "investigation"
     }
   ]
 }

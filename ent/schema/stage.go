@@ -44,6 +44,12 @@ func (Stage) Fields() []ent.Field {
 			Nillable().
 			Comment("null if count=1, 'all'/'any' if count>1"),
 
+		// Stage Type
+		field.Enum("stage_type").
+			Values("investigation", "synthesis", "chat", "exec_summary", "scoring").
+			Default("investigation").
+			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation)"),
+
 		// Stage-Level Status & Timing (aggregated from agent executions)
 		field.Enum("status").
 			Values("pending", "active", "completed", "failed", "timed_out", "cancelled").

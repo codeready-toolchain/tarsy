@@ -47,6 +47,14 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 		}
 	}
 
+	stageType := stage.StageTypeInvestigation
+	if req.StageType != "" {
+		stageType = stage.StageType(req.StageType)
+		if err := stage.StageTypeValidator(stageType); err != nil {
+			return nil, NewValidationError("stage_type", fmt.Sprintf("invalid: %q", req.StageType))
+		}
+	}
+
 	// Use timeout context derived from incoming context
 	ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
 	defer cancel()
@@ -58,6 +66,7 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 		SetStageName(req.StageName).
 		SetStageIndex(req.StageIndex).
 		SetExpectedAgentCount(req.ExpectedAgentCount).
+		SetStageType(stageType).
 		SetStatus(stage.StatusPending)
 
 	if req.ParallelType != nil {

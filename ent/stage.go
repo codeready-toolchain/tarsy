@@ -32,6 +32,8 @@ type Stage struct {
 	ParallelType *stage.ParallelType `json:"parallel_type,omitempty"`
 	// null if count=1, 'all'/'any' if count>1
 	SuccessPolicy *stage.SuccessPolicy `json:"success_policy,omitempty"`
+	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation)
+	StageType stage.StageType `json:"stage_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status stage.Status `json:"status,omitempty"`
 	// When first agent started
@@ -160,7 +162,7 @@ func (*Stage) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case stage.FieldStageIndex, stage.FieldExpectedAgentCount, stage.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case stage.FieldID, stage.FieldSessionID, stage.FieldStageName, stage.FieldParallelType, stage.FieldSuccessPolicy, stage.FieldStatus, stage.FieldErrorMessage, stage.FieldChatID, stage.FieldChatUserMessageID:
+		case stage.FieldID, stage.FieldSessionID, stage.FieldStageName, stage.FieldParallelType, stage.FieldSuccessPolicy, stage.FieldStageType, stage.FieldStatus, stage.FieldErrorMessage, stage.FieldChatID, stage.FieldChatUserMessageID:
 			values[i] = new(sql.NullString)
 		case stage.FieldStartedAt, stage.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -222,6 +224,12 @@ func (_m *Stage) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SuccessPolicy = new(stage.SuccessPolicy)
 				*_m.SuccessPolicy = stage.SuccessPolicy(value.String)
+			}
+		case stage.FieldStageType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_type", values[i])
+			} else if value.Valid {
+				_m.StageType = stage.StageType(value.String)
 			}
 		case stage.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -368,6 +376,9 @@ func (_m *Stage) String() string {
 		builder.WriteString("success_policy=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("stage_type=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageType))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))

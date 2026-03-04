@@ -13,6 +13,7 @@ type CreateStageRequest struct {
 	ExpectedAgentCount int     `json:"expected_agent_count"`
 	ParallelType       *string `json:"parallel_type,omitempty"`  // "multi_agent" or "replica"
 	SuccessPolicy      *string `json:"success_policy,omitempty"` // "all" or "any"
+	StageType          string  `json:"stage_type,omitempty"`     // defaults to "investigation" if empty
 	ChatID             *string `json:"chat_id,omitempty"`
 	ChatUserMessageID  *string `json:"chat_user_message_id,omitempty"`
 }

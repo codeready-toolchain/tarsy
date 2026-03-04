@@ -329,7 +329,7 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 
 ## Implementation Plan
 
-### PR 1: Stage Type Field (additive, no behavior change)
+### PR 1: Stage Type Field (additive, no behavior change) — ✅ DONE
 
 1. **Schema:** Add `stage_type` enum field to `ent/schema/stage.go` with 5 values (`investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`). Regenerate ent code. Add backfill SQL to the migration.
 2. **Service:** Add `StageType` to `CreateStageRequest`. Wire in `StageService.CreateStage` with `"investigation"` default.

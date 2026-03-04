@@ -26,6 +26,8 @@ const (
 	FieldParallelType = "parallel_type"
 	// FieldSuccessPolicy holds the string denoting the success_policy field in the database.
 	FieldSuccessPolicy = "success_policy"
+	// FieldStageType holds the string denoting the stage_type field in the database.
+	FieldStageType = "stage_type"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
@@ -141,6 +143,7 @@ var Columns = []string{
 	FieldExpectedAgentCount,
 	FieldParallelType,
 	FieldSuccessPolicy,
+	FieldStageType,
 	FieldStatus,
 	FieldStartedAt,
 	FieldCompletedAt,
@@ -203,6 +206,35 @@ func SuccessPolicyValidator(sp SuccessPolicy) error {
 		return nil
 	default:
 		return fmt.Errorf("stage: invalid enum value for success_policy field: %q", sp)
+	}
+}
+
+// StageType defines the type for the "stage_type" enum field.
+type StageType string
+
+// StageTypeInvestigation is the default value of the StageType enum.
+const DefaultStageType = StageTypeInvestigation
+
+// StageType values.
+const (
+	StageTypeInvestigation StageType = "investigation"
+	StageTypeSynthesis     StageType = "synthesis"
+	StageTypeChat          StageType = "chat"
+	StageTypeExecSummary   StageType = "exec_summary"
+	StageTypeScoring       StageType = "scoring"
+)
+
+func (st StageType) String() string {
+	return string(st)
+}
+
+// StageTypeValidator is a validator for the "stage_type" field enum values. It is called by the builders before save.
+func StageTypeValidator(st StageType) error {
+	switch st {
+	case StageTypeInvestigation, StageTypeSynthesis, StageTypeChat, StageTypeExecSummary, StageTypeScoring:
+		return nil
+	default:
+		return fmt.Errorf("stage: invalid enum value for stage_type field: %q", st)
 	}
 }
 
@@ -272,6 +304,11 @@ func ByParallelType(opts ...sql.OrderTermOption) OrderOption {
 // BySuccessPolicy orders the results by the success_policy field.
 func BySuccessPolicy(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSuccessPolicy, opts...).ToFunc()
+}
+
+// ByStageType orders the results by the stage_type field.
+func ByStageType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageType, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

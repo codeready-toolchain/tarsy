@@ -268,12 +268,15 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, 1, stages[0].StageIndex)
 	assert.Equal(t, stage.StatusCompleted, stages[0].Status)
+	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
 
 	// Verify stage events: started + completed
 	require.Len(t, publisher.stageStatuses, 2)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
 	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageName)
+	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageType)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[1].Status)
+	assert.Equal(t, "investigation", publisher.stageStatuses[1].StageType)
 }
 
 func TestExecutor_MultiStageChain(t *testing.T) {
@@ -673,6 +676,7 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 
 	// Investigation stage
 	assert.Equal(t, "parallel-investigation", stages[0].StageName)
+	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
 	assert.Equal(t, 2, stages[0].ExpectedAgentCount)
 	assert.NotNil(t, stages[0].ParallelType)
 	assert.Equal(t, stage.ParallelTypeMultiAgent, *stages[0].ParallelType)
@@ -680,6 +684,7 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 
 	// Synthesis stage
 	assert.Equal(t, "parallel-investigation - Synthesis", stages[1].StageName)
+	assert.Equal(t, stage.StageTypeSynthesis, stages[1].StageType)
 	assert.Equal(t, 1, stages[1].ExpectedAgentCount)
 	assert.Nil(t, stages[1].ParallelType)
 	assert.Equal(t, stage.StatusCompleted, stages[1].Status)
@@ -692,10 +697,14 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	// Verify stage events: started+completed for investigation, started+completed for synthesis = 4
 	require.Len(t, publisher.stageStatuses, 4)
 	assert.Equal(t, "parallel-investigation", publisher.stageStatuses[0].StageName)
+	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageType)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
+	assert.Equal(t, "investigation", publisher.stageStatuses[1].StageType)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[1].Status)
 	assert.Equal(t, "parallel-investigation - Synthesis", publisher.stageStatuses[2].StageName)
+	assert.Equal(t, "synthesis", publisher.stageStatuses[2].StageType)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[2].Status)
+	assert.Equal(t, "synthesis", publisher.stageStatuses[3].StageType)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
 
 	// Verify execution.status events: each agent emits active + terminal.
