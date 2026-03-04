@@ -155,6 +155,17 @@ interface ExtendedStreamingItem extends StreamingItem {
   sequenceNumber?: number;
 }
 
+// Hard cap for a single streaming event's in-memory content.
+// Prevents RangeError("Invalid string length") from runaway chunk accumulation.
+const MAX_STREAM_EVENT_CONTENT_CHARS = 2_000_000;
+
+function appendWithCap(base: string, delta: string, cap = MAX_STREAM_EVENT_CONTENT_CHARS): string {
+  if (!delta || base.length >= cap) return base;
+  const remaining = cap - base.length;
+  if (remaining <= 0) return base;
+  return delta.length <= remaining ? base + delta : base + delta.slice(0, remaining);
+}
+
 // ────────────────────────────────────────────────────────────
 // Page component
 // ────────────────────────────────────────────────────────────
@@ -258,9 +269,27 @@ export function SessionDetailPage() {
     const topLevel = new Map<string, string>();
     const subAgent = new Map<string, string>();
     for (const [eventId, { delta, isSubAgent }] of snapshot) {
+      if (typeof delta !== 'string' || delta.length === 0) continue;
       const target = isSubAgent ? subAgent : topLevel;
-      target.set(eventId, (target.get(eventId) || '') + delta);
+      target.set(eventId, appendWithCap(target.get(eventId) || '', delta));
     }
+
+    // Re-queue a missing event's delta exactly once per flush snapshot.
+    // In React StrictMode, state updaters are invoked twice in dev; the
+    // startsWith guard prevents the second invocation from duplicating the
+    // same snapshot delta while still preserving any newly arrived chunks.
+    const requeueMissingDelta = (eventId: string, delta: string, isSubAgent: boolean) => {
+      const curr = pending.get(eventId);
+      if (curr && curr.isSubAgent === isSubAgent && curr.delta.startsWith(delta)) {
+        return;
+      }
+      const requeuedDelta = appendWithCap(delta, curr?.delta || '');
+      if (requeuedDelta.length === 0) return;
+      pending.set(eventId, {
+        delta: requeuedDelta,
+        isSubAgent,
+      });
+    };
 
     if (topLevel.size > 0) {
       setStreamingEvents((prev) => {
@@ -269,18 +298,14 @@ export function SessionDetailPage() {
         for (const [eventId, delta] of topLevel) {
           const existing = next.get(eventId);
           if (!existing) {
-            // Entry not in streaming map yet (created event hasn't arrived).
-            // Re-queue into pending so the next flush can retry. Prepend
-            // the old delta to any new chunks that arrived since the snapshot.
-            const curr = pending.get(eventId);
-            pending.set(eventId, {
-              delta: curr ? delta + curr.delta : delta,
-              isSubAgent: false,
-            });
+            requeueMissingDelta(eventId, delta, false);
             continue;
           }
-          next.set(eventId, { ...existing, content: existing.content + delta });
-          changed = true;
+          const nextContent = appendWithCap(existing.content, delta);
+          if (nextContent !== existing.content) {
+            next.set(eventId, { ...existing, content: nextContent });
+            changed = true;
+          }
         }
         return changed ? next : prev;
       });
@@ -292,15 +317,14 @@ export function SessionDetailPage() {
         for (const [eventId, delta] of subAgent) {
           const existing = next.get(eventId);
           if (!existing) {
-            const curr = pending.get(eventId);
-            pending.set(eventId, {
-              delta: curr ? delta + curr.delta : delta,
-              isSubAgent: true,
-            });
+            requeueMissingDelta(eventId, delta, true);
             continue;
           }
-          next.set(eventId, { ...existing, content: existing.content + delta });
-          changed = true;
+          const nextContent = appendWithCap(existing.content, delta);
+          if (nextContent !== existing.content) {
+            next.set(eventId, { ...existing, content: nextContent });
+            changed = true;
+          }
         }
         return changed ? next : prev;
       });
@@ -988,10 +1012,18 @@ export function SessionDetailPage() {
 
         // Immediate: stream.chunk has its own batching via pendingChunksRef
         if (eventType === EVENT_STREAM_CHUNK) {
+          if ((data as Record<string, unknown>).truncated) {
+            // Truncated chunk payload has no usable delta; re-fetch timeline.
+            refetchTimelineDebounced();
+            return;
+          }
           const payload = data as unknown as StreamChunkPayload;
+          if (typeof payload.delta !== 'string' || payload.delta.length === 0) {
+            return;
+          }
           const existing = pendingChunksRef.current.get(payload.event_id);
           if (existing) {
-            existing.delta += payload.delta;
+            existing.delta = appendWithCap(existing.delta, payload.delta);
           } else {
             pendingChunksRef.current.set(payload.event_id, {
               delta: payload.delta,
