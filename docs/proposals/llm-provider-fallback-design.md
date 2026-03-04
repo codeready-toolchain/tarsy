@@ -114,9 +114,7 @@ type FallbackState struct {
 ```
 
 This state is maintained in the controller's iteration loop and used to:
-- Select the next compatible fallback provider
-- Skip providers with incompatible backends
-- Skip providers with missing credentials
+- Select the next fallback provider from the list
 - Record which providers were attempted
 
 ### Observability
@@ -142,9 +140,9 @@ When a fallback occurs, the system records:
 
 An entry in the fallback list: `{provider: string, backend: LLMBackend}`. The provider name references a registered `LLMProviderConfig`. The backend determines compatibility filtering.
 
-### Backend Compatibility
+### Backend Switching
 
-An agent's resolved backend (e.g., `google-native`) must match the fallback provider's backend. This is a hard filter, not a preference. Rationale: `google-native` uses the Google genai SDK with native function calling, while `langchain` uses a completely different tool calling mechanism. Mixing them mid-execution would break tool call continuity.
+Each fallback entry specifies both a provider and a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., `google-native` → `langchain`). If a provider/backend combination doesn't work, that's a configuration error caught at startup (Q4).
 
 ### Fallback Trigger Conditions
 
@@ -169,7 +167,7 @@ Fallback is NOT triggered when:
 
 ### Provider Credential Validation
 
-At fallback selection time, the system checks whether the candidate provider's API key (or credentials file) is actually set in the environment. This avoids falling back to a provider that would immediately fail due to missing credentials.
+At startup, the system validates that every provider in every fallback list has its required API key (or credentials file) set in the environment. Startup fails if any are missing — a fallback list with broken entries gives a false sense of safety.
 
 **Decision (Q4):** Validate at startup — fail if any fallback provider has missing credentials. A broken fallback is worse than no fallback.
 
