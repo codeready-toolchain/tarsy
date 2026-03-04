@@ -154,9 +154,9 @@ Fallback triggers depend on the error code from the Python LLM service, since ea
 |---|---|---|
 | `max_retries` | Yes (3x) | Immediate |
 | `credentials` | No | Immediate (guaranteed failure) |
-| `provider_error` | No | After 1 Go retry |
-| `invalid_request` | No | After 1 Go retry |
-| `partial_stream_error` | No | After 2 consecutive partial errors |
+| `provider_error` | No | After 1 Go retry (2 consecutive failures) |
+| `invalid_request` | No | After 1 Go retry (2 consecutive failures) |
+| `partial_stream_error` | No | After 1 Go retry (2 consecutive failures) |
 
 In all cases, fallback also requires:
 - The parent context is not cancelled/expired
@@ -252,5 +252,5 @@ All decisions resolved — see [llm-provider-fallback-questions.md](llm-provider
 4. **Q4** — Validate fallback credentials at startup; fail if any are missing
 5. **Q5** — Two new nullable columns: `original_llm_provider`, `original_llm_backend`
 6. **Q6** — All controllers get fallback (iterating, forced conclusion, single-shot)
-7. **Q7** — Error-code-aware triggers: immediate for `max_retries`/`credentials`, 1 Go retry for `provider_error`/`invalid_request`, 2 consecutive for `partial_stream_error`
+7. **Q7** — Error-code-aware triggers: immediate for `max_retries`/`credentials`, 2 consecutive failures for `provider_error`/`invalid_request`/`partial_stream_error`
 8. **Q8** — Conservative defaults: 120s initial, 60s stall, 5m max

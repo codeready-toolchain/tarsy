@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -253,11 +254,12 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	}
 
 	// Single LLM call — no tools, consume full response from stream.
-	// Retry with fallback providers on failure.
+	// Retry once on the same provider for transient errors, then fall back.
 	var summary string
 	var usage agent.TokenUsage
 	fallbackIdx := -1 // -1 = primary, 0+ = fallback index
 	clearCache := false
+	retriedCurrentProvider := false
 	for {
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("executive summary interrupted: %w", ctx.Err())
@@ -274,7 +276,11 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		ch, err := e.llmClient.Generate(llmCtx, llmInput)
 		if err != nil {
 			llmCancel()
-			// Try fallback
+			// Transport errors are transient — retry once before fallback
+			if !retriedCurrentProvider {
+				retriedCurrentProvider = true
+				continue
+			}
 			if nextIdx := fallbackIdx + 1; nextIdx < len(fallbackEntries) {
 				entry := fallbackEntries[nextIdx]
 				logger.Info("Executive summary falling back to next provider",
@@ -285,6 +291,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				backend = entry.Backend
 				fallbackIdx = nextIdx
 				clearCache = true
+				retriedCurrentProvider = false
 				startTime = time.Now()
 				continue
 			}
@@ -292,8 +299,8 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 		}
 
 		var sb strings.Builder
-		usage = agent.TokenUsage{}
 		var chunkErr error
+		var chunkErrCode string
 		for chunk := range ch {
 			switch c := chunk.(type) {
 			case *agent.TextChunk:
@@ -304,12 +311,19 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				usage.TotalTokens += c.TotalTokens
 			case *agent.ErrorChunk:
 				chunkErr = fmt.Errorf("executive summary LLM error: %s (code: %s)", c.Message, c.Code)
+				chunkErrCode = string(c.Code)
 			}
 		}
 		llmCancel()
 
 		if chunkErr != nil {
-			// Try fallback
+			// credentials/max_retries: fallback immediately (no retry).
+			// Other codes: retry once on the same provider before fallback.
+			immediatefallback := chunkErrCode == string(controller.LLMErrorCredentials) || chunkErrCode == string(controller.LLMErrorMaxRetries)
+			if !immediatefallback && !retriedCurrentProvider {
+				retriedCurrentProvider = true
+				continue
+			}
 			if nextIdx := fallbackIdx + 1; nextIdx < len(fallbackEntries) {
 				entry := fallbackEntries[nextIdx]
 				logger.Info("Executive summary falling back to next provider",
@@ -320,6 +334,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 				backend = entry.Backend
 				fallbackIdx = nextIdx
 				clearCache = true
+				retriedCurrentProvider = false
 				startTime = time.Now()
 				continue
 			}

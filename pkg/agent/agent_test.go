@@ -48,9 +48,8 @@ func TestStatusFromContextErr(t *testing.T) {
 	})
 
 	t.Run("timed out context", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 		defer cancel()
-		time.Sleep(time.Millisecond)
 
 		status, done := StatusFromContextErr(ctx)
 		assert.True(t, done)

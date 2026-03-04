@@ -70,15 +70,7 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 		}),
 	)
 
-	ctx := context.Background()
-	ws, err := WSConnect(ctx, app.WSURL)
-	require.NoError(t, err)
-	defer ws.Close()
-
-	resp := app.SubmitAlert(t, "test-fallback", "API server alert triggered")
-	sessionID := resp["session_id"].(string)
-	require.NotEmpty(t, sessionID)
-	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	ws, sessionID := submitAndSubscribe(t, app, "test-fallback", "API server alert triggered")
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
@@ -120,21 +112,14 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 	// ── LLM call count: 1 error + 1 tool call + 1 final + 1 exec summary = 4 ──
 	assert.Equal(t, 4, llm.CallCount())
 
-	// ── WS: provider_fallback event delivered ──
+	// ── WS: provider_fallback event delivered (use WaitForEvent to avoid race) ──
 	ws.WaitForEvent(t, func(e WSEvent) bool {
-		return e.Type == "session.status" && e.Parsed["status"] == "completed"
-	}, 5*time.Second, "waiting for session.status=completed")
-
-	var hasFallbackWSEvent bool
-	for _, e := range ws.Events() {
-		if e.Type == "timeline_event.created" {
-			if et, _ := e.Parsed["event_type"].(string); et == "provider_fallback" {
-				hasFallbackWSEvent = true
-				break
-			}
+		if e.Type != "timeline_event.created" {
+			return false
 		}
-	}
-	assert.True(t, hasFallbackWSEvent, "WS should include provider_fallback timeline event")
+		et, _ := e.Parsed["event_type"].(string)
+		return et == string(timelineevent.EventTypeProviderFallback)
+	}, 5*time.Second, "waiting for provider_fallback WS event")
 }
 
 // ────────────────────────────────────────────────────────────
@@ -183,15 +168,7 @@ func TestE2E_FallbackCascade(t *testing.T) {
 		}),
 	)
 
-	ctx := context.Background()
-	ws, err := WSConnect(ctx, app.WSURL)
-	require.NoError(t, err)
-	defer ws.Close()
-
-	resp := app.SubmitAlert(t, "test-cascade", "Monitoring alert fired")
-	sessionID := resp["session_id"].(string)
-	require.NotEmpty(t, sessionID)
-	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	_, sessionID := submitAndSubscribe(t, app, "test-cascade", "Monitoring alert fired")
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
@@ -200,15 +177,16 @@ func TestE2E_FallbackCascade(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["executive_summary"])
 
-	// ── Two provider_fallback timeline events ──
+	// ── Two provider_fallback timeline events (order-independent lookup) ──
 	timeline := app.QueryTimeline(t, sessionID)
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
 	require.Len(t, fallbackEvents, 2, "should have two provider_fallback events (primary→fb-1, fb-1→fb-2)")
 
-	assert.Equal(t, "primary-provider", fallbackEvents[0].Metadata["original_provider"])
-	assert.Equal(t, "fallback-1", fallbackEvents[0].Metadata["fallback_provider"])
-	assert.Equal(t, "fallback-1", fallbackEvents[1].Metadata["original_provider"])
-	assert.Equal(t, "fallback-2", fallbackEvents[1].Metadata["fallback_provider"])
+	ev1 := findFallbackTransition(fallbackEvents, "primary-provider", "fallback-1")
+	require.NotNil(t, ev1, "should have primary-provider → fallback-1 transition")
+
+	ev2 := findFallbackTransition(fallbackEvents, "fallback-1", "fallback-2")
+	require.NotNil(t, ev2, "should have fallback-1 → fallback-2 transition")
 
 	// ── Execution record: original provider preserved, current is fallback-2 ──
 	execs := app.QueryExecutions(t, sessionID)
@@ -270,15 +248,7 @@ func TestE2E_FallbackAllExhausted(t *testing.T) {
 		WithLLMClient(llm),
 	)
 
-	ctx := context.Background()
-	ws, err := WSConnect(ctx, app.WSURL)
-	require.NoError(t, err)
-	defer ws.Close()
-
-	resp := app.SubmitAlert(t, "test-exhausted", "Critical outage — all providers down")
-	sessionID := resp["session_id"].(string)
-	require.NotEmpty(t, sessionID)
-	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	_, sessionID := submitAndSubscribe(t, app, "test-exhausted", "Critical outage — all providers down")
 
 	app.WaitForSessionStatus(t, sessionID, "failed")
 
@@ -370,15 +340,7 @@ func TestE2E_FallbackParallelAgents(t *testing.T) {
 		}),
 	)
 
-	ctx := context.Background()
-	ws, err := WSConnect(ctx, app.WSURL)
-	require.NoError(t, err)
-	defer ws.Close()
-
-	resp := app.SubmitAlert(t, "test-parallel-fallback", "Parallel investigation triggered")
-	sessionID := resp["session_id"].(string)
-	require.NotEmpty(t, sessionID)
-	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	_, sessionID := submitAndSubscribe(t, app, "test-parallel-fallback", "Parallel investigation triggered")
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
@@ -419,6 +381,12 @@ func TestE2E_FallbackParallelAgents(t *testing.T) {
 //   - Session completes with executive_summary populated
 //   - Agent execution has NO original_llm_provider (no agent-level fallback)
 //   - Executive summary was generated despite primary failure
+//   - LLM call count proves the exec summary required a retry/fallback
+//
+// NOTE: The executive summary uses a standalone LLM call path
+// (executor_synthesis.go), not the agent controller. It does not create
+// provider_fallback timeline events or execution records, so we verify
+// the fallback indirectly via call count and successful summary output.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_FallbackExecutiveSummary(t *testing.T) {
@@ -444,6 +412,9 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 		Error: fmt.Errorf("executive summary provider overloaded"),
 	})
 	llm.AddSequential(LLMScriptEntry{
+		Error: fmt.Errorf("executive summary provider still overloaded"),
+	})
+	llm.AddSequential(LLMScriptEntry{
 		Text: "System operating normally. CPU 45%, memory 62%. No action required.",
 	})
 
@@ -457,15 +428,7 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 		}),
 	)
 
-	ctx := context.Background()
-	ws, err := WSConnect(ctx, app.WSURL)
-	require.NoError(t, err)
-	defer ws.Close()
-
-	resp := app.SubmitAlert(t, "test-exec-fallback", "Routine health check")
-	sessionID := resp["session_id"].(string)
-	require.NotEmpty(t, sessionID)
-	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	_, sessionID := submitAndSubscribe(t, app, "test-exec-fallback", "Routine health check")
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
@@ -482,13 +445,35 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 	assert.Equal(t, "completed", string(investigator.Status))
 	assert.Nil(t, investigator.OriginalLlmProvider, "Investigator should not have fallback (succeeded on primary)")
 
-	// ── LLM calls: Investigator (2) + exec summary (1 error + 1 success) = 4 ──
-	assert.Equal(t, 4, llm.CallCount())
+	// ── No agent-level provider_fallback events (exec summary path doesn't create them) ──
+	timeline := app.QueryTimeline(t, sessionID)
+	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
+	assert.Empty(t, fallbackEvents, "no agent-level fallback should have occurred")
+
+	// ── LLM calls: Investigator (2) + exec summary (1 retry + 1 fallback success) = 5 ──
+	// The extra call proves the exec summary path retried before falling back.
+	assert.Equal(t, 5, llm.CallCount())
 }
 
 // ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
+
+// submitAndSubscribe creates a WS connection, submits an alert, subscribes to
+// the session, and returns the WS client and session ID. Registers ws.Close
+// via t.Cleanup so callers don't need defer.
+func submitAndSubscribe(t *testing.T, app *TestApp, alertType, alertPayload string) (*WSClient, string) {
+	t.Helper()
+	ws, err := WSConnect(context.Background(), app.WSURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+
+	resp := app.SubmitAlert(t, alertType, alertPayload)
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	return ws, sessionID
+}
 
 // findExecution returns the first execution matching agentName, or nil.
 func findExecution(execs []*ent.AgentExecution, agentName string) *ent.AgentExecution {
@@ -509,4 +494,14 @@ func filterTimelineByType(events []*ent.TimelineEvent, eventType timelineevent.E
 		}
 	}
 	return result
+}
+
+// findFallbackTransition locates a provider_fallback event by its from→to transition.
+func findFallbackTransition(events []*ent.TimelineEvent, fromProvider, toProvider string) *ent.TimelineEvent {
+	for _, e := range events {
+		if e.Metadata["original_provider"] == fromProvider && e.Metadata["fallback_provider"] == toProvider {
+			return e
+		}
+	}
+	return nil
 }
