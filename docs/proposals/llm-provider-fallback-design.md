@@ -11,7 +11,7 @@ This feature adds **automatic fallback to alternative LLM providers** when the c
 ## Design Principles
 
 1. **Existing retry logic remains the first line of defense.** Python-level retries (3 attempts with exponential backoff) handle transient errors. Fallback only triggers after those retries are exhausted and the Go-level error propagates.
-2. **Backend compatibility is a hard constraint.** A `google-native` agent cannot fall back to a `langchain` provider — the tool calling mechanism is fundamentally different. Fallback selection must filter by backend.
+2. **Each fallback entry is self-contained.** Each entry specifies both provider and backend explicitly. The system uses them as-is — no runtime compatibility filtering. Invalid combinations are caught at startup.
 3. **Operator preference is respected.** The fallback list order represents cost/quality preference. The system does not re-rank providers automatically.
 4. **Minimal blast radius.** The fallback mechanism integrates at the iteration level in the Go controller, not in the Python LLM service. This keeps the Python service stateless and provider-agnostic.
 5. **Observable by default.** Every fallback event is recorded in the timeline, on the execution record, and surfaced in the dashboard without additional configuration.
@@ -41,7 +41,7 @@ Iteration N: LLM call fails (after Python retries exhausted)
          │
          ├─ Fallback providers available? 
          │    │
-         │    ├─ YES → Select next compatible provider
+         │    ├─ YES → Select next fallback provider
          │    │         Record fallback timeline event
          │    │         Update execution metadata
          │    │         Swap provider in execCtx.Config
@@ -105,11 +105,13 @@ A new `FallbackState` struct tracks fallback progress within an execution:
 
 ```go
 type FallbackState struct {
-    OriginalProvider     string
-    OriginalBackend      config.LLMBackend
-    CurrentProviderIndex int      // -1 = primary, 0+ = fallback list index
-    AttemptedProviders   []string // For observability
-    FallbackReason       string   // Last error that triggered fallback
+    OriginalProvider        string
+    OriginalBackend         config.LLMBackend
+    CurrentProviderIndex    int      // -1 = primary, 0+ = fallback list index
+    AttemptedProviders      []string // For observability
+    FallbackReason          string   // Last error that triggered fallback
+    ConsecutiveNonRetryable int      // Counts consecutive provider_error/invalid_request (threshold: 1)
+    ConsecutivePartialErrors int     // Counts consecutive partial_stream_error (threshold: 2)
 }
 ```
 
@@ -138,7 +140,7 @@ When a fallback occurs, the system records:
 
 ### Fallback Provider Entry
 
-An entry in the fallback list: `{provider: string, backend: LLMBackend}`. The provider name references a registered `LLMProviderConfig`. The backend determines compatibility filtering.
+An entry in the fallback list: `{provider: string, backend: LLMBackend}`. The provider name references a registered `LLMProviderConfig`. The backend specifies which SDK path to use when this provider is active.
 
 ### Backend Switching
 
@@ -158,7 +160,7 @@ Fallback triggers depend on the error code from the Python LLM service, since ea
 
 In all cases, fallback also requires:
 - The parent context is not cancelled/expired
-- At least one untried compatible fallback provider remains
+- At least one untried fallback provider remains
 
 Fallback is NOT triggered when:
 - The error is a loop detection (not a provider issue)
@@ -167,7 +169,12 @@ Fallback is NOT triggered when:
 
 ### Provider Credential Validation
 
-At startup, the system validates that every provider in every fallback list has its required API key (or credentials file) set in the environment. Startup fails if any are missing — a fallback list with broken entries gives a false sense of safety.
+At startup, the system validates each fallback provider entry:
+1. **Provider exists** — the referenced provider name is registered in `LLMProviderRegistry`
+2. **Backend is valid** — the backend value is a known `LLMBackend` enum
+3. **Credentials are set** — the required environment variable (`api_key_env` or `credentials_env`) is present and non-empty
+
+Startup fails if any check fails — a fallback list with broken entries gives a false sense of safety.
 
 **Decision (Q4):** Validate at startup — fail if any fallback provider has missing credentials. A broken fallback is worse than no fallback.
 
@@ -175,7 +182,7 @@ At startup, the system validates that every provider in every fallback list has 
 
 ### Phase 1: Core Fallback Logic (P1)
 
-**Goal:** When a provider fails with no partial output and retries are exhausted, automatically switch to the next compatible provider.
+**Goal:** When a provider fails (retries exhausted, non-retryable error, or repeated partial failures), automatically switch to the next fallback provider based on error-code-aware trigger rules (Q7).
 
 Changes:
 - `pkg/config/defaults.go` — Add `FallbackProviders` field to `Defaults`
@@ -185,10 +192,13 @@ Changes:
 - `pkg/agent/context.go` — Add `FallbackProviders` to `ResolvedAgentConfig`
 - `pkg/agent/config_resolver.go` — Resolve fallback list through hierarchy
 - `pkg/agent/controller/iterating.go` — Integrate fallback after LLM error (error-code-aware triggers)
-- `pkg/agent/controller/single_shot.go` — Add fallback wrapper for synthesis/scoring/executive summary calls
-- `pkg/agent/controller/fallback.go` — New file: `FallbackState`, provider selection, compatibility checks, shared `callLLMWithFallback` helper, error-code-aware trigger logic
+- `pkg/agent/controller/single_shot.go` — Add fallback wrapper for synthesis/scoring calls
+- `pkg/queue/executor_synthesis.go` — Add fallback to `generateExecutiveSummary` (uses direct LLM call with `chain.ExecutiveSummaryProvider`, not the single-shot controller)
+- `pkg/agent/controller/fallback.go` — New file: `FallbackState`, provider selection, shared `callLLMWithFallback` helper, error-code-aware trigger logic
 - `proto/llm_service.proto` — Add `clear_cache` flag to `GenerateRequest` for provider-switch cache invalidation
-- `pkg/config/validation.go` — Validate fallback provider references at startup
+- `llm-service/llm/providers/google_native.py` — Handle `clear_cache` flag: delete `_model_contents[execution_id]` when set
+- `pkg/config/validator.go` — Validate fallback provider references and credentials at startup
+- `pkg/agent/config_resolver.go` — Resolve fallback list for synthesis (inherits from chain/defaults, same as other config fields)
 
 ### Phase 2: Adaptive Timeouts (P2)
 
@@ -205,7 +215,7 @@ Changes:
 
 Changes:
 - `ent/schema/timelineevent.go` — Add `provider_fallback` event type
-- `ent/schema/agentexecution.go` — Add `original_llm_provider`, `original_llm_backend`, `fallback_count` fields
+- `ent/schema/agentexecution.go` — Add `original_llm_provider`, `original_llm_backend` fields (nullable)
 - Database migration for new fields
 - `pkg/services/stage_service.go` — Method to update provider on fallback
 - `web/dashboard/src/components/timeline/StageContent.tsx` — Render fallback indicator
