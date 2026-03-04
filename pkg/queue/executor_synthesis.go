@@ -258,7 +258,7 @@ func (e *RealSessionExecutor) generateExecutiveSummary(
 	emitFallbackEvent := func(fromProvider string, toEntry agent.ResolvedFallbackEntry, reason string) {
 		_, evtErr := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
 			SessionID:      session.ID,
-			SequenceNumber: executiveSummarySeqNum,
+			SequenceNumber: executiveSummarySeqNum - 1,
 			EventType:      timelineevent.EventTypeProviderFallback,
 			Status:         timelineevent.StatusCompleted,
 			Content:        fmt.Sprintf("Provider fallback: %s → %s", fromProvider, toEntry.ProviderName),
