@@ -136,6 +136,13 @@ func (c *ScriptedLLMClient) CallCount() int {
 	return len(c.capturedInputs)
 }
 
+// CapturedInputs returns a copy of all captured GenerateInput values in call order.
+func (c *ScriptedLLMClient) CapturedInputs() []*agent.GenerateInput {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]*agent.GenerateInput(nil), c.capturedInputs...)
+}
+
 // nextEntry selects the next script entry using dual dispatch.
 // Must be called with c.mu held.
 func (c *ScriptedLLMClient) nextEntry(input *agent.GenerateInput) (*LLMScriptEntry, error) {

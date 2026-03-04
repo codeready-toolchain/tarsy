@@ -1,0 +1,73 @@
+defaults:
+  llm_provider: "primary-provider"
+  llm_backend: "google-native"
+  max_iterations: 5
+  fallback_providers:
+    - provider: "fallback-1"
+      backend: "google-native"
+    - provider: "fallback-2"
+      backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, investigating the issue."
+  LimitedAgent:
+    max_iterations: 3
+    custom_instructions: "You are LimitedAgent, analyzing the alert."
+  AlphaChecker:
+    custom_instructions: "You are AlphaChecker, checking system health."
+  BetaChecker:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are BetaChecker, analyzing logs."
+
+agent_chains:
+  # Used by: TestE2E_FallbackOnMaxRetries, TestE2E_FallbackCascade
+  single-fallback:
+    alert_types: [test-fallback, test-cascade]
+    executive_summary_provider: "primary-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+
+  # Used by: TestE2E_FallbackAllExhausted
+  exhausted-chain:
+    alert_types: [test-exhausted]
+    stages:
+      - name: investigation
+        agents:
+          - name: LimitedAgent
+
+  # Used by: TestE2E_FallbackParallelAgents
+  parallel-fallback:
+    alert_types: [test-parallel-fallback]
+    stages:
+      - name: analysis
+        success_policy: all
+        agents:
+          - name: AlphaChecker
+          - name: BetaChecker
+        synthesis:
+          llm_provider: "primary-provider"
+          llm_backend: "google-native"
+
+  # Used by: TestE2E_FallbackExecutiveSummary
+  exec-summary-chain:
+    alert_types: [test-exec-fallback]
+    executive_summary_provider: "primary-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator

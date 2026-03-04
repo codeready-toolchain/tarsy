@@ -1,0 +1,13 @@
+llm_providers:
+  primary-provider:
+    type: google
+    model: test-primary
+    max_tool_result_tokens: 10000
+  fallback-1:
+    type: google
+    model: test-fallback-1
+    max_tool_result_tokens: 10000
+  fallback-2:
+    type: google
+    model: test-fallback-2
+    max_tool_result_tokens: 10000
