@@ -773,6 +773,7 @@ type dashboardRow struct {
 	HasParallel     int   `sql:"has_parallel"`   // 0/1, mapped to bool on output
 	HasSubAgents    int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
 	ChatMsgCount    int   `sql:"chat_msg_count"`
+	FallbackCount   int   `sql:"fallback_count"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -935,6 +936,12 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				"chat_msg_count",
 			)
 
+			// Provider fallback count.
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM timeline_events WHERE session_id = %s AND event_type = 'provider_fallback')", sid),
+				"fallback_count",
+			)
+
 			// Duration sort: ORDER BY (completed_at - started_at).
 			if isDurationSort {
 				dir := "DESC"
@@ -959,29 +966,30 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		}
 
 		items = append(items, models.DashboardSessionItem{
-			ID:                  row.ID,
-			AlertType:           row.AlertType,
-			ChainID:             row.ChainID,
-			Status:              row.Status,
-			Author:              row.Author,
-			CreatedAt:           row.CreatedAt,
-			StartedAt:           row.StartedAt,
-			CompletedAt:         row.CompletedAt,
-			DurationMs:          durationMs,
-			ErrorMessage:        row.ErrorMessage,
-			ExecutiveSummary:    row.ExecutiveSummary,
-			LLMInteractionCount: row.LLMCount,
-			MCPInteractionCount: row.MCPCount,
-			InputTokens:         row.LLMInputTokens,
-			OutputTokens:        row.LLMOutputTokens,
-			TotalTokens:         row.LLMTotalTokens,
-			TotalStages:         row.TotalStages,
-			CompletedStages:     row.CompletedStages,
-			HasParallelStages:   row.HasParallel != 0,
-			HasSubAgents:        row.HasSubAgents != 0,
-			ChatMessageCount:    row.ChatMsgCount,
-			CurrentStageIndex:   row.CurrentStageIndex,
-			CurrentStageID:      row.CurrentStageID,
+			ID:                    row.ID,
+			AlertType:             row.AlertType,
+			ChainID:               row.ChainID,
+			Status:                row.Status,
+			Author:                row.Author,
+			CreatedAt:             row.CreatedAt,
+			StartedAt:             row.StartedAt,
+			CompletedAt:           row.CompletedAt,
+			DurationMs:            durationMs,
+			ErrorMessage:          row.ErrorMessage,
+			ExecutiveSummary:      row.ExecutiveSummary,
+			LLMInteractionCount:   row.LLMCount,
+			MCPInteractionCount:   row.MCPCount,
+			InputTokens:           row.LLMInputTokens,
+			OutputTokens:          row.LLMOutputTokens,
+			TotalTokens:           row.LLMTotalTokens,
+			TotalStages:           row.TotalStages,
+			CompletedStages:       row.CompletedStages,
+			HasParallelStages:     row.HasParallel != 0,
+			HasSubAgents:          row.HasSubAgents != 0,
+			ChatMessageCount:      row.ChatMsgCount,
+			ProviderFallbackCount: row.FallbackCount,
+			CurrentStageIndex:     row.CurrentStageIndex,
+			CurrentStageID:        row.CurrentStageID,
 		})
 	}
 

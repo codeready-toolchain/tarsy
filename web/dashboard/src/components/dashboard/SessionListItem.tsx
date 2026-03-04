@@ -25,6 +25,7 @@ import {
   CallSplit,
   Hub,
   Summarize,
+  SwapHoriz,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -132,8 +133,8 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Box>
       </TableCell>
 
-      {/* Parallel / Sub-agent indicators */}
-      <TableCell sx={{ width: 60, textAlign: 'center', px: 0.5 }}>
+      {/* Parallel / Sub-agent / Fallback indicators */}
+      <TableCell sx={{ width: 80, textAlign: 'center', px: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
@@ -152,6 +153,19 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                 icon={<Hub sx={{ fontSize: '0.875rem' }} />}
                 size="small"
                 color="secondary"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+          {session.provider_fallback_count > 0 && (
+            <Tooltip
+              title={`Provider fallback${session.provider_fallback_count > 1 ? ` (${session.provider_fallback_count}×)` : ''}`}
+            >
+              <Chip
+                icon={<SwapHoriz sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="warning"
                 variant="outlined"
                 sx={iconOnlyChipSx}
               />

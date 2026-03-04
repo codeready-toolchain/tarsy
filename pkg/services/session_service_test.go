@@ -1590,6 +1590,57 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("provider_fallback_count", func(t *testing.T) {
+		fbSessionID := seedDashboardSession(t, client.Client,
+			"Fallback data", "pod-crash", "test-chain", 100, 50, 150, 0)
+
+		// Look up the execution to attach timeline events.
+		fbExecs := client.AgentExecution.Query().
+			Where(agentexecution.SessionID(fbSessionID)).
+			AllX(ctx)
+		require.Len(t, fbExecs, 1)
+		execID := fbExecs[0].ID
+
+		fbStages := client.Stage.Query().
+			Where(stage.SessionID(fbSessionID)).
+			AllX(ctx)
+		require.Len(t, fbStages, 1)
+		stageID := fbStages[0].ID
+
+		// Create 2 provider_fallback timeline events.
+		for i := 0; i < 2; i++ {
+			client.TimelineEvent.Create().
+				SetID(uuid.New().String()).
+				SetSessionID(fbSessionID).
+				SetStageID(stageID).
+				SetExecutionID(execID).
+				SetSequenceNumber(100 + i).
+				SetEventType(timelineevent.EventTypeProviderFallback).
+				SetStatus(timelineevent.StatusCompleted).
+				SetContent(fmt.Sprintf("Provider fallback: openai → anthropic (attempt %d)", i+1)).
+				SetMetadata(map[string]interface{}{
+					"original_provider": "openai",
+					"fallback_provider": "anthropic",
+					"attempt":           i + 1,
+				}).
+				SaveX(ctx)
+		}
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		for _, s := range result.Sessions {
+			if s.ID == fbSessionID {
+				assert.Equal(t, 2, s.ProviderFallbackCount)
+			} else {
+				assert.Equal(t, 0, s.ProviderFallbackCount,
+					"session %s should have zero fallbacks", s.ID)
+			}
+		}
+	})
 }
 
 func TestSessionService_GetDistinctAlertTypes(t *testing.T) {

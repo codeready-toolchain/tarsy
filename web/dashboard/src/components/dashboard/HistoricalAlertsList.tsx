@@ -21,7 +21,7 @@ import {
   TableSortLabel,
   Tooltip,
 } from '@mui/material';
-import { Refresh, SearchOff, CallSplit, Hub, Chat as ChatIcon } from '@mui/icons-material';
+import { Refresh, SearchOff, CallSplit, Hub, Chat as ChatIcon, SwapHoriz } from '@mui/icons-material';
 import { SessionListItem } from './SessionListItem.tsx';
 import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
@@ -112,8 +112,8 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Parallel / Sub-agent indicators */}
-                  <TableCell sx={{ width: 60, px: 0.5, textAlign: 'center' }}>
+                  {/* Parallel / Sub-agent / Fallback indicators */}
+                  <TableCell sx={{ width: 80, px: 0.5, textAlign: 'center' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                       <Tooltip title="Parallel Agents" arrow>
                         <CallSplit
@@ -130,6 +130,16 @@ export function HistoricalAlertsList({
                           sx={{
                             fontSize: '1.1rem',
                             color: 'secondary.main',
+                            verticalAlign: 'middle',
+                            cursor: 'help',
+                          }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Provider Fallback" arrow>
+                        <SwapHoriz
+                          sx={{
+                            fontSize: '1.1rem',
+                            color: 'warning.main',
                             verticalAlign: 'middle',
                             cursor: 'help',
                           }}

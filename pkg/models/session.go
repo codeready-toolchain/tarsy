@@ -65,29 +65,30 @@ type DashboardListParams struct {
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
 type DashboardSessionItem struct {
-	ID                  string     `json:"id"`
-	AlertType           *string    `json:"alert_type"`
-	ChainID             string     `json:"chain_id"`
-	Status              string     `json:"status"`
-	Author              *string    `json:"author"`
-	CreatedAt           time.Time  `json:"created_at"`
-	StartedAt           *time.Time `json:"started_at"`
-	CompletedAt         *time.Time `json:"completed_at"`
-	DurationMs          *int64     `json:"duration_ms"`
-	ErrorMessage        *string    `json:"error_message"`
-	ExecutiveSummary    *string    `json:"executive_summary"`
-	LLMInteractionCount int        `json:"llm_interaction_count"`
-	MCPInteractionCount int        `json:"mcp_interaction_count"`
-	InputTokens         int64      `json:"input_tokens"`
-	OutputTokens        int64      `json:"output_tokens"`
-	TotalTokens         int64      `json:"total_tokens"`
-	TotalStages         int        `json:"total_stages"`
-	CompletedStages     int        `json:"completed_stages"`
-	HasParallelStages   bool       `json:"has_parallel_stages"`
-	HasSubAgents        bool       `json:"has_sub_agents"`
-	ChatMessageCount    int        `json:"chat_message_count"`
-	CurrentStageIndex   *int       `json:"current_stage_index"`
-	CurrentStageID      *string    `json:"current_stage_id"`
+	ID                    string     `json:"id"`
+	AlertType             *string    `json:"alert_type"`
+	ChainID               string     `json:"chain_id"`
+	Status                string     `json:"status"`
+	Author                *string    `json:"author"`
+	CreatedAt             time.Time  `json:"created_at"`
+	StartedAt             *time.Time `json:"started_at"`
+	CompletedAt           *time.Time `json:"completed_at"`
+	DurationMs            *int64     `json:"duration_ms"`
+	ErrorMessage          *string    `json:"error_message"`
+	ExecutiveSummary      *string    `json:"executive_summary"`
+	LLMInteractionCount   int        `json:"llm_interaction_count"`
+	MCPInteractionCount   int        `json:"mcp_interaction_count"`
+	InputTokens           int64      `json:"input_tokens"`
+	OutputTokens          int64      `json:"output_tokens"`
+	TotalTokens           int64      `json:"total_tokens"`
+	TotalStages           int        `json:"total_stages"`
+	CompletedStages       int        `json:"completed_stages"`
+	HasParallelStages     bool       `json:"has_parallel_stages"`
+	HasSubAgents          bool       `json:"has_sub_agents"`
+	ChatMessageCount      int        `json:"chat_message_count"`
+	ProviderFallbackCount int        `json:"provider_fallback_count"`
+	CurrentStageIndex     *int       `json:"current_stage_index"`
+	CurrentStageID        *string    `json:"current_stage_id"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
