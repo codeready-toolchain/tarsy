@@ -32,6 +32,7 @@ func (c *IteratingController) Run(
 	maxIter := execCtx.Config.MaxIterations
 	totalUsage := agent.TokenUsage{}
 	state := &agent.IterationState{MaxIterations: maxIter}
+	fbState := NewFallbackState(execCtx)
 	msgSeq := 0
 
 	// Initialize eventSeq from DB to avoid collisions with events created
@@ -103,6 +104,7 @@ func (c *IteratingController) Run(
 			Config:      execCtx.Config.LLMProvider,
 			Tools:       tools, // Tools bound for native calling
 			Backend:     execCtx.Config.LLMBackend,
+			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
 		llmCancel()
 
@@ -121,6 +123,11 @@ func (c *IteratingController) Run(
 					Error:      fmt.Errorf("execution interrupted: %w", err),
 					TokensUsed: totalUsage,
 				}, nil
+			}
+
+			// Try fallback to a different provider before exhausting retries
+			if tryFallback(ctx, execCtx, fbState, err, &eventSeq) {
+				continue
 			}
 
 			var poe *PartialOutputError
@@ -256,7 +263,7 @@ func (c *IteratingController) Run(
 	}
 
 	// Max iterations — force conclusion (call LLM WITHOUT tools)
-	return c.forceConclusion(ctx, execCtx, messages, &totalUsage, state, &msgSeq, &eventSeq)
+	return c.forceConclusion(ctx, execCtx, messages, &totalUsage, state, fbState, &msgSeq, &eventSeq)
 }
 
 // forceConclusion forces the LLM to produce a final answer by calling without tools.
@@ -266,6 +273,7 @@ func (c *IteratingController) forceConclusion(
 	messages []agent.ConversationMessage,
 	totalUsage *agent.TokenUsage,
 	state *agent.IterationState,
+	fbState *FallbackState,
 	msgSeq *int,
 	eventSeq *int,
 ) (*agent.ExecutionResult, error) {
@@ -289,23 +297,33 @@ func (c *IteratingController) forceConclusion(
 
 	// Call LLM WITHOUT tools with streaming — forces text-only response.
 	// Apply LLM call timeout (the parent ctx is the session context here).
-	llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
-	streamed, err := callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
-		SessionID:   execCtx.SessionID,
-		ExecutionID: execCtx.ExecutionID,
-		Messages:    messages,
-		Config:      execCtx.Config.LLMProvider,
-		Tools:       nil, // No tools — force conclusion
-		Backend:     execCtx.Config.LLMBackend,
-	}, eventSeq, forcedMeta)
-	llmCancel()
-	if err != nil {
-		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
-		return &agent.ExecutionResult{
-			Status:     agent.ExecutionStatusFailed,
-			Error:      fmt.Errorf("forced conclusion LLM call failed: %w", err),
-			TokensUsed: *totalUsage,
-		}, nil
+	// On failure, attempt fallback to another provider before giving up.
+	var streamed *StreamedResponse
+	var err error
+	for {
+		llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
+		streamed, err = callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+			SessionID:   execCtx.SessionID,
+			ExecutionID: execCtx.ExecutionID,
+			Messages:    messages,
+			Config:      execCtx.Config.LLMProvider,
+			Tools:       nil, // No tools — force conclusion
+			Backend:     execCtx.Config.LLMBackend,
+			ClearCache:  fbState.consumeClearCache(),
+		}, eventSeq, forcedMeta)
+		llmCancel()
+		if err == nil {
+			break
+		}
+		if !tryFallback(ctx, execCtx, fbState, err, eventSeq) {
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
+			return &agent.ExecutionResult{
+				Status:     agent.ExecutionStatusFailed,
+				Error:      fmt.Errorf("forced conclusion LLM call failed: %w", err),
+				TokensUsed: *totalUsage,
+			}, nil
+		}
+		startTime = time.Now()
 	}
 	resp := streamed.LLMResponse
 

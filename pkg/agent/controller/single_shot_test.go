@@ -201,3 +201,58 @@ func TestSynthesisController_WithCodeExecution(t *testing.T) {
 	}
 	require.True(t, foundCodeExec, "code_execution event should be created in synthesis")
 }
+
+func TestSingleShotController_FallbackOnError(t *testing.T) {
+	// First call fails with max_retries → fallback → second call succeeds
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesis via fallback."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Synthesis via fallback.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount)
+
+	// Verify fallback provider was used in second call
+	require.Equal(t, "fallback-model", llm.capturedInputs[1].Config.Model)
+	require.True(t, llm.capturedInputs[1].ClearCache)
+}
+
+func TestSingleShotController_NoFallback_ReturnsError(t *testing.T) {
+	// No fallback providers → error returned directly
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+	_, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "synthesis LLM call failed")
+}

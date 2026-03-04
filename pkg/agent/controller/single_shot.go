@@ -55,6 +55,7 @@ func (c *SingleShotController) Run(
 	startTime := time.Now()
 	msgSeq := 0
 	eventSeq := 0
+	fbState := NewFallbackState(execCtx)
 
 	// 1. Build messages via config-provided builder
 	if c.cfg.BuildMessages == nil {
@@ -67,18 +68,27 @@ func (c *SingleShotController) Run(
 		return nil, err
 	}
 
-	// 3. Single LLM call with streaming (no tools)
-	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
-		SessionID:   execCtx.SessionID,
-		ExecutionID: execCtx.ExecutionID,
-		Messages:    messages,
-		Config:      execCtx.Config.LLMProvider,
-		Tools:       nil, // No MCP tools; native tools (Google Search) may still activate
-		Backend:     execCtx.Config.LLMBackend,
-	}, &eventSeq)
-	if err != nil {
-		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
-		return nil, fmt.Errorf("%s LLM call failed: %w", c.cfg.InteractionLabel, err)
+	// 3. Single LLM call with streaming (no tools), with fallback retry
+	var streamed *StreamedResponse
+	var err error
+	for {
+		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+			SessionID:   execCtx.SessionID,
+			ExecutionID: execCtx.ExecutionID,
+			Messages:    messages,
+			Config:      execCtx.Config.LLMProvider,
+			Tools:       nil, // No MCP tools; native tools (Google Search) may still activate
+			Backend:     execCtx.Config.LLMBackend,
+			ClearCache:  fbState.consumeClearCache(),
+		}, &eventSeq)
+		if err == nil {
+			break
+		}
+		if !tryFallback(ctx, execCtx, fbState, err, &eventSeq) {
+			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
+			return nil, fmt.Errorf("%s LLM call failed: %w", c.cfg.InteractionLabel, err)
+		}
+		startTime = time.Now()
 	}
 	resp := streamed.LLMResponse
 

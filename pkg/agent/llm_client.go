@@ -26,6 +26,7 @@ type GenerateInput struct {
 	Config      *config.LLMProviderConfig
 	Tools       []ToolDefinition  // nil = no tools
 	Backend     config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
+	ClearCache  bool              // signal to clear provider content cache (e.g. on fallback provider switch)
 }
 
 // Conversation message roles.

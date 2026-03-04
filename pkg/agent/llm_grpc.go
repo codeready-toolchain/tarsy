@@ -85,6 +85,7 @@ func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 		ExecutionId: input.ExecutionID,
 		Messages:    toProtoMessages(input.Messages),
 		Tools:       toProtoTools(input.Tools),
+		ClearCache:  input.ClearCache,
 	}
 	if input.Config != nil {
 		req.LlmConfig = toProtoLLMConfig(input.Config)

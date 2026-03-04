@@ -191,6 +191,47 @@ func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, execution
 	return nil
 }
 
+// UpdateExecutionProviderFallback records a provider fallback on an execution.
+// Sets original_llm_provider/original_llm_backend (only on first fallback) and
+// updates llm_provider/llm_backend to the new fallback values.
+func (s *StageService) UpdateExecutionProviderFallback(
+	ctx context.Context,
+	executionID string,
+	originalProvider, originalBackend string,
+	newProvider, newBackend string,
+) error {
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	exec, err := s.client.AgentExecution.Get(writeCtx, executionID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to get agent execution for fallback update: %w", err)
+	}
+
+	update := s.client.AgentExecution.UpdateOneID(executionID).
+		SetLlmProvider(newProvider).
+		SetLlmBackend(newBackend)
+
+	// Only set originals on the first fallback (preserve the true primary)
+	if exec.OriginalLlmProvider == nil {
+		update = update.
+			SetOriginalLlmProvider(originalProvider).
+			SetOriginalLlmBackend(originalBackend)
+	}
+
+	if err := update.Exec(writeCtx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to update execution fallback: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateStageStatus aggregates stage status from all agent executions
 func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) error {
 	// Use timeout context derived from incoming context

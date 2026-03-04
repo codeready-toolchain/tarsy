@@ -986,3 +986,213 @@ func TestIteratingController_NilCollectorSkipsDrainWait(t *testing.T) {
 	require.Equal(t, "Everything is fine.", result.FinalAnalysis)
 	require.Equal(t, 1, llm.callCount)
 }
+
+func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
+	// First call: max_retries error → immediate fallback
+	// Second call (with fallback provider): success
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "all retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Analysis complete with fallback provider."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "primary-provider"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback-provider",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Analysis complete with fallback provider.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount, "should have made 2 LLM calls")
+
+	// Verify the second call used the fallback provider config
+	require.Len(t, llm.capturedInputs, 2)
+	require.Equal(t, "fallback-model", llm.capturedInputs[1].Config.Model)
+	require.True(t, llm.capturedInputs[1].ClearCache, "second call should have ClearCache set")
+
+	// Verify provider was swapped in execCtx
+	require.Equal(t, "fallback-provider", execCtx.Config.LLMProviderName)
+	require.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
+}
+
+func TestIteratingController_FallbackProviderError_RequiresOneRetry(t *testing.T) {
+	// provider_error requires 1 Go retry before fallback.
+	// Call 1: provider_error → no fallback (first occurrence)
+	// Call 2: provider_error → fallback triggered (second consecutive)
+	// Call 3: success with fallback provider
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "provider down", Code: "provider_error", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "provider still down", Code: "provider_error", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Recovered via fallback."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, 3, llm.callCount)
+
+	// First two calls with primary, third with fallback
+	require.Equal(t, "test-model", llm.capturedInputs[0].Config.Model)
+	require.Equal(t, "test-model", llm.capturedInputs[1].Config.Model)
+	require.Equal(t, "fallback-model", llm.capturedInputs[2].Config.Model)
+}
+
+func TestIteratingController_FallbackInForcedConclusion(t *testing.T) {
+	// Use maxIter=1, first call returns a tool call (consuming the iteration),
+	// then forced conclusion fails with max_retries → fallback → success.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// Iteration 1: tool call
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "test.tool", Arguments: "{}"},
+			}},
+			// Forced conclusion: max_retries error → fallback
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			// Forced conclusion retry with fallback: success
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Forced conclusion via fallback."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "test.tool", Description: "A test tool"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"test.tool": {Content: "tool result"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 1
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Forced conclusion via fallback.", result.FinalAnalysis)
+	require.Equal(t, 3, llm.callCount)
+
+	// Third call should use fallback provider with ClearCache
+	require.Equal(t, "fallback-model", llm.capturedInputs[2].Config.Model)
+	require.True(t, llm.capturedInputs[2].ClearCache)
+}
+
+func TestIteratingController_NoFallbackWithEmptyList(t *testing.T) {
+	// When no fallback providers are configured, errors go through normal retry path
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Recovered on retry."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	// No fallback providers (default)
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, 2, llm.callCount, "should have retried with same provider")
+}
+
+func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Success."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	// Verify provider_fallback timeline event was created
+	events, listErr := execCtx.Services.Timeline.GetSessionTimeline(
+		context.Background(), execCtx.SessionID)
+	require.NoError(t, listErr)
+
+	var foundFallbackEvent bool
+	for _, evt := range events {
+		if evt.EventType == timelineevent.EventTypeProviderFallback {
+			foundFallbackEvent = true
+			require.Contains(t, evt.Content, "primary")
+			require.Contains(t, evt.Content, "fallback")
+		}
+	}
+	require.True(t, foundFallbackEvent, "should have a provider_fallback timeline event")
+}

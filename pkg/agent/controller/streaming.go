@@ -15,13 +15,28 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
+// LLMErrorCode identifies the category of error returned by the LLM service.
+// Codes originate as strings in the Python gRPC service and are converted at
+// the Go boundary when populating PartialOutputError.
+type LLMErrorCode string
+
+const (
+	LLMErrorMaxRetries         LLMErrorCode = "max_retries"          // Python already retried 3x
+	LLMErrorCredentials        LLMErrorCode = "credentials"          // missing or invalid API key
+	LLMErrorProviderError      LLMErrorCode = "provider_error"       // upstream provider failure
+	LLMErrorInvalidRequest     LLMErrorCode = "invalid_request"      // malformed request
+	LLMErrorPartialStreamError LLMErrorCode = "partial_stream_error" // error mid-stream after partial output
+)
+
 // PartialOutputError wraps an LLM error that occurred after partial output
 // was produced. Callers can inspect PartialText to include it in retry context.
 type PartialOutputError struct {
 	Cause           error
 	PartialText     string
 	PartialThinking string
-	IsLoop          bool // true when caused by degenerate loop detection
+	IsLoop          bool         // true when caused by degenerate loop detection
+	Code            LLMErrorCode // error code from LLM service
+	Retryable       bool         // whether the LLM service considers the error retryable
 }
 
 func (e *PartialOutputError) Error() string { return e.Cause.Error() }
@@ -189,6 +204,8 @@ func collectStreamWithCallback(
 					c.Message, c.Code, c.Retryable),
 				PartialText:     textBuf.String(),
 				PartialThinking: thinkingBuf.String(),
+				Code:            LLMErrorCode(c.Code),
+				Retryable:       c.Retryable,
 			}
 		}
 	}

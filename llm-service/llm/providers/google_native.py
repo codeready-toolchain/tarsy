@@ -290,6 +290,14 @@ class GoogleNativeProvider(LLMProvider):
             )
             return
 
+        if request.clear_cache and request.execution_id:
+            if request.execution_id in self._model_contents:
+                del self._model_contents[request.execution_id]
+                logger.info(
+                    "[%s] Cleared model content cache for execution %s (provider fallback)",
+                    request_id, request.execution_id,
+                )
+
         try:
             system_instruction, contents = self._convert_messages(
                 list(request.messages), request.execution_id

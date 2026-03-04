@@ -73,6 +73,14 @@ type ServiceBundle struct {
 	Stage       *services.StageService
 }
 
+// ResolvedFallbackEntry is a pre-resolved fallback provider with its full config.
+// Built during config resolution so the controller never needs registry access.
+type ResolvedFallbackEntry struct {
+	ProviderName string
+	Backend      config.LLMBackend
+	Config       *config.LLMProviderConfig
+}
+
 // ResolvedAgentConfig is the fully-resolved configuration for an agent execution.
 // All hierarchy levels (defaults → chain → stage → agent) have been applied.
 type ResolvedAgentConfig struct {
@@ -90,6 +98,8 @@ type ResolvedAgentConfig struct {
 
 	// Fallback providers to try when the primary provider fails (ordered by preference)
 	FallbackProviders []config.FallbackProviderEntry
+	// Pre-resolved fallback provider configs (parallel to FallbackProviders)
+	ResolvedFallbackProviders []ResolvedFallbackEntry
 
 	// Adaptive timeout: max wait for the first streaming chunk (default: 120s)
 	InitialResponseTimeout time.Duration

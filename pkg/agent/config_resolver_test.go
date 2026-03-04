@@ -1156,6 +1156,114 @@ func TestResolveFallbackProviders(t *testing.T) {
 	})
 }
 
+func TestResolvedFallbackProviders(t *testing.T) {
+	primaryProvider := &config.LLMProviderConfig{
+		Type:    config.LLMProviderTypeGoogle,
+		Model:   "gemini-primary",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	fallbackProvider1 := &config.LLMProviderConfig{
+		Type:    config.LLMProviderTypeGoogle,
+		Model:   "gemini-fallback-1",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	fallbackProvider2 := &config.LLMProviderConfig{
+		Type:    config.LLMProviderTypeOpenAI,
+		Model:   "gpt-fallback-2",
+		APIKeyEnv: "OPENAI_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider: "primary",
+			FallbackProviders: []config.FallbackProviderEntry{
+				{Provider: "fb-1", Backend: config.LLMBackendNativeGemini},
+				{Provider: "fb-2", Backend: config.LLMBackendLangChain},
+			},
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent":    {},
+			"ScoringAgent": {Type: config.AgentTypeScoring},
+			"ChatAgent":    {},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"primary": primaryProvider,
+			"fb-1":    fallbackProvider1,
+			"fb-2":    fallbackProvider2,
+		}),
+	}
+
+	t.Run("ResolveAgentConfig populates ResolvedFallbackProviders", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 2)
+
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[0].ProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.ResolvedFallbackProviders[0].Backend)
+		assert.Equal(t, "gemini-fallback-1", resolved.ResolvedFallbackProviders[0].Config.Model)
+
+		assert.Equal(t, "fb-2", resolved.ResolvedFallbackProviders[1].ProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.ResolvedFallbackProviders[1].Backend)
+		assert.Equal(t, "gpt-fallback-2", resolved.ResolvedFallbackProviders[1].Config.Model)
+	})
+
+	t.Run("ResolveChatAgentConfig populates ResolvedFallbackProviders", func(t *testing.T) {
+		resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 2)
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[0].ProviderName)
+		assert.Equal(t, "fb-2", resolved.ResolvedFallbackProviders[1].ProviderName)
+	})
+
+	t.Run("ResolveScoringConfig populates ResolvedFallbackProviders", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 2)
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[0].ProviderName)
+	})
+
+	t.Run("nil FallbackProviders yields nil ResolvedFallbackProviders", func(t *testing.T) {
+		cfgNoFallback := &config.Config{
+			Defaults:            &config.Defaults{LLMProvider: "primary"},
+			AgentRegistry:       cfg.AgentRegistry,
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		resolved, err := ResolveAgentConfig(cfgNoFallback,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Nil(t, resolved.ResolvedFallbackProviders)
+	})
+
+	t.Run("missing provider in registry is skipped", func(t *testing.T) {
+		cfgMissing := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "primary",
+				FallbackProviders: []config.FallbackProviderEntry{
+					{Provider: "nonexistent", Backend: config.LLMBackendLangChain},
+					{Provider: "fb-1", Backend: config.LLMBackendNativeGemini},
+				},
+			},
+			AgentRegistry:       cfg.AgentRegistry,
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		resolved, err := ResolveAgentConfig(cfgMissing,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 1, "nonexistent provider should be skipped")
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[0].ProviderName)
+	})
+}
+
 func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
 	googleProvider := &config.LLMProviderConfig{
 		Type:                config.LLMProviderTypeGoogle,

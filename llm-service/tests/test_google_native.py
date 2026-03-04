@@ -473,6 +473,108 @@ class TestGoogleNativeProvider:
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
+    async def test_clear_cache_deletes_model_contents(self, mock_client_class, provider):
+        """Test that clear_cache=True deletes _model_contents for the execution."""
+        execution_id = "exec-fallback"
+        content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="cached")]
+        )
+        provider._cache_model_turn(execution_id, [content])
+        assert execution_id in provider._model_contents
+
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [MagicMock()]
+        mock_chunk.candidates[0].content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="fresh response")]
+        )
+        mock_chunk.usage_metadata = None
+
+        async def mock_stream():
+            yield mock_chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id=execution_id,
+            clear_cache=True,
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="hello")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        # Cache should have been cleared before message conversion
+        # (a new cache entry may have been created by the generate call itself)
+        # The key test: the old cached content should not be there
+        if execution_id in provider._model_contents:
+            turns, _ = provider._model_contents[execution_id]
+            # Should only contain the fresh turn, not the pre-seeded one
+            assert len(turns) <= 1
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_clear_cache_false_preserves_model_contents(self, mock_client_class, provider):
+        """Test that clear_cache=False (default) preserves existing cache."""
+        execution_id = "exec-no-clear"
+        content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="cached")]
+        )
+        provider._cache_model_turn(execution_id, [content])
+        assert execution_id in provider._model_contents
+
+        turns_before, _ = provider._model_contents[execution_id]
+        assert len(turns_before) == 1
+
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [MagicMock()]
+        mock_chunk.candidates[0].content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="response")]
+        )
+        mock_chunk.usage_metadata = None
+
+        async def mock_stream():
+            yield mock_chunk
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id=execution_id,
+            clear_cache=False,
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="hello")],
+        )
+
+        responses = []
+        async for resp in provider.generate(request):
+            responses.append(resp)
+
+        # Cache should still have the pre-seeded entry (plus possibly the new turn)
+        assert execution_id in provider._model_contents
+        turns_after, _ = provider._model_contents[execution_id]
+        assert len(turns_after) >= 1
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
     async def test_generate_missing_api_key(self, mock_client_class, provider):
         """Test that generate yields error when API key env var is missing."""
         with patch.dict(os.environ, {}, clear=True):

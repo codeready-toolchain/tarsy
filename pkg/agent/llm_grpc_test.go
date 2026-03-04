@@ -277,6 +277,33 @@ func TestIntSliceFromInt32(t *testing.T) {
 	})
 }
 
+func TestToProtoRequest_ClearCache(t *testing.T) {
+	t.Run("ClearCache false by default", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:   "session-1",
+			ExecutionID: "exec-1",
+			Messages:    []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:      &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:     config.LLMBackendNativeGemini,
+		}
+		req := toProtoRequest(input)
+		assert.False(t, req.ClearCache)
+	})
+
+	t.Run("ClearCache propagated when true", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:   "session-1",
+			ExecutionID: "exec-1",
+			Messages:    []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:      &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:     config.LLMBackendNativeGemini,
+			ClearCache:  true,
+		}
+		req := toProtoRequest(input)
+		assert.True(t, req.ClearCache)
+	})
+}
+
 func TestToProtoTools(t *testing.T) {
 	t.Run("nil tools returns nil", func(t *testing.T) {
 		assert.Nil(t, toProtoTools(nil))
