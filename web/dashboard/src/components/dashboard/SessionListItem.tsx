@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import {
   OpenInNew,
-  Chat as ChatIcon,
+  SmsOutlined as ChatIcon,
   CallSplit,
   Hub,
   Summarize,
@@ -133,9 +133,9 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Box>
       </TableCell>
 
-      {/* Parallel / Sub-agent / Fallback indicators */}
-      <TableCell sx={{ width: 80, textAlign: 'center', px: 0.5 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+      {/* Session indicators: parallel, sub-agents, fallback, chat */}
+      <TableCell sx={{ width: 112, textAlign: 'right', px: 0.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
               <Chip
@@ -166,6 +166,19 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                 icon={<SwapHoriz sx={{ fontSize: '0.875rem' }} />}
                 size="small"
                 color="warning"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+          {session.chat_message_count > 0 && (
+            <Tooltip
+              title={`Follow-up chat active (${session.chat_message_count} message${session.chat_message_count !== 1 ? 's' : ''})`}
+            >
+              <Chip
+                icon={<ChatIcon sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="primary"
                 variant="outlined"
                 sx={iconOnlyChipSx}
               />
@@ -226,23 +239,6 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
           <Typography variant="body2" color="text.secondary">
             —
           </Typography>
-        )}
-      </TableCell>
-
-      {/* Chat indicator */}
-      <TableCell sx={{ width: 40, textAlign: 'center', px: 0.5 }}>
-        {session.chat_message_count > 0 && (
-          <Tooltip
-            title={`Follow-up chat active (${session.chat_message_count} message${session.chat_message_count !== 1 ? 's' : ''})`}
-          >
-            <Chip
-              icon={<ChatIcon sx={{ fontSize: '0.875rem' }} />}
-              size="small"
-              color="primary"
-              variant="outlined"
-              sx={iconOnlyChipSx}
-            />
-          </Tooltip>
         )}
       </TableCell>
 

@@ -191,8 +191,11 @@ export default function ConversationTimeline({
   }, []);
 
   const isItemCollapsible = useCallback(
-    (item: FlowItem): boolean => isFlowItemCollapsible(item) && isFlowItemTerminal(item),
-    [],
+    (item: FlowItem): boolean => {
+      if (item.type === FLOW_ITEM.FINAL_ANALYSIS && item.stageId && chatStageIds?.has(item.stageId)) return false;
+      return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
+    },
+    [chatStageIds],
   );
 
   // --- Stage grouping ---
@@ -389,7 +392,7 @@ export default function ConversationTimeline({
       </Box>
 
       {/* Content area */}
-      <Box sx={{ p: 3, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
+      <Box sx={{ px: 3, pt: 3, pb: 5, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
         <Virtuoso
           useWindowScroll
           data={stageGroups}

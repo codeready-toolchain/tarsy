@@ -20,7 +20,7 @@ export default function ProcessingIndicator({
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
-        ...(centered ? { py: 4, justifyContent: 'center' } : { mt: 3 }),
+        ...(centered ? { py: 4, justifyContent: 'center' } : { mt: 5 }),
         opacity: 0.7,
       }}
     >
