@@ -445,7 +445,7 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 			parentName := strings.TrimSuffix(stg.StageName, " - Synthesis")
 			// Scan backwards to find the nearest parent investigation stage.
 			for j := i - 1; j >= 0; j-- {
-				if stages[j].StageName == parentName {
+				if stages[j].StageName == parentName && stages[j].StageType == stage.StageTypeInvestigation {
 					if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
 						synthResults[stages[j].ID] = fa
 					}
@@ -471,8 +471,10 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 				}
 			}
 			continue
+		case stage.StageTypeInvestigation:
+			// Fall through to build per-agent timelines below.
 		default:
-			// Investigation stage — fall through to build per-agent timelines.
+			continue
 		}
 
 		// Investigation stage — build per-agent timelines.

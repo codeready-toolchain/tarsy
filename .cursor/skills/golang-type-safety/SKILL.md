@@ -37,6 +37,48 @@ Convert to `string` at serialization boundaries (JSON payloads, DB queries, log 
 payload.StageType = string(stageType)
 ```
 
+### Warning: Direct Casting Does Not Validate
+
+`stage.StageType(s)` compiles but does **not** check whether `s` is a known value.
+Always use a parse helper at API/deserialize boundaries where the input is untrusted:
+
+```go
+// Bad — silently accepts unknown values
+stageType := stage.StageType(req.StageType)
+
+// Good — rejects unknown values at the boundary
+stageType, err := parseStageType(req.StageType)
+if err != nil {
+    return nil, err
+}
+```
+
+### parseStageType Helper
+
+Define this once near the package entry point (e.g., handler or service layer):
+
+```go
+// parseStageType converts a raw string from an API payload or query parameter
+// into a stage.StageType, returning an error for unknown values.
+//
+// Allowed values: stage.StageTypeInvestigation, stage.StageTypeSynthesis,
+// stage.StageTypeChat, stage.StageTypeExecSummary, stage.StageTypeScoring.
+func parseStageType(s string) (stage.StageType, error) {
+    switch stage.StageType(s) {
+    case stage.StageTypeInvestigation,
+        stage.StageTypeSynthesis,
+        stage.StageTypeChat,
+        stage.StageTypeExecSummary,
+        stage.StageTypeScoring:
+        return stage.StageType(s), nil
+    default:
+        return "", fmt.Errorf("unknown stage type %q", s)
+    }
+}
+```
+
+This is the only place where an unvalidated cast is acceptable — all call sites receive an already-validated `stage.StageType`.
+
 ## Struct Fields
 
 Use `string` for DTOs/payloads that cross API boundaries (JSON serialization).

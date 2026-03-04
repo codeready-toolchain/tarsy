@@ -89,6 +89,7 @@ func (e *RealSessionExecutor) resolveRunbook(ctx context.Context, session *ent.A
 type stageResult struct {
 	stageID       string
 	stageName     string
+	stageType     stage.StageType
 	status        alertsession.Status // mapped from agent status
 	finalAnalysis string
 	err           error
@@ -212,7 +213,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		})
 
 		// Publish stage terminal status (use background context — ctx may be cancelled)
-		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, stage.StageTypeInvestigation, mapTerminalStatus(sr))
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, sr.stageType, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -248,7 +249,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			}, sr)
 
 			// Publish synthesis stage terminal status (use background context — ctx may be cancelled)
-			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, stage.StageTypeSynthesis, mapTerminalStatus(synthSr))
+			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, synthSr.stageType, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -360,7 +361,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stage.StageTypeInvestigation, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stg.StageType, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
 		input.stageIndex, input.totalExpectedStages, len(configs),
 		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))
@@ -403,6 +404,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	return stageResult{
 		stageID:       stg.ID,
 		stageName:     input.stageConfig.Name,
+		stageType:     stg.StageType,
 		status:        stageStatus,
 		finalAnalysis: finalAnalysis,
 		err:           aggregateError(agentResults, stageStatus, input.stageConfig),

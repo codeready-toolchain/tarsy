@@ -1,7 +1,3 @@
--- drop index "agentexecution_parent_execution_id_agent_index_sub_agent" from table: "agent_executions"
-DROP INDEX "public"."agentexecution_parent_execution_id_agent_index_sub_agent";
--- drop index "agentexecution_stage_id_agent_index_top_level" from table: "agent_executions"
-DROP INDEX "public"."agentexecution_stage_id_agent_index_top_level";
 -- drop index "sessionscore_session_id" from table: "session_scores"
 DROP INDEX "public"."sessionscore_session_id";
 -- create index "sessionscore_session_id" to table: "session_scores"

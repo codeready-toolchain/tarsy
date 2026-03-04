@@ -68,7 +68,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, stage.StageTypeSynthesis, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, stg.StageType, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
 		input.stageIndex, input.totalExpectedStages, 1,
 		"Synthesizing...")
@@ -108,6 +108,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	return stageResult{
 		stageID:       stg.ID,
 		stageName:     synthStageName,
+		stageType:     stg.StageType,
 		status:        mapAgentStatusToSessionStatus(ar.status),
 		finalAnalysis: ar.finalAnalysis,
 		err:           ar.err,

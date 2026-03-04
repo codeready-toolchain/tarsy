@@ -1,4 +1,4 @@
-h1:Bh8d2qwUeNnqLZ/1fBbLYO2t46ax0GX0xAIeIWvU/Ns=
+h1:Yf8xqSl+/Fiiwd9WKZh+QO9pilBzafTOP1fbZZvqeuU=
 20260209015211_initial_schema.up.sql h1:BNZPcBZlJWvzJPXR63PmUeO5O6j4T/Hh+LpKyHT2Sxw=
 20260211041222_optional_stage_execution_on_timeline.up.sql h1:+h7vYATBxceFqqGwjYSCfcnQDJ+QicHkSWG/rSprdtU=
 20260214053406_add_llm_provider_to_agent_executions.up.sql h1:jLGeQixypPjJnbC0StmO5X7sovplIl9FxHjAi8NKlA4=
@@ -8,4 +8,4 @@ h1:Bh8d2qwUeNnqLZ/1fBbLYO2t46ax0GX0xAIeIWvU/Ns=
 20260226223249_add_parent_execution_id_to_timeline_events.up.sql h1:Iek6XoKGCPLppeAJEnbybLPMLJ90lThDOcicCYgE8Cg=
 20260304000000_add_fallback_fields.up.sql h1:sBQcMdjvYOidROCrm+yeRbFE+MCJoXYJLKgmcdsSAQQ=
 20260304100000_add_mcp_session_id_index.up.sql h1:8BB62JLlxaaYorxQWTS9u8Aj0jlKJyAfDePaueEY3Vo=
-20260304214237_add_stage_type.up.sql h1:vQn2pCufgpnf/cO5ojyiZEcV2WVvzKzFRzVCxgKd5oQ=
+20260304214237_add_stage_type.up.sql h1:BMIY5E8IzY1EAGqqjQ0Ok83VyLAzlXwpsVA14Bh4+kA=
