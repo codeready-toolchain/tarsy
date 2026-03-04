@@ -231,6 +231,42 @@ func TestShouldFallback_StallTimeout_AfterTwo(t *testing.T) {
 	assert.True(t, result, "second consecutive stall_timeout should trigger fallback")
 }
 
+func TestShouldFallback_SingleShot_ProviderError_Immediate(t *testing.T) {
+	state := newTestFallbackState()
+	state.SingleShot = true
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
+	assert.True(t, result, "single-shot: first provider_error should trigger immediate fallback")
+}
+
+func TestShouldFallback_SingleShot_InvalidRequest_Immediate(t *testing.T) {
+	state := newTestFallbackState()
+	state.SingleShot = true
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorInvalidRequest), providers)
+	assert.True(t, result, "single-shot: first invalid_request should trigger immediate fallback")
+}
+
+func TestShouldFallback_SingleShot_PartialStreamError_Immediate(t *testing.T) {
+	state := newTestFallbackState()
+	state.SingleShot = true
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorPartialStreamError), providers)
+	assert.True(t, result, "single-shot: first partial_stream_error should trigger immediate fallback")
+}
+
+func TestShouldFallback_SingleShot_InitialTimeout_Immediate(t *testing.T) {
+	state := newTestFallbackState()
+	state.SingleShot = true
+	providers := fallbackProviders()
+
+	result := state.shouldFallback(makePartialError(LLMErrorInitialTimeout), providers)
+	assert.True(t, result, "single-shot: first initial_timeout should trigger immediate fallback")
+}
+
 func TestShouldFallback_MixedErrors_BreaksConsecutiveCount(t *testing.T) {
 	state := newTestFallbackState()
 	providers := fallbackProviders()

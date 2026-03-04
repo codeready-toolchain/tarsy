@@ -239,6 +239,76 @@ func TestSingleShotController_FallbackOnError(t *testing.T) {
 	require.True(t, llm.capturedInputs[1].ClearCache)
 }
 
+func TestSingleShotController_FallbackOnProviderError(t *testing.T) {
+	// provider_error (e.g. 404 model not found) should trigger fallback on the
+	// first failure in single-shot mode. Before the SingleShot fix, the
+	// threshold of 2 consecutive errors was unreachable and synthesis would
+	// fail without trying fallback providers.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "model not found", Code: "provider_error", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesis via fallback after provider_error."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Synthesis via fallback after provider_error.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount)
+
+	require.Equal(t, "fallback-model", llm.capturedInputs[1].Config.Model)
+	require.True(t, llm.capturedInputs[1].ClearCache)
+}
+
+func TestSingleShotController_FallbackOnInvalidRequest(t *testing.T) {
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "invalid request", Code: "invalid_request", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Synthesis via fallback after invalid_request."},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "fallback",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "fallback-model"},
+		},
+	}
+
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Synthesis via fallback after invalid_request.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount)
+}
+
 func TestSingleShotController_NoFallback_ReturnsError(t *testing.T) {
 	// No fallback providers → error returned directly
 	llm := &mockLLMClient{

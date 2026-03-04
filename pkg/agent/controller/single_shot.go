@@ -56,6 +56,7 @@ func (c *SingleShotController) Run(
 	msgSeq := 0
 	eventSeq := 0
 	fbState := NewFallbackState(execCtx)
+	fbState.SingleShot = true
 
 	// 1. Build messages via config-provided builder
 	if c.cfg.BuildMessages == nil {
