@@ -23,6 +23,7 @@ export const FLOW_ITEM = {
   CODE_EXECUTION: 'code_execution',
   SEARCH_RESULT: 'search_result',
   URL_CONTEXT: 'url_context',
+  PROVIDER_FALLBACK: 'provider_fallback',
   STAGE_SEPARATOR: 'stage_separator',
 } as const;
 
@@ -82,6 +83,7 @@ const EVENT_TYPE_MAP: Record<string, FlowItemType> = {
   [TIMELINE_EVENT_TYPES.GOOGLE_SEARCH_RESULT]: FLOW_ITEM.SEARCH_RESULT,
   [TIMELINE_EVENT_TYPES.URL_CONTEXT_RESULT]: FLOW_ITEM.URL_CONTEXT,
   [TIMELINE_EVENT_TYPES.TASK_ASSIGNED]: FLOW_ITEM.USER_QUESTION,
+  [TIMELINE_EVENT_TYPES.PROVIDER_FALLBACK]: FLOW_ITEM.PROVIDER_FALLBACK,
   [TIMELINE_EVENT_TYPES.ERROR]: FLOW_ITEM.ERROR,
 };
 
@@ -446,6 +448,9 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
         break;
       case FLOW_ITEM.URL_CONTEXT:
         lines.push(`[URL Context]\n${item.content}\n`);
+        break;
+      case FLOW_ITEM.PROVIDER_FALLBACK:
+        lines.push(`[Provider Fallback]\n${item.content}\n`);
         break;
     }
   }

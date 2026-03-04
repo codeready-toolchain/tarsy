@@ -686,6 +686,13 @@ const StageContent: React.FC<StageContentProps> = ({
                       {eo.llm_backend}
                     </Typography>
                   )}
+                  {eo?.original_llm_provider && (
+                    <Chip
+                      label={`was: ${eo.original_llm_provider}`}
+                      size="small" color="warning" variant="outlined"
+                      sx={{ height: 18, fontSize: '0.6rem', fontFamily: 'monospace' }}
+                    />
+                  )}
                   <Chip
                     label={getStatusLabel(cardEffectiveStatus)}
                     size="small" color={statusColor}

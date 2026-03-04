@@ -36,6 +36,7 @@ import {
 } from './traceHelpers';
 import InteractionCard from './InteractionCard';
 import SubAgentTabs from './SubAgentTabs';
+import ProviderFallbackIndicator from './ProviderFallbackIndicator';
 
 interface ParallelExecutionTabsProps {
   stage: TraceStageGroup;
@@ -224,16 +225,7 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
                     sx={{ fontWeight: 600, fontSize: '0.75rem', height: 22 }}
                   />
                 </Box>
-                {currentOverview.llm_backend && (
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Backend:</strong> {currentOverview.llm_backend}
-                  </Typography>
-                )}
-                {currentOverview.llm_provider && (
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Provider:</strong> {currentOverview.llm_provider}
-                  </Typography>
-                )}
+                <ProviderFallbackIndicator overview={currentOverview} />
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {currentOverview.started_at && (

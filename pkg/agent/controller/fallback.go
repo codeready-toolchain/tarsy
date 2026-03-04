@@ -132,8 +132,8 @@ func tryFallback(
 		return false
 	}
 
-	// Find the next fallback entry that differs from the currently active
-	// provider+backend. An entry identical to the current provider would just
+	// Find the next fallback entry whose provider name differs from the
+	// currently active one. An entry with the same provider name would just
 	// repeat the same failure, so skip it.
 	nextIdx := state.CurrentProviderIndex + 1
 	for nextIdx < len(execCtx.Config.ResolvedFallbackProviders) {

@@ -126,6 +126,8 @@ export interface ExecutionOverview {
   total_tokens: number;
   parent_execution_id?: string | null;
   task?: string | null;
+  original_llm_provider?: string | null;
+  original_llm_backend?: string | null;
   sub_agents?: ExecutionOverview[];
 }
 

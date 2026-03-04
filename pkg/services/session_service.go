@@ -1135,8 +1135,10 @@ func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]exec
 		InputTokens:       tokens.Input,
 		OutputTokens:      tokens.Output,
 		TotalTokens:       tokens.Total,
-		ParentExecutionID: exec.ParentExecutionID,
-		Task:              exec.Task,
+		ParentExecutionID:   exec.ParentExecutionID,
+		Task:                exec.Task,
+		OriginalLLMProvider: exec.OriginalLlmProvider,
+		OriginalLLMBackend:  exec.OriginalLlmBackend,
 	}
 }
 

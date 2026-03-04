@@ -33,6 +33,7 @@ import {
   mergeAndSortInteractions,
 } from './traceHelpers';
 import InteractionCard from './InteractionCard';
+import ProviderFallbackIndicator from './ProviderFallbackIndicator';
 
 interface SubAgentTabsProps {
   subAgents: TraceExecutionGroup[];
@@ -168,16 +169,7 @@ export default function SubAgentTabs({ subAgents, session }: SubAgentTabsProps) 
                     sx={{ fontWeight: 600, fontSize: '0.75rem', height: 22 }}
                   />
                 </Box>
-                {currentOverview.llm_backend && (
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Backend:</strong> {currentOverview.llm_backend}
-                  </Typography>
-                )}
-                {currentOverview.llm_provider && (
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Provider:</strong> {currentOverview.llm_provider}
-                  </Typography>
-                )}
+                <ProviderFallbackIndicator overview={currentOverview} />
               </Box>
               {currentOverview.task && (
                 <Typography variant="body2" color="text.secondary">

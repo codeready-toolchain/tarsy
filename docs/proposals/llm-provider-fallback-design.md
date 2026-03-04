@@ -243,7 +243,7 @@ Changes:
 Tests:
 - `pkg/agent/controller/streaming_test.go` — Initial response timeout (no chunks → cancel), stall timeout (gap between chunks → cancel), active streaming within max timeout (no cancel)
 
-### Phase 4: Dashboard Visibility (P4)
+### Phase 4: Dashboard Visibility (P4) - ✅ DONE
 
 **Goal:** Operators can see fallback events and provider switches in the dashboard.
 

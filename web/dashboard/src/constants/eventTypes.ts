@@ -62,6 +62,7 @@ export const TIMELINE_EVENT_TYPES = {
   GOOGLE_SEARCH_RESULT: 'google_search_result',
   URL_CONTEXT_RESULT: 'url_context_result',
   TASK_ASSIGNED: 'task_assigned',
+  PROVIDER_FALLBACK: 'provider_fallback',
   ERROR: 'error',
 } as const;
 

@@ -207,9 +207,11 @@ type ExecutionOverview struct {
 	InputTokens       int64               `json:"input_tokens"`
 	OutputTokens      int64               `json:"output_tokens"`
 	TotalTokens       int64               `json:"total_tokens"`
-	ParentExecutionID *string             `json:"parent_execution_id,omitempty"`
-	Task              *string             `json:"task,omitempty"`
-	SubAgents         []ExecutionOverview `json:"sub_agents,omitempty"`
+	ParentExecutionID   *string             `json:"parent_execution_id,omitempty"`
+	Task                *string             `json:"task,omitempty"`
+	OriginalLLMProvider *string             `json:"original_llm_provider,omitempty"`
+	OriginalLLMBackend  *string             `json:"original_llm_backend,omitempty"`
+	SubAgents           []ExecutionOverview `json:"sub_agents,omitempty"`
 }
 
 // SessionSummaryResponse is returned by GET /api/v1/sessions/:id/summary.
