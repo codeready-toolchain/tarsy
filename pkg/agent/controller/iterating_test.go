@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1206,6 +1207,12 @@ func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {
 			foundFallbackEvent = true
 			require.Contains(t, evt.Content, "primary")
 			require.Contains(t, evt.Content, "fallback")
+
+			require.NotNil(t, evt.Metadata, "fallback event should have metadata")
+			assert.Equal(t, "max_retries", evt.Metadata["error_code"])
+			assert.Equal(t, false, evt.Metadata["error_retryable"])
+			assert.Equal(t, "primary", evt.Metadata["original_provider"])
+			assert.Equal(t, "fallback", evt.Metadata["fallback_provider"])
 		}
 	}
 	require.True(t, foundFallbackEvent, "should have a provider_fallback timeline event")
