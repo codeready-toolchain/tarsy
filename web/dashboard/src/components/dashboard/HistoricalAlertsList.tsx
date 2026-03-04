@@ -21,7 +21,7 @@ import {
   TableSortLabel,
   Tooltip,
 } from '@mui/material';
-import { Refresh, SearchOff, CallSplit, Hub, Chat as ChatIcon, SwapHoriz } from '@mui/icons-material';
+import { Refresh, SearchOff, CallSplit, Hub, SmsOutlined as ChatIcon, SwapHoriz } from '@mui/icons-material';
 import { SessionListItem } from './SessionListItem.tsx';
 import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
@@ -29,10 +29,10 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
 
 /**
- * Column order matches old dashboard: Status | Parallel | Type | Chain | Author | Time | Duration | Tokens | Chat | Actions
- * Chain is non-sortable; the rest of the named columns are sortable.
+ * Column order: Status | Indicators | Type | Chain | Author | Time | Duration | Tokens | Actions
+ * Indicators column packs: parallel, sub-agents, fallback, chat (fixed-slot grid).
  */
-const TOTAL_COLUMNS = 10;
+const TOTAL_COLUMNS = 9;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -112,9 +112,9 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Parallel / Sub-agent / Fallback indicators */}
-                  <TableCell sx={{ width: 80, px: 0.5, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+                  {/* Session indicators: parallel, sub-agents, fallback, chat */}
+                  <TableCell sx={{ width: 112, px: 0.5, textAlign: 'right' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                       <Tooltip title="Parallel Agents" arrow>
                         <CallSplit
                           sx={{
@@ -140,6 +140,16 @@ export function HistoricalAlertsList({
                           sx={{
                             fontSize: '1.1rem',
                             color: 'warning.main',
+                            verticalAlign: 'middle',
+                            cursor: 'help',
+                          }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Follow-up Chats" arrow>
+                        <ChatIcon
+                          sx={{
+                            fontSize: '1.1rem',
+                            color: 'primary.main',
                             verticalAlign: 'middle',
                             cursor: 'help',
                           }}
@@ -197,20 +207,6 @@ export function HistoricalAlertsList({
 
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
-
-                  {/* Chat indicator */}
-                  <TableCell sx={{ width: 40, px: 0.5, textAlign: 'center' }}>
-                    <Tooltip title="Follow-up Chats" arrow>
-                      <ChatIcon
-                        sx={{
-                          fontSize: '1.1rem',
-                          color: 'primary.main',
-                          verticalAlign: 'middle',
-                          cursor: 'help',
-                        }}
-                      />
-                    </Tooltip>
-                  </TableCell>
 
                   {/* Actions */}
                   <TableCell sx={{ fontWeight: 600, width: 60, textAlign: 'center' }} />

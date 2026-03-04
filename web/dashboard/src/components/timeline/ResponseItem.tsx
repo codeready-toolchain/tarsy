@@ -42,7 +42,7 @@ function ResponseItem({
     return (
       <Box
         sx={{
-          mb: 2,
+          mb: 3,
           mt: 3,
           display: 'flex',
           gap: 1.5,
@@ -67,7 +67,7 @@ function ResponseItem({
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
-            <Box sx={{ mt: 0.5 }}>
+            <Box sx={{ mt: 0.5, pb: 3 }}>
               {hasMarkdown ? (
                 <Box sx={{ color: 'text.primary' }}>
                   <ReactMarkdown

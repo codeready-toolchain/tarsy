@@ -99,9 +99,9 @@ Explicit service-level validation — consistent with the existing `ParallelType
 
 ### Creation Path Changes
 
-**Investigation** (`executor.go:330`) — no change needed. Omitting `StageType` falls through to the `"investigation"` default.
+**Investigation** (`executor.go:340`) — no change needed. Omitting `StageType` falls through to the `"investigation"` default.
 
-**Synthesis** (`executor_synthesis.go:40`) — set `StageType: "synthesis"`.
+**Synthesis** (`executor_synthesis.go:49`) — set `StageType: "synthesis"`.
 
 **Chat** (`chat_executor.go:172`) — set `StageType: "chat"`.
 
@@ -159,7 +159,7 @@ The `publishStageStatus` helper (`pkg/queue/executor_helpers.go`) gains a `stage
 
 ### Chat Context Builder Simplification
 
-With an explicit type field, the heuristic-based filtering in `chat_executor.go:452-485` becomes direct:
+With an explicit type field, the heuristic-based filtering in `chat_executor.go:440-500` becomes direct:
 
 ```go
 for _, stg := range stages {
@@ -188,12 +188,13 @@ The synthesis stage _pairing_ logic (finding which investigation stage a synthes
 
 ### Executive Summary Refactoring (PR 2)
 
-The current executive summary implementation (`executor_synthesis.go:164-328`) is a special case:
+The current executive summary implementation (`executor_synthesis.go:168-439`) is a special case:
 
 - Direct LLM call — not through the agent/controller framework
 - Creates its own timeline event with sentinel sequence number `999_999` (no `stage_id`, no `execution_id`)
 - Creates its own LLM interaction with `interaction_type: "executive_summary"`
 - Resolves LLM provider inline (chain `executive_summary_provider` → chain `llm_provider` → defaults)
+- Implements its own retry + multi-provider fallback loop (retry once per provider, then fall through to next fallback entry), including `emitFallbackEvent` timeline event creation and error-code-based immediate fallback for credentials/max_retries errors
 - Publishes progress manually (not through stage infrastructure)
 - Stores result on session fields (`executive_summary`, `executive_summary_error`)
 
@@ -208,7 +209,7 @@ Refactoring it into a typed stage:
    The current `generateExecutiveSummary()` does: (1) build a system + user message pair from static templates, (2) make a single LLM call, (3) return the text. This maps directly to `SingleShotController.Run()` which does the same thing plus standard message storage, timeline events, and interaction recording — exactly the infrastructure we want exec summary to gain.
 
    Key differences from synthesis that are handled by `SingleShotConfig`:
-   - **Prompt building:** Exec summary uses `BuildExecutiveSummarySystemPrompt()` + `BuildExecutiveSummaryUserPrompt(prevStageContext)` — two simple static-template functions, unlike synthesis which uses `composeSynthesisInstructions(execCtx)` for config-aware instruction assembly. The `BuildMessages` function in the config adapts the existing prompt methods to the `func(*ExecutionContext, string) []ConversationMessage` signature with a trivial closure.
+   - **Prompt building:** Exec summary uses `BuildExecutiveSummarySystemPrompt()` + `BuildExecutiveSummaryUserPrompt(prevStageContext)` — two simple static-template functions, unlike synthesis which uses `pb.BuildSynthesisMessages(execCtx, prevStageContext)` for config-aware instruction assembly. The `BuildMessages` function in the config adapts the existing prompt methods to the `func(*ExecutionContext, string) []ConversationMessage` signature with a trivial closure.
    - **No thinking fallback:** Exec summary doesn't use `ThinkingFallback` (set to `false`), unlike synthesis (set to `true`).
    - **Interaction label:** `"exec_summary"` instead of `"synthesis"`.
 
@@ -294,7 +295,7 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 | Exec summary | `pkg/queue/executor_synthesis.go` | Remove `generateExecutiveSummary()`, `executiveSummarySeqNum` |
 | Agent config | `pkg/agent/config_resolver.go` | Add `ResolveExecSummaryConfig()` or reuse existing provider resolution |
 | Controller | `pkg/agent/controller/` | New `ExecSummaryController` or reuse `SingleShotController` |
-| Agent factory | `pkg/agent/factory.go` | Wire exec summary agent type (if new) |
+| Agent/controller factory | `pkg/agent/controller/factory.go` | Wire exec summary agent type in `CreateController` switch |
 | Config enums | `pkg/config/enums.go` | Add `AgentTypeExecSummary` (if new agent type needed) |
 | Context builders | `pkg/queue/executor.go` | Add explicit stage-type filter guards to `buildStageContext()`, `extractFinalAnalysis()` (safety — behavior unchanged, they already operate on the correct slice) |
 | Event helpers | `pkg/queue/executor_helpers.go` | Update `publishStageStatus` call for exec summary |
@@ -345,7 +346,7 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
    - `ThinkingFallback: false` — exec summary expects a direct text response, not thinking output.
    - `InteractionLabel: "exec_summary"`.
    - Add `config.AgentTypeExecSummary` constant and wire it in `controller/factory.go`'s switch: `case config.AgentTypeExecSummary: return NewExecSummaryController(execCtx.PromptBuilder), nil`.
-2. **Config resolution:** Add `ResolveExecSummaryConfig()` in `config_resolver.go`. It resolves the LLM provider using the existing chain hierarchy: `chain.ExecutiveSummaryProvider` → `chain.LLMProvider` → `defaults.LLMProvider`. It returns the resolved `*config.LLMProviderConfig` and backend string, which the executor uses to populate the agent's `ExecutionContext.Config`. This mirrors the inline resolution in today's `generateExecutiveSummary()` (lines 188–210 of `executor_synthesis.go`) but extracted into a reusable function.
+2. **Config resolution:** Add `ResolveExecSummaryConfig()` in `config_resolver.go` (new file). It resolves the LLM provider using the existing chain hierarchy: `chain.ExecutiveSummaryProvider` → `chain.LLMProvider` → `defaults.LLMProvider`. It returns the resolved `*config.LLMProviderConfig` and backend string, which the executor uses to populate the agent's `ExecutionContext.Config`. This mirrors the inline resolution in today's `generateExecutiveSummary()` (lines 199–222 of `executor_synthesis.go`) but extracted into a reusable function. The fallback provider resolution (lines 233–254) should also be extracted so the `SingleShotController`'s built-in `tryFallback()` mechanism can use the same fallback chain.
 3. **Executor refactoring:** Replace `generateExecutiveSummary()` with:
    - Create Stage record (type: `exec_summary`, name: "Executive Summary")
    - Create AgentExecution record
