@@ -2805,7 +2805,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 			validator := NewValidator(cfg)
 
 			// Test defaults-level validation
-			if tt.defaults != nil && len(tt.defaults.FallbackProviders) > 0 {
+			if tt.defaults != nil {
 				err := validator.validateDefaults()
 				if tt.wantErr {
 					require.Error(t, err)
@@ -2831,6 +2831,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
+			LLMProvider: "defaults-primary",
 			FallbackProviders: []FallbackProviderEntry{
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
@@ -2863,6 +2864,7 @@ func TestCollectReferencedLLMProviders_IncludesFallback(t *testing.T) {
 	validator := NewValidator(cfg)
 	referenced := validator.collectReferencedLLMProviders()
 
+	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
 	assert.True(t, referenced["stage-fallback"], "stage fallback provider should be referenced")

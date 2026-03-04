@@ -540,6 +540,9 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 
 	// Default-level providers
 	if v.cfg.Defaults != nil {
+		if v.cfg.Defaults.LLMProvider != "" {
+			referenced[v.cfg.Defaults.LLMProvider] = true
+		}
 		for _, fb := range v.cfg.Defaults.FallbackProviders {
 			referenced[fb.Provider] = true
 		}

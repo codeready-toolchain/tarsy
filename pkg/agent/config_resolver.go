@@ -410,7 +410,10 @@ func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []con
 			result = o
 		}
 	}
-	return result
+	if result == nil {
+		return nil
+	}
+	return append([]config.FallbackProviderEntry(nil), result...)
 }
 
 // resolveMaxIterations returns the last non-nil value from the given
