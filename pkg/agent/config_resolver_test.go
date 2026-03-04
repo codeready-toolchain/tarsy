@@ -1071,6 +1071,69 @@ func TestResolveFallbackProviders(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, chainFallback, resolved.FallbackProviders)
 	})
+
+	t.Run("multi-entry list preserves order", func(t *testing.T) {
+		multiFallback := []config.FallbackProviderEntry{
+			{Provider: "first", Backend: config.LLMBackendLangChain},
+			{Provider: "second", Backend: config.LLMBackendNativeGemini},
+			{Provider: "third", Backend: config.LLMBackendLangChain},
+		}
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: multiFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.FallbackProviders, 3)
+		assert.Equal(t, "first", resolved.FallbackProviders[0].Provider)
+		assert.Equal(t, "second", resolved.FallbackProviders[1].Provider)
+		assert.Equal(t, "third", resolved.FallbackProviders[2].Provider)
+	})
+
+	t.Run("stage fallback does not leak into chat", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg,
+			&config.ChainConfig{},
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Nil(t, resolved.FallbackProviders,
+			"chat should not inherit stage-level fallback — only defaults and chain")
+	})
+
+	t.Run("stage fallback does not leak into scoring", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveScoringConfig(cfg,
+			&config.ChainConfig{},
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Nil(t, resolved.FallbackProviders,
+			"scoring should not inherit stage-level fallback — only defaults and chain")
+	})
 }
 
 func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {

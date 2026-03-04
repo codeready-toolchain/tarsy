@@ -2754,6 +2754,21 @@ func TestValidateFallbackProviders(t *testing.T) {
 			errMsg:  "environment variable VERTEX_CREDS is not set",
 		},
 		{
+			name: "multi-entry error on second entry",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "good-provider", Backend: LLMBackendLangChain},
+					{Provider: "bad-provider", Backend: LLMBackendNativeGemini},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"good-provider": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "GOOD_KEY", MaxToolResultTokens: 100000},
+			},
+			env:     map[string]string{"GOOD_KEY": "secret"},
+			wantErr: true,
+			errMsg:  "LLM provider 'bad-provider' not found",
+		},
+		{
 			name: "empty fallback list is valid",
 			defaults: &Defaults{
 				FallbackProviders: []FallbackProviderEntry{},
