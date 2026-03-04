@@ -132,9 +132,23 @@ func tryFallback(
 		return false
 	}
 
-	// Defensive: shouldFallback already rejects exhausted lists, but guard
-	// the slice access in case the two checks ever diverge.
+	// Find the next fallback entry that differs from the currently active
+	// provider+backend. An entry identical to the current provider would just
+	// repeat the same failure, so skip it.
 	nextIdx := state.CurrentProviderIndex + 1
+	for nextIdx < len(execCtx.Config.ResolvedFallbackProviders) {
+		candidate := execCtx.Config.ResolvedFallbackProviders[nextIdx]
+		if candidate.ProviderName != execCtx.Config.LLMProviderName {
+			break
+		}
+		slog.Info("Skipping fallback entry identical to current provider",
+			"session_id", execCtx.SessionID,
+			"execution_id", execCtx.ExecutionID,
+			"skipped_provider", candidate.ProviderName,
+			"skipped_backend", candidate.Backend,
+		)
+		nextIdx++
+	}
 	if nextIdx >= len(execCtx.Config.ResolvedFallbackProviders) {
 		return false
 	}

@@ -153,6 +153,10 @@ An entry in the fallback list: `{provider: string, backend: LLMBackend}`. The pr
 
 Each fallback entry specifies both a provider and a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., `google-native` → `langchain`). If a provider/backend combination doesn't work, that's a configuration error caught at startup (Q4).
 
+### Same-Provider Skip
+
+When selecting the next fallback entry, `tryFallback` skips entries whose provider name matches the currently active provider (regardless of backend). This prevents wasting iterations by "falling back" to the same model that is already failing.
+
 ### Fallback Trigger Conditions
 
 Fallback triggers depend on the error code from the Python LLM service, since each code carries different retry history:

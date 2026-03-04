@@ -351,6 +351,98 @@ func TestTryFallback_ExhaustsFallbackList(t *testing.T) {
 	assert.False(t, result, "should fail when all providers exhausted")
 }
 
+func TestTryFallback_SkipsSameProviderEntries(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "primary",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "same-model"},
+		},
+		{
+			ProviderName: "actual-fallback",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "different-model"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.True(t, result)
+
+	assert.Equal(t, "actual-fallback", execCtx.Config.LLMProviderName,
+		"should skip the entry identical to current provider")
+	assert.Equal(t, config.LLMBackendLangChain, execCtx.Config.LLMBackend)
+	assert.Equal(t, 1, state.CurrentProviderIndex,
+		"index should point to the entry that was actually used")
+}
+
+func TestTryFallback_AllFallbacksSameAsCurrentProvider(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "primary",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "same-model"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	assert.False(t, result,
+		"should return false when all fallback entries match current provider")
+	assert.Equal(t, "primary", execCtx.Config.LLMProviderName,
+		"provider should not have changed")
+}
+
+func TestTryFallback_SameProviderDifferentBackendAlsoSkipped(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "gemini-flash"
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "gemini-flash",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "gemini-flash"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	assert.False(t, result,
+		"same provider name with different backend should still be skipped")
+	assert.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend,
+		"backend should not have changed")
+}
+
 func TestTryFallback_CancelledContext(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
