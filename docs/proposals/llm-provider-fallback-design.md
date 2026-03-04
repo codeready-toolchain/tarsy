@@ -180,46 +180,67 @@ Startup fails if any check fails — a fallback list with broken entries gives a
 
 ## Implementation Plan
 
-### Phase 1: Core Fallback Logic (P1)
+### Phase 1: Configuration & Schema (P1)
 
-**Goal:** When a provider fails (retries exhausted, non-retryable error, or repeated partial failures), automatically switch to the next fallback provider based on error-code-aware trigger rules (Q7).
+**Goal:** Define the fallback configuration structure, schema changes, and startup validation. Everything downstream depends on this.
 
 Changes:
-- `pkg/config/defaults.go` — Add `FallbackProviders` field to `Defaults`
 - `pkg/config/types.go` — Define `FallbackProviderEntry` struct
+- `pkg/config/defaults.go` — Add `FallbackProviders` field to `Defaults`
 - `pkg/config/chain.go` — Add `FallbackProviders` to `ChainConfig`
 - `pkg/config/types.go` — Add `FallbackProviders` to `StageAgentConfig`
-- `pkg/agent/context.go` — Add `FallbackProviders` to `ResolvedAgentConfig`
-- `pkg/agent/config_resolver.go` — Resolve fallback list through hierarchy
-- `pkg/agent/controller/iterating.go` — Integrate fallback after LLM error (error-code-aware triggers)
-- `pkg/agent/controller/single_shot.go` — Add fallback wrapper for synthesis/scoring calls
-- `pkg/queue/executor_synthesis.go` — Add fallback to `generateExecutiveSummary` (uses direct LLM call with `chain.ExecutiveSummaryProvider`, not the single-shot controller)
-- `pkg/agent/controller/fallback.go` — New file: `FallbackState`, provider selection, shared `callLLMWithFallback` helper, error-code-aware trigger logic
-- `proto/llm_service.proto` — Add `clear_cache` flag to `GenerateRequest` for provider-switch cache invalidation
-- `llm-service/llm/providers/google_native.py` — Handle `clear_cache` flag: delete `_model_contents[execution_id]` when set
-- `pkg/config/validator.go` — Validate fallback provider references and credentials at startup
-- `pkg/agent/config_resolver.go` — Resolve fallback list for synthesis (inherits from chain/defaults, same as other config fields)
-
-### Phase 2: Adaptive Timeouts (P2)
-
-**Goal:** Reduce time wasted on unresponsive providers.
-
-Changes:
-- `pkg/agent/controller/streaming.go` — Implement initial-response and stall timeouts in `collectStreamWithCallback`
-- `pkg/agent/context.go` — Add timeout config fields to `ResolvedAgentConfig`
-- `pkg/agent/config_resolver.go` — Set defaults for adaptive timeouts
-
-### Phase 3: Dashboard Visibility (P3)
-
-**Goal:** Operators can see fallback events and provider switches.
-
-Changes:
+- `pkg/agent/context.go` — Add `FallbackProviders` to `ResolvedAgentConfig`; add adaptive timeout config fields (`InitialResponseTimeout`, `StallTimeout`)
+- `pkg/agent/config_resolver.go` — Resolve fallback list through hierarchy (defaults → chain → stage → agent); resolve for synthesis/scoring/executive summary (inherits from chain/defaults); set adaptive timeout defaults
+- `pkg/config/validator.go` — Validate fallback entries at startup (provider exists, backend valid, credentials set)
 - `ent/schema/timelineevent.go` — Add `provider_fallback` event type
 - `ent/schema/agentexecution.go` — Add `original_llm_provider`, `original_llm_backend` fields (nullable)
 - Database migration for new fields
-- `pkg/services/stage_service.go` — Method to update provider on fallback
-- `web/dashboard/src/components/timeline/StageContent.tsx` — Render fallback indicator
-- `web/dashboard/src/components/trace/` — Show original vs. fallback provider
+- `proto/llm_service.proto` — Add `clear_cache` flag to `GenerateRequest`
+
+Tests:
+- `pkg/config/validator_test.go` — Startup validation: missing provider, invalid backend, missing credentials
+- `pkg/agent/config_resolver_test.go` — Fallback list resolution through hierarchy
+
+### Phase 2: Core Fallback Logic (P2)
+
+**Goal:** When a provider fails, automatically switch to the next fallback provider based on error-code-aware trigger rules (Q7). All LLM call sites get fallback (Q6).
+
+Changes:
+- `pkg/agent/controller/fallback.go` — New file: `FallbackState`, provider selection, shared `callLLMWithFallback` helper, error-code-aware trigger logic
+- `pkg/agent/controller/iterating.go` — Integrate fallback after LLM error in the iteration loop and forced conclusion
+- `pkg/agent/controller/single_shot.go` — Add fallback wrapper for synthesis/scoring calls
+- `pkg/queue/executor_synthesis.go` — Add fallback to `generateExecutiveSummary` (uses direct LLM call with `chain.ExecutiveSummaryProvider`, not the single-shot controller)
+- `pkg/agent/llm_grpc.go` — Pass `clear_cache` flag on `GenerateRequest` when provider has changed
+- `llm-service/llm/servicer.py` — Route `clear_cache` flag through to the provider
+- `llm-service/llm/providers/google_native.py` — Handle `clear_cache`: delete `_model_contents[execution_id]` when set
+- `pkg/services/stage_service.go` — Method to update `llm_provider`, `llm_backend`, `original_llm_provider`, `original_llm_backend` on fallback
+- `pkg/events/payloads.go` — New `ProviderFallbackPayload` for WebSocket events
+
+Tests:
+- `pkg/agent/controller/fallback_test.go` — Error-code-aware triggers, provider selection, state tracking, consecutive error counters
+- `pkg/agent/controller/iterating_test.go` — Fallback integration in iteration loop (mock LLM errors → verify provider switch)
+- `pkg/agent/controller/single_shot_test.go` — Fallback for single-shot calls
+- `llm-service/tests/test_google_native.py` — `clear_cache` flag clears `_model_contents`
+
+### Phase 3: Adaptive Timeouts (P3)
+
+**Goal:** Reduce time wasted on unresponsive providers. Independent of fallback but makes it more effective.
+
+Changes:
+- `pkg/agent/controller/streaming.go` — Implement initial-response and stall timeouts in `collectStreamWithCallback` (track time-to-first-chunk and time-since-last-chunk; cancel context when thresholds exceeded)
+
+Tests:
+- `pkg/agent/controller/streaming_test.go` — Initial response timeout (no chunks → cancel), stall timeout (gap between chunks → cancel), active streaming within max timeout (no cancel)
+
+### Phase 4: Dashboard Visibility (P4)
+
+**Goal:** Operators can see fallback events and provider switches in the dashboard.
+
+Changes:
+- `web/dashboard/src/components/timeline/StageContent.tsx` — Render `provider_fallback` timeline event with fallback indicator (original → fallback provider, reason)
+- `web/dashboard/src/components/trace/StageAccordion.tsx` — Show original vs. fallback provider when `original_llm_provider` is set
+- `web/dashboard/src/components/trace/ParallelExecutionTabs.tsx` — Same fallback indicator for parallel executions
+- `web/dashboard/src/components/trace/SubAgentTabs.tsx` — Same for sub-agents
 
 ## Decisions Summary
 
