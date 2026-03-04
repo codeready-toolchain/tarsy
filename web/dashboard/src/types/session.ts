@@ -128,6 +128,9 @@ export interface ExecutionOverview {
   task?: string | null;
   original_llm_provider?: string | null;
   original_llm_backend?: string | null;
+  fallback_reason?: string | null;
+  fallback_error_code?: string | null;
+  fallback_attempt?: number | null;
   sub_agents?: ExecutionOverview[];
 }
 

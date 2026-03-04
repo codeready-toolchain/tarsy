@@ -211,6 +211,9 @@ type ExecutionOverview struct {
 	Task                *string             `json:"task,omitempty"`
 	OriginalLLMProvider *string             `json:"original_llm_provider,omitempty"`
 	OriginalLLMBackend  *string             `json:"original_llm_backend,omitempty"`
+	FallbackReason      *string             `json:"fallback_reason,omitempty"`
+	FallbackErrorCode   *string             `json:"fallback_error_code,omitempty"`
+	FallbackAttempt     *int                `json:"fallback_attempt,omitempty"`
 	SubAgents           []ExecutionOverview `json:"sub_agents,omitempty"`
 }
 

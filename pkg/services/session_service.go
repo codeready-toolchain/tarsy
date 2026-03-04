@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
@@ -458,6 +459,12 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		return nil, err
 	}
 
+	// Batch-load provider_fallback timeline events for enriching execution overviews.
+	fallbackMeta, err := s.loadFallbackMetadata(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Compute stage stats.
 	totalStages := len(session.Edges.Stages)
 	completedStages := 0
@@ -489,12 +496,12 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		if stg.Edges.AgentExecutions != nil {
 			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
 			for _, exec := range stg.Edges.AgentExecutions {
-				overview := buildExecutionOverview(exec, execTokens)
+				overview := buildExecutionOverview(exec, execTokens, fallbackMeta)
 
 				if exec.Edges.SubAgents != nil {
 					overview.SubAgents = make([]models.ExecutionOverview, 0, len(exec.Edges.SubAgents))
 					for _, sub := range exec.Edges.SubAgents {
-						overview.SubAgents = append(overview.SubAgents, buildExecutionOverview(sub, execTokens))
+						overview.SubAgents = append(overview.SubAgents, buildExecutionOverview(sub, execTokens, fallbackMeta))
 					}
 				}
 
@@ -1113,15 +1120,63 @@ func (s *SessionService) GetDistinctChainIDs(ctx context.Context) ([]string, err
 	return results, nil
 }
 
+// fallbackEventMeta holds parsed metadata from a provider_fallback timeline event.
+type fallbackEventMeta struct {
+	Reason    string
+	ErrorCode string
+	Attempt   int
+}
+
+// loadFallbackMetadata queries all provider_fallback timeline events for a session
+// and returns a map keyed by execution_id.
+func (s *SessionService) loadFallbackMetadata(ctx context.Context, sessionID string) (map[string]fallbackEventMeta, error) {
+	events, err := s.client.TimelineEvent.Query().
+		Where(
+			timelineevent.HasAgentExecutionWith(agentexecution.SessionIDEQ(sessionID)),
+			timelineevent.EventTypeEQ(timelineevent.EventTypeProviderFallback),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load fallback timeline events: %w", err)
+	}
+
+	result := make(map[string]fallbackEventMeta, len(events))
+	for _, ev := range events {
+		if ev.ExecutionID == nil {
+			continue
+		}
+		execID := *ev.ExecutionID
+
+		var meta fallbackEventMeta
+		if ev.Metadata != nil {
+			if r, ok := ev.Metadata["reason"].(string); ok {
+				meta.Reason = r
+			}
+			if c, ok := ev.Metadata["error_code"].(string); ok {
+				meta.ErrorCode = c
+			}
+			if a, ok := ev.Metadata["attempt"].(float64); ok {
+				meta.Attempt = int(a)
+			}
+		}
+
+		// Keep the latest attempt if multiple fallbacks occurred for the same execution
+		if existing, exists := result[execID]; !exists || meta.Attempt > existing.Attempt {
+			result[execID] = meta
+		}
+	}
+	return result, nil
+}
+
 // buildExecutionOverview creates an ExecutionOverview from an AgentExecution entity.
-func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]executionTokenStats) models.ExecutionOverview {
+func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]executionTokenStats, fallbackMeta map[string]fallbackEventMeta) models.ExecutionOverview {
 	tokens := execTokens[exec.ID]
 	var durationMs *int64
 	if exec.DurationMs != nil {
 		v := int64(*exec.DurationMs)
 		durationMs = &v
 	}
-	return models.ExecutionOverview{
+	overview := models.ExecutionOverview{
 		ExecutionID:       exec.ID,
 		AgentName:         exec.AgentName,
 		AgentIndex:        exec.AgentIndex,
@@ -1140,6 +1195,20 @@ func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]exec
 		OriginalLLMProvider: exec.OriginalLlmProvider,
 		OriginalLLMBackend:  exec.OriginalLlmBackend,
 	}
+
+	if fm, ok := fallbackMeta[exec.ID]; ok {
+		if fm.Reason != "" {
+			overview.FallbackReason = &fm.Reason
+		}
+		if fm.ErrorCode != "" {
+			overview.FallbackErrorCode = &fm.ErrorCode
+		}
+		if fm.Attempt > 0 {
+			overview.FallbackAttempt = &fm.Attempt
+		}
+	}
+
+	return overview
 }
 
 // validateMCPOverride validates MCP server selection override
