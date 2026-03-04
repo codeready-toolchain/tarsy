@@ -108,7 +108,7 @@ func ResolveAgentConfig(
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
-	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders)
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
 		AgentName:                 agentConfig.Name,
@@ -233,7 +233,7 @@ func ResolveChatAgentConfig(
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
-	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders)
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
 		AgentName: agentName,
@@ -341,7 +341,7 @@ func ResolveScoringConfig(
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 
-	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders)
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
 		AgentName:                 agentName,
@@ -432,9 +432,11 @@ func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []con
 }
 
 // resolveFullFallbackEntries looks up the full LLMProviderConfig for each
-// fallback provider entry. Entries whose provider is not found in the registry
-// are logged and skipped (startup validation should have caught these).
-func resolveFullFallbackEntries(cfg *config.Config, entries []config.FallbackProviderEntry) []ResolvedFallbackEntry {
+// fallback provider entry and applies agent-level native tool overrides so
+// that native tool configuration survives provider swaps during fallback.
+// Entries whose provider is not found in the registry are logged and skipped
+// (startup validation should have caught these).
+func resolveFullFallbackEntries(cfg *config.Config, entries []config.FallbackProviderEntry, agentNativeTools map[config.GoogleNativeTool]bool) []ResolvedFallbackEntry {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -449,7 +451,7 @@ func resolveFullFallbackEntries(cfg *config.Config, entries []config.FallbackPro
 		resolved = append(resolved, ResolvedFallbackEntry{
 			ProviderName: entry.Provider,
 			Backend:      entry.Backend,
-			Config:       provider,
+			Config:       applyAgentNativeTools(provider, agentNativeTools),
 		})
 	}
 	return resolved

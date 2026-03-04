@@ -381,3 +381,71 @@ func TestTryFallback_PreservesOriginalOnSecondFallback(t *testing.T) {
 	assert.Equal(t, "primary", *exec.OriginalLlmProvider, "original should be preserved across multiple fallbacks")
 	assert.Equal(t, "fallback-2", *exec.LlmProvider, "current should be updated to latest fallback")
 }
+
+func TestNativeToolsDroppedOnFallback(t *testing.T) {
+	t.Run("no drop when target is google-native", func(t *testing.T) {
+		provider := &config.LLMProviderConfig{
+			NativeTools: map[config.GoogleNativeTool]bool{
+				config.GoogleNativeToolGoogleSearch: true,
+			},
+		}
+		dropped := nativeToolsDroppedOnFallback(provider, config.LLMBackendNativeGemini)
+		assert.Nil(t, dropped)
+	})
+
+	t.Run("drops enabled tools when target is langchain", func(t *testing.T) {
+		provider := &config.LLMProviderConfig{
+			NativeTools: map[config.GoogleNativeTool]bool{
+				config.GoogleNativeToolGoogleSearch:  true,
+				config.GoogleNativeToolCodeExecution: false, // disabled — not dropped
+				config.GoogleNativeToolURLContext:    true,
+			},
+		}
+		dropped := nativeToolsDroppedOnFallback(provider, config.LLMBackendLangChain)
+		assert.Len(t, dropped, 2)
+		assert.Contains(t, dropped, "google_search")
+		assert.Contains(t, dropped, "url_context")
+	})
+
+	t.Run("no drop when no native tools configured", func(t *testing.T) {
+		provider := &config.LLMProviderConfig{}
+		dropped := nativeToolsDroppedOnFallback(provider, config.LLMBackendLangChain)
+		assert.Nil(t, dropped)
+	})
+}
+
+func TestTryFallback_NativeToolsDroppedMetadata(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
+		config.GoogleNativeToolGoogleSearch: true,
+		config.GoogleNativeToolURLContext:   true,
+	}
+	// Fallback directly to langchain backend
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "langchain-fb",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "gpt-fallback"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.True(t, result)
+
+	// Verify the timeline event was created (contains native_tools_dropped metadata)
+	assert.Equal(t, 1, eventSeq)
+
+	// Verify the provider was swapped to langchain
+	assert.Equal(t, "langchain-fb", execCtx.Config.LLMProviderName)
+	assert.Equal(t, config.LLMBackendLangChain, execCtx.Config.LLMBackend)
+}

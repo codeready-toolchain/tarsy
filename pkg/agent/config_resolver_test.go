@@ -1241,6 +1241,56 @@ func TestResolvedFallbackProviders(t *testing.T) {
 		assert.Nil(t, resolved.ResolvedFallbackProviders)
 	})
 
+	t.Run("agent native tool overrides applied to fallback entries", func(t *testing.T) {
+		// Provider fb-1 has google_search enabled in its registry config
+		fbWithNativeTools := &config.LLMProviderConfig{
+			Type:      config.LLMProviderTypeGoogle,
+			Model:     "gemini-fb-native",
+			APIKeyEnv: "GOOGLE_API_KEY",
+			NativeTools: map[config.GoogleNativeTool]bool{
+				config.GoogleNativeToolGoogleSearch: true,
+			},
+		}
+		cfgNative := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "primary",
+				FallbackProviders: []config.FallbackProviderEntry{
+					{Provider: "fb-native", Backend: config.LLMBackendNativeGemini},
+				},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"NativeAgent": {
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolCodeExecution: true,
+						config.GoogleNativeToolGoogleSearch:  false, // override: disable search
+					},
+				},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"primary":   primaryProvider,
+				"fb-native": fbWithNativeTools,
+			}),
+		}
+
+		resolved, err := ResolveAgentConfig(cfgNative,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "NativeAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 1)
+
+		fbConfig := resolved.ResolvedFallbackProviders[0].Config
+		assert.False(t, fbConfig.NativeTools[config.GoogleNativeToolGoogleSearch],
+			"agent override should disable google_search on fallback")
+		assert.True(t, fbConfig.NativeTools[config.GoogleNativeToolCodeExecution],
+			"agent override should enable code_execution on fallback")
+
+		// Primary provider should also have the same overrides
+		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolCodeExecution])
+	})
+
 	t.Run("missing provider in registry is skipped", func(t *testing.T) {
 		cfgMissing := &config.Config{
 			Defaults: &config.Defaults{

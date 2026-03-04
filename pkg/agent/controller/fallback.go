@@ -22,14 +22,14 @@ const (
 // FallbackState tracks fallback progress within a single execution.
 // Initialized once at the start of Run() and carried through all iterations.
 type FallbackState struct {
-	OriginalProvider         string
-	OriginalBackend          config.LLMBackend
-	CurrentProviderIndex     int // -1 = primary, 0+ = index into ResolvedFallbackProviders
-	AttemptedProviders       []string
-	FallbackReason           string
+	OriginalProvider          string
+	OriginalBackend           config.LLMBackend
+	CurrentProviderIndex      int // -1 = primary, 0+ = index into ResolvedFallbackProviders
+	AttemptedProviders        []string
+	FallbackReason            string
 	ConsecutiveProviderErrors int // counts consecutive provider_error / invalid_request / transport failures
-	ConsecutivePartialErrors int // counts consecutive partial_stream_error
-	ClearCacheNeeded         bool
+	ConsecutivePartialErrors  int // counts consecutive partial_stream_error
+	ClearCacheNeeded          bool
 }
 
 // NewFallbackState creates a FallbackState initialized from the current provider.
@@ -140,6 +140,18 @@ func tryFallback(
 	prevProvider := execCtx.Config.LLMProviderName
 	prevBackend := execCtx.Config.LLMBackend
 
+	// Check for native tools that will be lost on backend switch.
+	droppedTools := nativeToolsDroppedOnFallback(execCtx.Config.LLMProvider, entry.Backend)
+	if len(droppedTools) > 0 {
+		slog.Warn("Fallback provider does not support native tools; capabilities will be reduced",
+			"session_id", execCtx.SessionID,
+			"execution_id", execCtx.ExecutionID,
+			"dropped_tools", droppedTools,
+			"from_backend", prevBackend,
+			"to_backend", entry.Backend,
+		)
+	}
+
 	// Swap provider in the execution config
 	execCtx.Config.LLMProvider = entry.Config
 	execCtx.Config.LLMProviderName = entry.ProviderName
@@ -170,6 +182,9 @@ func tryFallback(
 		"reason":            state.FallbackReason,
 		"attempt":           nextIdx + 1,
 	}
+	if len(droppedTools) > 0 {
+		meta["native_tools_dropped"] = droppedTools
+	}
 	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeProviderFallback,
 		fmt.Sprintf("Provider fallback: %s → %s", prevProvider, entry.ProviderName),
 		meta, eventSeq)
@@ -187,6 +202,22 @@ func tryFallback(
 	}
 
 	return true
+}
+
+// nativeToolsDroppedOnFallback returns the list of enabled native tool names
+// that will be silently lost when switching to a backend that doesn't support
+// them (anything other than google-native). Returns nil when no tools are lost.
+func nativeToolsDroppedOnFallback(current *config.LLMProviderConfig, targetBackend config.LLMBackend) []string {
+	if targetBackend == config.LLMBackendNativeGemini {
+		return nil
+	}
+	var dropped []string
+	for tool, enabled := range current.NativeTools {
+		if enabled {
+			dropped = append(dropped, string(tool))
+		}
+	}
+	return dropped
 }
 
 // consumeClearCache returns the current ClearCacheNeeded value and resets it.
