@@ -165,6 +165,41 @@ func TestShouldFallback_NonPartialError_TreatedAsProviderError(t *testing.T) {
 	assert.True(t, result, "second consecutive non-POE error should trigger")
 }
 
+func TestShouldFallback_UnknownCode_TreatedAsProviderError(t *testing.T) {
+	state := newTestFallbackState()
+	providers := fallbackProviders()
+
+	unknownErr := &PartialOutputError{
+		Cause: fmt.Errorf("something new"),
+		Code:  LLMErrorCode("new_error_code"),
+	}
+
+	result := state.shouldFallback(unknownErr, providers)
+	assert.False(t, result, "first unknown code should not trigger")
+
+	result = state.shouldFallback(unknownErr, providers)
+	assert.True(t, result, "second consecutive unknown code should trigger")
+}
+
+func TestShouldFallback_MixedErrors_BreaksConsecutiveCount(t *testing.T) {
+	state := newTestFallbackState()
+	providers := fallbackProviders()
+
+	// provider_error → partial_stream_error → provider_error: none should trigger
+	// because consecutive counts reset when the error type changes.
+	state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
+	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+
+	state.shouldFallback(makePartialError(LLMErrorPartialStreamError), providers)
+	assert.Equal(t, 0, state.ConsecutiveNonRetryable, "provider_error count reset by partial")
+	assert.Equal(t, 1, state.ConsecutivePartialErrors)
+
+	result := state.shouldFallback(makePartialError(LLMErrorProviderError), providers)
+	assert.False(t, result, "alternating errors should never reach threshold")
+	assert.Equal(t, 0, state.ConsecutivePartialErrors, "partial count reset by provider_error")
+	assert.Equal(t, 1, state.ConsecutiveNonRetryable)
+}
+
 // ────────────────────────────────────────────────────────────
 // FallbackState lifecycle tests
 // ────────────────────────────────────────────────────────────

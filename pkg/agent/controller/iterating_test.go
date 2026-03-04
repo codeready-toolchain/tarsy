@@ -1031,6 +1031,40 @@ func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
 	require.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
 }
 
+func TestIteratingController_FallbackOnCredentials_Immediate(t *testing.T) {
+	// credentials errors trigger immediate fallback (no Go retry needed)
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "API key invalid", Code: "credentials", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Success with fallback."},
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 10, TotalTokens: 15},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "bad-creds-provider"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "good-provider",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "good-model"},
+		},
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, 2, llm.callCount, "credentials should trigger immediate fallback, no extra retry")
+	require.Equal(t, "good-model", llm.capturedInputs[1].Config.Model)
+}
+
 func TestIteratingController_FallbackProviderError_RequiresOneRetry(t *testing.T) {
 	// provider_error requires 1 Go retry before fallback.
 	// Call 1: provider_error → no fallback (first occurrence)

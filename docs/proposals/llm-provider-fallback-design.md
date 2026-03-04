@@ -201,7 +201,7 @@ Tests:
 - `pkg/config/validator_test.go` — Startup validation: missing provider, invalid backend, missing credentials
 - `pkg/agent/config_resolver_test.go` — Fallback list resolution through hierarchy
 
-### Phase 2: Core Fallback Logic (P2)
+### Phase 2: Core Fallback Logic (P2) - ✅ DONE
 
 **Goal:** When a provider fails, automatically switch to the next fallback provider based on error-code-aware trigger rules (Q7). All LLM call sites get fallback (Q6).
 

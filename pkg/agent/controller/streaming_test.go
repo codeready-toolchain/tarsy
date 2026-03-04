@@ -298,11 +298,13 @@ func TestCollectStreamWithCallback_ErrorChunk(t *testing.T) {
 	assert.Contains(t, err.Error(), "rate limit exceeded")
 	assert.Equal(t, 1, callbackCount) // Only the first text chunk callback fired
 
-	// Should be a PartialOutputError with partial text preserved
+	// Should be a PartialOutputError with partial text and error code preserved
 	var poe *PartialOutputError
 	require.ErrorAs(t, err, &poe)
 	assert.Equal(t, "partial ", poe.PartialText)
 	assert.False(t, poe.IsLoop)
+	assert.Equal(t, LLMErrorCode("429"), poe.Code)
+	assert.True(t, poe.Retryable)
 }
 
 func TestCollectStreamWithCallback_ToolCalls(t *testing.T) {
@@ -463,6 +465,8 @@ func TestCollectStreamWithCallback_ErrorPreservesPartialOutput(t *testing.T) {
 	assert.Equal(t, "Let me think...", poe.PartialThinking)
 	assert.False(t, poe.IsLoop)
 	assert.Contains(t, poe.Error(), "stream interrupted")
+	assert.Equal(t, LLMErrorPartialStreamError, poe.Code)
+	assert.False(t, poe.Retryable)
 }
 
 // ============================================================================

@@ -482,14 +482,20 @@ class TestGoogleNativeProvider:
         provider._cache_model_turn(execution_id, [content])
         assert execution_id in provider._model_contents
 
+        cached_turns = provider._get_cached_model_turns(execution_id)
+        assert len(cached_turns) == 1
+
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
 
-        mock_chunk = MagicMock()
-        mock_chunk.candidates = [MagicMock()]
-        mock_chunk.candidates[0].content = genai_types.Content(
+        mock_candidate = MagicMock()
+        mock_candidate.content = genai_types.Content(
             role="model", parts=[genai_types.Part(text="fresh response")]
         )
+        mock_candidate.grounding_metadata = None
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
         mock_chunk.usage_metadata = None
 
         async def mock_stream():
@@ -513,13 +519,15 @@ class TestGoogleNativeProvider:
         async for resp in provider.generate(request):
             responses.append(resp)
 
-        # Cache should have been cleared before message conversion
-        # (a new cache entry may have been created by the generate call itself)
-        # The key test: the old cached content should not be there
+        # After generate, any cached entry should only contain the fresh
+        # response — the pre-seeded "cached" content must have been cleared.
         if execution_id in provider._model_contents:
             turns, _ = provider._model_contents[execution_id]
-            # Should only contain the fresh turn, not the pre-seeded one
-            assert len(turns) <= 1
+            for turn in turns:
+                for content_obj in turn:
+                    for part in content_obj.parts:
+                        assert getattr(part, "text", None) != "cached", \
+                            "old cached content should have been cleared before generate"
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
@@ -539,11 +547,14 @@ class TestGoogleNativeProvider:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
 
-        mock_chunk = MagicMock()
-        mock_chunk.candidates = [MagicMock()]
-        mock_chunk.candidates[0].content = genai_types.Content(
+        mock_candidate = MagicMock()
+        mock_candidate.content = genai_types.Content(
             role="model", parts=[genai_types.Part(text="response")]
         )
+        mock_candidate.grounding_metadata = None
+
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
         mock_chunk.usage_metadata = None
 
         async def mock_stream():
