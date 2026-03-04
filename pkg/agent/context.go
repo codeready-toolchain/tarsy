@@ -88,6 +88,14 @@ type ResolvedAgentConfig struct {
 	MCPServers         []string
 	CustomInstructions string
 
+	// Fallback providers to try when the primary provider fails (ordered by preference)
+	FallbackProviders []config.FallbackProviderEntry
+
+	// Adaptive timeout: max wait for the first streaming chunk (default: 120s)
+	InitialResponseTimeout time.Duration
+	// Adaptive timeout: max gap between consecutive chunks (default: 60s)
+	StallTimeout time.Duration
+
 	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
 	// Set by the session executor when the alert provides an MCP selection with native_tools.
 	NativeToolsOverride *models.NativeToolsConfig

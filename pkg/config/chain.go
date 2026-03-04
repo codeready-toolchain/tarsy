@@ -31,6 +31,9 @@ type ChainConfig struct {
 	// Chain-level LLM backend override
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
+	// Chain-level fallback providers override
+	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
+
 	// Chain-level max iterations override
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 
@@ -63,6 +66,9 @@ type StageConfig struct {
 
 	// Stage-level MCP servers override
 	MCPServers []string `yaml:"mcp_servers,omitempty"`
+
+	// Stage-level fallback providers override
+	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 
 	// Sub-agents available to orchestrator agents in this stage
 	SubAgents SubAgentRefs `yaml:"sub_agents,omitempty"`

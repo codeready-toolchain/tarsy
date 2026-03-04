@@ -59,6 +59,16 @@ func (AgentExecution) Fields() []ent.Field {
 			Nillable().
 			Comment("Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')"),
 
+		// Fallback tracking fields (NULL = no fallback occurred)
+		field.String("original_llm_provider").
+			Optional().
+			Nillable().
+			Comment("Original provider before fallback (NULL = no fallback occurred)"),
+		field.String("original_llm_backend").
+			Optional().
+			Nillable().
+			Comment("Original backend before fallback (NULL = no fallback occurred)"),
+
 		// Orchestrator sub-agent fields
 		field.String("parent_execution_id").
 			Optional().

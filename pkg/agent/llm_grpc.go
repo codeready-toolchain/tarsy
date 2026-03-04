@@ -52,10 +52,10 @@ func (c *GRPCLLMClient) Generate(ctx context.Context, input *GenerateInput) (<-c
 			if err == io.EOF {
 				return
 			}
-		if err != nil {
-			ch <- &ErrorChunk{Message: err.Error(), Retryable: false}
-			return
-		}
+			if err != nil {
+				ch <- &ErrorChunk{Message: err.Error(), Retryable: false}
+				return
+			}
 			chunk := fromProtoResponse(resp)
 			if chunk != nil {
 				select {

@@ -12,6 +12,9 @@ type Defaults struct {
 	// LLM backend default
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
+	// Ordered list of fallback providers to try when the primary provider fails
+	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
+
 	// Default scoring agent name (fallback when chain has no scoring config)
 	ScoringAgent string `yaml:"scoring_agent,omitempty"`
 

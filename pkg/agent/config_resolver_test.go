@@ -877,3 +877,244 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "chain configuration cannot be nil")
 	})
 }
+
+func TestResolveFallbackProviders(t *testing.T) {
+	defaultsFallback := []config.FallbackProviderEntry{
+		{Provider: "defaults-fb", Backend: config.LLMBackendLangChain},
+	}
+	chainFallback := []config.FallbackProviderEntry{
+		{Provider: "chain-fb", Backend: config.LLMBackendNativeGemini},
+	}
+	stageFallback := []config.FallbackProviderEntry{
+		{Provider: "stage-fb", Backend: config.LLMBackendLangChain},
+	}
+	agentFallback := []config.FallbackProviderEntry{
+		{Provider: "agent-fb", Backend: config.LLMBackendNativeGemini},
+	}
+
+	googleProvider := &config.LLMProviderConfig{
+		Type:                config.LLMProviderTypeGoogle,
+		Model:               "gemini-2.5-pro",
+		APIKeyEnv:           "GOOGLE_API_KEY",
+		MaxToolResultTokens: 950000,
+	}
+
+	baseCfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider: "google-default",
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent":    {},
+			"ScoringAgent": {Type: config.AgentTypeScoring},
+			"ChatAgent":    {},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": googleProvider,
+		}),
+	}
+
+	t.Run("no fallback at any level returns nil", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(baseCfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Nil(t, resolved.FallbackProviders)
+	})
+
+	t.Run("defaults fallback inherited", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, defaultsFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("chain overrides defaults", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{FallbackProviders: chainFallback},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, chainFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("stage overrides chain", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{FallbackProviders: chainFallback},
+			config.StageConfig{FallbackProviders: stageFallback},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, stageFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("agent overrides stage", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{FallbackProviders: chainFallback},
+			config.StageConfig{FallbackProviders: stageFallback},
+			config.StageAgentConfig{Name: "TestAgent", FallbackProviders: agentFallback},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, agentFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("empty list does not override", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{FallbackProviders: []config.FallbackProviderEntry{}},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, defaultsFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("chat inherits from defaults and chain", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg,
+			&config.ChainConfig{FallbackProviders: chainFallback},
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, chainFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("chat inherits defaults when chain has none", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveChatAgentConfig(cfg,
+			&config.ChainConfig{},
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, defaultsFallback, resolved.FallbackProviders)
+	})
+
+	t.Run("scoring inherits from defaults and chain", func(t *testing.T) {
+		cfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:       "google-default",
+				FallbackProviders: defaultsFallback,
+			},
+			AgentRegistry:       baseCfg.AgentRegistry,
+			LLMProviderRegistry: baseCfg.LLMProviderRegistry,
+		}
+
+		resolved, err := ResolveScoringConfig(cfg,
+			&config.ChainConfig{FallbackProviders: chainFallback},
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, chainFallback, resolved.FallbackProviders)
+	})
+}
+
+func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
+	googleProvider := &config.LLMProviderConfig{
+		Type:                config.LLMProviderTypeGoogle,
+		Model:               "gemini-2.5-pro",
+		APIKeyEnv:           "GOOGLE_API_KEY",
+		MaxToolResultTokens: 950000,
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "google-default"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent":    {},
+			"ScoringAgent": {Type: config.AgentTypeScoring},
+			"ChatAgent":    {},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": googleProvider,
+		}),
+	}
+
+	t.Run("ResolveAgentConfig sets timeout defaults", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultInitialResponseTimeout, resolved.InitialResponseTimeout)
+		assert.Equal(t, DefaultStallTimeout, resolved.StallTimeout)
+	})
+
+	t.Run("ResolveChatAgentConfig sets timeout defaults", func(t *testing.T) {
+		resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultInitialResponseTimeout, resolved.InitialResponseTimeout)
+		assert.Equal(t, DefaultStallTimeout, resolved.StallTimeout)
+	})
+
+	t.Run("ResolveScoringConfig sets timeout defaults", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultInitialResponseTimeout, resolved.InitialResponseTimeout)
+		assert.Equal(t, DefaultStallTimeout, resolved.StallTimeout)
+	})
+}
