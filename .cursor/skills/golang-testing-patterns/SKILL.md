@@ -67,13 +67,13 @@ func TestFeature(t *testing.T) {
 **Pattern:**
 ```go
 for _, tt := range tests {
-	tt := tt // Required for parallel tests
 	t.Run(tt.name, func(t *testing.T) {
 		t.Parallel() // Run subtests in parallel
 		// ... test logic
 	})
 }
 ```
+
 
 ## Test Organization
 
@@ -265,7 +265,7 @@ func TestSessionService_CreateSession(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			session, err := service.CreateSession(ctx, tt.req)
 			
 			if tt.wantErr {

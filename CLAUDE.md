@@ -4,7 +4,7 @@
 
 **MANDATORY**: For ALL coding tasks regardless of programming language, apply:
 
-- `.cursor/skills/karpathy-guidelines/SKILL.md`
+- `.cursor/skills/karpathy-modified-guidelines/SKILL.md`
 
 These emphasize: think before coding, simplicity over complexity, surgical changes, goal-driven execution.
 
@@ -57,7 +57,7 @@ This configuration is **future-proof**:
 
 ## Application Order
 
-1. **Always first**: karpathy-guidelines
+1. **Always first**: karpathy-modified-guidelines
 2. **Then**: All `<language>-*` skills for the current language (discovered automatically)
 3. **On request**: Specific commands via `/command-name`
 
