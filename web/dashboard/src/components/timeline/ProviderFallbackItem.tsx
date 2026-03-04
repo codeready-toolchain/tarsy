@@ -7,9 +7,14 @@ interface ProviderFallbackItemProps {
   item: FlowItem;
 }
 
+function safeString(value: unknown): string {
+  return typeof value === 'string' ? value : String(value ?? '');
+}
+
 function extractErrorCode(meta: Record<string, unknown>): string {
-  if (meta.error_code) return meta.error_code as string;
-  const reason = (meta.reason as string) || '';
+  if (typeof meta.error_code === 'string' && meta.error_code) return meta.error_code;
+  const reason = safeString(meta.reason);
+  if (!reason) return '';
   const match = reason.match(/code:\s*(\w+)/);
   return match ? match[1] : '';
 }
@@ -38,15 +43,15 @@ function stripEnvelope(raw: string): string {
 
 function ProviderFallbackItem({ item }: ProviderFallbackItemProps) {
   const meta = item.metadata || {};
-  const from = (meta.original_provider as string) || '?';
-  const to = (meta.fallback_provider as string) || '?';
-  const fromBackend = (meta.original_backend as string) || '';
-  const toBackend = (meta.fallback_backend as string) || '';
-  const reason = (meta.reason as string) || '';
-  const attempt = meta.attempt as number | undefined;
-  const droppedTools = meta.native_tools_dropped as string[] | undefined;
+  const from = safeString(meta.original_provider) || '?';
+  const to = safeString(meta.fallback_provider) || '?';
+  const fromBackend = safeString(meta.original_backend);
+  const toBackend = safeString(meta.fallback_backend);
+  const reason = safeString(meta.reason);
+  const attempt = typeof meta.attempt === 'number' ? meta.attempt : undefined;
+  const droppedTools = Array.isArray(meta.native_tools_dropped) ? meta.native_tools_dropped as string[] : undefined;
   const errorCode = extractErrorCode(meta);
-  const errorRetryable = meta.error_retryable as boolean | undefined;
+  const errorRetryable = typeof meta.error_retryable === 'boolean' ? meta.error_retryable : undefined;
 
   const [expanded, setExpanded] = useState(false);
   const hasDetails = reason.length > 0 || (droppedTools && droppedTools.length > 0);

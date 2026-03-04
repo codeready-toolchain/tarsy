@@ -54,23 +54,6 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		return false // all fallback providers exhausted
 	}
 
-	var poe *PartialOutputError
-	if !errors.As(err, &poe) {
-		// Not an LLM error (e.g. gRPC transport failure) — no error code to
-		// inspect. Treat like a provider_error for fallback purposes.
-		s.ConsecutiveProviderErrors++
-		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveProviderErrors >= providerErrorThreshold
-	}
-
-	if poe.IsLoop {
-		// Loop detection is not a provider issue — break any consecutive streak
-		// so a subsequent provider error doesn't inherit the pre-loop count.
-		s.ConsecutiveProviderErrors = 0
-		s.ConsecutivePartialErrors = 0
-		return false
-	}
-
 	// In single-shot mode (synthesis, scoring), there's only one LLM call so
 	// the normal threshold of 2 consecutive errors can never be reached.
 	// Use threshold 1 to allow fallback on the first failure.
@@ -79,6 +62,23 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	if s.SingleShot {
 		provThreshold = 1
 		partialThreshold = 1
+	}
+
+	var poe *PartialOutputError
+	if !errors.As(err, &poe) {
+		// Not an LLM error (e.g. gRPC transport failure) — no error code to
+		// inspect. Treat like a provider_error for fallback purposes.
+		s.ConsecutiveProviderErrors++
+		s.ConsecutivePartialErrors = 0
+		return s.ConsecutiveProviderErrors >= provThreshold
+	}
+
+	if poe.IsLoop {
+		// Loop detection is not a provider issue — break any consecutive streak
+		// so a subsequent provider error doesn't inherit the pre-loop count.
+		s.ConsecutiveProviderErrors = 0
+		s.ConsecutivePartialErrors = 0
+		return false
 	}
 
 	switch poe.Code {

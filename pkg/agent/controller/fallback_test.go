@@ -190,6 +190,17 @@ func TestShouldFallback_NonPartialError_TreatedAsProviderError(t *testing.T) {
 	assert.True(t, result, "second consecutive non-POE error should trigger")
 }
 
+func TestShouldFallback_SingleShot_NonPartialError_Immediate(t *testing.T) {
+	state := newTestFallbackState()
+	state.SingleShot = true
+	providers := fallbackProviders()
+
+	plainErr := fmt.Errorf("gRPC transport failure")
+
+	result := state.shouldFallback(plainErr, providers)
+	assert.True(t, result, "single-shot: first non-POE error should trigger immediate fallback")
+}
+
 func TestShouldFallback_UnknownCode_TreatedAsProviderError(t *testing.T) {
 	state := newTestFallbackState()
 	providers := fallbackProviders()

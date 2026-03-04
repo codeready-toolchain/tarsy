@@ -5,6 +5,7 @@ import (
 	stdsql "database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -460,9 +461,12 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 	}
 
 	// Batch-load provider_fallback timeline events for enriching execution overviews.
+	// Non-critical: log and continue with empty map if this fails.
 	fallbackMeta, err := s.loadFallbackMetadata(ctx, sessionID)
 	if err != nil {
-		return nil, err
+		slog.Warn("Failed to load fallback metadata, continuing without it",
+			"session_id", sessionID, "error", err)
+		fallbackMeta = nil
 	}
 
 	// Compute stage stats.

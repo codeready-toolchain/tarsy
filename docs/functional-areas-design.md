@@ -223,6 +223,7 @@ graph TB
 
 **Config Validator**: `pkg/config/validator.go`
 - Validates chain stage references, MCP server existence, runbook domains
+- Validates fallback provider entries: provider exists, backend valid, credentials set (fail-fast at startup)
 - Startup-time validation prevents runtime failures
 
 **Key Implementation Files**:
@@ -343,6 +344,8 @@ Chains support flexible LLM provider configuration with a resolution hierarchy:
 3. **Global `defaults.llm_provider`** (system-wide default)
 
 Non-stage components (executive summary, follow-up chat) use chain-level provider if defined, otherwise global default.
+
+**Fallback provider list** follows the same hierarchy: `defaults.fallback_providers` → chain-level → stage-level → agent-level. See [ADR-0003](../adr/0003-llm-provider-fallback.md).
 
 ---
 
@@ -509,17 +512,32 @@ This auto-injection means custom agents with `type: orchestrator` receive the sa
 
 At max iterations, `forceConclusion()` makes one extra LLM call without tools, asking for the best conclusion with available data. Every investigation produces actionable output.
 
+#### Provider Fallback
+
+All LLM call sites (iterating loop, forced conclusion, single-shot) support automatic fallback to alternative providers when the primary fails. A shared `callLLMWithFallback` helper wraps the streaming LLM call with error-code-aware trigger logic:
+
+- **Immediate triggers**: `max_retries` (Python exhausted 3 retries), `credentials` (guaranteed failure)
+- **Consecutive failure triggers**: `provider_error`, `invalid_request`, `partial_stream_error` (after 2 consecutive failures)
+
+`FallbackState` tracks the original provider, current fallback index, attempted providers, and consecutive error counters. When fallback triggers, the controller selects the next untried provider from the configured fallback list, records a `provider_fallback` timeline event, updates execution metadata (`original_llm_provider`, `original_llm_backend`), and continues with the new provider. Fallback sticks for the rest of the execution; new executions reset to the primary.
+
+**Adaptive timeouts** reduce time wasted on unresponsive providers. Implemented in `collectStreamWithCallback`: initial response timeout (120s default), stall timeout (60s default), and max call timeout (5m). Configurable per agent through the config hierarchy.
+
+**For detailed design**: See [ADR-0003: LLM Provider Fallback](../adr/0003-llm-provider-fallback.md)
+
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
 - `pkg/agent/base_agent.go` -- BaseAgent with Controller delegation
 - `pkg/agent/controller/iterating.go` -- IteratingController (includes sub-agent drain/wait for orchestrators)
 - `pkg/agent/controller/single_shot.go` -- SingleShotController
+- `pkg/agent/controller/fallback.go` -- FallbackState, provider selection, callLLMWithFallback helper, error-code-aware triggers
+- `pkg/agent/controller/streaming.go` -- Stream collection with adaptive timeouts (initial response, stall, max call)
 - `pkg/agent/controller/tool_execution.go` -- Shared tool execution logic
 - `pkg/agent/controller/summarize.go` -- Tool result summarization
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
-- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
+- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
 
@@ -736,6 +754,7 @@ Shared convention between Go and Python:
 
 - **RPC**: `Generate(GenerateRequest) returns (stream GenerateResponse)`
 - **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`, `max_tool_result_tokens`
+- **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures)
 - **Response streaming**: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`
 
 #### Built-in LLM Providers
@@ -755,9 +774,10 @@ Google providers include native tools (google_search, url_context enabled; code_
 
 **Key Implementation Files**:
 - `pkg/agent/llm_client.go` -- GRPCLLMClient, GenerateInput, Chunk types
+- `pkg/agent/llm_grpc.go` -- gRPC client implementation (includes `clear_cache` flag on provider switch)
 - `proto/llm_service.proto` -- gRPC service definition
-- `llm-service/llm/servicer.py` -- gRPC servicer with provider routing
-- `llm-service/llm/providers/google_native.py` -- GoogleNativeProvider
+- `llm-service/llm/servicer.py` -- gRPC servicer with provider routing and `clear_cache` passthrough
+- `llm-service/llm/providers/google_native.py` -- GoogleNativeProvider (handles `clear_cache` to invalidate `_model_contents` cache)
 - `llm-service/llm/providers/langchain_provider.py` -- LangChainProvider
 - `llm-service/llm/providers/tool_names.py` -- Tool name encoding
 
@@ -810,7 +830,7 @@ func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload) error      
 The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
 
 **Event Types**:
-- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`
+- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`, `provider_fallback`
 - **Transient** (NOTIFY only): `stream.chunk` (LLM token deltas)
 
 All event payloads include `parent_execution_id` when present, enabling the dashboard to route sub-agent events without cross-referencing.
@@ -879,10 +899,10 @@ AlertSession (session metadata, status, alert data)
 `id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
-`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
+`id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
 
 **TimelineEvent** (`ent/schema/timelineevent.go`):
-`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `parent_execution_id` (nullable — for sub-agent event partitioning), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result/task_assigned), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
+`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `parent_execution_id` (nullable — for sub-agent event partitioning), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result/task_assigned/provider_fallback), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
 
 **Message** (`ent/schema/message.go`):
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
@@ -892,7 +912,7 @@ AlertSession (session metadata, status, alert data)
 | Service | File | Purpose |
 |---------|------|---------|
 | `SessionService` | `pkg/services/session_service.go` | Session CRUD, status updates, pagination |
-| `StageService` | `pkg/services/stage_service.go` | Stage lifecycle, parallel status aggregation |
+| `StageService` | `pkg/services/stage_service.go` | Stage lifecycle, parallel status aggregation, fallback metadata updates |
 | `TimelineService` | `pkg/services/timeline_service.go` | Timeline event CRUD, streaming updates |
 | `MessageService` | `pkg/services/message_service.go` | LLM conversation message storage |
 | `InteractionService` | `pkg/services/interaction_service.go` | LLM/MCP interaction recording |
@@ -1013,6 +1033,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Event-notification pattern**: Trace page debounces WebSocket events and re-fetches via REST
 - **Optimistic UI**: Chat injects temporary `user_question` items before server confirmation
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
+- **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 
 #### State Management
 
