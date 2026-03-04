@@ -194,22 +194,27 @@ type StageOverview struct {
 
 // ExecutionOverview is a summary of an agent execution within a stage.
 type ExecutionOverview struct {
-	ExecutionID       string              `json:"execution_id"`
-	AgentName         string              `json:"agent_name"`
-	AgentIndex        int                 `json:"agent_index"`
-	Status            string              `json:"status"`
-	LLMBackend        string              `json:"llm_backend"`
-	LLMProvider       *string             `json:"llm_provider"`
-	StartedAt         *time.Time          `json:"started_at"`
-	CompletedAt       *time.Time          `json:"completed_at"`
-	DurationMs        *int64              `json:"duration_ms"`
-	ErrorMessage      *string             `json:"error_message"`
-	InputTokens       int64               `json:"input_tokens"`
-	OutputTokens      int64               `json:"output_tokens"`
-	TotalTokens       int64               `json:"total_tokens"`
-	ParentExecutionID *string             `json:"parent_execution_id,omitempty"`
-	Task              *string             `json:"task,omitempty"`
-	SubAgents         []ExecutionOverview `json:"sub_agents,omitempty"`
+	ExecutionID         string              `json:"execution_id"`
+	AgentName           string              `json:"agent_name"`
+	AgentIndex          int                 `json:"agent_index"`
+	Status              string              `json:"status"`
+	LLMBackend          string              `json:"llm_backend"`
+	LLMProvider         *string             `json:"llm_provider"`
+	StartedAt           *time.Time          `json:"started_at"`
+	CompletedAt         *time.Time          `json:"completed_at"`
+	DurationMs          *int64              `json:"duration_ms"`
+	ErrorMessage        *string             `json:"error_message"`
+	InputTokens         int64               `json:"input_tokens"`
+	OutputTokens        int64               `json:"output_tokens"`
+	TotalTokens         int64               `json:"total_tokens"`
+	ParentExecutionID   *string             `json:"parent_execution_id,omitempty"`
+	Task                *string             `json:"task,omitempty"`
+	OriginalLLMProvider *string             `json:"original_llm_provider,omitempty"`
+	OriginalLLMBackend  *string             `json:"original_llm_backend,omitempty"`
+	FallbackReason      *string             `json:"fallback_reason,omitempty"`
+	FallbackErrorCode   *string             `json:"fallback_error_code,omitempty"`
+	FallbackAttempt     *int                `json:"fallback_attempt,omitempty"`
+	SubAgents           []ExecutionOverview `json:"sub_agents,omitempty"`
 }
 
 // SessionSummaryResponse is returned by GET /api/v1/sessions/:id/summary.

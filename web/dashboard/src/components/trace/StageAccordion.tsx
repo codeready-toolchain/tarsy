@@ -41,6 +41,7 @@ import {
 import ParallelExecutionTabs from './ParallelExecutionTabs';
 import SubAgentTabs from './SubAgentTabs';
 import InteractionCard from './InteractionCard';
+import ProviderFallbackIndicator from './ProviderFallbackIndicator';
 
 interface StageAccordionProps {
   stage: TraceStageGroup;
@@ -217,16 +218,7 @@ export default function StageAccordion({
                     <Typography variant="body2" color="text.secondary">
                       <strong>Agent:</strong> {singleOverview.agent_name}
                     </Typography>
-                    {singleOverview.llm_backend && (
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Backend:</strong> {singleOverview.llm_backend}
-                      </Typography>
-                    )}
-                    {singleOverview.llm_provider && (
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Provider:</strong> {singleOverview.llm_provider}
-                      </Typography>
-                    )}
+                    <ProviderFallbackIndicator overview={singleOverview} />
                     <Typography variant="body2" color="text.secondary">
                       <strong>Interactions:</strong> {counts.total}
                     </Typography>

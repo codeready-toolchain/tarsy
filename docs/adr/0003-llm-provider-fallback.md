@@ -1,6 +1,7 @@
-# LLM Provider Fallback — Design Document
+# ADR-0003: LLM Provider Fallback
 
-**Status:** Final — all decisions resolved in [llm-provider-fallback-questions.md](llm-provider-fallback-questions.md)
+**Status:** Implemented
+**Date:** 2026-03-03
 
 ## Overview
 
@@ -59,7 +60,7 @@ Iteration N: LLM call fails (after Python retries exhausted)
               └─ NO trigger → Retry iteration with same provider
 ```
 
-**Decision (Q1):** Fallback sticks for the rest of the execution. Each new execution (stage, sub-agent) starts fresh with the primary provider via `ResolveAgentConfig`.
+**Fallback scope:** Fallback sticks for the rest of the execution. Each new execution (stage, sub-agent) starts fresh with the primary provider via `ResolveAgentConfig`.
 
 **Cache invalidation:** When the provider changes mid-execution, the Go controller sends a `clear_cache` flag on `GenerateRequest`. The Google Native provider's `_model_contents` cache (which stores raw Gemini `Content` objects with `thought_signatures` per `execution_id`) must be cleared so the new model reconstructs conversation history from proto fields instead of replaying the old model's cached objects. The LangChain provider is stateless and unaffected.
 
@@ -80,7 +81,7 @@ LLM call starts
         Overall ceiling. Even active streaming gets cut off here.
 ```
 
-**Decision (Q2):** Adaptive timeouts are implemented in Go's `collectStreamWithCallback`, which already processes every chunk. Python's existing 300s timeout stays as a static safety net — no changes needed on the Python side.
+Adaptive timeouts are implemented in Go's `collectStreamWithCallback`, which already processes every chunk. Python's existing 300s timeout stays as a static safety net — no changes needed on the Python side.
 
 ### Configuration Structure
 
@@ -104,7 +105,7 @@ chains:
         backend: "google-native"
 ```
 
-**Decision (Q3):** Each fallback entry explicitly specifies its backend. No implicit mapping — future-proof as new backends are added.
+Each fallback entry explicitly specifies its backend. No implicit mapping — future-proof as new backends are added.
 
 ### Fallback State Tracking
 
@@ -141,7 +142,7 @@ When a fallback occurs, the system records:
 3. **LLM interaction records**:
    - Each `llm_interaction` already has `model_name` — this naturally captures per-call provider info
 
-**Decision (Q5):** Two new nullable columns on `agent_executions`: `original_llm_provider` and `original_llm_backend`. Only set when fallback occurs. Existing `llm_provider`/`llm_backend` updated to the fallback provider. Timeline events provide the full attempt chain.
+Two new nullable columns on `agent_executions`: `original_llm_provider` and `original_llm_backend`. Only set when fallback occurs. Existing `llm_provider`/`llm_backend` updated to the fallback provider. Timeline events provide the full attempt chain.
 
 ## Core Concepts
 
@@ -151,7 +152,7 @@ An entry in the fallback list: `{provider: string, backend: LLMBackend}`. The pr
 
 ### Backend Switching
 
-Each fallback entry specifies both a provider and a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., `google-native` → `langchain`). If a provider/backend combination doesn't work, that's a configuration error caught at startup (Q4).
+Each fallback entry specifies both a provider and a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., `google-native` → `langchain`). If a provider/backend combination doesn't work, that's a configuration error caught at startup.
 
 ### Same-Provider Skip
 
@@ -187,13 +188,11 @@ At startup, the system validates each fallback provider entry:
 
 Startup fails if any check fails — a fallback list with broken entries gives a false sense of safety.
 
-**Decision (Q4):** Validate at startup — fail if any fallback provider has missing credentials. A broken fallback is worse than no fallback.
+## Implementation
 
-## Implementation Plan
+### Phase 1: Configuration & Schema
 
-### Phase 1: Configuration & Schema (P1) - ✅ DONE
-
-**Goal:** Define the fallback configuration structure, schema changes, and startup validation. Everything downstream depends on this.
+Defined the fallback configuration structure, schema changes, and startup validation.
 
 Changes:
 - `pkg/config/types.go` — Define `FallbackProviderEntry` struct
@@ -208,16 +207,12 @@ Changes:
 - Database migration for new fields
 - `proto/llm_service.proto` — Add `clear_cache` flag to `GenerateRequest`
 
-Tests:
-- `pkg/config/validator_test.go` — Startup validation: missing provider, invalid backend, missing credentials
-- `pkg/agent/config_resolver_test.go` — Fallback list resolution through hierarchy
+### Phase 2: Core Fallback Logic
 
-### Phase 2: Core Fallback Logic (P2) - ✅ DONE
-
-**Goal:** When a provider fails, automatically switch to the next fallback provider based on error-code-aware trigger rules (Q7). All LLM call sites get fallback (Q6).
+When a provider fails, automatically switch to the next fallback provider based on error-code-aware trigger rules. All LLM call sites get fallback.
 
 Changes:
-- `pkg/agent/controller/fallback.go` — New file: `FallbackState`, provider selection, shared `callLLMWithFallback` helper, error-code-aware trigger logic
+- `pkg/agent/controller/fallback.go` — `FallbackState`, provider selection, shared `callLLMWithFallback` helper, error-code-aware trigger logic
 - `pkg/agent/controller/iterating.go` — Integrate fallback after LLM error in the iteration loop and forced conclusion
 - `pkg/agent/controller/single_shot.go` — Add fallback wrapper for synthesis/scoring calls
 - `pkg/queue/executor_synthesis.go` — Add fallback to `generateExecutiveSummary` (uses direct LLM call with `chain.ExecutiveSummaryProvider`, not the single-shot controller)
@@ -227,25 +222,16 @@ Changes:
 - `pkg/services/stage_service.go` — Method to update `llm_provider`, `llm_backend`, `original_llm_provider`, `original_llm_backend` on fallback
 - `pkg/events/payloads.go` — New `ProviderFallbackPayload` for WebSocket events
 
-Tests:
-- `pkg/agent/controller/fallback_test.go` — Error-code-aware triggers, provider selection, state tracking, consecutive error counters
-- `pkg/agent/controller/iterating_test.go` — Fallback integration in iteration loop (mock LLM errors → verify provider switch)
-- `pkg/agent/controller/single_shot_test.go` — Fallback for single-shot calls
-- `llm-service/tests/test_google_native.py` — `clear_cache` flag clears `_model_contents`
+### Phase 3: Adaptive Timeouts
 
-### Phase 3: Adaptive Timeouts (P3) - ✅ DONE
-
-**Goal:** Reduce time wasted on unresponsive providers. Independent of fallback but makes it more effective.
+Reduce time wasted on unresponsive providers. Independent of fallback but makes it more effective.
 
 Changes:
 - `pkg/agent/controller/streaming.go` — Implement initial-response and stall timeouts in `collectStreamWithCallback` (track time-to-first-chunk and time-since-last-chunk; cancel context when thresholds exceeded)
 
-Tests:
-- `pkg/agent/controller/streaming_test.go` — Initial response timeout (no chunks → cancel), stall timeout (gap between chunks → cancel), active streaming within max timeout (no cancel)
+### Phase 4: Dashboard Visibility
 
-### Phase 4: Dashboard Visibility (P4)
-
-**Goal:** Operators can see fallback events and provider switches in the dashboard.
+Operators can see fallback events and provider switches in the dashboard.
 
 Changes:
 - `web/dashboard/src/components/timeline/StageContent.tsx` — Render `provider_fallback` timeline event with fallback indicator (original → fallback provider, reason)
@@ -255,13 +241,13 @@ Changes:
 
 ## Decisions Summary
 
-All decisions resolved — see [llm-provider-fallback-questions.md](llm-provider-fallback-questions.md) for full discussion:
-
-1. **Q1** — Stick with fallback provider for rest of execution; new executions reset to primary
-2. **Q2** — Adaptive timeouts in Go controller; Python's 300s timeout stays as safety net
-3. **Q3** — Explicit backend per fallback entry; no implicit mapping
-4. **Q4** — Validate fallback credentials at startup; fail if any are missing
-5. **Q5** — Two new nullable columns: `original_llm_provider`, `original_llm_backend`
-6. **Q6** — All controllers get fallback (iterating, forced conclusion, single-shot)
-7. **Q7** — Error-code-aware triggers: immediate for `max_retries`/`credentials`, 2 consecutive failures for `provider_error`/`invalid_request`/`partial_stream_error`
-8. **Q8** — Conservative defaults: 120s initial, 60s stall, 5m max
+| # | Question | Decision | Rationale |
+|---|---|---|---|
+| Q1 | Fallback scope | Stick with fallback for rest of execution; new executions reset to primary | Provider outages last longer than a single execution. New executions naturally reset via `ResolveAgentConfig`. Avoids oscillation. |
+| Q2 | Where adaptive timeouts live | Go controller (`collectStreamWithCallback`); Python's 300s stays as safety net | Go already processes every chunk in real-time. No proto changes needed. Single implementation. |
+| Q3 | Backend specification | Explicit backend per fallback entry; no implicit mapping | Avoids hidden compatibility mappings. Future-proof as backends evolve. Minimal config verbosity. |
+| Q4 | Credential validation timing | Validate at startup; fail if any fallback provider has missing credentials | A broken fallback is worse than no fallback — false sense of security. Catch misconfigs at deploy time. |
+| Q5 | Fallback metadata storage | Two new nullable columns: `original_llm_provider`, `original_llm_backend` | Directly queryable (`WHERE original_llm_provider IS NOT NULL`). Timeline events provide full audit trail. |
+| Q6 | Fallback scope across controllers | All controllers get fallback (iterating, forced conclusion, single-shot) | Whole session should survive an outage, not just the iteration loop. Scoring/synthesis would otherwise hit the same broken primary. |
+| Q7 | Failure threshold | Error-code-aware: immediate for `max_retries`/`credentials`, 2 consecutive for `provider_error`/`invalid_request`/`partial_stream_error` | Respects Python's retry history per error type. `max_retries` already exhausted 3 attempts; `credentials` is guaranteed failure; others get one Go retry since Python didn't retry. |
+| Q8 | Adaptive timeout defaults | 120s initial, 60s stall, 5m max | Conservative to avoid false-positives with thinking models on heavy context. 120s initial still saves ~3m vs flat 5m on dead providers. |

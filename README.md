@@ -74,6 +74,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Dynamic Orchestration with Sub-Agents**: Orchestrator agents use LLM reasoning to dispatch specialized sub-agents at runtime, react to partial results, and synthesize findings -- replacing static parallel chains with adaptive, multi-phase investigation flows
 - **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
+- **Automatic Provider Fallback**: When a primary LLM provider fails, automatically switches to the next configured fallback provider with error-code-aware triggers and adaptive streaming timeouts
 - **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
 
 ### Investigation & Analysis

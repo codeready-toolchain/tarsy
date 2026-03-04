@@ -126,6 +126,8 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
+**Provider Fallback**: All controller paths (iterating, forced conclusion, single-shot) support automatic fallback to alternative LLM providers when the primary fails. Fallback state is tracked per-execution; each new execution resets to the primary provider.
+
 ### 5. Orchestrator Agent
 
 The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration**. Instead of following a predefined chain of agents, the orchestrator uses LLM reasoning to decide which agents to invoke, what tasks to give them, and how to combine their results — all at runtime. It is a standard TARSy agent (`type: orchestrator`) with three additional tools:
@@ -162,6 +164,8 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 | VertexAI | claude-sonnet-4-6 | 1M tokens (beta) |
 
 **Per-chain/stage provider configuration**: Different stages can use different LLM providers for cost/performance optimization. Native thinking mode available for Gemini models with exposed internal reasoning.
+
+**Automatic provider fallback**: When a primary provider fails (after Python-level retries are exhausted), the Go controller automatically switches to the next provider in a configurable fallback list. Fallback triggers are error-code-aware — immediate for exhausted retries or missing credentials, after consecutive failures for transient errors. Adaptive streaming timeouts (initial response, stall detection, max call) reduce time wasted on unresponsive providers. Fallback events are recorded in the timeline and surfaced in the dashboard. See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md) for full design.
 
 ### 8. Real-time Dashboard
 

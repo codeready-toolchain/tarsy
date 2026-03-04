@@ -73,6 +73,9 @@ Main configuration file containing:
 defaults:
   llm_provider: "google-default"
   max_iterations: 20
+  fallback_providers:
+    - provider: "gemini-3.1-pro"
+      backend: "google-native"
 
 mcp_servers:
   kubernetes-server:
@@ -214,6 +217,7 @@ chain validation failed: chain 'my-chain' stage 1: agent 'invalid-agent' not fou
 Validation checks:
 - Required fields present
 - Cross-references valid (chains → agents, agents → MCP servers, etc.)
+- Fallback providers valid (provider exists, backend valid, credentials set)
 - Value ranges correct
 - Environment variables set
 

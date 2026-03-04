@@ -30,6 +30,7 @@ type FallbackState struct {
 	ConsecutiveProviderErrors int // counts consecutive provider_error / invalid_request / transport failures
 	ConsecutivePartialErrors  int // counts consecutive partial_stream_error
 	ClearCacheNeeded          bool
+	SingleShot                bool // when true, fallback triggers after 1 error instead of the normal threshold
 }
 
 // NewFallbackState creates a FallbackState initialized from the current provider.
@@ -53,13 +54,23 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 		return false // all fallback providers exhausted
 	}
 
+	// In single-shot mode (synthesis, scoring), there's only one LLM call so
+	// the normal threshold of 2 consecutive errors can never be reached.
+	// Use threshold 1 to allow fallback on the first failure.
+	provThreshold := providerErrorThreshold
+	partialThreshold := partialStreamThreshold
+	if s.SingleShot {
+		provThreshold = 1
+		partialThreshold = 1
+	}
+
 	var poe *PartialOutputError
 	if !errors.As(err, &poe) {
 		// Not an LLM error (e.g. gRPC transport failure) — no error code to
 		// inspect. Treat like a provider_error for fallback purposes.
 		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveProviderErrors >= providerErrorThreshold
+		return s.ConsecutiveProviderErrors >= provThreshold
 	}
 
 	if poe.IsLoop {
@@ -82,18 +93,18 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	case LLMErrorProviderError, LLMErrorInvalidRequest, LLMErrorInitialTimeout:
 		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveProviderErrors >= providerErrorThreshold
+		return s.ConsecutiveProviderErrors >= provThreshold
 
 	case LLMErrorPartialStreamError, LLMErrorStallTimeout:
 		s.ConsecutivePartialErrors++
 		s.ConsecutiveProviderErrors = 0
-		return s.ConsecutivePartialErrors >= partialStreamThreshold
+		return s.ConsecutivePartialErrors >= partialThreshold
 
 	default:
 		// Unknown code — treat conservatively like provider_error
 		s.ConsecutiveProviderErrors++
 		s.ConsecutivePartialErrors = 0
-		return s.ConsecutiveProviderErrors >= providerErrorThreshold
+		return s.ConsecutiveProviderErrors >= provThreshold
 	}
 }
 
@@ -132,8 +143,8 @@ func tryFallback(
 		return false
 	}
 
-	// Find the next fallback entry that differs from the currently active
-	// provider+backend. An entry identical to the current provider would just
+	// Find the next fallback entry whose provider name differs from the
+	// currently active one. An entry with the same provider name would just
 	// repeat the same failure, so skip it.
 	nextIdx := state.CurrentProviderIndex + 1
 	for nextIdx < len(execCtx.Config.ResolvedFallbackProviders) {
@@ -199,6 +210,11 @@ func tryFallback(
 		"fallback_backend":  string(entry.Backend),
 		"reason":            state.FallbackReason,
 		"attempt":           nextIdx + 1,
+	}
+	var poeForMeta *PartialOutputError
+	if errors.As(err, &poeForMeta) {
+		meta["error_code"] = string(poeForMeta.Code)
+		meta["error_retryable"] = poeForMeta.Retryable
 	}
 	if len(droppedTools) > 0 {
 		meta["native_tools_dropped"] = droppedTools

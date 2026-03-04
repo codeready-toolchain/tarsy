@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -1072,6 +1073,228 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.Equal(t, false, detail.ChatEnabled, "chat should be disabled when chain sets Chat.Enabled=false")
+	})
+
+	t.Run("populates fallback metadata in execution overview from timeline events", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("fallback test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("analysis").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		origProvider := "gemini-pro"
+		origBackend := string(config.LLMBackendNativeGemini)
+		exec := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("KubernetesAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetLlmProvider("openai-gpt4").
+			SetOriginalLlmProvider(origProvider).
+			SetOriginalLlmBackend(origBackend).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("test-model").
+			SetLlmRequest(map[string]interface{}{}).
+			SetLlmResponse(map[string]interface{}{}).
+			SetInputTokens(100).
+			SetOutputTokens(50).
+			SetTotalTokens(150).
+			SaveX(ctx)
+
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetAgentExecutionID(exec.ID).
+			SetSequenceNumber(1).
+			SetEventType(timelineevent.EventTypeProviderFallback).
+			SetContent("Provider fallback: gemini-pro → openai-gpt4").
+			SetMetadata(map[string]interface{}{
+				"original_provider": origProvider,
+				"original_backend":  origBackend,
+				"fallback_provider": "openai-gpt4",
+				"fallback_backend":  string(config.LLMBackendLangChain),
+				"reason":            "LLM error: model not found (code: provider_error, retryable: false)",
+				"error_code":        "provider_error",
+				"attempt":           float64(1),
+			}).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.Len(t, detail.Stages, 1)
+		require.Len(t, detail.Stages[0].Executions, 1)
+
+		eo := detail.Stages[0].Executions[0]
+		assert.Equal(t, exec.ID, eo.ExecutionID)
+		require.NotNil(t, eo.OriginalLLMProvider)
+		assert.Equal(t, origProvider, *eo.OriginalLLMProvider)
+		require.NotNil(t, eo.OriginalLLMBackend)
+		assert.Equal(t, origBackend, *eo.OriginalLLMBackend)
+
+		require.NotNil(t, eo.FallbackReason, "fallback_reason should be populated")
+		assert.Contains(t, *eo.FallbackReason, "model not found")
+		require.NotNil(t, eo.FallbackErrorCode, "fallback_error_code should be populated")
+		assert.Equal(t, "provider_error", *eo.FallbackErrorCode)
+		require.NotNil(t, eo.FallbackAttempt, "fallback_attempt should be populated")
+		assert.Equal(t, 1, *eo.FallbackAttempt)
+	})
+
+	t.Run("keeps latest fallback attempt when multiple fallbacks for same execution", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("multi-fallback test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("analysis").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		exec := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("KubernetesAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetLlmProvider("fallback-2").
+			SetOriginalLlmProvider("primary").
+			SetOriginalLlmBackend(string(config.LLMBackendNativeGemini)).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("test-model").
+			SetLlmRequest(map[string]interface{}{}).
+			SetLlmResponse(map[string]interface{}{}).
+			SetInputTokens(10).
+			SetOutputTokens(5).
+			SetTotalTokens(15).
+			SaveX(ctx)
+
+		// First fallback event (attempt 1)
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetAgentExecutionID(exec.ID).
+			SetSequenceNumber(1).
+			SetEventType(timelineevent.EventTypeProviderFallback).
+			SetContent("Provider fallback: primary → fallback-1").
+			SetMetadata(map[string]interface{}{
+				"reason":     "first error",
+				"error_code": "max_retries",
+				"attempt":    float64(1),
+			}).
+			SaveX(ctx)
+
+		// Second fallback event (attempt 2) — this should win
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetAgentExecutionID(exec.ID).
+			SetSequenceNumber(2).
+			SetEventType(timelineevent.EventTypeProviderFallback).
+			SetContent("Provider fallback: fallback-1 → fallback-2").
+			SetMetadata(map[string]interface{}{
+				"reason":     "second error",
+				"error_code": "credentials",
+				"attempt":    float64(2),
+			}).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.Len(t, detail.Stages[0].Executions, 1)
+		eo := detail.Stages[0].Executions[0]
+
+		require.NotNil(t, eo.FallbackReason)
+		assert.Equal(t, "second error", *eo.FallbackReason, "should keep the latest attempt")
+		require.NotNil(t, eo.FallbackErrorCode)
+		assert.Equal(t, "credentials", *eo.FallbackErrorCode)
+		require.NotNil(t, eo.FallbackAttempt)
+		assert.Equal(t, 2, *eo.FallbackAttempt)
+	})
+
+	t.Run("no fallback fields when execution has no fallback events", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"no-fallback test", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.Len(t, detail.Stages[0].Executions, 1)
+		eo := detail.Stages[0].Executions[0]
+		assert.Nil(t, eo.FallbackReason)
+		assert.Nil(t, eo.FallbackErrorCode)
+		assert.Nil(t, eo.FallbackAttempt)
+		assert.Nil(t, eo.OriginalLLMProvider)
+		assert.Nil(t, eo.OriginalLLMBackend)
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

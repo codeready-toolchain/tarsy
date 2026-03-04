@@ -7,6 +7,7 @@ import ToolSummaryItem from './ToolSummaryItem';
 import UserQuestionItem from './UserQuestionItem';
 import NativeToolItem from './NativeToolItem';
 import ErrorItem from './ErrorItem';
+import ProviderFallbackItem from './ProviderFallbackItem';
 
 interface TimelineItemProps {
   item: FlowItem;
@@ -97,6 +98,9 @@ function TimelineItem({
 
     case FLOW_ITEM.ERROR:
       return <ErrorItem item={item} />;
+
+    case FLOW_ITEM.PROVIDER_FALLBACK:
+      return <ProviderFallbackItem item={item} />;
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container
