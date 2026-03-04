@@ -346,6 +346,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		ExpectedAgentCount: len(configs),
 		ParallelType:       parallelTypePtr(input.stageConfig),
 		SuccessPolicy:      successPolicyPtr(input.stageConfig, policy),
+		StageType:          string(stage.StageTypeInvestigation),
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
