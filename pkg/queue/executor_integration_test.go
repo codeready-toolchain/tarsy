@@ -622,10 +622,13 @@ func TestExecutor_ExecutiveSummaryNoLegacyTimelineEvent(t *testing.T) {
 	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
-	executor.Execute(context.Background(), session)
+	result := executor.Execute(context.Background(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 
 	tlEvents, err := entClient.TimelineEvent.Query().All(context.Background())
 	require.NoError(t, err)
+	require.NotEmpty(t, tlEvents, "timeline events should have been created")
 
 	for _, ev := range tlEvents {
 		assert.NotEqual(t, timelineevent.EventTypeExecutiveSummary, ev.EventType,
@@ -1526,7 +1529,7 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 	assert.Equal(t, "Final diagnosis.", result.FinalAnalysis)
 
 	// 4 stages: investigation, synthesis, final-diagnosis, exec_summary
-	stages, err := entClient.Stage.Query().All(context.Background())
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, stages, 4)
 	assert.Equal(t, "parallel-investigation", stages[0].StageName)
