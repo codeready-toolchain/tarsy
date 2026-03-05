@@ -313,6 +313,56 @@ func TestExtractFinalAnalysis(t *testing.T) {
 	}
 }
 
+func TestBuildStageContext(t *testing.T) {
+	executor := &RealSessionExecutor{}
+
+	t.Run("includes investigation and synthesis stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Found OOM kill"},
+			{stageType: stage.StageTypeSynthesis, stageName: "synthesis", finalAnalysis: "Root cause confirmed"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Found OOM kill")
+		assert.Contains(t, result, "Root cause confirmed")
+	})
+
+	t.Run("excludes exec_summary and scoring stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Investigation result"},
+			{stageType: stage.StageTypeExecSummary, stageName: "exec-summary", finalAnalysis: "Executive summary text"},
+			{stageType: stage.StageTypeScoring, stageName: "scoring", finalAnalysis: "Score: 8/10"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Investigation result")
+		assert.NotContains(t, result, "Executive summary text")
+		assert.NotContains(t, result, "Score: 8/10")
+	})
+
+	t.Run("excludes chat stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Investigation result"},
+			{stageType: stage.StageTypeChat, stageName: "chat", finalAnalysis: "Chat response"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Investigation result")
+		assert.NotContains(t, result, "Chat response")
+	})
+
+	t.Run("empty stages returns empty", func(t *testing.T) {
+		result := executor.buildStageContext(nil)
+		assert.Empty(t, result)
+	})
+
+	t.Run("only non-eligible stages returns empty", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeExecSummary, stageName: "summary", finalAnalysis: "Summary"},
+			{stageType: stage.StageTypeScoring, stageName: "scoring", finalAnalysis: "Score"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Empty(t, result)
+	})
+}
+
 func TestMapAgentStatusToSessionStatus(t *testing.T) {
 	tests := []struct {
 		name   string

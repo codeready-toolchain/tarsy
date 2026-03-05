@@ -567,8 +567,8 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		chatlessCfg := &config.Config{
 			Defaults: defaults,
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				config.AgentNameChat:     {},                                         // no MCP servers
-				"DataCollector": {MCPServers: []string{"monitoring-tools"}}, // investigation agent
+				config.AgentNameChat: {},                                         // no MCP servers
+				"DataCollector":      {MCPServers: []string{"monitoring-tools"}}, // investigation agent
 			}),
 			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 				"google-default": googleProvider,
@@ -665,7 +665,7 @@ func TestResolveScoringConfig(t *testing.T) {
 		Defaults: defaults,
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			config.AgentNameScoring:    scoringAgentDef,
-			"CustomScorer":    {MCPServers: []string{"custom-mcp"}, Type: config.AgentTypeScoring, LLMBackend: config.LLMBackendLangChain},
+			"CustomScorer":             {MCPServers: []string{"custom-mcp"}, Type: config.AgentTypeScoring, LLMBackend: config.LLMBackendLangChain},
 			config.AgentNameKubernetes: {MCPServers: []string{"k8s-mcp"}},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -904,7 +904,7 @@ func TestResolveFallbackProviders(t *testing.T) {
 			LLMProvider: "google-default",
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"TestAgent":    {},
+			"TestAgent":             {},
 			config.AgentNameScoring: {Type: config.AgentTypeScoring},
 			config.AgentNameChat:    {},
 		}),
@@ -1182,7 +1182,7 @@ func TestResolvedFallbackProviders(t *testing.T) {
 			},
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"TestAgent":    {},
+			"TestAgent":             {},
 			config.AgentNameScoring: {Type: config.AgentTypeScoring},
 			config.AgentNameChat:    {},
 		}),
@@ -1325,7 +1325,7 @@ func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: &config.Defaults{LLMProvider: "google-default"},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"TestAgent":        {},
+			"TestAgent":                 {},
 			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
 			config.AgentNameChat:        {},
 			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},

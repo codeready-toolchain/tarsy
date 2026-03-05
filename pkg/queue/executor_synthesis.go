@@ -161,4 +161,3 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 
 	return agentctx.FormatInvestigationForSynthesis(investigations, input.stageConfig.Name)
 }
-

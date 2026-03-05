@@ -339,7 +339,7 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 6. **Chat context:** Replace `strings.HasSuffix` and `chat_id != nil` identification checks with `stg.StageType` switch in `buildChatContext`.
 7. **Tests:** Update existing tests, add targeted tests for type assignment and backfill.
 
-### PR 2: Executive Summary as Typed Stage (behavioral change)
+### PR 2: Executive Summary as Typed Stage (behavioral change) — ✅ DONE
 
 1. **Agent/controller:** Add `NewExecSummaryController(pb PromptBuilder) *SingleShotController` to `single_shot.go` (pattern: identical to `NewSynthesisController`). It returns `NewSingleShotController(SingleShotConfig{...})` with:
    - `BuildMessages`: closure that calls `pb.BuildExecutiveSummarySystemPrompt()` and `pb.BuildExecutiveSummaryUserPrompt(prevStageContext)`, returning a `[]ConversationMessage` with system + user roles. The `execCtx` parameter is unused (exec summary prompts are context-independent static templates).

@@ -32,11 +32,11 @@ type BuiltinAgentConfig struct {
 // Built-in agent names. Use these constants instead of string literals
 // when referencing built-in agents in resolvers, executors, and tests.
 const (
-	AgentNameKubernetes  = "KubernetesAgent"
-	AgentNameChat        = "ChatAgent"
-	AgentNameExecSummary = "ExecSummaryAgent"
-	AgentNameSynthesis   = "SynthesisAgent"
-	AgentNameScoring     = "ScoringAgent"
+	AgentNameKubernetes   = "KubernetesAgent"
+	AgentNameChat         = "ChatAgent"
+	AgentNameExecSummary  = "ExecSummaryAgent"
+	AgentNameSynthesis    = "SynthesisAgent"
+	AgentNameScoring      = "ScoringAgent"
 	AgentNameOrchestrator = "Orchestrator"
 )
 

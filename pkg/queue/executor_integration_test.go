@@ -2390,7 +2390,7 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 			orchestratorExec = e
 		case "GeneralWorker":
 			subAgentExec = e
-		// ExecSummaryAgent is ignored here — verified separately
+			// ExecSummaryAgent is ignored here — verified separately
 		}
 	}
 	require.NotNil(t, orchestratorExec, "orchestrator execution should exist")

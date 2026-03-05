@@ -98,6 +98,12 @@ func TestBuiltinAgents(t *testing.T) {
 			customInstructionsMatch: "You are GeneralWorker",
 		},
 		{
+			name:     AgentNameExecSummary,
+			agentID:  AgentNameExecSummary,
+			wantDesc: "Generates executive summary of the investigation",
+			wantType: AgentTypeExecSummary,
+		},
+		{
 			name:     AgentNameOrchestrator,
 			agentID:  AgentNameOrchestrator,
 			wantDesc: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
