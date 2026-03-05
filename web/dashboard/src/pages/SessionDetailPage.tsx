@@ -257,6 +257,11 @@ export function SessionDetailPage() {
   const pendingChunksRef = useRef<Map<string, { delta: string; isSubAgent: boolean }>>(new Map());
   const chunkFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // --- Streaming collapse animation timers ---
+  // Tracks pending 300ms timeouts that delay the streaming→timeline swap
+  // so the Collapse exit animation can play. Cleared on effect cleanup.
+  const collapseTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
   const flushPendingChunks = useCallback(() => {
     chunkFlushTimerRef.current = null;
     const pending = pendingChunksRef.current;
@@ -793,7 +798,8 @@ export function SessionDetailPage() {
             } else {
               setStreamingEvents(markCollapsing);
             }
-            setTimeout(() => {
+            const timerId = setTimeout(() => {
+              collapseTimersRef.current.delete(timerId);
               if (isSubAgentCompleted) {
                 setSubAgentStreamingEvents(removeFromMap);
               } else {
@@ -806,6 +812,7 @@ export function SessionDetailPage() {
               }
               addToTimeline();
             }, 300);
+            collapseTimersRef.current.add(timerId);
           } else {
             if (isSubAgentCompleted) {
               setSubAgentStreamingEvents(removeFromMap);
@@ -1097,6 +1104,8 @@ export function SessionDetailPage() {
         chunkFlushTimerRef.current = null;
       }
       pendingChunksRef.current.clear();
+      for (const t of collapseTimersRef.current) clearTimeout(t);
+      collapseTimersRef.current.clear();
     };
   }, [id, loadData, refetchTimelineDebounced, applyFreshTimeline, flushPendingChunks, chatState.onStageStarted, chatState.onStageTerminal]);
 
@@ -1162,6 +1171,8 @@ export function SessionDetailPage() {
     return () => {
       if (disableTimeoutRef.current) clearTimeout(disableTimeoutRef.current);
       if (chunkFlushTimerRef.current !== null) clearTimeout(chunkFlushTimerRef.current);
+      for (const t of collapseTimersRef.current) clearTimeout(t);
+      collapseTimersRef.current.clear();
     };
   }, []);
 

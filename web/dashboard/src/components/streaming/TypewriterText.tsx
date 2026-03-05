@@ -31,11 +31,13 @@ const CATCHUP_RATE = 0.3;
  */
 export default function TypewriterText({ 
   text, 
-  speed = 3,
-  tickInterval = 16,
+  speed: rawSpeed = 3,
+  tickInterval: rawTickInterval = 16,
   onComplete,
   children 
 }: TypewriterTextProps) {
+  const speed = Math.max(1, rawSpeed);
+  const tickInterval = Math.max(1, rawTickInterval);
   const [displayedText, setDisplayedText] = useState('');
   const [isAnimating, setIsAnimating] = useState(false);
   
