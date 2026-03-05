@@ -49,6 +49,17 @@ export const PHASE_STATUS_MESSAGE: Record<string, string> = {
   [PROGRESS_PHASE_FINALIZING]: 'Finalizing...',
 };
 
+// Stage type values
+export const STAGE_TYPE = {
+  INVESTIGATION: 'investigation',
+  SYNTHESIS: 'synthesis',
+  CHAT: 'chat',
+  EXEC_SUMMARY: 'exec_summary',
+  SCORING: 'scoring',
+} as const;
+
+export type StageType = (typeof STAGE_TYPE)[keyof typeof STAGE_TYPE];
+
 // Timeline event types (for routing to renderers)
 export const TIMELINE_EVENT_TYPES = {
   LLM_THINKING: 'llm_thinking',

@@ -47,6 +47,7 @@ export interface StageGroup {
   stageId: string;
   stageName: string;
   stageIndex: number;
+  stageType?: string;
   stageStatus: string;
   isParallel: boolean;
   expectedAgentCount: number;
@@ -187,6 +188,7 @@ export function parseTimelineToFlow(
           content: stage.stage_name,
           metadata: {
             stage_index: stage.stage_index,
+            stage_type: stage.stage_type,
             stage_status: stage.status,
             parallel_type: stage.parallel_type,
             expected_agent_count: stage.expected_agent_count,
@@ -233,8 +235,10 @@ function filterDuplicatedItems(items: FlowItem[]): FlowItem[] {
   }
 
   return items.filter(item => {
-    // (1) executive_summary is rendered by FinalAnalysisCard, not the timeline
-    if (item.type === FLOW_ITEM.EXECUTIVE_SUMMARY) return false;
+    // (1) Legacy executive_summary events (no stage_id) are rendered by
+    // FinalAnalysisCard, not the timeline. Stage-bound exec_summary items
+    // (from the new typed exec_summary stage) render inside their stage group.
+    if (item.type === FLOW_ITEM.EXECUTIVE_SUMMARY && !item.stageId) return false;
 
     // (2) Hide response when an identical final_analysis exists in the same execution
     if (item.type === FLOW_ITEM.RESPONSE && item.executionId) {
@@ -272,6 +276,7 @@ export function groupFlowItemsByStage(
         stageId: item.stageId || '',
         stageName: item.content,
         stageIndex: stage?.stage_index ?? groups.length,
+        stageType: (item.metadata?.stage_type as string) || stage?.stage_type,
         stageStatus: stage?.status || '',
         isParallel: item.isParallelStage || false,
         expectedAgentCount: (item.metadata?.expected_agent_count as number) || 1,
@@ -290,6 +295,7 @@ export function groupFlowItemsByStage(
         stageId: item.stageId,
         stageName: stage?.stage_name || 'Unknown Stage',
         stageIndex: stage?.stage_index ?? groups.length,
+        stageType: stage?.stage_type,
         stageStatus: stage?.status || '',
         isParallel: !!item.isParallelStage,
         expectedAgentCount: stage?.expected_agent_count || 1,

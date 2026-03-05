@@ -105,7 +105,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 ### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
-- Each chain consists of **sequential stages** with data accumulating between stages
+- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
 - **Flexible chain definitions** via YAML configuration without code changes
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
@@ -116,13 +116,13 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Two controller types** (text-based ReAct parsing was completely removed):
 
 - **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also used by orchestrator agents with push-based sub-agent result injection.
-- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis (and future scoring)
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and future scoring
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
@@ -243,7 +243,7 @@ sequenceDiagram
         E-->>WS: Publish stage status
     end
 
-    E->>LLM: Generate executive summary
+    E->>E: Execute exec_summary stage (SingleShotController)
     E->>DB: Update session (completed)
     E-->>WS: Publish session status
     D->>D: Engineers review analysis

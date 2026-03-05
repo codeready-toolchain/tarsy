@@ -56,6 +56,7 @@ export interface StageStatusPayload {
   stage_id?: string;
   stage_name: string;
   stage_index: number;
+  stage_type: string;
   status: string;
   timestamp: string;
 }

@@ -238,7 +238,7 @@ Three levels of detail:
 
 ### Phase 1: Stage Type System
 
-See [stage-types-design.md](stage-types-design.md) for full implementation spec.
+See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation spec.
 
 - **PR 1:** Add `stage_type` enum field (5 values), wire for investigation/synthesis/chat, API/WS changes, chat context simplification. Additive, no behavior changes.
 - **PR 2:** Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.

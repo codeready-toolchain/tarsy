@@ -102,6 +102,7 @@ export interface StageOverview {
   id: string;
   stage_name: string;
   stage_index: number;
+  stage_type: string;
   status: string;
   parallel_type: string | null;
   expected_agent_count: number;

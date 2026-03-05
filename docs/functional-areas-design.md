@@ -148,7 +148,7 @@ queue:
 **Session Executor**: `pkg/queue/executor.go`
 - `RealSessionExecutor.Execute()` orchestrates the full chain lifecycle
 - Resolves chain config, downloads runbook, iterates stages
-- Extracts final analysis, generates executive summary (fail-open)
+- Extracts final analysis, runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open)
 - Maps context errors to session status (timed_out / cancelled)
 
 **Key Implementation Files**:
@@ -231,7 +231,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- AgentType (including `orchestrator`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
 
 ---
@@ -268,7 +268,8 @@ sequenceDiagram
     E->>S: Synthesize parallel results
     S-->>E: Unified analysis
 
-    E->>E: Extract final analysis + generate executive summary
+    E->>E: Extract final analysis
+    E->>E: Execute exec_summary stage (SingleShotController)
 ```
 
 #### Key Components
@@ -282,6 +283,7 @@ sequenceDiagram
 - `executeStage()` -- unified handler for all stages (single or multi-agent)
 - `executeAgent()` -- per-agent lifecycle (DB record, config resolution, MCP creation, agent execution)
 - `executeSynthesisStage()` -- automatic synthesis after parallel stages with >1 agent
+- `executeExecSummaryStage()` -- executive summary as a typed `exec_summary` stage via SingleShotController
 - `buildConfigs()` / `buildMultiAgentConfigs()` / `buildReplicaConfigs()` -- execution config building
 
 #### Parallel Stage Execution
@@ -357,7 +359,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -434,6 +436,7 @@ type Controller interface {
 | `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
 | `"orchestrator"` | IteratingController | Iterating + push-based sub-agent results | Dynamic multi-agent orchestration |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
+| `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
 | `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
 
 **LLMBackend determines the Python SDK path** (orthogonal to controller):
@@ -457,7 +460,7 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
-Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results (and future scoring). Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
+Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results, executive summary generation, and future scoring. Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
 
 #### Orchestrator Agent (`pkg/agent/orchestrator/`)
 
@@ -898,7 +901,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
@@ -972,8 +975,8 @@ graph TB
 **ChatMessageExecutor** (`pkg/queue/chat_executor.go`):
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
-- Creates Stage and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context from unified timeline (`GetSessionTimeline` + `FormatInvestigationContext`)
+- Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
+- Builds context using `stage_type` filtering — switches on `stg.StageType` instead of heuristic `strings.HasSuffix` / `chat_id != nil` checks
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):

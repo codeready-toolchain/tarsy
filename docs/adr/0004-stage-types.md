@@ -1,7 +1,7 @@
-# Stage Types — Design Document
+# ADR-0004: Stage Types
 
-**Status:** Final
-**Related:** [Design questions](stage-types-questions.md) | [Session scoring design](session-scoring-design.md) (this doc is Phase 1)
+**Status:** Implemented
+**Date:** 2026-03-04
 
 ## Overview
 
@@ -16,9 +16,9 @@ Additionally, executive summary generation is refactored from a special-cased di
 - PR 1: Data model, API, WS event changes, creation-path wiring, chat context builder simplification (additive, no behavior changes).
 - PR 2: Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.
 
-**Out of scope:** UI changes, scoring pipeline (Phase 2 of the [session scoring design](session-scoring-design.md)).
+**Out of scope:** UI changes, scoring pipeline (Phase 2 of the [session scoring design](../proposals/session-scoring-design.md)).
 
-**Follow-up (separate proposal):** Synthesis stages reference their "parent" stages by name (e.g. "my stage - Synthesis" is related to "my stage" stage). This is fragile and would benefit from a `referenced_stage_id` FK. See [referenced-stage-id proposal](referenced-stage-id-design.md). This proposal keeps name-based pairing.
+**Follow-up (separate proposal):** Synthesis stages reference their "parent" stages by name (e.g. "my stage - Synthesis" is related to "my stage" stage). This is fragile and would benefit from a `referenced_stage_id` FK. See [referenced-stage-id proposal](../proposals/referenced-stage-id-design.md). This proposal keeps name-based pairing.
 
 ## Design Principles
 
@@ -320,16 +320,16 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| Q1 | Where to define `StageType` | Ent-generated constants only | Consistent with `stage.Status`, `stage.ParallelType`, `stage.SuccessPolicy`. No duplication. |
-| Q2 | DB index on `stage_type` | No index | Low cardinality, no cross-session queries. Can add later if needed. |
-| Q3 | `stage_type` in `StageStatusPayload` | Yes | WS payload should be self-describing. Mechanical change to `publishStageStatus`. |
-| Q4 | Synthesis pairing in `buildChatContext` | Replace identification only, keep name-based pairing | Name convention is reliable. `referenced_stage_id` FK is a [separate proposal](referenced-stage-id-design.md). |
-| Q5 | Backfill migration | Embed in ent migration | Single step, standard pattern for schema + data changes. |
+| Q1 | Where to define `StageType` | Ent-generated constants only | Consistent with `stage.Status`, `stage.ParallelType`, `stage.SuccessPolicy`. No duplication. Not a config concept — would imply configurability if placed in `pkg/config/enums.go`. |
+| Q2 | DB index on `stage_type` | No index | Low cardinality, no cross-session queries. Stages always loaded per-session (1-5 per session). Can add later if needed. |
+| Q3 | `stage_type` in `StageStatusPayload` | Yes | WS payload should be self-describing. Consistent with REST API. Mechanical change to `publishStageStatus`. |
+| Q4 | Synthesis pairing in `buildChatContext` | Replace identification only, keep name-based pairing | Name convention is reliable. `referenced_stage_id` FK is a [separate proposal](../proposals/referenced-stage-id-design.md). Adjacency-based pairing would be fragile. |
+| Q5 | Backfill migration | Embed in ent migration | Single step, standard pattern for schema + data changes. Avoids persistent Go startup code for a one-time operation. |
 | Q6 | PR granularity | Two PRs | PR 1 is additive (~15 files), PR 2 is behavioral (exec summary refactoring). Clean separation of risk. |
 
 ## Implementation Plan
 
-### PR 1: Stage Type Field (additive, no behavior change) — ✅ DONE
+### PR 1: Stage Type Field (additive, no behavior change) — Done
 
 1. **Schema:** Add `stage_type` enum field to `ent/schema/stage.go` with 5 values (`investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`). Regenerate ent code. Add backfill SQL to the migration.
 2. **Service:** Add `StageType` to `CreateStageRequest`. Wire in `StageService.CreateStage` with `"investigation"` default.
@@ -339,7 +339,7 @@ This migration is safe and idempotent. The heuristics match exactly the stages t
 6. **Chat context:** Replace `strings.HasSuffix` and `chat_id != nil` identification checks with `stg.StageType` switch in `buildChatContext`.
 7. **Tests:** Update existing tests, add targeted tests for type assignment and backfill.
 
-### PR 2: Executive Summary as Typed Stage (behavioral change) — ✅ DONE
+### PR 2: Executive Summary as Typed Stage (behavioral change) — Done
 
 1. **Agent/controller:** Add `NewExecSummaryController(pb PromptBuilder) *SingleShotController` to `single_shot.go` (pattern: identical to `NewSynthesisController`). It returns `NewSingleShotController(SingleShotConfig{...})` with:
    - `BuildMessages`: closure that calls `pb.BuildExecutiveSummarySystemPrompt()` and `pb.BuildExecutiveSummaryUserPrompt(prevStageContext)`, returning a `[]ConversationMessage` with system + user roles. The `execCtx` parameter is unused (exec summary prompts are context-independent static templates).

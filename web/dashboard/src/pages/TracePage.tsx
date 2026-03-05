@@ -226,7 +226,7 @@ export function TracePage() {
             if (existing) {
               const updatedStages = stages.map((stage) =>
                 stage.id === payload.stage_id
-                  ? { ...stage, status: payload.status }
+                  ? { ...stage, status: payload.status, stage_type: payload.stage_type ?? stage.stage_type }
                   : stage,
               );
               return { ...prev, stages: updatedStages };

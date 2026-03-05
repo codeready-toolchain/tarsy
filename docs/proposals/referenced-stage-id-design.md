@@ -1,7 +1,7 @@
 # Referenced Stage ID — Proposal
 
 **Status:** Idea — not yet designed
-**Origin:** Identified during [stage-types](stage-types-design.md) investigation (Q4)
+**Origin:** Identified during [stage-types](../adr/0004-stage-types.md) investigation (Q4)
 
 ## Problem
 

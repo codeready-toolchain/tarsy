@@ -25,6 +25,7 @@ import { CallSplit } from '@mui/icons-material';
 
 import type { TraceStageGroup } from '../../types/trace';
 import type { SessionDetailResponse, ExecutionOverview } from '../../types/session';
+import { STAGE_TYPE } from '../../constants/eventTypes';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import { formatDurationMs, formatTimestamp } from '../../utils/format';
 import {
@@ -124,6 +125,16 @@ export default function StageAccordion({
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             Stage {stageIndex + 1}: {stage.stage_name}
           </Typography>
+
+          {/* Stage type badge (non-investigation types only) */}
+          {stage.stage_type && stage.stage_type !== STAGE_TYPE.INVESTIGATION && (
+            <Chip
+              label={stage.stage_type.replace('_', ' ')}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: '0.65rem', height: 20, fontWeight: 600, textTransform: 'capitalize' }}
+            />
+          )}
 
           {/* Parallel badge */}
           {isParallel && (
