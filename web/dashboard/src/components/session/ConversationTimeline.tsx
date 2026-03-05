@@ -46,6 +46,30 @@ function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): b
   return TERMINAL_EXECUTION_STATUSES.has(group.stageStatus);
 }
 
+// Virtuoso footer context — minimal data needed to render the ProcessingIndicator
+// and ungrouped streaming events inside the virtual list (avoids overlap from
+// Virtuoso's stale height measurements when streaming content grows dynamically).
+interface FooterContext {
+  ungroupedStreamingEntries: Array<[string, StreamingItem & { stageId?: string; executionId?: string }]>;
+  showProcessingIndicator: boolean;
+  displayStatus: string;
+}
+
+function VirtuosoFooter({ context }: { context?: FooterContext }) {
+  if (!context) return null;
+  const { ungroupedStreamingEntries, showProcessingIndicator, displayStatus } = context;
+  return (
+    <>
+      {ungroupedStreamingEntries.map(([eventId, streamItem]) => (
+        <StreamingContentRenderer key={eventId} item={streamItem} />
+      ))}
+      {showProcessingIndicator && <ProcessingIndicator message={displayStatus} />}
+    </>
+  );
+}
+
+const virtuosoComponents = { Footer: VirtuosoFooter };
+
 interface ConversationTimelineProps {
   /** Flat list of FlowItems (from parseTimelineToFlow) */
   items: FlowItem[];
@@ -253,6 +277,79 @@ export default function ConversationTimeline({
     return byStage;
   }, [streamingEvents]);
 
+  // --- Ungrouped streaming entries (for Virtuoso footer) ---
+  const ungroupedStreamingEntries = useMemo(() => {
+    const ungrouped = streamingByStage.get('__ungrouped__');
+    if (!ungrouped) return [];
+    return Array.from(ungrouped.entries())
+      .filter(([, streamItem]) => streamItem.eventType !== TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY);
+  }, [streamingByStage]);
+
+  // --- Processing indicator display status ---
+  const showProcessingIndicator = isActive || !!chatStageInProgress;
+
+  const displayStatus = useMemo(() => {
+    let status = progressStatus || 'Processing...';
+
+    if (chatStageInProgress && !isActive) {
+      status = 'Processing...';
+    }
+
+    if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
+      const singleAgentStatus = agentProgressStatuses.values().next().value;
+      if (singleAgentStatus) status = singleAgentStatus;
+    }
+
+    if (selectedAgentExecutionId) {
+      const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);
+      if (agentStatus) {
+        status = agentStatus;
+      }
+
+      const wsEntry = executionStatuses?.get(selectedAgentExecutionId);
+      const isSelectedTerminal = (() => {
+        if (wsEntry && TERMINAL_EXECUTION_STATUSES.has(wsEntry.status)) return true;
+        for (const stage of stages) {
+          const eo = stage.executions?.find(e => e.execution_id === selectedAgentExecutionId);
+          if (eo && TERMINAL_EXECUTION_STATUSES.has(eo.status)) return true;
+        }
+        return false;
+      })();
+
+      if (isSelectedTerminal) {
+        const stageId = wsEntry?.stageId
+          || stages.find(s => s.executions?.some(e => e.execution_id === selectedAgentExecutionId))?.id;
+
+        if (stageId) {
+          const othersRunning =
+            (executionStatuses ? Array.from(executionStatuses.entries()).some(
+              ([id, entry]) =>
+                id !== selectedAgentExecutionId &&
+                entry.stageId === stageId &&
+                !TERMINAL_EXECUTION_STATUSES.has(entry.status),
+            ) : false) ||
+            (stages.find(s => s.id === stageId)?.executions?.some(
+              e => e.execution_id !== selectedAgentExecutionId &&
+                !TERMINAL_EXECUTION_STATUSES.has(e.status),
+            ) ?? false);
+
+          if (othersRunning) {
+            status = 'Waiting for other agents...';
+          }
+        }
+      }
+    }
+
+    return status;
+  }, [progressStatus, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
+
+  // --- Virtuoso footer context ---
+  const footerContext: FooterContext = useMemo(() => ({
+    ungroupedStreamingEntries,
+    showProcessingIndicator,
+    displayStatus,
+  }), [ungroupedStreamingEntries, showProcessingIndicator, displayStatus]);
+
   if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
     // Session is active but no timeline items have arrived yet — show the
     // same pulsing ring spinner used by SessionDetailPage so there is no
@@ -397,6 +494,8 @@ export default function ConversationTimeline({
         <Virtuoso
           useWindowScroll
           data={stageGroups}
+          context={footerContext}
+          components={virtuosoComponents}
           increaseViewportBy={{ top: 400, bottom: 800 }}
           computeItemKey={(index, group) => group.stageId ? `${group.stageId}-${index}` : `group-${index}`}
           itemContent={(_index, group) => {
@@ -457,69 +556,6 @@ export default function ConversationTimeline({
             );
           }}
         />
-
-        {/* Ungrouped streaming events (no stageId), excluding executive_summary */}
-        {streamingByStage.get('__ungrouped__') &&
-          Array.from(streamingByStage.get('__ungrouped__')!.entries())
-            .filter(([, streamItem]) => streamItem.eventType !== TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY)
-            .map(([eventId, streamItem]) => (
-              <StreamingContentRenderer key={eventId} item={streamItem} />
-            ))}
-
-        {/* Processing indicator for active sessions and chat stages */}
-        {(isActive || chatStageInProgress) && (() => {
-          let displayStatus = progressStatus || 'Processing...';
-
-          if (chatStageInProgress && !isActive) {
-            displayStatus = 'Processing...';
-          }
-
-          if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
-            const singleAgentStatus = agentProgressStatuses.values().next().value;
-            if (singleAgentStatus) displayStatus = singleAgentStatus;
-          }
-
-          if (selectedAgentExecutionId) {
-            const agentStatus = agentProgressStatuses?.get(selectedAgentExecutionId);
-            if (agentStatus) {
-              displayStatus = agentStatus;
-            }
-
-            const wsEntry = executionStatuses?.get(selectedAgentExecutionId);
-            const isSelectedTerminal = (() => {
-              if (wsEntry && TERMINAL_EXECUTION_STATUSES.has(wsEntry.status)) return true;
-              for (const stage of stages) {
-                const eo = stage.executions?.find(e => e.execution_id === selectedAgentExecutionId);
-                if (eo && TERMINAL_EXECUTION_STATUSES.has(eo.status)) return true;
-              }
-              return false;
-            })();
-
-            if (isSelectedTerminal) {
-              const stageId = wsEntry?.stageId
-                || stages.find(s => s.executions?.some(e => e.execution_id === selectedAgentExecutionId))?.id;
-
-              if (stageId) {
-                const othersRunning =
-                  (executionStatuses ? Array.from(executionStatuses.entries()).some(
-                    ([id, entry]) =>
-                      id !== selectedAgentExecutionId &&
-                      entry.stageId === stageId &&
-                      !TERMINAL_EXECUTION_STATUSES.has(entry.status),
-                  ) : false) ||
-                  (stages.find(s => s.id === stageId)?.executions?.some(
-                    e => e.execution_id !== selectedAgentExecutionId &&
-                      !TERMINAL_EXECUTION_STATUSES.has(e.status),
-                  ) ?? false);
-
-                if (othersRunning) {
-                  displayStatus = 'Waiting for other agents...';
-                }
-              }
-            }
-          }
-          return <ProcessingIndicator message={displayStatus} />;
-        })()}
       </Box>
     </Card>
   );
