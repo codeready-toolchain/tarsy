@@ -87,13 +87,14 @@ func (e *RealSessionExecutor) resolveRunbook(ctx context.Context, session *ent.A
 
 // stageResult captures the outcome of a single stage execution.
 type stageResult struct {
-	stageID       string
-	stageName     string
-	stageType     stage.StageType
-	status        alertsession.Status // mapped from agent status
-	finalAnalysis string
-	err           error
-	agentResults  []agentResult // always populated (1 entry for single-agent, N for multi-agent)
+	stageID           string
+	stageName         string
+	stageType         stage.StageType
+	referencedStageID *string
+	status            alertsession.Status // mapped from agent status
+	finalAnalysis     string
+	err               error
+	agentResults      []agentResult // always populated (1 entry for single-agent, N for multi-agent)
 }
 
 // agentResult captures the outcome of a single agent execution within a stage.
@@ -213,7 +214,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		})
 
 		// Publish stage terminal status (use background context — ctx may be cancelled)
-		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, sr.stageType, mapTerminalStatus(sr))
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, sr.stageID, sr.stageName, dbStageIndex, sr.stageType, sr.referencedStageID, mapTerminalStatus(sr))
 		dbStageIndex++
 
 		// Fail-fast: if stage didn't complete, stop the chain
@@ -249,7 +250,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			}, sr)
 
 			// Publish synthesis stage terminal status (use background context — ctx may be cancelled)
-			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, synthSr.stageType, mapTerminalStatus(synthSr))
+			publishStageStatus(context.Background(), e.eventPublisher, session.ID, synthSr.stageID, synthSr.stageName, dbStageIndex, synthSr.stageType, synthSr.referencedStageID, mapTerminalStatus(synthSr))
 			dbStageIndex++
 
 			if synthSr.status != alertsession.StatusCompleted {
@@ -297,7 +298,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			timelineService:     timelineService,
 			interactionService:  interactionService,
 		})
-		publishStageStatus(context.Background(), e.eventPublisher, session.ID, execSr.stageID, execSr.stageName, dbStageIndex, execSr.stageType, mapTerminalStatus(execSr))
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, execSr.stageID, execSr.stageName, dbStageIndex, execSr.stageType, execSr.referencedStageID, mapTerminalStatus(execSr))
 		if execSr.status == alertsession.StatusCompleted {
 			execSummary = execSr.finalAnalysis
 		} else if execSr.err != nil {
@@ -376,7 +377,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 
 	// 3. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stg.StageType, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stg.StageType, stg.ReferencedStageID, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
 		input.stageIndex, input.totalExpectedStages, len(configs),
 		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))

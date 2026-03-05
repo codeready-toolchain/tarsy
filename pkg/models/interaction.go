@@ -50,10 +50,11 @@ type TraceListResponse struct {
 
 // TraceStageGroup contains executions for one pipeline stage.
 type TraceStageGroup struct {
-	StageID    string                `json:"stage_id"`
-	StageName  string                `json:"stage_name"`
-	StageType  string                `json:"stage_type"`
-	Executions []TraceExecutionGroup `json:"executions"`
+	StageID           string                `json:"stage_id"`
+	StageName         string                `json:"stage_name"`
+	StageType         string                `json:"stage_type"`
+	ReferencedStageID *string               `json:"referenced_stage_id,omitempty"`
+	Executions        []TraceExecutionGroup `json:"executions"`
 }
 
 // TraceExecutionGroup contains interactions for one agent execution.

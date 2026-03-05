@@ -265,7 +265,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "What caused the OOM kill for pod-1?"},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 
 	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -298,14 +298,14 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue."},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+	{Type: "stage.status", StageName: "Chat", Status: "completed"},
 
 	// ── Chat 2: "What are the current SLO metrics?" (ChatAgent, google-native with prometheus-mcp tool) ──
 	// user_question published via WS so the dashboard can render it.
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "What are the current SLO metrics for pod-1?"},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 
 	// Iteration 1: thinking + text + tool call to prometheus-mcp/query_slo.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -332,7 +332,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention."},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+	{Type: "stage.status", StageName: "Chat", Status: "completed"},
 }
 
 // ────────────────────────────────────────────────────────────
@@ -524,14 +524,14 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 	{Type: "chat.created"},
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "Ask a question"},
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 	// BlockUntilCancelled: no streaming events. Stage cancelled.
-	{Type: "stage.status", StageName: "Chat Response", Status: "cancelled"},
+	{Type: "stage.status", StageName: "Chat", Status: "cancelled"},
 
 	// ── Chat 2: follow-up succeeds ──
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "Follow-up question"},
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 
 	// Single iteration: thinking + response + final_analysis.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -543,7 +543,7 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Here is your follow-up answer: everything looks good."},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+	{Type: "stage.status", StageName: "Chat", Status: "completed"},
 }
 
 // ────────────────────────────────────────────────────────────
@@ -603,14 +603,14 @@ var TimeoutChatExpectedEvents = []ExpectedEvent{
 	{Type: "chat.created"},
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "Ask a question"},
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 	// BlockUntilCancelled: no streaming events. Stage timed_out.
-	{Type: "stage.status", StageName: "Chat Response", Status: "timed_out"},
+	{Type: "stage.status", StageName: "Chat", Status: "timed_out"},
 
 	// ── Chat 2: follow-up succeeds ──
 	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
 		Content: "Follow-up question"},
-	{Type: "stage.status", StageName: "Chat Response", Status: "started"},
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
 
 	// Single iteration: thinking + response + final_analysis.
 	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
@@ -622,7 +622,7 @@ var TimeoutChatExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
 		Content: "Here is your follow-up answer: everything looks good."},
 
-	{Type: "stage.status", StageName: "Chat Response", Status: "completed"},
+	{Type: "stage.status", StageName: "Chat", Status: "completed"},
 }
 
 // ────────────────────────────────────────────────────────────

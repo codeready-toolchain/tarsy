@@ -287,6 +287,26 @@ func (_u *StageUpdate) ClearChatUserMessageID() *StageUpdate {
 	return _u
 }
 
+// SetReferencedStageID sets the "referenced_stage_id" field.
+func (_u *StageUpdate) SetReferencedStageID(v string) *StageUpdate {
+	_u.mutation.SetReferencedStageID(v)
+	return _u
+}
+
+// SetNillableReferencedStageID sets the "referenced_stage_id" field if the given value is not nil.
+func (_u *StageUpdate) SetNillableReferencedStageID(v *string) *StageUpdate {
+	if v != nil {
+		_u.SetReferencedStageID(*v)
+	}
+	return _u
+}
+
+// ClearReferencedStageID clears the value of the "referenced_stage_id" field.
+func (_u *StageUpdate) ClearReferencedStageID() *StageUpdate {
+	_u.mutation.ClearReferencedStageID()
+	return _u
+}
+
 // AddAgentExecutionIDs adds the "agent_executions" edge to the AgentExecution entity by IDs.
 func (_u *StageUpdate) AddAgentExecutionIDs(ids ...string) *StageUpdate {
 	_u.mutation.AddAgentExecutionIDs(ids...)
@@ -370,6 +390,26 @@ func (_u *StageUpdate) SetChat(v *Chat) *StageUpdate {
 // SetChatUserMessage sets the "chat_user_message" edge to the ChatUserMessage entity.
 func (_u *StageUpdate) SetChatUserMessage(v *ChatUserMessage) *StageUpdate {
 	return _u.SetChatUserMessageID(v.ID)
+}
+
+// AddReferencingStageIDs adds the "referencing_stages" edge to the Stage entity by IDs.
+func (_u *StageUpdate) AddReferencingStageIDs(ids ...string) *StageUpdate {
+	_u.mutation.AddReferencingStageIDs(ids...)
+	return _u
+}
+
+// AddReferencingStages adds the "referencing_stages" edges to the Stage entity.
+func (_u *StageUpdate) AddReferencingStages(v ...*Stage) *StageUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReferencingStageIDs(ids...)
+}
+
+// SetReferencedStage sets the "referenced_stage" edge to the Stage entity.
+func (_u *StageUpdate) SetReferencedStage(v *Stage) *StageUpdate {
+	return _u.SetReferencedStageID(v.ID)
 }
 
 // Mutation returns the StageMutation object of the builder.
@@ -491,6 +531,33 @@ func (_u *StageUpdate) ClearChat() *StageUpdate {
 // ClearChatUserMessage clears the "chat_user_message" edge to the ChatUserMessage entity.
 func (_u *StageUpdate) ClearChatUserMessage() *StageUpdate {
 	_u.mutation.ClearChatUserMessage()
+	return _u
+}
+
+// ClearReferencingStages clears all "referencing_stages" edges to the Stage entity.
+func (_u *StageUpdate) ClearReferencingStages() *StageUpdate {
+	_u.mutation.ClearReferencingStages()
+	return _u
+}
+
+// RemoveReferencingStageIDs removes the "referencing_stages" edge to Stage entities by IDs.
+func (_u *StageUpdate) RemoveReferencingStageIDs(ids ...string) *StageUpdate {
+	_u.mutation.RemoveReferencingStageIDs(ids...)
+	return _u
+}
+
+// RemoveReferencingStages removes "referencing_stages" edges to Stage entities.
+func (_u *StageUpdate) RemoveReferencingStages(v ...*Stage) *StageUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReferencingStageIDs(ids...)
+}
+
+// ClearReferencedStage clears the "referenced_stage" edge to the Stage entity.
+func (_u *StageUpdate) ClearReferencedStage() *StageUpdate {
+	_u.mutation.ClearReferencedStage()
 	return _u
 }
 
@@ -910,6 +977,80 @@ func (_u *StageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ReferencingStagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReferencingStagesIDs(); len(nodes) > 0 && !_u.mutation.ReferencingStagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferencingStagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReferencedStageCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   stage.ReferencedStageTable,
+			Columns: []string{stage.ReferencedStageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferencedStageIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   stage.ReferencedStageTable,
+			Columns: []string{stage.ReferencedStageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -1183,6 +1324,26 @@ func (_u *StageUpdateOne) ClearChatUserMessageID() *StageUpdateOne {
 	return _u
 }
 
+// SetReferencedStageID sets the "referenced_stage_id" field.
+func (_u *StageUpdateOne) SetReferencedStageID(v string) *StageUpdateOne {
+	_u.mutation.SetReferencedStageID(v)
+	return _u
+}
+
+// SetNillableReferencedStageID sets the "referenced_stage_id" field if the given value is not nil.
+func (_u *StageUpdateOne) SetNillableReferencedStageID(v *string) *StageUpdateOne {
+	if v != nil {
+		_u.SetReferencedStageID(*v)
+	}
+	return _u
+}
+
+// ClearReferencedStageID clears the value of the "referenced_stage_id" field.
+func (_u *StageUpdateOne) ClearReferencedStageID() *StageUpdateOne {
+	_u.mutation.ClearReferencedStageID()
+	return _u
+}
+
 // AddAgentExecutionIDs adds the "agent_executions" edge to the AgentExecution entity by IDs.
 func (_u *StageUpdateOne) AddAgentExecutionIDs(ids ...string) *StageUpdateOne {
 	_u.mutation.AddAgentExecutionIDs(ids...)
@@ -1266,6 +1427,26 @@ func (_u *StageUpdateOne) SetChat(v *Chat) *StageUpdateOne {
 // SetChatUserMessage sets the "chat_user_message" edge to the ChatUserMessage entity.
 func (_u *StageUpdateOne) SetChatUserMessage(v *ChatUserMessage) *StageUpdateOne {
 	return _u.SetChatUserMessageID(v.ID)
+}
+
+// AddReferencingStageIDs adds the "referencing_stages" edge to the Stage entity by IDs.
+func (_u *StageUpdateOne) AddReferencingStageIDs(ids ...string) *StageUpdateOne {
+	_u.mutation.AddReferencingStageIDs(ids...)
+	return _u
+}
+
+// AddReferencingStages adds the "referencing_stages" edges to the Stage entity.
+func (_u *StageUpdateOne) AddReferencingStages(v ...*Stage) *StageUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReferencingStageIDs(ids...)
+}
+
+// SetReferencedStage sets the "referenced_stage" edge to the Stage entity.
+func (_u *StageUpdateOne) SetReferencedStage(v *Stage) *StageUpdateOne {
+	return _u.SetReferencedStageID(v.ID)
 }
 
 // Mutation returns the StageMutation object of the builder.
@@ -1387,6 +1568,33 @@ func (_u *StageUpdateOne) ClearChat() *StageUpdateOne {
 // ClearChatUserMessage clears the "chat_user_message" edge to the ChatUserMessage entity.
 func (_u *StageUpdateOne) ClearChatUserMessage() *StageUpdateOne {
 	_u.mutation.ClearChatUserMessage()
+	return _u
+}
+
+// ClearReferencingStages clears all "referencing_stages" edges to the Stage entity.
+func (_u *StageUpdateOne) ClearReferencingStages() *StageUpdateOne {
+	_u.mutation.ClearReferencingStages()
+	return _u
+}
+
+// RemoveReferencingStageIDs removes the "referencing_stages" edge to Stage entities by IDs.
+func (_u *StageUpdateOne) RemoveReferencingStageIDs(ids ...string) *StageUpdateOne {
+	_u.mutation.RemoveReferencingStageIDs(ids...)
+	return _u
+}
+
+// RemoveReferencingStages removes "referencing_stages" edges to Stage entities.
+func (_u *StageUpdateOne) RemoveReferencingStages(v ...*Stage) *StageUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReferencingStageIDs(ids...)
+}
+
+// ClearReferencedStage clears the "referenced_stage" edge to the Stage entity.
+func (_u *StageUpdateOne) ClearReferencedStage() *StageUpdateOne {
+	_u.mutation.ClearReferencedStage()
 	return _u
 }
 
@@ -1829,6 +2037,80 @@ func (_u *StageUpdateOne) sqlSave(ctx context.Context) (_node *Stage, err error)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(chatusermessage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReferencingStagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReferencingStagesIDs(); len(nodes) > 0 && !_u.mutation.ReferencingStagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferencingStagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReferencedStageCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   stage.ReferencedStageTable,
+			Columns: []string{stage.ReferencedStageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferencedStageIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   stage.ReferencedStageTable,
+			Columns: []string{stage.ReferencedStageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

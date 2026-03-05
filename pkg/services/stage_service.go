@@ -55,6 +55,19 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 		}
 	}
 
+	if req.ReferencedStageID != nil {
+		refStage, err := s.client.Stage.Get(httpCtx, *req.ReferencedStageID)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return nil, NewValidationError("referenced_stage_id", fmt.Sprintf("stage %q not found", *req.ReferencedStageID))
+			}
+			return nil, fmt.Errorf("failed to look up referenced stage: %w", err)
+		}
+		if refStage.SessionID != req.SessionID {
+			return nil, NewValidationError("referenced_stage_id", "must belong to the same session")
+		}
+	}
+
 	// Use timeout context derived from incoming context
 	ctx, cancel := context.WithTimeout(httpCtx, 10*time.Second)
 	defer cancel()
@@ -80,6 +93,9 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 	}
 	if req.ChatUserMessageID != nil {
 		builder.SetChatUserMessageID(*req.ChatUserMessageID)
+	}
+	if req.ReferencedStageID != nil {
+		builder.SetReferencedStageID(*req.ReferencedStageID)
 	}
 
 	stg, err := builder.Save(ctx)

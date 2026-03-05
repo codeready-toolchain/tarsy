@@ -221,11 +221,11 @@ func TestE2E_Cancellation(t *testing.T) {
 		return e.Type == "stage.status" &&
 			e.Parsed["stage_id"] == chat2StageID &&
 			e.Parsed["status"] == "completed"
-	}, 5*time.Second, "session 2: expected Chat Response stage.status completed WS event for chat 2")
+	}, 5*time.Second, "session 2: expected Chat stage.status completed WS event for chat 2")
 
 	// ── Session 2 stage assertions ──
 	stages2 := app.QueryStages(t, session2ID)
-	// Expect: quick-check + exec_summary + Chat Response (cancelled) + Chat Response (completed) = 4 stages
+	// Expect: quick-check + exec_summary + Chat (cancelled) + Chat (completed) = 4 stages
 	require.Len(t, stages2, 4, "quick-check + exec_summary + 2 chat stages")
 
 	assert.Equal(t, "quick-check", stages2[0].StageName)
@@ -234,10 +234,10 @@ func TestE2E_Cancellation(t *testing.T) {
 	assert.Equal(t, "Executive Summary", stages2[1].StageName)
 	assert.Equal(t, "completed", string(stages2[1].Status))
 
-	assert.Equal(t, "Chat Response", stages2[2].StageName)
+	assert.Equal(t, "Chat", stages2[2].StageName)
 	assert.Equal(t, "cancelled", string(stages2[2].Status))
 
-	assert.Equal(t, "Chat Response", stages2[3].StageName)
+	assert.Equal(t, "Chat", stages2[3].StageName)
 	assert.Equal(t, "completed", string(stages2[3].Status))
 
 	// ── Session 2 execution assertions ──

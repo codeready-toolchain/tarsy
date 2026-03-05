@@ -294,7 +294,7 @@ func TestE2E_Pipeline(t *testing.T) {
 		return e.Type == "stage.status" &&
 			e.Parsed["stage_id"] == chat2StageID &&
 			e.Parsed["status"] == "completed"
-	}, 5*time.Second, "expected Chat Response stage.status completed WS event for chat 2")
+	}, 5*time.Second, "expected Chat stage.status completed WS event for chat 2")
 
 	// Verify session via API.
 	session := app.GetSession(t, sessionID)
@@ -311,8 +311,8 @@ func TestE2E_Pipeline(t *testing.T) {
 	assert.Equal(t, "scaling-review", stages[4].StageName)
 	assert.Equal(t, "scaling-review - Synthesis", stages[5].StageName)
 	assert.Equal(t, "Executive Summary", stages[6].StageName)
-	assert.Equal(t, "Chat Response", stages[7].StageName)
-	assert.Equal(t, "Chat Response", stages[8].StageName)
+	assert.Equal(t, "Chat", stages[7].StageName)
+	assert.Equal(t, "Chat", stages[8].StageName)
 
 	// 8 pipeline execs + exec_summary + 2 chat execs = 11.
 	execs := app.QueryExecutions(t, sessionID)

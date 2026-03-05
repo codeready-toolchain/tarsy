@@ -115,6 +115,11 @@ func ChatUserMessageID(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldEQ(FieldChatUserMessageID, v))
 }
 
+// ReferencedStageID applies equality check predicate on the "referenced_stage_id" field. It's identical to ReferencedStageIDEQ.
+func ReferencedStageID(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldEQ(FieldReferencedStageID, v))
+}
+
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
 func SessionIDEQ(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldEQ(FieldSessionID, v))
@@ -800,6 +805,81 @@ func ChatUserMessageIDContainsFold(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldContainsFold(FieldChatUserMessageID, v))
 }
 
+// ReferencedStageIDEQ applies the EQ predicate on the "referenced_stage_id" field.
+func ReferencedStageIDEQ(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldEQ(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDNEQ applies the NEQ predicate on the "referenced_stage_id" field.
+func ReferencedStageIDNEQ(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldNEQ(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDIn applies the In predicate on the "referenced_stage_id" field.
+func ReferencedStageIDIn(vs ...string) predicate.Stage {
+	return predicate.Stage(sql.FieldIn(FieldReferencedStageID, vs...))
+}
+
+// ReferencedStageIDNotIn applies the NotIn predicate on the "referenced_stage_id" field.
+func ReferencedStageIDNotIn(vs ...string) predicate.Stage {
+	return predicate.Stage(sql.FieldNotIn(FieldReferencedStageID, vs...))
+}
+
+// ReferencedStageIDGT applies the GT predicate on the "referenced_stage_id" field.
+func ReferencedStageIDGT(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldGT(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDGTE applies the GTE predicate on the "referenced_stage_id" field.
+func ReferencedStageIDGTE(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldGTE(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDLT applies the LT predicate on the "referenced_stage_id" field.
+func ReferencedStageIDLT(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldLT(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDLTE applies the LTE predicate on the "referenced_stage_id" field.
+func ReferencedStageIDLTE(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldLTE(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDContains applies the Contains predicate on the "referenced_stage_id" field.
+func ReferencedStageIDContains(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldContains(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDHasPrefix applies the HasPrefix predicate on the "referenced_stage_id" field.
+func ReferencedStageIDHasPrefix(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldHasPrefix(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDHasSuffix applies the HasSuffix predicate on the "referenced_stage_id" field.
+func ReferencedStageIDHasSuffix(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldHasSuffix(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDIsNil applies the IsNil predicate on the "referenced_stage_id" field.
+func ReferencedStageIDIsNil() predicate.Stage {
+	return predicate.Stage(sql.FieldIsNull(FieldReferencedStageID))
+}
+
+// ReferencedStageIDNotNil applies the NotNil predicate on the "referenced_stage_id" field.
+func ReferencedStageIDNotNil() predicate.Stage {
+	return predicate.Stage(sql.FieldNotNull(FieldReferencedStageID))
+}
+
+// ReferencedStageIDEqualFold applies the EqualFold predicate on the "referenced_stage_id" field.
+func ReferencedStageIDEqualFold(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldEqualFold(FieldReferencedStageID, v))
+}
+
+// ReferencedStageIDContainsFold applies the ContainsFold predicate on the "referenced_stage_id" field.
+func ReferencedStageIDContainsFold(v string) predicate.Stage {
+	return predicate.Stage(sql.FieldContainsFold(FieldReferencedStageID, v))
+}
+
 // HasSession applies the HasEdge predicate on the "session" edge.
 func HasSession() predicate.Stage {
 	return predicate.Stage(func(s *sql.Selector) {
@@ -976,6 +1056,52 @@ func HasChatUserMessage() predicate.Stage {
 func HasChatUserMessageWith(preds ...predicate.ChatUserMessage) predicate.Stage {
 	return predicate.Stage(func(s *sql.Selector) {
 		step := newChatUserMessageStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasReferencingStages applies the HasEdge predicate on the "referencing_stages" edge.
+func HasReferencingStages() predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ReferencingStagesTable, ReferencingStagesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasReferencingStagesWith applies the HasEdge predicate on the "referencing_stages" edge with a given conditions (other predicates).
+func HasReferencingStagesWith(preds ...predicate.Stage) predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := newReferencingStagesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasReferencedStage applies the HasEdge predicate on the "referenced_stage" edge.
+func HasReferencedStage() predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ReferencedStageTable, ReferencedStageColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasReferencedStageWith applies the HasEdge predicate on the "referenced_stage" edge with a given conditions (other predicates).
+func HasReferencedStageWith(preds ...predicate.Stage) predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := newReferencedStageStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

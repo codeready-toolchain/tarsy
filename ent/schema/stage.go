@@ -78,6 +78,12 @@ func (Stage) Fields() []ent.Field {
 		field.String("chat_user_message_id").
 			Optional().
 			Nillable(),
+
+		// Stage Reference (e.g. synthesis → parent investigation)
+		field.String("referenced_stage_id").
+			Optional().
+			Nillable().
+			Comment("FK to another stage in the same session (e.g. synthesis -> investigation)"),
 	}
 }
 
@@ -107,6 +113,12 @@ func (Stage) Edges() []ent.Edge {
 		edge.From("chat_user_message", ChatUserMessage.Type).
 			Ref("stage").
 			Field("chat_user_message_id").
+			Unique(),
+		edge.To("referencing_stages", Stage.Type).
+			Annotations(entsql.OnDelete(entsql.SetNull)),
+		edge.From("referenced_stage", Stage.Type).
+			Ref("referencing_stages").
+			Field("referenced_stage_id").
 			Unique(),
 	}
 }

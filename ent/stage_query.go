@@ -28,19 +28,21 @@ import (
 // StageQuery is the builder for querying Stage entities.
 type StageQuery struct {
 	config
-	ctx                 *QueryContext
-	order               []stage.OrderOption
-	inters              []Interceptor
-	predicates          []predicate.Stage
-	withSession         *AlertSessionQuery
-	withAgentExecutions *AgentExecutionQuery
-	withTimelineEvents  *TimelineEventQuery
-	withMessages        *MessageQuery
-	withLlmInteractions *LLMInteractionQuery
-	withMcpInteractions *MCPInteractionQuery
-	withChat            *ChatQuery
-	withChatUserMessage *ChatUserMessageQuery
-	modifiers           []func(*sql.Selector)
+	ctx                   *QueryContext
+	order                 []stage.OrderOption
+	inters                []Interceptor
+	predicates            []predicate.Stage
+	withSession           *AlertSessionQuery
+	withAgentExecutions   *AgentExecutionQuery
+	withTimelineEvents    *TimelineEventQuery
+	withMessages          *MessageQuery
+	withLlmInteractions   *LLMInteractionQuery
+	withMcpInteractions   *MCPInteractionQuery
+	withChat              *ChatQuery
+	withChatUserMessage   *ChatUserMessageQuery
+	withReferencingStages *StageQuery
+	withReferencedStage   *StageQuery
+	modifiers             []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -253,6 +255,50 @@ func (_q *StageQuery) QueryChatUserMessage() *ChatUserMessageQuery {
 	return query
 }
 
+// QueryReferencingStages chains the current query on the "referencing_stages" edge.
+func (_q *StageQuery) QueryReferencingStages() *StageQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, selector),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, stage.ReferencingStagesTable, stage.ReferencingStagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryReferencedStage chains the current query on the "referenced_stage" edge.
+func (_q *StageQuery) QueryReferencedStage() *StageQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, selector),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, stage.ReferencedStageTable, stage.ReferencedStageColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first Stage entity from the query.
 // Returns a *NotFoundError when no Stage was found.
 func (_q *StageQuery) First(ctx context.Context) (*Stage, error) {
@@ -440,19 +486,21 @@ func (_q *StageQuery) Clone() *StageQuery {
 		return nil
 	}
 	return &StageQuery{
-		config:              _q.config,
-		ctx:                 _q.ctx.Clone(),
-		order:               append([]stage.OrderOption{}, _q.order...),
-		inters:              append([]Interceptor{}, _q.inters...),
-		predicates:          append([]predicate.Stage{}, _q.predicates...),
-		withSession:         _q.withSession.Clone(),
-		withAgentExecutions: _q.withAgentExecutions.Clone(),
-		withTimelineEvents:  _q.withTimelineEvents.Clone(),
-		withMessages:        _q.withMessages.Clone(),
-		withLlmInteractions: _q.withLlmInteractions.Clone(),
-		withMcpInteractions: _q.withMcpInteractions.Clone(),
-		withChat:            _q.withChat.Clone(),
-		withChatUserMessage: _q.withChatUserMessage.Clone(),
+		config:                _q.config,
+		ctx:                   _q.ctx.Clone(),
+		order:                 append([]stage.OrderOption{}, _q.order...),
+		inters:                append([]Interceptor{}, _q.inters...),
+		predicates:            append([]predicate.Stage{}, _q.predicates...),
+		withSession:           _q.withSession.Clone(),
+		withAgentExecutions:   _q.withAgentExecutions.Clone(),
+		withTimelineEvents:    _q.withTimelineEvents.Clone(),
+		withMessages:          _q.withMessages.Clone(),
+		withLlmInteractions:   _q.withLlmInteractions.Clone(),
+		withMcpInteractions:   _q.withMcpInteractions.Clone(),
+		withChat:              _q.withChat.Clone(),
+		withChatUserMessage:   _q.withChatUserMessage.Clone(),
+		withReferencingStages: _q.withReferencingStages.Clone(),
+		withReferencedStage:   _q.withReferencedStage.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -548,6 +596,28 @@ func (_q *StageQuery) WithChatUserMessage(opts ...func(*ChatUserMessageQuery)) *
 	return _q
 }
 
+// WithReferencingStages tells the query-builder to eager-load the nodes that are connected to
+// the "referencing_stages" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *StageQuery) WithReferencingStages(opts ...func(*StageQuery)) *StageQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withReferencingStages = query
+	return _q
+}
+
+// WithReferencedStage tells the query-builder to eager-load the nodes that are connected to
+// the "referenced_stage" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *StageQuery) WithReferencedStage(opts ...func(*StageQuery)) *StageQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withReferencedStage = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -626,7 +696,7 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 	var (
 		nodes       = []*Stage{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [10]bool{
 			_q.withSession != nil,
 			_q.withAgentExecutions != nil,
 			_q.withTimelineEvents != nil,
@@ -635,6 +705,8 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 			_q.withMcpInteractions != nil,
 			_q.withChat != nil,
 			_q.withChatUserMessage != nil,
+			_q.withReferencingStages != nil,
+			_q.withReferencedStage != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -708,6 +780,19 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 	if query := _q.withChatUserMessage; query != nil {
 		if err := _q.loadChatUserMessage(ctx, query, nodes, nil,
 			func(n *Stage, e *ChatUserMessage) { n.Edges.ChatUserMessage = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withReferencingStages; query != nil {
+		if err := _q.loadReferencingStages(ctx, query, nodes,
+			func(n *Stage) { n.Edges.ReferencingStages = []*Stage{} },
+			func(n *Stage, e *Stage) { n.Edges.ReferencingStages = append(n.Edges.ReferencingStages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withReferencedStage; query != nil {
+		if err := _q.loadReferencedStage(ctx, query, nodes, nil,
+			func(n *Stage, e *Stage) { n.Edges.ReferencedStage = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -963,6 +1048,71 @@ func (_q *StageQuery) loadChatUserMessage(ctx context.Context, query *ChatUserMe
 	}
 	return nil
 }
+func (_q *StageQuery) loadReferencingStages(ctx context.Context, query *StageQuery, nodes []*Stage, init func(*Stage), assign func(*Stage, *Stage)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Stage)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(stage.FieldReferencedStageID)
+	}
+	query.Where(predicate.Stage(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(stage.ReferencingStagesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ReferencedStageID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "referenced_stage_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "referenced_stage_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *StageQuery) loadReferencedStage(ctx context.Context, query *StageQuery, nodes []*Stage, init func(*Stage), assign func(*Stage, *Stage)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*Stage)
+	for i := range nodes {
+		if nodes[i].ReferencedStageID == nil {
+			continue
+		}
+		fk := *nodes[i].ReferencedStageID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(stage.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "referenced_stage_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 
 func (_q *StageQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
@@ -1000,6 +1150,9 @@ func (_q *StageQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withChatUserMessage != nil {
 			_spec.Node.AddColumnOnce(stage.FieldChatUserMessageID)
+		}
+		if _q.withReferencedStage != nil {
+			_spec.Node.AddColumnOnce(stage.FieldReferencedStageID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

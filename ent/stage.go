@@ -48,6 +48,8 @@ type Stage struct {
 	ChatID *string `json:"chat_id,omitempty"`
 	// ChatUserMessageID holds the value of the "chat_user_message_id" field.
 	ChatUserMessageID *string `json:"chat_user_message_id,omitempty"`
+	// FK to another stage in the same session (e.g. synthesis -> investigation)
+	ReferencedStageID *string `json:"referenced_stage_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the StageQuery when eager-loading is set.
 	Edges        StageEdges `json:"edges"`
@@ -72,9 +74,13 @@ type StageEdges struct {
 	Chat *Chat `json:"chat,omitempty"`
 	// ChatUserMessage holds the value of the chat_user_message edge.
 	ChatUserMessage *ChatUserMessage `json:"chat_user_message,omitempty"`
+	// ReferencingStages holds the value of the referencing_stages edge.
+	ReferencingStages []*Stage `json:"referencing_stages,omitempty"`
+	// ReferencedStage holds the value of the referenced_stage edge.
+	ReferencedStage *Stage `json:"referenced_stage,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [10]bool
 }
 
 // SessionOrErr returns the Session value or an error if the edge
@@ -155,6 +161,26 @@ func (e StageEdges) ChatUserMessageOrErr() (*ChatUserMessage, error) {
 	return nil, &NotLoadedError{edge: "chat_user_message"}
 }
 
+// ReferencingStagesOrErr returns the ReferencingStages value or an error if the edge
+// was not loaded in eager-loading.
+func (e StageEdges) ReferencingStagesOrErr() ([]*Stage, error) {
+	if e.loadedTypes[8] {
+		return e.ReferencingStages, nil
+	}
+	return nil, &NotLoadedError{edge: "referencing_stages"}
+}
+
+// ReferencedStageOrErr returns the ReferencedStage value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e StageEdges) ReferencedStageOrErr() (*Stage, error) {
+	if e.ReferencedStage != nil {
+		return e.ReferencedStage, nil
+	} else if e.loadedTypes[9] {
+		return nil, &NotFoundError{label: stage.Label}
+	}
+	return nil, &NotLoadedError{edge: "referenced_stage"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Stage) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -162,7 +188,7 @@ func (*Stage) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case stage.FieldStageIndex, stage.FieldExpectedAgentCount, stage.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case stage.FieldID, stage.FieldSessionID, stage.FieldStageName, stage.FieldParallelType, stage.FieldSuccessPolicy, stage.FieldStageType, stage.FieldStatus, stage.FieldErrorMessage, stage.FieldChatID, stage.FieldChatUserMessageID:
+		case stage.FieldID, stage.FieldSessionID, stage.FieldStageName, stage.FieldParallelType, stage.FieldSuccessPolicy, stage.FieldStageType, stage.FieldStatus, stage.FieldErrorMessage, stage.FieldChatID, stage.FieldChatUserMessageID, stage.FieldReferencedStageID:
 			values[i] = new(sql.NullString)
 		case stage.FieldStartedAt, stage.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -279,6 +305,13 @@ func (_m *Stage) assignValues(columns []string, values []any) error {
 				_m.ChatUserMessageID = new(string)
 				*_m.ChatUserMessageID = value.String
 			}
+		case stage.FieldReferencedStageID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field referenced_stage_id", values[i])
+			} else if value.Valid {
+				_m.ReferencedStageID = new(string)
+				*_m.ReferencedStageID = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -330,6 +363,16 @@ func (_m *Stage) QueryChat() *ChatQuery {
 // QueryChatUserMessage queries the "chat_user_message" edge of the Stage entity.
 func (_m *Stage) QueryChatUserMessage() *ChatUserMessageQuery {
 	return NewStageClient(_m.config).QueryChatUserMessage(_m)
+}
+
+// QueryReferencingStages queries the "referencing_stages" edge of the Stage entity.
+func (_m *Stage) QueryReferencingStages() *StageQuery {
+	return NewStageClient(_m.config).QueryReferencingStages(_m)
+}
+
+// QueryReferencedStage queries the "referenced_stage" edge of the Stage entity.
+func (_m *Stage) QueryReferencedStage() *StageQuery {
+	return NewStageClient(_m.config).QueryReferencedStage(_m)
 }
 
 // Update returns a builder for updating this Stage.
@@ -410,6 +453,11 @@ func (_m *Stage) String() string {
 	builder.WriteString(", ")
 	if v := _m.ChatUserMessageID; v != nil {
 		builder.WriteString("chat_user_message_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ReferencedStageID; v != nil {
+		builder.WriteString("referenced_stage_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')

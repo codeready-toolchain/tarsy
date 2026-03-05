@@ -192,6 +192,20 @@ func (_c *StageCreate) SetNillableChatUserMessageID(v *string) *StageCreate {
 	return _c
 }
 
+// SetReferencedStageID sets the "referenced_stage_id" field.
+func (_c *StageCreate) SetReferencedStageID(v string) *StageCreate {
+	_c.mutation.SetReferencedStageID(v)
+	return _c
+}
+
+// SetNillableReferencedStageID sets the "referenced_stage_id" field if the given value is not nil.
+func (_c *StageCreate) SetNillableReferencedStageID(v *string) *StageCreate {
+	if v != nil {
+		_c.SetReferencedStageID(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *StageCreate) SetID(v string) *StageCreate {
 	_c.mutation.SetID(v)
@@ -286,6 +300,26 @@ func (_c *StageCreate) SetChat(v *Chat) *StageCreate {
 // SetChatUserMessage sets the "chat_user_message" edge to the ChatUserMessage entity.
 func (_c *StageCreate) SetChatUserMessage(v *ChatUserMessage) *StageCreate {
 	return _c.SetChatUserMessageID(v.ID)
+}
+
+// AddReferencingStageIDs adds the "referencing_stages" edge to the Stage entity by IDs.
+func (_c *StageCreate) AddReferencingStageIDs(ids ...string) *StageCreate {
+	_c.mutation.AddReferencingStageIDs(ids...)
+	return _c
+}
+
+// AddReferencingStages adds the "referencing_stages" edges to the Stage entity.
+func (_c *StageCreate) AddReferencingStages(v ...*Stage) *StageCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddReferencingStageIDs(ids...)
+}
+
+// SetReferencedStage sets the "referenced_stage" edge to the Stage entity.
+func (_c *StageCreate) SetReferencedStage(v *Stage) *StageCreate {
+	return _c.SetReferencedStageID(v.ID)
 }
 
 // Mutation returns the StageMutation object of the builder.
@@ -584,6 +618,39 @@ func (_c *StageCreate) createSpec() (*Stage, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ChatUserMessageID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ReferencingStagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.ReferencingStagesTable,
+			Columns: []string{stage.ReferencingStagesColumn},
+			Bidi:    true,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ReferencedStageIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   stage.ReferencedStageTable,
+			Columns: []string{stage.ReferencedStageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ReferencedStageID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

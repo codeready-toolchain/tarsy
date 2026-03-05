@@ -36,12 +36,12 @@
   },
   {
     "stage_index": 8,
-    "stage_name": "Chat Response",
+    "stage_name": "Chat",
     "status": "completed"
   },
   {
     "stage_index": 9,
-    "stage_name": "Chat Response",
+    "stage_name": "Chat",
     "status": "completed"
   }
 ]

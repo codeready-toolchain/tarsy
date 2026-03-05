@@ -13,6 +13,7 @@ export interface TraceStageGroup {
   stage_id: string;
   stage_name: string;
   stage_type: string;
+  referenced_stage_id?: string;
   executions: TraceExecutionGroup[];
 }
 
