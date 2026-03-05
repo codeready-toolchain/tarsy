@@ -273,6 +273,9 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 	assert.Equal(t, 1, stages[0].StageIndex)
 	assert.Equal(t, stage.StatusCompleted, stages[0].Status)
 	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
+	assert.Equal(t, "Executive Summary", stages[1].StageName)
+	assert.Equal(t, 2, stages[1].StageIndex)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[1].StageType)
 
 	// Verify stage events: started + completed for investigation, + 2 for exec_summary
 	require.Len(t, publisher.stageStatuses, 4)
