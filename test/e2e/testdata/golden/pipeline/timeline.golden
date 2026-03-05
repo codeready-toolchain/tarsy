@@ -3,7 +3,7 @@
     "agent": "ChatAgent",
     "content": "What caused the OOM kill for pod-1?",
     "event_type": "user_question",
-    "sequence": 1000000,
+    "sequence": 12,
     "status": "completed"
   },
   {
@@ -13,14 +13,14 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1000001,
+    "sequence": 13,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Let me check the current pod status to explain the OOM kill.",
     "event_type": "llm_response",
-    "sequence": 1000002,
+    "sequence": 14,
     "status": "completed"
   },
   {
@@ -33,7 +33,7 @@
       "server_name": "test-mcp",
       "tool_name": "get_pods"
     },
-    "sequence": 1000003,
+    "sequence": 15,
     "status": "completed"
   },
   {
@@ -46,7 +46,7 @@
       "summarization_model": "test-model",
       "tool_name": "get_pods"
     },
-    "sequence": 1000004,
+    "sequence": 16,
     "status": "completed"
   },
   {
@@ -56,28 +56,28 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1000005,
+    "sequence": 17,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue.",
     "event_type": "llm_response",
-    "sequence": 1000006,
+    "sequence": 18,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Pod-1 was OOM killed because it exceeded the 512Mi memory limit. The pod has restarted 5 times due to this issue.",
     "event_type": "final_analysis",
-    "sequence": 1000007,
+    "sequence": 19,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "What are the current SLO metrics for pod-1?",
     "event_type": "user_question",
-    "sequence": 1000008,
+    "sequence": 20,
     "status": "completed"
   },
   {
@@ -87,14 +87,14 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1000009,
+    "sequence": 21,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Let me check the current SLO metrics for pod-1.",
     "event_type": "llm_response",
-    "sequence": 1000010,
+    "sequence": 22,
     "status": "completed"
   },
   {
@@ -107,7 +107,7 @@
       "server_name": "prometheus-mcp",
       "tool_name": "query_slo"
     },
-    "sequence": 1000011,
+    "sequence": 23,
     "status": "completed"
   },
   {
@@ -117,21 +117,21 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1000012,
+    "sequence": 24,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
     "event_type": "llm_response",
-    "sequence": 1000013,
+    "sequence": 25,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "The current SLO metrics show pod-1 availability at 95%, well below the 99.9% target. This is a critical violation that needs immediate attention.",
     "event_type": "final_analysis",
-    "sequence": 1000014,
+    "sequence": 26,
     "status": "completed"
   },
   {
@@ -289,6 +289,20 @@
     "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
     "event_type": "final_analysis",
     "sequence": 11,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+    "event_type": "final_analysis",
+    "sequence": 2,
     "status": "completed"
   },
   {
@@ -544,12 +558,6 @@
     "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
     "event_type": "final_analysis",
     "sequence": 4,
-    "status": "completed"
-  },
-  {
-    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
-    "event_type": "executive_summary",
-    "sequence": 999999,
     "status": "completed"
   }
 ]

@@ -326,3 +326,46 @@ func TestSingleShotController_NoFallback_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "synthesis LLM call failed")
 }
+
+func TestExecSummaryController_HappyPath(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Pod OOM killed: memory leak in web-1."},
+				&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.Type = config.AgentTypeExecSummary
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder)
+
+	finalAnalysis := "Root cause: memory leak in web-1. Pods OOMKilled repeatedly."
+	result, err := ctrl.Run(context.Background(), execCtx, finalAnalysis)
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "OOM killed")
+	require.Equal(t, 100, result.TokensUsed.TotalTokens)
+	require.Equal(t, 1, llm.callCount)
+}
+
+func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
+	// Exec summary must NOT use thinking text as fallback when resp.Text is empty.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ThinkingChunk{Content: "Let me think about this..."},
+				// No TextChunk — empty text response
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder)
+
+	result, err := ctrl.Run(context.Background(), execCtx, "some final analysis")
+	require.NoError(t, err)
+	// ThinkingFallback is false → FinalAnalysis is empty, not the thinking text
+	require.Empty(t, result.FinalAnalysis)
+}

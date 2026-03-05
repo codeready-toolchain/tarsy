@@ -41,7 +41,7 @@ func TestResolveAgentConfig(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: defaults,
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"KubernetesAgent": agentDef,
+			config.AgentNameKubernetes: agentDef,
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"google-default": googleProvider,
@@ -52,12 +52,12 @@ func TestResolveAgentConfig(t *testing.T) {
 	t.Run("uses defaults when no overrides", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}
-		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+		agentConfig := config.StageAgentConfig{Name: config.AgentNameKubernetes}
 
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentNameKubernetes, resolved.AgentName)
 		assert.Equal(t, config.AgentTypeDefault, resolved.Type)
 		// Agent def overrides defaults for LLM backend
 		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
@@ -76,7 +76,7 @@ func TestResolveAgentConfig(t *testing.T) {
 			MaxIterations: intPtr(10),
 		}
 		agentConfig := config.StageAgentConfig{
-			Name:          "KubernetesAgent",
+			Name:          config.AgentNameKubernetes,
 			LLMBackend:    config.LLMBackendLangChain,
 			LLMProvider:   "openai-default",
 			MaxIterations: intPtr(5),
@@ -100,7 +100,7 @@ func TestResolveAgentConfig(t *testing.T) {
 			LLMBackend: config.LLMBackendLangChain,
 		}
 		stageConfig := config.StageConfig{}
-		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+		agentConfig := config.StageAgentConfig{Name: config.AgentNameKubernetes}
 
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		synthCfg := &config.Config{
 			Defaults: defaults,
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"SynthesisAgent": {
+				config.AgentNameSynthesis: {
 					Type:               config.AgentTypeSynthesis,
 					CustomInstructions: "You synthesize.",
 				},
@@ -122,7 +122,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		}
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}
-		agentConfig := config.StageAgentConfig{Name: "SynthesisAgent"}
+		agentConfig := config.StageAgentConfig{Name: config.AgentNameSynthesis}
 
 		resolved, err := ResolveAgentConfig(synthCfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}
 		agentConfig := config.StageAgentConfig{
-			Name: "KubernetesAgent",
+			Name: config.AgentNameKubernetes,
 			Type: config.AgentTypeOrchestrator,
 		}
 
@@ -196,7 +196,7 @@ func TestResolveAgentConfig(t *testing.T) {
 		chain := &config.ChainConfig{}
 		stageConfig := config.StageConfig{}
 		agentConfig := config.StageAgentConfig{
-			Name:        "KubernetesAgent",
+			Name:        config.AgentNameKubernetes,
 			LLMProvider: "nonexistent-provider",
 		}
 
@@ -207,7 +207,7 @@ func TestResolveAgentConfig(t *testing.T) {
 
 	t.Run("errors on nil chain", func(t *testing.T) {
 		stageConfig := config.StageConfig{}
-		agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+		agentConfig := config.StageAgentConfig{Name: config.AgentNameKubernetes}
 
 		_, err := ResolveAgentConfig(cfg, nil, stageConfig, agentConfig)
 		require.Error(t, err)
@@ -221,7 +221,7 @@ func TestResolveAgentConfig(t *testing.T) {
 				MCPServers: []string{"chain-server"},
 			}
 			stageConfig := config.StageConfig{}
-			agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+			agentConfig := config.StageAgentConfig{Name: config.AgentNameKubernetes}
 
 			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 			require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestResolveAgentConfig(t *testing.T) {
 			stageConfig := config.StageConfig{
 				MCPServers: []string{"stage-server"},
 			}
-			agentConfig := config.StageAgentConfig{Name: "KubernetesAgent"}
+			agentConfig := config.StageAgentConfig{Name: config.AgentNameKubernetes}
 
 			resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 			require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestResolveAgentConfig(t *testing.T) {
 				MCPServers: []string{"stage-server"},
 			}
 			agentConfig := config.StageAgentConfig{
-				Name:       "KubernetesAgent",
+				Name:       config.AgentNameKubernetes,
 				MCPServers: []string{"stage-agent-server"},
 			}
 
@@ -270,7 +270,7 @@ func TestResolveAgentConfig(t *testing.T) {
 				MCPServers: []string{}, // empty, should not override
 			}
 			agentConfig := config.StageAgentConfig{
-				Name:       "KubernetesAgent",
+				Name:       config.AgentNameKubernetes,
 				MCPServers: []string{}, // empty, should not override
 			}
 
@@ -436,8 +436,8 @@ func TestResolveChatAgentConfig(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: defaults,
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"ChatAgent":       chatAgentDef,
-			"KubernetesAgent": {MCPServers: []string{"k8s-mcp"}},
+			config.AgentNameChat:       chatAgentDef,
+			config.AgentNameKubernetes: {MCPServers: []string{"k8s-mcp"}},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"google-default": googleProvider,
@@ -450,7 +450,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 
 		resolved, err := ResolveChatAgentConfig(cfg, chain, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "ChatAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentNameChat, resolved.AgentName)
 		assert.Equal(t, config.AgentTypeDefault, resolved.Type)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
 		assert.Equal(t, 25, resolved.MaxIterations)
@@ -460,12 +460,12 @@ func TestResolveChatAgentConfig(t *testing.T) {
 	t.Run("chatCfg agent overrides default", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		chatCfg := &config.ChatConfig{
-			Agent: "KubernetesAgent",
+			Agent: config.AgentNameKubernetes,
 		}
 
 		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
 		require.NoError(t, err)
-		assert.Equal(t, "KubernetesAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentNameKubernetes, resolved.AgentName)
 	})
 
 	t.Run("chatCfg overrides chain for LLM backend and provider", func(t *testing.T) {
@@ -532,7 +532,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 			Stages: []config.StageConfig{
 				{
 					Agents: []config.StageAgentConfig{
-						{Name: "KubernetesAgent"}, // has "k8s-mcp" in registry
+						{Name: config.AgentNameKubernetes}, // has "k8s-mcp" in registry
 					},
 				},
 			},
@@ -549,7 +549,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 				{
 					MCPServers: []string{"stage-level"},
 					Agents: []config.StageAgentConfig{
-						{Name: "KubernetesAgent"}, // "k8s-mcp" from registry
+						{Name: config.AgentNameKubernetes}, // "k8s-mcp" from registry
 						{MCPServers: []string{"inline-mcp"}},
 					},
 				},
@@ -567,7 +567,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		chatlessCfg := &config.Config{
 			Defaults: defaults,
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ChatAgent":     {},                                         // no MCP servers
+				config.AgentNameChat:     {},                                         // no MCP servers
 				"DataCollector": {MCPServers: []string{"monitoring-tools"}}, // investigation agent
 			}),
 			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -582,7 +582,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 
 		resolved, err := ResolveChatAgentConfig(chatlessCfg, chain, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "ChatAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentNameChat, resolved.AgentName)
 		assert.Equal(t, []string{"monitoring-tools"}, resolved.MCPServers)
 	})
 
@@ -605,7 +605,7 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		chatCfg := &config.Config{
 			Defaults: &config.Defaults{LLMProvider: "google-nt"},
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ChatAgent": {
+				config.AgentNameChat: {
 					NativeTools: map[config.GoogleNativeTool]bool{
 						config.GoogleNativeToolCodeExecution: true,
 					},
@@ -664,9 +664,9 @@ func TestResolveScoringConfig(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: defaults,
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"ScoringAgent":    scoringAgentDef,
+			config.AgentNameScoring:    scoringAgentDef,
 			"CustomScorer":    {MCPServers: []string{"custom-mcp"}, Type: config.AgentTypeScoring, LLMBackend: config.LLMBackendLangChain},
-			"KubernetesAgent": {MCPServers: []string{"k8s-mcp"}},
+			config.AgentNameKubernetes: {MCPServers: []string{"k8s-mcp"}},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"google-default": googleProvider,
@@ -679,7 +679,7 @@ func TestResolveScoringConfig(t *testing.T) {
 
 		resolved, err := ResolveScoringConfig(cfg, chain, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "ScoringAgent", resolved.AgentName)
+		assert.Equal(t, config.AgentNameScoring, resolved.AgentName)
 		assert.Equal(t, config.AgentTypeScoring, resolved.Type)
 		assert.Equal(t, googleProvider, resolved.LLMProvider)
 		assert.Equal(t, 25, resolved.MaxIterations)
@@ -720,7 +720,7 @@ func TestResolveScoringConfig(t *testing.T) {
 			Defaults: &config.Defaults{
 				LLMProvider:   "google-default",
 				MaxIterations: &maxIter25,
-				ScoringAgent:  "KubernetesAgent",
+				ScoringAgent:  config.AgentNameKubernetes,
 			},
 			AgentRegistry:       cfg.AgentRegistry,
 			LLMProviderRegistry: cfg.LLMProviderRegistry,
@@ -829,7 +829,7 @@ func TestResolveScoringConfig(t *testing.T) {
 		scorCfg := &config.Config{
 			Defaults: &config.Defaults{LLMProvider: "google-nt"},
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-				"ScoringAgent": {
+				config.AgentNameScoring: {
 					Type:       config.AgentTypeScoring,
 					LLMBackend: config.LLMBackendLangChain,
 					NativeTools: map[config.GoogleNativeTool]bool{
@@ -905,8 +905,8 @@ func TestResolveFallbackProviders(t *testing.T) {
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent":    {},
-			"ScoringAgent": {Type: config.AgentTypeScoring},
-			"ChatAgent":    {},
+			config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			config.AgentNameChat:    {},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"google-default": googleProvider,
@@ -1183,8 +1183,8 @@ func TestResolvedFallbackProviders(t *testing.T) {
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"TestAgent":    {},
-			"ScoringAgent": {Type: config.AgentTypeScoring},
-			"ChatAgent":    {},
+			config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			config.AgentNameChat:    {},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"primary": primaryProvider,
@@ -1325,9 +1325,10 @@ func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: &config.Defaults{LLMProvider: "google-default"},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"TestAgent":    {},
-			"ScoringAgent": {Type: config.AgentTypeScoring},
-			"ChatAgent":    {},
+			"TestAgent":        {},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+			config.AgentNameChat:        {},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"google-default": googleProvider,
@@ -1357,5 +1358,111 @@ func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, DefaultInitialResponseTimeout, resolved.InitialResponseTimeout)
 		assert.Equal(t, DefaultStallTimeout, resolved.StallTimeout)
+	})
+
+	t.Run("ResolveExecSummaryConfig sets timeout defaults", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, DefaultInitialResponseTimeout, resolved.InitialResponseTimeout)
+		assert.Equal(t, DefaultStallTimeout, resolved.StallTimeout)
+	})
+}
+
+func TestResolveExecSummaryConfig(t *testing.T) {
+	defaults := &config.Defaults{
+		LLMProvider: "google-default",
+		LLMBackend:  config.LLMBackendLangChain,
+	}
+
+	googleProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	openaiProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeOpenAI,
+		Model:     "gpt-5",
+		APIKeyEnv: "OPENAI_API_KEY",
+	}
+	anthropicProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeAnthropic,
+		Model:     "claude-sonnet",
+		APIKeyEnv: "ANTHROPIC_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: defaults,
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			// ExecSummaryAgent is a built-in; we register it here for the test.
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary, LLMBackend: config.LLMBackendLangChain},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default":    googleProvider,
+			"openai-default":    openaiProvider,
+			"anthropic-default": anthropicProvider,
+		}),
+	}
+
+	t.Run("uses ExecSummaryAgent type", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, config.AgentNameExecSummary, resolved.AgentName)
+		assert.Equal(t, config.AgentTypeExecSummary, resolved.Type)
+	})
+
+	t.Run("defaults to defaults.LLMProvider when no chain override", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, googleProvider, resolved.LLMProvider)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+	})
+
+	t.Run("chain.LLMProvider overrides defaults", func(t *testing.T) {
+		chain := &config.ChainConfig{LLMProvider: "openai-default"}
+		resolved, err := ResolveExecSummaryConfig(cfg, chain)
+		require.NoError(t, err)
+		assert.Equal(t, openaiProvider, resolved.LLMProvider)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+	})
+
+	t.Run("chain.ExecutiveSummaryProvider overrides chain.LLMProvider", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			LLMProvider:              "openai-default",
+			ExecutiveSummaryProvider: "anthropic-default",
+		}
+		resolved, err := ResolveExecSummaryConfig(cfg, chain)
+		require.NoError(t, err)
+		assert.Equal(t, anthropicProvider, resolved.LLMProvider)
+		assert.Equal(t, "anthropic-default", resolved.LLMProviderName)
+	})
+
+	t.Run("chain.LLMBackend is included in backend resolution", func(t *testing.T) {
+		chain := &config.ChainConfig{LLMBackend: config.LLMBackendNativeGemini}
+		resolved, err := ResolveExecSummaryConfig(cfg, chain)
+		require.NoError(t, err)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("fallback providers resolved from chain", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			FallbackProviders: []config.FallbackProviderEntry{
+				{Provider: "openai-default", Backend: config.LLMBackendLangChain},
+			},
+		}
+		resolved, err := ResolveExecSummaryConfig(cfg, chain)
+		require.NoError(t, err)
+		require.Len(t, resolved.FallbackProviders, 1)
+		assert.Equal(t, "openai-default", resolved.FallbackProviders[0].Provider)
+	})
+
+	t.Run("nil chain returns error", func(t *testing.T) {
+		_, err := ResolveExecSummaryConfig(cfg, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("unknown provider returns error", func(t *testing.T) {
+		chain := &config.ChainConfig{ExecutiveSummaryProvider: "nonexistent-provider"}
+		_, err := ResolveExecSummaryConfig(cfg, chain)
+		assert.Error(t, err)
 	})
 }

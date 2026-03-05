@@ -535,7 +535,7 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	prevChatExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    prevChatStage.ID,
 		SessionID:  session.ID,
-		AgentName:  "ChatAgent",
+		AgentName:  config.AgentNameChat,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})

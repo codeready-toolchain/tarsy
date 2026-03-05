@@ -39,11 +39,11 @@ func chatTestConfig(chainID string, chain *config.ChainConfig) *config.Config {
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
 			},
-			"ChatAgent": {
+			config.AgentNameChat: {
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
 			},
-			"SynthesisAgent": {
+			config.AgentNameSynthesis: {
 				Type:          config.AgentTypeSynthesis,
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
@@ -170,7 +170,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 		All(ctx)
 	require.NoError(t, err)
 	require.Len(t, execs, 1)
-	assert.Equal(t, "ChatAgent", execs[0].AgentName)
+	assert.Equal(t, config.AgentNameChat, execs[0].AgentName)
 	assert.Equal(t, agentexecution.StatusCompleted, execs[0].Status)
 
 	// Verify timeline events: user_question + final_analysis

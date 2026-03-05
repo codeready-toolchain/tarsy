@@ -177,9 +177,9 @@ func TestDashboardEndpoints(t *testing.T) {
 			assert.Equal(t, exp.outputTokens, toInt(sess["output_tokens"]), "session %s output_tokens", id)
 			assert.Equal(t, exp.totalTokens, toInt(sess["total_tokens"]), "session %s total_tokens", id)
 
-			// Stage stats.
-			assert.Equal(t, 1, toInt(sess["total_stages"]), "session %s total_stages", id)
-			assert.Equal(t, 1, toInt(sess["completed_stages"]), "session %s completed_stages", id)
+			// Stage stats: investigation + exec_summary = 2.
+			assert.Equal(t, 2, toInt(sess["total_stages"]), "session %s total_stages", id)
+			assert.Equal(t, 2, toInt(sess["completed_stages"]), "session %s completed_stages", id)
 			assert.Equal(t, false, sess["has_parallel_stages"], "session %s has_parallel_stages", id)
 			assert.Equal(t, 0, toInt(sess["chat_message_count"]), "session %s chat_message_count", id)
 
@@ -343,8 +343,9 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, expB.summaryText, detail["executive_summary"])
 
 		// Computed stats (exact).
-		assert.Equal(t, 1, toInt(detail["total_stages"]))
-		assert.Equal(t, 1, toInt(detail["completed_stages"]))
+		// 2 stages (analysis + exec_summary) and 2 LLM interactions.
+		assert.Equal(t, 2, toInt(detail["total_stages"]))
+		assert.Equal(t, 2, toInt(detail["completed_stages"]))
 		assert.Equal(t, 0, toInt(detail["failed_stages"]))
 		assert.Equal(t, false, detail["has_parallel_stages"])
 		assert.Equal(t, 2, toInt(detail["llm_interaction_count"]))
@@ -359,10 +360,10 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.NotNil(t, detail["completed_at"])
 		assert.NotNil(t, detail["duration_ms"])
 
-		// Stage list — exactly 1 stage.
+		// Stage list — 2 stages: analysis + exec_summary.
 		stages, ok := detail["stages"].([]interface{})
 		require.True(t, ok, "stages should be an array")
-		require.Len(t, stages, 1)
+		require.Len(t, stages, 2)
 
 		stage := stages[0].(map[string]interface{})
 		assert.NotEmpty(t, stage["id"])
@@ -388,8 +389,8 @@ func TestDashboardEndpoints(t *testing.T) {
 
 		chainStats, ok := summary["chain_statistics"].(map[string]interface{})
 		require.True(t, ok, "chain_statistics should be present")
-		assert.Equal(t, 1, toInt(chainStats["total_stages"]))
-		assert.Equal(t, 1, toInt(chainStats["completed_stages"]))
+		assert.Equal(t, 2, toInt(chainStats["total_stages"]))
+		assert.Equal(t, 2, toInt(chainStats["completed_stages"]))
 		assert.Equal(t, 0, toInt(chainStats["failed_stages"]))
 	})
 

@@ -280,17 +280,29 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	// 4. Extract final analysis from completed stages
 	finalAnalysis := extractFinalAnalysis(completedStages)
 
-	// 5. Generate executive summary (fail-open)
+	// 5. Generate executive summary as a typed stage (fail-open).
+	// Only run when there is a final analysis to summarize.
 	var execSummary string
 	var execSummaryErr string
 	if finalAnalysis != "" {
-		summary, summaryErr := e.generateExecutiveSummary(ctx, session, chain, finalAnalysis, timelineService, interactionService)
-		if summaryErr != nil {
-			logger.Warn("Executive summary generation failed (fail-open)",
-				"error", summaryErr)
-			execSummaryErr = summaryErr.Error()
-		} else {
-			execSummary = summary
+		execSr := e.executeExecSummaryStage(ctx, executeStageInput{
+			session:             session,
+			chain:               chain,
+			stageIndex:          dbStageIndex,
+			prevContext:         finalAnalysis, // ExecSummaryController reads this as the text to summarize
+			totalExpectedStages: totalExpectedStages,
+			runbookContent:      runbookContent,
+			stageService:        stageService,
+			messageService:      messageService,
+			timelineService:     timelineService,
+			interactionService:  interactionService,
+		})
+		publishStageStatus(context.Background(), e.eventPublisher, session.ID, execSr.stageID, execSr.stageName, dbStageIndex, execSr.stageType, mapTerminalStatus(execSr))
+		if execSr.status == alertsession.StatusCompleted {
+			execSummary = execSr.finalAnalysis
+		} else if execSr.err != nil {
+			logger.Warn("Executive summary stage failed (fail-open)", "error", execSr.err)
+			execSummaryErr = execSr.err.Error()
 		}
 	}
 

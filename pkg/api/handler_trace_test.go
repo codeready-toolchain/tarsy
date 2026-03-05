@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -194,7 +195,7 @@ func TestBuildTraceListResponse_SubAgentNesting(t *testing.T) {
 			StageType: stage.StageTypeInvestigation,
 			Edges: ent.StageEdges{
 				AgentExecutions: []*ent.AgentExecution{
-					{ID: "exec-orch", AgentName: "Orchestrator", AgentIndex: 1},
+					{ID: "exec-orch", AgentName: config.AgentNameOrchestrator, AgentIndex: 1},
 					{ID: "exec-sub-1", AgentName: "LogAnalyzer", AgentIndex: 1, ParentExecutionID: &parentExecID},
 					{ID: "exec-sub-2", AgentName: "GeneralWorker", AgentIndex: 2, ParentExecutionID: &parentExecID},
 				},
@@ -221,7 +222,7 @@ func TestBuildTraceListResponse_SubAgentNesting(t *testing.T) {
 	require.Len(t, resp.Stages[0].Executions, 1)
 	orch := resp.Stages[0].Executions[0]
 	assert.Equal(t, "exec-orch", orch.ExecutionID)
-	assert.Equal(t, "Orchestrator", orch.AgentName)
+	assert.Equal(t, config.AgentNameOrchestrator, orch.AgentName)
 	require.Len(t, orch.LLMInteractions, 1)
 	assert.Equal(t, "llm-orch", orch.LLMInteractions[0].ID)
 

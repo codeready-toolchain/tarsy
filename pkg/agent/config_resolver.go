@@ -164,8 +164,8 @@ func ResolveChatAgentConfig(
 		defaults = *cfg.Defaults
 	}
 
-	// Agent name: chatCfg.Agent → "ChatAgent"
-	agentName := "ChatAgent"
+	// Agent name: chatCfg.Agent → AgentNameChat
+	agentName := config.AgentNameChat
 	if chatCfg != nil && chatCfg.Agent != "" {
 		agentName = chatCfg.Agent
 	}
@@ -274,8 +274,8 @@ func ResolveScoringConfig(
 		defaults = *cfg.Defaults
 	}
 
-	// Agent name: "ScoringAgent" → defaults.ScoringAgent → scoringCfg.Agent
-	agentName := "ScoringAgent"
+	// Agent name: AgentNameScoring → defaults.ScoringAgent → scoringCfg.Agent
+	agentName := config.AgentNameScoring
 	if defaults.ScoringAgent != "" {
 		agentName = defaults.ScoringAgent
 	}
@@ -354,6 +354,76 @@ func ResolveScoringConfig(
 		LLMCallTimeout:            DefaultLLMCallTimeout,
 		ToolCallTimeout:           DefaultToolCallTimeout,
 		MCPServers:                mcpServers,
+		CustomInstructions:        agentDef.CustomInstructions,
+		FallbackProviders:         fallbackProviders,
+		ResolvedFallbackProviders: resolvedFallback,
+		InitialResponseTimeout:    DefaultInitialResponseTimeout,
+		StallTimeout:              DefaultStallTimeout,
+	}, nil
+}
+
+// ResolveExecSummaryConfig builds the agent configuration for an executive summary execution.
+// Hierarchy: defaults → agent definition → chain (including executive_summary_provider).
+// The executive_summary_provider chain field is the highest-priority provider override,
+// allowing a different model for summaries than for investigation agents.
+func ResolveExecSummaryConfig(
+	cfg *config.Config,
+	chain *config.ChainConfig,
+) (*ResolvedAgentConfig, error) {
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
+
+	// Agent name is always AgentNameExecSummary — no configurable override.
+	agentDef, err := cfg.GetAgent(config.AgentNameExecSummary)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameExecSummary, err)
+	}
+
+	// Resolve LLM backend (defaults → agentDef → chain).
+	backend := resolveLLMBackend(
+		defaults.LLMBackend, agentDef.LLMBackend, chain.LLMBackend,
+	)
+
+	// Resolve LLM provider (defaults → chain.llm_provider → chain.executive_summary_provider).
+	// executive_summary_provider is the highest-priority override, allowing a dedicated
+	// model for summaries without affecting investigation agents.
+	provider, providerName, err := resolveLLMProvider(cfg,
+		defaults.LLMProvider, chain.LLMProvider, chain.ExecutiveSummaryProvider,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve max iterations (defaults → agentDef → chain).
+	// Exec summary is a single-shot call; max_iterations from the chain is advisory only.
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations, chain.MaxIterations, nil,
+	)
+
+	// Resolve fallback providers (defaults → chain).
+	fallbackProviders := resolveFallbackProviders(
+		defaults.FallbackProviders, chain.FallbackProviders,
+	)
+
+	// Exec summary has no MCP servers — it is a single-shot LLM call with no tools.
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
+
+	return &ResolvedAgentConfig{
+		AgentName:                 config.AgentNameExecSummary,
+		Type:                      config.AgentTypeExecSummary,
+		LLMBackend:                backend,
+		LLMProvider:               provider,
+		LLMProviderName:           providerName,
+		MaxIterations:             maxIter,
+		IterationTimeout:          DefaultIterationTimeout,
+		LLMCallTimeout:            DefaultLLMCallTimeout,
+		ToolCallTimeout:           DefaultToolCallTimeout,
 		CustomInstructions:        agentDef.CustomInstructions,
 		FallbackProviders:         fallbackProviders,
 		ResolvedFallbackProviders: resolvedFallback,

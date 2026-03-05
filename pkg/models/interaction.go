@@ -40,8 +40,12 @@ type CreateMCPInteractionRequest struct {
 
 // TraceListResponse is the top-level response for GET /trace.
 type TraceListResponse struct {
-	Stages              []TraceStageGroup        `json:"stages"`
-	SessionInteractions []LLMInteractionListItem `json:"session_interactions"` // Session-level LLM calls (e.g. executive summary)
+	Stages []TraceStageGroup `json:"stages"`
+	// SessionInteractions holds LLM interactions with no execution_id (no parent AgentExecution).
+	// Executive summary interactions appear inside a TraceStageGroup (stage_type: exec_summary).
+	// This field is retained for backward compatibility with legacy sessions whose exec summary
+	// interactions were created without an execution_id.
+	SessionInteractions []LLMInteractionListItem `json:"session_interactions"`
 }
 
 // TraceStageGroup contains executions for one pipeline stage.

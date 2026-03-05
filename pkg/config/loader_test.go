@@ -38,7 +38,7 @@ func TestInitialize(t *testing.T) {
 	assert.NotNil(t, cfg.Defaults)
 
 	// Verify built-in configs are loaded
-	assert.True(t, cfg.AgentRegistry.Has("KubernetesAgent"))
+	assert.True(t, cfg.AgentRegistry.Has(AgentNameKubernetes))
 	assert.True(t, cfg.ChainRegistry.Has("kubernetes"))
 	assert.True(t, cfg.MCPServerRegistry.Has("kubernetes-server"))
 	assert.True(t, cfg.LLMProviderRegistry.Has("google-default"))

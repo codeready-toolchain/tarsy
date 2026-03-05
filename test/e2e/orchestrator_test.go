@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -165,15 +166,15 @@ func TestE2E_Orchestrator(t *testing.T) {
 
 	// ── DB assertions ──
 
-	// Stages: 1 orchestrate stage.
+	// Stages: orchestrate + exec_summary
 	stages := app.QueryStages(t, sessionID)
-	require.Len(t, stages, 1)
+	require.Len(t, stages, 2)
 	assert.Equal(t, "orchestrate", stages[0].StageName)
 	assert.Equal(t, "completed", string(stages[0].Status))
 
-	// Executions: 2 (orchestrator + 1 sub-agent).
+	// Executions: 3 (orchestrator + 1 sub-agent + exec_summary
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 2, "expected orchestrator + 1 sub-agent")
+	require.Len(t, execs, 3, "expected orchestrator + 1 sub-agent + exec_summary")
 
 	var orchExec, laExec string
 	var laParentID *string
@@ -226,7 +227,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages, ok := traceList["stages"].([]interface{})
 	require.True(t, ok, "stages should be an array")
-	require.Len(t, traceStages, 1, "should have 1 stage")
+	require.Len(t, traceStages, 2, "should have 2 stages (orchestrate + exec_summary)")
 
 	// Verify the orchestrator execution has nested sub-agents.
 	stg := traceStages[0].(map[string]interface{})
@@ -536,9 +537,9 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	assert.NotEmpty(t, session["final_analysis"])
 	assert.NotEmpty(t, session["executive_summary"])
 
-	// ── DB: 3 executions (orchestrator + 2 sub-agents), all completed ──
+	// ── DB: 4 executions (orchestrator + 2 sub-agents + exec_summary), all completed ──
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 3, "expected orchestrator + 2 sub-agents")
+	require.Len(t, execs, 4, "expected orchestrator + 2 sub-agents + exec_summary")
 
 	agentNames := make(map[string]bool)
 	var orchExecID string
@@ -575,7 +576,7 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 	// ── Trace API: orchestrator with 2 nested sub-agents ──
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages := traceList["stages"].([]interface{})
-	require.Len(t, traceStages, 1)
+	require.Len(t, traceStages, 2, "orchestrate + exec_summary")
 
 	stg := traceStages[0].(map[string]interface{})
 	traceExecs := stg["executions"].([]interface{})
@@ -624,7 +625,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	orchIter2Ready := make(chan struct{}, 1)
 
 	// Orchestrator iteration 1: dispatch both sub-agents.
-	llm.AddRouted("Orchestrator", LLMScriptEntry{
+	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
 				Arguments: `{"name":"LogAnalyzer","task":"Analyze recent error logs for the payment service"}`},
@@ -634,7 +635,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		},
 	})
 	// Iteration 2: text → WaitForResult. OnBlock signals readiness.
-	llm.AddRouted("Orchestrator", LLMScriptEntry{
+	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
 		WaitCh:  orchIter2Gate,
 		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
@@ -644,7 +645,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	})
 	// Iterations 3-4: buffer for timing variance.
 	for i := range 2 {
-		llm.AddRouted("Orchestrator", LLMScriptEntry{
+		llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
 			Chunks: []agent.Chunk{
 				&agent.TextChunk{Content: fmt.Sprintf("Waiting for sub-agent results (cycle %d).", i+2)},
 				&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
@@ -652,7 +653,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		})
 	}
 	// Final answer after receiving all results.
-	llm.AddRouted("Orchestrator", LLMScriptEntry{
+	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Both sub-agents completed. LogAnalyzer found errors, " +
 				"GeneralWorker assessed severity. Root cause: memory pressure after deploy-5678."},
@@ -733,9 +734,9 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	assert.NotEmpty(t, session["final_analysis"])
 	assert.NotEmpty(t, session["executive_summary"])
 
-	// ── DB: 3 executions (Orchestrator + 2 sub-agents), all completed ──
+	// ── DB: 4 executions (Orchestrator + 2 sub-agents + exec_summary), all completed ──
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 3, "expected orchestrator + 2 sub-agents")
+	require.Len(t, execs, 4, "expected orchestrator + 2 sub-agents + exec_summary")
 
 	agentNames := make(map[string]bool)
 	var orchExecID string
@@ -744,7 +745,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		assert.Equal(t, "completed", string(e.Status), "%s should be completed", e.AgentName)
 
 		switch e.AgentName {
-		case "Orchestrator":
+		case config.AgentNameOrchestrator:
 			orchExecID = e.ID
 			assert.Nil(t, e.ParentExecutionID)
 		case "LogAnalyzer":
@@ -757,7 +758,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 			assert.Contains(t, *e.Task, "alert context")
 		}
 	}
-	assert.True(t, agentNames["Orchestrator"], "should have built-in Orchestrator")
+	assert.True(t, agentNames[config.AgentNameOrchestrator], "should have built-in Orchestrator")
 	assert.True(t, agentNames["LogAnalyzer"], "should have LogAnalyzer")
 	assert.True(t, agentNames["GeneralWorker"], "should have GeneralWorker")
 	assert.NotEmpty(t, orchExecID)
@@ -772,14 +773,14 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	// ── Trace API: orchestrator with 2 nested sub-agents ──
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages := traceList["stages"].([]interface{})
-	require.Len(t, traceStages, 1)
+	require.Len(t, traceStages, 2, "orchestrate + exec_summary")
 
 	stg := traceStages[0].(map[string]interface{})
 	traceExecs := stg["executions"].([]interface{})
 	require.Len(t, traceExecs, 1, "only orchestrator at top level")
 
 	orchTrace := traceExecs[0].(map[string]interface{})
-	assert.Equal(t, "Orchestrator", orchTrace["agent_name"])
+	assert.Equal(t, config.AgentNameOrchestrator, orchTrace["agent_name"])
 
 	subAgents := orchTrace["sub_agents"].([]interface{})
 	require.Len(t, subAgents, 2, "orchestrator should have 2 nested sub-agents")
@@ -956,9 +957,9 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	assert.NotEmpty(t, session["final_analysis"])
 	assert.NotEmpty(t, session["executive_summary"])
 
-	// ── DB: 4 executions (orchestrator + 3 sub-agents) ──
+	// ── DB: 5 executions (orchestrator + 3 sub-agents + exec_summary) ──
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 4, "expected orchestrator + 3 sub-agents")
+	require.Len(t, execs, 5, "expected orchestrator + 3 sub-agents + exec_summary")
 
 	var orchExecID string
 	var gwTasks []string
@@ -1013,7 +1014,7 @@ func TestE2E_OrchestratorMultiPhase(t *testing.T) {
 	// ── Trace API: orchestrator with 3 nested sub-agents ──
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages := traceList["stages"].([]interface{})
-	require.Len(t, traceStages, 1)
+	require.Len(t, traceStages, 2, "orchestrate + exec_summary")
 
 	stg := traceStages[0].(map[string]interface{})
 	traceExecs := stg["executions"].([]interface{})
@@ -1145,9 +1146,9 @@ func TestE2E_OrchestratorSubAgentFailure(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
 
-	// Execution assertions.
+	// Execution assertions: orchestrator + 2 sub-agents + exec_summary.
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 3)
+	require.Len(t, execs, 4)
 
 	for _, e := range execs {
 		switch e.AgentName {
@@ -1277,9 +1278,9 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 	}
 	assert.True(t, listAgentsFound, "should have a list_agents tool call in timeline")
 
-	// Verify all 3 executions completed.
+	// Verify all executions (orchestrator + 2 sub-agents + exec_summary).
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 3)
+	require.Len(t, execs, 4)
 	for _, e := range execs {
 		assert.Equal(t, "completed", string(e.Status),
 			"execution %s (%s) should be completed", e.ID, e.AgentName)
@@ -1395,9 +1396,9 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
 
-	// ── DB: 3 executions — orchestrator+GW completed, LA cancelled ──
+	// ── DB: 4 executions — orchestrator+GW completed, LA cancelled + exec_summary ──
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 3, "expected orchestrator + 2 sub-agents")
+	require.Len(t, execs, 4, "expected orchestrator + 2 sub-agents + exec_summary")
 
 	for _, e := range execs {
 		switch e.AgentName {
@@ -1427,7 +1428,7 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 	// ── Trace API: 2 sub-agents nested under orchestrator ──
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages := traceList["stages"].([]interface{})
-	require.Len(t, traceStages, 1)
+	require.Len(t, traceStages, 2, "orchestrate + exec_summary")
 
 	stg := traceStages[0].(map[string]interface{})
 	traceExecs := stg["executions"].([]interface{})

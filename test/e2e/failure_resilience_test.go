@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -81,10 +82,7 @@ func TestE2E_FailureResilience(t *testing.T) {
 	})
 
 	// ── Executive summary — LLM error (fail-open) ──
-	// Two entries: first attempt fails, retry also fails (retry-before-fallback).
-	llm.AddSequential(LLMScriptEntry{
-		Error: fmt.Errorf("executive summary model overloaded"),
-	})
+	// Single attempt fails; exec_summary stage uses SingleShotController (no retry).
 	llm.AddSequential(LLMScriptEntry{
 		Error: fmt.Errorf("executive summary model overloaded"),
 	})
@@ -133,9 +131,9 @@ func TestE2E_FailureResilience(t *testing.T) {
 	assert.NotEmpty(t, session["executive_summary_error"], "executive_summary_error should be populated")
 
 	// ── Stage assertions ──
-	// 3 stages: analysis, analysis - Synthesis, summary.
+	// 4 stages: analysis, analysis - Synthesis, summary, exec_summary (fail-open).
 	stages := app.QueryStages(t, sessionID)
-	require.Len(t, stages, 3, "analysis + analysis - Synthesis + summary")
+	require.Len(t, stages, 4, "analysis + analysis - Synthesis + summary + exec_summary (fail-open)")
 
 	assert.Equal(t, "analysis", stages[0].StageName)
 	assert.Equal(t, "completed", string(stages[0].Status))
@@ -146,9 +144,13 @@ func TestE2E_FailureResilience(t *testing.T) {
 	assert.Equal(t, "summary", stages[2].StageName)
 	assert.Equal(t, "completed", string(stages[2].Status))
 
+	// exec_summary stage: fails because no LLM mock response provided (fail-open)
+	assert.Equal(t, "Executive Summary", stages[3].StageName)
+	assert.Equal(t, "failed", string(stages[3].Status))
+
 	// ── Execution assertions ──
 	execs := app.QueryExecutions(t, sessionID)
-	require.Len(t, execs, 4, "Analyzer + Investigator + SynthesisAgent + Summarizer")
+	require.Len(t, execs, 5, "Analyzer + Investigator + SynthesisAgent + Summarizer + ExecSummaryAgent (failed)")
 
 	execByName := make(map[string]string)
 	for _, e := range execs {
@@ -156,7 +158,7 @@ func TestE2E_FailureResilience(t *testing.T) {
 	}
 	assert.Equal(t, "failed", execByName["Analyzer"], "Analyzer should have failed")
 	assert.Equal(t, "completed", execByName["Investigator"], "Investigator should have completed")
-	assert.Equal(t, "completed", execByName["SynthesisAgent"], "SynthesisAgent should have completed")
+	assert.Equal(t, "completed", execByName[config.AgentNameSynthesis], "SynthesisAgent should have completed")
 	assert.Equal(t, "completed", execByName["Summarizer"], "Summarizer should have completed")
 
 	// Verify the failed execution has an error message.
@@ -169,8 +171,9 @@ func TestE2E_FailureResilience(t *testing.T) {
 	}
 
 	// ── LLM call count ──
-	// Analyzer (1 error + 1 forced conclusion) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error + 1 retry) = 8
-	assert.Equal(t, 8, llm.CallCount())
+	// Analyzer (1 error + 1 forced conclusion) + Investigator (2) + Synthesis (1) + Summarizer (1) + Exec summary (1 error, fail-open) = 7
+	// exec_summary uses SingleShotController (1 call, no retry).
+	assert.Equal(t, 7, llm.CallCount())
 
 	// ── Timeline API assertions ──
 	apiTimeline := app.GetTimeline(t, sessionID)

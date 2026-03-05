@@ -196,7 +196,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 		req := models.CreateAgentExecutionRequest{
 			StageID:    stg.ID,
 			SessionID:  session.ID,
-			AgentName:  "KubernetesAgent",
+			AgentName:  config.AgentNameKubernetes,
 			AgentIndex: 1,
 			LLMBackend: config.LLMBackendLangChain,
 		}
@@ -993,7 +993,7 @@ func TestStageService_CreateAgentExecution_SubAgent(t *testing.T) {
 	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    stg.ID,
 		SessionID:  session.ID,
-		AgentName:  "Orchestrator",
+		AgentName:  config.AgentNameOrchestrator,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})
@@ -1169,7 +1169,7 @@ func TestStageService_UpdateStageStatus_ExcludesSubAgents(t *testing.T) {
 	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    stg.ID,
 		SessionID:  session.ID,
-		AgentName:  "Orchestrator",
+		AgentName:  config.AgentNameOrchestrator,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})
@@ -1231,7 +1231,7 @@ func TestStageService_GetSubAgentExecutions(t *testing.T) {
 	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    stg.ID,
 		SessionID:  session.ID,
-		AgentName:  "Orchestrator",
+		AgentName:  config.AgentNameOrchestrator,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})
@@ -1300,7 +1300,7 @@ func TestStageService_GetExecutionTree(t *testing.T) {
 	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    stg.ID,
 		SessionID:  session.ID,
-		AgentName:  "Orchestrator",
+		AgentName:  config.AgentNameOrchestrator,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})
@@ -1368,7 +1368,7 @@ func TestStageService_SubAgentCascadeDelete(t *testing.T) {
 	orchestrator, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 		StageID:    stg.ID,
 		SessionID:  session.ID,
-		AgentName:  "Orchestrator",
+		AgentName:  config.AgentNameOrchestrator,
 		AgentIndex: 1,
 		LLMBackend: config.LLMBackendLangChain,
 	})

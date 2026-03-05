@@ -31,11 +31,16 @@
   },
   {
     "stage_index": 7,
-    "stage_name": "Chat Response",
+    "stage_name": "Executive Summary",
     "status": "completed"
   },
   {
     "stage_index": 8,
+    "stage_name": "Chat Response",
+    "status": "completed"
+  },
+  {
+    "stage_index": 9,
     "stage_name": "Chat Response",
     "status": "completed"
   }

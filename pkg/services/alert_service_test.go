@@ -25,7 +25,7 @@ func setupTestAlertService(t *testing.T, client *database.Client, maskingSvc ...
 			Stages: []config.StageConfig{
 				{
 					Name:   "analysis",
-					Agents: []config.StageAgentConfig{{Name: "KubernetesAgent"}},
+					Agents: []config.StageAgentConfig{{Name: config.AgentNameKubernetes}},
 				},
 			},
 		},

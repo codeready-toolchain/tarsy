@@ -4,20 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
-	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
-	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
-	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
-	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
-	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
 // ────────────────────────────────────────────────────────────
@@ -79,7 +72,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Build synthesis agent config — synthesis: block is optional, defaults apply
 	synthAgentConfig := config.StageAgentConfig{
-		Name: "SynthesisAgent",
+		Name: config.AgentNameSynthesis,
 	}
 	if s := input.stageConfig.Synthesis; s != nil {
 		if s.Agent != "" {
@@ -170,274 +163,68 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 }
 
 // ────────────────────────────────────────────────────────────
-// Executive summary
+// Executive summary stage
 // ────────────────────────────────────────────────────────────
 
-// executiveSummarySeqNum is a sentinel sequence number ensuring the executive
-// summary timeline event sorts after all stage events.
-const executiveSummarySeqNum = 999_999
+// executeExecSummaryStage runs the executive summary agent as a typed stage.
+// input.prevContext must be set to the final analysis text by the caller.
+// Fail-open: always returns a stageResult; caller extracts summary from finalAnalysis.
+func (e *RealSessionExecutor) executeExecSummaryStage(ctx context.Context, input executeStageInput) stageResult {
+	logger := slog.With("session_id", input.session.ID)
 
-// generateExecutiveSummary generates an executive summary from the final analysis.
-// Uses a single LLM call (no tools, no streaming to timeline).
-// Fail-open: returns ("", error) on failure; caller decides how to handle.
-func (e *RealSessionExecutor) generateExecutiveSummary(
-	ctx context.Context,
-	session *ent.AlertSession,
-	chain *config.ChainConfig,
-	finalAnalysis string,
-	timelineService *services.TimelineService,
-	interactionService *services.InteractionService,
-) (string, error) {
-	logger := slog.With("session_id", session.ID)
-	startTime := time.Now()
-
-	// Publish session progress: finalizing.
-	// Executive summary is the last expected step; use totalExpectedStages - 1 as
-	// the 0-based index so CurrentStageIndex (1-based) equals totalExpectedStages.
-	totalExpectedStages := countExpectedStages(chain)
-	publishSessionProgress(ctx, e.eventPublisher, session.ID, "Executive Summary",
-		totalExpectedStages-1, totalExpectedStages, 0, "Generating executive summary")
-	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, session.ID, "", "",
-		events.ProgressPhaseFinalizing, "Generating executive summary")
-
-	// Resolve LLM provider: chain.executive_summary_provider → chain.llm_provider → defaults.llm_provider
-	var providerName string
-	if e.cfg.Defaults != nil {
-		providerName = e.cfg.Defaults.LLMProvider
-	}
-	if chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
-	}
-	if chain.ExecutiveSummaryProvider != "" {
-		providerName = chain.ExecutiveSummaryProvider
-	}
-	provider, err := e.cfg.GetLLMProvider(providerName)
-	if err != nil {
-		return "", fmt.Errorf("executive summary LLM provider %q not found: %w", providerName, err)
-	}
-
-	// Resolve backend from chain-level LLM backend or defaults
-	backend := agent.DefaultLLMBackend
-	if e.cfg.Defaults != nil && e.cfg.Defaults.LLMBackend != "" {
-		backend = e.cfg.Defaults.LLMBackend
-	}
-	if chain.LLMBackend != "" {
-		backend = chain.LLMBackend
-	}
-
-	// Build prompts
-	systemPrompt := e.promptBuilder.BuildExecutiveSummarySystemPrompt()
-	userPrompt := e.promptBuilder.BuildExecutiveSummaryUserPrompt(finalAnalysis)
-
-	messages := []agent.ConversationMessage{
-		{Role: agent.RoleSystem, Content: systemPrompt},
-		{Role: agent.RoleUser, Content: userPrompt},
-	}
-
-	// Resolve fallback providers for executive summary (defaults → chain)
-	var fallbackEntries []agent.ResolvedFallbackEntry
-	var rawFallback []config.FallbackProviderEntry
-	if e.cfg.Defaults != nil && e.cfg.Defaults.FallbackProviders != nil {
-		rawFallback = e.cfg.Defaults.FallbackProviders
-	}
-	if chain.FallbackProviders != nil {
-		rawFallback = chain.FallbackProviders
-	}
-	for _, entry := range rawFallback {
-		fbProvider, fbErr := e.cfg.GetLLMProvider(entry.Provider)
-		if fbErr != nil {
-			logger.Warn("Executive summary fallback provider not found, skipping",
-				"provider", entry.Provider, "error", fbErr)
-			continue
-		}
-		fallbackEntries = append(fallbackEntries, agent.ResolvedFallbackEntry{
-			ProviderName: entry.Provider,
-			Backend:      entry.Backend,
-			Config:       fbProvider,
-		})
-	}
-
-	// Single LLM call — no tools, consume full response from stream.
-	// Retry once on the same provider for transient errors, then fall back.
-	emitFallbackEvent := func(fromProvider string, toEntry agent.ResolvedFallbackEntry, reason string) {
-		_, evtErr := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-			SessionID:      session.ID,
-			SequenceNumber: executiveSummarySeqNum - 1,
-			EventType:      timelineevent.EventTypeProviderFallback,
-			Status:         timelineevent.StatusCompleted,
-			Content:        fmt.Sprintf("Provider fallback: %s → %s", fromProvider, toEntry.ProviderName),
-			Metadata: map[string]any{
-				"original_provider": fromProvider,
-				"fallback_provider": toEntry.ProviderName,
-				"fallback_backend":  string(toEntry.Backend),
-				"reason":            reason,
-			},
-		})
-		if evtErr != nil {
-			logger.Warn("Failed to create provider_fallback timeline event", "error", evtErr)
-		}
-	}
-
-	var summary string
-	var usage agent.TokenUsage
-	fallbackIdx := -1 // -1 = primary, 0+ = fallback index
-	clearCache := false
-	retriedCurrentProvider := false
-	for {
-		if ctx.Err() != nil {
-			return "", fmt.Errorf("executive summary interrupted: %w", ctx.Err())
-		}
-		llmInput := &agent.GenerateInput{
-			SessionID:  session.ID,
-			Messages:   messages,
-			Config:     provider,
-			Backend:    backend,
-			ClearCache: clearCache,
-		}
-		clearCache = false // consume once per provider switch
-
-		llmCtx, llmCancel := context.WithCancel(ctx)
-		ch, err := e.llmClient.Generate(llmCtx, llmInput)
-		if err != nil {
-			llmCancel()
-			// Transport errors are transient — retry once before fallback
-			if !retriedCurrentProvider {
-				retriedCurrentProvider = true
-				continue
-			}
-			if nextIdx := fallbackIdx + 1; nextIdx < len(fallbackEntries) {
-				entry := fallbackEntries[nextIdx]
-				logger.Info("Executive summary falling back to next provider",
-					"from_provider", providerName, "to_provider", entry.ProviderName,
-					"reason", err.Error())
-				emitFallbackEvent(providerName, entry, err.Error())
-				provider = entry.Config
-				providerName = entry.ProviderName
-				backend = entry.Backend
-				fallbackIdx = nextIdx
-				clearCache = true
-				retriedCurrentProvider = false
-				continue
-			}
-			return "", fmt.Errorf("executive summary LLM call failed: %w", err)
-		}
-
-		var sb strings.Builder
-		var chunkErr error
-		var chunkErrCode string
-		for chunk := range ch {
-			switch c := chunk.(type) {
-			case *agent.TextChunk:
-				sb.WriteString(c.Content)
-			case *agent.UsageChunk:
-				usage.InputTokens += c.InputTokens
-				usage.OutputTokens += c.OutputTokens
-				usage.TotalTokens += c.TotalTokens
-			case *agent.ErrorChunk:
-				chunkErr = fmt.Errorf("executive summary LLM error: %s (code: %s)", c.Message, c.Code)
-				chunkErrCode = string(c.Code)
-			}
-		}
-		llmCancel()
-
-		if chunkErr != nil {
-			// credentials/max_retries: fallback immediately (no retry).
-			// Other codes: retry once on the same provider before fallback.
-			immediatefallback := chunkErrCode == string(controller.LLMErrorCredentials) || chunkErrCode == string(controller.LLMErrorMaxRetries)
-			if !immediatefallback && !retriedCurrentProvider {
-				retriedCurrentProvider = true
-				continue
-			}
-			if nextIdx := fallbackIdx + 1; nextIdx < len(fallbackEntries) {
-				entry := fallbackEntries[nextIdx]
-				logger.Info("Executive summary falling back to next provider",
-					"from_provider", providerName, "to_provider", entry.ProviderName,
-					"reason", chunkErr.Error())
-				emitFallbackEvent(providerName, entry, chunkErr.Error())
-				provider = entry.Config
-				providerName = entry.ProviderName
-				backend = entry.Backend
-				fallbackIdx = nextIdx
-				clearCache = true
-				retriedCurrentProvider = false
-				continue
-			}
-			return "", chunkErr
-		}
-
-		summary = sb.String()
-		if summary == "" {
-			return "", fmt.Errorf("executive summary LLM returned empty response")
-		}
-		break
-	}
-
-	durationMs := int(time.Since(startTime).Milliseconds())
-
-	// Record session-level LLM interaction with inline conversation for observability.
-	conversation := []map[string]string{
-		{"role": string(agent.RoleSystem), "content": systemPrompt},
-		{"role": string(agent.RoleUser), "content": userPrompt},
-		{"role": string(agent.RoleAssistant), "content": summary},
-	}
-	createReq := models.CreateLLMInteractionRequest{
-		SessionID:       session.ID,
-		InteractionType: "executive_summary",
-		ModelName:       provider.Model,
-		LLMRequest: map[string]any{
-			"messages_count": len(messages),
-			"conversation":   conversation,
-		},
-		LLMResponse: map[string]any{
-			"text_length":      len(summary),
-			"tool_calls_count": 0,
-		},
-		DurationMs: &durationMs,
-	}
-	if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.TotalTokens > 0 {
-		createReq.InputTokens = &usage.InputTokens
-		createReq.OutputTokens = &usage.OutputTokens
-		createReq.TotalTokens = &usage.TotalTokens
-	}
-	interaction, createErr := interactionService.CreateLLMInteraction(ctx, createReq)
-	if createErr != nil {
-		logger.Warn("Failed to record executive summary LLM interaction",
-			"error", createErr)
-	} else if e.eventPublisher != nil {
-		// Publish interaction.created for trace view live updates.
-		if pubErr := e.eventPublisher.PublishInteractionCreated(ctx, session.ID, events.InteractionCreatedPayload{
-			BasePayload: events.BasePayload{
-				Type:      events.EventTypeInteractionCreated,
-				SessionID: session.ID,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
-			},
-			InteractionID:   interaction.ID,
-			InteractionType: events.InteractionTypeLLM,
-		}); pubErr != nil {
-			logger.Warn("Failed to publish interaction created for executive summary",
-				"error", pubErr)
-		}
-	}
-
-	// Create session-level timeline event (no stage_id, no execution_id).
-	// Use a fixed sequence number — executive summary is always the last event.
-	//
-	// NOTE: This event is persisted to the DB only — it is NOT published to
-	// WebSocket clients via EventPublisher. Clients discover the executive
-	// summary through the session API response (executive_summary field) or
-	// by querying the timeline after the session completes.
-	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
-		SessionID:      session.ID,
-		SequenceNumber: executiveSummarySeqNum,
-		EventType:      timelineevent.EventTypeExecutiveSummary,
-		Status:         timelineevent.StatusCompleted,
-		Content:        summary,
+	// Create exec summary Stage DB record.
+	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          input.session.ID,
+		StageName:          "Executive Summary",
+		StageIndex:         input.stageIndex + 1, // 1-based in DB
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeExecSummary),
 	})
 	if err != nil {
-		logger.Warn("Failed to create executive summary timeline event (summary still returned)",
-			"error", err)
+		if r := e.mapCancellation(ctx); r != nil {
+			return stageResult{stageName: "Executive Summary", stageType: stage.StageTypeExecSummary, status: r.Status, err: r.Error}
+		}
+		logger.Error("Failed to create exec summary stage", "error", err)
+		return stageResult{
+			stageName: "Executive Summary",
+			stageType: stage.StageTypeExecSummary,
+			status:    alertsession.StatusFailed,
+			err:       fmt.Errorf("failed to create exec summary stage: %w", err),
+		}
 	}
 
-	logger.Info("Executive summary generated", "summary_length", len(summary))
-	return summary, nil
+	// Publish stage.status: started, session progress, and execution progress.
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, "Executive Summary", input.stageIndex, stage.StageTypeExecSummary, events.StageStatusStarted)
+	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, "Executive Summary",
+		input.stageIndex, input.totalExpectedStages, 0, "Generating executive summary")
+	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
+		events.ProgressPhaseFinalizing, "Generating executive summary")
+
+	// Build exec summary agent config. Apply chain.ExecutiveSummaryProvider as the
+	// highest-priority LLM provider override — ResolveAgentConfig picks it up via
+	// agentConfig.LLMProvider (defaults → chain.LLMProvider → agentConfig.LLMProvider).
+	agentCfg := config.StageAgentConfig{Name: config.AgentNameExecSummary}
+	if input.chain.ExecutiveSummaryProvider != "" {
+		agentCfg.LLMProvider = input.chain.ExecutiveSummaryProvider
+	}
+
+	// input.prevContext carries the finalAnalysis; the ExecSummaryController receives
+	// it as prevStageContext and uses it to build the user prompt.
+	ar := e.executeAgent(ctx, input, stg, agentCfg, 0, config.AgentNameExecSummary)
+
+	// Update exec summary stage status (use background context — ctx may be cancelled).
+	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
+		logger.Error("Failed to update exec summary stage status", "error", updateErr)
+	}
+
+	return stageResult{
+		stageID:       stg.ID,
+		stageName:     "Executive Summary",
+		stageType:     stg.StageType,
+		status:        mapAgentStatusToSessionStatus(ar.status),
+		finalAnalysis: ar.finalAnalysis,
+		err:           ar.err,
+		agentResults:  []agentResult{ar},
+	}
 }
+

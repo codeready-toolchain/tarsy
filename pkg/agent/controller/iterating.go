@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -172,7 +173,7 @@ func (c *IteratingController) Run(
 				iterCancel()
 				return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
 			}
-			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+			recordLLMInteraction(ctx, execCtx, iteration+1, llminteraction.InteractionTypeIteration, len(messages), resp, &assistantMsg.ID, startTime)
 
 			// Append assistant message to conversation
 			messages = append(messages, agent.ConversationMessage{
@@ -207,7 +208,7 @@ func (c *IteratingController) Run(
 					iterCancel()
 					return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
 				}
-				recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+				recordLLMInteraction(ctx, execCtx, iteration+1, llminteraction.InteractionTypeIteration, len(messages), resp, &assistantMsg.ID, startTime)
 
 				if resp.Text != "" {
 					messages = append(messages, agent.ConversationMessage{
@@ -237,7 +238,7 @@ func (c *IteratingController) Run(
 				iterCancel()
 				return nil, fmt.Errorf("failed to store assistant message: %w", storeErr)
 			}
-			recordLLMInteraction(ctx, execCtx, iteration+1, "iteration", len(messages), resp, &assistantMsg.ID, startTime)
+			recordLLMInteraction(ctx, execCtx, iteration+1, llminteraction.InteractionTypeIteration, len(messages), resp, &assistantMsg.ID, startTime)
 
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, resp.Text, nil, &eventSeq)
 
@@ -335,7 +336,7 @@ func (c *IteratingController) forceConclusion(
 			TokensUsed: *totalUsage,
 		}, nil
 	}
-	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, "forced_conclusion", len(messages), resp, &assistantMsg.ID, startTime)
+	recordLLMInteraction(ctx, execCtx, state.CurrentIteration+1, llminteraction.InteractionTypeForcedConclusion, len(messages), resp, &assistantMsg.ID, startTime)
 
 	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText,
