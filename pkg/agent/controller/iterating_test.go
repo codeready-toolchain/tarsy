@@ -52,6 +52,59 @@ func TestIteratingController_HappyPath(t *testing.T) {
 	require.Equal(t, 2, llm.callCount)
 }
 
+func TestIteratingController_EmptyResponseRetry(t *testing.T) {
+	// LLM returns empty text on first attempt, then responds on retry.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 0, TotalTokens: 5},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Here is my response."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 15, TotalTokens: 25},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Here is my response.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount, "should retry after empty response")
+
+	// The retry message should be in the second call's messages
+	lastMessages := llm.capturedInputs[1].Messages
+	lastUserMsg := lastMessages[len(lastMessages)-1]
+	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)
+	assert.Contains(t, lastUserMsg.Content, "empty")
+}
+
+func TestIteratingController_EmptyResponseRetry_ExhaustsRetries(t *testing.T) {
+	// LLM returns empty text every time; after maxEmptyResponseRetries we accept it.
+	responses := make([]mockLLMResponse, maxEmptyResponseRetries+1)
+	for i := range responses {
+		responses[i] = mockLLMResponse{chunks: []agent.Chunk{
+			&agent.UsageChunk{InputTokens: 5, OutputTokens: 0, TotalTokens: 5},
+		}}
+	}
+
+	llm := &mockLLMClient{responses: responses}
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "", result.FinalAnalysis, "should accept empty after retries exhausted")
+	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount)
+}
+
 func TestIteratingController_MultipleToolCalls(t *testing.T) {
 	// Single LLM response with multiple tool calls
 	llm := &mockLLMClient{

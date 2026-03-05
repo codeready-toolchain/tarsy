@@ -13,6 +13,10 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 )
 
+// maxEmptyResponseRetries is the number of times to retry when the LLM
+// returns an empty text response with no tool calls before accepting it.
+const maxEmptyResponseRetries = 2
+
 // IteratingController implements the multi-turn tool-calling loop.
 // Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 // Tool calls come as structured ToolCallChunk values (not parsed from text).
@@ -35,6 +39,7 @@ func (c *IteratingController) Run(
 	state := &agent.IterationState{MaxIterations: maxIter}
 	fbState := NewFallbackState(execCtx)
 	msgSeq := 0
+	emptyRetries := 0
 
 	// Initialize eventSeq from DB to avoid collisions with events created
 	// before this loop starts (e.g., task_assigned from orchestrator dispatch).
@@ -232,6 +237,20 @@ func (c *IteratingController) Run(
 				continue
 			}
 
+			// Empty response retry: if the LLM returned no text, nudge it to
+			// respond before accepting a blank final answer.
+			if resp.Text == "" && emptyRetries < maxEmptyResponseRetries {
+				emptyRetries++
+				slog.Warn("LLM returned empty response, retrying",
+					"session_id", execCtx.SessionID, "attempt", emptyRetries,
+					"max_attempts", maxEmptyResponseRetries)
+				retryMsg := "Your previous response was empty. Please provide a response."
+				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: retryMsg})
+				storeObservationMessage(ctx, execCtx, retryMsg, &msgSeq)
+				iterCancel()
+				continue
+			}
+
 			// No tool calls, no pending sub-agents — this is the final answer
 			assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
 			if storeErr != nil {
@@ -291,6 +310,7 @@ func (c *IteratingController) forceConclusion(
 	// On failure, attempt fallback to another provider before giving up.
 	var streamed *StreamedResponse
 	var err error
+	emptyRetries := 0
 	for {
 		if status, done := agent.StatusFromContextErr(ctx); done {
 			return &agent.ExecutionResult{
@@ -311,7 +331,18 @@ func (c *IteratingController) forceConclusion(
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		if err == nil {
-			break
+			if streamed.LLMResponse.Text != "" || emptyRetries >= maxEmptyResponseRetries {
+				break
+			}
+			emptyRetries++
+			slog.Warn("LLM returned empty response during forced conclusion, retrying",
+				"session_id", execCtx.SessionID, "attempt", emptyRetries,
+				"max_attempts", maxEmptyResponseRetries)
+			retryMsg := "Your previous response was empty. Please provide a response."
+			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: retryMsg})
+			storeObservationMessage(ctx, execCtx, retryMsg, msgSeq)
+			startTime = time.Now()
+			continue
 		}
 		if !tryFallback(ctx, execCtx, fbState, err, eventSeq) {
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)

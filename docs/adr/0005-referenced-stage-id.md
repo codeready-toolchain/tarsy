@@ -1,8 +1,8 @@
-# Referenced Stage ID
+# ADR-0005: Referenced Stage ID
 
-**Status:** Final
-**Decisions:** [referenced-stage-id-questions.md](referenced-stage-id-questions.md)
-**Origin:** Identified during [stage-types ADR](../adr/0004-stage-types.md) investigation (Q4)
+**Status:** Implemented
+**Date:** March 4, 2026
+**Origin:** Identified during [stage-types ADR](0004-stage-types.md) investigation (Q4)
 
 ## Overview
 

@@ -7,6 +7,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -352,15 +353,15 @@ func TestExecSummaryController_HappyPath(t *testing.T) {
 
 func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
 	// Exec summary must NOT use thinking text as fallback when resp.Text is empty.
-	llm := &mockLLMClient{
-		responses: []mockLLMResponse{
-			{chunks: []agent.Chunk{
-				&agent.ThinkingChunk{Content: "Let me think about this..."},
-				// No TextChunk — empty text response
-			}},
-		},
+	// After maxEmptyResponseRetries the empty result is accepted.
+	responses := make([]mockLLMResponse, maxEmptyResponseRetries+1)
+	for i := range responses {
+		responses[i] = mockLLMResponse{chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me think about this..."},
+		}}
 	}
 
+	llm := &mockLLMClient{responses: responses}
 	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
 	ctrl := NewExecSummaryController(execCtx.PromptBuilder)
 
@@ -368,4 +369,57 @@ func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
 	require.NoError(t, err)
 	// ThinkingFallback is false → FinalAnalysis is empty, not the thinking text
 	require.Empty(t, result.FinalAnalysis)
+	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount, "should exhaust empty retries")
+}
+
+func TestSingleShotController_EmptyResponseRetry(t *testing.T) {
+	// First call returns empty, second succeeds.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 0, TotalTokens: 5},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Here is the synthesis."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 15, TotalTokens: 25},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Here is the synthesis.", result.FinalAnalysis)
+	require.Equal(t, 2, llm.callCount, "should retry after empty response")
+
+	lastMessages := llm.capturedInputs[1].Messages
+	lastUserMsg := lastMessages[len(lastMessages)-1]
+	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)
+	assert.Contains(t, lastUserMsg.Content, "empty")
+}
+
+func TestSingleShotController_EmptyResponseSkipsRetryWithThinkingFallback(t *testing.T) {
+	// Synthesis has ThinkingFallback=true. If text is empty but thinking is
+	// present, no retry needed — thinking serves as the final analysis.
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ThinkingChunk{Content: "Deep analysis here."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewSynthesisController(execCtx.PromptBuilder)
+
+	result, err := ctrl.Run(context.Background(), execCtx, "Agent 1 analysis text.")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Deep analysis here.", result.FinalAnalysis)
+	require.Equal(t, 1, llm.callCount, "should NOT retry — thinking fallback has content")
 }

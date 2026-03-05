@@ -901,7 +901,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring), `referenced_stage_id` (nullable FK — synthesis→investigation pairing), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
@@ -976,7 +976,7 @@ graph TB
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
 - Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context using `stage_type` filtering — switches on `stg.StageType` instead of heuristic `strings.HasSuffix` / `chat_id != nil` checks
+- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning)
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):

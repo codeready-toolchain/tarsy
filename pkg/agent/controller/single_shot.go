@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
@@ -88,6 +89,7 @@ func (c *SingleShotController) Run(
 	// 3. Single LLM call with streaming (no tools), with fallback retry
 	var streamed *StreamedResponse
 	var err error
+	emptyRetries := 0
 	for {
 		if status, done := agent.StatusFromContextErr(ctx); done {
 			return &agent.ExecutionResult{
@@ -106,7 +108,22 @@ func (c *SingleShotController) Run(
 			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
 		if err == nil {
-			break
+			resp := streamed.LLMResponse
+			hasContent := resp.Text != "" || (c.cfg.ThinkingFallback && resp.ThinkingText != "")
+			if hasContent || emptyRetries >= maxEmptyResponseRetries {
+				break
+			}
+			emptyRetries++
+			slog.Warn("LLM returned empty response, retrying",
+				"session_id", execCtx.SessionID, "label", c.cfg.InteractionLabel,
+				"attempt", emptyRetries, "max_attempts", maxEmptyResponseRetries)
+			messages = append(messages, agent.ConversationMessage{
+				Role:    agent.RoleUser,
+				Content: "Your previous response was empty. Please provide a response.",
+			})
+			storeObservationMessage(ctx, execCtx, "Your previous response was empty. Please provide a response.", &msgSeq)
+			startTime = time.Now()
+			continue
 		}
 		if !tryFallback(ctx, execCtx, fbState, err, &eventSeq) {
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
