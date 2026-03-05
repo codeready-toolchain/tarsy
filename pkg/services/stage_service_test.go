@@ -1435,6 +1435,51 @@ func TestStageService_GetExecutionTree(t *testing.T) {
 	})
 }
 
+func TestStageService_ReferencedStageSetNullOnDelete(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "set-null test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	parentStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Investigation",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+		StageType:          "investigation",
+	})
+	require.NoError(t, err)
+
+	synthStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Investigation - Synthesis",
+		StageIndex:         2,
+		ExpectedAgentCount: 1,
+		StageType:          "synthesis",
+		ReferencedStageID:  &parentStage.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, synthStage.ReferencedStageID)
+
+	// Delete the referenced parent stage.
+	err = client.Stage.DeleteOneID(parentStage.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	// Synthesis stage must still exist with referenced_stage_id set to NULL.
+	reloaded, err := client.Stage.Get(ctx, synthStage.ID)
+	require.NoError(t, err)
+	assert.Nil(t, reloaded.ReferencedStageID,
+		"ON DELETE SET NULL should nullify the FK, not cascade-delete the child")
+}
+
 func TestStageService_SubAgentCascadeDelete(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)
