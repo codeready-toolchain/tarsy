@@ -252,8 +252,8 @@ export function SessionDetailPage() {
 
   // --- Stream chunk batching ---
   // stream.chunk events arrive at 30-60/sec during multi-agent chains.
-  // Accumulate deltas in refs and flush to state on a 150ms throttle
-  // (~7 updates/sec) to keep the UI responsive while content grows.
+  // Accumulate deltas in refs and flush to state on a 32ms throttle
+  // (~31 updates/sec) to keep the UI responsive while content grows.
   const pendingChunksRef = useRef<Map<string, { delta: string; isSubAgent: boolean }>>(new Map());
   const chunkFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

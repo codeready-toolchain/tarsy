@@ -46,6 +46,11 @@ export default function TypewriterText({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
   const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!text) {
@@ -104,10 +109,10 @@ export default function TypewriterText({
           clearInterval(timerRef.current);
           timerRef.current = null;
         }
-        onComplete?.();
+        onCompleteRef.current?.();
       }
     }, tickInterval);
-  }, [text, speed, tickInterval, onComplete]);
+  }, [text, speed, tickInterval]);
   
   useEffect(() => {
     return () => {
