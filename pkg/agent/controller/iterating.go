@@ -167,6 +167,7 @@ func (c *IteratingController) Run(
 
 		// Check for tool calls in response
 		if len(resp.ToolCalls) > 0 {
+			emptyRetries = 0
 			// Record text alongside tool calls (only if not already created by streaming)
 			if !streamed.TextEventCreated && resp.Text != "" {
 				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmResponse, resp.Text, nil, &eventSeq)
@@ -207,6 +208,7 @@ func (c *IteratingController) Run(
 		} else {
 			// No tool calls — check for pending sub-agents before treating as final
 			if collector := execCtx.SubAgentCollector; collector != nil && collector.HasPending() {
+				emptyRetries = 0
 				// Persist the assistant's intermediate response before waiting
 				assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
 				if storeErr != nil {

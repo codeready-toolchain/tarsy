@@ -13,6 +13,7 @@ import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
+import ErrorCard from './ErrorCard';
 import { formatDurationMs } from '../../utils/format';
 import {
   EXECUTION_STATUS,
@@ -195,11 +196,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             )}
 
             {isFailed && eo?.error_message && (
-              <Alert severity="error" sx={{ mt: 1 }}>
-                <Typography variant="body2">
-                  <strong>Failed</strong>: {eo.error_message}
-                </Typography>
-              </Alert>
+              <ErrorCard label="Failed" message={eo.error_message} sx={{ mt: 1 }} />
             )}
 
             {isCancelled && (

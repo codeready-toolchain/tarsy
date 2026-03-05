@@ -5,6 +5,7 @@ import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome } f
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 import { STAGE_TYPE } from '../../constants/eventTypes';
+import ErrorCard from './ErrorCard';
 
 interface StageSeparatorProps {
   item: FlowItem;
@@ -107,14 +108,11 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
       </Typography>
 
       {isErrorStatus && !isCollapsed && (
-        <Alert severity="error" sx={{ mt: 2, mx: 2 }}>
-          <Typography variant="body2">
-            <strong>
-              {stageStatus === EXECUTION_STATUS.TIMED_OUT ? 'Stage Timed Out' : 'Stage Failed'}
-            </strong>
-            {errorMessage && `: ${errorMessage}`}
-          </Typography>
-        </Alert>
+        <ErrorCard
+          label={stageStatus === EXECUTION_STATUS.TIMED_OUT ? 'Stage Timed Out' : 'Stage Failed'}
+          message={errorMessage}
+          sx={{ mt: 2, mx: 2 }}
+        />
       )}
 
       {isCancelledStatus && !isCollapsed && (

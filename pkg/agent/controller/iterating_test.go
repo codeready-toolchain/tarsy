@@ -105,6 +105,51 @@ func TestIteratingController_EmptyResponseRetry_ExhaustsRetries(t *testing.T) {
 	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount)
 }
 
+func TestIteratingController_EmptyResponseRetry_ResetsAcrossTurns(t *testing.T) {
+	// Empty response → retry → tool call → empty response again.
+	// The second empty occurrence must get fresh retries (counter was reset
+	// by the intervening tool-call turn).
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			// Turn 1: empty response (emptyRetries → 1)
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 2, OutputTokens: 0, TotalTokens: 2},
+			}},
+			// Turn 1 retry: tool call (emptyRetries reset → 0)
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "test.tool", Arguments: "{}"},
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 5, TotalTokens: 10},
+			}},
+			// Turn 2: empty response again (emptyRetries → 1, NOT 2)
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 3, OutputTokens: 0, TotalTokens: 3},
+			}},
+			// Turn 2 retry: final answer
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Done."},
+				&agent.UsageChunk{InputTokens: 8, OutputTokens: 10, TotalTokens: 18},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "test.tool", Description: "A test tool"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"test.tool": {Content: "tool result"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Done.", result.FinalAnalysis)
+	require.Equal(t, 4, llm.callCount, "2 empty + 1 tool call + 1 final = 4 calls")
+}
+
 func TestIteratingController_MultipleToolCalls(t *testing.T) {
 	// Single LLM response with multiple tool calls
 	llm := &mockLLMClient{

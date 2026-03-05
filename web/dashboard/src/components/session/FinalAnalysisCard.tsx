@@ -1,9 +1,10 @@
 import { useState, useEffect, forwardRef } from 'react';
-import { Paper, Typography, Box, Button, Alert, AlertTitle, Snackbar, Collapse, IconButton } from '@mui/material';
+import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton } from '@mui/material';
 import { Psychology, ContentCopy, ExpandMore, AutoAwesome } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
+import ErrorCard from '../timeline/ErrorCard';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
@@ -195,10 +196,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
             </Paper>
 
             {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                <AlertTitle>Session completed with errors</AlertTitle>
-                <Typography variant="body2">{errorMessage}</Typography>
-              </Alert>
+              <ErrorCard label="Session completed with errors" message={errorMessage} sx={{ mt: 2 }} />
             )}
           </Collapse>
         </Paper>

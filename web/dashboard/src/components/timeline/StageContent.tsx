@@ -14,6 +14,7 @@ import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
 import SubAgentCard from './SubAgentCard';
+import ErrorCard from './ErrorCard';
 import {
   EXECUTION_STATUS,
   TERMINAL_EXECUTION_STATUSES,
@@ -570,12 +571,7 @@ const StageContent: React.FC<StageContentProps> = ({
         )}
 
         {isFailed && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>Execution Failed</strong>
-              {errorMessage ? `: ${errorMessage}` : ''}
-            </Typography>
-          </Alert>
+          <ErrorCard label="Execution Failed" message={errorMessage} sx={{ mt: 2 }} />
         )}
 
         {isCancelled && (

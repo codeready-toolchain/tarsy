@@ -1,20 +1,13 @@
 import { memo } from 'react';
-import { Alert, Typography } from '@mui/material';
 import type { FlowItem } from '../../utils/timelineParser';
+import ErrorCard from './ErrorCard';
 
 interface ErrorItemProps {
   item: FlowItem;
 }
 
-/**
- * ErrorItem - renders error timeline events.
- */
 function ErrorItem({ item }: ErrorItemProps) {
-  return (
-    <Alert severity="error" sx={{ my: 1 }}>
-      <Typography variant="body2">{item.content}</Typography>
-    </Alert>
-  );
+  return <ErrorCard label="Error" message={item.content} sx={{ my: 2 }} />;
 }
 
 export default memo(ErrorItem);
