@@ -89,13 +89,14 @@ func (c *SingleShotController) Run(
 	// 3. Single LLM call with streaming (no tools), with fallback retry
 	var streamed *StreamedResponse
 	var err error
+	var totalUsage agent.TokenUsage
 	emptyRetries := 0
 	for {
 		if status, done := agent.StatusFromContextErr(ctx); done {
 			return &agent.ExecutionResult{
 				Status:     status,
 				Error:      fmt.Errorf("%s interrupted: %w", c.cfg.InteractionLabel, ctx.Err()),
-				TokensUsed: agent.TokenUsage{},
+				TokensUsed: totalUsage,
 			}, nil
 		}
 		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
@@ -108,6 +109,7 @@ func (c *SingleShotController) Run(
 			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
 		if err == nil {
+			accumulateUsage(&totalUsage, streamed.LLMResponse)
 			resp := streamed.LLMResponse
 			hasContent := resp.Text != "" || (c.cfg.ThinkingFallback && resp.ThinkingText != "")
 			if hasContent || emptyRetries >= maxEmptyResponseRetries {
@@ -170,6 +172,6 @@ func (c *SingleShotController) Run(
 	return &agent.ExecutionResult{
 		Status:        agent.ExecutionStatusCompleted,
 		FinalAnalysis: finalAnalysis,
-		TokensUsed:    tokenUsageFromResp(resp),
+		TokensUsed:    totalUsage,
 	}, nil
 }

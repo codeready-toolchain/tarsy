@@ -396,6 +396,9 @@ func TestSingleShotController_EmptyResponseRetry(t *testing.T) {
 	require.Equal(t, "Here is the synthesis.", result.FinalAnalysis)
 	require.Equal(t, 2, llm.callCount, "should retry after empty response")
 
+	// Tokens from both attempts must be accumulated (5 + 25)
+	assert.Equal(t, 30, result.TokensUsed.TotalTokens)
+
 	lastMessages := llm.capturedInputs[1].Messages
 	lastUserMsg := lastMessages[len(lastMessages)-1]
 	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)

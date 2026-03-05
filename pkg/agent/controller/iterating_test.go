@@ -1240,6 +1240,9 @@ func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {
 	require.Equal(t, "Final answer after retry.", result.FinalAnalysis)
 	require.Equal(t, 3, llm.callCount)
 
+	// Tokens from both forced-conclusion attempts must be accumulated (5 + 30)
+	assert.Equal(t, 35, result.TokensUsed.TotalTokens)
+
 	// Verify the retry nudge was injected into the third call
 	lastMessages := llm.capturedInputs[2].Messages
 	lastUserMsg := lastMessages[len(lastMessages)-1]

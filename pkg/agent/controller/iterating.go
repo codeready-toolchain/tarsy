@@ -331,6 +331,7 @@ func (c *IteratingController) forceConclusion(
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		if err == nil {
+			accumulateUsage(totalUsage, streamed.LLMResponse)
 			if streamed.LLMResponse.Text != "" || emptyRetries >= maxEmptyResponseRetries {
 				break
 			}
@@ -356,7 +357,6 @@ func (c *IteratingController) forceConclusion(
 	}
 	resp := streamed.LLMResponse
 
-	accumulateUsage(totalUsage, resp)
 	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, msgSeq)
 	if storeErr != nil {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError,
