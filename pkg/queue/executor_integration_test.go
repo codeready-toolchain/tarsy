@@ -266,7 +266,7 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 	assert.Nil(t, result.Error)
 
 	// Verify Stage DB records: investigation + exec_summary
-	stages, err := entClient.Stage.Query().All(context.Background())
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
 	require.Len(t, stages, 2) // investigation + exec_summary
 	assert.Equal(t, "investigation", stages[0].StageName)
@@ -705,6 +705,10 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesized: Both agents agree on memory issue."},
 			}},
+			// Exec summary agent
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "OOM caused by memory leak in application."},
+			}},
 		},
 	}
 
@@ -772,9 +776,9 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	activeEvents := publisher.filterExecutionStatuses("active")
 	assert.Len(t, activeEvents, 4, "each agent should emit execution.status: active at startup")
 
-	// investigation + synthesis should complete; exec_summary may fail (no mock response)
+	// All 4 agents should complete: 2 investigation + 1 synthesis + 1 exec_summary
 	completedEvents := publisher.filterExecutionStatuses("completed")
-	assert.GreaterOrEqual(t, len(completedEvents), 3, "at least investigation and synthesis agents should complete")
+	assert.Len(t, completedEvents, 4, "all agents (2 investigation + synthesis + exec_summary) should complete")
 
 	// Verify AgentIndex preserves chain config ordering (1-based).
 	// Investigation stage has 2 agents → AgentIndex 1 and 2.
