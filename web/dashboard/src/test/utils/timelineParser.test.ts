@@ -45,6 +45,7 @@ function makeStage(overrides: Partial<StageOverview> & { id: string }): StageOve
   return {
     stage_name: 'Investigation',
     stage_index: 0,
+    stage_type: 'investigation',
     status: EXECUTION_STATUS.COMPLETED,
     parallel_type: null,
     expected_agent_count: 1,
@@ -206,12 +207,13 @@ describe('parseTimelineToFlow', () => {
     expect(item?.isParallelStage).toBeUndefined();
   });
 
-  it('stage separator metadata includes stage details', () => {
+  it('stage separator metadata includes stage details and stage_type', () => {
     const stages = [
       makeStage({
         id: 's1',
         stage_index: 0,
         stage_name: 'Investigation',
+        stage_type: 'investigation',
         status: EXECUTION_STATUS.COMPLETED,
         parallel_type: 'multi_agent',
         expected_agent_count: 3,
@@ -222,10 +224,21 @@ describe('parseTimelineToFlow', () => {
     const sep = result.find((i) => i.type === FLOW_ITEM.STAGE_SEPARATOR);
     expect(sep?.metadata).toMatchObject({
       stage_index: 0,
+      stage_type: 'investigation',
       stage_status: EXECUTION_STATUS.COMPLETED,
       parallel_type: 'multi_agent',
       expected_agent_count: 3,
     });
+  });
+
+  it('stage separator metadata reflects non-default stage_type', () => {
+    const stages = [
+      makeStage({ id: 's1', stage_index: 0, stage_name: 'Synthesis', stage_type: 'synthesis' }),
+    ];
+    const events = [makeEvent({ id: 'e1', stage_id: 's1' })];
+    const result = parseTimelineToFlow(events, stages);
+    const sep = result.find((i) => i.type === FLOW_ITEM.STAGE_SEPARATOR);
+    expect(sep?.metadata?.stage_type).toBe('synthesis');
   });
 });
 
@@ -234,7 +247,7 @@ describe('parseTimelineToFlow', () => {
 // ---------------------------------------------------------------------------
 
 describe('filterDuplicatedItems', () => {
-  it('removes executive_summary items', () => {
+  it('removes legacy executive_summary items without stage_id', () => {
     const stages = [makeStage({ id: 's1', stage_index: 0 })];
     const events = [
       makeEvent({ id: 'e1', stage_id: 's1', event_type: TIMELINE_EVENT_TYPES.LLM_THINKING }),
@@ -242,6 +255,21 @@ describe('filterDuplicatedItems', () => {
     ];
     const result = parseTimelineToFlow(events, stages);
     expect(result.find((i) => i.type === FLOW_ITEM.EXECUTIVE_SUMMARY)).toBeUndefined();
+  });
+
+  it('keeps stage-bound executive_summary items', () => {
+    const stages = [
+      makeStage({ id: 's1', stage_index: 0 }),
+      makeStage({ id: 's-exec', stage_index: 1, stage_name: 'Executive Summary', stage_type: 'exec_summary' }),
+    ];
+    const events = [
+      makeEvent({ id: 'e1', stage_id: 's1', event_type: TIMELINE_EVENT_TYPES.LLM_THINKING, sequence_number: 1 }),
+      makeEvent({ id: 'e2', stage_id: 's-exec', event_type: TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY, sequence_number: 2 }),
+    ];
+    const result = parseTimelineToFlow(events, stages);
+    const execSummary = result.find((i) => i.type === FLOW_ITEM.EXECUTIVE_SUMMARY);
+    expect(execSummary).toBeDefined();
+    expect(execSummary?.stageId).toBe('s-exec');
   });
 
   it('removes response when identical final_analysis exists in same execution', () => {
@@ -409,6 +437,38 @@ describe('groupFlowItemsByStage', () => {
     const items = parseTimelineToFlow(events, stages);
     const groups = groupFlowItemsByStage(items, stages);
     expect(groups[0].isParallel).toBe(true);
+  });
+
+  it('populates stageType from separator metadata', () => {
+    const stages = [
+      makeStage({ id: 's1', stage_index: 0, stage_type: 'investigation' }),
+      makeStage({ id: 's2', stage_index: 1, stage_type: 'synthesis' }),
+    ];
+    const events = [
+      makeEvent({ id: 'e1', stage_id: 's1', sequence_number: 1 }),
+      makeEvent({ id: 'e2', stage_id: 's2', sequence_number: 2 }),
+    ];
+    const items = parseTimelineToFlow(events, stages);
+    const groups = groupFlowItemsByStage(items, stages);
+    expect(groups[0].stageType).toBe('investigation');
+    expect(groups[1].stageType).toBe('synthesis');
+  });
+
+  it('populates stageType for groups created without separator', () => {
+    const stages = [makeStage({ id: 's1', stage_index: 0, stage_type: 'chat' })];
+    const items: FlowItem[] = [
+      {
+        id: 'e1',
+        type: FLOW_ITEM.RESPONSE,
+        stageId: 's1',
+        content: 'response',
+        status: TIMELINE_STATUS.COMPLETED,
+        timestamp: '2025-01-15T10:00:00Z',
+        sequenceNumber: 1,
+      },
+    ];
+    const groups = groupFlowItemsByStage(items, stages);
+    expect(groups[0].stageType).toBe('chat');
   });
 });
 

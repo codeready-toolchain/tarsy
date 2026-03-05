@@ -49,6 +49,7 @@ function makeStageGroup(overrides?: Partial<TraceStageGroup>): TraceStageGroup {
   return {
     stage_id: 'stage-1',
     stage_name: 'Investigation',
+    stage_type: 'investigation',
     executions: [makeExecution()],
     ...overrides,
   };
@@ -78,6 +79,7 @@ function makeStageOverview(overrides?: Partial<StageOverview>): StageOverview {
     id: 'stage-1',
     stage_name: 'Investigation',
     stage_index: 0,
+    stage_type: 'investigation',
     status: EXECUTION_STATUS.COMPLETED,
     parallel_type: null,
     expected_agent_count: 1,
