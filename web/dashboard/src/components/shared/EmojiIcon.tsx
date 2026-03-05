@@ -7,7 +7,8 @@ interface EmojiIconProps {
   opacity: number;
   showTooltip?: boolean;
   tooltipContent?: string;
-  tooltipType?: 'thought' | 'final_answer' | 'forced_conclusion' | 'summarization';
+  tooltipType?: 'thought' | 'response' | 'final_answer' | 'forced_conclusion' | 'summarization';
+  onClick?: () => void;
 }
 
 /**
@@ -19,18 +20,20 @@ export default function EmojiIcon({
   opacity, 
   showTooltip = false,
   tooltipContent = '',
-  tooltipType = 'thought'
+  tooltipType = 'thought',
+  onClick,
 }: EmojiIconProps) {
   const iconStyles = {
     ...EMOJI_ICON_STYLES,
     opacity,
-    ...(showTooltip && { cursor: 'help' })
+    ...(showTooltip && { cursor: 'help' }),
+    ...(onClick && !showTooltip && { cursor: 'pointer' }),
   };
 
   if (showTooltip) {
     return (
       <ContentPreviewTooltip content={tooltipContent} type={tooltipType}>
-        <Box className="cfi-dimmable" sx={iconStyles}>
+        <Box className="cfi-dimmable" sx={iconStyles} onClick={onClick}>
           {emoji}
         </Box>
       </ContentPreviewTooltip>
@@ -38,7 +41,7 @@ export default function EmojiIcon({
   }
 
   return (
-    <Box className="cfi-dimmable" sx={iconStyles}>
+    <Box className="cfi-dimmable" sx={iconStyles} onClick={onClick}>
       {emoji}
     </Box>
   );

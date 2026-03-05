@@ -579,7 +579,7 @@ describe('isFlowItemCollapsible', () => {
     [FLOW_ITEM.THINKING, true],
     [FLOW_ITEM.TOOL_SUMMARY, true],
     [FLOW_ITEM.FINAL_ANALYSIS, true],
-    [FLOW_ITEM.RESPONSE, false],
+    [FLOW_ITEM.RESPONSE, true],
     [FLOW_ITEM.TOOL_CALL, false],
     [FLOW_ITEM.ERROR, false],
     [FLOW_ITEM.STAGE_SEPARATOR, false],

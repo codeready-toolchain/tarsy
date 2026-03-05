@@ -96,24 +96,61 @@ function ResponseItem({
   }
 
   // Regular response (intermediate)
+  const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
+  const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
+  const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
+
   return (
-    <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-      <EmojiIcon emoji="💬" opacity={1} />
+    <Box
+      sx={{
+        mb: 1.5,
+        display: 'flex',
+        gap: 1.5,
+        alignItems: 'flex-start',
+        ...(shouldShowCollapsed && FADE_COLLAPSE_ANIMATION),
+      }}
+    >
+      <EmojiIcon
+        emoji="💬"
+        opacity={collapsedLeadingIconOpacity}
+        showTooltip={shouldShowCollapsed}
+        tooltipContent={item.content || ''}
+        tooltipType="response"
+        onClick={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+      />
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        {hasMarkdown ? (
-          <Box sx={{ color: 'text.primary' }}>
-            <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-              {item.content || ''}
-            </ReactMarkdown>
-          </Box>
-        ) : (
-          <Typography
-            variant="body1"
-            sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-          >
-            {item.content}
-          </Typography>
+        {shouldShowCollapsed && (
+          <CollapsibleItemHeader
+            headerText={(() => {
+              const raw = (item.content || '').trim();
+              const firstLine = raw.split('\n')[0];
+              return firstLine.length > 120 ? firstLine.slice(0, 120) + '…' : firstLine;
+            })()}
+            headerColor="text.secondary"
+            shouldShowCollapsed={shouldShowCollapsed}
+            collapsedHeaderOpacity={collapsedHeaderOpacity}
+            onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+          />
         )}
+        <Collapse in={!shouldShowCollapsed} timeout={300}>
+          <Box sx={{ mt: 0.5 }}>
+            {hasMarkdown ? (
+              <Box sx={{ color: 'text.primary' }}>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                  {item.content || ''}
+                </ReactMarkdown>
+              </Box>
+            ) : (
+              <Typography
+                variant="body1"
+                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
+              >
+                {item.content}
+              </Typography>
+            )}
+            {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
+          </Box>
+        </Collapse>
       </Box>
     </Box>
   );

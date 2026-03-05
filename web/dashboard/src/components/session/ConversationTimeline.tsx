@@ -252,7 +252,7 @@ export default function ConversationTimeline({
     return byStage;
   }, [streamingEvents]);
 
-  // --- Ungrouped streaming entries (for Virtuoso footer) ---
+  // --- Ungrouped streaming entries ---
   const ungroupedStreamingEntries = useMemo(() => {
     const ungrouped = streamingByStage.get('__ungrouped__');
     if (!ungrouped) return [];

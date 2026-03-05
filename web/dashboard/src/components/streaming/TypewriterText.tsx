@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 
 interface TypewriterTextProps {
   text: string;
-  speed?: number; // ms per character (default: 3)
-  tickInterval?: number; // ms between state updates (default: 150)
+  speed?: number; // ms per character (default: 1)
+  tickInterval?: number; // ms between state updates (default: 50)
   onComplete?: () => void;
   children?: (displayText: string, isAnimating: boolean) => ReactNode;
 }
@@ -22,8 +22,8 @@ interface TypewriterTextProps {
  */
 export default function TypewriterText({ 
   text, 
-  speed = 3,
-  tickInterval = 150,
+  speed = 1,
+  tickInterval = 50,
   onComplete,
   children 
 }: TypewriterTextProps) {

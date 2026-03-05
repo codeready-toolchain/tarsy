@@ -354,7 +354,7 @@ func callLLMWithStreaming(
 	// Batch stream.chunk deltas: accumulate per-event deltas and publish
 	// combined deltas every chunkFlushInterval. Reduces pg_notify calls
 	// from ~50/sec to ~10/sec per active stream.
-	const chunkFlushInterval = 100 * time.Millisecond
+	const chunkFlushInterval = 50 * time.Millisecond
 	var mu sync.Mutex
 	var pendingThinkingDelta, pendingTextDelta string
 	lastChunkFlush := time.Now()
