@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Box, Typography, Chip, Alert, alpha } from '@mui/material';
+import { Box, Typography, Chip, Alert, Collapse, alpha } from '@mui/material';
 import {
   CheckCircle,
   Error as ErrorIcon,
@@ -561,7 +561,9 @@ const StageContent: React.FC<StageContentProps> = ({
         {elements}
 
         {executionStreamingItems.map(([key, streamItem]) => (
-          <StreamingContentRenderer key={key} item={streamItem} />
+          <Collapse key={key} in={!streamItem.collapsing} timeout={300}>
+            <StreamingContentRenderer item={streamItem} />
+          </Collapse>
         ))}
 
         {!hasDbItems && !hasStreamingItems && !isExecutionActive && allSubAgentExecIds.size === 0 && (
@@ -595,7 +597,9 @@ const StageContent: React.FC<StageContentProps> = ({
       return (
         <Box>
           {allStreamingItems.map(([key, streamItem]) => (
-            <StreamingContentRenderer key={key} item={streamItem} />
+            <Collapse key={key} in={!streamItem.collapsing} timeout={300}>
+              <StreamingContentRenderer item={streamItem} />
+            </Collapse>
           ))}
         </Box>
       );

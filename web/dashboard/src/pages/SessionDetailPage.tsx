@@ -709,89 +709,116 @@ export function SessionDetailPage() {
           // parent_execution_id), then fall back to the payload field.
           const isSubAgentCompleted = meta?.isSubAgent ?? !!payload.parent_execution_id;
 
-          // Remove from the correct streaming state map.
-          // Also attempt removal from the other map as a safety net:
-          // if the sub-agent flag was lost (e.g. created event was also
-          // truncated), the entry may live in the wrong map.
           const removeFromMap = (prev: Map<string, ExtendedStreamingItem>) => {
             if (!prev.has(payload.event_id)) return prev;
             const next = new Map(prev);
             next.delete(payload.event_id);
             return next;
           };
-          if (isSubAgentCompleted) {
-            setSubAgentStreamingEvents(removeFromMap);
-          } else {
-            setStreamingEvents(removeFromMap);
-          }
-          // Belt-and-suspenders: also try the other map
-          if (isSubAgentCompleted) {
-            setStreamingEvents(removeFromMap);
-          } else {
-            setSubAgentStreamingEvents(removeFromMap);
-          }
 
           // ── Truncated payload handling ──────────────────────────
-          // The backend truncates NOTIFY payloads that exceed PostgreSQL's
-          // ~8KB limit (e.g. tool calls with large results). Truncated
-          // payloads only contain type, event_id, session_id, db_event_id,
-          // and truncated:true — all other fields are stripped.
-          // When detected, re-fetch the full timeline from the REST API.
+          // Truncated payloads only contain routing info — remove from
+          // streaming immediately (no animation) and re-fetch.
           if (isTruncated) {
+            if (isSubAgentCompleted) {
+              setSubAgentStreamingEvents(removeFromMap);
+            } else {
+              setStreamingEvents(removeFromMap);
+            }
+            // Belt-and-suspenders: also try the other map
+            if (isSubAgentCompleted) {
+              setStreamingEvents(removeFromMap);
+            } else {
+              setSubAgentStreamingEvents(removeFromMap);
+            }
             refetchTimelineDebounced();
             return;
           }
 
           // ── Full payload handling ──────────────────────────────
-          // Upsert based on actual timelineEvents presence (not knownEventIdsRef)
-          // to handle the case where a streaming event's ID is in knownEventIdsRef
-          // (added by applyFreshTimeline) but was never placed in timelineEvents
-          // (kept in streamingEvents instead). Using findIndex on the real state
-          // ensures the event is appended when missing, not silently dropped.
-          setTimelineEvents((prev) => {
-            const index = prev.findIndex((ev) => ev.id === payload.event_id);
-            if (index >= 0) {
-              // Update existing event in-place. Merge metadata: the existing
-              // event may have full metadata from timeline_event.created
-              // (e.g. tool_name, server_name, arguments), while the completed
-              // payload may add new fields (e.g. is_error).
-              const next = [...prev];
-              next[index] = {
-                ...next[index],
-                content: payload.content,
-                status: payload.status,
-                metadata: (next[index].metadata || payload.metadata)
-                  ? { ...(next[index].metadata || {}), ...(payload.metadata || {}) }
-                  : null,
-                updated_at: payload.timestamp,
-              };
+          const addToTimeline = () => {
+            setTimelineEvents((prev) => {
+              const index = prev.findIndex((ev) => ev.id === payload.event_id);
+              if (index >= 0) {
+                const next = [...prev];
+                next[index] = {
+                  ...next[index],
+                  content: payload.content,
+                  status: payload.status,
+                  metadata: (next[index].metadata || payload.metadata)
+                    ? { ...(next[index].metadata || {}), ...(payload.metadata || {}) }
+                    : null,
+                  updated_at: payload.timestamp,
+                };
+                return next;
+              }
+              const mergedMetadata = (meta?.metadata || payload.metadata)
+                ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
+                : null;
+              knownEventIdsRef.current.add(payload.event_id);
+              return [
+                ...prev,
+                {
+                  id: payload.event_id,
+                  session_id: id,
+                  stage_id: meta?.stageId ?? null,
+                  execution_id: meta?.executionId ?? null,
+                  parent_execution_id: meta?.parentExecutionId ?? payload.parent_execution_id ?? null,
+                  sequence_number: meta?.sequenceNumber ?? 0,
+                  event_type: meta?.eventType ?? payload.event_type,
+                  status: payload.status,
+                  content: payload.content,
+                  metadata: mergedMetadata,
+                  created_at: meta?.createdAt ?? payload.timestamp,
+                  updated_at: payload.timestamp,
+                },
+              ];
+            });
+          };
+
+          // If the event was actively streaming, animate the streaming card
+          // collapse (300ms) before swapping to the completed timeline item.
+          // This prevents the visual "blink" where the streaming card (150px)
+          // is replaced by a momentarily-expanded completed card (up to 900px).
+          if (meta) {
+            const markCollapsing = (prev: Map<string, ExtendedStreamingItem>) => {
+              const existing = prev.get(payload.event_id);
+              if (!existing) return prev;
+              const next = new Map(prev);
+              next.set(payload.event_id, { ...existing, collapsing: true });
               return next;
+            };
+            if (isSubAgentCompleted) {
+              setSubAgentStreamingEvents(markCollapsing);
+            } else {
+              setStreamingEvents(markCollapsing);
             }
-            // New completed event — append. Merge metadata from the streaming
-            // meta ref (tool_name, server_name, etc.) with completed payload
-            // metadata (is_error, etc.).
-            const mergedMetadata = (meta?.metadata || payload.metadata)
-              ? { ...(meta?.metadata || {}), ...(payload.metadata || {}) }
-              : null;
-            knownEventIdsRef.current.add(payload.event_id);
-            return [
-              ...prev,
-              {
-                id: payload.event_id,
-                session_id: id,
-                stage_id: meta?.stageId ?? null,
-                execution_id: meta?.executionId ?? null,
-                parent_execution_id: meta?.parentExecutionId ?? payload.parent_execution_id ?? null,
-                sequence_number: meta?.sequenceNumber ?? 0,
-                event_type: meta?.eventType ?? payload.event_type,
-                status: payload.status,
-                content: payload.content,
-                metadata: mergedMetadata,
-                created_at: meta?.createdAt ?? payload.timestamp,
-                updated_at: payload.timestamp,
-              },
-            ];
-          });
+            setTimeout(() => {
+              if (isSubAgentCompleted) {
+                setSubAgentStreamingEvents(removeFromMap);
+              } else {
+                setStreamingEvents(removeFromMap);
+              }
+              if (isSubAgentCompleted) {
+                setStreamingEvents(removeFromMap);
+              } else {
+                setSubAgentStreamingEvents(removeFromMap);
+              }
+              addToTimeline();
+            }, 300);
+          } else {
+            if (isSubAgentCompleted) {
+              setSubAgentStreamingEvents(removeFromMap);
+            } else {
+              setStreamingEvents(removeFromMap);
+            }
+            if (isSubAgentCompleted) {
+              setStreamingEvents(removeFromMap);
+            } else {
+              setSubAgentStreamingEvents(removeFromMap);
+            }
+            addToTimeline();
+          }
           return;
         }
 

@@ -470,7 +470,9 @@ export default function ConversationTimeline({
 
         {/* Ungrouped streaming events (no stageId) */}
         {ungroupedStreamingEntries.map(([eventId, streamItem]) => (
-          <StreamingContentRenderer key={eventId} item={streamItem} />
+          <Collapse key={eventId} in={!streamItem.collapsing} timeout={300}>
+            <StreamingContentRenderer item={streamItem} />
+          </Collapse>
         ))}
 
         {/* Processing indicator */}

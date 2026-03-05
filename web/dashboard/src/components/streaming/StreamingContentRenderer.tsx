@@ -14,6 +14,7 @@ export interface StreamingItem {
   eventType: string;
   content: string;
   metadata?: Record<string, unknown>;
+  collapsing?: boolean;
 }
 
 interface StreamingContentRendererProps {
