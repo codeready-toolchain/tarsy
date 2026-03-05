@@ -320,7 +320,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
 	publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, 1, string(agentexecution.StatusActive), "")
-	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusStarted)
+	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, nil, events.StageStatusStarted)
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(execCtx)
 	defer cancelHeartbeat()
@@ -403,7 +403,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	}
 
 	// 14. Publish stage.status: completed/failed/cancelled/timed_out
-	publishStageStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, terminalStatus)
+	publishStageStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, nil, terminalStatus)
 
 	// 15. Stop heartbeat
 	cancelHeartbeat()
@@ -433,24 +433,13 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 
 	// 2. Build structured stage investigations.
 	//    - Investigation stages → per-agent timelines
-	//    - Synthesis stages (stage_type = synthesis) → paired with parent
+	//    - Synthesis stages (stage_type = synthesis) → paired with parent via referenced_stage_id FK
 	//    - Chat stages (stage_type = chat) → treated as previous chat Q&A
-	//    Synthesis results are keyed by parent stage ID for pairing.
-	//    Since stages are ordered by StageIndex, each synthesis stage is paired
-	//    with the closest preceding investigation stage whose name matches.
-	//    This avoids collisions when multiple stages share the same name.
 	synthResults := make(map[string]string) // parent stage ID → synthesis final analysis
-	for i, stg := range stages {
-		if stg.StageType == stage.StageTypeSynthesis {
-			parentName := strings.TrimSuffix(stg.StageName, " - Synthesis")
-			// Scan backwards to find the nearest parent investigation stage.
-			for j := i - 1; j >= 0; j-- {
-				if stages[j].StageName == parentName && stages[j].StageType == stage.StageTypeInvestigation {
-					if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
-						synthResults[stages[j].ID] = fa
-					}
-					break
-				}
+	for _, stg := range stages {
+		if stg.StageType == stage.StageTypeSynthesis && stg.ReferencedStageID != nil {
+			if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
+				synthResults[*stg.ReferencedStageID] = fa
 			}
 		}
 	}
@@ -794,7 +783,7 @@ func (e *ChatMessageExecutor) createFailedChatExecution(
 // Uses ForceStageFailure to directly set terminal status, bypassing the
 // execution-derived UpdateStageStatus which is a no-op without executions.
 func (e *ChatMessageExecutor) finishStage(stageID, sessionID, stageName string, stageIndex int, stageType stage.StageType, status, errMsg string) {
-	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, stageName, stageIndex, stageType, status)
+	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, stageName, stageIndex, stageType, nil, status)
 	if updateErr := e.stageService.ForceStageFailure(context.Background(), stageID, errMsg); updateErr != nil {
 		slog.Warn("Failed to update stage status on early exit",
 			"stage_id", stageID,

@@ -16,6 +16,7 @@ type CreateStageRequest struct {
 	StageType          string  `json:"stage_type,omitempty"`     // defaults to "investigation" if empty
 	ChatID             *string `json:"chat_id,omitempty"`
 	ChatUserMessageID  *string `json:"chat_user_message_id,omitempty"`
+	ReferencedStageID  *string `json:"referenced_stage_id,omitempty"`
 }
 
 // CreateAgentExecutionRequest contains fields for creating a new agent execution

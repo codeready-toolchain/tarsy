@@ -42,6 +42,8 @@ const (
 	FieldChatID = "chat_id"
 	// FieldChatUserMessageID holds the string denoting the chat_user_message_id field in the database.
 	FieldChatUserMessageID = "chat_user_message_id"
+	// FieldReferencedStageID holds the string denoting the referenced_stage_id field in the database.
+	FieldReferencedStageID = "referenced_stage_id"
 	// EdgeSession holds the string denoting the session edge name in mutations.
 	EdgeSession = "session"
 	// EdgeAgentExecutions holds the string denoting the agent_executions edge name in mutations.
@@ -58,6 +60,10 @@ const (
 	EdgeChat = "chat"
 	// EdgeChatUserMessage holds the string denoting the chat_user_message edge name in mutations.
 	EdgeChatUserMessage = "chat_user_message"
+	// EdgeReferencingStages holds the string denoting the referencing_stages edge name in mutations.
+	EdgeReferencingStages = "referencing_stages"
+	// EdgeReferencedStage holds the string denoting the referenced_stage edge name in mutations.
+	EdgeReferencedStage = "referenced_stage"
 	// AlertSessionFieldID holds the string denoting the ID field of the AlertSession.
 	AlertSessionFieldID = "session_id"
 	// AgentExecutionFieldID holds the string denoting the ID field of the AgentExecution.
@@ -132,6 +138,14 @@ const (
 	ChatUserMessageInverseTable = "chat_user_messages"
 	// ChatUserMessageColumn is the table column denoting the chat_user_message relation/edge.
 	ChatUserMessageColumn = "chat_user_message_id"
+	// ReferencingStagesTable is the table that holds the referencing_stages relation/edge.
+	ReferencingStagesTable = "stages"
+	// ReferencingStagesColumn is the table column denoting the referencing_stages relation/edge.
+	ReferencingStagesColumn = "referenced_stage_id"
+	// ReferencedStageTable is the table that holds the referenced_stage relation/edge.
+	ReferencedStageTable = "stages"
+	// ReferencedStageColumn is the table column denoting the referenced_stage relation/edge.
+	ReferencedStageColumn = "referenced_stage_id"
 )
 
 // Columns holds all SQL columns for stage fields.
@@ -151,6 +165,7 @@ var Columns = []string{
 	FieldErrorMessage,
 	FieldChatID,
 	FieldChatUserMessageID,
+	FieldReferencedStageID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -346,6 +361,11 @@ func ByChatUserMessageID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldChatUserMessageID, opts...).ToFunc()
 }
 
+// ByReferencedStageID orders the results by the referenced_stage_id field.
+func ByReferencedStageID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReferencedStageID, opts...).ToFunc()
+}
+
 // BySessionField orders the results by session field.
 func BySessionField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -436,6 +456,27 @@ func ByChatUserMessageField(field string, opts ...sql.OrderTermOption) OrderOpti
 		sqlgraph.OrderByNeighborTerms(s, newChatUserMessageStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByReferencingStagesCount orders the results by referencing_stages count.
+func ByReferencingStagesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newReferencingStagesStep(), opts...)
+	}
+}
+
+// ByReferencingStages orders the results by referencing_stages terms.
+func ByReferencingStages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newReferencingStagesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByReferencedStageField orders the results by referenced_stage field.
+func ByReferencedStageField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newReferencedStageStep(), sql.OrderByField(field, opts...))
+	}
+}
 func newSessionStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -490,5 +531,19 @@ func newChatUserMessageStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ChatUserMessageInverseTable, ChatUserMessageFieldID),
 		sqlgraph.Edge(sqlgraph.O2O, true, ChatUserMessageTable, ChatUserMessageColumn),
+	)
+}
+func newReferencingStagesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ReferencingStagesTable, ReferencingStagesColumn),
+	)
+}
+func newReferencedStageStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ReferencedStageTable, ReferencedStageColumn),
 	)
 }

@@ -167,6 +167,98 @@ func TestStageService_CreateStage_StageType(t *testing.T) {
 	})
 }
 
+func TestStageService_CreateStage_ReferencedStageID(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	// Create a parent investigation stage to reference.
+	// Start at index 300 to avoid conflicts with the initial stage created by CreateSession.
+	parentStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Investigation",
+		StageIndex:         300,
+		ExpectedAgentCount: 1,
+		StageType:          "investigation",
+	})
+	require.NoError(t, err)
+
+	t.Run("persists when set", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Investigation - Synthesis",
+			StageIndex:         301,
+			ExpectedAgentCount: 1,
+			StageType:          "synthesis",
+			ReferencedStageID:  &parentStage.ID,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, stg.ReferencedStageID)
+		assert.Equal(t, parentStage.ID, *stg.ReferencedStageID)
+	})
+
+	t.Run("NULL when omitted", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "No Reference",
+			StageIndex:         302,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+		assert.Nil(t, stg.ReferencedStageID)
+	})
+
+	t.Run("validation error when referenced stage does not exist", func(t *testing.T) {
+		bogusID := uuid.New().String()
+		_, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Bad Ref",
+			StageIndex:         303,
+			ExpectedAgentCount: 1,
+			ReferencedStageID:  &bogusID,
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+
+	t.Run("validation error when referenced stage is in different session", func(t *testing.T) {
+		otherSession, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "other",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+
+		otherStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          otherSession.ID,
+			StageName:          "Other Investigation",
+			StageIndex:         300,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		_, err = stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Cross-session Ref",
+			StageIndex:         304,
+			ExpectedAgentCount: 1,
+			ReferencedStageID:  &otherStage.ID,
+		})
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
 func TestStageService_CreateAgentExecution(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	stageService := NewStageService(client.Client)

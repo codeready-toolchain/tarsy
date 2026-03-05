@@ -289,6 +289,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeSynthesis),
+		ReferencedStageID:  &investStage1.ID,
 	})
 	require.NoError(t, err)
 
@@ -307,6 +308,7 @@ func TestChatMessageExecutor_BuildChatContext_SynthesisPairingWithDuplicateStage
 		StageIndex:         3,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeSynthesis),
+		ReferencedStageID:  &investStage2.ID,
 	})
 	require.NoError(t, err)
 

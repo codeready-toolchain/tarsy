@@ -2330,6 +2330,38 @@ func (c *StageClient) QueryChatUserMessage(_m *Stage) *ChatUserMessageQuery {
 	return query
 }
 
+// QueryReferencingStages queries the referencing_stages edge of a Stage.
+func (c *StageClient) QueryReferencingStages(_m *Stage) *StageQuery {
+	query := (&StageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, id),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, stage.ReferencingStagesTable, stage.ReferencingStagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryReferencedStage queries the referenced_stage edge of a Stage.
+func (c *StageClient) QueryReferencedStage(_m *Stage) *StageQuery {
+	query := (&StageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, id),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, stage.ReferencedStageTable, stage.ReferencedStageColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *StageClient) Hooks() []Hook {
 	return c.hooks.Stage

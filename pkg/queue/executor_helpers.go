@@ -239,9 +239,13 @@ func publishExecutionStatus(ctx context.Context, eventPublisher agent.EventPubli
 
 // publishStageStatus publishes a stage.status event. Nil-safe for EventPublisher.
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, stageType stage.StageType, status string) {
+func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher, sessionID, stageID, stageName string, stageIndex int, stageType stage.StageType, referencedStageID *string, status string) {
 	if eventPublisher == nil {
 		return
+	}
+	var refID string
+	if referencedStageID != nil {
+		refID = *referencedStageID
 	}
 	if err := eventPublisher.PublishStageStatus(ctx, sessionID, events.StageStatusPayload{
 		BasePayload: events.BasePayload{
@@ -249,11 +253,12 @@ func publishStageStatus(ctx context.Context, eventPublisher agent.EventPublisher
 			SessionID: sessionID,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
 		},
-		StageID:    stageID,
-		StageName:  stageName,
-		StageIndex: stageIndex + 1, // 1-based for clients
-		StageType:  string(stageType),
-		Status:     status,
+		StageID:           stageID,
+		StageName:         stageName,
+		StageIndex:        stageIndex + 1, // 1-based for clients
+		StageType:         string(stageType),
+		ReferencedStageID: refID,
+		Status:            status,
 	}); err != nil {
 		slog.Warn("Failed to publish stage status",
 			"session_id", sessionID,

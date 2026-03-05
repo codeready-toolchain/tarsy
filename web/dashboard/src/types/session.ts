@@ -106,6 +106,7 @@ export interface StageOverview {
   status: string;
   parallel_type: string | null;
   expected_agent_count: number;
+  referenced_stage_id?: string;
   started_at: string | null;
   completed_at: string | null;
   executions?: ExecutionOverview[];

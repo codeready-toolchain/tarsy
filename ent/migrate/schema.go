@@ -522,6 +522,7 @@ var (
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "chat_id", Type: field.TypeString, Nullable: true},
 		{Name: "chat_user_message_id", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "referenced_stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// StagesTable holds the schema information for the "stages" table.
 	StagesTable = &schema.Table{
@@ -545,6 +546,12 @@ var (
 				Symbol:     "stages_chat_user_messages_stage",
 				Columns:    []*schema.Column{StagesColumns[14]},
 				RefColumns: []*schema.Column{ChatUserMessagesColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "stages_stages_referencing_stages",
+				Columns:    []*schema.Column{StagesColumns[15]},
+				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
@@ -681,6 +688,7 @@ func init() {
 	StagesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	StagesTable.ForeignKeys[1].RefTable = ChatsTable
 	StagesTable.ForeignKeys[2].RefTable = ChatUserMessagesTable
+	StagesTable.ForeignKeys[3].RefTable = StagesTable
 	TimelineEventsTable.ForeignKeys[0].RefTable = AgentExecutionsTable
 	TimelineEventsTable.ForeignKeys[1].RefTable = AgentExecutionsTable
 	TimelineEventsTable.ForeignKeys[2].RefTable = AlertSessionsTable

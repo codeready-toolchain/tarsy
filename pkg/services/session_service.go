@@ -521,6 +521,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 			Status:             string(stg.Status),
 			ParallelType:       pt,
 			ExpectedAgentCount: stg.ExpectedAgentCount,
+			ReferencedStageID:  stg.ReferencedStageID,
 			StartedAt:          stg.StartedAt,
 			CompletedAt:        stg.CompletedAt,
 			Executions:         execOverviews,

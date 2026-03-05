@@ -47,6 +47,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 		StageIndex:         input.stageIndex + 1, // 1-based in DB
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeSynthesis),
+		ReferencedStageID:  &parallelResult.stageID,
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
@@ -63,7 +64,7 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 
 	// Update session progress + publish stage.status: started
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
-	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, stg.StageType, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, synthStageName, input.stageIndex, stg.StageType, stg.ReferencedStageID, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, synthStageName,
 		input.stageIndex, input.totalExpectedStages, 1,
 		"Synthesizing...")
@@ -101,13 +102,14 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	}
 
 	return stageResult{
-		stageID:       stg.ID,
-		stageName:     synthStageName,
-		stageType:     stg.StageType,
-		status:        mapAgentStatusToSessionStatus(ar.status),
-		finalAnalysis: ar.finalAnalysis,
-		err:           ar.err,
-		agentResults:  []agentResult{ar},
+		stageID:           stg.ID,
+		stageName:         synthStageName,
+		stageType:         stg.StageType,
+		referencedStageID: stg.ReferencedStageID,
+		status:            mapAgentStatusToSessionStatus(ar.status),
+		finalAnalysis:     ar.finalAnalysis,
+		err:               ar.err,
+		agentResults:      []agentResult{ar},
 	}
 }
 

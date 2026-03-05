@@ -189,6 +189,7 @@ type StageOverview struct {
 	Status             string              `json:"status"`
 	ParallelType       *string             `json:"parallel_type"`
 	ExpectedAgentCount int                 `json:"expected_agent_count"`
+	ReferencedStageID  *string             `json:"referenced_stage_id,omitempty"`
 	StartedAt          *time.Time          `json:"started_at"`
 	CompletedAt        *time.Time          `json:"completed_at"`
 	Executions         []ExecutionOverview `json:"executions,omitempty"`
