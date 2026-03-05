@@ -290,6 +290,7 @@ describe('traceHelpers sub-agent support', () => {
     const stage: TraceStageGroup = {
       stage_id: 'stage-1',
       stage_name: 'Test',
+      stage_type: 'investigation',
       executions: [makeTraceExecution()],
     };
     const counts = countStageInteractions(stage);
@@ -300,6 +301,7 @@ describe('traceHelpers sub-agent support', () => {
     const stage: TraceStageGroup = {
       stage_id: 'stage-1',
       stage_name: 'Test',
+      stage_type: 'investigation',
       executions: [
         makeTraceExecution({
           execution_id: 'orch-1',
@@ -368,6 +370,7 @@ describe('traceHelpers sub-agent support', () => {
         id: 'stage-1',
         stage_name: 'Investigation',
         stage_index: 0,
+        stage_type: 'investigation',
         status: EXECUTION_STATUS.COMPLETED,
         parallel_type: null,
         expected_agent_count: 1,

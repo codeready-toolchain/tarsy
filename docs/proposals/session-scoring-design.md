@@ -236,7 +236,7 @@ Three levels of detail:
 
 ## Implementation Plan
 
-### Phase 1: Stage Type System
+### Phase 1: Stage Type System - ✅ DONE
 
 See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation spec.
 
