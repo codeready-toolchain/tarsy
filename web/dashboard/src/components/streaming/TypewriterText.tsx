@@ -36,8 +36,8 @@ export default function TypewriterText({
   onComplete,
   children 
 }: TypewriterTextProps) {
-  const speed = Math.max(1, rawSpeed);
-  const tickInterval = Math.max(1, rawTickInterval);
+  const speed = Number.isFinite(rawSpeed) && rawSpeed > 0 ? rawSpeed : 1;
+  const tickInterval = Number.isFinite(rawTickInterval) && rawTickInterval > 0 ? rawTickInterval : 1;
   const [displayedText, setDisplayedText] = useState('');
   const [isAnimating, setIsAnimating] = useState(false);
   

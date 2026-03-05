@@ -1042,6 +1042,8 @@ export function SessionDetailPage() {
             chunkFlushTimerRef.current = null;
           }
           pendingChunksRef.current.clear();
+          for (const t of collapseTimersRef.current) clearTimeout(t);
+          collapseTimersRef.current.clear();
           loadData();
           return;
         }
