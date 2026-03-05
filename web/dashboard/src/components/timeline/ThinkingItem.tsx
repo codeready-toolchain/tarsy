@@ -1,10 +1,11 @@
 import { memo } from 'react';
-import { Box, Typography, Collapse, alpha } from '@mui/material';
+import { Box, Collapse } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
-import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import ContentCard from '../shared/ContentCard';
+import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { formatDurationMs } from '../../utils/format';
 import type { FlowItem } from '../../utils/timelineParser';
@@ -32,8 +33,6 @@ function ThinkingItem({
   const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
   const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
-  const hasMarkdown = hasMarkdownSyntax(item.content || '');
-
   return (
     <Box
       sx={{
@@ -67,43 +66,19 @@ function ThinkingItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <Box
-              sx={(theme) => ({
-                bgcolor: alpha(theme.palette.grey[300], 0.15),
-                border: '1px solid',
-                borderColor: alpha(theme.palette.grey[400], 0.2),
-                borderRadius: 1,
-                p: 1.5,
-              })}
-            >
-              {hasMarkdown ? (
-                <Box
-                  sx={{
-                    '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
-                    color: 'text.secondary',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                    {item.content || ''}
-                  </ReactMarkdown>
-                </Box>
-              ) : (
-                <Typography
-                  variant="body1"
-                  sx={{
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    lineHeight: 1.7,
-                    fontSize: '1rem',
-                    color: 'text.secondary',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  {item.content}
-                </Typography>
-              )}
-            </Box>
+            <ContentCard maxHeight="900px">
+              <Box
+                sx={{
+                  '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
+                  color: 'text.secondary',
+                  fontStyle: 'italic',
+                }}
+              >
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                  {item.content || ''}
+                </ReactMarkdown>
+              </Box>
+            </ContentCard>
             {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
           </Box>
         </Collapse>

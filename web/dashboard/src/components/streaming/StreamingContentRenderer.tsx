@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import TypewriterText from './TypewriterText';
+import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
@@ -51,33 +52,19 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
           {(displayText) => {
             if (!displayText) return null;
             return (
-              <Box
-                ref={scrollContainerRef}
-                sx={(theme) => ({
-                  bgcolor: alpha(theme.palette.grey[300], 0.15),
-                  border: '1px solid',
-                  borderColor: alpha(theme.palette.grey[400], 0.2),
-                  borderRadius: 1, p: 1.5,
-                  height: '150px', overflowY: 'auto',
-                  '&::-webkit-scrollbar': { width: '8px' },
-                  '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
-                  '&::-webkit-scrollbar-thumb': {
-                    bgcolor: alpha(theme.palette.grey[500], 0.3), borderRadius: '4px',
-                    '&:hover': { bgcolor: alpha(theme.palette.grey[500], 0.5) }
-                  }
-                })}
-              >
-                <Typography
-                  variant="body1"
+              <ContentCard ref={scrollContainerRef} height="150px">
+                <Box
                   sx={{
-                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    lineHeight: 1.7, fontSize: '1rem',
-                    color: 'text.secondary', fontStyle: 'italic',
+                    '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },
+                    color: 'text.secondary',
+                    fontStyle: 'italic',
                   }}
                 >
-                  {displayText}
-                </Typography>
-              </Box>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                    {displayText}
+                  </ReactMarkdown>
+                </Box>
+              </ContentCard>
             );
           }}
         </TypewriterText>
@@ -87,6 +74,55 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
 });
 
 ThinkingBlock.displayName = 'ThinkingBlock';
+
+// --- ResponseBlock ---
+// Renders streaming llm_response content in a card/box with auto-scroll,
+// matching the completed ResponseItem card style.
+
+const ResponseBlock = memo(({ content }: { content: string }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [content]);
+
+  return (
+    <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
+      <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
+        💬
+      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
+            fontSize: '0.75rem', color: 'primary.main', display: 'block', mb: 0.5
+          }}
+        >
+          Responding...
+        </Typography>
+        <TypewriterText text={content}>
+          {(displayText) => {
+            if (!displayText) return null;
+            return (
+              <ContentCard ref={scrollContainerRef} height="150px">
+                <Box sx={{ color: 'text.primary' }}>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                    {displayText}
+                  </ReactMarkdown>
+                </Box>
+              </ContentCard>
+            );
+          }}
+        </TypewriterText>
+      </Box>
+    </Box>
+  );
+});
+
+ResponseBlock.displayName = 'ResponseBlock';
 
 // --- StreamingContentRenderer ---
 
@@ -108,22 +144,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
 
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_RESPONSE) {
     if (!item.content || !item.content.trim()) return null;
-    return (
-      <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5 }}>
-        <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
-          💬
-        </Typography>
-        <TypewriterText text={item.content}>
-          {(displayText) => (
-            <Box sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
-              <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                {displayText}
-              </ReactMarkdown>
-            </Box>
-          )}
-        </TypewriterText>
-      </Box>
-    );
+    return <ResponseBlock content={item.content} />;
   }
   
   if (item.eventType === TIMELINE_EVENT_TYPES.MCP_TOOL_SUMMARY) {
