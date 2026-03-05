@@ -47,7 +47,7 @@ const ThinkingBlock = memo(({ content }: { content: string }) => {
         >
           Thinking...
         </Typography>
-        <TypewriterText text={content} speed={1} tickInterval={50}>
+        <TypewriterText text={content}>
           {(displayText) => {
             if (!displayText) return null;
             return (
@@ -113,7 +113,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
         <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
           💬
         </Typography>
-        <TypewriterText text={item.content} speed={1} tickInterval={50}>
+        <TypewriterText text={item.content}>
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
               <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
@@ -159,7 +159,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               {item.content}
             </Typography>
           ) : (
-            <TypewriterText text={item.content} speed={1} tickInterval={50}>
+            <TypewriterText text={item.content}>
               {(displayText) => (
                 <Box sx={{ color: 'text.secondary' }}>
                   <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
@@ -192,7 +192,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
           </Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, ml: 4, color: 'text.primary' }}>
-          <TypewriterText text={item.content} speed={1} tickInterval={50}>
+          <TypewriterText text={item.content}>
             {(displayText) => (
               <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
                 {displayText}
@@ -264,7 +264,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
         <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: 0.25 }}>
           ✨
         </Typography>
-        <TypewriterText text={item.content} speed={1} tickInterval={50}>
+        <TypewriterText text={item.content}>
           {(displayText) => (
             <Box sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
               <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>

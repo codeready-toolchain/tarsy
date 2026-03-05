@@ -1033,7 +1033,7 @@ export function SessionDetailPage() {
             });
           }
           if (chunkFlushTimerRef.current === null) {
-            chunkFlushTimerRef.current = setTimeout(flushPendingChunks, 80);
+            chunkFlushTimerRef.current = setTimeout(flushPendingChunks, 32);
           }
           return;
         }
