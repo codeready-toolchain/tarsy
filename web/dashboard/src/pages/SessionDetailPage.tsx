@@ -725,17 +725,9 @@ export function SessionDetailPage() {
           // Truncated payloads only contain routing info — remove from
           // streaming immediately (no animation) and re-fetch.
           if (isTruncated) {
-            if (isSubAgentCompleted) {
-              setSubAgentStreamingEvents(removeFromMap);
-            } else {
-              setStreamingEvents(removeFromMap);
-            }
-            // Belt-and-suspenders: also try the other map
-            if (isSubAgentCompleted) {
-              setStreamingEvents(removeFromMap);
-            } else {
-              setSubAgentStreamingEvents(removeFromMap);
-            }
+            // Remove from both maps (belt-and-suspenders for edge cases)
+            setStreamingEvents(removeFromMap);
+            setSubAgentStreamingEvents(removeFromMap);
             refetchTimelineDebounced();
             return;
           }
@@ -800,30 +792,16 @@ export function SessionDetailPage() {
             }
             const timerId = setTimeout(() => {
               collapseTimersRef.current.delete(timerId);
-              if (isSubAgentCompleted) {
-                setSubAgentStreamingEvents(removeFromMap);
-              } else {
-                setStreamingEvents(removeFromMap);
-              }
-              if (isSubAgentCompleted) {
-                setStreamingEvents(removeFromMap);
-              } else {
-                setSubAgentStreamingEvents(removeFromMap);
-              }
+              // Remove from both maps (belt-and-suspenders for edge cases)
+              setStreamingEvents(removeFromMap);
+              setSubAgentStreamingEvents(removeFromMap);
               addToTimeline();
             }, 300);
             collapseTimersRef.current.add(timerId);
           } else {
-            if (isSubAgentCompleted) {
-              setSubAgentStreamingEvents(removeFromMap);
-            } else {
-              setStreamingEvents(removeFromMap);
-            }
-            if (isSubAgentCompleted) {
-              setStreamingEvents(removeFromMap);
-            } else {
-              setSubAgentStreamingEvents(removeFromMap);
-            }
+            // Remove from both maps (belt-and-suspenders for edge cases)
+            setStreamingEvents(removeFromMap);
+            setSubAgentStreamingEvents(removeFromMap);
             addToTimeline();
           }
           return;
