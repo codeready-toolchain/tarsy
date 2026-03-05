@@ -727,8 +727,8 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	// Final analysis comes from synthesis
 	assert.Contains(t, result.FinalAnalysis, "Synthesized")
 
-	// Verify DB: 2 stages (investigation + synthesis) + exec_summary
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// Verify DB: 3 stages (investigation + synthesis + exec_summary)
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
 	require.Len(t, stages, 3)
 
@@ -1230,13 +1230,13 @@ func TestExecutor_SynthesisSkippedForSingleAgent(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Equal(t, "Single agent analysis.", result.FinalAnalysis)
 
-	// 2 stages: investigation (no synthesis skipped for single agent) + exec_summary
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// 2 stages: investigation + exec_summary (synthesis is skipped for single-agent stages)
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, stages, 2)
 	assert.Equal(t, "investigation", stages[0].StageName)
 
-	// 2 agent executions: investigation + exec_summary
+	// 2 executions: investigation agent + exec_summary agent
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, execs, 2)
