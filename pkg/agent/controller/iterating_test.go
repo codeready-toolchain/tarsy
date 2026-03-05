@@ -1200,6 +1200,53 @@ func TestIteratingController_FallbackInForcedConclusion(t *testing.T) {
 	require.True(t, llm.capturedInputs[2].ClearCache)
 }
 
+func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {
+	// maxIter=1 with a tool call consumes the iteration, triggering forced
+	// conclusion. First forced conclusion returns empty → retry → success.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// Iteration 1: tool call (consumes the only iteration)
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "test.tool", Arguments: "{}"},
+			}},
+			// Forced conclusion: empty response
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 0, TotalTokens: 5},
+			}},
+			// Forced conclusion retry: success
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Final answer after retry."},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "test.tool", Description: "A test tool"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"test.tool": {Content: "tool result"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.MaxIterations = 1
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Final answer after retry.", result.FinalAnalysis)
+	require.Equal(t, 3, llm.callCount)
+
+	// Verify the retry nudge was injected into the third call
+	lastMessages := llm.capturedInputs[2].Messages
+	lastUserMsg := lastMessages[len(lastMessages)-1]
+	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)
+	assert.Contains(t, lastUserMsg.Content, "empty")
+}
+
 func TestIteratingController_NoFallbackWithEmptyList(t *testing.T) {
 	// When no fallback providers are configured, errors go through normal retry path
 	llm := &mockLLMClient{
