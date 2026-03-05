@@ -112,8 +112,8 @@ func (c *SingleShotController) Run(
 		if err == nil {
 			accumulateUsage(&totalUsage, streamed.LLMResponse)
 			resp := streamed.LLMResponse
-			hasContent := strings.TrimSpace(resp.Text) != "" || (c.cfg.ThinkingFallback && resp.ThinkingText != "")
-			if hasContent || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {
+			hasContent := strings.TrimSpace(resp.Text) != "" || (c.cfg.ThinkingFallback && strings.TrimSpace(resp.ThinkingText) != "")
+			if hasContent || emptyRetries >= maxEmptyResponseRetries {
 				break
 			}
 			emptyRetries++
@@ -133,6 +133,14 @@ func (c *SingleShotController) Run(
 			return nil, fmt.Errorf("%s LLM call failed: %w", c.cfg.InteractionLabel, err)
 		}
 		startTime = time.Now()
+	}
+
+	if status, done := agent.StatusFromContextErr(ctx); done {
+		return &agent.ExecutionResult{
+			Status:     status,
+			Error:      fmt.Errorf("%s interrupted: %w", c.cfg.InteractionLabel, ctx.Err()),
+			TokensUsed: totalUsage,
+		}, nil
 	}
 	resp := streamed.LLMResponse
 

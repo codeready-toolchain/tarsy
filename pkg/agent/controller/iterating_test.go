@@ -79,8 +79,14 @@ func TestIteratingController_EmptyResponseRetry(t *testing.T) {
 
 	// The retry message should be in the second call's messages
 	lastMessages := llm.capturedInputs[1].Messages
-	lastUserMsg := lastMessages[len(lastMessages)-1]
-	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)
+	var lastUserMsg *agent.ConversationMessage
+	for i := len(lastMessages) - 1; i >= 0; i-- {
+		if lastMessages[i].Role == agent.RoleUser {
+			lastUserMsg = &lastMessages[i]
+			break
+		}
+	}
+	require.NotNil(t, lastUserMsg, "expected a user message in the retry call")
 	assert.Contains(t, lastUserMsg.Content, "empty")
 }
 
@@ -1302,6 +1308,7 @@ func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.MaxIterations = 1
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
 
 	ctrl := NewIteratingController()
 	result, err := ctrl.Run(context.Background(), execCtx, "")
@@ -1315,8 +1322,14 @@ func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {
 
 	// Verify the retry nudge was injected into the third call
 	lastMessages := llm.capturedInputs[2].Messages
-	lastUserMsg := lastMessages[len(lastMessages)-1]
-	assert.Equal(t, agent.RoleUser, lastUserMsg.Role)
+	var lastUserMsg *agent.ConversationMessage
+	for i := len(lastMessages) - 1; i >= 0; i-- {
+		if lastMessages[i].Role == agent.RoleUser {
+			lastUserMsg = &lastMessages[i]
+			break
+		}
+	}
+	require.NotNil(t, lastUserMsg, "expected a user message in the forced conclusion retry call")
 	assert.Contains(t, lastUserMsg.Content, "empty")
 }
 
