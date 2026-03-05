@@ -1019,6 +1019,10 @@ export function SessionDetailPage() {
             clearTimeout(chunkFlushTimerRef.current);
             chunkFlushTimerRef.current = null;
           }
+          if (truncationRefetchTimerRef.current !== null) {
+            clearTimeout(truncationRefetchTimerRef.current);
+            truncationRefetchTimerRef.current = null;
+          }
           pendingChunksRef.current.clear();
           for (const t of collapseTimersRef.current) clearTimeout(t);
           collapseTimersRef.current.clear();
@@ -1082,6 +1086,10 @@ export function SessionDetailPage() {
       if (chunkFlushTimerRef.current !== null) {
         clearTimeout(chunkFlushTimerRef.current);
         chunkFlushTimerRef.current = null;
+      }
+      if (truncationRefetchTimerRef.current !== null) {
+        clearTimeout(truncationRefetchTimerRef.current);
+        truncationRefetchTimerRef.current = null;
       }
       pendingChunksRef.current.clear();
       for (const t of collapseTimersRef.current) clearTimeout(t);
@@ -1151,6 +1159,10 @@ export function SessionDetailPage() {
     return () => {
       if (disableTimeoutRef.current) clearTimeout(disableTimeoutRef.current);
       if (chunkFlushTimerRef.current !== null) clearTimeout(chunkFlushTimerRef.current);
+      if (truncationRefetchTimerRef.current !== null) {
+        clearTimeout(truncationRefetchTimerRef.current);
+        truncationRefetchTimerRef.current = null;
+      }
       for (const t of collapseTimersRef.current) clearTimeout(t);
       collapseTimersRef.current.clear();
     };
