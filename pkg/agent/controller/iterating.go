@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
@@ -240,8 +241,9 @@ func (c *IteratingController) Run(
 			}
 
 			// Empty response retry: if the LLM returned no text, nudge it to
-			// respond before accepting a blank final answer.
-			if resp.Text == "" && emptyRetries < maxEmptyResponseRetries {
+			// respond before accepting a blank final answer. Skip when the
+			// context is done - empty streams from cancellation are expected.
+			if strings.TrimSpace(resp.Text) == "" && emptyRetries < maxEmptyResponseRetries && ctx.Err() == nil {
 				emptyRetries++
 				slog.Warn("LLM returned empty response, retrying",
 					"session_id", execCtx.SessionID, "attempt", emptyRetries,
@@ -334,7 +336,7 @@ func (c *IteratingController) forceConclusion(
 		llmCancel()
 		if err == nil {
 			accumulateUsage(totalUsage, streamed.LLMResponse)
-			if streamed.LLMResponse.Text != "" || emptyRetries >= maxEmptyResponseRetries {
+			if strings.TrimSpace(streamed.LLMResponse.Text) != "" || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {
 				break
 			}
 			emptyRetries++

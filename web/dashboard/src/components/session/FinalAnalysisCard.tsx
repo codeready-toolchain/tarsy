@@ -196,7 +196,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
             </Paper>
 
             {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (
-              <ErrorCard label="Session completed with errors" message={errorMessage} sx={{ mt: 2 }} />
+              <ErrorCard label="Session Failed" message={errorMessage} sx={{ mt: 2 }} />
             )}
           </Collapse>
         </Paper>

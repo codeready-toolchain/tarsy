@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
@@ -111,8 +112,8 @@ func (c *SingleShotController) Run(
 		if err == nil {
 			accumulateUsage(&totalUsage, streamed.LLMResponse)
 			resp := streamed.LLMResponse
-			hasContent := resp.Text != "" || (c.cfg.ThinkingFallback && resp.ThinkingText != "")
-			if hasContent || emptyRetries >= maxEmptyResponseRetries {
+			hasContent := strings.TrimSpace(resp.Text) != "" || (c.cfg.ThinkingFallback && resp.ThinkingText != "")
+			if hasContent || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {
 				break
 			}
 			emptyRetries++

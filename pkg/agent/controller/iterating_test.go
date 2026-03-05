@@ -105,6 +105,31 @@ func TestIteratingController_EmptyResponseRetry_ExhaustsRetries(t *testing.T) {
 	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount)
 }
 
+func TestIteratingController_EmptyResponseRetry_SkipsOnCancelledContext(t *testing.T) {
+	// When the context is cancelled, empty responses are a side-effect of
+	// stream closure — not a genuine empty reply. No retry should fire.
+	// The controller propagates the DB error from storeAssistantMessage;
+	// the caller (executor) maps it to the correct cancelled status.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.UsageChunk{InputTokens: 5, OutputTokens: 0, TotalTokens: 5},
+			}},
+		},
+		onGenerate: func(_ int) { cancel() },
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	ctrl := NewIteratingController()
+
+	_, err := ctrl.Run(ctx, execCtx, "")
+	require.Equal(t, 1, llm.callCount, "should NOT retry — context is cancelled")
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestIteratingController_EmptyResponseRetry_ResetsAcrossTurns(t *testing.T) {
 	// Empty response → retry → tool call → empty response again.
 	// The second empty occurrence must get fresh retries (counter was reset
