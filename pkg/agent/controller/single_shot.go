@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
@@ -17,8 +18,8 @@ type SingleShotConfig struct {
 	// ThinkingFallback uses ThinkingText as final analysis when resp.Text is empty.
 	ThinkingFallback bool
 
-	// InteractionLabel is recorded in LLM interactions (e.g. "synthesis").
-	InteractionLabel string
+	// InteractionLabel is recorded in LLM interactions (e.g. InteractionTypeSynthesis).
+	InteractionLabel llminteraction.InteractionType
 }
 
 // SingleShotController executes a single LLM call with no MCP tools.
@@ -42,7 +43,22 @@ func NewSynthesisController(pb agent.PromptBuilder) *SingleShotController {
 	return NewSingleShotController(SingleShotConfig{
 		BuildMessages:    pb.BuildSynthesisMessages,
 		ThinkingFallback: true,
-		InteractionLabel: "synthesis",
+		InteractionLabel: llminteraction.InteractionTypeSynthesis,
+	})
+}
+
+// NewExecSummaryController creates a SingleShotController configured for executive summary.
+// prevStageContext receives the finalAnalysis text from the preceding investigation/synthesis stages.
+func NewExecSummaryController(pb agent.PromptBuilder) *SingleShotController {
+	return NewSingleShotController(SingleShotConfig{
+		BuildMessages: func(_ *agent.ExecutionContext, prevStageContext string) []agent.ConversationMessage {
+			return []agent.ConversationMessage{
+				{Role: agent.RoleSystem, Content: pb.BuildExecutiveSummarySystemPrompt()},
+				{Role: agent.RoleUser, Content: pb.BuildExecutiveSummaryUserPrompt(prevStageContext)},
+			}
+		},
+		ThinkingFallback: false,
+		InteractionLabel: llminteraction.InteractionTypeExecutiveSummary,
 	})
 }
 

@@ -24,7 +24,7 @@ import {
   isFlowItemTerminal,
   flowItemsToPlainText,
 } from '../../utils/timelineParser';
-import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
+import { TIMELINE_EVENT_TYPES, STAGE_TYPE } from '../../constants/eventTypes';
 import StageSeparator from '../timeline/StageSeparator';
 import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -40,8 +40,8 @@ import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
  * can watch the reasoning flow in real time.
  */
 function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): boolean {
-  const isSynthesis = group.stageName.toLowerCase().includes('synthesis');
-  if (!isSynthesis) return false;
+  const isCollapsible = group.stageType === STAGE_TYPE.SYNTHESIS || group.stageType === STAGE_TYPE.EXEC_SUMMARY;
+  if (!isCollapsible) return false;
   if (isSessionActive) return false;
   return TERMINAL_EXECUTION_STATUSES.has(group.stageStatus);
 }
@@ -214,6 +214,7 @@ export default function ConversationTimeline({
           stageId: stage.id,
           stageName: stage.stage_name,
           stageIndex: stage.stage_index,
+          stageType: stage.stage_type,
           stageStatus: stage.status,
           isParallel: stage.parallel_type != null && stage.parallel_type !== '' && stage.parallel_type !== 'none',
           expectedAgentCount: stage.expected_agent_count || 1,
@@ -415,6 +416,7 @@ export default function ConversationTimeline({
                       content: group.stageName,
                       metadata: {
                         stage_index: group.stageIndex,
+                        stage_type: group.stageType,
                         stage_status: group.stageStatus,
                       },
                       status: group.stageStatus,

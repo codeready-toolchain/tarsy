@@ -64,6 +64,23 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected ScoringController")
 	})
 
+	t.Run("exec_summary type returns SingleShotController", func(t *testing.T) {
+		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}))
+		esExecCtx := &agent.ExecutionContext{
+			SessionID:     "test-session",
+			StageID:       "test-stage",
+			AgentName:     "test-agent",
+			AgentIndex:    1,
+			PromptBuilder: pb,
+		}
+		controller, err := factory.CreateController(config.AgentTypeExecSummary, esExecCtx)
+		require.NoError(t, err)
+		require.NotNil(t, controller)
+
+		_, ok := controller.(*SingleShotController)
+		assert.True(t, ok, "expected SingleShotController")
+	})
+
 	t.Run("orchestrator type returns IteratingController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.AgentTypeOrchestrator, execCtx)
 		require.NoError(t, err)

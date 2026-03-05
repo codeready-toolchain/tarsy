@@ -1,16 +1,5 @@
 {
-  "session_interactions": [
-    {
-      "created_at": "{TIMESTAMP}",
-      "duration_ms": {DURATION_MS},
-      "id": "{INTERACTION_ID_9}",
-      "input_tokens": 10,
-      "interaction_type": "executive_summary",
-      "model_name": "test-model",
-      "output_tokens": 5,
-      "total_tokens": 15
-    }
-  ],
+  "session_interactions": [],
   "stages": [
     {
       "executions": [
@@ -108,6 +97,30 @@
       "stage_id": "{STAGE_ID_1}",
       "stage_name": "orchestrate",
       "stage_type": "investigation"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ExecSummaryAgent",
+          "execution_id": "{UUID}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{UUID}",
+              "input_tokens": 10,
+              "interaction_type": "executive_summary",
+              "model_name": "test-model",
+              "output_tokens": 5,
+              "total_tokens": 15
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "stage_id": "{UUID}",
+      "stage_name": "Executive Summary",
+      "stage_type": "exec_summary"
     }
   ]
 }

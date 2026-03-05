@@ -150,12 +150,12 @@ func newIntegrationBuilder() *PromptBuilder {
 func newIntegrationExecCtx() *agent.ExecutionContext {
 	return &agent.ExecutionContext{
 		SessionID:      "test-session",
-		AgentName:      "KubernetesAgent",
+		AgentName:      config.AgentNameKubernetes,
 		AlertData:      `{"description": "Test alert scenario", "namespace": "test-namespace"}`,
 		AlertType:      "test-investigation",
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
-			AgentName:          "KubernetesAgent",
+			AgentName:          config.AgentNameKubernetes,
 			Type:               config.AgentTypeDefault,
 			LLMBackend:         config.LLMBackendLangChain,
 			MCPServers:         []string{"kubernetes-server"},
@@ -167,12 +167,12 @@ func newIntegrationExecCtx() *agent.ExecutionContext {
 func newSynthesisExecCtx() *agent.ExecutionContext {
 	return &agent.ExecutionContext{
 		SessionID:      "test-session",
-		AgentName:      "SynthesisAgent",
+		AgentName:      config.AgentNameSynthesis,
 		AlertData:      `{"description": "Test alert scenario", "namespace": "test-namespace"}`,
 		AlertType:      "test-investigation",
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
-			AgentName:          "SynthesisAgent",
+			AgentName:          config.AgentNameSynthesis,
 			Type:               config.AgentTypeSynthesis,
 			LLMBackend:         config.LLMBackendLangChain,
 			MCPServers:         []string{}, // Synthesis has no MCP servers
@@ -184,12 +184,12 @@ func newSynthesisExecCtx() *agent.ExecutionContext {
 func newSynthesisGoogleNativeExecCtx() *agent.ExecutionContext {
 	return &agent.ExecutionContext{
 		SessionID:      "test-session",
-		AgentName:      "SynthesisAgent",
+		AgentName:      config.AgentNameSynthesis,
 		AlertData:      `{"description": "Test alert scenario", "namespace": "test-namespace"}`,
 		AlertType:      "test-investigation",
 		RunbookContent: "# Test Runbook\nThis is a test runbook for integration testing.",
 		Config: &agent.ResolvedAgentConfig{
-			AgentName:          "SynthesisAgent",
+			AgentName:          config.AgentNameSynthesis,
 			Type:               config.AgentTypeSynthesis,
 			LLMBackend:         config.LLMBackendNativeGemini,
 			MCPServers:         []string{}, // Synthesis has no MCP servers

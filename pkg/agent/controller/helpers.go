@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -40,7 +41,7 @@ func recordLLMInteraction(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	iteration int,
-	interactionType string,
+	interactionType llminteraction.InteractionType,
 	messagesCount int,
 	resp *LLMResponse,
 	lastMessageID *string,
@@ -102,7 +103,7 @@ func recordLLMInteraction(
 		SessionID:        execCtx.SessionID,
 		StageID:          &execCtx.StageID,
 		ExecutionID:      &execCtx.ExecutionID,
-		InteractionType:  interactionType,
+		InteractionType:  string(interactionType),
 		ModelName:        execCtx.Config.LLMProvider.Model,
 		LastMessageID:    lastMessageID,
 		LLMRequest:       llmRequestMeta,

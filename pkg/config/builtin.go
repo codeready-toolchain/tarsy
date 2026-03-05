@@ -29,6 +29,17 @@ type BuiltinAgentConfig struct {
 	NativeTools        map[GoogleNativeTool]bool
 }
 
+// Built-in agent names. Use these constants instead of string literals
+// when referencing built-in agents in resolvers, executors, and tests.
+const (
+	AgentNameKubernetes   = "KubernetesAgent"
+	AgentNameChat         = "ChatAgent"
+	AgentNameExecSummary  = "ExecSummaryAgent"
+	AgentNameSynthesis    = "SynthesisAgent"
+	AgentNameScoring      = "ScoringAgent"
+	AgentNameOrchestrator = "Orchestrator"
+)
+
 var (
 	builtinConfig     *BuiltinConfig
 	builtinConfigOnce sync.Once
@@ -56,15 +67,20 @@ func initBuiltinConfig() {
 
 func initBuiltinAgents() map[string]BuiltinAgentConfig {
 	return map[string]BuiltinAgentConfig{
-		"KubernetesAgent": {
+		AgentNameKubernetes: {
 			Description: "Kubernetes-specialized agent",
 			MCPServers:  []string{"kubernetes-server"},
 		},
-		"ChatAgent": {
+		AgentNameChat: {
 			Description: "Built-in agent for follow-up conversations",
 			// No MCPServers — inherits from chain stages via aggregateChainMCPServers.
 		},
-		"SynthesisAgent": {
+		AgentNameExecSummary: {
+			Description: "Generates executive summary of the investigation",
+			Type:        AgentTypeExecSummary,
+			// No MCP servers — single-shot, no tools
+		},
+		AgentNameSynthesis: {
 			Description: "Synthesizes parallel investigation results",
 			Type:        AgentTypeSynthesis,
 			CustomInstructions: `You are an Incident Commander synthesizing results from multiple parallel investigations.
@@ -111,7 +127,7 @@ Show your work. Report results clearly.`,
 			CustomInstructions: `You are GeneralWorker, a general-purpose agent.
 Complete the assigned task thoroughly and concisely.`,
 		},
-		"Orchestrator": {
+		AgentNameOrchestrator: {
 			Description: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
 			Type:        AgentTypeOrchestrator,
 		},
@@ -266,7 +282,7 @@ func initBuiltinChains() map[string]ChainConfig {
 				{
 					Name: "analysis",
 					Agents: []StageAgentConfig{
-						{Name: "KubernetesAgent"},
+						{Name: AgentNameKubernetes},
 					},
 				},
 			},

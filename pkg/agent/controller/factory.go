@@ -24,6 +24,8 @@ func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.Ex
 		return NewIteratingController(), nil
 	case config.AgentTypeSynthesis:
 		return NewSynthesisController(execCtx.PromptBuilder), nil
+	case config.AgentTypeExecSummary:
+		return NewExecSummaryController(execCtx.PromptBuilder), nil
 	case config.AgentTypeScoring:
 		return NewScoringController(), nil
 	case config.AgentTypeOrchestrator:

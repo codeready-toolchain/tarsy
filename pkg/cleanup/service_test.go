@@ -25,7 +25,7 @@ func setupSessionService(t *testing.T) (*database.Client, *services.SessionServi
 			Stages: []config.StageConfig{
 				{
 					Name:   "analysis",
-					Agents: []config.StageAgentConfig{{Name: "KubernetesAgent"}},
+					Agents: []config.StageAgentConfig{{Name: config.AgentNameKubernetes}},
 				},
 			},
 		},

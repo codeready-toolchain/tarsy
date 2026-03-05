@@ -329,8 +329,8 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
             />
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            These interactions run at the session level, outside the stage pipeline
-            (e.g., executive summary generation).
+            These interactions ran at the session level, outside the stage pipeline.
+            In newer sessions, executive summaries run as typed stages and appear above.
           </Typography>
           <Stack spacing={2}>
             {sessionInteractions.map((interaction) => (

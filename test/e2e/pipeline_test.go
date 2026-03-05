@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -300,36 +301,38 @@ func TestE2E_Pipeline(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
 
-	// Verify DB state — 6 pipeline stages + 2 chat stages.
+	// Verify DB state — 6 pipeline stages + exec_summary + 2 chat stages.
 	stages := app.QueryStages(t, sessionID)
-	assert.Len(t, stages, 8)
+	assert.Len(t, stages, 9)
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, "remediation", stages[1].StageName)
 	assert.Equal(t, "validation", stages[2].StageName)
 	assert.Equal(t, "validation - Synthesis", stages[3].StageName)
 	assert.Equal(t, "scaling-review", stages[4].StageName)
 	assert.Equal(t, "scaling-review - Synthesis", stages[5].StageName)
-	assert.Equal(t, "Chat Response", stages[6].StageName)
+	assert.Equal(t, "Executive Summary", stages[6].StageName)
 	assert.Equal(t, "Chat Response", stages[7].StageName)
+	assert.Equal(t, "Chat Response", stages[8].StageName)
 
-	// 8 pipeline execs + 2 chat execs = 10.
+	// 8 pipeline execs + exec_summary + 2 chat execs = 11.
 	execs := app.QueryExecutions(t, sessionID)
-	assert.Len(t, execs, 10)
+	assert.Len(t, execs, 11)
 	assert.Equal(t, "DataCollector", execs[0].AgentName)
 	assert.Equal(t, "Remediator", execs[1].AgentName)
 	// Validation parallel agents — order may vary, so check by name set.
 	validationNames := map[string]bool{execs[2].AgentName: true, execs[3].AgentName: true}
 	assert.True(t, validationNames["ConfigValidator"], "expected ConfigValidator execution")
 	assert.True(t, validationNames["MetricsValidator"], "expected MetricsValidator execution")
-	assert.Equal(t, "SynthesisAgent", execs[4].AgentName)
+	assert.Equal(t, config.AgentNameSynthesis, execs[4].AgentName)
 	// Scaling-review replicas — order may vary, so check by name set.
 	replicaNames := map[string]bool{execs[5].AgentName: true, execs[6].AgentName: true}
 	assert.True(t, replicaNames["ScalingReviewer-1"], "expected ScalingReviewer-1 execution")
 	assert.True(t, replicaNames["ScalingReviewer-2"], "expected ScalingReviewer-2 execution")
-	assert.Equal(t, "SynthesisAgent", execs[7].AgentName)
+	assert.Equal(t, config.AgentNameSynthesis, execs[7].AgentName)
+	assert.Equal(t, config.AgentNameExecSummary, execs[8].AgentName)
 	// Chat executions — both use the built-in ChatAgent.
-	assert.Equal(t, "ChatAgent", execs[8].AgentName)
-	assert.Equal(t, "ChatAgent", execs[9].AgentName)
+	assert.Equal(t, config.AgentNameChat, execs[9].AgentName)
+	assert.Equal(t, config.AgentNameChat, execs[10].AgentName)
 
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)

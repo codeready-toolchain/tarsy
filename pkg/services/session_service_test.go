@@ -847,7 +847,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetID(uuid.New().String()).
 			SetSessionID(sess.ID).
 			SetStageID(stg.ID).
-			SetAgentName("KubernetesAgent").
+			SetAgentName(config.AgentNameKubernetes).
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendNativeGemini)).
 			SetLlmProvider("gemini-2.5-pro").
@@ -914,7 +914,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 
 		eo1 := detail.Stages[0].Executions[0]
 		assert.Equal(t, exec1.ID, eo1.ExecutionID)
-		assert.Equal(t, "KubernetesAgent", eo1.AgentName)
+		assert.Equal(t, config.AgentNameKubernetes, eo1.AgentName)
 		assert.Equal(t, 1, eo1.AgentIndex)
 		assert.Equal(t, "completed", eo1.Status)
 		assert.Equal(t, string(config.LLMBackendNativeGemini), eo1.LLMBackend)
@@ -968,7 +968,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetID(uuid.New().String()).
 			SetSessionID(sess.ID).
 			SetStageID(stg.ID).
-			SetAgentName("Orchestrator").
+			SetAgentName(config.AgentNameOrchestrator).
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetStatus("completed").
@@ -1038,7 +1038,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 
 		orch := detail.Stages[0].Executions[0]
 		assert.Equal(t, orchestrator.ID, orch.ExecutionID)
-		assert.Equal(t, "Orchestrator", orch.AgentName)
+		assert.Equal(t, config.AgentNameOrchestrator, orch.AgentName)
 		assert.Nil(t, orch.ParentExecutionID)
 		assert.Nil(t, orch.Task)
 		assert.Equal(t, int64(100), orch.InputTokens)
@@ -1110,7 +1110,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetID(uuid.New().String()).
 			SetSessionID(sess.ID).
 			SetStageID(stg.ID).
-			SetAgentName("KubernetesAgent").
+			SetAgentName(config.AgentNameKubernetes).
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetLlmProvider("openai-gpt4").
@@ -1208,7 +1208,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetID(uuid.New().String()).
 			SetSessionID(sess.ID).
 			SetStageID(stg.ID).
-			SetAgentName("KubernetesAgent").
+			SetAgentName(config.AgentNameKubernetes).
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetLlmProvider("fallback-2").

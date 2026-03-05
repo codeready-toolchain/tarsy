@@ -74,6 +74,7 @@ import {
   TIMELINE_STATUS,
   TIMELINE_EVENT_TYPES,
   PHASE_STATUS_MESSAGE,
+  STAGE_TYPE,
 } from '../constants/eventTypes.ts';
 
 import {
@@ -837,7 +838,7 @@ export function SessionDetailPage() {
               // Update existing stage
               const updatedStages = stages.map((stage) =>
                 stage.id === payload.stage_id
-                  ? { ...stage, status: payload.status }
+                  ? { ...stage, status: payload.status, stage_type: payload.stage_type ?? stage.stage_type }
                   : stage,
               );
               return { ...prev, stages: updatedStages };
@@ -851,6 +852,7 @@ export function SessionDetailPage() {
               id: payload.stage_id,
               stage_name: payload.stage_name || `Stage ${safeIndex + 1}`,
               stage_index: safeIndex,
+              stage_type: payload.stage_type || STAGE_TYPE.INVESTIGATION,
               status: payload.status,
               parallel_type: null,
               expected_agent_count: 1,

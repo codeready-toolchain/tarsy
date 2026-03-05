@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
 
@@ -155,21 +156,29 @@ func TestE2E_Concurrency(t *testing.T) {
 		assert.Equal(t, "completed", session["status"],
 			"%s: should be completed", label)
 
-		// Stage assertions: exactly 1 stage (analysis), completed.
+		// Stage assertions: 2 stages (analysis + exec_summary), both completed.
 		stages := app.QueryStages(t, sessionID)
-		require.Len(t, stages, 1, "%s: should have exactly 1 stage", label)
+		require.Len(t, stages, 2, "%s: should have exactly 2 stages (analysis + exec_summary)", label)
 		assert.Equal(t, "analysis", stages[0].StageName,
-			"%s: stage name", label)
+			"%s: first stage name", label)
 		assert.Equal(t, "completed", string(stages[0].Status),
-			"%s: stage status", label)
+			"%s: first stage status", label)
+		assert.Equal(t, "Executive Summary", stages[1].StageName,
+			"%s: second stage name", label)
+		assert.Equal(t, "completed", string(stages[1].Status),
+			"%s: second stage status", label)
 
-		// Execution assertions: exactly 1 execution (SimpleAgent), completed.
+		// Execution assertions: 2 executions (SimpleAgent + ExecSummaryAgent).
 		execs := app.QueryExecutions(t, sessionID)
-		require.Len(t, execs, 1, "%s: should have exactly 1 execution", label)
+		require.Len(t, execs, 2, "%s: should have exactly 2 executions (SimpleAgent + ExecSummaryAgent)", label)
 		assert.Equal(t, "SimpleAgent", execs[0].AgentName,
-			"%s: agent name", label)
+			"%s: first agent name", label)
 		assert.Equal(t, "completed", string(execs[0].Status),
-			"%s: execution status", label)
+			"%s: first execution status", label)
+		assert.Equal(t, config.AgentNameExecSummary, execs[1].AgentName,
+			"%s: second agent name", label)
+		assert.Equal(t, "completed", string(execs[1].Status),
+			"%s: second execution status", label)
 
 		// Timeline API: no events stuck as "streaming".
 		apiTimeline := app.GetTimeline(t, sessionID)

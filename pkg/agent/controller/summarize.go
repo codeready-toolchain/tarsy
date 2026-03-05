@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -353,7 +354,7 @@ func recordSummarizationInteraction(
 		SessionID:       execCtx.SessionID,
 		StageID:         &execCtx.StageID,
 		ExecutionID:     &execCtx.ExecutionID,
-		InteractionType: "summarization",
+		InteractionType: string(llminteraction.InteractionTypeSummarization),
 		ModelName:       execCtx.Config.LLMProvider.Model,
 		LLMRequest: map[string]any{
 			"messages_count": len(inputMessages),

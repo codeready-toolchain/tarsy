@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -191,32 +192,38 @@ func TestE2E_Timeout(t *testing.T) {
 
 	// ── Session 2 stage assertions ──
 	stages2 := app.QueryStages(t, session2ID)
-	// Expect: quick-check + Chat Response (timed_out) + Chat Response (completed) = 3 stages
-	require.Len(t, stages2, 3, "quick-check + 2 chat stages")
+	// Expect: quick-check + exec_summary + Chat Response (timed_out) + Chat Response (completed) = 4 stages
+	require.Len(t, stages2, 4, "quick-check + exec_summary + 2 chat stages")
 
 	assert.Equal(t, "quick-check", stages2[0].StageName)
 	assert.Equal(t, "completed", string(stages2[0].Status))
 
-	assert.Equal(t, "Chat Response", stages2[1].StageName)
-	assert.Equal(t, "timed_out", string(stages2[1].Status))
+	assert.Equal(t, "Executive Summary", stages2[1].StageName)
+	assert.Equal(t, "completed", string(stages2[1].Status))
 
 	assert.Equal(t, "Chat Response", stages2[2].StageName)
-	assert.Equal(t, "completed", string(stages2[2].Status))
+	assert.Equal(t, "timed_out", string(stages2[2].Status))
+
+	assert.Equal(t, "Chat Response", stages2[3].StageName)
+	assert.Equal(t, "completed", string(stages2[3].Status))
 
 	// ── Session 2 execution assertions ──
 	execs2 := app.QueryExecutions(t, session2ID)
-	// QuickInvestigator + ChatAgent (timed_out) + ChatAgent (completed) = 3
-	require.Len(t, execs2, 3, "QuickInvestigator + 2 chat executions")
+	// QuickInvestigator + ExecSummaryAgent + ChatAgent (timed_out) + ChatAgent (completed) = 4
+	require.Len(t, execs2, 4, "QuickInvestigator + ExecSummaryAgent + 2 chat executions")
 
 	assert.Equal(t, "QuickInvestigator", execs2[0].AgentName)
 	assert.Equal(t, "completed", string(execs2[0].Status))
 
-	// Chat executions — both use the built-in ChatAgent.
-	assert.Equal(t, "ChatAgent", execs2[1].AgentName)
-	assert.Equal(t, "timed_out", string(execs2[1].Status))
+	assert.Equal(t, config.AgentNameExecSummary, execs2[1].AgentName)
+	assert.Equal(t, "completed", string(execs2[1].Status))
 
-	assert.Equal(t, "ChatAgent", execs2[2].AgentName)
-	assert.Equal(t, "completed", string(execs2[2].Status))
+	// Chat executions — both use the built-in ChatAgent.
+	assert.Equal(t, config.AgentNameChat, execs2[2].AgentName)
+	assert.Equal(t, "timed_out", string(execs2[2].Status))
+
+	assert.Equal(t, config.AgentNameChat, execs2[3].AgentName)
+	assert.Equal(t, "completed", string(execs2[3].Status))
 
 	// ── Session 2 Timeline API assertions ──
 	apiTimeline2 := app.GetTimeline(t, session2ID)
@@ -239,9 +246,9 @@ func TestE2E_Timeout(t *testing.T) {
 			finalAnalysisCount++
 		}
 	}
-	// QuickInvestigator final_analysis + follow-up chat final_analysis = 2
-	assert.Equal(t, 2, finalAnalysisCount,
-		"should have 2 final_analysis events (QuickInvestigator + follow-up chat)")
+	// QuickInvestigator final_analysis + exec_summary + follow-up chat final_analysis = 3
+	assert.Equal(t, 3, finalAnalysisCount,
+		"should have 3 final_analysis events (QuickInvestigator + exec_summary + follow-up chat)")
 
 	// WS event structural assertions for Session 2.
 	AssertEventsInOrder(t, ws2.Events(), testdata.TimeoutChatExpectedEvents)

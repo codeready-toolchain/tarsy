@@ -185,10 +185,14 @@ func testConfig(chainID string, chain *config.ChainConfig) *config.Config {
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
 			},
-			"SynthesisAgent": {
+			config.AgentNameSynthesis: {
 				Type:          config.AgentTypeSynthesis,
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
+			},
+			config.AgentNameExecSummary: {
+				Type:       config.AgentTypeExecSummary,
+				LLMBackend: config.LLMBackendLangChain,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -261,17 +265,20 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 	assert.Equal(t, "Everything is healthy.", result.FinalAnalysis)
 	assert.Nil(t, result.Error)
 
-	// Verify Stage DB record
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// Verify Stage DB records: investigation + exec_summary
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 1)
+	require.Len(t, stages, 2) // investigation + exec_summary
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, 1, stages[0].StageIndex)
 	assert.Equal(t, stage.StatusCompleted, stages[0].Status)
 	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
+	assert.Equal(t, "Executive Summary", stages[1].StageName)
+	assert.Equal(t, 2, stages[1].StageIndex)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[1].StageType)
 
-	// Verify stage events: started + completed
-	require.Len(t, publisher.stageStatuses, 2)
+	// Verify stage events: started + completed for investigation, + 2 for exec_summary
+	require.Len(t, publisher.stageStatuses, 4)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
 	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageName)
 	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageType)
@@ -326,18 +333,18 @@ func TestExecutor_MultiStageChain(t *testing.T) {
 	assert.Equal(t, "Root cause is memory leak in app container.", result.FinalAnalysis)
 	assert.Nil(t, result.Error)
 
-	// Verify 2 Stage DB records
+	// Verify Stage DB records: 2 investigation + exec_summary
 	stages, err := entClient.Stage.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 2)
+	require.Len(t, stages, 3)
 
-	// Verify 2 AgentExecution records
+	// Verify AgentExecution records: 2 investigation + exec_summary
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, execs, 2)
+	require.Len(t, execs, 3)
 
-	// Verify stage events: started + completed for each stage = 4 events
-	require.Len(t, publisher.stageStatuses, 4)
+	// Verify stage events: started + completed for each stage + 2 for exec_summary = 6 events
+	require.Len(t, publisher.stageStatuses, 6)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
 	assert.Equal(t, "data-collection", publisher.stageStatuses[0].StageName)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[1].Status)
@@ -345,11 +352,11 @@ func TestExecutor_MultiStageChain(t *testing.T) {
 	assert.Equal(t, "diagnosis", publisher.stageStatuses[2].StageName)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
 
-	// Verify session progress was updated
+	// Verify session progress was updated (3 stages: 2 investigation + exec_summary)
 	updatedSession, err := entClient.AlertSession.Get(context.Background(), session.ID)
 	require.NoError(t, err)
 	require.NotNil(t, updatedSession.CurrentStageIndex)
-	assert.Equal(t, 2, *updatedSession.CurrentStageIndex)
+	assert.Equal(t, 3, *updatedSession.CurrentStageIndex)
 }
 
 func TestExecutor_FailFast(t *testing.T) {
@@ -518,8 +525,8 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 		},
 	}
 
-	// LLM call 1: agent final answer
-	// LLM call 2: executive summary
+	// LLM call 1: investigation agent final answer
+	// LLM call 2: executive summary (via ExecSummaryController / SingleShotController)
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
@@ -544,23 +551,23 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	assert.Equal(t, "Executive summary: Pod-1 OOM killed.", result.ExecutiveSummary)
 	assert.Empty(t, result.ExecutiveSummaryError)
 
-	// Verify executive_summary timeline event with NULL stage_id/execution_id
-	tlEvents, err := entClient.TimelineEvent.Query().All(context.Background())
+	// Verify exec_summary Stage DB record was created.
+	stages, err := entClient.Stage.Query().All(context.Background())
 	require.NoError(t, err)
 
-	var summaryEvent *ent.TimelineEvent
-	for _, ev := range tlEvents {
-		if ev.EventType == timelineevent.EventTypeExecutiveSummary {
-			summaryEvent = ev
+	var execSummaryStage *ent.Stage
+	for _, stg := range stages {
+		if stg.StageType == stage.StageTypeExecSummary {
+			execSummaryStage = stg
 			break
 		}
 	}
-	require.NotNil(t, summaryEvent, "should have executive_summary timeline event")
-	assert.Contains(t, summaryEvent.Content, "Executive summary: Pod-1 OOM killed.")
-	assert.Nil(t, summaryEvent.StageID, "executive_summary should have nil stage_id")
-	assert.Nil(t, summaryEvent.ExecutionID, "executive_summary should have nil execution_id")
+	require.NotNil(t, execSummaryStage, "should have exec_summary Stage record")
+	assert.Equal(t, "Executive Summary", execSummaryStage.StageName)
+	assert.Equal(t, session.ID, execSummaryStage.SessionID)
 
-	// Verify executive_summary LLM interaction (session-level, nil stage/execution).
+	// Verify executive_summary LLM interaction is stage-level (non-nil stage_id and execution_id).
+	// Exec summary interactions are created by the agent framework, not session-level.
 	llmInteractions, err := entClient.LLMInteraction.Query().All(context.Background())
 	require.NoError(t, err)
 
@@ -572,17 +579,64 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 		}
 	}
 	require.NotNil(t, execSummaryInteraction, "should have executive_summary LLM interaction")
-	assert.Nil(t, execSummaryInteraction.StageID, "executive_summary interaction should have nil stage_id")
-	assert.Nil(t, execSummaryInteraction.ExecutionID, "executive_summary interaction should have nil execution_id")
+	assert.NotNil(t, execSummaryInteraction.StageID, "exec summary interaction should have a stage_id")
+	assert.NotNil(t, execSummaryInteraction.ExecutionID, "exec summary interaction should have an execution_id")
 	assert.Equal(t, session.ID, execSummaryInteraction.SessionID)
 	assert.NotNil(t, execSummaryInteraction.DurationMs, "should record duration")
 
-	// Verify inline conversation is stored in llm_request.
-	convRaw, ok := execSummaryInteraction.LlmRequest["conversation"]
-	assert.True(t, ok, "llm_request should contain conversation")
-	conv, ok := convRaw.([]any)
-	assert.True(t, ok, "conversation should be a slice")
-	assert.Len(t, conv, 3, "should have system + user + assistant messages")
+	// Verify stage.status events include exec_summary started and terminal events.
+	publisher.mu.Lock()
+	stageEvents := publisher.stageStatuses
+	publisher.mu.Unlock()
+	var execSummaryStarted, execSummaryTerminal bool
+	for _, ev := range stageEvents {
+		if ev.StageType == string(stage.StageTypeExecSummary) {
+			if ev.Status == "started" {
+				execSummaryStarted = true
+			} else {
+				execSummaryTerminal = true
+			}
+		}
+	}
+	assert.True(t, execSummaryStarted, "should publish exec_summary stage.status: started")
+	assert.True(t, execSummaryTerminal, "should publish exec_summary stage.status terminal event")
+}
+
+// Verify that the no-longer-created executive_summary timeline event is absent in new sessions.
+// Legacy sessions may still have this event; new sessions use stage-based timeline events.
+func TestExecutor_ExecutiveSummaryNoLegacyTimelineEvent(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "investigation", Agents: []config.StageAgentConfig{{Name: "TestAgent"}}},
+		},
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "OOM killed pod-1."}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summary: OOM."}}},
+		},
+	}
+
+	cfg := testConfig("test-chain", chain)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+
+	tlEvents, err := entClient.TimelineEvent.Query().All(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, tlEvents, "timeline events should have been created")
+
+	for _, ev := range tlEvents {
+		assert.NotEqual(t, timelineevent.EventTypeExecutiveSummary, ev.EventType,
+			"new sessions should not create legacy executive_summary timeline events")
+	}
 }
 
 func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {
@@ -654,6 +708,10 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesized: Both agents agree on memory issue."},
 			}},
+			// Exec summary agent
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "OOM caused by memory leak in application."},
+			}},
 		},
 	}
 
@@ -669,10 +727,10 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	// Final analysis comes from synthesis
 	assert.Contains(t, result.FinalAnalysis, "Synthesized")
 
-	// Verify DB: 2 stages (investigation + synthesis)
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// Verify DB: 3 stages (investigation + synthesis + exec_summary)
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 2)
+	require.Len(t, stages, 3)
 
 	// Investigation stage
 	assert.Equal(t, "parallel-investigation", stages[0].StageName)
@@ -689,13 +747,14 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	assert.Nil(t, stages[1].ParallelType)
 	assert.Equal(t, stage.StatusCompleted, stages[1].Status)
 
-	// Verify 3 AgentExecution records (2 investigation + 1 synthesis)
+	// Verify AgentExecution records: 2 investigation + 1 synthesis + 1 exec_summary
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, execs, 3)
+	assert.Len(t, execs, 4)
 
-	// Verify stage events: started+completed for investigation, started+completed for synthesis = 4
-	require.Len(t, publisher.stageStatuses, 4)
+	// Verify stage events: started+completed for investigation, started+completed for synthesis
+	// + 2 for exec_summary = 6 total
+	require.Len(t, publisher.stageStatuses, 6)
 	assert.Equal(t, "parallel-investigation", publisher.stageStatuses[0].StageName)
 	assert.Equal(t, "investigation", publisher.stageStatuses[0].StageType)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
@@ -708,21 +767,21 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
 
 	// Verify execution.status events: each agent emits active + terminal.
-	// 3 agents (2 investigation + 1 synthesis) × 2 events each = 6 total.
+	// 4 agents (2 investigation + 1 synthesis + 1 exec_summary) × 2 events = 8 total.
 	execStatuses := publisher.getExecutionStatuses()
-	require.Len(t, execStatuses, 6, "expected 6 execution.status events (active+completed for each of 3 agents)")
+	require.Len(t, execStatuses, 8, "expected 8 execution.status events (active+completed for each of 4 agents)")
 	for _, es := range execStatuses {
 		assert.NotEmpty(t, es.ExecutionID, "execution.status should include execution_id")
 		assert.Equal(t, events.EventTypeExecutionStatus, es.Type, "event type should be execution.status")
 	}
 
-	// 3 "active" events (one per agent at startup)
+	// 4 "active" events (one per agent at startup, including exec_summary)
 	activeEvents := publisher.filterExecutionStatuses("active")
-	assert.Len(t, activeEvents, 3, "each agent should emit execution.status: active at startup")
+	assert.Len(t, activeEvents, 4, "each agent should emit execution.status: active at startup")
 
-	// 3 "completed" events (one per agent at completion)
+	// All 4 agents should complete: 2 investigation + 1 synthesis + 1 exec_summary
 	completedEvents := publisher.filterExecutionStatuses("completed")
-	assert.Len(t, completedEvents, 3, "all agents should complete successfully")
+	assert.Len(t, completedEvents, 4, "all agents (2 investigation + synthesis + exec_summary) should complete")
 
 	// Verify AgentIndex preserves chain config ordering (1-based).
 	// Investigation stage has 2 agents → AgentIndex 1 and 2.
@@ -856,10 +915,10 @@ func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Nil(t, result.Error)
 
-	// Both agents ran + synthesis = 3 executions
+	// Both agents ran + synthesis + exec_summary = 4 executions
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, execs, 3)
+	assert.Len(t, execs, 4)
 }
 
 func TestExecutor_NilEventPublisher(t *testing.T) {
@@ -942,10 +1001,10 @@ func TestExecutor_ReplicaAllSucceed(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Contains(t, result.FinalAnalysis, "Synthesized from 3 replicas")
 
-	// Verify DB: investigation stage + synthesis stage
+	// Verify DB: investigation stage + synthesis stage + exec_summary
 	stages, err := entClient.Stage.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 2)
+	require.Len(t, stages, 3)
 
 	// Investigation stage: replicas=3 → parallel_type=replica
 	assert.Equal(t, "replicated-stage", stages[0].StageName)
@@ -1109,8 +1168,8 @@ func TestExecutor_StageEventsHaveCorrectIndex(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 
-	// 4 stage events: started/completed for each stage
-	require.Len(t, publisher.stageStatuses, 4)
+	// 4 stage events for investigation stages + 2 for exec_summary = 6
+	require.Len(t, publisher.stageStatuses, 6)
 
 	// Stage A events should have index 1 (1-based for clients)
 	assert.Equal(t, 1, publisher.stageStatuses[0].StageIndex)
@@ -1171,16 +1230,16 @@ func TestExecutor_SynthesisSkippedForSingleAgent(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Equal(t, "Single agent analysis.", result.FinalAnalysis)
 
-	// Only 1 stage — no synthesis
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// 2 stages: investigation + exec_summary (synthesis is skipped for single-agent stages)
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, stages, 1)
+	assert.Len(t, stages, 2)
 	assert.Equal(t, "investigation", stages[0].StageName)
 
-	// Only 1 agent execution
+	// 2 executions: investigation agent + exec_summary agent
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, execs, 1)
+	assert.Len(t, execs, 2)
 }
 
 func TestExecutor_SynthesisFailure(t *testing.T) {
@@ -1282,14 +1341,15 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 	assert.Contains(t, result.FinalAnalysis, "Default synthesis result")
 
 	// Verify synthesis agent execution used default name
+	// 4 execs: 2 investigation agents + SynthesisAgent + ExecSummaryAgent
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, execs, 3)
+	require.Len(t, execs, 4)
 
 	// Find synthesis execution
 	var synthExec *ent.AgentExecution
 	for _, e := range execs {
-		if e.AgentName == "SynthesisAgent" {
+		if e.AgentName == config.AgentNameSynthesis {
 			synthExec = e
 			break
 		}
@@ -1318,7 +1378,7 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 		},
 	}
 
-	// LLM: agent1 answer, agent2 answer, synthesis
+	// LLM: agent1 answer, agent2 answer, synthesis, exec_summary
 	llm := &mockLLMClient{
 		capture: true,
 		responses: []mockLLMResponse{
@@ -1330,6 +1390,9 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Synthesis done."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Executive summary."},
 			}},
 		},
 	}
@@ -1350,10 +1413,14 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
 			},
-			"SynthesisAgent": {
+			config.AgentNameSynthesis: {
 				Type:          config.AgentTypeSynthesis,
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
+			},
+			config.AgentNameExecSummary: {
+				Type:       config.AgentTypeExecSummary,
+				LLMBackend: config.LLMBackendLangChain,
 			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -1374,7 +1441,7 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 	// Verify execution records store the resolved backend from agent registry
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, execs, 3) // NativeAgent, LangChainAgent, SynthesisAgent
+	require.Len(t, execs, 4) // NativeAgent, LangChainAgent, SynthesisAgent, ExecSummaryAgent
 
 	execByName := make(map[string]*ent.AgentExecution)
 	for _, e := range execs {
@@ -1389,8 +1456,8 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 	assert.Equal(t, string(config.LLMBackendLangChain), execByName["LangChainAgent"].LlmBackend,
 		"LangChainAgent should have resolved backend from agent registry")
 
-	require.Contains(t, execByName, "SynthesisAgent")
-	assert.Equal(t, string(config.LLMBackendLangChain), execByName["SynthesisAgent"].LlmBackend)
+	require.Contains(t, execByName, config.AgentNameSynthesis)
+	assert.Equal(t, string(config.LLMBackendLangChain), execByName[config.AgentNameSynthesis].LlmBackend)
 
 	// Verify the synthesis LLM call received correct backend labels.
 	// The 3rd LLM call is synthesis — its input messages should contain
@@ -1450,6 +1517,10 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Final diagnosis."},
 			}},
+			// Exec summary
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Executive summary."},
+			}},
 		},
 	}
 
@@ -1464,10 +1535,10 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Equal(t, "Final diagnosis.", result.FinalAnalysis)
 
-	// 3 stages: investigation, synthesis, final-diagnosis
-	stages, err := entClient.Stage.Query().All(context.Background())
+	// 4 stages: investigation, synthesis, final-diagnosis, exec_summary
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, stages, 3)
+	assert.Len(t, stages, 4)
 	assert.Equal(t, "parallel-investigation", stages[0].StageName)
 	assert.Equal(t, "parallel-investigation - Synthesis", stages[1].StageName)
 	assert.Equal(t, "final-diagnosis", stages[2].StageName)
@@ -1489,13 +1560,13 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 	}
 	assert.True(t, foundSynthesisContext, "final stage should receive synthesis context")
 
-	// Verify dbStageIndex tracking: investigation=1, synthesis=2, final-diagnosis=3
+	// Verify dbStageIndex tracking: investigation=1, synthesis=2, final-diagnosis=3, exec_summary=4
 	assert.Equal(t, 1, stages[0].StageIndex)
 	assert.Equal(t, 2, stages[1].StageIndex)
 	assert.Equal(t, 3, stages[2].StageIndex)
 
-	// 6 stage events: started+completed for each of 3 stages
-	require.Len(t, publisher.stageStatuses, 6)
+	// 8 stage events: started+completed for each of 3 stages + 2 for exec_summary
+	require.Len(t, publisher.stageStatuses, 8)
 }
 
 func TestExecutor_StatusAggregationEdgeCases(t *testing.T) {
@@ -1792,7 +1863,7 @@ func TestExecutor_BuildConfigs(t *testing.T) {
 		stageCfg := config.StageConfig{
 			Replicas: 3,
 			Agents: []config.StageAgentConfig{
-				{Name: "KubernetesAgent"},
+				{Name: config.AgentNameKubernetes},
 			},
 		}
 		configs := buildConfigs(stageCfg)
@@ -1802,7 +1873,7 @@ func TestExecutor_BuildConfigs(t *testing.T) {
 		assert.Equal(t, "KubernetesAgent-3", configs[2].displayName)
 		// All replicas share the same base config name
 		for _, c := range configs {
-			assert.Equal(t, "KubernetesAgent", c.agentConfig.Name)
+			assert.Equal(t, config.AgentNameKubernetes, c.agentConfig.Name)
 		}
 	})
 }
@@ -2238,6 +2309,10 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,
 			},
+			config.AgentNameExecSummary: {
+				Type:       config.AgentTypeExecSummary,
+				LLMBackend: config.LLMBackendLangChain,
+			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"test-provider": {
@@ -2282,6 +2357,10 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Root cause: memory pressure on pod-1 based on sub-agent analysis."},
 			}},
+			// Exec summary: exec_summary stage single-shot call
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Executive summary of orchestrator investigation."},
+			}},
 		},
 		subAgentResp: []mockLLMResponse{
 			// Sub-agent call 1: return analysis
@@ -2302,17 +2381,17 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 	assert.Contains(t, result.FinalAnalysis, "memory pressure")
 	assert.Nil(t, result.Error)
 
-	// Verify stage
+	// Verify stages: orchestrate + exec_summary
 	stages, err := entClient.Stage.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 1)
+	require.Len(t, stages, 2)
 	assert.Equal(t, "orchestrate", stages[0].StageName)
 	assert.Equal(t, stage.StatusCompleted, stages[0].Status)
 
-	// Verify AgentExecution records: orchestrator + sub-agent
+	// Verify AgentExecution records: orchestrator + sub-agent + exec_summary
 	execs, err := entClient.AgentExecution.Query().All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, execs, 2, "expected orchestrator + 1 sub-agent execution")
+	require.Len(t, execs, 3, "expected orchestrator + 1 sub-agent + exec_summary execution")
 
 	var orchestratorExec, subAgentExec *ent.AgentExecution
 	for _, e := range execs {
@@ -2321,6 +2400,7 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 			orchestratorExec = e
 		case "GeneralWorker":
 			subAgentExec = e
+			// ExecSummaryAgent is ignored here — verified separately
 		}
 	}
 	require.NotNil(t, orchestratorExec, "orchestrator execution should exist")

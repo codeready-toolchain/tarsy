@@ -7,10 +7,10 @@
   "chat_id": null,
   "chat_message_count": 0,
   "completed_at": "{TIMESTAMP}",
-  "completed_stages": 1,
+  "completed_stages": 2,
   "created_at": "{TIMESTAMP}",
-  "current_stage_id": "{STAGE_ID_1}",
-  "current_stage_index": 1,
+  "current_stage_id": "{UUID}",
+  "current_stage_index": 2,
   "duration_ms": {DURATION_MS},
   "error_message": null,
   "executive_summary": "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
@@ -71,10 +71,38 @@
       "stage_type": "investigation",
       "started_at": null,
       "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ExecSummaryAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{UUID}",
+          "input_tokens": 10,
+          "llm_backend": "google-native",
+          "llm_provider": "test-provider",
+          "output_tokens": 5,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 15
+        }
+      ],
+      "expected_agent_count": 1,
+      "id": "{UUID}",
+      "parallel_type": null,
+      "stage_index": 2,
+      "stage_name": "Executive Summary",
+      "stage_type": "exec_summary",
+      "started_at": null,
+      "status": "completed"
     }
   ],
   "started_at": "{TIMESTAMP}",
   "status": "completed",
-  "total_stages": 1,
+  "total_stages": 2,
   "total_tokens": 1505
 }

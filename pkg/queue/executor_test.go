@@ -8,6 +8,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -233,33 +234,72 @@ func TestExtractFinalAnalysis(t *testing.T) {
 			want:   "",
 		},
 		{
-			name: "single stage with analysis",
+			name: "single investigation stage with analysis",
 			stages: []stageResult{
-				{finalAnalysis: "Root cause: OOM"},
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Root cause: OOM"},
 			},
 			want: "Root cause: OOM",
 		},
 		{
-			name: "returns last stage analysis (reverse search)",
+			name: "synthesis stage included",
 			stages: []stageResult{
-				{finalAnalysis: "Stage 1 findings"},
-				{finalAnalysis: "Stage 2 diagnosis"},
+				{stageType: stage.StageTypeSynthesis, finalAnalysis: "Synthesized diagnosis"},
+			},
+			want: "Synthesized diagnosis",
+		},
+		{
+			name: "returns last eligible stage analysis (reverse search)",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Stage 1 findings"},
+				{stageType: stage.StageTypeSynthesis, finalAnalysis: "Stage 2 diagnosis"},
 			},
 			want: "Stage 2 diagnosis",
 		},
 		{
 			name: "skips empty analysis, returns earlier stage",
 			stages: []stageResult{
-				{finalAnalysis: "Only this one has analysis"},
-				{finalAnalysis: ""},
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Only this one has analysis"},
+				{stageType: stage.StageTypeSynthesis, finalAnalysis: ""},
 			},
 			want: "Only this one has analysis",
 		},
 		{
 			name: "all empty analysis returns empty",
 			stages: []stageResult{
-				{finalAnalysis: ""},
-				{finalAnalysis: ""},
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: ""},
+				{stageType: stage.StageTypeSynthesis, finalAnalysis: ""},
+			},
+			want: "",
+		},
+		{
+			name: "exec_summary stage is excluded from extraction",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeExecSummary, finalAnalysis: "Executive summary"},
+			},
+			want: "Investigation findings",
+		},
+		{
+			name: "scoring stage is excluded from extraction",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeScoring, finalAnalysis: "Scoring result"},
+			},
+			want: "Investigation findings",
+		},
+		{
+			name: "chat stage is excluded from extraction",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeChat, finalAnalysis: "Chat response"},
+			},
+			want: "Investigation findings",
+		},
+		{
+			name: "only non-eligible stages returns empty",
+			stages: []stageResult{
+				{stageType: stage.StageTypeExecSummary, finalAnalysis: "Executive summary"},
+				{stageType: stage.StageTypeScoring, finalAnalysis: "Scoring result"},
 			},
 			want: "",
 		},
@@ -271,6 +311,56 @@ func TestExtractFinalAnalysis(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestBuildStageContext(t *testing.T) {
+	executor := &RealSessionExecutor{}
+
+	t.Run("includes investigation and synthesis stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Found OOM kill"},
+			{stageType: stage.StageTypeSynthesis, stageName: "synthesis", finalAnalysis: "Root cause confirmed"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Found OOM kill")
+		assert.Contains(t, result, "Root cause confirmed")
+	})
+
+	t.Run("excludes exec_summary and scoring stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Investigation result"},
+			{stageType: stage.StageTypeExecSummary, stageName: "exec-summary", finalAnalysis: "Executive summary text"},
+			{stageType: stage.StageTypeScoring, stageName: "scoring", finalAnalysis: "Score: 8/10"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Investigation result")
+		assert.NotContains(t, result, "Executive summary text")
+		assert.NotContains(t, result, "Score: 8/10")
+	})
+
+	t.Run("excludes chat stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Investigation result"},
+			{stageType: stage.StageTypeChat, stageName: "chat", finalAnalysis: "Chat response"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Investigation result")
+		assert.NotContains(t, result, "Chat response")
+	})
+
+	t.Run("empty stages returns empty", func(t *testing.T) {
+		result := executor.buildStageContext(nil)
+		assert.Empty(t, result)
+	})
+
+	t.Run("only non-eligible stages returns empty", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeExecSummary, stageName: "summary", finalAnalysis: "Summary"},
+			{stageType: stage.StageTypeScoring, stageName: "scoring", finalAnalysis: "Score"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Empty(t, result)
+	})
 }
 
 func TestMapAgentStatusToSessionStatus(t *testing.T) {

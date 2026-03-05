@@ -17,7 +17,7 @@ func setupTestSessionService(_ *testing.T, client *ent.Client) *SessionService {
 				{
 					Name: "analysis",
 					Agents: []config.StageAgentConfig{
-						{Name: "KubernetesAgent"},
+						{Name: config.AgentNameKubernetes},
 					},
 				},
 			},
@@ -28,7 +28,7 @@ func setupTestSessionService(_ *testing.T, client *ent.Client) *SessionService {
 				{
 					Name: "deep-analysis",
 					Agents: []config.StageAgentConfig{
-						{Name: "KubernetesAgent"},
+						{Name: config.AgentNameKubernetes},
 					},
 				},
 			},

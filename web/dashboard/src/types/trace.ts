@@ -12,6 +12,7 @@ export interface TraceListResponse {
 export interface TraceStageGroup {
   stage_id: string;
   stage_name: string;
+  stage_type: string;
   executions: TraceExecutionGroup[];
 }
 

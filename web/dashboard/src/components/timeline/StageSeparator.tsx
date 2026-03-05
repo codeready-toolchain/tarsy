@@ -1,9 +1,10 @@
 import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
-import { Flag, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
+import { STAGE_TYPE } from '../../constants/eventTypes';
 
 interface StageSeparatorProps {
   item: FlowItem;
@@ -14,12 +15,22 @@ interface StageSeparatorProps {
 const getStatusThemeColor = (theme: Theme, isError: boolean, isCancelled: boolean) =>
   isError ? theme.palette.error.main : isCancelled ? theme.palette.text.secondary : theme.palette.primary.main;
 
+function getStageTypeIcon(stageType: string | undefined) {
+  switch (stageType) {
+    case STAGE_TYPE.SYNTHESIS: return <MergeType />;
+    case STAGE_TYPE.CHAT: return <SmsOutlined />;
+    case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome />;
+    default: return <Search />;
+  }
+}
+
 /**
  * StageSeparator - renders stage boundary dividers.
  * Clickable chip with expand/collapse, agent name, and error alerts.
  */
 function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
+  const stageType = item.metadata?.stage_type as string | undefined;
   const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
   const isCancelledStatus = CANCELLED_EXECUTION_STATUSES.has(stageStatus);
   // The backend prefixes stage names with the parent chain name
@@ -62,8 +73,8 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
           onClick={onToggleCollapse}
         >
           <Chip
-            icon={<Flag />}
-            label={`Stage: ${stageName}`}
+            icon={getStageTypeIcon(stageType)}
+            label={stageName}
             color={isErrorStatus ? 'error' : isCancelledStatus ? 'default' : 'primary'}
             variant="outlined"
             size="small"

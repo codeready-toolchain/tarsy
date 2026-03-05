@@ -54,20 +54,20 @@ func TestBuiltinAgents(t *testing.T) {
 		customInstructionsMatch string
 	}{
 		{
-			name:     "KubernetesAgent",
-			agentID:  "KubernetesAgent",
+			name:     AgentNameKubernetes,
+			agentID:  AgentNameKubernetes,
 			wantDesc: "Kubernetes-specialized agent",
 			wantType: AgentTypeDefault,
 		},
 		{
-			name:     "ChatAgent",
-			agentID:  "ChatAgent",
+			name:     AgentNameChat,
+			agentID:  AgentNameChat,
 			wantDesc: "Built-in agent for follow-up conversations",
 			wantType: AgentTypeDefault,
 		},
 		{
-			name:                    "SynthesisAgent",
-			agentID:                 "SynthesisAgent",
+			name:                    AgentNameSynthesis,
+			agentID:                 AgentNameSynthesis,
 			wantDesc:                "Synthesizes parallel investigation results",
 			wantType:                AgentTypeSynthesis,
 			wantCustomInstructions:  true,
@@ -98,8 +98,14 @@ func TestBuiltinAgents(t *testing.T) {
 			customInstructionsMatch: "You are GeneralWorker",
 		},
 		{
-			name:     "Orchestrator",
-			agentID:  "Orchestrator",
+			name:     AgentNameExecSummary,
+			agentID:  AgentNameExecSummary,
+			wantDesc: "Generates executive summary of the investigation",
+			wantType: AgentTypeExecSummary,
+		},
+		{
+			name:     AgentNameOrchestrator,
+			agentID:  AgentNameOrchestrator,
 			wantDesc: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
 			wantType: AgentTypeOrchestrator,
 		},
@@ -159,7 +165,7 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 	})
 
 	t.Run("KubernetesAgent has no backend or native tools", func(t *testing.T) {
-		agent, exists := cfg.Agents["KubernetesAgent"]
+		agent, exists := cfg.Agents[AgentNameKubernetes]
 		require.True(t, exists)
 		assert.Empty(t, agent.LLMBackend)
 		assert.Nil(t, agent.NativeTools)
@@ -168,7 +174,7 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 
 func TestBuiltinChatAgentInheritsFromDefaults(t *testing.T) {
 	cfg := GetBuiltinConfig()
-	agent, exists := cfg.Agents["ChatAgent"]
+	agent, exists := cfg.Agents[AgentNameChat]
 	require.True(t, exists)
 
 	// ChatAgent should not pin a specific type or MCP servers.
@@ -181,7 +187,7 @@ func TestBuiltinChatAgentInheritsFromDefaults(t *testing.T) {
 
 func TestBuiltinSynthesisAgentHasNoMCPServers(t *testing.T) {
 	cfg := GetBuiltinConfig()
-	agent, exists := cfg.Agents["SynthesisAgent"]
+	agent, exists := cfg.Agents[AgentNameSynthesis]
 	require.True(t, exists)
 
 	assert.Empty(t, agent.MCPServers, "SynthesisAgent should not have MCP servers (it never calls tools)")
@@ -189,7 +195,7 @@ func TestBuiltinSynthesisAgentHasNoMCPServers(t *testing.T) {
 
 func TestBuiltinOrchestratorAgentProperties(t *testing.T) {
 	cfg := GetBuiltinConfig()
-	agent, exists := cfg.Agents["Orchestrator"]
+	agent, exists := cfg.Agents[AgentNameOrchestrator]
 	require.True(t, exists)
 
 	assert.Equal(t, AgentTypeOrchestrator, agent.Type)
@@ -203,7 +209,7 @@ func TestBuiltinOrchestratorExcludedFromSubAgentRegistry(t *testing.T) {
 	agents := mergeAgents(cfg.Agents, nil)
 	registry := BuildSubAgentRegistry(agents)
 
-	_, found := registry.Get("Orchestrator")
+	_, found := registry.Get(AgentNameOrchestrator)
 	assert.False(t, found, "Orchestrator should not appear in SubAgentRegistry")
 
 	// Other described agents should still be present.
@@ -365,7 +371,7 @@ func TestBuiltinChains(t *testing.T) {
 		assert.Len(t, chain.Stages, 1)
 		assert.Equal(t, "analysis", chain.Stages[0].Name)
 		assert.Len(t, chain.Stages[0].Agents, 1)
-		assert.Equal(t, "KubernetesAgent", chain.Stages[0].Agents[0].Name)
+		assert.Equal(t, AgentNameKubernetes, chain.Stages[0].Agents[0].Name)
 	})
 }
 

@@ -381,12 +381,11 @@ func TestE2E_FallbackParallelAgents(t *testing.T) {
 //   - Session completes with executive_summary populated
 //   - Agent execution has NO original_llm_provider (no agent-level fallback)
 //   - Executive summary was generated despite primary failure
-//   - ClearCache=true and different model on the fallback call prove provider switch
+//   - provider_fallback timeline events are created for each fallback hop
+//   - ClearCache=true and different model on the final fallback call prove provider switch
 //
-// NOTE: The executive summary uses a standalone LLM call path
-// (executor_synthesis.go), not the agent controller. It does not create
-// provider_fallback timeline events or execution records, so we verify
-// the fallback via CapturedInputs() (ClearCache flag + model change).
+// Executive summary runs through the agent controller, so it
+// creates provider_fallback timeline events (unlike the old direct LLM call path).
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_FallbackExecutiveSummary(t *testing.T) {
@@ -445,26 +444,29 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 	assert.Equal(t, "completed", string(investigator.Status))
 	assert.Nil(t, investigator.OriginalLlmProvider, "Investigator should not have fallback (succeeded on primary)")
 
-	// ── Executive summary creates a provider_fallback timeline event ──
+	// ── Executive summary creates provider_fallback timeline events ──
+	// Two failures → two hops: primary → fallback-1 → fallback-2
 	timeline := app.QueryTimeline(t, sessionID)
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
-	require.Len(t, fallbackEvents, 1, "exactly one provider_fallback event from exec summary")
-	assert.Equal(t, "primary-provider", fallbackEvents[0].Metadata["original_provider"])
-	assert.Equal(t, "fallback-1", fallbackEvents[0].Metadata["fallback_provider"])
+	require.Len(t, fallbackEvents, 2, "two provider_fallback events from exec summary (primary→fallback-1, fallback-1→fallback-2)")
+	assert.NotNil(t, findFallbackTransition(fallbackEvents, "primary-provider", "fallback-1"),
+		"should have primary-provider → fallback-1 transition")
+	assert.NotNil(t, findFallbackTransition(fallbackEvents, "fallback-1", "fallback-2"),
+		"should have fallback-1 → fallback-2 transition")
 
-	// ── LLM calls: Investigator (2) + exec summary (1 fail + 1 retry + 1 fallback) = 5 ──
+	// ── LLM calls: Investigator (2) + exec summary (1 fail + 1 fail + 1 success) = 5 ──
 	inputs := llm.CapturedInputs()
 	require.Equal(t, 5, len(inputs))
 
-	// The last call (exec summary fallback) should prove a provider switch:
-	// ClearCache=true and a different model than the primary provider.
+	// The last call (exec summary on fallback-2) should prove a provider switch:
+	// ClearCache=true and the model from fallback-2.
 	summaryFallbackCall := inputs[4]
 	assert.True(t, summaryFallbackCall.ClearCache,
 		"exec summary fallback call should have ClearCache=true")
-	assert.Equal(t, "test-fallback-1", summaryFallbackCall.Config.Model,
-		"exec summary fallback should use fallback-1 provider model")
+	assert.Equal(t, "test-fallback-2", summaryFallbackCall.Config.Model,
+		"exec summary final fallback should use fallback-2 provider model")
 
-	// Earlier exec summary calls used the primary provider
+	// Earlier exec summary calls used the primary provider then fallback-1
 	assert.False(t, inputs[2].ClearCache, "first exec summary attempt should not clear cache")
 	assert.Equal(t, "test-primary", inputs[2].Config.Model,
 		"first exec summary attempt should use primary model")
