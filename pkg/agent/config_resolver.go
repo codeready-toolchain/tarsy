@@ -411,14 +411,16 @@ func ResolveExecSummaryConfig(
 		defaults.FallbackProviders, chain.FallbackProviders,
 	)
 
-	// Exec summary has no MCP servers — it is a single-shot LLM call with no tools.
+	// Apply agent-level native tools override (provider → agent merge)
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
 	return &ResolvedAgentConfig{
 		AgentName:                 config.AgentNameExecSummary,
 		Type:                      config.AgentTypeExecSummary,
 		LLMBackend:                backend,
-		LLMProvider:               provider,
+		LLMProvider:               resolvedProvider,
 		LLMProviderName:           providerName,
 		MaxIterations:             maxIter,
 		IterationTimeout:          DefaultIterationTimeout,

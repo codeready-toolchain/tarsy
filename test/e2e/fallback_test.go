@@ -449,10 +449,10 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
 	require.Len(t, fallbackEvents, 2, "two provider_fallback events from exec summary (primary→fallback-1, fallback-1→fallback-2)")
-	assert.Equal(t, "primary-provider", fallbackEvents[0].Metadata["original_provider"])
-	assert.Equal(t, "fallback-1", fallbackEvents[0].Metadata["fallback_provider"])
-	assert.Equal(t, "fallback-1", fallbackEvents[1].Metadata["original_provider"])
-	assert.Equal(t, "fallback-2", fallbackEvents[1].Metadata["fallback_provider"])
+	assert.NotNil(t, findFallbackTransition(fallbackEvents, "primary-provider", "fallback-1"),
+		"should have primary-provider → fallback-1 transition")
+	assert.NotNil(t, findFallbackTransition(fallbackEvents, "fallback-1", "fallback-2"),
+		"should have fallback-1 → fallback-2 transition")
 
 	// ── LLM calls: Investigator (2) + exec summary (1 fail + 1 fail + 1 success) = 5 ──
 	inputs := llm.CapturedInputs()

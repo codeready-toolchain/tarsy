@@ -349,11 +349,11 @@ func TestExecutor_MultiStageChain(t *testing.T) {
 	assert.Equal(t, "diagnosis", publisher.stageStatuses[2].StageName)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[3].Status)
 
-	// Verify session progress was updated
+	// Verify session progress was updated (3 stages: 2 investigation + exec_summary)
 	updatedSession, err := entClient.AlertSession.Get(context.Background(), session.ID)
 	require.NoError(t, err)
 	require.NotNil(t, updatedSession.CurrentStageIndex)
-	assert.Equal(t, 2, *updatedSession.CurrentStageIndex)
+	assert.Equal(t, 3, *updatedSession.CurrentStageIndex)
 }
 
 func TestExecutor_FailFast(t *testing.T) {

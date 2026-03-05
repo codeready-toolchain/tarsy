@@ -39,7 +39,8 @@ func (e *RealSessionExecutor) executeExecSummaryStage(ctx context.Context, input
 		}
 	}
 
-	// Publish stage.status: started, session progress, and execution progress.
+	// Update session progress pointer, then publish events.
+	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, "Executive Summary", input.stageIndex, stage.StageTypeExecSummary, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, "Executive Summary",
 		input.stageIndex, input.totalExpectedStages, 0, "Generating executive summary")
