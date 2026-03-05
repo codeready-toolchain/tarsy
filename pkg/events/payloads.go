@@ -67,7 +67,7 @@ type StageStatusPayload struct {
 	StageID    string `json:"stage_id,omitempty"` // may be empty on "started" if stage creation hasn't happened yet
 	StageName  string `json:"stage_name"`         // human-readable stage name from config
 	StageIndex int    `json:"stage_index"`        // 1-based
-	StageType  string `json:"stage_type"`         // investigation, synthesis, chat
+	StageType  string `json:"stage_type"`         // investigation, synthesis, chat, exec_summary, scoring
 	Status     string `json:"status"`             // started, completed, failed, timed_out, cancelled
 }
 
@@ -84,8 +84,8 @@ type ChatCreatedPayload struct {
 // Used by trace view for live updates via event-notification + REST re-fetch.
 type InteractionCreatedPayload struct {
 	BasePayload
-	StageID         string `json:"stage_id,omitempty"`     // stage UUID (empty for session-level, e.g. executive summary)
-	ExecutionID     string `json:"execution_id,omitempty"` // execution UUID (empty for session-level)
+	StageID         string `json:"stage_id,omitempty"`     // stage UUID (empty for legacy session-level interactions)
+	ExecutionID     string `json:"execution_id,omitempty"` // execution UUID (empty for legacy session-level interactions)
 	InteractionID   string `json:"interaction_id"`         // LLM or MCP interaction UUID
 	InteractionType string `json:"interaction_type"`       // "llm" or "mcp"
 }
