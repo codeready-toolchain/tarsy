@@ -183,16 +183,16 @@ func TestE2E_Timeout(t *testing.T) {
 
 	app.WaitForStageStatus(t, chat2StageID, "completed")
 
-	// Wait for the final WS event (Chat Response stage completed) instead of a fixed sleep.
+	// Wait for the final WS event (Chat stage completed) instead of a fixed sleep.
 	ws2.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "stage.status" &&
-			e.Parsed["stage_name"] == "Chat Response" &&
+			e.Parsed["stage_name"] == "Chat" &&
 			e.Parsed["status"] == "completed"
-	}, 5*time.Second, "session 2: expected Chat Response stage.status completed WS event")
+	}, 5*time.Second, "session 2: expected Chat stage.status completed WS event")
 
 	// ── Session 2 stage assertions ──
 	stages2 := app.QueryStages(t, session2ID)
-	// Expect: quick-check + exec_summary + Chat Response (timed_out) + Chat Response (completed) = 4 stages
+	// Expect: quick-check + exec_summary + Chat (timed_out) + Chat (completed) = 4 stages
 	require.Len(t, stages2, 4, "quick-check + exec_summary + 2 chat stages")
 
 	assert.Equal(t, "quick-check", stages2[0].StageName)
@@ -201,10 +201,10 @@ func TestE2E_Timeout(t *testing.T) {
 	assert.Equal(t, "Executive Summary", stages2[1].StageName)
 	assert.Equal(t, "completed", string(stages2[1].Status))
 
-	assert.Equal(t, "Chat Response", stages2[2].StageName)
+	assert.Equal(t, "Chat", stages2[2].StageName)
 	assert.Equal(t, "timed_out", string(stages2[2].Status))
 
-	assert.Equal(t, "Chat Response", stages2[3].StageName)
+	assert.Equal(t, "Chat", stages2[3].StageName)
 	assert.Equal(t, "completed", string(stages2[3].Status))
 
 	// ── Session 2 execution assertions ──

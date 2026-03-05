@@ -457,7 +457,7 @@
         }
       ],
       "stage_id": "{STAGE_ID_8}",
-      "stage_name": "Chat Response",
+      "stage_name": "Chat",
       "stage_type": "chat"
     },
     {
@@ -512,7 +512,7 @@
         }
       ],
       "stage_id": "{STAGE_ID_9}",
-      "stage_name": "Chat Response",
+      "stage_name": "Chat",
       "stage_type": "chat"
     }
   ]

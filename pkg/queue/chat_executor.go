@@ -172,7 +172,7 @@ func (e *ChatMessageExecutor) Submit(ctx context.Context, input ChatExecuteInput
 	messageID := input.Message.ID
 	stg, err := e.stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          input.Session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         stageIndex,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeChat),
@@ -230,7 +230,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	chain, err := e.cfg.GetChain(input.Chat.ChainID)
 	if err != nil {
 		logger.Error("Failed to resolve chain config", "error", err)
-		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
 		return
 	}
 
@@ -244,7 +244,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		logger.Error("Failed to resolve chat agent config", "error", err)
 		// Best-effort: create a failed AgentExecution for audit trail.
 		e.createFailedChatExecution(stageID, input.Session.ID, "chat", chatProviderName, err.Error(), logger)
-		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
 		return
 	}
 
@@ -254,7 +254,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		logger.Error("Failed to resolve MCP selection", "error", err)
 		// Best-effort: create a failed AgentExecution for audit trail.
 		e.createFailedChatExecution(stageID, input.Session.ID, resolvedConfig.AgentName, chatProviderName, err.Error(), logger)
-		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
 		return
 	}
 
@@ -269,7 +269,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
-		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
 		return
 	}
 
@@ -320,7 +320,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
 	publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, 1, string(agentexecution.StatusActive), "")
-	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, nil, events.StageStatusStarted)
+	publishStageStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, "Chat", stageIndex, stage.StageTypeChat, nil, events.StageStatusStarted)
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(execCtx)
 	defer cancelHeartbeat()
@@ -363,7 +363,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 			logger.Error("Failed to update agent execution status", "error", updateErr)
 		}
 		publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, 1, string(agentexecution.StatusFailed), err.Error())
-		e.finishStage(stageID, input.Session.ID, "Chat Response", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
 		return
 	}
 
@@ -403,7 +403,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	}
 
 	// 14. Publish stage.status: completed/failed/cancelled/timed_out
-	publishStageStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, "Chat Response", stageIndex, stage.StageTypeChat, nil, terminalStatus)
+	publishStageStatus(context.Background(), e.eventPublisher, input.Session.ID, stageID, "Chat", stageIndex, stage.StageTypeChat, nil, terminalStatus)
 
 	// 15. Stop heartbeat
 	cancelHeartbeat()

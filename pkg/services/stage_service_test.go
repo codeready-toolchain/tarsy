@@ -1025,7 +1025,7 @@ func TestStageService_GetActiveStageForChat(t *testing.T) {
 		chatID := chatObj.ID
 		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 			SessionID:          session.ID,
-			StageName:          "Chat Response",
+			StageName:          "Chat",
 			StageIndex:         1,
 			ExpectedAgentCount: 1,
 			ChatID:             &chatID,

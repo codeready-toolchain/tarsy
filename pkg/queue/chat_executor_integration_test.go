@@ -158,7 +158,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	// Verify chat Stage record
 	chatStage, err := entClient.Stage.Get(ctx, stageID)
 	require.NoError(t, err)
-	assert.Equal(t, "Chat Response", chatStage.StageName)
+	assert.Equal(t, "Chat", chatStage.StageName)
 	assert.Equal(t, 2, chatStage.StageIndex) // investigation was 1
 	assert.Equal(t, stage.StatusCompleted, chatStage.Status)
 	assert.NotNil(t, chatStage.ChatID)
@@ -198,7 +198,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	// Verify stage events were published
 	require.GreaterOrEqual(t, len(publisher.stageStatuses), 2)
 	assert.Equal(t, events.StageStatusStarted, publisher.stageStatuses[0].Status)
-	assert.Equal(t, "Chat Response", publisher.stageStatuses[0].StageName)
+	assert.Equal(t, "Chat", publisher.stageStatuses[0].StageName)
 	assert.Equal(t, "chat", publisher.stageStatuses[0].StageType)
 	assert.Equal(t, events.StageStatusCompleted, publisher.stageStatuses[len(publisher.stageStatuses)-1].Status)
 	assert.Equal(t, "chat", publisher.stageStatuses[len(publisher.stageStatuses)-1].StageType)

@@ -59,7 +59,7 @@ func TestChatMessageExecutor_Submit_RejectsActiveExecution(t *testing.T) {
 	chatID := chat.ID
 	_, err = stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 		ChatID:             &chatID,
@@ -99,7 +99,7 @@ func TestChatMessageExecutor_Submit_AllowsWhenNoActiveExecution(t *testing.T) {
 	chatID := chat.ID
 	completedStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 		ChatID:             &chatID,
@@ -525,7 +525,7 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	prevMsgID := prevMsg.ID
 	prevChatStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         2,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeChat),
@@ -608,7 +608,7 @@ func TestChatMessageExecutor_FinishStage_MarksStageFailedWithoutExecutions(t *te
 	// Create a stage with no agent executions (simulates early-exit before execution creation)
 	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeChat),
@@ -620,7 +620,7 @@ func TestChatMessageExecutor_FinishStage_MarksStageFailedWithoutExecutions(t *te
 		stageService: stageService,
 	}
 
-	executor.finishStage(stg.ID, session.ID, "Chat Response", 1, stage.StageTypeChat, events.StageStatusFailed, "chain not found")
+	executor.finishStage(stg.ID, session.ID, "Chat", 1, stage.StageTypeChat, events.StageStatusFailed, "chain not found")
 
 	// Stage must be failed in DB (previously would stay pending)
 	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
@@ -640,7 +640,7 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 
 	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          session.ID,
-		StageName:          "Chat Response",
+		StageName:          "Chat",
 		StageIndex:         1,
 		ExpectedAgentCount: 1,
 		StageType:          string(stage.StageTypeChat),

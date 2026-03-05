@@ -276,7 +276,7 @@
       "id": "{STAGE_ID_8}",
       "parallel_type": null,
       "stage_index": 8,
-      "stage_name": "Chat Response",
+      "stage_name": "Chat",
       "stage_type": "chat",
       "started_at": null,
       "status": "completed"
@@ -304,7 +304,7 @@
       "id": "{STAGE_ID_9}",
       "parallel_type": null,
       "stage_index": 9,
-      "stage_name": "Chat Response",
+      "stage_name": "Chat",
       "stage_type": "chat",
       "started_at": null,
       "status": "completed"
