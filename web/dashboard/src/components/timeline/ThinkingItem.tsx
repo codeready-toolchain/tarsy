@@ -66,7 +66,7 @@ function ThinkingItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <ContentCard maxHeight="900px">
+            <ContentCard maxHeight="900px" copyText={item.content || ''}>
               <Box
                 sx={{
                   '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },

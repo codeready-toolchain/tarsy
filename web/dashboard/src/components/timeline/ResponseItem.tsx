@@ -136,7 +136,7 @@ function ResponseItem({
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
             <Box sx={{ mt: 0.5 }}>
-              <ContentCard maxHeight="900px">
+              <ContentCard maxHeight="900px" copyText={item.content || ''}>
                 {hasMarkdown ? (
                   <Box sx={{ color: 'text.primary' }}>
                     <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
