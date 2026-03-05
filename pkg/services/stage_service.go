@@ -58,7 +58,10 @@ func (s *StageService) CreateStage(httpCtx context.Context, req models.CreateSta
 	if req.ReferencedStageID != nil {
 		refStage, err := s.client.Stage.Get(httpCtx, *req.ReferencedStageID)
 		if err != nil {
-			return nil, NewValidationError("referenced_stage_id", fmt.Sprintf("stage %q not found", *req.ReferencedStageID))
+			if ent.IsNotFound(err) {
+				return nil, NewValidationError("referenced_stage_id", fmt.Sprintf("stage %q not found", *req.ReferencedStageID))
+			}
+			return nil, fmt.Errorf("failed to look up referenced stage: %w", err)
 		}
 		if refStage.SessionID != req.SessionID {
 			return nil, NewValidationError("referenced_stage_id", "must belong to the same session")
