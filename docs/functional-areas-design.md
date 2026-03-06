@@ -907,7 +907,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
 
 **TimelineEvent** (`ent/schema/timelineevent.go`):
-`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `parent_execution_id` (nullable — for sub-agent event partitioning), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result/task_assigned/provider_fallback), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps
+`id`, `session_id`, `stage_id` (optional), `execution_id` (optional), `parent_execution_id` (nullable — for sub-agent event partitioning), `sequence_number`, `event_type` (llm_thinking/llm_response/llm_tool_call/mcp_tool_summary/error/user_question/executive_summary/final_analysis/code_execution/google_search_result/url_context_result/task_assigned/provider_fallback), `status` (streaming/completed/failed/cancelled/timed_out), `content`, `metadata` (JSON), timestamps. **GIN index** on `content` for full-text search across dashboard session list queries (see [ADR-0006](adr/0006-search-text.md)).
 
 **Message** (`ent/schema/message.go`):
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
@@ -916,7 +916,7 @@ AlertSession (session metadata, status, alert data)
 
 | Service | File | Purpose |
 |---------|------|---------|
-| `SessionService` | `pkg/services/session_service.go` | Session CRUD, status updates, pagination |
+| `SessionService` | `pkg/services/session_service.go` | Session CRUD, status updates, pagination, FTS search across timeline content |
 | `StageService` | `pkg/services/stage_service.go` | Stage lifecycle, parallel status aggregation, fallback metadata updates |
 | `TimelineService` | `pkg/services/timeline_service.go` | Timeline event CRUD, streaming updates |
 | `MessageService` | `pkg/services/message_service.go` | LLM conversation message storage |
@@ -1040,6 +1040,13 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 
+#### Text Search
+
+Two-phase search implementation (see [ADR-0006](adr/0006-search-text.md)):
+
+- **Dashboard search** (server-side): The session list search extends to `timeline_events.content` via PostgreSQL full-text search (`to_tsvector/plainto_tsquery`) with a GIN index. Sessions matched via timeline content carry a `matched_in_content` flag shown as an indicator in the session list.
+- **In-session search** (client-side): A search bar on `SessionDetailPage` (terminated sessions only) performs substring matching on loaded `FlowItem[]` content, highlights matches via `rehypeSearchHighlight`, auto-expands collapsed stages containing matches, and provides next/previous match navigation.
+
 #### State Management
 
 No global state library. State is local `useState` per page + two React Contexts:
@@ -1059,6 +1066,8 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - `web/dashboard/src/pages/` -- Page components
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
+- `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
+- `web/dashboard/src/utils/rehypeSearchHighlight.ts` -- Rehype plugin for search term highlighting in markdown
 - `web/dashboard/src/services/websocketService.ts` -- WebSocket with reconnect + catchup
 - `web/dashboard/src/services/api.ts` -- Axios-based API client with retry
 - `web/dashboard/src/hooks/` -- useChatState, useVersionMonitor, useAdvancedAutoScroll

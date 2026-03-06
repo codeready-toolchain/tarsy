@@ -85,6 +85,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 
 ### Observability & Operations
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
+- **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
 - **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
 - **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views

@@ -170,7 +170,8 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 ### 8. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
-- **Session list** with filtering by status, alert type, chain, date range, and search
+- **Session list** with filtering by status, alert type, chain, date range, and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index)
+- **In-session search** for terminated sessions — client-side substring matching with highlight, auto-expand of collapsed stages, and match navigation
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
 - **Parallel execution tabs** for viewing multiple agent results side by side
 - **Orchestrator sub-agent cards** inline in the conversation timeline, with collapsible sub-agent detail and real-time streaming

@@ -1,7 +1,7 @@
-# Search Text Feature
+# ADR-0006: Search Text Feature
 
-**Status:** Final
-**Decisions:** [search-text-questions.md](search-text-questions.md)
+**Status:** Implemented
+**Date:** 2026-03-05
 
 ## Overview
 
@@ -18,6 +18,17 @@ The search text feature adds:
 2. **Server-side for cross-session, client-side for in-session**: FTS with GIN index for dashboard queries (performance at scale). Exact substring matching client-side for in-session search (all data already loaded).
 3. **Minimal schema changes**: One new GIN index on `timeline_events.content`. No new tables or columns (aside from a `matched_in_content` boolean in the API response).
 4. **Search everything**: All timeline event types are searchable. No artificial restrictions on which content is indexed.
+
+## Key Decisions
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| Q1 | Search scope | Dashboard list search + in-session search (two phases) | Full search workflow: find the session, then find content within it. In-session search is client-side (no extra backend work). Rejected: dashboard-only (can't pinpoint where match is), in-session-only (can't find which session). |
+| Q2 | Backend search approach | Hybrid — FTS for dashboard, client-side for in-session | Fast cross-session search via GIN index + exact substring matching within a session. Two behaviors serve different purposes. Rejected: ILIKE (no GIN, sequential scan at scale), FTS everywhere (in-session already client-side). |
+| Q3 | Index strategy | GIN full-text search index on `timeline_events.content` | Follows existing `CreateGINIndexes()` pattern. Fast FTS queries. Rejected: no index (too slow at scale), GIN + event type filter (unnecessarily restricts searchable content). |
+| Q4 | In-session search | Client-side filter/highlight, terminated sessions only | No backend changes needed; all data already loaded; instant results with debounce. Integrates with collapse/expand state. Rejected: defer (Ctrl+F doesn't work with collapsed sections), server-side (breaks load-all-events model). |
+| Q5 | Match context in session list | Match indicator only (`matched_in_content` boolean) | Simple backend/frontend; avoids `ts_headline()` complexity. Users open session to see details. Rejected: match snippet (too complex for Phase 1), no indicator (confusing results). |
+| Q6 | Event type filtering | Search all event types | Comprehensive — won't miss matches. FTS handles noise via stemming/stop words. Type filtering can be layered on later. Rejected: high-value types only (misses tool output), optional type filter param (unnecessary API complexity). |
 
 ## Architecture
 
