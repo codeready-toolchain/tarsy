@@ -187,25 +187,41 @@ Modify the existing `UpdateSessionStatus` in `pkg/services/session_service.go` t
 
 ```go
 func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string, status alertsession.Status) error {
+    // Background context for writes — intentional TARSy pattern.
+    // DB writes must complete even if the caller's context is cancelled
+    // (e.g., HTTP client disconnect, worker shutdown).
     writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
+
+    // Load current session to check existing review state.
+    // Only initialize review fields on the FIRST transition into a terminal state.
+    // Late/duplicate worker writes must not overwrite an existing claimed/resolved workflow.
+    session, err := s.client.AlertSession.Get(writeCtx, sessionID)
+    if err != nil {
+        return fmt.Errorf("failed to load session: %w", err)
+    }
 
     update := s.client.AlertSession.UpdateOneID(sessionID).
         SetStatus(status).
         SetLastInteractionAt(time.Now())
 
-    if status == alertsession.StatusCompleted ||
+    isTerminal := status == alertsession.StatusCompleted ||
         status == alertsession.StatusFailed ||
-        status == alertsession.StatusTimedOut {
-        update = update.
-            SetCompletedAt(time.Now()).
-            SetReviewStatus(alertsession.ReviewStatusNeedsReview)
+        status == alertsession.StatusTimedOut
+    isCancelled := status == alertsession.StatusCancelled
+    alreadyHasReviewStatus := session.ReviewStatus != nil
+
+    if isTerminal || isCancelled {
+        update = update.SetCompletedAt(time.Now())
     }
 
-    if status == alertsession.StatusCancelled {
+    if isTerminal && !alreadyHasReviewStatus {
+        update = update.SetReviewStatus(alertsession.ReviewStatusNeedsReview)
+    }
+
+    if isCancelled && !alreadyHasReviewStatus {
         now := time.Now()
         update = update.
-            SetCompletedAt(now).
             SetReviewStatus(alertsession.ReviewStatusResolved).
             SetResolvedAt(now).
             SetResolutionReason(alertsession.ResolutionReasonDismissed)
@@ -228,11 +244,21 @@ type UpdateReviewRequest struct {
 func (s *SessionService) UpdateReviewStatus(ctx context.Context, sessionID string, req UpdateReviewRequest) error
 ```
 
-This method:
-1. Loads the session and validates the transition (e.g., can't claim an already-claimed session by someone else — or can we?)
-2. Updates the session's `review_status`, `assignee`, `resolved_at`, `resolution_reason`, `resolution_note` as appropriate
-3. Inserts a `SessionReviewActivity` record
-4. Returns the updated session
+This method uses an atomic compare-and-transition pattern to prevent concurrent race conditions (e.g., two users claiming the same session simultaneously):
+
+1. Begin a transaction (`s.client.Tx(writeCtx)`)
+2. Perform a conditional UPDATE on the sessions row using the expected current `review_status` (and `assignee` where relevant) as WHERE predicates:
+   ```sql
+   UPDATE alert_sessions
+   SET review_status = ?, assignee = ?, assigned_at = ?, ...
+   WHERE session_id = ? AND review_status = ? [AND assignee = ?]
+   ```
+3. Check rows-affected count — if zero, the session's state has changed since the caller read it. Rollback and return `409 Conflict`.
+4. Insert the `SessionReviewActivity` record within the same transaction (only after a successful conditional update).
+5. Commit the transaction. All field updates (`review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note`) and the activity log insert are atomic.
+6. Return the updated session.
+
+This ensures concurrent claims/resolves cannot both succeed — only the first writer wins, the second gets a conflict error.
 
 > **Open question:** Should claiming an already-claimed session be allowed (reassignment)? See [questions document](session-workflow-design-questions.md), Q2.
 
@@ -291,7 +317,7 @@ Single endpoint for all workflow transitions.
 | `404 Not Found` | Session doesn't exist. |
 | `409 Conflict` | Invalid transition (e.g., resolve from `needs_review` if disallowed, claim already-claimed session). |
 
-**Auth:** `extractAuthor` provides the actor identity for claim/unclaim/resolve/reopen.
+**Auth:** `extractAuthor` provides the actor identity from the `X-Forwarded-User` header (set by oauth2-proxy or kube-rbac-proxy running as colocated sidecars). **Deployment requirement:** the ingress must strip any client-supplied `X-Forwarded-User` header (e.g., `proxy_set_header X-Forwarded-User "";`) to prevent identity spoofing — the auth proxy is the sole source of truth. See [token-exchange-sketch.md](token-exchange-sketch.md) and [session-authorization-sketch.md](session-authorization-sketch.md) for the full trust model and deployment guarantees.
 
 ### GET /api/v1/sessions/:id/review-activity
 

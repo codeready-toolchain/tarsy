@@ -36,11 +36,10 @@ The current dashboard is a flat session list. The workflow needs a way to show "
 Two top-level tabs on the dashboard:
 
 1. **Sessions** — the current flat list, unchanged. Sortable, filterable, no workflow concepts forced on it. The "catalog" / history view for teams that use external ticketing or don't need review workflow.
-2. **Workflow** — the action-oriented view. Ships as a grouped list (V1), Kanban layout added later as a sub-toggle within this tab.
+2. **Triage** — the action-oriented view with two sub-layouts (grouped list and Kanban), both shipping from day one.
 
 - **Pro:** Purely additive — existing list view doesn't change. Teams that ignore workflow features see no difference.
-- **Pro:** Clean separation of concerns — "what has the system done" (Sessions) vs. "what do I need to do" (Workflow).
-- **Pro:** Incremental delivery — grouped list first, Kanban later, without rethinking the navigation.
+- **Pro:** Clean separation of concerns — "what has the system done" (Sessions) vs. "what do I need to do" (Triage).
 - **Pro:** `review_status` and `assignee` can optionally appear as columns/filters in the Sessions list too, but aren't prominent.
 
 All three layouts ship together:
