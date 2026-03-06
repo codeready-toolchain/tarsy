@@ -187,47 +187,73 @@ Modify the existing `UpdateSessionStatus` in `pkg/services/session_service.go` t
 
 ```go
 func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string, status alertsession.Status) error {
-    // Background context for writes — intentional TARSy pattern.
-    // DB writes must complete even if the caller's context is cancelled
-    // (e.g., HTTP client disconnect, worker shutdown).
+    // Background context — intentional TARSy pattern (see golang-context-patterns skill).
+    // DB writes must complete even if the caller's context is cancelled (HTTP client
+    // disconnect, worker context cancellation). Trade-off: on shutdown, this may block
+    // for up to 5s while the write completes. This is acceptable — a partial status
+    // update would leave the session in an inconsistent state.
     writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
-    // Load current session to check existing review state.
-    // Only initialize review fields on the FIRST transition into a terminal state.
-    // Late/duplicate worker writes must not overwrite an existing claimed/resolved workflow.
-    session, err := s.client.AlertSession.Get(writeCtx, sessionID)
-    if err != nil {
-        return fmt.Errorf("failed to load session: %w", err)
-    }
-
-    update := s.client.AlertSession.UpdateOneID(sessionID).
-        SetStatus(status).
-        SetLastInteractionAt(time.Now())
+    now := time.Now()
 
     isTerminal := status == alertsession.StatusCompleted ||
         status == alertsession.StatusFailed ||
         status == alertsession.StatusTimedOut
     isCancelled := status == alertsession.StatusCancelled
-    alreadyHasReviewStatus := session.ReviewStatus != nil
+
+    // Always update status + last_interaction_at + completed_at for terminal states.
+    update := s.client.AlertSession.UpdateOneID(sessionID).
+        SetStatus(status).
+        SetLastInteractionAt(now)
 
     if isTerminal || isCancelled {
-        update = update.SetCompletedAt(time.Now())
+        update = update.SetCompletedAt(now)
     }
 
-    if isTerminal && !alreadyHasReviewStatus {
-        update = update.SetReviewStatus(alertsession.ReviewStatusNeedsReview)
+    if err := update.Exec(writeCtx); err != nil {
+        return fmt.Errorf("failed to update session status: %w", err)
     }
 
-    if isCancelled && !alreadyHasReviewStatus {
-        now := time.Now()
-        update = update.
+    // Initialize review_status only on the FIRST terminal transition.
+    // Uses a conditional UPDATE with WHERE review_status IS NULL to avoid TOCTOU:
+    // if two workers race to set the terminal status, only the first one initializes
+    // the review fields — the second sees zero rows affected and is a no-op.
+    if isTerminal {
+        affected, err := s.client.AlertSession.Update().
+            Where(
+                alertsession.IDEQ(sessionID),
+                alertsession.ReviewStatusIsNil(),
+            ).
+            SetReviewStatus(alertsession.ReviewStatusNeedsReview).
+            Save(writeCtx)
+        if err != nil {
+            return fmt.Errorf("failed to set review status: %w", err)
+        }
+        if affected == 0 {
+            slog.Debug("Review status already set, skipping", "session_id", sessionID)
+        }
+    }
+
+    if isCancelled {
+        affected, err := s.client.AlertSession.Update().
+            Where(
+                alertsession.IDEQ(sessionID),
+                alertsession.ReviewStatusIsNil(),
+            ).
             SetReviewStatus(alertsession.ReviewStatusResolved).
             SetResolvedAt(now).
-            SetResolutionReason(alertsession.ResolutionReasonDismissed)
+            SetResolutionReason(alertsession.ResolutionReasonDismissed).
+            Save(writeCtx)
+        if err != nil {
+            return fmt.Errorf("failed to set review status: %w", err)
+        }
+        if affected == 0 {
+            slog.Debug("Review status already set, skipping", "session_id", sessionID)
+        }
     }
 
-    return update.Exec(writeCtx)
+    return nil
 }
 ```
 
