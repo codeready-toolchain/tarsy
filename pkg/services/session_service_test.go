@@ -1502,6 +1502,7 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Sessions, 1)
 		assert.Equal(t, idA, result.Sessions[0].ID)
+		assert.False(t, result.Sessions[0].MatchedInContent, "session-level match should not flag matched_in_content")
 	})
 
 	t.Run("sorting asc", func(t *testing.T) {
@@ -1641,6 +1642,66 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 					"session %s should have zero fallbacks", s.ID)
 			}
 		}
+	})
+}
+
+func TestSessionService_ListSessionsForDashboard_TimelineSearch(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	sessionID := seedDashboardSession(t, client.Client,
+		"generic alert data", "pod-crash", "k8s-analysis", 10, 5, 15, 0)
+
+	execs := client.AgentExecution.Query().
+		Where(agentexecution.SessionID(sessionID)).
+		AllX(ctx)
+	require.Len(t, execs, 1)
+	stages := client.Stage.Query().
+		Where(stage.SessionID(sessionID)).
+		AllX(ctx)
+	require.Len(t, stages, 1)
+
+	client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stages[0].ID).
+		SetExecutionID(execs[0].ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmResponse).
+		SetStatus(timelineevent.StatusCompleted).
+		SetContent("The investigation found a xK9UniqueTimelineTerm in the cluster logs").
+		SaveX(ctx)
+
+	t.Run("search matches timeline event content", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "xK9UniqueTimelineTerm",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, sessionID, result.Sessions[0].ID)
+		assert.True(t, result.Sessions[0].MatchedInContent, "timeline content match should flag matched_in_content")
+	})
+
+	t.Run("session-level match does not flag matched_in_content", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "generic alert",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, sessionID, result.Sessions[0].ID)
+		assert.False(t, result.Sessions[0].MatchedInContent, "session-field match should not flag matched_in_content")
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "zzzNonExistentTerm999",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Sessions)
 	})
 }
 

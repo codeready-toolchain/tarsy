@@ -8,7 +8,8 @@ import (
 )
 
 // CreateGINIndexes creates full-text search GIN indexes for PostgreSQL.
-// These indexes enable efficient full-text search on alert_data and final_analysis fields.
+// These indexes enable efficient full-text search on alert_data, final_analysis,
+// and timeline_events content fields.
 func CreateGINIndexes(ctx context.Context, driver *sql.Driver) error {
 	db := driver.DB()
 
@@ -26,6 +27,14 @@ func CreateGINIndexes(ctx context.Context, driver *sql.Driver) error {
 		ON alert_sessions USING gin(to_tsvector('english', COALESCE(final_analysis, '')))`)
 	if err != nil {
 		return fmt.Errorf("failed to create final_analysis GIN index: %w", err)
+	}
+
+	// GIN index for timeline_events content full-text search
+	_, err = db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_timeline_events_content_gin
+		ON timeline_events USING gin(to_tsvector('english', content))`)
+	if err != nil {
+		return fmt.Errorf("failed to create timeline_events content GIN index: %w", err)
 	}
 
 	return nil

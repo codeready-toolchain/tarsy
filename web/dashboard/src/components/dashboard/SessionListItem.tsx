@@ -23,6 +23,7 @@ import {
   OpenInNew,
   SmsOutlined as ChatIcon,
   CallSplit,
+  FindInPage,
   Hub,
   Summarize,
   SwapHoriz,
@@ -179,6 +180,17 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
                 icon={<ChatIcon sx={{ fontSize: '0.875rem' }} />}
                 size="small"
                 color="primary"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+          {searchTerm && session.matched_in_content && (
+            <Tooltip title="Search matched in session content">
+              <Chip
+                icon={<FindInPage sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="info"
                 variant="outlined"
                 sx={iconOnlyChipSx}
               />
