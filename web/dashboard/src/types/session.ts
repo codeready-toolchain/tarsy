@@ -28,6 +28,7 @@ export interface DashboardSessionItem {
   provider_fallback_count: number;
   current_stage_index: number | null;
   current_stage_id: string | null;
+  matched_in_content: boolean;
 }
 
 /** Active (in-progress / cancelling) session. */

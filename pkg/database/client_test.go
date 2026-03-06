@@ -113,6 +113,75 @@ func TestFullTextSearch(t *testing.T) {
 	assert.Equal(t, session2.ID, results2[0])
 }
 
+func TestFullTextSearch_TimelineEvents(t *testing.T) {
+	client := newTestClient(t)
+	ctx := context.Background()
+
+	sess, err := client.AlertSession.Create().
+		SetID("tl-fts-1").
+		SetAlertData("simple alert").
+		SetAgentType("kubernetes").
+		SetChainID("k8s-analysis").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.TimelineEvent.Create().
+		SetID("te-fts-1").
+		SetSessionID(sess.ID).
+		SetSequenceNumber(1).
+		SetEventType("llm_response").
+		SetStatus("completed").
+		SetContent("OOMKilled detected in production namespace for deployment nginx-frontend").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.TimelineEvent.Create().
+		SetID("te-fts-2").
+		SetSessionID(sess.ID).
+		SetSequenceNumber(2).
+		SetEventType("llm_thinking").
+		SetStatus("completed").
+		SetContent("Investigating CPU throttling on worker nodes").
+		Save(ctx)
+	require.NoError(t, err)
+
+	rows, err := client.DB().QueryContext(ctx,
+		`SELECT event_id FROM timeline_events
+		WHERE to_tsvector('english', content) @@ to_tsquery('english', $1)`,
+		"OOMKilled & nginx",
+	)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var results []string
+	for rows.Next() {
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		results = append(results, id)
+	}
+
+	assert.Len(t, results, 1)
+	assert.Equal(t, "te-fts-1", results[0])
+
+	rows2, err := client.DB().QueryContext(ctx,
+		`SELECT event_id FROM timeline_events
+		WHERE to_tsvector('english', content) @@ to_tsquery('english', $1)`,
+		"throttling",
+	)
+	require.NoError(t, err)
+	defer rows2.Close()
+
+	var results2 []string
+	for rows2.Next() {
+		var id string
+		require.NoError(t, rows2.Scan(&id))
+		results2 = append(results2, id)
+	}
+
+	assert.Len(t, results2, 1)
+	assert.Equal(t, "te-fts-2", results2[0])
+}
+
 func TestLoadConfigFromEnv(t *testing.T) {
 	tests := []struct {
 		name        string

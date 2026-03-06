@@ -765,17 +765,18 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount        int   `sql:"llm_count"`
-	LLMInputTokens  int64 `sql:"llm_input_tokens"`
-	LLMOutputTokens int64 `sql:"llm_output_tokens"`
-	LLMTotalTokens  int64 `sql:"llm_total_tokens"`
-	MCPCount        int   `sql:"mcp_count"`
-	TotalStages     int   `sql:"total_stages"`
-	CompletedStages int   `sql:"completed_stages"`
-	HasParallel     int   `sql:"has_parallel"`   // 0/1, mapped to bool on output
-	HasSubAgents    int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
-	ChatMsgCount    int   `sql:"chat_msg_count"`
-	FallbackCount   int   `sql:"fallback_count"`
+	LLMCount         int   `sql:"llm_count"`
+	LLMInputTokens   int64 `sql:"llm_input_tokens"`
+	LLMOutputTokens  int64 `sql:"llm_output_tokens"`
+	LLMTotalTokens   int64 `sql:"llm_total_tokens"`
+	MCPCount         int   `sql:"mcp_count"`
+	TotalStages      int   `sql:"total_stages"`
+	CompletedStages  int   `sql:"completed_stages"`
+	HasParallel      int   `sql:"has_parallel"`   // 0/1, mapped to bool on output
+	HasSubAgents     int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
+	ChatMsgCount     int   `sql:"chat_msg_count"`
+	FallbackCount    int   `sql:"fallback_count"`
+	MatchedInContent int   `sql:"matched_in_content"` // 0/1, mapped to bool on output
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -799,10 +800,20 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		query = query.Where(alertsession.ChainIDEQ(params.ChainID))
 	}
 	if params.Search != "" {
+		search := params.Search
 		query = query.Where(func(sel *sql.Selector) {
+			t := sel.TableName()
 			sel.Where(sql.Or(
-				sql.ContainsFold(alertsession.FieldAlertData, params.Search),
-				sql.ContainsFold(alertsession.FieldFinalAnalysis, params.Search),
+				sql.ContainsFold(alertsession.FieldAlertData, search),
+				sql.ContainsFold(alertsession.FieldFinalAnalysis, search),
+				sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf(
+						`EXISTS (SELECT 1 FROM timeline_events te WHERE te.session_id = %q.%q AND to_tsvector('english', te.content) @@ plainto_tsquery('english', `,
+						t, alertsession.FieldID,
+					))
+					b.Arg(search)
+					b.WriteString("))")
+				}),
 			))
 		})
 	}
@@ -944,6 +955,23 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				"fallback_count",
 			)
 
+			// Whether the search matched in timeline event content (vs. session-level fields).
+			if params.Search != "" {
+				sel.AppendSelectExprAs(
+					sql.P(func(b *sql.Builder) {
+						b.WriteString(fmt.Sprintf(
+							"(CASE WHEN EXISTS(SELECT 1 FROM timeline_events te WHERE te.session_id = %s AND to_tsvector('english', te.content) @@ plainto_tsquery('english', ",
+							sid,
+						))
+						b.Arg(params.Search)
+						b.WriteString(")) THEN 1 ELSE 0 END)")
+					}),
+					"matched_in_content",
+				)
+			} else {
+				sel.AppendSelectExprAs(sql.Expr("0"), "matched_in_content")
+			}
+
 			// Duration sort: ORDER BY (completed_at - started_at).
 			if isDurationSort {
 				dir := "DESC"
@@ -992,6 +1020,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ProviderFallbackCount: row.FallbackCount,
 			CurrentStageIndex:     row.CurrentStageIndex,
 			CurrentStageID:        row.CurrentStageID,
+			MatchedInContent:      row.MatchedInContent != 0,
 		})
 	}
 

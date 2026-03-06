@@ -1502,6 +1502,7 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Sessions, 1)
 		assert.Equal(t, idA, result.Sessions[0].ID)
+		assert.False(t, result.Sessions[0].MatchedInContent, "session-level match should not flag matched_in_content")
 	})
 
 	t.Run("sorting asc", func(t *testing.T) {
@@ -1641,6 +1642,182 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 					"session %s should have zero fallbacks", s.ID)
 			}
 		}
+	})
+}
+
+func TestSessionService_ListSessionsForDashboard_TimelineSearch(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	sessionID := seedDashboardSession(t, client.Client,
+		"generic alert data", "pod-crash", "k8s-analysis", 10, 5, 15, 0)
+
+	execs := client.AgentExecution.Query().
+		Where(agentexecution.SessionID(sessionID)).
+		AllX(ctx)
+	require.Len(t, execs, 1)
+	stages := client.Stage.Query().
+		Where(stage.SessionID(sessionID)).
+		AllX(ctx)
+	require.Len(t, stages, 1)
+
+	client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stages[0].ID).
+		SetExecutionID(execs[0].ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmResponse).
+		SetStatus(timelineevent.StatusCompleted).
+		SetContent("The investigation found a xK9UniqueTimelineTerm in the cluster logs").
+		SaveX(ctx)
+
+	t.Run("search matches timeline event content", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "xK9UniqueTimelineTerm",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, sessionID, result.Sessions[0].ID)
+		assert.True(t, result.Sessions[0].MatchedInContent, "timeline content match should flag matched_in_content")
+	})
+
+	t.Run("session-level match does not flag matched_in_content", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "generic alert",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, sessionID, result.Sessions[0].ID)
+		assert.False(t, result.Sessions[0].MatchedInContent, "session-field match should not flag matched_in_content")
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "zzzNonExistentTerm999",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Sessions)
+	})
+
+	t.Run("multiple timeline events do not duplicate session", func(t *testing.T) {
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sessionID).
+			SetStageID(stages[0].ID).
+			SetExecutionID(execs[0].ID).
+			SetSequenceNumber(2).
+			SetEventType(timelineevent.EventTypeLlmThinking).
+			SetStatus(timelineevent.StatusCompleted).
+			SetContent("Another entry mentioning xK9UniqueTimelineTerm for verification").
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "xK9UniqueTimelineTerm",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1, "EXISTS should prevent duplicate rows when multiple events match")
+		assert.Equal(t, 1, result.Pagination.TotalItems)
+	})
+
+	t.Run("term in both alert_data and timeline flags matched_in_content", func(t *testing.T) {
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sessionID).
+			SetStageID(stages[0].ID).
+			SetExecutionID(execs[0].ID).
+			SetSequenceNumber(3).
+			SetEventType(timelineevent.EventTypeLlmResponse).
+			SetStatus(timelineevent.StatusCompleted).
+			SetContent("This event contains generic alert information").
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "generic alert",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.True(t, result.Sessions[0].MatchedInContent,
+			"when term matches both session fields and timeline, matched_in_content should be true")
+	})
+
+	t.Run("final_analysis match does not flag matched_in_content", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "Investigation result",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, sessionID, result.Sessions[0].ID)
+		assert.False(t, result.Sessions[0].MatchedInContent,
+			"final_analysis match should not flag matched_in_content")
+	})
+}
+
+func TestSessionService_ListSessionsForDashboard_MixedSearchSources(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	sessionFieldMatch := seedDashboardSession(t, client.Client,
+		"zQ7MixedSearchToken data", "pod-crash", "k8s-analysis", 10, 5, 15, 0)
+	time.Sleep(10 * time.Millisecond)
+
+	timelineOnlyMatch := seedDashboardSession(t, client.Client,
+		"unrelated alert data", "oom-kill", "k8s-analysis", 10, 5, 15, 0)
+
+	execs := client.AgentExecution.Query().
+		Where(agentexecution.SessionID(timelineOnlyMatch)).
+		AllX(ctx)
+	stages := client.Stage.Query().
+		Where(stage.SessionID(timelineOnlyMatch)).
+		AllX(ctx)
+
+	client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(timelineOnlyMatch).
+		SetStageID(stages[0].ID).
+		SetExecutionID(execs[0].ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmResponse).
+		SetStatus(timelineevent.StatusCompleted).
+		SetContent("Found zQ7MixedSearchToken in the cluster logs").
+		SaveX(ctx)
+
+	t.Run("total count includes both match sources", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+			Search: "zQ7MixedSearchToken",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, result.Pagination.TotalItems)
+		require.Len(t, result.Sessions, 2)
+
+		byID := map[string]models.DashboardSessionItem{}
+		for _, s := range result.Sessions {
+			byID[s.ID] = s
+		}
+		assert.False(t, byID[sessionFieldMatch].MatchedInContent,
+			"session-field-only match should not flag matched_in_content")
+		assert.True(t, byID[timelineOnlyMatch].MatchedInContent,
+			"timeline-only match should flag matched_in_content")
+	})
+
+	t.Run("paginated mixed results have correct page counts", func(t *testing.T) {
+		p1, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 1, SortBy: "created_at", SortOrder: "desc",
+			Search: "zQ7MixedSearchToken",
+		})
+		require.NoError(t, err)
+		assert.Len(t, p1.Sessions, 1)
+		assert.Equal(t, 2, p1.Pagination.TotalItems)
+		assert.Equal(t, 2, p1.Pagination.TotalPages)
 	})
 }
 

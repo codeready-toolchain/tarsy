@@ -89,6 +89,7 @@ type DashboardSessionItem struct {
 	ProviderFallbackCount int        `json:"provider_fallback_count"`
 	CurrentStageIndex     *int       `json:"current_stage_index"`
 	CurrentStageID        *string    `json:"current_stage_id"`
+	MatchedInContent      bool       `json:"matched_in_content"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
