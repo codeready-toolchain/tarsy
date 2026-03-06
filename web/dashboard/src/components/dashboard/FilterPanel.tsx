@@ -149,6 +149,10 @@ export function FilterPanel({
                       <Button
                         size="small"
                         onClick={() => {
+                          if (searchDebounceRef.current) {
+                            clearTimeout(searchDebounceRef.current);
+                            searchDebounceRef.current = null;
+                          }
                           setSearchInput('');
                           onFiltersChange({ ...filters, search: '' });
                         }}
