@@ -7,7 +7,7 @@
  * matching old dashboard UX (single "Time Range" button + modal with presets).
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Paper,
   Button,
@@ -41,9 +41,38 @@ export function FilterPanel({
 }: FilterPanelProps) {
   const [timeRangeModalOpen, setTimeRangeModalOpen] = useState(false);
 
+  // Local search input state — avoids re-rendering DashboardView on each keystroke.
+  // Only propagates to parent after debounce.
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchInput === filtersRef.current.search) return;
+
+    searchDebounceRef.current = setTimeout(() => {
+      onFiltersChange({ ...filtersRef.current, search: searchInput });
+      searchDebounceRef.current = null;
+    }, 300);
+
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [searchInput, onFiltersChange]);
+
+  // Sync local input when parent clears filters externally (e.g. "Clear All", chip delete)
+  useEffect(() => {
+    if (filters.search !== searchInput) {
+      setSearchInput(filters.search);
+    }
+    // Only react to parent-driven changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.search]);
+
   const isActive = hasActiveFilters(filters);
 
-  // Count active filter categories
   const activeCount = [
     filters.search.trim().length >= 3 ? 1 : 0,
     filters.status.length > 0 ? 1 : 0,
@@ -54,9 +83,9 @@ export function FilterPanel({
 
   // ── Handlers ──
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onFiltersChange({ ...filters, search: e.target.value });
-  };
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value);
+  }, []);
 
   const handleStatusChange = (statuses: string[]) => {
     onFiltersChange({ ...filters, status: statuses });
@@ -106,7 +135,7 @@ export function FilterPanel({
               placeholder="Search alerts by type, error message..."
               variant="outlined"
               size="small"
-              value={filters.search}
+              value={searchInput}
               onChange={handleSearchChange}
               slotProps={{
                 input: {
@@ -115,11 +144,14 @@ export function FilterPanel({
                       <Search fontSize="small" />
                     </InputAdornment>
                   ),
-                  endAdornment: filters.search ? (
+                  endAdornment: searchInput ? (
                     <InputAdornment position="end">
                       <Button
                         size="small"
-                        onClick={() => onFiltersChange({ ...filters, search: '' })}
+                        onClick={() => {
+                          setSearchInput('');
+                          onFiltersChange({ ...filters, search: '' });
+                        }}
                         sx={{ minWidth: 'auto', p: 0.5 }}
                       >
                         <Clear fontSize="small" />
