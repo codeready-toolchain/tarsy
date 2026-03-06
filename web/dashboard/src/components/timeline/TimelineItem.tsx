@@ -16,6 +16,7 @@ interface TimelineItemProps {
   expandAll?: boolean;
   expandAllToolCalls?: boolean;
   isCollapsible?: boolean;
+  searchTerm?: string;
 }
 
 /**
@@ -29,6 +30,7 @@ function TimelineItem({
   expandAll = false,
   expandAllToolCalls = false,
   isCollapsible = false,
+  searchTerm,
 }: TimelineItemProps) {
   const handleToggle = useCallback(() => {
     onToggleAutoCollapse?.(item.id);
@@ -48,6 +50,7 @@ function TimelineItem({
           onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
+          searchTerm={searchTerm}
         />
       );
 
@@ -59,6 +62,7 @@ function TimelineItem({
           onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
+          searchTerm={searchTerm}
         />
       );
 
@@ -71,11 +75,12 @@ function TimelineItem({
           onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
+          searchTerm={searchTerm}
         />
       );
 
     case FLOW_ITEM.TOOL_CALL:
-      return <ToolCallItem item={item} expandAll={expandAllToolCalls} />;
+      return <ToolCallItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.TOOL_SUMMARY:
       return (
@@ -85,22 +90,23 @@ function TimelineItem({
           onToggleAutoCollapse={handleToggle}
           expandAll={expandAll}
           isCollapsible={isCollapsible}
+          searchTerm={searchTerm}
         />
       );
 
     case FLOW_ITEM.USER_QUESTION:
-      return <UserQuestionItem item={item} />;
+      return <UserQuestionItem item={item} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.CODE_EXECUTION:
     case FLOW_ITEM.SEARCH_RESULT:
     case FLOW_ITEM.URL_CONTEXT:
-      return <NativeToolItem item={item} />;
+      return <NativeToolItem item={item} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.ERROR:
-      return <ErrorItem item={item} />;
+      return <ErrorItem item={item} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.PROVIDER_FALLBACK:
-      return <ProviderFallbackItem item={item} />;
+      return <ProviderFallbackItem item={item} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container

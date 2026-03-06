@@ -21,7 +21,7 @@ The search text feature adds:
 
 ## Architecture
 
-### Phase 1: Dashboard Search Extension
+### Phase 1: Dashboard Search Extension - DONE
 
 ```
 Dashboard Search Input ("memory leak pod-xyz")

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -72,6 +72,8 @@ interface ConversationTimelineProps {
   chatStageInProgress?: boolean;
   /** Set of stage IDs that are chat stages (for suppressing auto-collapse) */
   chatStageIds?: Set<string>;
+  /** Search term for in-session search (highlights + auto-expand) */
+  searchTerm?: string;
 }
 
 /**
@@ -101,6 +103,7 @@ export default function ConversationTimeline({
   chainId,
   chatStageInProgress,
   chatStageIds,
+  searchTerm,
 }: ConversationTimelineProps) {
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
@@ -147,6 +150,62 @@ export default function ConversationTimeline({
     },
     [chatStageIds],
   );
+
+  // --- Search-driven auto-expand ---
+  const searchExpandedStagesRef = useRef<Set<string>>(new Set());
+  const searchExpandedItemsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    // Revert previously search-expanded stages/items
+    if (searchExpandedStagesRef.current.size > 0) {
+      setStageCollapseOverrides((prev) => {
+        const next = new Map(prev);
+        for (const id of searchExpandedStagesRef.current) next.delete(id);
+        return next;
+      });
+      searchExpandedStagesRef.current = new Set();
+    }
+    if (searchExpandedItemsRef.current.size > 0) {
+      setManualOverrides((prev) => {
+        const next = new Set(prev);
+        for (const id of searchExpandedItemsRef.current) next.delete(id);
+        return next;
+      });
+      searchExpandedItemsRef.current = new Set();
+    }
+
+    if (!searchTerm?.trim()) return;
+
+    const lower = searchTerm.toLowerCase();
+    const matchingStageIds = new Set<string>();
+    const matchingItemIds = new Set<string>();
+
+    for (const item of items) {
+      if (item.content && item.content.toLowerCase().includes(lower)) {
+        if (item.stageId) matchingStageIds.add(item.stageId);
+        if (isFlowItemCollapsible(item) && isFlowItemTerminal(item)) {
+          matchingItemIds.add(item.id);
+        }
+      }
+    }
+
+    if (matchingStageIds.size > 0) {
+      setStageCollapseOverrides((prev) => {
+        const next = new Map(prev);
+        for (const id of matchingStageIds) next.set(id, false);
+        return next;
+      });
+      searchExpandedStagesRef.current = matchingStageIds;
+    }
+    if (matchingItemIds.size > 0) {
+      setManualOverrides((prev) => {
+        const next = new Set(prev);
+        for (const id of matchingItemIds) next.add(id);
+        return next;
+      });
+      searchExpandedItemsRef.current = matchingItemIds;
+    }
+  }, [searchTerm, items]);
 
   // --- Stage grouping ---
   // Group items by stage, then append empty groups for backend stages that
@@ -462,6 +521,7 @@ export default function ConversationTimeline({
                   subAgentExecutionStatuses={subAgentExecutionStatuses}
                   subAgentProgressStatuses={subAgentProgressStatuses}
                   onSelectedAgentChange={handleSelectedAgentChange}
+                  searchTerm={searchTerm}
                 />
               </Collapse>
             </Box>

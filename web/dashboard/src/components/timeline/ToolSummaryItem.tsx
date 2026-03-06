@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Box, Collapse, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
@@ -6,6 +6,8 @@ import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
 import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
+import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
+import { highlightSearchTermNodes } from '../../utils/search';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ToolSummaryItemProps {
@@ -14,6 +16,7 @@ interface ToolSummaryItemProps {
   onToggleAutoCollapse?: () => void;
   expandAll?: boolean;
   isCollapsible?: boolean;
+  searchTerm?: string;
 }
 
 /**
@@ -26,14 +29,20 @@ function ToolSummaryItem({
   onToggleAutoCollapse,
   expandAll = false,
   isCollapsible = true,
+  searchTerm,
 }: ToolSummaryItemProps) {
   const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
   const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
+  const rehypePlugins = useMemo(
+    () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
+    [searchTerm],
+  );
 
   return (
     <Box
+      data-flow-item-id={item.id}
       sx={{
         mb: 1.5,
         display: 'flex',
@@ -65,7 +74,7 @@ function ToolSummaryItem({
             <Box sx={{ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: '2px solid rgba(237, 108, 2, 0.2)' }}>
               {hasMarkdown ? (
                 <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' }, color: 'text.secondary' }}>
-                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                  <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} skipHtml>
                     {item.content || ''}
                   </ReactMarkdown>
                 </Box>
@@ -74,7 +83,7 @@ function ToolSummaryItem({
                   variant="body1"
                   sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.secondary' }}
                 >
-                  {item.content}
+                  {searchTerm ? highlightSearchTermNodes(item.content, searchTerm) : item.content}
                 </Typography>
               )}
             </Box>

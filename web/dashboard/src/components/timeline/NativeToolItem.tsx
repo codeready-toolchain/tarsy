@@ -15,6 +15,7 @@ interface CodeBlock {
 
 interface NativeToolItemProps {
   item: FlowItem;
+  searchTerm?: string;
 }
 
 /** Parse content preview summary for the header */
@@ -60,7 +61,7 @@ const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
  * NativeToolItem - renders code_execution, search_result, and url_context timeline events.
  * Uses info/teal color scheme to differentiate from MCP tool calls.
  */
-function NativeToolItem({ item }: NativeToolItemProps) {
+function NativeToolItem({ item, searchTerm: _searchTerm }: NativeToolItemProps) {
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
   const boxColor = theme.palette.info.main;
@@ -472,6 +473,7 @@ function NativeToolItem({ item }: NativeToolItemProps) {
 
   return (
     <Box
+      data-flow-item-id={item.id}
       sx={{
         ml: 4,
         my: 1,

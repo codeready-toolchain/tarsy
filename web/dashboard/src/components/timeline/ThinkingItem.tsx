@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Box, Collapse } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
@@ -8,6 +8,7 @@ import ContentCard from '../shared/ContentCard';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { formatDurationMs } from '../../utils/format';
+import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ThinkingItemProps {
@@ -16,25 +17,27 @@ interface ThinkingItemProps {
   onToggleAutoCollapse?: () => void;
   expandAll?: boolean;
   isCollapsible?: boolean;
+  searchTerm?: string;
 }
 
-/**
- * ThinkingItem - renders llm_thinking timeline events.
- * Collapsible grey box with brain emoji and "Thought" header.
- * Content is rendered in italic / text.secondary style.
- */
 function ThinkingItem({
   item,
   isAutoCollapsed = false,
   onToggleAutoCollapse,
   expandAll = false,
   isCollapsible = true,
+  searchTerm,
 }: ThinkingItemProps) {
+  const rehypePlugins = useMemo(
+    () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
+    [searchTerm],
+  );
   const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
   const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
   return (
     <Box
+      data-flow-item-id={item.id}
       sx={{
         mb: 1.5,
         display: 'flex',
@@ -74,7 +77,7 @@ function ThinkingItem({
                   fontStyle: 'italic',
                 }}
               >
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
+                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} skipHtml>
                   {item.content || ''}
                 </ReactMarkdown>
               </Box>

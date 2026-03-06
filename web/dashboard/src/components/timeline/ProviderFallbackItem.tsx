@@ -1,10 +1,12 @@
 import { memo, useState } from 'react';
 import { Box, Chip, Collapse, IconButton, Typography, alpha } from '@mui/material';
 import { SwapHoriz, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { highlightSearchTermNodes } from '../../utils/search';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ProviderFallbackItemProps {
   item: FlowItem;
+  searchTerm?: string;
 }
 
 function safeString(value: unknown): string {
@@ -41,7 +43,7 @@ function stripEnvelope(raw: string): string {
   return msg.trim();
 }
 
-function ProviderFallbackItem({ item }: ProviderFallbackItemProps) {
+function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
   const meta = item.metadata || {};
   const from = safeString(meta.original_provider) || '?';
   const to = safeString(meta.fallback_provider) || '?';
@@ -60,7 +62,7 @@ function ProviderFallbackItem({ item }: ProviderFallbackItemProps) {
   const formattedMessage = formatErrorMessage(strippedMessage);
 
   return (
-    <Box sx={{ my: 2 }}>
+    <Box data-flow-item-id={item.id} sx={{ my: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'stretch' }}>
         <Box
           sx={(theme) => ({
@@ -179,7 +181,7 @@ function ProviderFallbackItem({ item }: ProviderFallbackItemProps) {
                       overflow: 'auto',
                     })}
                   >
-                    {formattedMessage}
+                    {searchTerm ? highlightSearchTermNodes(formattedMessage, searchTerm) : formattedMessage}
                   </Box>
                 </Box>
               )}

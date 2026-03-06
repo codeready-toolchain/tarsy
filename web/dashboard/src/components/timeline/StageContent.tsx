@@ -49,6 +49,8 @@ interface StageContentProps {
   /** Sub-agent progress statuses (events with parent_execution_id) */
   subAgentProgressStatuses?: Map<string, string>;
   onSelectedAgentChange?: (executionId: string | null) => void;
+  /** Search term for in-session content highlighting */
+  searchTerm?: string;
 }
 
 interface TabPanelProps {
@@ -255,6 +257,7 @@ const StageContent: React.FC<StageContentProps> = ({
   subAgentExecutionStatuses,
   subAgentProgressStatuses,
   onSelectedAgentChange,
+  searchTerm,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -482,6 +485,7 @@ const StageContent: React.FC<StageContentProps> = ({
         expandAllReasoning={expandAllReasoning}
         expandAllToolCalls={expandAllToolCalls}
         isItemCollapsible={isItemCollapsible}
+        searchTerm={searchTerm}
       />
     );
   };
@@ -538,6 +542,7 @@ const StageContent: React.FC<StageContentProps> = ({
           expandAll={expandAllReasoning}
           expandAllToolCalls={expandAllToolCalls}
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
+          searchTerm={searchTerm}
         />,
       );
     }

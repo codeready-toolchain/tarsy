@@ -27,11 +27,18 @@ import {
   FormControlLabel,
   ToggleButton,
   ToggleButtonGroup,
+  TextField,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
 import {
   KeyboardDoubleArrowDown,
   Psychology,
   AccountTree,
+  Search,
+  Clear,
+  KeyboardArrowUp,
+  KeyboardArrowDown,
 } from '@mui/icons-material';
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
@@ -240,6 +247,12 @@ export function SessionDetailPage() {
       });
     }
   }, [chatState.chatStageId]);
+
+  // --- In-session search ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
@@ -462,6 +475,63 @@ export function SessionDetailPage() {
     () => (session ? parseTimelineToFlow(timelineEvents, session.stages) : []),
     [timelineEvents, session],
   );
+
+  // --- In-session search: debounce + match computation ---
+  const isTerminal = session ? isTerminalStatus(session.status as SessionStatus) : false;
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!searchTerm.trim()) {
+      setDebouncedSearchTerm('');
+      setCurrentMatchIndex(0);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentMatchIndex(0);
+      searchDebounceRef.current = null;
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [searchTerm]);
+
+  const matchingItemIds = useMemo(() => {
+    if (!debouncedSearchTerm.trim()) return [];
+    const lower = debouncedSearchTerm.toLowerCase();
+    return flowItems
+      .filter((item) => item.content && item.content.toLowerCase().includes(lower))
+      .map((item) => item.id);
+  }, [flowItems, debouncedSearchTerm]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleNextMatch = useCallback(() => {
+    if (matchingItemIds.length === 0) return;
+    setCurrentMatchIndex((prev) => (prev + 1) % matchingItemIds.length);
+  }, [matchingItemIds.length]);
+
+  const handlePrevMatch = useCallback(() => {
+    if (matchingItemIds.length === 0) return;
+    setCurrentMatchIndex((prev) => (prev - 1 + matchingItemIds.length) % matchingItemIds.length);
+  }, [matchingItemIds.length]);
+
+  // Scroll to the current match when index changes
+  useEffect(() => {
+    if (matchingItemIds.length === 0) return;
+    const targetId = matchingItemIds[currentMatchIndex];
+    if (!targetId) return;
+    const el = document.querySelector(`[data-flow-item-id="${targetId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [currentMatchIndex, matchingItemIds]);
 
   // Header title with session ID suffix (matching old dashboard)
   const headerTitle = session
@@ -1460,6 +1530,62 @@ export function SessionDetailPage() {
               </Box>
             )}
 
+            {/* In-session search bar (terminated sessions only) */}
+            {isTerminal && (
+              <Paper
+                variant="outlined"
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 2,
+                  py: 1,
+                }}
+              >
+                <TextField
+                  fullWidth
+                  placeholder="Search in session content..."
+                  variant="standard"
+                  size="small"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search fontSize="small" color="action" />
+                        </InputAdornment>
+                      ),
+                      disableUnderline: true,
+                    },
+                  }}
+                  sx={{ flex: 1 }}
+                />
+                {debouncedSearchTerm && (
+                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                    {matchingItemIds.length === 0
+                      ? 'No matches'
+                      : `${currentMatchIndex + 1} of ${matchingItemIds.length}`}
+                  </Typography>
+                )}
+                {debouncedSearchTerm && matchingItemIds.length > 1 && (
+                  <>
+                    <IconButton size="small" onClick={handlePrevMatch} aria-label="Previous match">
+                      <KeyboardArrowUp fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={handleNextMatch} aria-label="Next match">
+                      <KeyboardArrowDown fontSize="small" />
+                    </IconButton>
+                  </>
+                )}
+                {searchTerm && (
+                  <IconButton size="small" onClick={handleClearSearch} aria-label="Clear search">
+                    <Clear fontSize="small" />
+                  </IconButton>
+                )}
+              </Paper>
+            )}
+
             {/* Conversation Timeline */}
             {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
@@ -1477,6 +1603,7 @@ export function SessionDetailPage() {
                   chainId={session.chain_id}
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
+                  searchTerm={debouncedSearchTerm}
                 />
               </Suspense>
             ) : isActive ? (

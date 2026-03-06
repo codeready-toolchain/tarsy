@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Box, Typography, Collapse } from '@mui/material';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
@@ -8,6 +8,8 @@ import ContentCard from '../shared/ContentCard';
 import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
+import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
+import { highlightSearchTermNodes } from '../../utils/search';
 
 interface ResponseItemProps {
   item: FlowItem;
@@ -15,6 +17,7 @@ interface ResponseItemProps {
   onToggleAutoCollapse?: () => void;
   expandAll?: boolean;
   isCollapsible?: boolean;
+  searchTerm?: string;
 }
 
 /**
@@ -28,10 +31,41 @@ function ResponseItem({
   onToggleAutoCollapse,
   expandAll = false,
   isCollapsible = false,
+  searchTerm,
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
+  const rehypePlugins = useMemo(
+    () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
+    [searchTerm],
+  );
+
+  const renderContent = () => {
+    if (hasMarkdown) {
+      return (
+        <Box sx={{ color: 'text.primary' }}>
+          <ReactMarkdown
+            urlTransform={defaultUrlTransform}
+            components={thoughtMarkdownComponents}
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            skipHtml
+          >
+            {item.content || ''}
+          </ReactMarkdown>
+        </Box>
+      );
+    }
+    return (
+      <Typography
+        variant="body1"
+        sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
+      >
+        {searchTerm ? highlightSearchTermNodes(item.content, searchTerm) : item.content}
+      </Typography>
+    );
+  };
 
   // Final analysis / forced conclusion rendering
   if (isFinalAnalysis) {
@@ -42,6 +76,7 @@ function ResponseItem({
 
     return (
       <Box
+        data-flow-item-id={item.id}
         sx={{
           mb: 3,
           mt: 3,
@@ -69,25 +104,7 @@ function ResponseItem({
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
             <Box sx={{ mt: 0.5, pb: 3 }}>
-              {hasMarkdown ? (
-                <Box sx={{ color: 'text.primary' }}>
-                  <ReactMarkdown
-                    urlTransform={defaultUrlTransform}
-                    components={thoughtMarkdownComponents}
-                    remarkPlugins={remarkPlugins}
-                    skipHtml
-                  >
-                    {item.content || ''}
-                  </ReactMarkdown>
-                </Box>
-              ) : (
-                <Typography
-                  variant="body1"
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-                >
-                  {item.content}
-                </Typography>
-              )}
+              {renderContent()}
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
             </Box>
           </Collapse>
@@ -104,6 +121,7 @@ function ResponseItem({
 
     return (
       <Box
+        data-flow-item-id={item.id}
         sx={{
           mb: 1.5,
           display: 'flex',
@@ -137,20 +155,7 @@ function ResponseItem({
           <Collapse in={!shouldShowCollapsed} timeout={300}>
             <Box sx={{ mt: 0.5 }}>
               <ContentCard maxHeight="900px" copyText={item.content || ''}>
-                {hasMarkdown ? (
-                  <Box sx={{ color: 'text.primary' }}>
-                    <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                      {item.content || ''}
-                    </ReactMarkdown>
-                  </Box>
-                ) : (
-                  <Typography
-                    variant="body1"
-                    sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-                  >
-                    {item.content}
-                  </Typography>
-                )}
+                {renderContent()}
               </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
             </Box>
@@ -167,6 +172,7 @@ function ResponseItem({
 
   return (
     <Box
+      data-flow-item-id={item.id}
       sx={{
         mb: 1.5,
         display: 'flex',
@@ -199,20 +205,7 @@ function ResponseItem({
         )}
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            {hasMarkdown ? (
-              <Box sx={{ color: 'text.primary' }}>
-                <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} skipHtml>
-                  {item.content || ''}
-                </ReactMarkdown>
-              </Box>
-            ) : (
-              <Typography
-                variant="body1"
-                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.7, fontSize: '1rem', color: 'text.primary' }}
-              >
-                {item.content}
-              </Typography>
-            )}
+            {renderContent()}
             {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
           </Box>
         </Collapse>

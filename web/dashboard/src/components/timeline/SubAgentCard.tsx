@@ -39,6 +39,7 @@ interface SubAgentCardProps {
   expandAllReasoning?: boolean;
   expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
+  searchTerm?: string;
 }
 
 const SubAgentCard: React.FC<SubAgentCardProps> = ({
@@ -53,6 +54,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   expandAllReasoning = false,
   expandAllToolCalls = false,
   isItemCollapsible,
+  searchTerm,
 }) => {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { setExpanded(expandAllToolCalls); }, [expandAllToolCalls]);
@@ -178,6 +180,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
                 expandAll={expandAllReasoning}
                 expandAllToolCalls={expandAllToolCalls}
                 isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
+                searchTerm={searchTerm}
               />
             ))}
 

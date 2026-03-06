@@ -4,12 +4,14 @@ import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined }
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
 import { formatDurationMs } from '../../utils/format';
+import { highlightSearchTermNodes } from '../../utils/search';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 
 interface ToolCallItemProps {
   item: FlowItem;
   expandAll?: boolean;
+  searchTerm?: string;
 }
 
 /**
@@ -58,7 +60,7 @@ const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
  * ToolCallItem - renders llm_tool_call timeline events.
  * Expandable box showing tool name, arguments preview, duration, and result.
  */
-function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
+function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     setExpanded(expandAll);
@@ -109,6 +111,7 @@ function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
 
   return (
     <Box
+      data-flow-item-id={item.id}
       sx={(theme) => ({
         ml: 4, my: 1, mr: 1,
         border: '2px solid',
@@ -131,7 +134,7 @@ function ToolCallItem({ item, expandAll = false }: ToolCallItemProps) {
       >
         <StatusIcon sx={(theme) => ({ fontSize: 18, color: theme.palette[accentKey].main })} />
         <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette[accentKey].main })}>
-          {toolName}
+          {searchTerm ? highlightSearchTermNodes(toolName, searchTerm) : toolName}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
           {getArgumentsPreview()}

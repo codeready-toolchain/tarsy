@@ -1,12 +1,14 @@
 import { memo, useState } from 'react';
 import { Box, Collapse, IconButton, Typography, alpha } from '@mui/material';
 import { ErrorOutline, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { highlightSearchTermNodes } from '../../utils/search';
 
 interface ErrorCardProps {
   label: string;
   message?: string;
   /** Outer margin — pass e.g. `{ mt: 2 }` to control spacing in context. */
   sx?: Record<string, unknown>;
+  searchTerm?: string;
 }
 
 function formatErrorMessage(raw: string): string {
@@ -25,7 +27,7 @@ function stripEnvelope(raw: string): string {
 
 const PREVIEW_LENGTH = 120;
 
-function ErrorCard({ label, message, sx: outerSx }: ErrorCardProps) {
+function ErrorCard({ label, message, sx: outerSx, searchTerm }: ErrorCardProps) {
   const stripped = stripEnvelope((message || '').trim());
   const formatted = formatErrorMessage(stripped);
   const hasContent = formatted.length > 0;
@@ -134,7 +136,7 @@ function ErrorCard({ label, message, sx: outerSx }: ErrorCardProps) {
                   overflow: 'auto',
                 })}
               >
-                {formatted}
+                {searchTerm ? highlightSearchTermNodes(formatted, searchTerm) : formatted}
               </Box>
             </Box>
           </Collapse>

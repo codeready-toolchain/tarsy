@@ -1,24 +1,30 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import { AccountCircle, Assignment } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface UserQuestionItemProps {
   item: FlowItem;
+  searchTerm?: string;
 }
 
 const MAX_TASK_HEIGHT = 200;
 
-function UserQuestionItem({ item }: UserQuestionItemProps) {
+function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
   const author = (item.metadata?.author as string) || 'User';
   const isTask = author === 'Task';
   const Icon = isTask ? Assignment : AccountCircle;
   const accentColor = isTask ? 'secondary.main' : 'primary.main';
+  const rehypePlugins = useMemo(
+    () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
+    [searchTerm],
+  );
 
   return (
-    <Box sx={{ mb: 1.5, position: 'relative' }}>
+    <Box data-flow-item-id={item.id} sx={{ mb: 1.5, position: 'relative' }}>
       <Box
         sx={{
           position: 'absolute', left: 0, top: 8,
@@ -55,6 +61,7 @@ function UserQuestionItem({ item }: UserQuestionItemProps) {
         }}>
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
             components={thoughtMarkdownComponents}
           >
             {item.content}
