@@ -1,6 +1,7 @@
 # Session Workflow — Detailed Design
 
-**Status:** Draft — pending decisions from [session-workflow-design-questions.md](session-workflow-design-questions.md)
+**Status:** Final
+**Decisions:** [session-workflow-design-questions.md](session-workflow-design-questions.md)
 **Sketch:** [session-workflow-sketch.md](session-workflow-sketch.md)
 
 ## Overview
@@ -177,7 +178,7 @@ func (SessionReviewActivity) Indexes() []ent.Index {
 
 ### Migration
 
-> **Open question:** How should existing terminal sessions be backfilled? See [questions document](session-workflow-design-questions.md), Q1.
+**Backfill strategy:** The migration backfills all existing terminal sessions (`completed`, `failed`, `timed_out`, `cancelled`) to `review_status = resolved`, `resolution_reason = dismissed`. This gives a clean start — only new investigations enter the "Needs Review" queue.
 
 ## Service Layer
 
@@ -202,16 +203,28 @@ func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string
         status == alertsession.StatusTimedOut
     isCancelled := status == alertsession.StatusCancelled
 
-    // Always update status + last_interaction_at + completed_at for terminal states.
-    update := s.client.AlertSession.UpdateOneID(sessionID).
-        SetStatus(status).
-        SetLastInteractionAt(now)
-
-    if isTerminal || isCancelled {
-        update = update.SetCompletedAt(now)
+    // Non-terminal status updates don't touch review fields — no transaction needed.
+    if !isTerminal && !isCancelled {
+        return s.client.AlertSession.UpdateOneID(sessionID).
+            SetStatus(status).
+            SetLastInteractionAt(now).
+            Exec(writeCtx)
     }
 
-    if err := update.Exec(writeCtx); err != nil {
+    // Terminal/cancelled transitions: the status write and review-field initialization
+    // MUST be atomic. If the status commits but the review init fails, the session is
+    // terminal with no review_status — breaking the auto-enter invariant.
+    tx, err := s.client.Tx(writeCtx)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+    defer tx.Rollback()
+
+    if err := tx.AlertSession.UpdateOneID(sessionID).
+        SetStatus(status).
+        SetLastInteractionAt(now).
+        SetCompletedAt(now).
+        Exec(writeCtx); err != nil {
         return fmt.Errorf("failed to update session status: %w", err)
     }
 
@@ -219,38 +232,50 @@ func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string
     // Uses a conditional UPDATE with WHERE review_status IS NULL to avoid TOCTOU:
     // if two workers race to set the terminal status, only the first one initializes
     // the review fields — the second sees zero rows affected and is a no-op.
-    if isTerminal {
-        affected, err := s.client.AlertSession.Update().
-            Where(
-                alertsession.IDEQ(sessionID),
-                alertsession.ReviewStatusIsNil(),
-            ).
-            SetReviewStatus(alertsession.ReviewStatusNeedsReview).
-            Save(writeCtx)
-        if err != nil {
-            return fmt.Errorf("failed to set review status: %w", err)
-        }
-        if affected == 0 {
-            slog.Debug("Review status already set, skipping", "session_id", sessionID)
-        }
-    }
+    var reviewStatus alertsession.ReviewStatus
+    var affected int
 
-    if isCancelled {
-        affected, err := s.client.AlertSession.Update().
+    if isTerminal {
+        reviewStatus = alertsession.ReviewStatusNeedsReview
+        affected, err = tx.AlertSession.Update().
             Where(
                 alertsession.IDEQ(sessionID),
                 alertsession.ReviewStatusIsNil(),
             ).
-            SetReviewStatus(alertsession.ReviewStatusResolved).
+            SetReviewStatus(reviewStatus).
+            Save(writeCtx)
+    } else {
+        // Cancelled — auto-resolve as dismissed.
+        reviewStatus = alertsession.ReviewStatusResolved
+        affected, err = tx.AlertSession.Update().
+            Where(
+                alertsession.IDEQ(sessionID),
+                alertsession.ReviewStatusIsNil(),
+            ).
+            SetReviewStatus(reviewStatus).
             SetResolvedAt(now).
             SetResolutionReason(alertsession.ResolutionReasonDismissed).
             Save(writeCtx)
-        if err != nil {
-            return fmt.Errorf("failed to set review status: %w", err)
-        }
-        if affected == 0 {
-            slog.Debug("Review status already set, skipping", "session_id", sessionID)
-        }
+    }
+    if err != nil {
+        return fmt.Errorf("failed to set review status: %w", err)
+    }
+
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("failed to commit transaction: %w", err)
+    }
+
+    // Publish review.status event so the Triage view updates in real time.
+    // Only publish when we actually initialized the review fields (affected > 0).
+    // When affected == 0, the review_status was already set — no event needed.
+    if affected > 0 {
+        s.publisher.PublishReviewStatus(sessionID, ReviewStatusPayload{
+            SessionID:    sessionID,
+            ReviewStatus: reviewStatus,
+            Timestamp:    now,
+        })
+    } else {
+        slog.Debug("Review status already set, skipping event", "session_id", sessionID)
     }
 
     return nil
@@ -286,7 +311,7 @@ This method uses an atomic compare-and-transition pattern to prevent concurrent 
 
 This ensures concurrent claims/resolves cannot both succeed — only the first writer wins, the second gets a conflict error.
 
-> **Open question:** Should claiming an already-claimed session be allowed (reassignment)? See [questions document](session-workflow-design-questions.md), Q2.
+**Reassignment:** The backend allows reclaiming unconditionally (no 409 for already-claimed sessions). The frontend shows a confirmation dialog when the session is already claimed: "This session is currently claimed by A. Take over?" Both transitions are logged in the activity table.
 
 ### Transition validation
 
@@ -299,7 +324,7 @@ Valid state transitions:
 | `resolve` | `in_progress` | `resolved` | `resolved_at`, `resolution_reason`, `resolution_note` |
 | `reopen` | `resolved` | `needs_review` | clears `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note` |
 
-> **Open question:** Should "resolve" be allowed directly from `needs_review` (skip claiming)? See [questions document](session-workflow-design-questions.md), Q3.
+**Direct resolve:** Resolving directly from `needs_review` is allowed. The backend auto-sets `assignee` to the resolver — you can't resolve a session without becoming its owner. The activity log will show both the implicit claim and the resolution.
 
 ### GetReviewActivity
 
@@ -316,7 +341,7 @@ Add `review_status` and `assignee` to the existing filter parameters and respons
 - `DashboardListParams`: add `ReviewStatus []string`, `Assignee string`
 - `DashboardSessionItem`: add `ReviewStatus *string`, `Assignee *string`, `ResolutionReason *string`
 
-> **Open question:** Does the Triage view need its own dedicated API endpoint, or can it reuse the existing list endpoint with added filters? See [questions document](session-workflow-design-questions.md), Q4.
+**Triage endpoint:** A new `GET /api/v1/sessions/triage` returns a grouped response (`investigating`, `needs_review`, `in_progress`, `resolved`) with counts. Each group is bounded (e.g., `?resolved_limit=20`), avoiding expensive full scans. See API section below.
 
 ## API
 
@@ -404,7 +429,7 @@ type ReviewStatusPayload struct {
 
 The frontend Triage view subscribes to `sessions` channel (already subscribed for `session.status` and `session.progress`). On `review.status` events, it updates the card's position in the Kanban/grouped list.
 
-> **Open question:** Should `review.status` be published to `GlobalSessionsChannel` only, or also to `SessionChannel(sessionID)`? See [questions document](session-workflow-design-questions.md), Q5.
+**WS channels:** The `review.status` event is published to both `GlobalSessionsChannel` (for the Triage dashboard) and `SessionChannel(sessionID)` (for the session detail page). The detail page can show the current review state and react to changes in real time.
 
 ## Frontend
 
@@ -454,7 +479,7 @@ DashboardView (existing, modified)
 
 **ResolveModal** — Compact dialog for resolving a session. Resolution reason radio group (`actioned` / `dismissed`) + optional note textarea + confirm button. Used by both the Resolve button and drag-to-Resolved.
 
-> **Open question:** What information should Kanban cards show? See [questions document](session-workflow-design-questions.md), Q6.
+**Card content:** Standard operational info — alert type, chain, author, timestamp, executive summary snippet, assignee badge (for claimed cards), severity/score badge. No investigation internals (tool calls, reasoning steps) — those belong on the detail page.
 
 ### Data fetching
 
@@ -463,7 +488,7 @@ The Triage view needs two data sources:
 1. **Active investigations** (for the virtual "Investigating" column): reuse `getActiveSessions()` — already fetched by the dashboard.
 2. **Workflow sessions** (needs_review, in_progress, resolved): use `getSessions()` with `review_status` filter.
 
-> **Open question:** Should the Triage view fetch all review-status groups in one call, or separate calls per group? See [questions document](session-workflow-design-questions.md), Q7.
+**Fetch strategy:** Single API call to `GET /api/v1/sessions/triage` returns all groups in one response. The `resolved` group is bounded by `?resolved_limit=20` (default) to keep the payload manageable. Pagination for resolved sessions is available via the standard sessions list endpoint with `review_status=resolved` filter.
 
 ### WebSocket handling
 
@@ -481,7 +506,7 @@ Kanban drag-and-drop using `@dnd-kit/core` and `@dnd-kit/sortable`:
 - If target is "Resolved": intercept drop, show `ResolveModal`, call API only after confirmation.
 - Investigating column: not droppable as source (cards can't be dragged out).
 
-> **Open question:** Which drag-and-drop library to use? See [questions document](session-workflow-design-questions.md), Q8.
+**DnD library:** `@dnd-kit/core` + `@dnd-kit/sortable` — React 19 compatible, accessible, ~27kB, largest community. See [questions document](session-workflow-design-questions.md), Q8 for full comparison.
 
 ### Keyboard shortcuts
 
@@ -510,7 +535,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 3. Run `make ent-generate`, `make migrate-create NAME=add_review_workflow`
 4. Review and adjust migration (backfill existing terminal sessions)
 5. Add `UpdateReviewRequest` and review fields to `pkg/models/session.go`
-6. Modify `SessionService.UpdateSessionStatus` to set `review_status` on terminal transitions
+6. Modify `SessionService.UpdateSessionStatus` to set `review_status` on terminal transitions (transactional: status write + review init in one tx)
 7. Add `SessionService.UpdateReviewStatus` and `SessionService.GetReviewActivity`
 8. Extend `ListSessionsForDashboard` with `review_status` and `assignee` filters
 9. Add review fields to `DashboardSessionItem` response DTO
@@ -521,7 +546,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 2. Add `PublishReviewStatus` to `EventPublisher`
 3. Create `pkg/api/handler_review.go` with `PATCH /sessions/:id/review` and `GET /sessions/:id/review-activity`
 4. Register routes in `setupRoutes()`
-5. Publish `review.status` events from `UpdateReviewStatus`
+5. Publish `review.status` events from both `UpdateReviewStatus` (manual actions) and `UpdateSessionStatus` (worker terminal transitions) so the Triage view updates in real time regardless of the transition source
 6. Unit tests for service methods and handler
 
 ### Phase 3: Frontend — Tab bar + Triage grouped list
