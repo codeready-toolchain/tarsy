@@ -199,7 +199,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             )}
 
             {isFailed && eo?.error_message && (
-              <ErrorCard label="Failed" message={eo.error_message} sx={{ mt: 1 }} />
+              <ErrorCard label="Failed" message={eo.error_message} sx={{ mt: 1 }} searchTerm={searchTerm} />
             )}
 
             {isCancelled && (

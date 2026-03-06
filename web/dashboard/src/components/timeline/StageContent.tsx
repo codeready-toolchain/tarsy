@@ -578,7 +578,7 @@ const StageContent: React.FC<StageContentProps> = ({
         )}
 
         {isFailed && (
-          <ErrorCard label="Execution Failed" message={errorMessage} sx={{ mt: 2 }} />
+          <ErrorCard label="Execution Failed" message={errorMessage} sx={{ mt: 2 }} searchTerm={searchTerm} />
         )}
 
         {isCancelled && (
