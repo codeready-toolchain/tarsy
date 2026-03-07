@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
-import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome, BoltOutlined } from '@mui/icons-material';
+import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome, BuildOutlined } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 import { STAGE_TYPE } from '../../constants/eventTypes';
@@ -21,7 +21,7 @@ function getStageTypeIcon(stageType: string | undefined) {
     case STAGE_TYPE.SYNTHESIS: return <MergeType />;
     case STAGE_TYPE.CHAT: return <SmsOutlined />;
     case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome />;
-    case STAGE_TYPE.ACTION: return <BoltOutlined />;
+    case STAGE_TYPE.ACTION: return <BuildOutlined />;
     default: return <Search />;
   }
 }

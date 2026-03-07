@@ -503,7 +503,7 @@ System prompt = Tier 1-3 (above)
 ```
 
 For **action agents** (`type: action`), the prompt builder auto-injects a safety-focused behavioral layer:
-```
+```text
 System prompt = Tier 1-3 (above)
               + Action behavioral instructions (auto-injected safety preamble)
               + Action task focus

@@ -111,7 +111,7 @@ if s.stageType != stage.StageTypeInvestigation &&
 
 Full treatment for v1:
 - `src/constants/eventTypes.ts` — add `ACTION: 'action'` to `STAGE_TYPE`
-- `src/types/session.ts` — add `has_action_stages: boolean` to `DashboardSessionItem` and `ActiveSessionItem`
+- `src/types/session.ts` — add `has_action_stages: boolean` to `DashboardSessionItem` and `SessionDetailResponse`
 - Timeline components — distinct icon/color/label for action stages (see `StageSeparator.tsx` `getStageTypeIcon`, `StageAccordion.tsx` stage type badge)
 - Session list — "action evaluation" badge on sessions containing at least one action stage, driven by the new `has_action_stages` field
 
