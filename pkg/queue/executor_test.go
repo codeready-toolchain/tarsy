@@ -390,7 +390,7 @@ func TestBuildStageContext(t *testing.T) {
 }
 
 func TestAllAgentsAreAction(t *testing.T) {
-	t.Run("all action agents returns true", func(t *testing.T) {
+	t.Run("single action agent returns true", func(t *testing.T) {
 		cfg := &config.Config{
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 				"RemediationAgent": {Type: config.AgentTypeAction},
@@ -401,6 +401,24 @@ func TestAllAgentsAreAction(t *testing.T) {
 		stageConfig := config.StageConfig{
 			Agents: []config.StageAgentConfig{
 				{Name: "RemediationAgent"},
+			},
+		}
+		assert.True(t, executor.allAgentsAreAction(stageConfig))
+	})
+
+	t.Run("multiple action agents returns true", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"RemediationAgent": {Type: config.AgentTypeAction},
+				"RollbackAgent":    {Type: config.AgentTypeAction},
+			}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "RemediationAgent"},
+				{Name: "RollbackAgent"},
 			},
 		}
 		assert.True(t, executor.allAgentsAreAction(stageConfig))
@@ -426,7 +444,7 @@ func TestAllAgentsAreAction(t *testing.T) {
 		cfg := &config.Config{
 			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 				"InvestigationAgent": {Type: config.AgentTypeDefault},
-				"RemediationAgent":  {Type: config.AgentTypeAction},
+				"RemediationAgent":   {Type: config.AgentTypeAction},
 			}),
 		}
 		executor := &RealSessionExecutor{cfg: cfg}

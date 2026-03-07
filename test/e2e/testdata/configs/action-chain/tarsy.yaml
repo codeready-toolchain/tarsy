@@ -1,0 +1,35 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Built-in KubernetesAgent requires this server for validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, gathering evidence about the alert."
+  Remediator:
+    type: action
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Remediator, executing justified remediation actions."
+
+agent_chains:
+  action-chain:
+    alert_types: [test-action]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+      - name: remediation
+        agents:
+          - name: Remediator

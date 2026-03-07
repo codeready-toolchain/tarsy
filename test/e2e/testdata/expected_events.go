@@ -729,3 +729,77 @@ var OrchestratorCancellationExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "orchestrate", Status: "cancelled"},
 	{Type: "session.status", Status: "cancelled"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Action Chain
+// Two-stage chain — investigation + action (remediation):
+//  1. investigation (Investigator, google-native) — tool call + final answer
+//  2. remediation   (Remediator, action type, google-native) — tool call + final answer
+//  + Executive summary — succeeds
+// Verifies: action stage type propagation, safety preamble, context flow.
+// ────────────────────────────────────────────────────────────
+
+var ActionChainExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (Investigator, google-native) ──
+	{Type: "stage.status", StageName: "investigation", Status: "started"},
+
+	// Iteration 1: thinking + response + tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Let me check the service status."},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Checking service health."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_service_status",
+		"arguments":   `{"service":"api-gateway"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// Iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Service is down, confirmed by health check."},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Investigation complete: api-gateway is DOWN. Health check confirms 503 errors since 10:00 UTC."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Investigation complete: api-gateway is DOWN. Health check confirms 503 errors since 10:00 UTC."},
+
+	{Type: "stage.status", StageName: "investigation", Status: "completed"},
+
+	// ── Stage 2: remediation (Remediator, action type, google-native) ──
+	{Type: "stage.status", StageName: "remediation", Status: "started"},
+
+	// Iteration 1: thinking + response + tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Evidence is clear — api-gateway is down. Restarting the service."},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Restarting api-gateway based on confirmed outage."},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "restart_service",
+		"arguments":   `{"service":"api-gateway"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// Iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Service restarted successfully."},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK)."},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK)."},
+
+	{Type: "stage.status", StageName: "remediation", Status: "completed"},
+
+	// ── Executive summary ── (DB-only, no WS timeline events)
+	{Type: "session.status", Status: "completed"},
+}
