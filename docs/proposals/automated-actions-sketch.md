@@ -35,7 +35,7 @@ What's missing is **ergonomic and safety support** for doing this correctly. The
 - **Auto-injected safety prompt** — consistent baseline that can't be accidentally omitted (agent type concern)
 - **DB-level auditability** — "show all automated actions" is a trivial query (stage type concern)
 - **Distinct dashboard treatment** — operators see at a glance which sessions had action evaluation (stage type concern)
-- **Executor pre-condition enforcement** — require investigation to complete before action (stage type concern)
+- **Executor pre-condition enforcement** — could enforce ordering constraints in the future if needed (stage type concern)
 
 These built-in types make it easier to configure actionable chains correctly. Less custom prompt required. More works out of the box.
 
@@ -46,7 +46,7 @@ TARSy has two orthogonal type systems that serve different purposes:
 - **Agent type** (`config.AgentType`) — determines the **controller** and **auto-injected prompt layers**. An `action` agent type uses IteratingController (same as default agents) and gets safety-focused behavioral instructions auto-injected by the prompt builder.
 - **Stage type** (`stage.StageType` in DB) — determines **executor behavior**, **context building**, **dashboard rendering**, and **queryability**. An `action` stage type gets distinct visual treatment and is filterable in the DB.
 
-The stage type is **derived from the agent types at config load time**: if all agents in a stage have `type: action`, the stage gets `stage_type: action`. Otherwise it stays `investigation`. This is a deterministic rule — no runtime ambiguity.
+The stage type is **derived from the agent types in the executor at stage creation time**: if all resolved agents in a stage have `type: action`, the stage gets `stage_type: action`. Otherwise it stays `investigation`. This is a deterministic rule — no ambiguity.
 
 Users can mix action and non-action agents in a stage. Each `type: action` agent still gets the safety prompt. But the stage loses action-type benefits (dashboard, audit, DB queryability). If you want the full action stage experience, keep the stage pure.
 

@@ -106,7 +106,7 @@ The action stage needs a configuration model that fits TARSy's existing chain YA
 
 ### Option A: Agent type `action` drives stage type
 
-Use the existing `StageAgentConfig.Type` field to set `type: action` on agents. The stage type is **derived at config load time**: if all agents in a stage have `type: action`, the executor creates the Stage with `stage_type: action`. Otherwise the stage stays `investigation`.
+Use the existing `StageAgentConfig.Type` field to set `type: action` on agents. The stage type is **derived in the executor at stage creation time**: if all resolved agents in a stage have `type: action`, the executor creates the Stage with `stage_type: action`. Otherwise the stage stays `investigation`.
 
 ```yaml
 stages:
@@ -126,7 +126,7 @@ stages:
 
 **Decision:** Option A — agent type `action` drives stage type.
 
-Adding `action` to the `AgentType` enum. The **agent type** provides: safety prompt auto-injection, IteratingController selection. The **stage type** is derived at config load: all agents in the stage are `type: action` → `stage_type: action`, otherwise → `investigation`. Stage type provides: specialized context, dashboard rendering, DB auditability, executor pre-conditions.
+Adding `action` to the `AgentType` enum. The **agent type** provides: safety prompt auto-injection, IteratingController selection. The **stage type** is derived in the executor at stage creation time: all resolved agents in the stage are `type: action` → `stage_type: action`, otherwise → `investigation`. Stage type provides: dashboard rendering, DB auditability, context flow integration.
 
 Users can mix action and non-action agents in a stage — nothing prevents it. The action agents still get their safety prompt. But the stage loses action-type benefits (it becomes a regular investigation stage). This is a reasonable trade-off: if you want the full action stage experience, keep the stage pure.
 
