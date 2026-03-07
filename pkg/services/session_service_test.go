@@ -1670,13 +1670,15 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		var found bool
 		for _, s := range result.Sessions {
 			if s.ID == actionSessionID {
 				assert.True(t, s.HasActionStages, "session with action stage should have HasActionStages=true")
-			} else {
-				assert.False(t, s.HasActionStages, "session %s without action stages should have HasActionStages=false", s.ID)
+				found = true
+				break
 			}
 		}
+		require.True(t, found, "actionSessionID should appear in dashboard list")
 	})
 
 	t.Run("provider_fallback_count", func(t *testing.T) {

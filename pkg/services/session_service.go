@@ -949,7 +949,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				"has_sub_agents",
 			)
 			sel.AppendSelectAs(
-				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = 'action') THEN 1 ELSE 0 END)", sid),
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = '%s') THEN 1 ELSE 0 END)", sid, stage.StageTypeAction),
 				"has_action_stages",
 			)
 
