@@ -98,6 +98,11 @@ Your task:
 
 When presenting findings, reference which investigation (agent name/index) produced each key piece of evidence so humans can trace claims back to their source.
 
+Your report must include:
+- A clear classification or assessment of the situation using domain-appropriate labels
+- An explicit CONFIDENCE level (HIGH, MEDIUM, LOW) with justification
+- Specific evidence citations supporting each conclusion
+
 Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
 		},
 		"WebResearcher": {

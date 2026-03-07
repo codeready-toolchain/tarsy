@@ -303,6 +303,22 @@ func TestExtractFinalAnalysis(t *testing.T) {
 			},
 			want: "",
 		},
+		{
+			name: "action stage included in extraction",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeAction, finalAnalysis: "Actions taken: suspended VM"},
+			},
+			want: "Actions taken: suspended VM",
+		},
+		{
+			name: "action stage with empty analysis falls through to investigation",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeAction, finalAnalysis: ""},
+			},
+			want: "Investigation findings",
+		},
 	}
 
 	for _, tt := range tests {
@@ -360,6 +376,98 @@ func TestBuildStageContext(t *testing.T) {
 		}
 		result := executor.buildStageContext(stages)
 		assert.Empty(t, result)
+	})
+
+	t.Run("includes action stages", func(t *testing.T) {
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", finalAnalysis: "Found malicious activity"},
+			{stageType: stage.StageTypeAction, stageName: "remediation", finalAnalysis: "Suspended offending workload"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Found malicious activity")
+		assert.Contains(t, result, "Suspended offending workload")
+	})
+}
+
+func TestAllAgentsAreAction(t *testing.T) {
+	t.Run("all action agents returns true", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"RemediationAgent": {Type: config.AgentTypeAction},
+			}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "RemediationAgent"},
+			},
+		}
+		assert.True(t, executor.allAgentsAreAction(stageConfig))
+	})
+
+	t.Run("stage override to action returns true", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"GenericAgent": {Type: config.AgentTypeDefault},
+			}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "GenericAgent", Type: config.AgentTypeAction},
+			},
+		}
+		assert.True(t, executor.allAgentsAreAction(stageConfig))
+	})
+
+	t.Run("mixed agents returns false", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"InvestigationAgent": {Type: config.AgentTypeDefault},
+				"RemediationAgent":  {Type: config.AgentTypeAction},
+			}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "InvestigationAgent"},
+				{Name: "RemediationAgent"},
+			},
+		}
+		assert.False(t, executor.allAgentsAreAction(stageConfig))
+	})
+
+	t.Run("default agents returns false", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"InvestigationAgent": {},
+			}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "InvestigationAgent"},
+			},
+		}
+		assert.False(t, executor.allAgentsAreAction(stageConfig))
+	})
+
+	t.Run("agent not found returns false", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{}),
+		}
+		executor := &RealSessionExecutor{cfg: cfg}
+
+		stageConfig := config.StageConfig{
+			Agents: []config.StageAgentConfig{
+				{Name: "NonexistentAgent"},
+			},
+		}
+		assert.False(t, executor.allAgentsAreAction(stageConfig))
 	})
 }
 

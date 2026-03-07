@@ -513,7 +513,7 @@ var (
 		{Name: "expected_agent_count", Type: field.TypeInt},
 		{Name: "parallel_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"multi_agent", "replica"}},
 		{Name: "success_policy", Type: field.TypeEnum, Nullable: true, Enums: []string{"all", "any"}},
-		{Name: "stage_type", Type: field.TypeEnum, Enums: []string{"investigation", "synthesis", "chat", "exec_summary", "scoring"}, Default: "investigation"},
+		{Name: "stage_type", Type: field.TypeEnum, Enums: []string{"investigation", "synthesis", "chat", "exec_summary", "scoring", "action"}, Default: "investigation"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "active", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},

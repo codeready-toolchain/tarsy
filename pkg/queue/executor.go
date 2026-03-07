@@ -352,7 +352,13 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 	configs := buildConfigs(input.stageConfig)
 	policy := e.resolvedSuccessPolicy(input)
 
-	// 2. Create Stage DB record
+	// 2. Derive stage type from agent types
+	stageType := stage.StageTypeInvestigation
+	if e.allAgentsAreAction(input.stageConfig) {
+		stageType = stage.StageTypeAction
+	}
+
+	// 3. Create Stage DB record
 	stg, err := input.stageService.CreateStage(ctx, models.CreateStageRequest{
 		SessionID:          input.session.ID,
 		StageName:          input.stageConfig.Name,
@@ -360,7 +366,7 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		ExpectedAgentCount: len(configs),
 		ParallelType:       parallelTypePtr(input.stageConfig),
 		SuccessPolicy:      successPolicyPtr(input.stageConfig, policy),
-		StageType:          string(stage.StageTypeInvestigation),
+		StageType:          string(stageType),
 	})
 	if err != nil {
 		if r := e.mapCancellation(ctx); r != nil {
@@ -375,14 +381,14 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		}
 	}
 
-	// 3. Update session progress + publish stage.status: started (stageID now available)
+	// 4. Update session progress + publish stage.status: started (stageID now available)
 	e.updateSessionProgress(ctx, input.session.ID, input.stageIndex, stg.ID)
 	publishStageStatus(ctx, e.eventPublisher, input.session.ID, stg.ID, input.stageConfig.Name, input.stageIndex, stg.StageType, stg.ReferencedStageID, events.StageStatusStarted)
 	publishSessionProgress(ctx, e.eventPublisher, input.session.ID, input.stageConfig.Name,
 		input.stageIndex, input.totalExpectedStages, len(configs),
 		fmt.Sprintf("Starting stage: %s", input.stageConfig.Name))
 
-	// 4. Launch goroutines (one per execution config — even if just one)
+	// 5. Launch goroutines (one per execution config — even if just one)
 	results := make(chan indexedAgentResult, len(configs))
 	var wg sync.WaitGroup
 
@@ -395,17 +401,17 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		}(i, cfg.agentConfig, cfg.displayName)
 	}
 
-	// 5. Wait for ALL goroutines to complete
+	// 6. Wait for ALL goroutines to complete
 	wg.Wait()
 	close(results)
 
-	// 6. Collect and sort by original index
+	// 7. Collect and sort by original index
 	agentResults := collectAndSort(results)
 
-	// 7. Aggregate status via success policy
+	// 8. Aggregate status via success policy
 	stageStatus := aggregateStatus(agentResults, policy)
 
-	// 8. Update Stage in DB (use background context — ctx may be cancelled)
+	// 9. Update Stage in DB (use background context — ctx may be cancelled)
 	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
 		logger.Error("Failed to update stage status", "error", updateErr)
 	}
@@ -721,4 +727,25 @@ func (e *RealSessionExecutor) executeAgent(
 		llmBackend:      resolvedBackend,
 		llmProviderName: resolvedConfig.LLMProviderName,
 	}
+}
+
+// allAgentsAreAction returns true if every agent in the stage resolves to AgentTypeAction.
+// Uses the same resolution order as ResolveAgentConfig: stage override > agent definition.
+// Returns false on any error (e.g. agent not found) — the error will be caught later
+// by ResolveAgentConfig in executeAgent.
+func (e *RealSessionExecutor) allAgentsAreAction(stageConfig config.StageConfig) bool {
+	for _, ac := range stageConfig.Agents {
+		agentType := ac.Type
+		if agentType == "" {
+			agentDef, err := e.cfg.GetAgent(ac.Name)
+			if err != nil {
+				return false
+			}
+			agentType = agentDef.Type
+		}
+		if agentType != config.AgentTypeAction {
+			return false
+		}
+	}
+	return true
 }

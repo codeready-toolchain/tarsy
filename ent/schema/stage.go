@@ -46,9 +46,9 @@ func (Stage) Fields() []ent.Field {
 
 		// Stage Type
 		field.Enum("stage_type").
-			Values("investigation", "synthesis", "chat", "exec_summary", "scoring").
+			Values("investigation", "synthesis", "chat", "exec_summary", "scoring", "action").
 			Default("investigation").
-			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation)"),
+			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation)"),
 
 		// Stage-Level Status & Timing (aggregated from agent executions)
 		field.Enum("status").

@@ -32,7 +32,7 @@ type Stage struct {
 	ParallelType *stage.ParallelType `json:"parallel_type,omitempty"`
 	// null if count=1, 'all'/'any' if count>1
 	SuccessPolicy *stage.SuccessPolicy `json:"success_policy,omitempty"`
-	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation)
+	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation)
 	StageType stage.StageType `json:"stage_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status stage.Status `json:"status,omitempty"`

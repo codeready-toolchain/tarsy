@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 )
@@ -364,6 +365,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		}
 	}
 
+	// Warn if a stage mixes action and non-action agents
+	v.warnMixedActionStage(stage, stageRef)
+
 	// Validate stage-level fallback providers if specified
 	if err := v.validateFallbackProviders(stage.FallbackProviders, stageRef, "", "fallback_providers"); err != nil {
 		return err
@@ -408,6 +412,35 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 	}
 
 	return nil
+}
+
+// warnMixedActionStage logs a warning when a stage has both action and non-action
+// agents. The stage type will fall back to "investigation", losing action-stage
+// benefits (dashboard rendering, DB queryability).
+func (v *Validator) warnMixedActionStage(stg *StageConfig, stageRef string) {
+	if len(stg.Agents) < 2 {
+		return
+	}
+
+	hasAction, hasNonAction := false, false
+	for _, ac := range stg.Agents {
+		effectiveType := ac.Type
+		if effectiveType == "" {
+			if agentDef, err := v.cfg.AgentRegistry.Get(ac.Name); err == nil {
+				effectiveType = agentDef.Type
+			}
+		}
+		if effectiveType == AgentTypeAction {
+			hasAction = true
+		} else {
+			hasNonAction = true
+		}
+	}
+
+	if hasAction && hasNonAction {
+		slog.Warn("Stage has mixed action and non-action agents — stage type will be 'investigation', action-stage benefits (dashboard, audit) will not apply",
+			"stage", stageRef, "stage_name", stg.Name)
+	}
 }
 
 func (v *Validator) validateMCPServers() error {

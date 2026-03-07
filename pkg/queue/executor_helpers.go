@@ -96,12 +96,12 @@ func applySafetyNet(result *ExecutionResult, ctxErr error, sessionTimeout time.D
 
 // buildStageContext converts completed stageResults into a context string
 // for the next stage's agent prompt.
-// Only investigation and synthesis stages contribute to the next-stage context;
+// Only investigation, synthesis, and action stages contribute to the next-stage context;
 // exec_summary and scoring stages are excluded as a safety guard.
 func (e *RealSessionExecutor) buildStageContext(stages []stageResult) string {
 	var results []agentctx.StageResult
 	for _, s := range stages {
-		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis {
+		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis && s.stageType != stage.StageTypeAction {
 			continue
 		}
 		results = append(results, agentctx.StageResult{
@@ -113,13 +113,13 @@ func (e *RealSessionExecutor) buildStageContext(stages []stageResult) string {
 }
 
 // extractFinalAnalysis returns the final analysis from the last completed stage.
-// Only considers investigation and synthesis stages; exec_summary and scoring
-// stages are excluded as a safety guard.
+// Only considers investigation, synthesis, and action stages; exec_summary and
+// scoring stages are excluded as a safety guard.
 // Searches in reverse to find the most recent stage with a non-empty analysis.
 func extractFinalAnalysis(stages []stageResult) string {
 	for i := len(stages) - 1; i >= 0; i-- {
 		s := stages[i]
-		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis {
+		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis && s.stageType != stage.StageTypeAction {
 			continue
 		}
 		if s.finalAnalysis != "" {

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -187,6 +189,14 @@ func TestValidateAgents(t *testing.T) {
 			servers: map[string]*MCPServerConfig{},
 			wantErr: true,
 			errMsg:  "must be positive",
+		},
+		{
+			name: "action agent type is valid",
+			agents: map[string]*AgentConfig{
+				"remediation": {Type: AgentTypeAction},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
 		},
 		{
 			name: "orchestrator agent without orchestrator config is valid",
@@ -1351,6 +1361,51 @@ func TestValidateStageComprehensive(t *testing.T) {
 			wantErr: true,
 			errMsg:  "LLM provider 'nonexistent-provider' which is not found",
 		},
+		{
+			name: "stage with action agent type is valid",
+			stage: StageConfig{
+				Name:   "take-action",
+				Agents: []StageAgentConfig{{Name: "remediation-agent"}},
+			},
+			agents: map[string]*AgentConfig{
+				"remediation-agent": {Type: AgentTypeAction},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers:   map[string]*MCPServerConfig{},
+			wantErr:   false,
+		},
+		{
+			name: "stage with mixed action and non-action agents is valid (warning only)",
+			stage: StageConfig{
+				Name: "mixed-stage",
+				Agents: []StageAgentConfig{
+					{Name: "investigation-agent"},
+					{Name: "remediation-agent"},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"investigation-agent": {},
+				"remediation-agent":   {Type: AgentTypeAction},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers:   map[string]*MCPServerConfig{},
+			wantErr:   false,
+		},
+		{
+			name: "stage with action type override is valid",
+			stage: StageConfig{
+				Name: "action-override",
+				Agents: []StageAgentConfig{
+					{Name: "generic-agent", Type: AgentTypeAction},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"generic-agent": {},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers:   map[string]*MCPServerConfig{},
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1372,6 +1427,108 @@ func TestValidateStageComprehensive(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWarnMixedActionStage(t *testing.T) {
+	t.Run("logs warning for mixed action and non-action agents", func(t *testing.T) {
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		oldLogger := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"investigator": {},
+				"remediator":   {Type: AgentTypeAction},
+			}),
+		}
+		v := NewValidator(cfg)
+		stg := &StageConfig{
+			Name: "mixed",
+			Agents: []StageAgentConfig{
+				{Name: "investigator"},
+				{Name: "remediator"},
+			},
+		}
+		v.warnMixedActionStage(stg, "chain 'test' stage 0")
+
+		assert.Contains(t, buf.String(), "mixed action and non-action agents")
+	})
+
+	t.Run("no warning for pure action stage", func(t *testing.T) {
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		oldLogger := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"remediator1": {Type: AgentTypeAction},
+				"remediator2": {Type: AgentTypeAction},
+			}),
+		}
+		v := NewValidator(cfg)
+		stg := &StageConfig{
+			Name: "pure-action",
+			Agents: []StageAgentConfig{
+				{Name: "remediator1"},
+				{Name: "remediator2"},
+			},
+		}
+		v.warnMixedActionStage(stg, "chain 'test' stage 0")
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("no warning for single agent stage", func(t *testing.T) {
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		oldLogger := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"remediator": {Type: AgentTypeAction},
+			}),
+		}
+		v := NewValidator(cfg)
+		stg := &StageConfig{
+			Name:   "single",
+			Agents: []StageAgentConfig{{Name: "remediator"}},
+		}
+		v.warnMixedActionStage(stg, "chain 'test' stage 0")
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("stage override resolves correctly", func(t *testing.T) {
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		oldLogger := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"generic1": {},
+				"generic2": {},
+			}),
+		}
+		v := NewValidator(cfg)
+		stg := &StageConfig{
+			Name: "all-overridden",
+			Agents: []StageAgentConfig{
+				{Name: "generic1", Type: AgentTypeAction},
+				{Name: "generic2", Type: AgentTypeAction},
+			},
+		}
+		v.warnMixedActionStage(stg, "chain 'test' stage 0")
+
+		assert.Empty(t, buf.String())
+	})
 }
 
 // TestValidateChainsEdgeCases tests additional chain validation scenarios

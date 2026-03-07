@@ -174,6 +174,23 @@ func TestBuildFunctionCallingMessages_OrchestratorMode(t *testing.T) {
 	assert.Contains(t, messages[1].Content, "Alert Details")
 }
 
+func TestBuildFunctionCallingMessages_ActionMode(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "Investigation found malicious activity.")
+	require.Len(t, messages, 2)
+
+	assert.Contains(t, messages[0].Content, "Action Agent Safety Guidelines")
+	assert.Contains(t, messages[0].Content, "Require hard evidence")
+	assert.Contains(t, messages[0].Content, "Prefer inaction over incorrect action")
+	assert.Contains(t, messages[0].Content, "General SRE Agent Instructions")
+	assert.Contains(t, messages[0].Content, "evaluating the upstream investigation findings")
+	assert.Contains(t, messages[1].Content, "Alert Details")
+	assert.Contains(t, messages[1].Content, "Investigation found malicious activity.")
+}
+
 func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()

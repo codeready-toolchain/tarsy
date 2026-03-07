@@ -2434,3 +2434,151 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(finalEvents), 1, "should have at least 1 final_analysis event")
 }
+
+func TestExecutor_ActionStageChain(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+			{
+				Name: "take-action",
+				Agents: []config.StageAgentConfig{
+					{Name: "ActionAgent"},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent": {
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			"ActionAgent": {
+				Type:          config.AgentTypeAction,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			config.AgentNameExecSummary: {
+				Type:       config.AgentTypeExecSummary,
+				LLMBackend: config.LLMBackendLangChain,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			// Stage 1: investigation
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Classification: MALICIOUS. Confidence: HIGH. Evidence: unauthorized access from IP 10.0.0.5."},
+			}},
+			// Stage 2: action
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Classification: MALICIOUS. Confidence: HIGH. Evidence: unauthorized access from IP 10.0.0.5.\n\n## Actions Taken\nSuspended workload per security policy. Reasoning: high-confidence malicious classification."},
+			}},
+			// Exec summary
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Security incident detected and remediated."},
+			}},
+		},
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Nil(t, result.Error)
+
+	// Verify Stage DB records: investigation + action + exec_summary
+	stages, err := entClient.Stage.Query().
+		Order(ent.Asc(stage.FieldStageIndex)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 3)
+
+	assert.Equal(t, "investigation", stages[0].StageName)
+	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
+
+	assert.Equal(t, "take-action", stages[1].StageName)
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+
+	assert.Equal(t, "Executive Summary", stages[2].StageName)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+
+	// Verify stage events carry correct stage_type from the first event
+	var actionStarted, actionCompleted bool
+	for _, ss := range publisher.stageStatuses {
+		if ss.StageName == "take-action" {
+			assert.Equal(t, "action", ss.StageType, "action stage events should have stage_type=action")
+			if ss.Status == events.StageStatusStarted {
+				actionStarted = true
+			}
+			if ss.Status == events.StageStatusCompleted {
+				actionCompleted = true
+			}
+		}
+	}
+	assert.True(t, actionStarted, "should have action stage started event")
+	assert.True(t, actionCompleted, "should have action stage completed event")
+
+	// Verify context flow: action stage receives investigation context
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 2)
+	actionInput := llm.capturedInputs[1]
+	var foundInvestigationContext bool
+	for _, msg := range actionInput.Messages {
+		if strings.Contains(msg.Content, "MALICIOUS") && strings.Contains(msg.Content, "unauthorized access") {
+			foundInvestigationContext = true
+			break
+		}
+	}
+	assert.True(t, foundInvestigationContext, "action stage should receive investigation findings in context")
+
+	// Verify action stage prompt has safety preamble
+	var foundSafetyPreamble bool
+	for _, msg := range actionInput.Messages {
+		if strings.Contains(msg.Content, "Action Agent Safety Guidelines") {
+			foundSafetyPreamble = true
+			break
+		}
+	}
+	assert.True(t, foundSafetyPreamble, "action stage should have safety preamble in system prompt")
+
+	// Verify exec summary receives the action stage's final analysis (not just investigation)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
+	execSummaryInput := llm.capturedInputs[2]
+	var foundActionContent bool
+	for _, msg := range execSummaryInput.Messages {
+		if strings.Contains(msg.Content, "Actions Taken") {
+			foundActionContent = true
+			break
+		}
+	}
+	assert.True(t, foundActionContent, "exec summary should receive the action stage's amended report")
+}

@@ -50,6 +50,9 @@ func (b *PromptBuilder) BuildFunctionCallingMessages(
 	if execCtx.Config.Type == config.AgentTypeOrchestrator {
 		return b.buildOrchestratorMessages(execCtx, prevStageContext)
 	}
+	if execCtx.Config.Type == config.AgentTypeAction {
+		return b.buildActionMessages(execCtx, prevStageContext)
+	}
 	if execCtx.SubAgent != nil {
 		return b.buildSubAgentMessages(execCtx)
 	}
