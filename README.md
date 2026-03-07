@@ -5,7 +5,7 @@
   <img src="./docs/img/TARSy-logo.png" alt="TARSy" width="100"/>
 </div>
 
-**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through parallel agent chains, using MCP (Model Context Protocol) servers and optional runbooks for comprehensive multi-stage incident analysis.
+**TARSy** (Thoughtful Alert Response System) is an intelligent SRE system that automatically processes alerts through parallel agent chains, using MCP (Model Context Protocol) servers and optional runbooks for comprehensive multi-stage incident analysis and automated remediation.
 
 This is the Go-based hybrid rewrite of TARSy, replacing the [original Python implementation](https://github.com/codeready-toolchain/tarsy-bot) (now deprecated). The new architecture splits responsibilities between a Go orchestrator and a stateless Python LLM service for better performance, type safety, and scalability.
 
@@ -74,6 +74,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Dynamic Orchestration with Sub-Agents**: Orchestrator agents use LLM reasoning to dispatch specialized sub-agents at runtime, react to partial results, and synthesize findings -- replacing static parallel chains with adaptive, multi-phase investigation flows
 - **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
+- **Automated Actions**: Action agents (`type: action`) evaluate investigation findings and execute remediation via MCP tools with auto-injected safety guardrails -- no custom safety prompt required
 - **Automatic Provider Fallback**: When a primary LLM provider fails, automatically switches to the next configured fallback provider with error-code-aware triggers and adaptive streaming timeouts
 - **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
 
@@ -119,9 +120,10 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 4. **Agents investigate** -- static chains launch parallel agents per stage; orchestrator agents dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
 5. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrators synthesize within the same execution as results arrive
 6. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
-7. **Comprehensive analysis** provided to engineers with actionable recommendations
-8. **Follow-up chat available** after investigation completes
-9. **Full audit trail** captured with stage-level detail and sub-agent trace trees
+7. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
+8. **Comprehensive analysis** provided to engineers with actionable recommendations
+9. **Follow-up chat available** after investigation completes
+10. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
 ### Components
 

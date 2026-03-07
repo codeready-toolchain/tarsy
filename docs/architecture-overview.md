@@ -4,7 +4,7 @@
 
 ## What is TARSy?
 
-TARSy is an **AI-powered incident analysis system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations for engineers to act upon. For complex investigations, an **orchestrator agent** can dynamically dispatch sub-agents based on LLM reasoning, enabling adaptive multi-phase workflows.
+TARSy is an **AI-powered incident analysis and remediation system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations. For high-confidence findings, **action agents** can automatically execute remediation actions (e.g., shutting down a compromised workload) with built-in safety guardrails. For complex investigations, an **orchestrator agent** can dynamically dispatch sub-agents based on LLM reasoning, enabling adaptive multi-phase workflows.
 
 The **Go Orchestrator** owns all orchestration logic: session management, chain execution, MCP tool execution, prompt building, conversation management, and real-time WebSocket streaming. The **Python LLM Service** is a stateless gRPC microservice that handles LLM provider interactions (Gemini, OpenAI, Anthropic, xAI, VertexAI), existing solely because LLM provider SDKs have best support in Python.
 
@@ -18,8 +18,8 @@ graph LR
     B --> C[Selects Agent Chain]
     C --> D["Stage 1: Data Collection"]
     D --> E["Stage 2: Analysis"]
-    E --> F["Stage 3: Recommendations"]
-    F --> G[Engineers Take Action]
+    E --> F["Stage 3: Action (optional)"]
+    F --> G["Engineers Review Results"]
 ```
 
 ## Architecture: Go/Python Split
@@ -105,7 +105,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 ### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
-- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
+- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
 - **Flexible chain definitions** via YAML configuration without code changes
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
@@ -116,7 +116,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"action"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Two controller types** (text-based ReAct parsing was completely removed):
@@ -142,7 +142,20 @@ Sub-agents are regular TARSy agents discovered via a `SubAgentRegistry` (agents 
 
 **For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md)
 
-### 6. MCP Integration & Tool Management
+### 6. Automated Actions
+
+Action agents (`type: action`) enable automated remediation based on investigation findings. This is an ergonomic and safety layer on top of existing capabilities — not a new engine:
+
+- **Auto-injected safety prompt** — the prompt builder injects a safety preamble requiring hard evidence before acting, preferring inaction over incorrect action, and explaining reasoning before executing tools. Domain-specific decision criteria (e.g., "shut down VMs only when classified MALICIOUS with HIGH confidence") stay in `custom_instructions`.
+- **Controller:** Uses the same `IteratingController` as investigation agents — multi-turn tool calling with MCP tools.
+- **Stage type derivation:** If all agents in a stage are `type: action`, the executor creates it as `stage_type: action`. This provides DB auditability (`WHERE stage_type = 'action'`), distinct dashboard rendering, and context flow to the exec summary.
+- **Policy guardrails:** Two layers of control — `custom_instructions` describe decision criteria (when to act), `mcp_servers` configuration limits capability (what actions are possible).
+
+The action stage typically runs after investigation/synthesis stages. It receives the upstream analysis via standard `BuildStageContext()`, evaluates findings, and executes justified actions via MCP tools. The agent's final report preserves the investigation report and amends it with an actions section.
+
+**For detailed design**: See [ADR-0007: Automated Actions](adr/0007-automated-actions.md)
+
+### 7. MCP Integration & Tool Management
 
 - **Go MCP SDK v1.3.0** for external tool integration (kubectl, ArgoCD, monitoring, etc.)
 - **Three transport types**: stdio (command-line servers), HTTP (JSON-RPC endpoints), SSE (Server-Sent Events)
@@ -151,7 +164,7 @@ Sub-agents are regular TARSy agents discovered via a `SubAgentRegistry` (agents 
 - **Tool result summarization** -- enabled by default for all MCP servers; large results (>5K tokens) are automatically summarized by an LLM call before being sent back to the investigating agent (can be disabled per-server)
 - **Health monitoring** -- background service checks server health, attempts recovery, surfaces warnings
 
-### 7. LLM Multi-Provider Support
+### 8. LLM Multi-Provider Support
 
 Built-in support for multiple AI providers with zero-configuration defaults:
 
@@ -167,7 +180,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 
 **Automatic provider fallback**: When a primary provider fails (after Python-level retries are exhausted), the Go controller automatically switches to the next provider in a configurable fallback list. Fallback triggers are error-code-aware — immediate for exhausted retries or missing credentials, after consecutive failures for transient errors. Adaptive streaming timeouts (initial response, stall detection, max call) reduce time wasted on unresponsive providers. Fallback events are recorded in the timeline and surfaced in the dashboard. See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md) for full design.
 
-### 8. Real-time Dashboard
+### 9. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
 - **Session list** with filtering by status, alert type, chain, date range, and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index)
@@ -180,7 +193,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **System status page** showing MCP server health and system warnings
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
-### 9. Follow-up Chat
+### 10. Follow-up Chat
 
 - **Interactive investigation continuation** after sessions reach terminal state (completed, failed, timed out)
 - **Context preservation** -- chat agent receives the full investigation timeline as context
@@ -188,7 +201,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Unified timeline** -- chat messages appear inline with investigation stages
 - **Real-time streaming** -- follow-up responses stream through the same WebSocket infrastructure
 
-### 10. Slack Notifications
+### 11. Slack Notifications
 
 TARSy can automatically send Slack notifications when alert processing starts (for Slack-originated alerts) and reaches a terminal status (completed, failed, timed out, cancelled). The system supports both standard channel notifications and threaded replies to alert messages via fingerprint correlation.
 
@@ -339,7 +352,7 @@ Each agent operates with three tiers of knowledge composed into its system promp
 2. **MCP Server Instructions**: Tool-specific guidance from each configured MCP server
 3. **Agent Custom Instructions**: Domain expertise specific to the agent's specialty area
 
-For **orchestrator agents** (`type: orchestrator`), an additional behavioral layer is auto-injected after the three tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. This layer is injected automatically by the prompt builder so that both the built-in `Orchestrator` and custom agents promoted to orchestrator type receive identical behavioral guidance without duplicating it in custom instructions.
+For **orchestrator agents** (`type: orchestrator`), an additional behavioral layer is auto-injected after the three tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. For **action agents** (`type: action`), a safety-focused behavioral layer is auto-injected — requiring hard evidence before acting, preferring inaction over incorrect action, and preserving the investigation report amended with actions taken. These layers are injected automatically by the prompt builder so that custom agents receive their respective behavioral guidance without duplicating it in custom instructions.
 
 Additionally, **runbook content** (fetched from GitHub or using a configured default) is injected into the user prompt for alert-specific investigation procedures.
 
@@ -377,6 +390,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Use `type: orchestrator` agents in chains for LLM-driven sub-agent dispatch with configurable guardrails (`max_concurrent_agents`, `agent_timeout`, `max_budget`) and `sub_agents` overrides at chain/stage/agent level. Agent `type` can be overridden at the stage-agent level, allowing a custom investigation agent to act as an orchestrator in a specific chain without modifying its global definition
+- **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. See [ADR-0007](adr/0007-automated-actions.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)

@@ -1,13 +1,11 @@
-# Automated Actions — Design Document
+# ADR-0007: Automated Actions
 
-**Status:** Final — all decisions resolved
-**Based on:** [automated-actions-sketch.md](automated-actions-sketch.md), [automated-actions-questions.md](automated-actions-questions.md) (sketch decisions), [automated-actions-design-questions.md](automated-actions-design-questions.md) (implementation decisions)
+**Status:** Implemented
+**Date:** 2026-03-06
 
 ## Overview
 
 Add `action` as a new agent type and stage type to TARSy, enabling automated remediation actions based on investigation findings. This is an ergonomic and safety layer on top of existing capabilities — not a new engine. The action agent type provides auto-injected safety prompts; the action stage type provides DB auditability, distinct dashboard rendering, and context flow integration.
-
-See the [sketch document](automated-actions-sketch.md) for full rationale and design decisions.
 
 ## Design Principles
 
@@ -55,7 +53,7 @@ case config.AgentTypeAction:
 #### 4. Prompt Builder — `pkg/agent/prompt/`
 
 New file `action.go` with:
-- `actionBehavioralInstructions` constant — the safety preamble from sketch Q8
+- `actionBehavioralInstructions` constant — the safety preamble
 - `actionTaskFocus` constant — task-level focus for action agents
 - `buildActionMessages()` method — mirrors `buildOrchestratorMessages` pattern:
   1. `ComposeInstructions(execCtx)` — standard Tier 1–3 (general SRE, MCP, custom)
@@ -197,58 +195,19 @@ Stage type: action     →  DB audit + dashboard + context flow
 
 An action agent in a mixed stage still gets the safety prompt. The stage just doesn't get action-type benefits (a config warning is logged).
 
-## Implementation Plan
+## Key Decisions
 
-### PR 1: Backend — action agent type and stage type - DONE
-
-**Goal:** Complete backend support for action agents. After this PR, configuring `type: action` on agents works end-to-end: safety prompt injected, stage type derived, context flows to exec summary, DB queryable. The frontend shows action stages as investigation stages until PR 2 ships — no breakage.
-
-**Config layer:**
-- `pkg/config/enums.go` — add `AgentTypeAction`, update `IsValid()`
-- `pkg/config/validator.go` — log warning for mixed action/non-action stages
-
-**DB schema:**
-- `ent/schema/stage.go` — add `"action"` to stage_type enum
-- Run `go generate ./ent/...`
-
-**Controller:**
-- `pkg/agent/controller/factory.go` — add `AgentTypeAction` case → `IteratingController`
-
-**Prompt builder:**
-- `pkg/agent/prompt/action.go` (new) — `actionBehavioralInstructions`, `actionTaskFocus`, `buildActionMessages`
-- `pkg/agent/prompt/builder.go` — add `AgentTypeAction` branch in `BuildFunctionCallingMessages`
-
-**Executor:**
-- `pkg/queue/executor.go` — `allAgentsAreAction` method on `RealSessionExecutor`, stage type derivation in `executeStage()`
-- `pkg/queue/executor_helpers.go` — include `StageTypeAction` in `buildStageContext()` and `extractFinalAnalysis()`
-
-**Synthesis prompt review:**
-- `pkg/config/builtin.go` — review and update `SynthesisAgent.CustomInstructions` to emphasize evidence references, classification, and confidence in reports
-
-**Tests:**
-- `pkg/config/validator_test.go` — action type passes validation, mixed stage warning
-- `pkg/agent/controller/factory_test.go` — `AgentTypeAction` → IteratingController
-- `pkg/agent/prompt/action_test.go` (new) — message structure, safety preamble, Tier 1–3 composed
-- `pkg/agent/prompt/builder_test.go` — dispatch to `buildActionMessages`
-- `pkg/queue/executor_test.go` — `buildStageContext` and `extractFinalAnalysis` with action stages, `allAgentsAreAction` method
-- `pkg/queue/executor_integration_test.go` — end-to-end: chain with investigation + action stage
-- Update all golden file e2e tests to cover action stage scenarios
-
-### PR 2: Frontend — action stage rendering + session list badge
-
-**Goal:** Distinct visual treatment for action stages in the dashboard. Depends on PR 1 (backend must serve `stage_type: "action"` and `has_action_stages`).
-
-**Backend (session list API):**
-- `pkg/models/session.go` — add `HasActionStages bool` to `DashboardSessionItem`
-- `pkg/services/session_service.go` — compute `has_action_stages` when building session list (check if any stage has `stage_type = 'action'`, mirrors existing `has_parallel_stages` pattern)
-
-**Frontend:**
-- `web/dashboard/src/constants/eventTypes.ts` — add `ACTION` to `STAGE_TYPE`
-- `web/dashboard/src/types/session.ts` — add `has_action_stages: boolean` to `DashboardSessionItem` and `ActiveSessionItem`
-- `web/dashboard/src/components/timeline/StageSeparator.tsx` — add action icon to `getStageTypeIcon`
-- `web/dashboard/src/components/trace/StageAccordion.tsx` — action stage type badge (already renders non-investigation badges)
-- `web/dashboard/src/components/dashboard/SessionListItem.tsx` — "action evaluation" badge driven by `has_action_stages`
-
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| Q1 | Stage type derivation location | Executor — derive at stage creation time via `allAgentsAreAction` method | Single source of truth at stage creation; stage type set before first WS event. Rejected: config-layer pre-compute (duplicates resolution logic), raw config check (ignores agent-level type definitions). |
+| Q2 | Action stages in context flow | Include in both `buildStageContext()` and `extractFinalAnalysis()` | Action agent's amended report (investigation + actions) becomes the finalAnalysis for exec summary. Consistent, simple. Rejected: extractFinalAnalysis only (special-casing for no benefit), exclude (exec summary would miss actions). |
+| Q3 | Action stage ordering validation | No validation — action stages can appear anywhere | Action-only chains are unusual but valid. Safety prompt provides runtime guardrail. Maximum operator flexibility. Rejected: hard validation (blocks valid action-only chains), warning (marginal value). |
+| Q4 | Mixed stage warning | Warn at config load | Log warning for mixed action/non-action stages. Cheap, catches accidental misconfiguration. Rejected: no warning (easy to misconfigure without realizing). |
+| Q5 | Frontend scope for v1 | Full treatment — timeline distinct rendering + session list badge | Timeline icon/color/label + "action evaluation" badge on session list. Rejected: constant only (no visual benefit), timeline only (incomplete for operators scanning session list). |
+| Q6 | Controller for action agents | Simple IteratingController (regular agent with tools) | Sufficient for evaluate→decide→act pattern. Orchestration available via existing escape hatches if needed. Rejected: orchestrator for action dispatch (over-engineering). |
+| Q7 | Context format for action stage | Standard `BuildStageContext()` | Zero implementation, consistent with all other stages. Upstream quality (synthesis prompt improvements) makes this work well. Rejected: enriched context (premature complexity), structured extraction (unreliable). |
+| Q8 | Auto-injected safety prompt | Minimal safety preamble (high-level principles only) | Universal safety guarantee without domain-specific prescriptiveness. Mirrors orchestrator pattern: auto-injected behavioral strategy + custom domain instructions. Rejected: comprehensive framework (rigid, conflicts with domain patterns), no auto-injection (loses key safety benefit). |
+| Q9 | Dashboard and audit trail | Lightweight distinct rendering | Action stage rendered distinctly in timeline + session list badge. Actual details in agent's final report. Rejected: no treatment (loses visibility), tool call parsing (fragile, premature). |
 
 ## Implementation Notes
 
@@ -264,12 +223,55 @@ The `executeStage()` function returns `stageResult{stageType: stage.StageTypeInv
 
 `ConversationTimeline.tsx` has `shouldAutoCollapseStage` which auto-collapses synthesis and exec_summary stages when the session is complete. Action stages should auto-collapse too — the exec summary and final answer already cover the action details. Add `STAGE_TYPE.ACTION` to the collapsible list in `shouldAutoCollapseStage`.
 
-## Decisions Summary
+### Upstream Analysis Quality
 
-| # | Question | Decision |
-|---|----------|----------|
-| Q1 | Stage type derivation location | Executor — derive at stage creation time via `allAgentsAreAction` method (PR 1) |
-| Q2 | Action stages in context flow | Yes — include in both `buildStageContext()` and `extractFinalAnalysis()` (PR 1) |
-| Q3 | Action stage ordering validation | No validation — action stages can appear anywhere, safety prompt self-corrects |
-| Q4 | Mixed stage warning | Yes — log warning at config load for mixed action/non-action stages (PR 1) |
-| Q5 | Frontend scope for v1 | Full treatment — timeline distinct rendering + session list badge (PR 2) |
+The action agent is only as good as the analysis it receives. As part of this feature, the built-in synthesis prompt was re-evaluated to ensure it emphasizes including evidence references, classification, and confidence in the report.
+
+## Configuration Example
+
+```yaml
+agent_chains:
+  my-investigation:
+    alert_types: ["MyAlertType"]
+    stages:
+      - name: "investigation"
+        agents: [...]
+        synthesis: {...}
+      - name: "take-action"
+        agents:
+          - name: "RemediationAgent"
+            type: "action"
+            mcp_servers: ["remediation-server"]
+```
+
+The `type: action` on the agent config drives both:
+- **Agent type** → safety prompt auto-injection, IteratingController selection
+- **Stage type** (derived) → all agents are `type: action` → `stage_type: action` in DB
+
+## Pipeline Flow
+
+```
+Alert arrives
+  → [Investigation stages] — agents gather evidence
+  → [Synthesis stage] — findings unified (if parallel agents)
+  → [Action stage] — evaluates findings, executes justified actions
+  → [Exec Summary stage] — auto-generated summary (hardcoded, always runs last)
+  → Session completed
+```
+
+## Future Considerations
+
+- **Human confirmation gate** — at the MCP tool-calling layer, pause and wait for approval before forwarding action tool calls. The decision model doesn't change; the gate is downstream.
+- **Enriched context** — if standard `BuildStageContext()` proves insufficient, a specialized `BuildActionContext()` with raw evidence from investigation stages is the natural next step.
+- **Tool call parsing for UI** — if a reliable heuristic emerges to detect which tool calls were "real actions" vs. verification, a dedicated "Actions Taken" summary section could be added to the dashboard.
+- **Orchestrated action agents** — if complex multi-action scenarios arise, action agents could be added into existing orchestrated investigation stages (works today, agents still get safety prompt). Multi-type support for agents (action + orchestrator) is a future consideration.
+
+## Implementation Plan
+
+### PR 1: Backend — action agent type and stage type (DONE)
+
+Config layer, DB schema, controller factory, prompt builder, executor (stage type derivation + context flow), synthesis prompt review, tests.
+
+### PR 2: Frontend — action stage rendering + session list badge
+
+Backend session list API (`has_action_stages`), frontend constants, types, timeline distinct rendering, session list badge.

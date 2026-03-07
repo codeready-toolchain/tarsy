@@ -231,7 +231,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`, `action`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
 
 ---
@@ -359,7 +359,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"action"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -435,6 +435,7 @@ type Controller interface {
 |-----------|-----------|---------|----------|
 | `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
 | `"orchestrator"` | IteratingController | Iterating + push-based sub-agent results | Dynamic multi-agent orchestration |
+| `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
 | `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
@@ -501,7 +502,16 @@ System prompt = Tier 1-3 (above)
               + Task focus
 ```
 
-This auto-injection means custom agents with `type: orchestrator` receive the same orchestration guidance as the built-in `Orchestrator` without duplicating behavioral instructions in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context (e.g., security investigation principles).
+For **action agents** (`type: action`), the prompt builder auto-injects a safety-focused behavioral layer:
+```
+System prompt = Tier 1-3 (above)
+              + Action behavioral instructions (auto-injected safety preamble)
+              + Action task focus
+```
+
+The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and preserve the investigation report amended with an actions section. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) for full design.
+
+This auto-injection pattern means custom agents with `type: orchestrator` or `type: action` receive their respective behavioral guidance without duplicating it in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context.
 
 **PromptBuilder** methods:
 - `BuildFunctionCallingMessages()` -- system + user messages for investigation
@@ -901,7 +911,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring), `referenced_stage_id` (nullable FK — synthesis→investigation pairing), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action), `referenced_stage_id` (nullable FK — synthesis→investigation pairing), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
