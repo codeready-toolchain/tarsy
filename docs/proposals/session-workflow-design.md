@@ -31,23 +31,24 @@ Sketch decisions (from [session-workflow-questions.md](session-workflow-question
 
 ```
 Worker completes investigation
-  → SessionService.UpdateSessionStatus(completed/failed/timed_out)
-  → SessionService sets review_status = needs_review (or resolved+dismissed for cancelled)
-  → EventPublisher.PublishReviewStatus (persistent, GlobalSessionsChannel)
+  → Worker.updateSessionTerminalStatus (atomic tx: terminal status + review init)
+    → Sets review_status = needs_review (or resolved+dismissed for cancelled)
+  → Worker.publishSessionStatus (session.status to SessionChannel + GlobalSessionsChannel)
+  → Worker.publishReviewStatus (review.status to SessionChannel + GlobalSessionsChannel)
   → Frontend Triage view updates via WebSocket
 
 SRE clicks "Claim"
   → PATCH /api/v1/sessions/:id/review {action: "claim"}
   → SessionService.UpdateReviewStatus (sets assignee, review_status = in_progress)
   → Inserts session_review_activity row
-  → EventPublisher.PublishReviewStatus
+  → EventPublisher.PublishReviewStatus (to SessionChannel + GlobalSessionsChannel)
   → Frontend Triage view updates
 
 SRE clicks "Resolve"
   → PATCH /api/v1/sessions/:id/review {action: "resolve", resolution_reason: "actioned", note: "..."}
   → SessionService.UpdateReviewStatus (sets resolved_at, resolution_reason, review_status = resolved)
   → Inserts session_review_activity row
-  → EventPublisher.PublishReviewStatus
+  → EventPublisher.PublishReviewStatus (to SessionChannel + GlobalSessionsChannel)
   → Frontend Triage view updates
 ```
 
@@ -55,14 +56,15 @@ SRE clicks "Resolve"
 
 | Layer | Component | Changes |
 |---|---|---|
-| **Schema** | `ent/schema/alertsession.go` | Add `review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note` fields |
+| **Schema** | `ent/schema/alertsession.go` | Add `review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note` fields + `review_activities` edge |
 | **Schema** | `ent/schema/sessionreviewactivity.go` | New entity |
 | **Migration** | `pkg/database/migrations/` | Add columns to `alert_sessions`, create `session_review_activity` table, backfill existing terminal sessions |
-| **Service** | `pkg/services/session_service.go` | Add `UpdateReviewStatus`, `GetReviewActivity` methods; modify `UpdateSessionStatus` to set `review_status` on terminal transitions |
+| **Worker** | `pkg/queue/worker.go` | Modify `updateSessionTerminalStatus` to initialize `review_status` atomically; add `publishReviewStatus` helper |
+| **Service** | `pkg/services/session_service.go` | Add `UpdateReviewStatus`, `GetReviewActivity` methods (no changes to `UpdateSessionStatus`) |
 | **Models** | `pkg/models/session.go` | Add review fields to DTOs, add request/response types |
-| **API** | `pkg/api/handler_review.go` | New handler for `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity` |
+| **API** | `pkg/api/handler_review.go` | New handler for `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity`, `GET /sessions/triage` |
 | **API** | `pkg/api/server.go` | Register new routes |
-| **Events** | `pkg/events/types.go`, `payloads.go`, `publisher.go` | Add `review.status` event type and payload |
+| **Events** | `pkg/events/types.go`, `payloads.go`, `publisher.go` | Add `review.status` event type, payload, and `PublishReviewStatus` method |
 | **Frontend** | Dashboard components | Tab bar, Triage view, Kanban board, grouped list, action buttons, resolve modal |
 
 ## Database Schema
@@ -103,6 +105,13 @@ field.Text("resolution_note").
     Optional().
     Nillable().
     Comment("Free-text context on resolution"),
+```
+
+New edge (add to existing `Edges()` method):
+
+```go
+edge.To("review_activities", SessionReviewActivity.Type).
+    Annotations(entsql.OnDelete(entsql.Cascade)),
 ```
 
 New indexes:
@@ -182,103 +191,133 @@ func (SessionReviewActivity) Indexes() []ent.Index {
 
 ## Service Layer
 
-### UpdateSessionStatus — hook for automatic review_status
+### Worker terminal path — automatic review_status initialization
 
-Modify the existing `UpdateSessionStatus` in `pkg/services/session_service.go` to set `review_status` when a session reaches a terminal state:
+The Worker owns terminal status writes via `Worker.updateSessionTerminalStatus()` in `pkg/queue/worker.go` — it does NOT go through `SessionService.UpdateSessionStatus`. The review_status initialization must happen in this method. `SessionService.UpdateSessionStatus` is unchanged.
+
+Modify `Worker.updateSessionTerminalStatus` to include review_status initialization in the same transaction. The terminal status write and review init MUST be atomic — if the status commits but review init fails, the session is terminal with no `review_status`, breaking the auto-enter invariant.
 
 ```go
-func (s *SessionService) UpdateSessionStatus(_ context.Context, sessionID string, status alertsession.Status) error {
-    // Background context — intentional TARSy pattern (see golang-context-patterns skill).
-    // DB writes must complete even if the caller's context is cancelled (HTTP client
-    // disconnect, worker context cancellation). Trade-off: on shutdown, this may block
-    // for up to 5s while the write completes. This is acceptable — a partial status
-    // update would leave the session in an inconsistent state.
-    writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    now := time.Now()
-
-    isTerminal := status == alertsession.StatusCompleted ||
-        status == alertsession.StatusFailed ||
-        status == alertsession.StatusTimedOut
-    isCancelled := status == alertsession.StatusCancelled
-
-    // Non-terminal status updates don't touch review fields — no transaction needed.
-    if !isTerminal && !isCancelled {
-        return s.client.AlertSession.UpdateOneID(sessionID).
-            SetStatus(status).
-            SetLastInteractionAt(now).
-            Exec(writeCtx)
-    }
-
-    // Terminal/cancelled transitions: the status write and review-field initialization
-    // MUST be atomic. If the status commits but the review init fails, the session is
-    // terminal with no review_status — breaking the auto-enter invariant.
-    tx, err := s.client.Tx(writeCtx)
+// updateSessionTerminalStatus writes the final session status and initializes
+// the review workflow. Returns whether review_status was initialized (the caller
+// should publish a review.status event when true).
+func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.AlertSession, result *ExecutionResult) (bool, error) {
+    tx, err := w.client.Tx(ctx)
     if err != nil {
-        return fmt.Errorf("failed to begin transaction: %w", err)
+        return false, fmt.Errorf("failed to begin transaction: %w", err)
     }
-    defer tx.Rollback()
+    defer func() { _ = tx.Rollback() }()
 
-    if err := tx.AlertSession.UpdateOneID(sessionID).
-        SetStatus(status).
-        SetLastInteractionAt(now).
-        SetCompletedAt(now).
-        Exec(writeCtx); err != nil {
-        return fmt.Errorf("failed to update session status: %w", err)
+    // 1. Write terminal status + results (existing logic, now transactional).
+    update := tx.AlertSession.UpdateOneID(session.ID).
+        SetStatus(result.Status).
+        SetCompletedAt(time.Now())
+
+    if result.FinalAnalysis != "" {
+        update = update.SetFinalAnalysis(result.FinalAnalysis)
+    }
+    if result.ExecutiveSummary != "" {
+        update = update.SetExecutiveSummary(result.ExecutiveSummary)
+    }
+    if result.ExecutiveSummaryError != "" {
+        update = update.SetExecutiveSummaryError(result.ExecutiveSummaryError)
+    }
+    if result.Error != nil {
+        update = update.SetErrorMessage(result.Error.Error())
     }
 
-    // Initialize review_status only on the FIRST terminal transition.
+    if err := update.Exec(ctx); err != nil {
+        return false, fmt.Errorf("failed to update session terminal status: %w", err)
+    }
+
+    // 2. Initialize review_status only on the FIRST terminal transition.
     // Uses a conditional UPDATE with WHERE review_status IS NULL to avoid TOCTOU:
     // if two workers race to set the terminal status, only the first one initializes
     // the review fields — the second sees zero rows affected and is a no-op.
-    var reviewStatus alertsession.ReviewStatus
     var affected int
 
-    if isTerminal {
-        reviewStatus = alertsession.ReviewStatusNeedsReview
+    if result.Status == alertsession.StatusCancelled {
         affected, err = tx.AlertSession.Update().
             Where(
-                alertsession.IDEQ(sessionID),
+                alertsession.IDEQ(session.ID),
                 alertsession.ReviewStatusIsNil(),
             ).
-            SetReviewStatus(reviewStatus).
-            Save(writeCtx)
-    } else {
-        // Cancelled — auto-resolve as dismissed.
-        reviewStatus = alertsession.ReviewStatusResolved
-        affected, err = tx.AlertSession.Update().
-            Where(
-                alertsession.IDEQ(sessionID),
-                alertsession.ReviewStatusIsNil(),
-            ).
-            SetReviewStatus(reviewStatus).
-            SetResolvedAt(now).
+            SetReviewStatus(alertsession.ReviewStatusResolved).
+            SetResolvedAt(time.Now()).
             SetResolutionReason(alertsession.ResolutionReasonDismissed).
-            Save(writeCtx)
+            Save(ctx)
+    } else {
+        // completed, failed, timed_out → needs_review
+        affected, err = tx.AlertSession.Update().
+            Where(
+                alertsession.IDEQ(session.ID),
+                alertsession.ReviewStatusIsNil(),
+            ).
+            SetReviewStatus(alertsession.ReviewStatusNeedsReview).
+            Save(ctx)
     }
     if err != nil {
-        return fmt.Errorf("failed to set review status: %w", err)
+        return false, fmt.Errorf("failed to initialize review status: %w", err)
     }
 
     if err := tx.Commit(); err != nil {
-        return fmt.Errorf("failed to commit transaction: %w", err)
+        return false, fmt.Errorf("failed to commit terminal status: %w", err)
     }
 
-    // Publish review.status event so the Triage view updates in real time.
-    // Only publish when we actually initialized the review fields (affected > 0).
-    // When affected == 0, the review_status was already set — no event needed.
-    if affected > 0 {
-        s.publisher.PublishReviewStatus(sessionID, ReviewStatusPayload{
-            SessionID:    sessionID,
-            ReviewStatus: reviewStatus,
-            Timestamp:    now,
-        })
+    return affected > 0, nil
+}
+```
+
+The Worker's `processSession` method calls this and then publishes events:
+
+```go
+// In Worker.processSession, replacing current steps 11 and 11a:
+
+// 11. Update terminal status + initialize review (atomic, background context)
+reviewInitialized, err := w.updateSessionTerminalStatus(finalizeCtx, session, result)
+if err != nil {
+    log.Error("Failed to update session terminal status", "error", err)
+    return err
+}
+
+// 11a. Publish terminal session status event
+w.publishSessionStatus(finalizeCtx, session.ID, result.Status)
+
+// 11b. Publish review.status event (only when review was actually initialized)
+if reviewInitialized {
+    w.publishReviewStatus(finalizeCtx, session.ID, result.Status)
+}
+```
+
+New `publishReviewStatus` helper on the Worker (mirrors existing `publishSessionStatus`):
+
+```go
+// publishReviewStatus publishes a review.status event to both the session-specific
+// and global channels. Non-blocking: errors are logged.
+func (w *Worker) publishReviewStatus(ctx context.Context, sessionID string, terminalStatus alertsession.Status) {
+    if w.eventPublisher == nil {
+        return
+    }
+
+    var reviewStatus string
+    if terminalStatus == alertsession.StatusCancelled {
+        reviewStatus = "resolved"
     } else {
-        slog.Debug("Review status already set, skipping event", "session_id", sessionID)
+        reviewStatus = "needs_review"
     }
 
-    return nil
+    if err := w.eventPublisher.PublishReviewStatus(ctx, sessionID, events.ReviewStatusPayload{
+        BasePayload: events.BasePayload{
+            Type:      events.EventTypeReviewStatus,
+            SessionID: sessionID,
+            Timestamp: time.Now().Format(time.RFC3339Nano),
+        },
+        ReviewStatus: reviewStatus,
+        Actor:        "system",
+    }); err != nil {
+        slog.Warn("Failed to publish review status",
+            "session_id", sessionID, "review_status", reviewStatus, "error", err)
+    }
 }
 ```
 
@@ -307,7 +346,9 @@ This method uses an atomic compare-and-transition pattern to prevent concurrent 
 3. Check rows-affected count — if zero, the session's state has changed since the caller read it. Rollback and return `409 Conflict`.
 4. Insert the `SessionReviewActivity` record within the same transaction (only after a successful conditional update).
 5. Commit the transaction. All field updates (`review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note`) and the activity log insert are atomic.
-6. Return the updated session.
+6. Return the updated session to the caller.
+
+The API handler publishes the `review.status` event via `EventPublisher.PublishReviewStatus` after a successful `UpdateReviewStatus` call. Event publishing is NOT inside the service method — consistent with the Worker pattern where the caller (Worker/handler) owns event publishing.
 
 This ensures concurrent claims/resolves cannot both succeed — only the first writer wins, the second gets a conflict error.
 
@@ -320,11 +361,13 @@ Valid state transitions:
 | Action | From | To | Sets |
 |---|---|---|---|
 | `claim` | `needs_review` | `in_progress` | `assignee`, `assigned_at` |
+| `claim` | `in_progress` | `in_progress` | `assignee`, `assigned_at` (reassignment — frontend confirmation, backend unconditional) |
 | `unclaim` | `in_progress` | `needs_review` | clears `assignee`, `assigned_at` |
 | `resolve` | `in_progress` | `resolved` | `resolved_at`, `resolution_reason`, `resolution_note` |
+| `resolve` | `needs_review` | `resolved` | `assignee` (auto-set to actor), `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note` |
 | `reopen` | `resolved` | `needs_review` | clears `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note` |
 
-**Direct resolve:** Resolving directly from `needs_review` is allowed. The backend auto-sets `assignee` to the resolver — you can't resolve a session without becoming its owner. The activity log will show both the implicit claim and the resolution.
+**Direct resolve:** Resolving directly from `needs_review` is allowed. The backend auto-sets `assignee` to the resolver — you can't resolve a session without becoming its owner. The activity log records both the implicit claim and the resolution as separate entries.
 
 ### GetReviewActivity
 
@@ -366,7 +409,7 @@ Single endpoint for all workflow transitions.
 | `200 OK` | Transition succeeded. Returns updated session review fields. |
 | `400 Bad Request` | Invalid action, missing required fields (e.g., `resolution_reason` for resolve). |
 | `404 Not Found` | Session doesn't exist. |
-| `409 Conflict` | Invalid transition (e.g., resolve from `needs_review` if disallowed, claim already-claimed session). |
+| `409 Conflict` | State changed since last read — the atomic compare-and-transition found zero affected rows (e.g., unclaiming a session that was already resolved by another user, reopening a session that is currently `in_progress`). |
 
 **Auth:** `extractAuthor` provides the actor identity from the `X-Forwarded-User` header (set by oauth2-proxy or kube-rbac-proxy running as colocated sidecars). **Deployment requirement:** the ingress must strip any client-supplied `X-Forwarded-User` header (e.g., `proxy_set_header X-Forwarded-User "";`) to prevent identity spoofing — the auth proxy is the sole source of truth. See [token-exchange-sketch.md](token-exchange-sketch.md) and [session-authorization-sketch.md](session-authorization-sketch.md) for the full trust model and deployment guarantees.
 
@@ -401,6 +444,48 @@ Returns the review activity log for a session.
 }
 ```
 
+### GET /api/v1/sessions/triage
+
+Returns sessions grouped by review status for the Triage view. Single call for the entire view.
+
+**Query parameters:**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `resolved_limit` | int | `20` | Max resolved sessions to return (most recent first) |
+| `assignee` | string | | Filter by assignee (exact match). Empty = all. |
+
+**Response:**
+
+```json
+{
+    "investigating": {
+        "count": 2,
+        "sessions": [...]
+    },
+    "needs_review": {
+        "count": 5,
+        "sessions": [...]
+    },
+    "in_progress": {
+        "count": 1,
+        "sessions": [...]
+    },
+    "resolved": {
+        "count": 142,
+        "sessions": [...],
+        "has_more": true
+    }
+}
+```
+
+Each group's `sessions` array contains `DashboardSessionItem` objects (extended with review fields). The `investigating` group is populated from active sessions (`status IN (pending, in_progress)`, `review_status IS NULL`) using the same query as `GetActiveSessions`. The `needs_review`, `in_progress`, and `resolved` groups query by `review_status`. All groups except `resolved` return in full; `resolved` is bounded by `resolved_limit` and includes `has_more` for pagination.
+
+| Status | When |
+|---|---|
+| `200 OK` | Returns grouped response. Empty groups have `count: 0` and `sessions: []`. |
+| `500 Internal Server Error` | Database error. |
+
 ### Extended GET /api/v1/sessions query params
 
 | Param | Type | Description |
@@ -413,7 +498,10 @@ Returns the review activity log for a session.
 
 ### New event type: `review.status`
 
-Published to `GlobalSessionsChannel` ("sessions") for Triage view updates, persistent (stored in DB for catchup).
+Published to both `SessionChannel(sessionID)` and `GlobalSessionsChannel` — matching the existing `PublishSessionStatus` pattern:
+
+1. **Persist** to `SessionChannel(sessionID)` via `persistAndNotify` (stored in DB for catchup on reconnect).
+2. **Broadcast** to `GlobalSessionsChannel` via `notifyOnly` (transient — for the Triage dashboard's live updates).
 
 ```go
 const EventTypeReviewStatus = "review.status"
@@ -423,13 +511,37 @@ type ReviewStatusPayload struct {
     ReviewStatus     string  `json:"review_status"`               // needs_review, in_progress, resolved
     Assignee         *string `json:"assignee,omitempty"`           // null when unassigned
     ResolutionReason *string `json:"resolution_reason,omitempty"`  // actioned, dismissed
-    Actor            string  `json:"actor"`                        // who triggered the change
+    Actor            string  `json:"actor"`                        // who triggered the change ("system" for automated worker transitions)
 }
 ```
 
-The frontend Triage view subscribes to `sessions` channel (already subscribed for `session.status` and `session.progress`). On `review.status` events, it updates the card's position in the Kanban/grouped list.
+`PublishReviewStatus` in `EventPublisher` follows the same dual-channel pattern as `PublishSessionStatus`:
 
-**WS channels:** The `review.status` event is published to both `GlobalSessionsChannel` (for the Triage dashboard) and `SessionChannel(sessionID)` (for the session detail page). The detail page can show the current review state and react to changes in real time.
+```go
+func (p *EventPublisher) PublishReviewStatus(ctx context.Context, sessionID string, payload ReviewStatusPayload) error {
+    payloadJSON, err := json.Marshal(payload)
+    if err != nil {
+        return fmt.Errorf("failed to marshal ReviewStatusPayload: %w", err)
+    }
+
+    var firstErr error
+    if err := p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON); err != nil {
+        slog.Warn("Failed to publish review status to session channel",
+            "session_id", sessionID, "error", err)
+        firstErr = err
+    }
+    if err := p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON); err != nil {
+        slog.Warn("Failed to publish review status to global channel",
+            "session_id", sessionID, "error", err)
+        if firstErr == nil {
+            firstErr = err
+        }
+    }
+    return firstErr
+}
+```
+
+The frontend Triage view subscribes to the `sessions` channel (already subscribed for `session.status` and `session.progress`). On `review.status` events, it updates the card's position in the Kanban/grouped list. The session detail page subscribes to `session:{id}` and can show the current review state with real-time updates.
 
 ## Frontend
 
@@ -483,12 +595,7 @@ DashboardView (existing, modified)
 
 ### Data fetching
 
-The Triage view needs two data sources:
-
-1. **Active investigations** (for the virtual "Investigating" column): reuse `getActiveSessions()` — already fetched by the dashboard.
-2. **Workflow sessions** (needs_review, in_progress, resolved): use `getSessions()` with `review_status` filter.
-
-**Fetch strategy:** Single API call to `GET /api/v1/sessions/triage` returns all groups in one response. The `resolved` group is bounded by `?resolved_limit=20` (default) to keep the payload manageable. Pagination for resolved sessions is available via the standard sessions list endpoint with `review_status=resolved` filter.
+Single API call to `GET /api/v1/sessions/triage` returns all four groups — including the `investigating` group (active sessions) — in one response. The backend assembles the `investigating` group using the same query as `GetActiveSessions` and the workflow groups by `review_status`. The `resolved` group is bounded by `?resolved_limit=20` (default). Pagination for older resolved sessions is available via the standard sessions list endpoint with `review_status=resolved` filter.
 
 ### WebSocket handling
 
@@ -528,32 +635,33 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 
 ## Implementation Plan
 
-### Phase 1: Backend — Schema + Service + API
+### Phase 1: Backend — Schema + Service
 
-1. Add fields to `ent/schema/alertsession.go`
+1. Add fields and `review_activities` edge to `ent/schema/alertsession.go`
 2. Create `ent/schema/sessionreviewactivity.go`
 3. Run `make ent-generate`, `make migrate-create NAME=add_review_workflow`
-4. Review and adjust migration (backfill existing terminal sessions)
+4. Review and adjust migration (backfill existing terminal sessions to `resolved`/`dismissed`)
 5. Add `UpdateReviewRequest` and review fields to `pkg/models/session.go`
-6. Modify `SessionService.UpdateSessionStatus` to set `review_status` on terminal transitions (transactional: status write + review init in one tx)
+6. Modify `Worker.updateSessionTerminalStatus` to initialize `review_status` atomically (transactional: terminal status + review init in one tx)
 7. Add `SessionService.UpdateReviewStatus` and `SessionService.GetReviewActivity`
 8. Extend `ListSessionsForDashboard` with `review_status` and `assignee` filters
 9. Add review fields to `DashboardSessionItem` response DTO
 
 ### Phase 2: Backend — Events + API handlers
 
-1. Add `EventTypeReviewStatus` and `ReviewStatusPayload`
-2. Add `PublishReviewStatus` to `EventPublisher`
-3. Create `pkg/api/handler_review.go` with `PATCH /sessions/:id/review` and `GET /sessions/:id/review-activity`
-4. Register routes in `setupRoutes()`
-5. Publish `review.status` events from both `UpdateReviewStatus` (manual actions) and `UpdateSessionStatus` (worker terminal transitions) so the Triage view updates in real time regardless of the transition source
-6. Unit tests for service methods and handler
+1. Add `EventTypeReviewStatus` and `ReviewStatusPayload` to `pkg/events/types.go` and `payloads.go`
+2. Add `PublishReviewStatus` to `EventPublisher` (dual-channel: persist to session channel, transient to global)
+3. Add `Worker.publishReviewStatus` helper; call from `processSession` after terminal status write
+4. Create `pkg/api/handler_review.go` with `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity`, `GET /sessions/triage`
+5. Register routes in `setupRoutes()`
+6. Publish `review.status` events from API handler after `UpdateReviewStatus` calls (manual transitions)
+7. Unit tests for service methods, Worker review init, and handlers
 
 ### Phase 3: Frontend — Tab bar + Triage grouped list
 
 1. Add tab bar to `DashboardView` (Sessions | Triage)
 2. Add `review_status`, `assignee`, `resolution_reason` to TypeScript types
-3. Extend API service with `updateReview()` and `getReviewActivity()`
+3. Extend API service with `updateReview()`, `getReviewActivity()`, and `getTriageSessions()`
 4. Build `TriageGroupedList` with collapsible sections
 5. Build `TriageSessionRow` with action buttons
 6. Build `ResolveModal`

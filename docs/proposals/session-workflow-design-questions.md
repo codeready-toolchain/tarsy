@@ -1,6 +1,6 @@
 # Session Workflow — Design Questions
 
-**Status:** Open — decisions pending
+**Status:** Final — all decisions recorded
 **Related:** [Design document](session-workflow-design.md)
 
 Each question has options with trade-offs and a recommendation. Go through them one by one to form the design, then update the design document.

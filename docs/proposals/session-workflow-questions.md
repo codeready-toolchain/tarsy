@@ -1,6 +1,6 @@
 # Session Workflow — Sketch Questions
 
-**Status:** Open — decisions pending
+**Status:** Final — all decisions recorded
 **Related:** [Sketch document](session-workflow-sketch.md)
 
 Each question has options with trade-offs and a recommendation. Go through them one by one to form the sketch, then update the sketch document.
@@ -44,12 +44,12 @@ Two top-level tabs on the dashboard:
 
 All three layouts ship together:
 1. **Sessions tab** — current flat list (unchanged).
-2. **Workflow tab, grouped list layout** — table grouped by review status, collapsible sections with counts.
-3. **Workflow tab, Kanban layout** — columns per review state, session cards, drag-and-drop or quick actions.
+2. **Triage tab, grouped list layout** — table grouped by review status, collapsible sections with counts.
+3. **Triage tab, Kanban layout** — columns per review state, session cards, drag-and-drop or quick actions.
 
-A sub-toggle within the Workflow tab switches between grouped list and Kanban. User preference persisted in `localStorage`.
+A sub-toggle within the Triage tab switches between grouped list and Kanban. User preference persisted in `localStorage`.
 
-**Decision:** Option D' (additive hybrid). Current list preserved as "Sessions" tab. New "Workflow" tab ships with both grouped list and Kanban layouts from day one.
+**Decision:** Option D' (additive hybrid). Current list preserved as "Sessions" tab. New "Triage" tab ships with both grouped list and Kanban layouts from day one.
 
 _Considered and rejected: Option A — Kanban only (less dense, doesn't replace the list for catalog use). Option B — inbox only (no visual state distribution). Option C — grouped list only (no Kanban path). Option D — hybrid without preserving the current list (forces workflow concepts on all users)._
 
@@ -86,7 +86,7 @@ The review states define the columns/groups in the workflow view. Too few and th
 
 Three workflow states: `needs_review` → `in_progress` → `resolved`
 
-When resolving, a `resolution_reason` captures the outcome: `actioned`, `dismissed`, `false_positive`, `duplicate`, `not_applicable`, etc. This follows the Jira model — status is the workflow position, resolution is the outcome type.
+When resolving, a `resolution_reason` captures the outcome: `actioned` or `dismissed`. This follows the Jira model — status is the workflow position, resolution is the outcome type. Additional reasons (e.g., `false_positive`, `duplicate`) can be added to the enum later without changing the workflow or Kanban layout.
 
 - **Pro:** Dead simple workflow — 3 Kanban columns, clean state machine.
 - **Pro:** "Dismissed" is a *reason* for resolving, not a separate workflow state. Both "I acted on this" and "this was noise" end up in the same terminal state.
