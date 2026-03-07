@@ -1,0 +1,118 @@
+{
+  "alert_data": "api-gateway returning 503 errors",
+  "alert_type": "test-action",
+  "author": "api-client",
+  "chain_id": "action-chain",
+  "chat_enabled": true,
+  "chat_id": null,
+  "chat_message_count": 0,
+  "completed_at": "{TIMESTAMP}",
+  "completed_stages": 3,
+  "created_at": "{TIMESTAMP}",
+  "current_stage_id": "{STAGE_ID_3}",
+  "current_stage_index": 3,
+  "duration_ms": {DURATION_MS},
+  "error_message": null,
+  "executive_summary": "api-gateway outage detected and remediated by automated restart.",
+  "executive_summary_error": null,
+  "failed_stages": 0,
+  "final_analysis": "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).",
+  "has_action_stages": true,
+  "has_parallel_stages": false,
+  "id": "{SESSION_ID}",
+  "input_tokens": 460,
+  "llm_interaction_count": 5,
+  "mcp_interaction_count": 4,
+  "output_tokens": 165,
+  "runbook_url": null,
+  "stages": [
+    {
+      "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "Investigator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_1}",
+          "input_tokens": 180,
+          "llm_backend": "google-native",
+          "llm_provider": "test-provider",
+          "output_tokens": 65,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 245
+        }
+      ],
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_1}",
+      "parallel_type": null,
+      "stage_index": 1,
+      "stage_name": "investigation",
+      "stage_type": "investigation",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "Remediator",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_2}",
+          "input_tokens": 220,
+          "llm_backend": "google-native",
+          "llm_provider": "test-provider",
+          "output_tokens": 80,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 300
+        }
+      ],
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_2}",
+      "parallel_type": null,
+      "stage_index": 2,
+      "stage_name": "remediation",
+      "stage_type": "action",
+      "started_at": null,
+      "status": "completed"
+    },
+    {
+      "completed_at": "{TIMESTAMP}",
+      "executions": [
+        {
+          "agent_index": 1,
+          "agent_name": "ExecSummaryAgent",
+          "completed_at": "{TIMESTAMP}",
+          "duration_ms": {DURATION_MS},
+          "error_message": null,
+          "execution_id": "{EXEC_ID_3}",
+          "input_tokens": 60,
+          "llm_backend": "google-native",
+          "llm_provider": "test-provider",
+          "output_tokens": 20,
+          "started_at": "{TIMESTAMP}",
+          "status": "completed",
+          "total_tokens": 80
+        }
+      ],
+      "expected_agent_count": 1,
+      "id": "{STAGE_ID_3}",
+      "parallel_type": null,
+      "stage_index": 3,
+      "stage_name": "Executive Summary",
+      "stage_type": "exec_summary",
+      "started_at": null,
+      "status": "completed"
+    }
+  ],
+  "started_at": "{TIMESTAMP}",
+  "status": "completed",
+  "total_stages": 3,
+  "total_tokens": 625
+}

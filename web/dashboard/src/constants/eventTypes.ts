@@ -56,6 +56,7 @@ export const STAGE_TYPE = {
   CHAT: 'chat',
   EXEC_SUMMARY: 'exec_summary',
   SCORING: 'scoring',
+  ACTION: 'action',
 } as const;
 
 export type StageType = (typeof STAGE_TYPE)[keyof typeof STAGE_TYPE];

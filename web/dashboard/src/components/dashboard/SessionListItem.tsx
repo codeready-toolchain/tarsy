@@ -27,6 +27,7 @@ import {
   Hub,
   Summarize,
   SwapHoriz,
+  BoltOutlined,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -152,6 +153,17 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
             <Tooltip title="Orchestrator - Sub-agents dispatched">
               <Chip
                 icon={<Hub sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={iconOnlyChipSx}
+              />
+            </Tooltip>
+          )}
+          {session.has_action_stages && (
+            <Tooltip title="Action Evaluation - Automated remediation evaluated">
+              <Chip
+                icon={<BoltOutlined sx={{ fontSize: '0.875rem' }} />}
                 size="small"
                 color="secondary"
                 variant="outlined"

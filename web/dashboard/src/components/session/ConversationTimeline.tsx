@@ -39,7 +39,7 @@ import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
  * can watch the reasoning flow in real time.
  */
 function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): boolean {
-  const isCollapsible = group.stageType === STAGE_TYPE.SYNTHESIS || group.stageType === STAGE_TYPE.EXEC_SUMMARY;
+  const isCollapsible = group.stageType === STAGE_TYPE.SYNTHESIS || group.stageType === STAGE_TYPE.EXEC_SUMMARY || group.stageType === STAGE_TYPE.ACTION;
   if (!isCollapsible) return false;
   if (isSessionActive) return false;
   return TERMINAL_EXECUTION_STATUSES.has(group.stageStatus);

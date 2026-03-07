@@ -199,7 +199,7 @@ An action agent in a mixed stage still gets the safety prompt. The stage just do
 
 ## Implementation Plan
 
-### PR 1: Backend — action agent type and stage type
+### PR 1: Backend — action agent type and stage type - DONE
 
 **Goal:** Complete backend support for action agents. After this PR, configuring `type: action` on agents works end-to-end: safety prompt injected, stage type derived, context flows to exec summary, DB queryable. The frontend shows action stages as investigation stages until PR 2 ships — no breakage.
 

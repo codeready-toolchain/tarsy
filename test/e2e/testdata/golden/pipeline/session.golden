@@ -17,6 +17,7 @@
   "executive_summary_error": null,
   "failed_stages": 0,
   "final_analysis": "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
+  "has_action_stages": false,
   "has_parallel_stages": true,
   "id": "{SESSION_ID}",
   "input_tokens": 2110,

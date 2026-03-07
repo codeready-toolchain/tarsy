@@ -786,6 +786,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, 1, detail.CompletedStages)
 		assert.Equal(t, 0, detail.FailedStages)
 		assert.Equal(t, false, detail.HasParallelStages)
+		assert.Equal(t, false, detail.HasActionStages)
 		assert.Equal(t, true, detail.ChatEnabled, "chat should be enabled by default (no Chat config on chain)")
 		assert.Nil(t, detail.ChatID, "no chat created yet")
 		assert.Equal(t, 0, detail.ChatMessageCount)
@@ -1298,6 +1299,61 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Nil(t, eo.OriginalLLMBackend)
 	})
 
+	t.Run("has_action_stages is true when session contains action stage", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-5 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("action stage test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Investigation").
+			SetStageIndex(0).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Remediation").
+			SetStageIndex(1).
+			SetStageType(stage.StageTypeAction).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.True(t, detail.HasActionStages)
+	})
+
+	t.Run("has_action_stages is false when session has no action stages", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"no action stages", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.False(t, detail.HasActionStages)
+	})
+
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
 		_, err := service.GetSessionDetail(ctx, "nonexistent-id")
 		assert.ErrorIs(t, err, ErrNotFound)
@@ -1541,6 +1597,7 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 				assert.Equal(t, 1, s.CompletedStages)
 				assert.Equal(t, false, s.HasParallelStages)
 				assert.Equal(t, false, s.HasSubAgents)
+				assert.Equal(t, false, s.HasActionStages)
 				return
 			}
 		}
@@ -1589,6 +1646,35 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 				assert.True(t, s.HasSubAgents, "session with sub-agent execution should have HasSubAgents=true")
 			} else {
 				assert.False(t, s.HasSubAgents, "session %s without sub-agents should have HasSubAgents=false", s.ID)
+			}
+		}
+	})
+
+	t.Run("has_action_stages flag", func(t *testing.T) {
+		actionSessionID := seedDashboardSession(t, client.Client,
+			"Action data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+
+		// Add an action stage to this session.
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(actionSessionID).
+			SetStageName("Remediation").
+			SetStageIndex(2).
+			SetStageType(stage.StageTypeAction).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		for _, s := range result.Sessions {
+			if s.ID == actionSessionID {
+				assert.True(t, s.HasActionStages, "session with action stage should have HasActionStages=true")
+			} else {
+				assert.False(t, s.HasActionStages, "session %s without action stages should have HasActionStages=false", s.ID)
 			}
 		}
 	})

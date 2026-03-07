@@ -24,6 +24,7 @@ export interface DashboardSessionItem {
   completed_stages: number;
   has_parallel_stages: boolean;
   has_sub_agents: boolean;
+  has_action_stages: boolean;
   chat_message_count: number;
   provider_fallback_count: number;
   current_stage_index: number | null;
@@ -86,6 +87,7 @@ export interface SessionDetailResponse {
   completed_stages: number;
   failed_stages: number;
   has_parallel_stages: boolean;
+  has_action_stages: boolean;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;

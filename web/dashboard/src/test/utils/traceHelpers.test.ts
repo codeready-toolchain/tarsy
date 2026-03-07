@@ -113,6 +113,7 @@ function makeSessionDetail(stages: StageOverview[]): SessionDetailResponse {
     completed_stages: stages.length,
     failed_stages: 0,
     has_parallel_stages: false,
+    has_action_stages: false,
     input_tokens: 0,
     output_tokens: 0,
     total_tokens: 0,

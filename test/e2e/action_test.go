@@ -176,4 +176,31 @@ func TestE2E_ActionChain(t *testing.T) {
 
 	// ── WS event structural assertions ──
 	AssertEventsInOrder(t, ws.Events(), testdata.ActionChainExpectedEvents)
+
+	// ── Golden file assertions ──
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages, ok := traceList["stages"].([]interface{})
+	require.True(t, ok, "stages should be an array")
+	require.Len(t, traceStages, 3, "should have 3 stages (investigation + remediation + exec_summary)")
+
+	normalizer := NewNormalizer(sessionID)
+	for _, rawStage := range traceStages {
+		stg := rawStage.(map[string]interface{})
+		normalizer.RegisterStageID(stg["stage_id"].(string))
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec := rawExec.(map[string]interface{})
+			normalizer.RegisterExecutionID(exec["execution_id"].(string))
+		}
+	}
+
+	AssertGoldenJSON(t, GoldenPath("action-chain", "session.golden"), session, normalizer)
+
+	// ── Session list API: verify has_action_stages ──
+	list := app.GetSessionList(t, "")
+	items, ok := list["sessions"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, items, 1)
+	sess := items[0].(map[string]interface{})
+	assert.Equal(t, true, sess["has_action_stages"], "session list should report has_action_stages=true")
+	assert.Equal(t, "completed", sess["status"])
 }

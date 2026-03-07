@@ -474,6 +474,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 	completedStages := 0
 	failedStages := 0
 	hasParallel := false
+	hasActionStages := false
 
 	stages := make([]models.StageOverview, 0, totalStages)
 	for _, stg := range session.Edges.Stages {
@@ -485,6 +486,9 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		}
 		if stg.ParallelType != nil {
 			hasParallel = true
+		}
+		if stg.StageType == stage.StageTypeAction {
+			hasActionStages = true
 		}
 
 		var pt *string
@@ -584,6 +588,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		CompletedStages:         completedStages,
 		FailedStages:            failedStages,
 		HasParallelStages:       hasParallel,
+		HasActionStages:         hasActionStages,
 		InputTokens:             inputTokens,
 		OutputTokens:            outputTokens,
 		TotalTokens:             totalTokens,
@@ -772,8 +777,9 @@ type dashboardRow struct {
 	MCPCount         int   `sql:"mcp_count"`
 	TotalStages      int   `sql:"total_stages"`
 	CompletedStages  int   `sql:"completed_stages"`
-	HasParallel      int   `sql:"has_parallel"`   // 0/1, mapped to bool on output
-	HasSubAgents     int   `sql:"has_sub_agents"` // 0/1, mapped to bool on output
+	HasParallel      int   `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents     int   `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages  int   `sql:"has_action_stages"` // 0/1, mapped to bool on output
 	ChatMsgCount     int   `sql:"chat_msg_count"`
 	FallbackCount    int   `sql:"fallback_count"`
 	MatchedInContent int   `sql:"matched_in_content"` // 0/1, mapped to bool on output
@@ -942,6 +948,10 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM agent_executions WHERE session_id = %s AND parent_execution_id IS NOT NULL) THEN 1 ELSE 0 END)", sid),
 				"has_sub_agents",
 			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = 'action') THEN 1 ELSE 0 END)", sid),
+				"has_action_stages",
+			)
 
 			// Chat message count (chat_user_messages → chats → session).
 			sel.AppendSelectAs(
@@ -1016,6 +1026,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			CompletedStages:       row.CompletedStages,
 			HasParallelStages:     row.HasParallel != 0,
 			HasSubAgents:          row.HasSubAgents != 0,
+			HasActionStages:       row.HasActionStages != 0,
 			ChatMessageCount:      row.ChatMsgCount,
 			ProviderFallbackCount: row.FallbackCount,
 			CurrentStageIndex:     row.CurrentStageIndex,
