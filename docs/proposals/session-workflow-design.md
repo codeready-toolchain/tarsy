@@ -187,7 +187,7 @@ func (SessionReviewActivity) Indexes() []ent.Index {
 
 ### Migration
 
-**Backfill strategy:** The migration backfills all existing terminal sessions (`completed`, `failed`, `timed_out`, `cancelled`) to `review_status = resolved`, `resolution_reason = dismissed`. This gives a clean start — only new investigations enter the "Needs Review" queue.
+**Backfill strategy:** The migration backfills all existing terminal sessions (`completed`, `failed`, `timed_out`, `cancelled`) to `review_status = resolved`, `resolution_reason = dismissed`, `resolved_at = completed_at`. Deriving `resolved_at` from the existing `completed_at` ensures the resolved group's "most recent first" ordering and `resolved_limit` semantics work correctly from day one. All three fields are set in a single UPDATE for atomicity. This gives a clean start — only new investigations enter the "Needs Review" queue.
 
 ## Service Layer
 
@@ -208,10 +208,20 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
     }
     defer func() { _ = tx.Rollback() }()
 
-    // 1. Write terminal status + results (existing logic, now transactional).
-    update := tx.AlertSession.UpdateOneID(session.ID).
+    // 1. Write terminal status + results as a compare-and-set: only succeed from
+    // an active state. If a racing worker already wrote the terminal status, this
+    // returns zero affected rows and we treat it as a no-op.
+    now := time.Now()
+    update := tx.AlertSession.Update().
+        Where(
+            alertsession.IDEQ(session.ID),
+            alertsession.StatusIn(
+                alertsession.StatusInProgress,
+                alertsession.StatusCancelling,
+            ),
+        ).
         SetStatus(result.Status).
-        SetCompletedAt(time.Now())
+        SetCompletedAt(now)
 
     if result.FinalAnalysis != "" {
         update = update.SetFinalAnalysis(result.FinalAnalysis)
@@ -226,8 +236,13 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
         update = update.SetErrorMessage(result.Error.Error())
     }
 
-    if err := update.Exec(ctx); err != nil {
+    statusAffected, err := update.Save(ctx)
+    if err != nil {
         return false, fmt.Errorf("failed to update session terminal status: %w", err)
+    }
+    if statusAffected == 0 {
+        // Another worker already wrote the terminal status — nothing to do.
+        return false, nil
     }
 
     // 2. Initialize review_status only on the FIRST terminal transition.
@@ -299,24 +314,26 @@ func (w *Worker) publishReviewStatus(ctx context.Context, sessionID string, term
         return
     }
 
-    var reviewStatus string
-    if terminalStatus == alertsession.StatusCancelled {
-        reviewStatus = "resolved"
-    } else {
-        reviewStatus = "needs_review"
-    }
-
-    if err := w.eventPublisher.PublishReviewStatus(ctx, sessionID, events.ReviewStatusPayload{
+    payload := events.ReviewStatusPayload{
         BasePayload: events.BasePayload{
             Type:      events.EventTypeReviewStatus,
             SessionID: sessionID,
             Timestamp: time.Now().Format(time.RFC3339Nano),
         },
-        ReviewStatus: reviewStatus,
-        Actor:        "system",
-    }); err != nil {
+        Actor: "system",
+    }
+
+    if terminalStatus == alertsession.StatusCancelled {
+        payload.ReviewStatus = "resolved"
+        reason := "dismissed"
+        payload.ResolutionReason = &reason
+    } else {
+        payload.ReviewStatus = "needs_review"
+    }
+
+    if err := w.eventPublisher.PublishReviewStatus(ctx, sessionID, payload); err != nil {
         slog.Warn("Failed to publish review status",
-            "session_id", sessionID, "review_status", reviewStatus, "error", err)
+            "session_id", sessionID, "review_status", payload.ReviewStatus, "error", err)
     }
 }
 ```
@@ -331,7 +348,7 @@ type UpdateReviewRequest struct {
     Note             *string // optional
 }
 
-func (s *SessionService) UpdateReviewStatus(ctx context.Context, sessionID string, req UpdateReviewRequest) error
+func (s *SessionService) UpdateReviewStatus(ctx context.Context, sessionID string, req UpdateReviewRequest) (*ent.AlertSession, error)
 ```
 
 This method uses an atomic compare-and-transition pattern to prevent concurrent race conditions (e.g., two users claiming the same session simultaneously):
@@ -344,9 +361,10 @@ This method uses an atomic compare-and-transition pattern to prevent concurrent 
    WHERE session_id = ? AND review_status = ? [AND assignee = ?]
    ```
 3. Check rows-affected count — if zero, the session's state has changed since the caller read it. Rollback and return `409 Conflict`.
-4. Insert the `SessionReviewActivity` record within the same transaction (only after a successful conditional update).
-5. Commit the transaction. All field updates (`review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note`) and the activity log insert are atomic.
-6. Return the updated session to the caller.
+4. Insert `SessionReviewActivity` record(s) within the same transaction (only after a successful conditional update). For a **direct resolve** (`needs_review → resolved`), insert **two** activity rows: one for the implicit claim (`needs_review → in_progress`) and one for the resolution (`in_progress → resolved`). For all other actions, insert one row.
+5. Read the updated session within the transaction (SELECT after UPDATE) to return it to the caller without a separate read.
+6. Commit the transaction. All field updates (`review_status`, `assignee`, `assigned_at`, `resolved_at`, `resolution_reason`, `resolution_note`), the activity log insert(s), and the session read are atomic.
+7. Return the updated session to the caller.
 
 The API handler publishes the `review.status` event via `EventPublisher.PublishReviewStatus` after a successful `UpdateReviewStatus` call. Event publishing is NOT inside the service method — consistent with the Worker pattern where the caller (Worker/handler) owns event publishing.
 

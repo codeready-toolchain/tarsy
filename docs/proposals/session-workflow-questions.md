@@ -163,6 +163,8 @@ Store the assignee as the raw string from the auth proxy header. No user table. 
 - **Pro:** Consistent with how `author` is already stored on sessions.
 - **Pro:** Sufficient for self-claim — no dropdown or autocomplete needed.
 
+**Trust boundary:** The `assignee` field stores the raw `X-Forwarded-User` value only when that header is set by a trusted ingress proxy (oauth2-proxy or kube-rbac-proxy running as colocated sidecars). The ingress must strip any client-supplied `X-Forwarded-User` header to prevent identity spoofing — the auth proxy is the sole source of truth. See the [detailed design's API section](session-workflow-design.md#patch-apiv1sessionsidreview) for the full trust boundary documentation, and [token-exchange-sketch.md](token-exchange-sketch.md) and [session-authorization-sketch.md](session-authorization-sketch.md) for the complete trust model and deployment guarantees.
+
 **Decision:** Option A — raw `X-Forwarded-User` header value as the `assignee` text field. Sufficient for self-claim. Revisit when "assign to others" is added (Q3 evolution).
 
 _Considered and rejected: Option B — user registry (premature, significant effort). Option C — observed users list (unnecessary for self-claim, useful later for "assign to others")._
