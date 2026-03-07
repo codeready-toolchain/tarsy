@@ -77,4 +77,8 @@ func TestBuildActionMessages_UserMessageHasContext(t *testing.T) {
 	assert.Contains(t, user, "test-alert")
 	assert.Contains(t, user, "Runbook Content")
 	assert.Contains(t, user, "Investigation found root cause: OOM kill")
+
+	// Action-specific task (not the investigation analysisTask)
+	assert.Contains(t, user, "Evaluate the upstream investigation findings")
+	assert.NotContains(t, user, "Use the available tools to investigate this alert")
 }

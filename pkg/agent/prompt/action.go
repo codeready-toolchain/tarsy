@@ -1,6 +1,8 @@
 package prompt
 
 import (
+	"strings"
+
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
@@ -24,7 +26,7 @@ const actionTaskFocus = "Focus on evaluating the upstream investigation findings
 
 // buildActionMessages builds the initial conversation for an action agent.
 // System prompt: Tier 1-3 instructions + safety preamble + task focus.
-// User message: same as investigation (alert + runbook + chain context).
+// User message: alert + runbook + chain context + action-specific task.
 func (b *PromptBuilder) buildActionMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
@@ -36,11 +38,31 @@ func (b *PromptBuilder) buildActionMessages(
 		{Role: agent.RoleSystem, Content: systemContent},
 	}
 
-	userContent := b.buildInvestigationUserMessage(execCtx, prevStageContext)
+	userContent := b.buildActionUserMessage(execCtx, prevStageContext)
 	messages = append(messages, agent.ConversationMessage{
 		Role:    agent.RoleUser,
 		Content: userContent,
 	})
 
 	return messages
+}
+
+// buildActionUserMessage builds the user message for action agents.
+// Uses the same alert/runbook/context sections as investigation but with
+// action-specific task instructions so changes to analysisTask don't leak here.
+func (b *PromptBuilder) buildActionUserMessage(
+	execCtx *agent.ExecutionContext,
+	prevStageContext string,
+) string {
+	var sb strings.Builder
+
+	sb.WriteString(FormatAlertSection(execCtx.AlertType, execCtx.AlertData))
+	sb.WriteString("\n")
+	sb.WriteString(FormatRunbookSection(execCtx.RunbookContent))
+	sb.WriteString("\n")
+	sb.WriteString(FormatChainContext(prevStageContext))
+	sb.WriteString("\n")
+	sb.WriteString(actionTask)
+
+	return sb.String()
 }

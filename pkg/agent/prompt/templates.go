@@ -18,6 +18,18 @@ Be thorough in your investigation before providing the final answer.
 
 For each factual finding about the current state of the system, reference where the data came from (e.g., which tool call, which log entry, which metric). General SRE knowledge does not need citations, but any claim about what is happening in this specific environment must be traceable to a tool result or the alert data.`
 
+// actionTask is the action-stage task instruction appended to the user message.
+// Distinct from analysisTask so that investigation-template changes don't affect action agents.
+const actionTask = `## Your Task
+Evaluate the upstream investigation findings and decide whether automated remediation is warranted.
+
+For each potential action:
+1. State the evidence that justifies it
+2. Explain your reasoning
+3. Execute the action via your available tools, or explain why you chose not to act
+
+When you are done, produce an amended report that preserves the investigation findings and appends an actions section.`
+
 // synthesisTask is the synthesis task instruction for combining parallel results.
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 

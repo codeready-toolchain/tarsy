@@ -18,6 +18,9 @@ agents:
     mcp_servers: [test-mcp]
     custom_instructions: "You are Investigator, gathering evidence about the alert."
   Remediator:
+    # type: action → uses IteratingController (same as default) but injects
+    # safety preamble ("require hard evidence", "prefer inaction", etc.) and
+    # causes the stage to be persisted as stage_type=action in the DB.
     type: action
     mcp_servers: [test-mcp]
     custom_instructions: "You are Remediator, executing justified remediation actions."
@@ -27,9 +30,13 @@ agent_chains:
     alert_types: [test-action]
     executive_summary_provider: "test-provider"
     stages:
+      # Stage 1: standard investigation — gathers evidence via MCP tools.
       - name: investigation
         agents:
           - name: Investigator
+      # Stage 2: action — receives investigation context, decides whether
+      # to act. Stage type is derived as "action" because all agents in
+      # this stage have type=action.
       - name: remediation
         agents:
           - name: Remediator
