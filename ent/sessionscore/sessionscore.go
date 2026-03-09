@@ -35,10 +35,16 @@ const (
 	FieldCompletedAt = "completed_at"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
+	// FieldStageID holds the string denoting the stage_id field in the database.
+	FieldStageID = "stage_id"
 	// EdgeSession holds the string denoting the session edge name in mutations.
 	EdgeSession = "session"
+	// EdgeStage holds the string denoting the stage edge name in mutations.
+	EdgeStage = "stage"
 	// AlertSessionFieldID holds the string denoting the ID field of the AlertSession.
 	AlertSessionFieldID = "session_id"
+	// StageFieldID holds the string denoting the ID field of the Stage.
+	StageFieldID = "stage_id"
 	// Table holds the table name of the sessionscore in the database.
 	Table = "session_scores"
 	// SessionTable is the table that holds the session relation/edge.
@@ -48,6 +54,13 @@ const (
 	SessionInverseTable = "alert_sessions"
 	// SessionColumn is the table column denoting the session relation/edge.
 	SessionColumn = "session_id"
+	// StageTable is the table that holds the stage relation/edge.
+	StageTable = "session_scores"
+	// StageInverseTable is the table name for the Stage entity.
+	// It exists in this package in order to avoid circular dependency with the "stage" package.
+	StageInverseTable = "stages"
+	// StageColumn is the table column denoting the stage relation/edge.
+	StageColumn = "stage_id"
 )
 
 // Columns holds all SQL columns for sessionscore fields.
@@ -63,6 +76,7 @@ var Columns = []string{
 	FieldStartedAt,
 	FieldCompletedAt,
 	FieldErrorMessage,
+	FieldStageID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -168,10 +182,22 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
 }
 
+// ByStageID orders the results by the stage_id field.
+func ByStageID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageID, opts...).ToFunc()
+}
+
 // BySessionField orders the results by session field.
 func BySessionField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newSessionStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByStageField orders the results by stage field.
+func ByStageField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newStageStep(), sql.OrderByField(field, opts...))
 	}
 }
 func newSessionStep() *sqlgraph.Step {
@@ -179,5 +205,12 @@ func newSessionStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SessionInverseTable, AlertSessionFieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, SessionTable, SessionColumn),
+	)
+}
+func newStageStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(StageInverseTable, StageFieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, StageTable, StageColumn),
 	)
 }

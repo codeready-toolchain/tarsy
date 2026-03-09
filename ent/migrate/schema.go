@@ -455,6 +455,7 @@ var (
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "session_id", Type: field.TypeString},
+		{Name: "stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// SessionScoresTable holds the schema information for the "session_scores" table.
 	SessionScoresTable = &schema.Table{
@@ -467,6 +468,12 @@ var (
 				Columns:    []*schema.Column{SessionScoresColumns[10]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "session_scores_stages_session_scores",
+				Columns:    []*schema.Column{SessionScoresColumns[11]},
+				RefColumns: []*schema.Column{StagesColumns[0]},
+				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -685,6 +692,7 @@ func init() {
 	MessagesTable.ForeignKeys[1].RefTable = AlertSessionsTable
 	MessagesTable.ForeignKeys[2].RefTable = StagesTable
 	SessionScoresTable.ForeignKeys[0].RefTable = AlertSessionsTable
+	SessionScoresTable.ForeignKeys[1].RefTable = StagesTable
 	StagesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	StagesTable.ForeignKeys[1].RefTable = ChatsTable
 	StagesTable.ForeignKeys[2].RefTable = ChatUserMessagesTable

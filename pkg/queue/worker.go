@@ -35,6 +35,7 @@ type Worker struct {
 	client          *ent.Client
 	config          *config.QueueConfig
 	sessionExecutor SessionExecutor
+	scoringExecutor *ScoringExecutor
 	eventPublisher  agent.EventPublisher
 	slackService    *tarsyslack.Service
 	pool            SessionRegistry
@@ -59,13 +60,15 @@ type SessionRegistry interface {
 // NewWorker creates a new queue worker.
 // eventPublisher may be nil (streaming disabled).
 // slackService may be nil (Slack notifications disabled).
-func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, pool SessionRegistry, eventPublisher agent.EventPublisher, slackService *tarsyslack.Service) *Worker {
+// scoringExecutor may be nil (scoring disabled).
+func NewWorker(id, podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, scoringExecutor *ScoringExecutor, pool SessionRegistry, eventPublisher agent.EventPublisher, slackService *tarsyslack.Service) *Worker {
 	return &Worker{
 		id:              id,
 		podID:           podID,
 		client:          client,
 		config:          cfg,
 		sessionExecutor: executor,
+		scoringExecutor: scoringExecutor,
 		eventPublisher:  eventPublisher,
 		slackService:    slackService,
 		pool:            pool,
@@ -244,6 +247,11 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 
 	// 11b. Send Slack terminal notification
 	w.notifySlackTerminal(finalizeCtx, session, result, slackThreadTS)
+
+	// 11c. Fire scoring (async, fire-and-forget) for completed sessions
+	if result.Status == alertsession.StatusCompleted && w.scoringExecutor != nil {
+		w.scoringExecutor.ScoreSessionAsync(session.ID, "auto", true)
+	}
 
 	// 12. Cleanup transient events after grace period (60s) to allow clients
 	// to receive final events before they are deleted.

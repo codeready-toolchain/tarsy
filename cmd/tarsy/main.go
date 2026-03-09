@@ -267,9 +267,10 @@ func main() {
 	}
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
+	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher)
 
 	// 6. Start worker pool (before HTTP server)
-	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher, slackService)
+	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, scoringExecutor, eventPublisher, slackService)
 	if err := workerPool.Start(ctx); err != nil {
 		slog.Error("Failed to start worker pool", "error", err)
 		os.Exit(1)
@@ -308,6 +309,7 @@ func main() {
 	httpServer.SetEventPublisher(eventPublisher)
 	httpServer.SetCancelNotifier(eventPublisher)
 	httpServer.SetRunbookService(runbookService)
+	httpServer.SetScoringExecutor(scoringExecutor)
 
 	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)
@@ -371,6 +373,20 @@ func main() {
 		slog.Info("Chat executor stopped gracefully")
 	case <-workerShutdownCtx.Done():
 		slog.Warn("Chat executor shutdown timeout exceeded")
+	}
+
+	// Stop scoring executor (drain active scoring goroutines)
+	scoringDone := make(chan struct{})
+	go func() {
+		scoringExecutor.Stop()
+		close(scoringDone)
+	}()
+
+	select {
+	case <-scoringDone:
+		slog.Info("Scoring executor stopped gracefully")
+	case <-workerShutdownCtx.Done():
+		slog.Warn("Scoring executor shutdown timeout exceeded")
 	}
 
 	// Stop worker pool (wait for active sessions to complete)

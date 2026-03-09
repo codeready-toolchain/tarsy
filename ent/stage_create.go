@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -300,6 +301,21 @@ func (_c *StageCreate) SetChat(v *Chat) *StageCreate {
 // SetChatUserMessage sets the "chat_user_message" edge to the ChatUserMessage entity.
 func (_c *StageCreate) SetChatUserMessage(v *ChatUserMessage) *StageCreate {
 	return _c.SetChatUserMessageID(v.ID)
+}
+
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by IDs.
+func (_c *StageCreate) AddSessionScoreIDs(ids ...string) *StageCreate {
+	_c.mutation.AddSessionScoreIDs(ids...)
+	return _c
+}
+
+// AddSessionScores adds the "session_scores" edges to the SessionScore entity.
+func (_c *StageCreate) AddSessionScores(v ...*SessionScore) *StageCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSessionScoreIDs(ids...)
 }
 
 // AddReferencingStageIDs adds the "referencing_stages" edge to the Stage entity by IDs.
@@ -618,6 +634,22 @@ func (_c *StageCreate) createSpec() (*Stage, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ChatUserMessageID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SessionScoresIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   stage.SessionScoresTable,
+			Columns: []string{stage.SessionScoresColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ReferencingStagesIDs(); len(nodes) > 0 {

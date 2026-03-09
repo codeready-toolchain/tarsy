@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 )
 
 // SessionScoreCreate is the builder for creating a SessionScore entity.
@@ -145,6 +146,20 @@ func (_c *SessionScoreCreate) SetNillableErrorMessage(v *string) *SessionScoreCr
 	return _c
 }
 
+// SetStageID sets the "stage_id" field.
+func (_c *SessionScoreCreate) SetStageID(v string) *SessionScoreCreate {
+	_c.mutation.SetStageID(v)
+	return _c
+}
+
+// SetNillableStageID sets the "stage_id" field if the given value is not nil.
+func (_c *SessionScoreCreate) SetNillableStageID(v *string) *SessionScoreCreate {
+	if v != nil {
+		_c.SetStageID(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *SessionScoreCreate) SetID(v string) *SessionScoreCreate {
 	_c.mutation.SetID(v)
@@ -154,6 +169,11 @@ func (_c *SessionScoreCreate) SetID(v string) *SessionScoreCreate {
 // SetSession sets the "session" edge to the AlertSession entity.
 func (_c *SessionScoreCreate) SetSession(v *AlertSession) *SessionScoreCreate {
 	return _c.SetSessionID(v.ID)
+}
+
+// SetStage sets the "stage" edge to the Stage entity.
+func (_c *SessionScoreCreate) SetStage(v *Stage) *SessionScoreCreate {
+	return _c.SetStageID(v.ID)
 }
 
 // Mutation returns the SessionScoreMutation object of the builder.
@@ -309,6 +329,23 @@ func (_c *SessionScoreCreate) createSpec() (*SessionScore, *sqlgraph.CreateSpec)
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.SessionID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.StageIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   sessionscore.StageTable,
+			Columns: []string{sessionscore.StageColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stage.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.StageID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

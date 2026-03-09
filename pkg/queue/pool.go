@@ -19,6 +19,7 @@ type WorkerPool struct {
 	client          *ent.Client
 	config          *config.QueueConfig
 	sessionExecutor SessionExecutor
+	scoringExecutor *ScoringExecutor
 	eventPublisher  agent.EventPublisher
 	slackService    *tarsyslack.Service
 	workers         []*Worker
@@ -38,12 +39,14 @@ type WorkerPool struct {
 // NewWorkerPool creates a new worker pool.
 // eventPublisher may be nil (streaming disabled).
 // slackService may be nil (Slack notifications disabled).
-func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, eventPublisher agent.EventPublisher, slackService *tarsyslack.Service) *WorkerPool {
+// scoringExecutor may be nil (scoring disabled).
+func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, executor SessionExecutor, scoringExecutor *ScoringExecutor, eventPublisher agent.EventPublisher, slackService *tarsyslack.Service) *WorkerPool {
 	return &WorkerPool{
 		podID:           podID,
 		client:          client,
 		config:          cfg,
 		sessionExecutor: executor,
+		scoringExecutor: scoringExecutor,
 		eventPublisher:  eventPublisher,
 		slackService:    slackService,
 		workers:         make([]*Worker, 0, cfg.WorkerCount),
@@ -65,7 +68,7 @@ func (p *WorkerPool) Start(ctx context.Context) error {
 
 	for i := 0; i < p.config.WorkerCount; i++ {
 		workerID := fmt.Sprintf("%s-worker-%d", p.podID, i)
-		worker := NewWorker(workerID, p.podID, p.client, p.config, p.sessionExecutor, p, p.eventPublisher, p.slackService)
+		worker := NewWorker(workerID, p.podID, p.client, p.config, p.sessionExecutor, p.scoringExecutor, p, p.eventPublisher, p.slackService)
 		p.workers = append(p.workers, worker)
 		worker.Start(ctx)
 	}

@@ -60,6 +60,8 @@ const (
 	EdgeChat = "chat"
 	// EdgeChatUserMessage holds the string denoting the chat_user_message edge name in mutations.
 	EdgeChatUserMessage = "chat_user_message"
+	// EdgeSessionScores holds the string denoting the session_scores edge name in mutations.
+	EdgeSessionScores = "session_scores"
 	// EdgeReferencingStages holds the string denoting the referencing_stages edge name in mutations.
 	EdgeReferencingStages = "referencing_stages"
 	// EdgeReferencedStage holds the string denoting the referenced_stage edge name in mutations.
@@ -80,6 +82,8 @@ const (
 	ChatFieldID = "chat_id"
 	// ChatUserMessageFieldID holds the string denoting the ID field of the ChatUserMessage.
 	ChatUserMessageFieldID = "message_id"
+	// SessionScoreFieldID holds the string denoting the ID field of the SessionScore.
+	SessionScoreFieldID = "score_id"
 	// Table holds the table name of the stage in the database.
 	Table = "stages"
 	// SessionTable is the table that holds the session relation/edge.
@@ -138,6 +142,13 @@ const (
 	ChatUserMessageInverseTable = "chat_user_messages"
 	// ChatUserMessageColumn is the table column denoting the chat_user_message relation/edge.
 	ChatUserMessageColumn = "chat_user_message_id"
+	// SessionScoresTable is the table that holds the session_scores relation/edge.
+	SessionScoresTable = "session_scores"
+	// SessionScoresInverseTable is the table name for the SessionScore entity.
+	// It exists in this package in order to avoid circular dependency with the "sessionscore" package.
+	SessionScoresInverseTable = "session_scores"
+	// SessionScoresColumn is the table column denoting the session_scores relation/edge.
+	SessionScoresColumn = "stage_id"
 	// ReferencingStagesTable is the table that holds the referencing_stages relation/edge.
 	ReferencingStagesTable = "stages"
 	// ReferencingStagesColumn is the table column denoting the referencing_stages relation/edge.
@@ -458,6 +469,20 @@ func ByChatUserMessageField(field string, opts ...sql.OrderTermOption) OrderOpti
 	}
 }
 
+// BySessionScoresCount orders the results by session_scores count.
+func BySessionScoresCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSessionScoresStep(), opts...)
+	}
+}
+
+// BySessionScores orders the results by session_scores terms.
+func BySessionScores(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSessionScoresStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByReferencingStagesCount orders the results by referencing_stages count.
 func ByReferencingStagesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -532,6 +557,13 @@ func newChatUserMessageStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ChatUserMessageInverseTable, ChatUserMessageFieldID),
 		sqlgraph.Edge(sqlgraph.O2O, true, ChatUserMessageTable, ChatUserMessageColumn),
+	)
+}
+func newSessionScoresStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SessionScoresInverseTable, SessionScoreFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SessionScoresTable, SessionScoresColumn),
 	)
 }
 func newReferencingStagesStep() *sqlgraph.Step {

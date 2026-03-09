@@ -54,6 +54,11 @@ func (SessionScore) Fields() []ent.Field {
 		field.Text("error_message").
 			Optional().
 			Nillable(),
+		field.String("stage_id").
+			Optional().
+			Nillable().
+			Immutable().
+			Comment("FK to scoring stage (nullable for pre-migration rows)"),
 	}
 }
 
@@ -65,6 +70,11 @@ func (SessionScore) Edges() []ent.Edge {
 			Field("session_id").
 			Unique().
 			Required().
+			Immutable(),
+		edge.From("stage", Stage.Type).
+			Ref("session_scores").
+			Field("stage_id").
+			Unique().
 			Immutable(),
 	}
 }

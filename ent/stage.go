@@ -74,13 +74,15 @@ type StageEdges struct {
 	Chat *Chat `json:"chat,omitempty"`
 	// ChatUserMessage holds the value of the chat_user_message edge.
 	ChatUserMessage *ChatUserMessage `json:"chat_user_message,omitempty"`
+	// SessionScores holds the value of the session_scores edge.
+	SessionScores []*SessionScore `json:"session_scores,omitempty"`
 	// ReferencingStages holds the value of the referencing_stages edge.
 	ReferencingStages []*Stage `json:"referencing_stages,omitempty"`
 	// ReferencedStage holds the value of the referenced_stage edge.
 	ReferencedStage *Stage `json:"referenced_stage,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [11]bool
 }
 
 // SessionOrErr returns the Session value or an error if the edge
@@ -161,10 +163,19 @@ func (e StageEdges) ChatUserMessageOrErr() (*ChatUserMessage, error) {
 	return nil, &NotLoadedError{edge: "chat_user_message"}
 }
 
+// SessionScoresOrErr returns the SessionScores value or an error if the edge
+// was not loaded in eager-loading.
+func (e StageEdges) SessionScoresOrErr() ([]*SessionScore, error) {
+	if e.loadedTypes[8] {
+		return e.SessionScores, nil
+	}
+	return nil, &NotLoadedError{edge: "session_scores"}
+}
+
 // ReferencingStagesOrErr returns the ReferencingStages value or an error if the edge
 // was not loaded in eager-loading.
 func (e StageEdges) ReferencingStagesOrErr() ([]*Stage, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[9] {
 		return e.ReferencingStages, nil
 	}
 	return nil, &NotLoadedError{edge: "referencing_stages"}
@@ -175,7 +186,7 @@ func (e StageEdges) ReferencingStagesOrErr() ([]*Stage, error) {
 func (e StageEdges) ReferencedStageOrErr() (*Stage, error) {
 	if e.ReferencedStage != nil {
 		return e.ReferencedStage, nil
-	} else if e.loadedTypes[9] {
+	} else if e.loadedTypes[10] {
 		return nil, &NotFoundError{label: stage.Label}
 	}
 	return nil, &NotLoadedError{edge: "referenced_stage"}
@@ -363,6 +374,11 @@ func (_m *Stage) QueryChat() *ChatQuery {
 // QueryChatUserMessage queries the "chat_user_message" edge of the Stage entity.
 func (_m *Stage) QueryChatUserMessage() *ChatUserMessageQuery {
 	return NewStageClient(_m.config).QueryChatUserMessage(_m)
+}
+
+// QuerySessionScores queries the "session_scores" edge of the Stage entity.
+func (_m *Stage) QuerySessionScores() *SessionScoreQuery {
+	return NewStageClient(_m.config).QuerySessionScores(_m)
 }
 
 // QueryReferencingStages queries the "referencing_stages" edge of the Stage entity.

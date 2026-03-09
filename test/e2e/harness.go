@@ -213,7 +213,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	if podID == "" {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
 	}
-	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, eventPublisher, tc.slackService)
+	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, nil, eventPublisher, tc.slackService)
 	require.NoError(t, workerPool.Start(ctx))
 
 	// 10. Chat executor.

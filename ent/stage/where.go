@@ -1064,6 +1064,29 @@ func HasChatUserMessageWith(preds ...predicate.ChatUserMessage) predicate.Stage 
 	})
 }
 
+// HasSessionScores applies the HasEdge predicate on the "session_scores" edge.
+func HasSessionScores() predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SessionScoresTable, SessionScoresColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSessionScoresWith applies the HasEdge predicate on the "session_scores" edge with a given conditions (other predicates).
+func HasSessionScoresWith(preds ...predicate.SessionScore) predicate.Stage {
+	return predicate.Stage(func(s *sql.Selector) {
+		step := newSessionScoresStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasReferencingStages applies the HasEdge predicate on the "referencing_stages" edge.
 func HasReferencingStages() predicate.Stage {
 	return predicate.Stage(func(s *sql.Selector) {
