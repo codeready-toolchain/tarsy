@@ -106,6 +106,10 @@ const (
 	// Fired when an agent execution transitions to a new status (active, completed, failed, etc.).
 	// Allows the frontend to update individual agent cards independently of stage completion.
 	EventTypeExecutionStatus = "execution.status"
+
+	// Score completed — published to GlobalSessionsChannel after scoring finishes.
+	// Allows the dashboard session list to refresh and show the new score.
+	EventTypeSessionScoreCompleted = "session.score_completed"
 )
 
 // ProgressPhase values for execution-level progress events.

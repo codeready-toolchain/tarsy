@@ -399,8 +399,34 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Warn("Scoring executor: failed", "error", errMsg)
 	}
 
+	// Notify global sessions channel so the dashboard refreshes the score
+	e.publishScoreCompleted(sessionID, scoreCompleted)
+
 	// Schedule event cleanup
 	e.scheduleEventCleanup(stageID, time.Now())
+}
+
+// publishScoreCompleted notifies the global sessions channel that scoring
+// finished, so the dashboard session list can re-fetch and show the score.
+func (e *ScoringExecutor) publishScoreCompleted(sessionID string, success bool) {
+	if e.eventPublisher == nil {
+		return
+	}
+	status := "failed"
+	if success {
+		status = "completed"
+	}
+	if err := e.eventPublisher.PublishSessionScoreCompleted(context.Background(), sessionID, events.SessionScoreCompletedPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeSessionScoreCompleted,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		ScoringStatus: status,
+	}); err != nil {
+		slog.Warn("Failed to publish session score completed",
+			"session_id", sessionID, "scoring_status", status, "error", err)
+	}
 }
 
 // trackCancel registers a cancel func for an in-flight scoring run.

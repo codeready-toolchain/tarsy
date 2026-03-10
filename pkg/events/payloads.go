@@ -124,6 +124,15 @@ type ReviewStatusPayload struct {
 	Actor            string  `json:"actor"`                       // who triggered the change ("system" for worker transitions)
 }
 
+// SessionScoreCompletedPayload is the payload for session.score_completed transient events.
+// Published to GlobalSessionsChannel when scoring finishes (success or failure),
+// so the dashboard session list can refresh and display the updated score.
+type SessionScoreCompletedPayload struct {
+	BasePayload
+	ScoringStatus string `json:"scoring_status"` // completed, failed
+	TotalScore    *int   `json:"total_score"`    // nil on failure
+}
+
 // ExecutionStatusPayload is the payload for execution.status transient events.
 // Published to SessionChannel(sessionID) when an agent execution transitions
 // to a new status. Allows the frontend to update individual agent cards

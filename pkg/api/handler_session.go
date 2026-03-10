@@ -111,6 +111,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		params.EndDate = &t
 	}
 
+	params.ReviewStatus = c.QueryParam("review_status")
+	params.Assignee = c.QueryParam("assignee")
+	params.ResolutionReason = c.QueryParam("resolution_reason")
+
 	result, err := s.sessionService.ListSessionsForDashboard(c.Request().Context(), params)
 	if err != nil {
 		return mapServiceError(err)

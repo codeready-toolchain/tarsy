@@ -665,7 +665,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 8. Extend `ListSessionsForDashboard` with `review_status` and `assignee` filters
 9. Add review fields to `DashboardSessionItem` response DTO
 
-### Phase 2: Backend — Events + API handlers
+### Phase 2: Backend — Events + API handlers - ✅ DONE
 
 1. Add `EventTypeReviewStatus` and `ReviewStatusPayload` to `pkg/events/types.go` and `payloads.go`
 2. Add `PublishReviewStatus` to `EventPublisher` (dual-channel: persist to session channel, transient to global)

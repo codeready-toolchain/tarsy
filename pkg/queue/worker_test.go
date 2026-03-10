@@ -159,6 +159,10 @@ func (m *mockEventPublisher) PublishReviewStatus(_ context.Context, _ string, pa
 	return nil
 }
 
+func (m *mockEventPublisher) PublishSessionScoreCompleted(_ context.Context, _ string, _ events.SessionScoreCompletedPayload) error {
+	return nil
+}
+
 func TestWorker_PublishReviewStatusNilPublisher(t *testing.T) {
 	cfg := testQueueConfig()
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil, nil)

@@ -51,19 +51,20 @@ type SessionListResponse struct {
 
 // DashboardListParams holds query parameters for the dashboard session list.
 type DashboardListParams struct {
-	Page          int        `json:"page"`       // 1-based
-	PageSize      int        `json:"page_size"`  // max 100
-	SortBy        string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
-	SortOrder     string     `json:"sort_order"` // asc or desc
-	Status        string     `json:"status"`     // comma-separated status filter
-	AlertType     string     `json:"alert_type"`
-	ChainID       string     `json:"chain_id"`
-	Search        string     `json:"search"`         // ILIKE on alert_data, final_analysis
-	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
-	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
-	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
-	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, resolved
-	Assignee      string     `json:"assignee"`       // exact match filter
+	Page             int        `json:"page"`       // 1-based
+	PageSize         int        `json:"page_size"`  // max 100
+	SortBy           string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
+	SortOrder        string     `json:"sort_order"` // asc or desc
+	Status           string     `json:"status"`     // comma-separated status filter
+	AlertType        string     `json:"alert_type"`
+	ChainID          string     `json:"chain_id"`
+	Search           string     `json:"search"`            // ILIKE on alert_data, final_analysis
+	StartDate        *time.Time `json:"start_date"`        // created_at >= start_date
+	EndDate          *time.Time `json:"end_date"`          // created_at < end_date
+	ScoringStatus    string     `json:"scoring_status"`    // scored, not_scored, scoring_in_progress, scoring_failed
+	ReviewStatus     string     `json:"review_status"`     // comma-separated: needs_review, in_progress, resolved
+	Assignee         string     `json:"assignee"`          // exact match filter
+	ResolutionReason string     `json:"resolution_reason"` // actioned, dismissed
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
