@@ -159,7 +159,7 @@ func (m *mockEventPublisher) PublishReviewStatus(_ context.Context, _ string, pa
 	return nil
 }
 
-func (m *mockEventPublisher) PublishSessionScoreCompleted(_ context.Context, _ string, _ events.SessionScoreCompletedPayload) error {
+func (m *mockEventPublisher) PublishSessionScoreUpdated(_ context.Context, _ string, _ events.SessionScoreUpdatedPayload) error {
 	return nil
 }
 

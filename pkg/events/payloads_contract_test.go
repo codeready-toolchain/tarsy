@@ -198,14 +198,14 @@ func TestSessionProgressPayload_ContainsSessionID(t *testing.T) {
 	assert.Equal(t, "sess-progress", sid)
 }
 
-func TestSessionScoreCompletedPayload_ContainsSessionID(t *testing.T) {
-	payload := SessionScoreCompletedPayload{
+func TestSessionScoreUpdatedPayload_ContainsSessionID(t *testing.T) {
+	payload := SessionScoreUpdatedPayload{
 		BasePayload: BasePayload{
-			Type:      EventTypeSessionScoreCompleted,
+			Type:      EventTypeSessionScoreUpdated,
 			SessionID: "sess-score",
 			Timestamp: "2026-01-01T00:00:00Z",
 		},
-		ScoringStatus: "completed",
+		ScoringStatus: ScoringStatusInProgress,
 	}
 
 	data, err := json.Marshal(payload)
@@ -215,6 +215,6 @@ func TestSessionScoreCompletedPayload_ContainsSessionID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &parsed))
 
 	sid, ok := parsed["session_id"]
-	assert.True(t, ok, "SessionScoreCompletedPayload is missing session_id")
+	assert.True(t, ok, "SessionScoreUpdatedPayload is missing session_id")
 	assert.Equal(t, "sess-score", sid)
 }

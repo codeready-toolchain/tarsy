@@ -731,7 +731,7 @@ func (noopEventPublisher) PublishReviewStatus(_ context.Context, _ string, _ eve
 	return nil
 }
 
-func (noopEventPublisher) PublishSessionScoreCompleted(_ context.Context, _ string, _ events.SessionScoreCompletedPayload) error {
+func (noopEventPublisher) PublishSessionScoreUpdated(_ context.Context, _ string, _ events.SessionScoreUpdatedPayload) error {
 	return nil
 }
 

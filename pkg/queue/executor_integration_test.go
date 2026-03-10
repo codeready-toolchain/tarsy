@@ -138,7 +138,7 @@ func (p *testEventPublisher) PublishReviewStatus(_ context.Context, _ string, _ 
 	return nil
 }
 
-func (p *testEventPublisher) PublishSessionScoreCompleted(_ context.Context, _ string, _ events.SessionScoreCompletedPayload) error {
+func (p *testEventPublisher) PublishSessionScoreUpdated(_ context.Context, _ string, _ events.SessionScoreUpdatedPayload) error {
 	return nil
 }
 

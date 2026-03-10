@@ -195,12 +195,12 @@ func (p *EventPublisher) PublishExecutionStatus(ctx context.Context, sessionID s
 	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
 }
 
-// PublishSessionScoreCompleted broadcasts a session.score_completed transient event
+// PublishSessionScoreUpdated broadcasts a session.score_updated transient event
 // to the global sessions channel so the dashboard can refresh and show the score.
-func (p *EventPublisher) PublishSessionScoreCompleted(ctx context.Context, _ string, payload SessionScoreCompletedPayload) error {
+func (p *EventPublisher) PublishSessionScoreUpdated(ctx context.Context, _ string, payload SessionScoreUpdatedPayload) error {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal SessionScoreCompletedPayload: %w", err)
+		return fmt.Errorf("failed to marshal SessionScoreUpdatedPayload: %w", err)
 	}
 	return p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON)
 }

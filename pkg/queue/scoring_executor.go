@@ -257,6 +257,9 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	logger := slog.With("session_id", sessionID, "score_id", scoreID, "stage_id", stageID)
 	logger.Info("Scoring executor: starting evaluation")
 
+	// Notify dashboard so it shows the scoring spinner
+	e.publishScoreUpdated(sessionID, events.ScoringStatusInProgress)
+
 	score, err := e.dbClient.SessionScore.Get(ctx, scoreID)
 	if err != nil {
 		logger.Error("Failed to load session score for execution", "error", err)
@@ -400,32 +403,32 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	}
 
 	// Notify global sessions channel so the dashboard refreshes the score
-	e.publishScoreCompleted(sessionID, scoreCompleted)
+	scoringStatus := events.ScoringStatusFailed
+	if scoreCompleted {
+		scoringStatus = events.ScoringStatusCompleted
+	}
+	e.publishScoreUpdated(sessionID, scoringStatus)
 
 	// Schedule event cleanup
 	e.scheduleEventCleanup(stageID, time.Now())
 }
 
-// publishScoreCompleted notifies the global sessions channel that scoring
-// finished, so the dashboard session list can re-fetch and show the score.
-func (e *ScoringExecutor) publishScoreCompleted(sessionID string, success bool) {
+// publishScoreUpdated notifies the global sessions channel that scoring
+// started or finished, so the dashboard can show the spinner / final score.
+func (e *ScoringExecutor) publishScoreUpdated(sessionID string, scoringStatus events.ScoringStatus) {
 	if e.eventPublisher == nil {
 		return
 	}
-	status := "failed"
-	if success {
-		status = "completed"
-	}
-	if err := e.eventPublisher.PublishSessionScoreCompleted(context.Background(), sessionID, events.SessionScoreCompletedPayload{
+	if err := e.eventPublisher.PublishSessionScoreUpdated(context.Background(), sessionID, events.SessionScoreUpdatedPayload{
 		BasePayload: events.BasePayload{
-			Type:      events.EventTypeSessionScoreCompleted,
+			Type:      events.EventTypeSessionScoreUpdated,
 			SessionID: sessionID,
 			Timestamp: time.Now().Format(time.RFC3339Nano),
 		},
-		ScoringStatus: status,
+		ScoringStatus: scoringStatus,
 	}); err != nil {
-		slog.Warn("Failed to publish session score completed",
-			"session_id", sessionID, "scoring_status", status, "error", err)
+		slog.Warn("Failed to publish session score updated",
+			"session_id", sessionID, "scoring_status", scoringStatus, "error", err)
 	}
 }
 

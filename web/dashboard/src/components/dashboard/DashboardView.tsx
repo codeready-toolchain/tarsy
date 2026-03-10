@@ -48,7 +48,7 @@ import { websocketService } from '../../services/websocket.ts';
 import {
   EVENT_SESSION_STATUS,
   EVENT_SESSION_PROGRESS,
-  EVENT_SESSION_SCORE_COMPLETED,
+  EVENT_SESSION_SCORE_UPDATED,
 } from '../../constants/eventTypes.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
@@ -375,8 +375,8 @@ export function DashboardView() {
         return;
       }
 
-      // session.score_completed → throttled refresh to pick up the new score
-      if (type === EVENT_SESSION_SCORE_COMPLETED) {
+      // session.score_updated → throttled refresh to pick up spinner / final score
+      if (type === EVENT_SESSION_SCORE_UPDATED) {
         throttledRefreshRef.current();
       }
     };

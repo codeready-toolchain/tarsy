@@ -71,6 +71,15 @@ const (
 	StageStatusCancelled = "cancelled"
 )
 
+// ScoringStatus values for session.score_updated payloads.
+type ScoringStatus string
+
+const (
+	ScoringStatusInProgress ScoringStatus = "in_progress"
+	ScoringStatusCompleted  ScoringStatus = "completed"
+	ScoringStatusFailed     ScoringStatus = "failed"
+)
+
 // Chat event types (stored in DB + NOTIFY).
 const (
 	EventTypeChatCreated = "chat.created"
@@ -107,9 +116,9 @@ const (
 	// Allows the frontend to update individual agent cards independently of stage completion.
 	EventTypeExecutionStatus = "execution.status"
 
-	// Score completed — published to GlobalSessionsChannel after scoring finishes.
-	// Allows the dashboard session list to refresh and show the new score.
-	EventTypeSessionScoreCompleted = "session.score_completed"
+	// Score updated — published to GlobalSessionsChannel when scoring starts or finishes.
+	// Allows the dashboard session list to refresh and show the spinner / final score.
+	EventTypeSessionScoreUpdated = "session.score_updated"
 )
 
 // ProgressPhase values for execution-level progress events.

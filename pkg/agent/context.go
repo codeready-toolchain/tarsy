@@ -147,7 +147,7 @@ type EventPublisher interface {
 	PublishExecutionProgress(ctx context.Context, sessionID string, payload events.ExecutionProgressPayload) error
 	PublishExecutionStatus(ctx context.Context, sessionID string, payload events.ExecutionStatusPayload) error
 	PublishReviewStatus(ctx context.Context, sessionID string, payload events.ReviewStatusPayload) error
-	PublishSessionScoreCompleted(ctx context.Context, sessionID string, payload events.SessionScoreCompletedPayload) error
+	PublishSessionScoreUpdated(ctx context.Context, sessionID string, payload events.SessionScoreUpdatedPayload) error
 }
 
 // SubAgentResultCollector provides push-based delivery of completed sub-agent
