@@ -441,21 +441,32 @@ func (w *Worker) publishSessionStatus(ctx context.Context, sessionID string, sta
 
 // publishReviewStatus publishes a review.status event to both the session-specific
 // and global channels. Non-blocking: errors are logged.
-//
-// TODO(phase2): Emit a real review.status event via w.eventPublisher using the
-// sessionID and computed reviewStatus as payload (mirror publishSessionStatus).
-// Publishing should be non-blocking; log errors instead of returning them.
-func (w *Worker) publishReviewStatus(_ context.Context, sessionID string, terminalStatus alertsession.Status) {
+func (w *Worker) publishReviewStatus(ctx context.Context, sessionID string, terminalStatus alertsession.Status) {
 	if w.eventPublisher == nil {
 		return
 	}
 
-	reviewStatus := alertsession.ReviewStatusNeedsReview
-	if terminalStatus == alertsession.StatusCancelled {
-		reviewStatus = alertsession.ReviewStatusResolved
+	payload := events.ReviewStatusPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeReviewStatus,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		Actor: "system",
 	}
-	slog.Info("Review status initialized",
-		"session_id", sessionID, "review_status", reviewStatus)
+
+	if terminalStatus == alertsession.StatusCancelled {
+		payload.ReviewStatus = string(alertsession.ReviewStatusResolved)
+		reason := string(alertsession.ResolutionReasonDismissed)
+		payload.ResolutionReason = &reason
+	} else {
+		payload.ReviewStatus = string(alertsession.ReviewStatusNeedsReview)
+	}
+
+	if err := w.eventPublisher.PublishReviewStatus(ctx, sessionID, payload); err != nil {
+		slog.Warn("Failed to publish review status",
+			"session_id", sessionID, "review_status", payload.ReviewStatus, "error", err)
+	}
 }
 
 // scheduleEventCleanup schedules deletion of transient events after a 60-second

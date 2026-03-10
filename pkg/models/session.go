@@ -317,3 +317,26 @@ type ReviewActivityItem struct {
 type ReviewActivityResponse struct {
 	Activities []ReviewActivityItem `json:"activities"`
 }
+
+// --- Triage DTOs ---
+
+// TriageGroup is a single column/section in the triage view.
+type TriageGroup struct {
+	Count    int                    `json:"count"`
+	Sessions []DashboardSessionItem `json:"sessions"`
+	HasMore  bool                   `json:"has_more,omitempty"`
+}
+
+// TriageResponse is the grouped response for GET /sessions/triage.
+type TriageResponse struct {
+	Investigating TriageGroup `json:"investigating"`
+	NeedsReview   TriageGroup `json:"needs_review"`
+	InProgress    TriageGroup `json:"in_progress"`
+	Resolved      TriageGroup `json:"resolved"`
+}
+
+// TriageParams holds query parameters for the triage endpoint.
+type TriageParams struct {
+	ResolvedLimit int    // max resolved sessions to return (default 20)
+	Assignee      string // filter by assignee (exact match)
+}

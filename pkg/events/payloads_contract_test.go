@@ -138,6 +138,18 @@ func TestSessionChannelPayloads_ContainSessionID(t *testing.T) {
 				Message:     "Iteration 1/5",
 			},
 		},
+		{
+			name: "ReviewStatusPayload",
+			payload: ReviewStatusPayload{
+				BasePayload: BasePayload{
+					Type:      EventTypeReviewStatus,
+					SessionID: testSessionID,
+					Timestamp: "2026-01-01T00:00:00Z",
+				},
+				ReviewStatus: "needs_review",
+				Actor:        "system",
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -751,6 +751,10 @@ func (noopEventPublisher) PublishExecutionStatus(context.Context, string, events
 	return nil
 }
 
+func (noopEventPublisher) PublishReviewStatus(context.Context, string, events.ReviewStatusPayload) error {
+	return nil
+}
+
 // contextExpiryErrorLLMClient sends initial chunks immediately, then waits
 // for the caller's context to expire before sending an error chunk. This
 // deterministically simulates a stream that outlives its parent context

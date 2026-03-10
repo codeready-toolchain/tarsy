@@ -57,6 +57,9 @@ const (
 
 	// Stage lifecycle — single event type for all stage status transitions
 	EventTypeStageStatus = "stage.status"
+
+	// Review workflow lifecycle
+	EventTypeReviewStatus = "review.status"
 )
 
 // Stage lifecycle status values (used in StageStatusPayload.Status).

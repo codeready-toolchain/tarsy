@@ -113,6 +113,17 @@ type ExecutionProgressPayload struct {
 	Message           string `json:"message"`                       // human-readable message
 }
 
+// ReviewStatusPayload is the payload for review.status events.
+// Published when a session's review workflow state changes (auto-init by worker
+// or manual transition by SRE via API).
+type ReviewStatusPayload struct {
+	BasePayload
+	ReviewStatus     string  `json:"review_status"`              // needs_review, in_progress, resolved
+	Assignee         *string `json:"assignee,omitempty"`          // null when unassigned
+	ResolutionReason *string `json:"resolution_reason,omitempty"` // actioned, dismissed
+	Actor            string  `json:"actor"`                       // who triggered the change ("system" for worker transitions)
+}
+
 // ExecutionStatusPayload is the payload for execution.status transient events.
 // Published to SessionChannel(sessionID) when an agent execution transitions
 // to a new status. Allows the frontend to update individual agent cards

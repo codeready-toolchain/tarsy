@@ -13,6 +13,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// seedActiveSession creates a session in the given non-terminal status with NULL
+// review_status (simulates an actively investigating session for the triage view).
+func seedActiveSession(t *testing.T, service *SessionService, status alertsession.Status) string {
+	t.Helper()
+	ctx := context.Background()
+
+	req := models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test alert",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	}
+	sess, err := service.CreateSession(ctx, req)
+	require.NoError(t, err)
+
+	if status != alertsession.StatusPending {
+		require.NoError(t, service.UpdateSessionStatus(ctx, sess.ID, status))
+	}
+	return sess.ID
+}
+
 // seedReviewSession creates a completed session with the given review_status.
 // If reviewStatus is empty, review_status stays NULL (simulates active session).
 func seedReviewSession(t *testing.T, service *SessionService, reviewStatus string, assignee string) string {
@@ -260,4 +281,109 @@ func TestSessionService_GetReviewActivity(t *testing.T) {
 		_, err := service.GetReviewActivity(ctx, "nonexistent-id")
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
+}
+
+func TestSessionService_GetTriageSessions(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Seed sessions across all 4 triage groups.
+	investigatingID := seedActiveSession(t, service, alertsession.StatusInProgress)
+	pendingID := seedActiveSession(t, service, alertsession.StatusPending)
+	needsReviewID := seedReviewSession(t, service, "needs_review", "")
+	inProgressID := seedReviewSession(t, service, "in_progress", "alice@test.com")
+	resolvedID1 := seedReviewSession(t, service, "resolved", "alice@test.com")
+	resolvedID2 := seedReviewSession(t, service, "resolved", "bob@test.com")
+	resolvedID3 := seedReviewSession(t, service, "resolved", "alice@test.com")
+
+	t.Run("groups sessions correctly", func(t *testing.T) {
+		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 20})
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, result.Investigating.Count)
+		investigatingIDs := collectIDs(result.Investigating.Sessions)
+		assert.Contains(t, investigatingIDs, investigatingID)
+		assert.Contains(t, investigatingIDs, pendingID)
+
+		assert.Equal(t, 1, result.NeedsReview.Count)
+		assert.Equal(t, needsReviewID, result.NeedsReview.Sessions[0].ID)
+
+		assert.Equal(t, 1, result.InProgress.Count)
+		assert.Equal(t, inProgressID, result.InProgress.Sessions[0].ID)
+		assert.NotNil(t, result.InProgress.Sessions[0].Assignee)
+		assert.Equal(t, "alice@test.com", *result.InProgress.Sessions[0].Assignee)
+
+		assert.Equal(t, 3, result.Resolved.Count)
+		assert.False(t, result.Resolved.HasMore)
+	})
+
+	t.Run("resolved_limit caps resolved group", func(t *testing.T) {
+		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 2})
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, result.Resolved.Count)
+		assert.True(t, result.Resolved.HasMore)
+		assert.Len(t, result.Resolved.Sessions, 2)
+
+		// Other groups unaffected.
+		assert.Equal(t, 2, result.Investigating.Count)
+		assert.Equal(t, 1, result.NeedsReview.Count)
+	})
+
+	t.Run("assignee filter", func(t *testing.T) {
+		result, err := service.GetTriageSessions(ctx, models.TriageParams{
+			ResolvedLimit: 20,
+			Assignee:      "alice@test.com",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, result.InProgress.Count)
+		assert.Equal(t, inProgressID, result.InProgress.Sessions[0].ID)
+
+		// Resolved sessions: 2 from alice, 1 from bob (filtered out).
+		resolvedIDs := collectIDs(result.Resolved.Sessions)
+		assert.Contains(t, resolvedIDs, resolvedID1)
+		assert.Contains(t, resolvedIDs, resolvedID3)
+		assert.NotContains(t, resolvedIDs, resolvedID2)
+	})
+
+	t.Run("defaults to limit 20 when zero", func(t *testing.T) {
+		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 0})
+		require.NoError(t, err)
+
+		assert.Equal(t, 3, result.Resolved.Count)
+		assert.False(t, result.Resolved.HasMore)
+	})
+
+	t.Run("review fields populated in items", func(t *testing.T) {
+		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 20})
+		require.NoError(t, err)
+
+		// Investigating sessions have nil review_status.
+		for _, s := range result.Investigating.Sessions {
+			assert.Nil(t, s.ReviewStatus)
+		}
+
+		// In-progress session has review_status and assignee.
+		require.Len(t, result.InProgress.Sessions, 1)
+		require.NotNil(t, result.InProgress.Sessions[0].ReviewStatus)
+		assert.Equal(t, "in_progress", *result.InProgress.Sessions[0].ReviewStatus)
+		assert.NotNil(t, result.InProgress.Sessions[0].Assignee)
+
+		// Resolved sessions have resolution_reason.
+		for _, s := range result.Resolved.Sessions {
+			require.NotNil(t, s.ReviewStatus)
+			assert.Equal(t, "resolved", *s.ReviewStatus)
+			assert.NotNil(t, s.ResolutionReason)
+		}
+	})
+}
+
+func collectIDs(items []models.DashboardSessionItem) []string {
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = item.ID
+	}
+	return ids
 }

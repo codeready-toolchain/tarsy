@@ -727,6 +727,10 @@ func (noopEventPublisher) PublishExecutionStatus(_ context.Context, _ string, _ 
 	return nil
 }
 
+func (noopEventPublisher) PublishReviewStatus(_ context.Context, _ string, _ events.ReviewStatusPayload) error {
+	return nil
+}
+
 // recordingEventPublisher embeds noopEventPublisher and records execution.status
 // and timeline_event.created payloads for assertion.
 type recordingEventPublisher struct {

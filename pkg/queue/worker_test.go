@@ -108,6 +108,8 @@ func TestWorker_PublishSessionStatusWithPublisher(t *testing.T) {
 type mockEventPublisher struct {
 	sessionStatusCount int
 	lastSessionStatus  *events.SessionStatusPayload
+	reviewStatusCount  int
+	lastReviewStatus   *events.ReviewStatusPayload
 }
 
 func (m *mockEventPublisher) PublishTimelineCreated(_ context.Context, _ string, _ events.TimelineCreatedPayload) error {
@@ -151,6 +153,12 @@ func (m *mockEventPublisher) PublishExecutionStatus(_ context.Context, _ string,
 	return nil
 }
 
+func (m *mockEventPublisher) PublishReviewStatus(_ context.Context, _ string, payload events.ReviewStatusPayload) error {
+	m.reviewStatusCount++
+	m.lastReviewStatus = &payload
+	return nil
+}
+
 func TestWorker_PublishReviewStatusNilPublisher(t *testing.T) {
 	cfg := testQueueConfig()
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil, nil)
@@ -165,15 +173,37 @@ func TestWorker_PublishReviewStatusNilPublisher(t *testing.T) {
 
 func TestWorker_PublishReviewStatusWithPublisher(t *testing.T) {
 	cfg := testQueueConfig()
-	pub := &mockEventPublisher{}
-	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, pub, nil)
 
-	// Should not panic — it's currently a logging-only stub.
-	assert.NotPanics(t, func() {
+	t.Run("completed session publishes needs_review", func(t *testing.T) {
+		pub := &mockEventPublisher{}
+		w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, pub, nil)
+
 		w.publishReviewStatus(t.Context(), "session-abc", alertsession.StatusCompleted)
+
+		assert.Equal(t, 1, pub.reviewStatusCount)
+		require.NotNil(t, pub.lastReviewStatus)
+		assert.Equal(t, events.EventTypeReviewStatus, pub.lastReviewStatus.Type)
+		assert.Equal(t, "session-abc", pub.lastReviewStatus.SessionID)
+		assert.Equal(t, "needs_review", pub.lastReviewStatus.ReviewStatus)
+		assert.Equal(t, "system", pub.lastReviewStatus.Actor)
+		assert.Nil(t, pub.lastReviewStatus.ResolutionReason)
+		assert.NotEmpty(t, pub.lastReviewStatus.Timestamp)
 	})
-	assert.NotPanics(t, func() {
+
+	t.Run("cancelled session publishes resolved with dismissed", func(t *testing.T) {
+		pub := &mockEventPublisher{}
+		w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, pub, nil)
+
 		w.publishReviewStatus(t.Context(), "session-def", alertsession.StatusCancelled)
+
+		assert.Equal(t, 1, pub.reviewStatusCount)
+		require.NotNil(t, pub.lastReviewStatus)
+		assert.Equal(t, events.EventTypeReviewStatus, pub.lastReviewStatus.Type)
+		assert.Equal(t, "session-def", pub.lastReviewStatus.SessionID)
+		assert.Equal(t, "resolved", pub.lastReviewStatus.ReviewStatus)
+		assert.Equal(t, "system", pub.lastReviewStatus.Actor)
+		require.NotNil(t, pub.lastReviewStatus.ResolutionReason)
+		assert.Equal(t, "dismissed", *pub.lastReviewStatus.ResolutionReason)
 	})
 }
 
