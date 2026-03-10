@@ -138,10 +138,6 @@ Evaluating horizontal scaling needs for pod-1.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-**Final Analysis:**
-
-Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
-
 #### Agent 2: ScalingReviewer-2 (google-native, test-provider)
 **Status**: completed
 
@@ -150,10 +146,6 @@ Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 Evaluating horizontal scaling needs for pod-1.
 
 **Agent Response:**
-
-Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
-
-**Final Analysis:**
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 

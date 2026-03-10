@@ -1,0 +1,51 @@
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "investigation" — 2/2 agents succeeded
+
+#### Agent 1: Investigator (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Found OOM events
+
+#### Agent 2: MetricsChecker (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Memory at 98%
+
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
+
+Confirmed memory leak
+
+## Stage 2: remediation
+
+**Agent:** Remediator (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Restarted pod-2 successfully
+
+## Stage 3: exec-summary
+
+**Agent:** ExecSummaryAgent (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Investigation complete
+
+## Executive Summary
+
+Executive: memory leak caused cascading pod failures
+

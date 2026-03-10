@@ -147,10 +147,6 @@ The pod is clearly OOMKilled.
 
 Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
-**Final Analysis:**
-
-Investigation complete: pod-1 is OOMKilled with 5 restarts.
-
 ## Stage 2: remediation
 
 **Agent:** Remediator (langchain, test-provider)
@@ -182,10 +178,6 @@ The logs and alerts confirm repeated OOM kills due to memory pressure.
 
 Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
-**Final Analysis:**
-
-Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
-
 ## Stage 3: validation
 
 <!-- PARALLEL_RESULTS_START -->
@@ -209,10 +201,6 @@ I should verify the pod memory limits are properly configured.
 The memory limit of 512Mi matches the alert threshold.
 
 **Agent Response:**
-
-Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
-
-**Final Analysis:**
 
 Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
@@ -240,10 +228,6 @@ SLO is being violated.
 
 Metrics confirm SLO violation for pod-1 availability.
 
-**Final Analysis:**
-
-Metrics confirm SLO violation for pod-1 availability.
-
 <!-- PARALLEL_RESULTS_END -->
 ### Synthesis Result
 
@@ -266,10 +250,6 @@ Evaluating horizontal scaling needs for pod-1.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-**Final Analysis:**
-
-Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
-
 #### Agent 2: ScalingReviewer-2 (google-native, test-provider)
 **Status**: completed
 
@@ -278,10 +258,6 @@ Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 Evaluating horizontal scaling needs for pod-1.
 
 **Agent Response:**
-
-Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
-
-**Final Analysis:**
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 

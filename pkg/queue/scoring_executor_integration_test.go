@@ -2,6 +2,9 @@ package queue
 
 import (
 	"context"
+	"flag"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,6 +20,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var updateGolden = flag.Bool("update", false, "update golden files")
+
+func assertGolden(t *testing.T, name string, actual string) {
+	t.Helper()
+	path := filepath.Join("testdata", name+".golden")
+
+	if *updateGolden {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(actual), 0o644))
+		t.Logf("updated golden file: %s", path)
+		return
+	}
+
+	expected, err := os.ReadFile(path)
+	require.NoError(t, err, "golden file missing — run with -update to create: %s", path)
+	assert.Equal(t, string(expected), actual, "golden mismatch: %s", path)
+}
 
 // ────────────────────────────────────────────────────────────
 // Test helpers
@@ -442,15 +463,7 @@ func TestScoringExecutor_BuildScoringContext_FiltersStageTypes(t *testing.T) {
 	createStageWithExec("Previous Scoring", 4, stage.StageTypeScoring)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	// Investigation, Action, and Exec Summary stages should be included
-	assert.Contains(t, result, "Investigation")
-	assert.Contains(t, result, "Action")
-	assert.Contains(t, result, "Exec Summary")
-
-	// Chat and Scoring stages should be excluded
-	assert.NotContains(t, result, "Chat")
-	assert.NotContains(t, result, "Previous Scoring")
+	assertGolden(t, "context_filters_stage_types", result)
 }
 
 func TestScoringExecutor_BuildScoringContext_EmptyForNoStages(t *testing.T) {
@@ -544,11 +557,7 @@ func TestScoringExecutor_BuildScoringContext_TimelineEventsIncluded(t *testing.T
 	require.NoError(t, err)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	assert.Contains(t, result, "Analyzing pod metrics for anomalies")
-	assert.Contains(t, result, "k8s.get_pods")
-	assert.Contains(t, result, "pod-1 Running, pod-2 CrashLoopBackOff")
-	assert.Contains(t, result, "Root cause: pod-2 is OOMKilled")
+	assertGolden(t, "context_timeline_events", result)
 }
 
 func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *testing.T) {
@@ -661,29 +670,7 @@ func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *test
 	require.NoError(t, err)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	// Parallel agents should appear in context
-	assert.Contains(t, result, "LogAnalyzer")
-	assert.Contains(t, result, "MetricsChecker")
-	assert.Contains(t, result, "Log analysis: detected OOM events")
-	assert.Contains(t, result, "Memory usage at 98%, CPU normal")
-
-	// Parallel format markers
-	assert.Contains(t, result, "PARALLEL_RESULTS_START")
-	assert.Contains(t, result, "2/2 agents succeeded")
-
-	// Synthesis result should be attached to the investigation stage
-	assert.Contains(t, result, "Synthesis Result")
-	assert.Contains(t, result, "Combined: OOM + high memory confirm memory leak")
-
-	// Synthesis stage itself should NOT appear as a separate stage section
-	stageCount := 0
-	for _, line := range splitLines(result) {
-		if len(line) > 3 && line[:3] == "## " {
-			stageCount++
-		}
-	}
-	assert.Equal(t, 1, stageCount, "only the investigation stage should appear as a top-level section")
+	assertGolden(t, "context_parallel_with_synthesis", result)
 }
 
 func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
@@ -731,9 +718,7 @@ func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
 	require.NoError(t, err)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	assert.Contains(t, result, "Executive Summary")
-	assert.Contains(t, result, "memory leak in pod-2 caused cascading failures")
+	assertGolden(t, "context_executive_summary", result)
 }
 
 func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
@@ -841,20 +826,7 @@ func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
 	require.NoError(t, err)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	// All executions (orchestrator + sub-agents) should appear in context.
-	// WithAgentExecutions() loads all executions for the stage without filtering
-	// on parent_execution_id — this is the expected behavior.
-	assert.Contains(t, result, "Orchestrator")
-	assert.Contains(t, result, "LogWorker")
-	assert.Contains(t, result, "ResourceWorker")
-	assert.Contains(t, result, "Orchestrator conclusion: delegated to sub-agents")
-	assert.Contains(t, result, "Sub-agent found: OOM in pod-2 logs")
-	assert.Contains(t, result, "Resource limits: memory limit 512Mi too low")
-
-	// 3 agents → parallel format
-	assert.Contains(t, result, "PARALLEL_RESULTS_START")
-	assert.Contains(t, result, "3/3 agents succeeded")
+	assertGolden(t, "context_orchestrated_stage", result)
 }
 
 func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
@@ -1025,48 +997,7 @@ func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
 	require.NoError(t, err)
 
 	result := executor.buildScoringContext(ctx, session.ID)
-
-	// Investigation stage: parallel agents
-	assert.Contains(t, result, "Investigator")
-	assert.Contains(t, result, "MetricsChecker")
-	assert.Contains(t, result, "Found OOM events")
-	assert.Contains(t, result, "Memory at 98%")
-
-	// Synthesis result attached to investigation
-	assert.Contains(t, result, "Synthesis Result")
-	assert.Contains(t, result, "Confirmed memory leak")
-
-	// Action stage included
-	assert.Contains(t, result, "remediation")
-	assert.Contains(t, result, "Restarted pod-2 successfully")
-
-	// Exec summary stage included
-	assert.Contains(t, result, "exec-summary")
-	assert.Contains(t, result, "Investigation complete")
-
-	// Executive summary section
-	assert.Contains(t, result, "Executive Summary")
-	assert.Contains(t, result, "Executive: memory leak caused cascading pod failures")
-
-	// Chat and scoring stages excluded
-	assert.NotContains(t, result, "Chat response here")
-	assert.NotContains(t, result, "Old score: 70")
-	assert.NotContains(t, result, "ChatAgent")
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := range len(s) {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
+	assertGolden(t, "context_full_pipeline", result)
 }
 
 // blockingMockLLMClient blocks Generate until blockCh is closed.

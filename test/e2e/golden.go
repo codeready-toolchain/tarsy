@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
@@ -187,4 +189,18 @@ func AssertGoldenMCPInteraction(t *testing.T, goldenPath string, detail map[stri
 	}
 
 	AssertGolden(t, goldenPath, data)
+}
+
+// serializeLLMMessages renders a slice of ConversationMessage into a
+// deterministic text format suitable for golden-file comparison.
+func serializeLLMMessages(msgs []agent.ConversationMessage) string {
+	var sb strings.Builder
+	for i, msg := range msgs {
+		sb.WriteString(fmt.Sprintf("=== message[%d] role=%s ===\n", i, msg.Role))
+		sb.WriteString(msg.Content)
+		if !strings.HasSuffix(msg.Content, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
 }

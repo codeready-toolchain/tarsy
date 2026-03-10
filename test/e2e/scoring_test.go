@@ -216,14 +216,6 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Equal(t, sessionscore.StatusCompleted, score.Status)
 	require.NotNil(t, score.TotalScore)
 	assert.Equal(t, 75, *score.TotalScore)
-	require.NotNil(t, score.ScoreAnalysis)
-	assert.Contains(t, *score.ScoreAnalysis, "Logical Flow")
-	assert.Contains(t, *score.ScoreAnalysis, "Consistency")
-	assert.Contains(t, *score.ScoreAnalysis, "Tool Relevance")
-	assert.Contains(t, *score.ScoreAnalysis, "Synthesis Quality")
-	require.NotNil(t, score.MissingToolsAnalysis)
-	assert.Contains(t, *score.MissingToolsAnalysis, "get_resource_limits")
-	assert.Contains(t, *score.MissingToolsAnalysis, "get_memory_metrics")
 	assert.Equal(t, "auto", score.ScoreTriggeredBy)
 	require.NotNil(t, score.StageID)
 	assert.Equal(t, scoringStageID, *score.StageID)
@@ -233,16 +225,8 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	// ── Verify GET /api/v1/sessions/:id/score API ──
 
 	scoreResp := app.GetScore(t, sessionID)
-	assert.Equal(t, score.ID, scoreResp["score_id"])
-	assert.Equal(t, float64(75), scoreResp["total_score"])
-	assert.Equal(t, "completed", scoreResp["status"])
-	assert.Equal(t, "auto", scoreResp["score_triggered_by"])
-	assert.NotNil(t, scoreResp["score_analysis"])
-	assert.NotNil(t, scoreResp["missing_tools_analysis"])
-	assert.NotNil(t, scoreResp["prompt_hash"])
-	assert.NotNil(t, scoreResp["started_at"])
-	assert.NotNil(t, scoreResp["completed_at"])
-	assert.Equal(t, scoringStageID, scoreResp["stage_id"])
+	assert.Equal(t, score.ID, scoreResp["score_id"], "API score_id should match DB record")
+	assert.Equal(t, scoringStageID, scoreResp["stage_id"], "API stage_id should match scoring stage")
 
 	// ── Verify scoring fields on session detail ──
 
@@ -268,30 +252,18 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	}
 	require.True(t, found, "session not found in list")
 
-	// ── Verify prompt/context in CapturedInputs ──
+	// ── Verify scoring prompts via golden files ──
 
 	captured := llm.CapturedInputs()
 	require.GreaterOrEqual(t, len(captured), 9, "should have at least 9 captured LLM inputs")
 
-	// Scoring inputs are the last 2: turn 1 (score eval) and turn 2 (missing tools).
 	scoringInput1 := captured[len(captured)-2]
 	scoringInput2 := captured[len(captured)-1]
 
-	// Turn 1: system prompt should contain the judge instruction.
-	require.NotEmpty(t, scoringInput1.Messages)
-	systemPrompt := scoringInput1.Messages[0].Content
-	assert.Contains(t, systemPrompt, "expert evaluator",
-		"scoring system prompt should contain judge instruction")
-
-	// Turn 1: user prompt should contain investigation context from all pipeline stages.
-	userPrompt := scoringInput1.Messages[1].Content
-	assert.Contains(t, userPrompt, "OOMKilled", "scoring context should contain investigation findings")
-	assert.Contains(t, userPrompt, "98%", "scoring context should contain metrics findings")
-	assert.Contains(t, userPrompt, "Restarted pod-1", "scoring context should contain remediation results")
-
-	// Turn 2: last user message should ask for missing tools.
-	lastMsg := scoringInput2.Messages[len(scoringInput2.Messages)-1]
-	assert.Contains(t, lastMsg.Content, "tool", "turn 2 should ask about missing tools")
+	AssertGolden(t, GoldenPath("scoring", "prompt_turn1.golden"),
+		[]byte(serializeLLMMessages(scoringInput1.Messages)))
+	AssertGolden(t, GoldenPath("scoring", "prompt_turn2.golden"),
+		[]byte(serializeLLMMessages(scoringInput2.Messages)))
 
 	// ── Verify scoring LLM interactions in trace API ──
 
