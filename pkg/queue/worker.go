@@ -442,9 +442,9 @@ func (w *Worker) publishReviewStatus(_ context.Context, sessionID string, termin
 		return
 	}
 
-	reviewStatus := "needs_review"
+	reviewStatus := alertsession.ReviewStatusNeedsReview
 	if terminalStatus == alertsession.StatusCancelled {
-		reviewStatus = "resolved"
+		reviewStatus = alertsession.ReviewStatusResolved
 	}
 	slog.Info("Review status initialized",
 		"session_id", sessionID, "review_status", reviewStatus)
