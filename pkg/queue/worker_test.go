@@ -151,6 +151,32 @@ func (m *mockEventPublisher) PublishExecutionStatus(_ context.Context, _ string,
 	return nil
 }
 
+func TestWorker_PublishReviewStatusNilPublisher(t *testing.T) {
+	cfg := testQueueConfig()
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil, nil)
+
+	assert.NotPanics(t, func() {
+		w.publishReviewStatus(t.Context(), "session-123", alertsession.StatusCompleted)
+	})
+	assert.NotPanics(t, func() {
+		w.publishReviewStatus(t.Context(), "session-456", alertsession.StatusCancelled)
+	})
+}
+
+func TestWorker_PublishReviewStatusWithPublisher(t *testing.T) {
+	cfg := testQueueConfig()
+	pub := &mockEventPublisher{}
+	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, pub, nil)
+
+	// Should not panic — it's currently a logging-only stub.
+	assert.NotPanics(t, func() {
+		w.publishReviewStatus(t.Context(), "session-abc", alertsession.StatusCompleted)
+	})
+	assert.NotPanics(t, func() {
+		w.publishReviewStatus(t.Context(), "session-def", alertsession.StatusCancelled)
+	})
+}
+
 func TestWorkerStopIdempotent(t *testing.T) {
 	cfg := testQueueConfig()
 	w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, nil, nil)

@@ -617,3 +617,94 @@ func TestNilExecutionResultGuard(t *testing.T) {
 		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
 	})
 }
+
+func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	client := dbClient.Client
+	ctx := context.Background()
+	cfg := intTestQueueConfig()
+
+	t.Run("completed sets review_status to needs_review", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status:        alertsession.StatusCompleted,
+			FinalAnalysis: "done",
+		})
+		require.NoError(t, err)
+		assert.True(t, reviewInit, "review_status should be initialized")
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Equal(t, alertsession.StatusCompleted, updated.Status)
+		require.NotNil(t, updated.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusNeedsReview, *updated.ReviewStatus)
+		assert.Nil(t, updated.ResolvedAt)
+	})
+
+	t.Run("cancelled sets review_status to resolved/dismissed", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCancelling).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusCancelled,
+			Error:  fmt.Errorf("user cancelled"),
+		})
+		require.NoError(t, err)
+		assert.True(t, reviewInit)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
+		require.NotNil(t, updated.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusResolved, *updated.ReviewStatus)
+		assert.NotNil(t, updated.ResolvedAt)
+		assert.NotNil(t, updated.ResolutionReason)
+		assert.Equal(t, alertsession.ResolutionReasonDismissed, *updated.ResolutionReason)
+	})
+
+	t.Run("idempotent: skips if review_status already set", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			SetReviewStatus(alertsession.ReviewStatusInProgress).
+			SetAssignee("alice@test.com").
+			SetAssignedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusCompleted,
+		})
+		require.NoError(t, err)
+		assert.False(t, reviewInit, "review_status was already set, should not re-init")
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		require.NotNil(t, updated.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusInProgress, *updated.ReviewStatus, "existing review_status should be preserved")
+	})
+
+	t.Run("no-op when session not in active state", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(time.Now()).
+			SetCompletedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusFailed,
+		})
+		require.NoError(t, err)
+		assert.False(t, reviewInit, "status CAS should fail for already-terminal session")
+	})
+}
