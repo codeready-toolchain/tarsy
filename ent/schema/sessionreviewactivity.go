@@ -23,24 +23,30 @@ func (SessionReviewActivity) Fields() []ent.Field {
 		field.String("session_id").
 			Immutable(),
 		field.String("actor").
+			Immutable().
 			Comment("User who performed the action (X-Forwarded-User)"),
 		field.Enum("action").
+			Immutable().
 			Values("claim", "unclaim", "resolve", "reopen").
 			Comment("What happened"),
 		field.Enum("from_status").
+			Immutable().
 			Values("needs_review", "in_progress", "resolved").
 			Optional().
 			Nillable().
 			Comment("Review status before transition"),
 		field.Enum("to_status").
+			Immutable().
 			Values("needs_review", "in_progress", "resolved").
 			Comment("Review status after transition"),
 		field.Enum("resolution_reason").
+			Immutable().
 			Values("actioned", "dismissed").
 			Optional().
 			Nillable().
 			Comment("Set when action is resolve"),
 		field.Text("note").
+			Immutable().
 			Optional().
 			Nillable().
 			Comment("Free-text context"),

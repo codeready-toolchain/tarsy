@@ -28,108 +28,6 @@ func (_u *SessionReviewActivityUpdate) Where(ps ...predicate.SessionReviewActivi
 	return _u
 }
 
-// SetActor sets the "actor" field.
-func (_u *SessionReviewActivityUpdate) SetActor(v string) *SessionReviewActivityUpdate {
-	_u.mutation.SetActor(v)
-	return _u
-}
-
-// SetNillableActor sets the "actor" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableActor(v *string) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetActor(*v)
-	}
-	return _u
-}
-
-// SetAction sets the "action" field.
-func (_u *SessionReviewActivityUpdate) SetAction(v sessionreviewactivity.Action) *SessionReviewActivityUpdate {
-	_u.mutation.SetAction(v)
-	return _u
-}
-
-// SetNillableAction sets the "action" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableAction(v *sessionreviewactivity.Action) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetAction(*v)
-	}
-	return _u
-}
-
-// SetFromStatus sets the "from_status" field.
-func (_u *SessionReviewActivityUpdate) SetFromStatus(v sessionreviewactivity.FromStatus) *SessionReviewActivityUpdate {
-	_u.mutation.SetFromStatus(v)
-	return _u
-}
-
-// SetNillableFromStatus sets the "from_status" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableFromStatus(v *sessionreviewactivity.FromStatus) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetFromStatus(*v)
-	}
-	return _u
-}
-
-// ClearFromStatus clears the value of the "from_status" field.
-func (_u *SessionReviewActivityUpdate) ClearFromStatus() *SessionReviewActivityUpdate {
-	_u.mutation.ClearFromStatus()
-	return _u
-}
-
-// SetToStatus sets the "to_status" field.
-func (_u *SessionReviewActivityUpdate) SetToStatus(v sessionreviewactivity.ToStatus) *SessionReviewActivityUpdate {
-	_u.mutation.SetToStatus(v)
-	return _u
-}
-
-// SetNillableToStatus sets the "to_status" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableToStatus(v *sessionreviewactivity.ToStatus) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetToStatus(*v)
-	}
-	return _u
-}
-
-// SetResolutionReason sets the "resolution_reason" field.
-func (_u *SessionReviewActivityUpdate) SetResolutionReason(v sessionreviewactivity.ResolutionReason) *SessionReviewActivityUpdate {
-	_u.mutation.SetResolutionReason(v)
-	return _u
-}
-
-// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableResolutionReason(v *sessionreviewactivity.ResolutionReason) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetResolutionReason(*v)
-	}
-	return _u
-}
-
-// ClearResolutionReason clears the value of the "resolution_reason" field.
-func (_u *SessionReviewActivityUpdate) ClearResolutionReason() *SessionReviewActivityUpdate {
-	_u.mutation.ClearResolutionReason()
-	return _u
-}
-
-// SetNote sets the "note" field.
-func (_u *SessionReviewActivityUpdate) SetNote(v string) *SessionReviewActivityUpdate {
-	_u.mutation.SetNote(v)
-	return _u
-}
-
-// SetNillableNote sets the "note" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdate) SetNillableNote(v *string) *SessionReviewActivityUpdate {
-	if v != nil {
-		_u.SetNote(*v)
-	}
-	return _u
-}
-
-// ClearNote clears the value of the "note" field.
-func (_u *SessionReviewActivityUpdate) ClearNote() *SessionReviewActivityUpdate {
-	_u.mutation.ClearNote()
-	return _u
-}
-
 // Mutation returns the SessionReviewActivityMutation object of the builder.
 func (_u *SessionReviewActivityUpdate) Mutation() *SessionReviewActivityMutation {
 	return _u.mutation
@@ -164,26 +62,6 @@ func (_u *SessionReviewActivityUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SessionReviewActivityUpdate) check() error {
-	if v, ok := _u.mutation.Action(); ok {
-		if err := sessionreviewactivity.ActionValidator(v); err != nil {
-			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.action": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.FromStatus(); ok {
-		if err := sessionreviewactivity.FromStatusValidator(v); err != nil {
-			return &ValidationError{Name: "from_status", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.from_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ToStatus(); ok {
-		if err := sessionreviewactivity.ToStatusValidator(v); err != nil {
-			return &ValidationError{Name: "to_status", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.to_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ResolutionReason(); ok {
-		if err := sessionreviewactivity.ResolutionReasonValidator(v); err != nil {
-			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.resolution_reason": %w`, err)}
-		}
-	}
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "SessionReviewActivity.session"`)
 	}
@@ -208,29 +86,11 @@ func (_u *SessionReviewActivityUpdate) sqlSave(ctx context.Context) (_node int, 
 			}
 		}
 	}
-	if value, ok := _u.mutation.Actor(); ok {
-		_spec.SetField(sessionreviewactivity.FieldActor, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Action(); ok {
-		_spec.SetField(sessionreviewactivity.FieldAction, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.FromStatus(); ok {
-		_spec.SetField(sessionreviewactivity.FieldFromStatus, field.TypeEnum, value)
-	}
 	if _u.mutation.FromStatusCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldFromStatus, field.TypeEnum)
 	}
-	if value, ok := _u.mutation.ToStatus(); ok {
-		_spec.SetField(sessionreviewactivity.FieldToStatus, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.ResolutionReason(); ok {
-		_spec.SetField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum, value)
-	}
 	if _u.mutation.ResolutionReasonCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum)
-	}
-	if value, ok := _u.mutation.Note(); ok {
-		_spec.SetField(sessionreviewactivity.FieldNote, field.TypeString, value)
 	}
 	if _u.mutation.NoteCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldNote, field.TypeString)
@@ -255,108 +115,6 @@ type SessionReviewActivityUpdateOne struct {
 	hooks     []Hook
 	mutation  *SessionReviewActivityMutation
 	modifiers []func(*sql.UpdateBuilder)
-}
-
-// SetActor sets the "actor" field.
-func (_u *SessionReviewActivityUpdateOne) SetActor(v string) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetActor(v)
-	return _u
-}
-
-// SetNillableActor sets the "actor" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableActor(v *string) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetActor(*v)
-	}
-	return _u
-}
-
-// SetAction sets the "action" field.
-func (_u *SessionReviewActivityUpdateOne) SetAction(v sessionreviewactivity.Action) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetAction(v)
-	return _u
-}
-
-// SetNillableAction sets the "action" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableAction(v *sessionreviewactivity.Action) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetAction(*v)
-	}
-	return _u
-}
-
-// SetFromStatus sets the "from_status" field.
-func (_u *SessionReviewActivityUpdateOne) SetFromStatus(v sessionreviewactivity.FromStatus) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetFromStatus(v)
-	return _u
-}
-
-// SetNillableFromStatus sets the "from_status" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableFromStatus(v *sessionreviewactivity.FromStatus) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetFromStatus(*v)
-	}
-	return _u
-}
-
-// ClearFromStatus clears the value of the "from_status" field.
-func (_u *SessionReviewActivityUpdateOne) ClearFromStatus() *SessionReviewActivityUpdateOne {
-	_u.mutation.ClearFromStatus()
-	return _u
-}
-
-// SetToStatus sets the "to_status" field.
-func (_u *SessionReviewActivityUpdateOne) SetToStatus(v sessionreviewactivity.ToStatus) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetToStatus(v)
-	return _u
-}
-
-// SetNillableToStatus sets the "to_status" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableToStatus(v *sessionreviewactivity.ToStatus) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetToStatus(*v)
-	}
-	return _u
-}
-
-// SetResolutionReason sets the "resolution_reason" field.
-func (_u *SessionReviewActivityUpdateOne) SetResolutionReason(v sessionreviewactivity.ResolutionReason) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetResolutionReason(v)
-	return _u
-}
-
-// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableResolutionReason(v *sessionreviewactivity.ResolutionReason) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetResolutionReason(*v)
-	}
-	return _u
-}
-
-// ClearResolutionReason clears the value of the "resolution_reason" field.
-func (_u *SessionReviewActivityUpdateOne) ClearResolutionReason() *SessionReviewActivityUpdateOne {
-	_u.mutation.ClearResolutionReason()
-	return _u
-}
-
-// SetNote sets the "note" field.
-func (_u *SessionReviewActivityUpdateOne) SetNote(v string) *SessionReviewActivityUpdateOne {
-	_u.mutation.SetNote(v)
-	return _u
-}
-
-// SetNillableNote sets the "note" field if the given value is not nil.
-func (_u *SessionReviewActivityUpdateOne) SetNillableNote(v *string) *SessionReviewActivityUpdateOne {
-	if v != nil {
-		_u.SetNote(*v)
-	}
-	return _u
-}
-
-// ClearNote clears the value of the "note" field.
-func (_u *SessionReviewActivityUpdateOne) ClearNote() *SessionReviewActivityUpdateOne {
-	_u.mutation.ClearNote()
-	return _u
 }
 
 // Mutation returns the SessionReviewActivityMutation object of the builder.
@@ -406,26 +164,6 @@ func (_u *SessionReviewActivityUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SessionReviewActivityUpdateOne) check() error {
-	if v, ok := _u.mutation.Action(); ok {
-		if err := sessionreviewactivity.ActionValidator(v); err != nil {
-			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.action": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.FromStatus(); ok {
-		if err := sessionreviewactivity.FromStatusValidator(v); err != nil {
-			return &ValidationError{Name: "from_status", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.from_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ToStatus(); ok {
-		if err := sessionreviewactivity.ToStatusValidator(v); err != nil {
-			return &ValidationError{Name: "to_status", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.to_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ResolutionReason(); ok {
-		if err := sessionreviewactivity.ResolutionReasonValidator(v); err != nil {
-			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.resolution_reason": %w`, err)}
-		}
-	}
 	if _u.mutation.SessionCleared() && len(_u.mutation.SessionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "SessionReviewActivity.session"`)
 	}
@@ -467,29 +205,11 @@ func (_u *SessionReviewActivityUpdateOne) sqlSave(ctx context.Context) (_node *S
 			}
 		}
 	}
-	if value, ok := _u.mutation.Actor(); ok {
-		_spec.SetField(sessionreviewactivity.FieldActor, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Action(); ok {
-		_spec.SetField(sessionreviewactivity.FieldAction, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.FromStatus(); ok {
-		_spec.SetField(sessionreviewactivity.FieldFromStatus, field.TypeEnum, value)
-	}
 	if _u.mutation.FromStatusCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldFromStatus, field.TypeEnum)
 	}
-	if value, ok := _u.mutation.ToStatus(); ok {
-		_spec.SetField(sessionreviewactivity.FieldToStatus, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.ResolutionReason(); ok {
-		_spec.SetField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum, value)
-	}
 	if _u.mutation.ResolutionReasonCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum)
-	}
-	if value, ok := _u.mutation.Note(); ok {
-		_spec.SetField(sessionreviewactivity.FieldNote, field.TypeString, value)
 	}
 	if _u.mutation.NoteCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldNote, field.TypeString)

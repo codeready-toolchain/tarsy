@@ -251,10 +251,10 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 		w.publishReviewStatus(finalizeCtx, session.ID, result.Status)
 	}
 
-	// 11b. Send Slack terminal notification
+	// 11c. Send Slack terminal notification
 	w.notifySlackTerminal(finalizeCtx, session, result, slackThreadTS)
 
-	// 11c. Fire scoring (async, fire-and-forget) for completed sessions
+	// 11d. Fire scoring (async, fire-and-forget) for completed sessions
 	if result.Status == alertsession.StatusCompleted && w.scoringExecutor != nil {
 		w.scoringExecutor.ScoreSessionAsync(session.ID, "auto", true)
 	}
@@ -433,7 +433,10 @@ func (w *Worker) publishSessionStatus(ctx context.Context, sessionID string, sta
 
 // publishReviewStatus publishes a review.status event to both the session-specific
 // and global channels. Non-blocking: errors are logged.
-// Full event publishing is implemented in Phase 2; this placeholder logs the transition.
+//
+// TODO(phase2): Emit a real review.status event via w.eventPublisher using the
+// sessionID and computed reviewStatus as payload (mirror publishSessionStatus).
+// Publishing should be non-blocking; log errors instead of returning them.
 func (w *Worker) publishReviewStatus(_ context.Context, sessionID string, terminalStatus alertsession.Status) {
 	if w.eventPublisher == nil {
 		return
