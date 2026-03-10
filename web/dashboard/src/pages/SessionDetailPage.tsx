@@ -927,11 +927,20 @@ export function SessionDetailPage() {
             }
           }
 
-          // Scoring stage completion: re-fetch session to update latest_score/scoring_status
+          // Scoring stage completion: re-fetch session and scroll to final analysis
           if (payload.stage_type === STAGE_TYPE.SCORING && TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
             getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
               console.warn('Failed to re-fetch session after scoring stage completion:', err);
             });
+            setExpandCounter((prev) => prev + 1);
+            setTimeout(() => {
+              if (finalAnalysisRef.current) {
+                const yOffset = -20;
+                const y =
+                  finalAnalysisRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+                window.scrollTo({ top: y, behavior: 'smooth' });
+              }
+            }, 500);
           }
 
           // When a new stage starts, clear per-agent progress and execution

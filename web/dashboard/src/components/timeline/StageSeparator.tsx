@@ -40,7 +40,6 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
   const errorMessage = (item.metadata?.error_message as string) || '';
 
-  const statusColor = isErrorStatus ? 'error.main' : isCancelledStatus ? 'text.disabled' : 'primary.main';
   const hoverColor = isErrorStatus ? 'error.main' : 'primary.main';
 
   const handleKeyDown = useCallback(
@@ -75,9 +74,11 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
             display: 'inline-flex',
             alignItems: 'center',
             gap: 0.5,
-            color: statusColor,
-            fontSize: '0.85rem',
+            color: isErrorStatus ? 'error.main' : 'text.disabled',
+            fontSize: '0.75rem',
             fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: 1,
             whiteSpace: 'nowrap',
             transition: 'color 0.2s',
           }}
