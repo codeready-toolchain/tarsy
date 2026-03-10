@@ -275,6 +275,7 @@ type ChainStatistics struct {
 // ReviewAction represents a workflow transition action.
 type ReviewAction string
 
+// Review workflow actions.
 const (
 	ReviewActionClaim   ReviewAction = "claim"
 	ReviewActionUnclaim ReviewAction = "unclaim"
