@@ -392,6 +392,10 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, 2, toInt(chainStats["total_stages"]))
 		assert.Equal(t, 2, toInt(chainStats["completed_stages"]))
 		assert.Equal(t, 0, toInt(chainStats["failed_stages"]))
+
+		// No score seeded — score fields should be absent (omitempty).
+		assert.Nil(t, summary["total_score"])
+		assert.Nil(t, summary["scoring_status"])
 	})
 
 	// ── Session Summary 404 ──

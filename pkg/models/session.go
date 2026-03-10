@@ -242,6 +242,10 @@ type SessionSummaryResponse struct {
 	TotalTokens       int64           `json:"total_tokens"`
 	TotalDurationMs   *int64          `json:"total_duration_ms"`
 	ChainStatistics   ChainStatistics `json:"chain_statistics"`
+
+	// Score fields — present only when a completed score exists for the session.
+	TotalScore    *int    `json:"total_score,omitempty"`
+	ScoringStatus *string `json:"scoring_status,omitempty"`
 }
 
 // SessionStatusResponse is returned by GET /api/v1/sessions/:id/status.

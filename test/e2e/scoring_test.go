@@ -237,6 +237,12 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Equal(t, "completed", sessionDetail["scoring_status"])
 	assert.NotNil(t, sessionDetail["score_id"])
 
+	// ── Verify scoring fields on session summary ──
+
+	summaryResp := app.GetSessionSummary(t, sessionID)
+	assert.Equal(t, float64(75), summaryResp["total_score"])
+	assert.Equal(t, "completed", summaryResp["scoring_status"])
+
 	// ── Verify scoring fields on session list ──
 
 	listResp := app.GetSessionList(t, "")
@@ -509,6 +515,11 @@ func TestE2E_Scoring_ReScoreAPI(t *testing.T) {
 	sessionDetail := app.GetSession(t, sessionID)
 	assert.Equal(t, float64(82), sessionDetail["latest_score"])
 	assert.Equal(t, "completed", sessionDetail["scoring_status"])
+
+	// ── Verify session summary reflects the re-score (latest) ──
+	summaryResp := app.GetSessionSummary(t, sessionID)
+	assert.Equal(t, float64(82), summaryResp["total_score"])
+	assert.Equal(t, "completed", summaryResp["scoring_status"])
 
 	assert.Equal(t, 11, llm.CallCount())
 }

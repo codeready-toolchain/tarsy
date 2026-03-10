@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -1400,6 +1401,32 @@ func TestSessionService_GetSessionSummary(t *testing.T) {
 		assert.Equal(t, 1, summary.ChainStatistics.TotalStages)
 		assert.Equal(t, 1, summary.ChainStatistics.CompletedStages)
 		assert.Equal(t, 0, summary.ChainStatistics.FailedStages)
+
+		// No score seeded — score fields should be nil.
+		assert.Nil(t, summary.TotalScore)
+		assert.Nil(t, summary.ScoringStatus)
+	})
+
+	t.Run("includes score when present", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"scored summary", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		client.SessionScore.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sessionID).
+			SetTotalScore(82).
+			SetScoreTriggeredBy("test").
+			SetStatus(sessionscore.StatusCompleted).
+			SaveX(ctx)
+
+		summary, err := service.GetSessionSummary(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.NotNil(t, summary.TotalScore)
+		assert.Equal(t, 82, *summary.TotalScore)
+		require.NotNil(t, summary.ScoringStatus)
+		assert.Equal(t, "completed", *summary.ScoringStatus)
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

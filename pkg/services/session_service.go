@@ -646,6 +646,9 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 	session, err := s.client.AlertSession.Query().
 		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages().
+		WithSessionScores(func(q *ent.SessionScoreQuery) {
+			q.Order(sessionscore.ByStartedAt(sql.OrderDesc())).Limit(1)
+		}).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -681,7 +684,7 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 		durationMs = &ms
 	}
 
-	return &models.SessionSummaryResponse{
+	resp := &models.SessionSummaryResponse{
 		SessionID:         sessionID,
 		TotalInteractions: llmCount + mcpCount,
 		LLMInteractions:   llmCount,
@@ -696,7 +699,16 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 			FailedStages:      failedStages,
 			CurrentStageIndex: session.CurrentStageIndex,
 		},
-	}, nil
+	}
+
+	if scores := session.Edges.SessionScores; len(scores) > 0 {
+		latest := scores[0]
+		status := string(latest.Status)
+		resp.ScoringStatus = &status
+		resp.TotalScore = latest.TotalScore
+	}
+
+	return resp, nil
 }
 
 // GetSessionStatus returns the minimal polling-friendly status for a session.

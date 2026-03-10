@@ -158,6 +158,8 @@ export interface SessionSummaryResponse {
   total_tokens: number;
   total_duration_ms: number | null;
   chain_statistics: ChainStatistics;
+  total_score?: number | null;
+  scoring_status?: string | null;
 }
 
 /** Stage counts for session summary. */
