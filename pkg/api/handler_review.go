@@ -65,13 +65,13 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 
 	var reviewStatus *string
 	if session.ReviewStatus != nil {
-		s := string(*session.ReviewStatus)
-		reviewStatus = &s
+		statusStr := string(*session.ReviewStatus)
+		reviewStatus = &statusStr
 	}
 	var resolutionReason *string
 	if session.ResolutionReason != nil {
-		s := string(*session.ResolutionReason)
-		resolutionReason = &s
+		reasonStr := string(*session.ResolutionReason)
+		resolutionReason = &reasonStr
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -107,12 +107,12 @@ func (s *Server) getReviewActivityHandler(c *echo.Context) error {
 			CreatedAt: a.CreatedAt.Format(time.RFC3339),
 		}
 		if a.FromStatus != nil {
-			s := string(*a.FromStatus)
-			item.FromStatus = &s
+			statusStr := string(*a.FromStatus)
+			item.FromStatus = &statusStr
 		}
 		if a.ResolutionReason != nil {
-			s := string(*a.ResolutionReason)
-			item.ResolutionReason = &s
+			reasonStr := string(*a.ResolutionReason)
+			item.ResolutionReason = &reasonStr
 		}
 		if a.Note != nil {
 			item.Note = a.Note
