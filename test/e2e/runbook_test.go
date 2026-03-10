@@ -161,8 +161,8 @@ func TestE2E_RunbookListEndpoint(t *testing.T) {
 
 // ────────────────────────────────────────────────────────────
 // TestE2E_RunbookFallback — submits an alert without a runbook
-// URL and verifies the session still completes using the
-// default runbook content (existing behavior preserved).
+// URL and verifies the session still completes (no runbook is
+// injected when none is configured).
 // ────────────────────────────────────────────────────────────
 func TestE2E_RunbookFallback(t *testing.T) {
 	if testing.Short() {

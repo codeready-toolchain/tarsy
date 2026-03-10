@@ -477,8 +477,7 @@ func TestBuiltinDefaults(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
 	t.Run("DefaultRunbook", func(t *testing.T) {
-		assert.NotEmpty(t, cfg.DefaultRunbook, "Default runbook should not be empty")
-		assert.Contains(t, cfg.DefaultRunbook, "Investigation Steps", "Default runbook should contain investigation steps")
+		assert.Empty(t, cfg.DefaultRunbook, "Default runbook should be empty (no built-in default)")
 	})
 
 	t.Run("DefaultAlertType", func(t *testing.T) {
@@ -496,7 +495,7 @@ func TestBuiltinConfigCompleteness(t *testing.T) {
 		assert.NotEmpty(t, cfg.ChainDefinitions, "Chain definitions should be populated")
 		assert.NotEmpty(t, cfg.MaskingPatterns, "Masking patterns should be populated")
 		assert.NotEmpty(t, cfg.PatternGroups, "Pattern groups should be populated")
-		assert.NotEmpty(t, cfg.DefaultRunbook, "Default runbook should be populated")
+		assert.Empty(t, cfg.DefaultRunbook, "Default runbook should be empty (no built-in default)")
 		assert.NotEmpty(t, cfg.DefaultAlertType, "Default alert type should be populated")
 	})
 }

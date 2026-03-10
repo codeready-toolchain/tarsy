@@ -144,9 +144,8 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	if defaults.AlertType == "" {
 		defaults.AlertType = builtin.DefaultAlertType
 	}
-	if defaults.Runbook == "" {
-		defaults.Runbook = builtin.DefaultRunbook
-	}
+	// defaults.Runbook: no built-in default — empty means "no runbook".
+	// Organization-specific runbooks come from defaults.runbook in YAML or per-alert URLs.
 	if defaults.AlertMasking == nil {
 		defaults.AlertMasking = &AlertMaskingDefaults{
 			Enabled:      true,

@@ -410,41 +410,7 @@ func initBuiltinCodeMaskers() []string {
 	}
 }
 
-const defaultRunbookContent = `# Generic Troubleshooting Guide
-
-## Investigation Steps
-
-1. **Analyze the alert** - Review alert data and identify affected system/service
-2. **Gather context** - Use tools to check current state and recent changes
-3. **Identify root cause** - Investigate potential causes based on alert type
-4. **Assess impact** - Determine scope and severity
-5. **Recommend actions** - Suggest safe investigation or remediation steps
-
-## Guidelines
-
-- Verify information before suggesting changes
-- Consider dependencies and potential side effects
-- Document findings and actions taken
-- Focus on understanding the problem before proposing solutions
-- When in doubt, gather more information rather than making assumptions
-
-## Common Investigation Patterns
-
-### For Performance Issues
-- Check resource utilization (CPU, memory, disk, network)
-- Review recent deployments or configuration changes
-- Analyze metrics and logs for anomalies
-- Identify bottlenecks in the request path
-
-### For Availability Issues
-- Verify service health and readiness
-- Check for recent restarts or crashes
-- Review dependencies and upstream services
-- Examine load balancer and routing configuration
-
-### For Error Rate Spikes
-- Analyze error messages and stack traces
-- Correlate with recent deployments
-- Check for external service failures
-- Review input validation and edge cases
-`
+// No default runbook — the system prompt layers (generalInstructions + analysisTask)
+// already provide investigation methodology. The runbook slot is reserved for
+// organization-specific content configured via defaults.runbook or per-alert URLs.
+const defaultRunbookContent = ""

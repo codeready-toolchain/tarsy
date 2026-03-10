@@ -117,20 +117,21 @@ defaults:
     enabled: true
     pattern_group: "security"  # Options: basic, secrets, security, kubernetes, cloud, all
 
-  # Default runbook content for new sessions
-  # Override with your organization's troubleshooting guide
-  runbook: |
-    # Company Troubleshooting Guide
-    
-    ## Investigation Steps
-    1. Check monitoring dashboards
-    2. Review recent deployments
-    3. Analyze logs and metrics
-    4. Contact on-call engineer if needed
-    
-    ## Internal Resources
-    - Runbook wiki: https://wiki.company.com/runbooks
-    - Escalation: #oncall-team
+  # Optional default runbook content for new sessions.
+  # No built-in default — the system prompt already provides investigation methodology.
+  # Set this to your organization's troubleshooting guide, or use per-alert runbook URLs.
+  # runbook: |
+  #   # Company Troubleshooting Guide
+  #   
+  #   ## Investigation Steps
+  #   1. Check monitoring dashboards
+  #   2. Review recent deployments
+  #   3. Analyze logs and metrics
+  #   4. Contact on-call engineer if needed
+  #   
+  #   ## Internal Resources
+  #   - Runbook wiki: https://wiki.company.com/runbooks
+  #   - Escalation: #oncall-team
 
 # =============================================================================
 # MCP SERVER CONFIGURATIONS
