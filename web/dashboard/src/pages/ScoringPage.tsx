@@ -5,7 +5,7 @@
  * re-score button, and back link to session detail.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -92,8 +92,6 @@ export function ScoringPage() {
   const [rescoreError, setRescoreError] = useState<string | null>(null);
   const [showRescoreDialog, setShowRescoreDialog] = useState(false);
 
-  const scoringStageIdRef = useRef<string | null>(null);
-
   const loadData = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -132,15 +130,6 @@ export function ScoringPage() {
     loadData();
     loadScore();
   }, [loadData, loadScore]);
-
-  // Track the latest scoring stage for real-time updates
-  useEffect(() => {
-    if (!session) return;
-    const scoringStages = (session.stages || [])
-      .filter((s) => s.stage_type === STAGE_TYPE.SCORING)
-      .sort((a, b) => b.stage_index - a.stage_index);
-    scoringStageIdRef.current = scoringStages[0]?.id ?? null;
-  }, [session]);
 
   // WebSocket: re-fetch score when scoring stage completes
   useEffect(() => {
