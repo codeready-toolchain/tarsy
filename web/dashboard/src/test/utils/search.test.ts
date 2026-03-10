@@ -105,6 +105,7 @@ describe('hasActiveFilters', () => {
     start_date: null,
     end_date: null,
     date_preset: null,
+    scoring_status: '',
   };
 
   it('returns false for default filters', () => {

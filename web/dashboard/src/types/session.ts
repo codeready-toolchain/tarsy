@@ -30,6 +30,8 @@ export interface DashboardSessionItem {
   current_stage_index: number | null;
   current_stage_id: string | null;
   matched_in_content: boolean;
+  latest_score?: number | null;
+  scoring_status?: string | null;
 }
 
 /** Active (in-progress / cancelling) session. */
@@ -95,6 +97,11 @@ export interface SessionDetailResponse {
   mcp_interaction_count: number;
   current_stage_index: number | null;
   current_stage_id: string | null;
+
+  // Scoring fields
+  latest_score?: number | null;
+  scoring_status?: string | null;
+  score_id?: string | null;
 
   // Stage list
   stages: StageOverview[];

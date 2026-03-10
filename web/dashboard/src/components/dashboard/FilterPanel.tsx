@@ -17,7 +17,12 @@ import {
   TextField,
   InputAdornment,
   Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import { Search, Clear, FilterList } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { StatusFilter } from './StatusFilter.tsx';
@@ -79,6 +84,7 @@ export function FilterPanel({
     filters.alert_type ? 1 : 0,
     filters.chain_id ? 1 : 0,
     filters.start_date || filters.end_date || filters.date_preset ? 1 : 0,
+    filters.scoring_status ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   // ── Handlers ──
@@ -176,6 +182,27 @@ export function FilterPanel({
             />
           </Box>
 
+          {/* Scoring Status */}
+          <Box sx={{ flex: '1 1 160px', minWidth: 140 }}>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="scoring-status-label">Scoring</InputLabel>
+              <Select
+                labelId="scoring-status-label"
+                value={filters.scoring_status}
+                label="Scoring"
+                onChange={(e: SelectChangeEvent) =>
+                  onFiltersChange({ ...filters, scoring_status: e.target.value })
+                }
+              >
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="scored">Scored</MenuItem>
+                <MenuItem value="not_scored">Not Scored</MenuItem>
+                <MenuItem value="scoring_in_progress">In Progress</MenuItem>
+                <MenuItem value="scoring_failed">Failed</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+
           {/* Time Range Button — single button opens modal (matches old dashboard) */}
           <Button
             variant="outlined"
@@ -246,6 +273,15 @@ export function FilterPanel({
                   onDelete={() => onFiltersChange({ ...filters, chain_id: '' })}
                   size="small"
                   color="info"
+                  variant="outlined"
+                />
+              )}
+              {filters.scoring_status && (
+                <Chip
+                  label={`Scoring: ${filters.scoring_status.replace(/_/g, ' ')}`}
+                  onDelete={() => onFiltersChange({ ...filters, scoring_status: '' })}
+                  size="small"
+                  color="secondary"
                   variant="outlined"
                 />
               )}

@@ -22,6 +22,7 @@ export function getDefaultFilters(): SessionFilter {
     start_date: null,
     end_date: null,
     date_preset: null,
+    scoring_status: '',
   };
 }
 

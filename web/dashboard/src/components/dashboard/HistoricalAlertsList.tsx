@@ -32,7 +32,7 @@ import type { SessionFilter, PaginationState, SortState } from '../../types/dash
  * Column order: Status | Indicators | Type | Chain | Author | Time | Duration | Tokens | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
-const TOTAL_COLUMNS = 9;
+const TOTAL_COLUMNS = 10;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -212,6 +212,17 @@ export function HistoricalAlertsList({
                       onClick={() => onSortChange('duration')}
                     >
                       Duration
+                    </TableSortLabel>
+                  </TableCell>
+
+                  {/* Score — sortable */}
+                  <TableCell sx={{ fontWeight: 600 }}>
+                    <TableSortLabel
+                      active={sortState.field === 'score'}
+                      direction={sortState.field === 'score' ? sortState.direction : 'desc'}
+                      onClick={() => onSortChange('score')}
+                    >
+                      Score
                     </TableSortLabel>
                   </TableCell>
 

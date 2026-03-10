@@ -102,6 +102,9 @@ function buildQueryParams(
   if (filters.end_date) {
     params.end_date = filters.end_date;
   }
+  if (filters.scoring_status) {
+    params.scoring_status = filters.scoring_status;
+  }
 
   return params;
 }

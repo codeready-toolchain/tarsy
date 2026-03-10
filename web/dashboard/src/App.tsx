@@ -11,6 +11,7 @@ import { SessionDetailPage } from './pages/SessionDetailPage.tsx';
 import { TracePage } from './pages/TracePage.tsx';
 import { SubmitAlertPage } from './pages/SubmitAlertPage.tsx';
 import { SystemStatusPage } from './pages/SystemStatusPage.tsx';
+import { ScoringPage } from './pages/ScoringPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 
 const router = createBrowserRouter([
@@ -25,6 +26,10 @@ const router = createBrowserRouter([
   {
     path: '/sessions/:id/trace',
     element: <TracePage />,
+  },
+  {
+    path: '/sessions/:id/scoring',
+    element: <ScoringPage />,
   },
   {
     path: '/submit-alert',

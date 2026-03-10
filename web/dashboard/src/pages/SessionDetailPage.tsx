@@ -927,6 +927,13 @@ export function SessionDetailPage() {
             }
           }
 
+          // Scoring stage completion: re-fetch session to update latest_score/scoring_status
+          if (payload.stage_type === STAGE_TYPE.SCORING && TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
+            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+              console.warn('Failed to re-fetch session after scoring stage completion:', err);
+            });
+          }
+
           // When a new stage starts, clear per-agent progress and execution
           // status maps from the previous (potentially parallel) stage.  This
           // mirrors the pattern of clearing agentProgressStatuses when

@@ -59,6 +59,7 @@ describe('getDefaultFilters', () => {
       start_date: null,
       end_date: null,
       date_preset: null,
+      scoring_status: '',
     });
   });
 });
@@ -124,6 +125,7 @@ describe('filter persistence', () => {
       start_date: '2025-01-15T00:00:00Z',
       end_date: null,
       date_preset: '1d',
+      scoring_status: '',
     };
     saveFiltersToStorage(filters);
     const loaded = loadFiltersFromStorage();

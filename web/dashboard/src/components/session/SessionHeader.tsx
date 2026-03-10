@@ -18,12 +18,14 @@ import {
   CancelOutlined,
   Replay as ReplayIcon,
   CallSplit,
+  GradingOutlined,
 } from '@mui/icons-material';
 import { StatusBadge } from '../common/StatusBadge';
+import { ScoreBadge } from '../common/ScoreBadge';
 import ProgressIndicator from '../common/ProgressIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import { formatTimestamp } from '../../utils/format';
-import { cancelSession, handleAPIError } from '../../services/api';
+import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
   isTerminalStatus,
@@ -32,7 +34,7 @@ import {
   ACTIVE_STATUSES,
 } from '../../constants/sessionStatus';
 import type { SessionDetailResponse } from '../../types/session';
-import { ROUTES } from '../../constants/routes';
+import { ROUTES, sessionScoringPath } from '../../constants/routes';
 
 // --- Breathing glow for active sessions ---
 const breathingGlowSx = {
@@ -131,6 +133,27 @@ export default function SessionHeader({
       },
     });
   }, [navigate, session]);
+
+  // Scoring
+  const [scoringTriggered, setScoringTriggered] = useState(false);
+  const [scoringError, setScoringError] = useState<string | null>(null);
+
+  const handleTriggerScoring = useCallback(async () => {
+    setScoringTriggered(true);
+    setScoringError(null);
+    try {
+      await triggerScoring(session.id);
+    } catch (error) {
+      setScoringError(handleAPIError(error));
+      setScoringTriggered(false);
+    }
+  }, [session.id]);
+
+  const handleScoreClick = useCallback(() => {
+    if (session.score_id || session.latest_score != null) {
+      navigate(sessionScoringPath(session.id));
+    }
+  }, [navigate, session.id, session.score_id, session.latest_score]);
 
   // MCP summary
   const mcpServers = session.mcp_selection
@@ -614,6 +637,38 @@ export default function SessionHeader({
               stages
             </Typography>
           </Box>
+
+          {/* Score badge or trigger button */}
+          {session.latest_score != null || (session.scoring_status && session.scoring_status !== 'not_scored') ? (
+            <ScoreBadge
+              score={session.latest_score}
+              scoringStatus={session.scoring_status}
+              onClick={handleScoreClick}
+            />
+          ) : isTerminal && !scoringTriggered ? (
+            <Tooltip title={scoringError || 'Run quality scoring on this session'}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<GradingOutlined sx={{ fontSize: '1rem' }} />}
+                onClick={handleTriggerScoring}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  fontSize: '0.8rem',
+                  py: 0.25,
+                  px: 1,
+                  borderRadius: '16px',
+                  color: scoringError ? 'error.main' : 'text.secondary',
+                  borderColor: scoringError ? 'error.main' : 'divider',
+                }}
+              >
+                Score
+              </Button>
+            </Tooltip>
+          ) : scoringTriggered ? (
+            <ScoreBadge scoringStatus="scoring_in_progress" />
+          ) : null}
 
           {session.total_tokens > 0 && (
             <Box

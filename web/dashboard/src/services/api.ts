@@ -18,6 +18,8 @@ import type {
   AlertResponse,
   CancelResponse,
   SendChatMessageResponse,
+  SessionScoreResponse,
+  ScoreSessionResponse,
 } from '../types/api.ts';
 import type {
   SessionDetailResponse,
@@ -164,6 +166,18 @@ export async function sendChatMessage(
     `/api/v1/sessions/${sessionId}/chat/messages`,
     { content },
   );
+  return response.data;
+}
+
+// --- Scoring ---
+
+export async function getScore(sessionId: string): Promise<SessionScoreResponse> {
+  const response = await client.get<SessionScoreResponse>(`/api/v1/sessions/${sessionId}/score`);
+  return response.data;
+}
+
+export async function triggerScoring(sessionId: string): Promise<ScoreSessionResponse> {
+  const response = await client.post<ScoreSessionResponse>(`/api/v1/sessions/${sessionId}/score`);
   return response.data;
 }
 

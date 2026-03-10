@@ -40,6 +40,7 @@ export function hasActiveFilters(filters: SessionFilter): boolean {
       filters.chain_id ||
       filters.start_date ||
       filters.end_date ||
-      filters.date_preset,
+      filters.date_preset ||
+      filters.scoring_status,
   );
 }

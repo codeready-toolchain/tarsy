@@ -36,6 +36,7 @@ import { StatusBadge } from '../common/StatusBadge.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
+import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import type { DashboardSessionItem } from '../../types/session.ts';
@@ -244,6 +245,11 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         <Typography variant="body2" color="text.secondary">
           {formatDurationMs(session.duration_ms)}
         </Typography>
+      </TableCell>
+
+      {/* Score */}
+      <TableCell>
+        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} />
       </TableCell>
 
       {/* Tokens */}

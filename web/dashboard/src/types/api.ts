@@ -31,6 +31,7 @@ export interface DashboardListParams {
   search?: string;
   start_date?: string;
   end_date?: string;
+  scoring_status?: string;
 }
 
 /**
@@ -61,6 +62,26 @@ export interface AlertResponse {
 export interface CancelResponse {
   session_id: string;
   message: string;
+}
+
+/** Full score details from GET /sessions/:id/score. */
+export interface SessionScoreResponse {
+  score_id: string;
+  total_score: number | null;
+  score_analysis: string | null;
+  missing_tools_analysis: string | null;
+  prompt_hash: string | null;
+  score_triggered_by: string;
+  status: string;
+  stage_id: string | null;
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
+/** Response from POST /sessions/:id/score (202 Accepted). */
+export interface ScoreSessionResponse {
+  score_id: string;
 }
 
 /** Chat message request. */
