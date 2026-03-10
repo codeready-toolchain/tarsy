@@ -1,11 +1,11 @@
-# Session Scoring & Evaluation
+# ADR-0008: Session Scoring & Evaluation
 
-**Status:** Backend complete, frontend pending
-**Decisions:** [session-scoring-questions.md](session-scoring-questions.md)
+**Status:** Implemented
+**Date:** 2026-03-09
 
 ## Overview
 
-TARSy runs automated incident investigations via agent chains. Today, completed sessions produce a final analysis and an executive summary, but there is no structured quality evaluation of the investigation itself.
+TARSy runs automated incident investigations via agent chains. Completed sessions produce a final analysis and an executive summary, but there is no structured quality evaluation of the investigation itself.
 
 Session scoring evaluates completed investigations to answer: **how good was this investigation?** The scoring produces:
 
@@ -14,20 +14,6 @@ Session scoring evaluates completed investigations to answer: **how good was thi
 3. **A missing tools report** identifying MCP tools that should be built to improve future investigations.
 
 These evaluation reports feed a continuous improvement loop: identify weak agent behavior, discover missing MCP tooling, tune prompts, and track quality trends over time.
-
-### WIP State
-
-Significant groundwork already exists:
-
-- **ScoringController** (`pkg/agent/controller/scoring.go`) — 2-turn LLM flow (score + missing tools). Persists LLM interactions and creates streaming timeline events via `callLLMWithStreaming`.
-- **ScoringAgent** (`pkg/agent/scoring_agent.go`) — delegates to controller. Does not manage AgentExecution status (expects external lifecycle management).
-- **Scoring prompts** (`pkg/agent/prompt/judges.go`) — detailed rubric and instructions with prompt hash versioning.
-- **SessionScore schema** (`ent/schema/sessionscore.go`) — DB table with score fields, status lifecycle, prompt hash. Already supports multiple scores per session (O2M edge, partial unique index only on in-progress rows).
-- **ResolveScoringConfig** (`pkg/agent/config_resolver.go`) — config resolution hierarchy.
-- **ScoringConfig** (`pkg/config/types.go`) — YAML config structure.
-- **Config validation** — scoring config validated per chain.
-
-What's missing: dashboard frontend integration.
 
 ## Design Principles
 
@@ -38,11 +24,23 @@ What's missing: dashboard frontend integration.
 5. **Extensible**: The stage type system accommodates future post-investigation activities without major refactoring.
 6. **Auditable**: Scoring results are traceable — prompt hash, LLM provider, timing, who triggered it.
 
+## Key Decisions
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| Q1 | Where does scoring live in the architecture? | Expand stages with explicit `stage_type` enum | Unifies the execution model, solves existing implicit-type-detection problems, and enables composable context/UI filtering. The refactoring cost is paid once and benefits all current and future stage types. See [ADR-0004](0004-stage-types.md). |
+| Q2 | Inline or async? | Async after session completion | Scoring is post-work that must not delay the investigation. Zero impact on session completion latency, independent timeout, fail-open by construction. |
+| Q3 | Where does orchestration logic live? | Separate `ScoringExecutor` in `pkg/queue/` | Same executor pattern, scoped to the scoring workflow. Keeps `RealSessionExecutor.Execute()` focused on the investigation chain. Clean dependency for both callers (worker auto-trigger, API re-score). |
+| Q4 | How is scoring triggered? | Automatic + API | Worker auto-triggers after successful completion (if chain scoring enabled). `POST /api/v1/sessions/:id/score` for on-demand re-scoring. Both paths use the same `ScoringExecutor.ScoreSession()`. |
+| Q5 | Dashboard presentation | Badge → detail → dedicated page | Three progressive levels: color-coded score badge on session list, score indicator on session detail page, dedicated scoring page with full reports and scoring stage timeline. |
+| Q6 | What context does the scoring LLM receive? | Full investigation timeline | All LLM turns, tool calls with arguments and results, intermediate reasoning, final analysis. Filtered by stage type (`investigation` + `synthesis` + `exec_summary`). Truncation of oldest tool results as fallback for very long sessions. |
+| Q7 | Re-scoring support | Multiple scores per session (keep all, use latest) | Each re-score creates a new scoring stage and `session_scores` row. Old records preserved as history. Enables A/B testing of scoring prompts via `prompt_hash`. Partial unique index prevents concurrent in-progress scorings while allowing multiple completed scores. |
+
 ## Architecture
 
 ### Stage Type System
 
-Add a `stage_type` enum column to the `stages` table. All LLM-driven activities become typed stages:
+The `stage_type` enum column on the `stages` table classifies all LLM-driven activities:
 
 | Stage Type | When Created | Fail Behavior | Created By |
 |---|---|---|---|
@@ -62,13 +60,7 @@ Stage types enable composable context filtering:
 | Main timeline view | `investigation`, `synthesis` |
 | Full session view | all |
 
-This replaces the current implicit type detection (checking `chat_id` presence, name suffix " - Synthesis") with an explicit, queryable field.
-
-**Schema migration:**
-
-1. Add `stage_type` enum to `stages` table.
-2. Backfill existing stages: stages with `chat_id` → `chat`, stages with name ending " - Synthesis" → `synthesis`, all others → `investigation`.
-3. Add `StageType` field to `CreateStageRequest` (`pkg/models/stage.go`).
+This replaces the previous implicit type detection (checking `chat_id` presence, name suffix " - Synthesis") with an explicit, queryable field. The stage type system is fully specified in [ADR-0004: Stage Types](0004-stage-types.md).
 
 ### Session Flow
 
@@ -85,19 +77,6 @@ Later (on-demand):
 ```
 
 The investigation chain and exec summary run inline within `RealSessionExecutor.Execute()`. The session is marked completed. Scoring fires asynchronously afterward — it never delays session completion.
-
-### Executive Summary Refactoring
-
-The current executive summary implementation is a special case: a direct LLM call (not through the agent/controller framework) that creates its own timeline event (sequence 999999) and LLM interaction (type `executive_summary`). It stores results directly on the session (`executive_summary`, `executive_summary_error` fields).
-
-To make it a typed stage:
-
-1. **Create a Stage record** (type: `exec_summary`) and an AgentExecution record, using the standard stage infrastructure.
-2. **Run through the agent framework** — either via the existing SingleShotController or a dedicated controller. The exec summary is a single LLM call with no tools, which fits SingleShotController.
-3. **Remove special-casing** — the sequence 999999 timeline event convention and `executive_summary` LLM interaction type are no longer needed; the stage infrastructure handles timeline ordering via `stage_index`.
-4. **Keep the session-level `executive_summary` field** as a denormalized copy for quick access (session list, Slack notifications). The worker populates it from the exec summary stage's result, same as today. Similarly, `executive_summary_error` stays.
-5. **Update `countExpectedStages()`** — currently counts exec summary as +1 for progress reporting. This logic remains correct since exec summary is now a real stage. Scoring is NOT counted (it's async and shouldn't appear in investigation progress).
-6. **Update `ExecutionResult`** — `ExecutiveSummary` and `ExecutiveSummaryError` fields stay for the worker to persist the denormalized values.
 
 ### Scoring Execution Flow
 
@@ -147,7 +126,7 @@ Two callers:
 
 ### Worker Integration
 
-The worker fires scoring after marking the session complete (step 10 in the current `processSession` flow):
+The worker fires scoring after marking the session complete (step 10 in `processSession`):
 
 ```
 10. Update terminal status
@@ -161,8 +140,7 @@ Key details:
 
 - **Context**: The scoring goroutine gets a fresh `context.Background()` with its own timeout (not the session context, which may be cancelled/timed-out). Scoring timeout is independent.
 - **Dependency injection**: The worker receives `ScoringExecutor` at construction time (same pattern as `sessionExecutor`).
-- **Graceful shutdown**: The worker pool must track active scoring goroutines and drain them on shutdown. A `sync.WaitGroup` or similar mechanism prevents the process from exiting while scoring is in progress.
-- **Chain config**: The worker needs the chain ID from the session to check if scoring is enabled. The `ScoringExecutor.ScoreSession()` resolves the full chain config internally.
+- **Graceful shutdown**: The worker pool tracks active scoring goroutines and drains them on shutdown via `sync.WaitGroup`.
 - **Non-completed sessions**: Scoring is only auto-triggered for sessions with `status: completed`. Failed/cancelled/timed-out sessions are not auto-scored.
 
 ### API Endpoint for Re-scoring
@@ -189,21 +167,21 @@ The scoring stage's own status provides a natural sub-status without any new fie
 
 The frontend derives the scoring state by checking for a scoring-type stage and its status.
 
-### Data Model
+## Data Model
 
-#### Stages table (migration)
+### Stages table (migration)
 
-Add `stage_type` enum: `investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`.
+`stage_type` enum: `investigation`, `synthesis`, `chat`, `exec_summary`, `scoring`.
 
-#### session_scores table (existing + migration)
+### session_scores table
 
-The table already exists and supports multiple scores per session (O2M relationship, partial unique index only on in-progress rows).
+The table supports multiple scores per session (O2M relationship, partial unique index only on in-progress rows).
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `score_id` | string | PK |
 | `session_id` | string | FK to alert_sessions |
-| `stage_id` | string | **NEW** — FK to scoring stage (nullable for pre-migration rows) |
+| `stage_id` | string | FK to scoring stage (nullable for pre-migration rows) |
 | `prompt_hash` | string | SHA256 of judge prompts (versioning) |
 | `total_score` | int | 0–100 |
 | `score_analysis` | text | Detailed evaluation |
@@ -230,47 +208,58 @@ For very long sessions, truncation of the oldest tool results is a pragmatic fal
 
 Three levels of detail:
 
-1. **Session list**: Color-coded score badge (e.g. "72/100") on session list items.
-2. **Session detail page**: Score visible alongside the investigation. Quick indicator.
-3. **Dedicated scoring page**: Reached from the session detail. Shows full scoring reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default). Start minimal — just the reports. Analytics (trends, distributions) added later.
+1. **Session list**: Color-coded score badge (e.g. "72/100") on session list items. Color coding: green ≥80, yellow ≥60, red <60.
+2. **Session detail page**: Score visible alongside the investigation with link to dedicated scoring view.
+3. **Dedicated scoring page**: Reached from the session detail. Shows full scoring reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default).
 
-## Implementation Plan
+### Backend API
 
-### Phase 1: Stage Type System - ✅ DONE
+- `latest_score` (nullable int) and `scoring_status` (nullable string) added to `DashboardSessionItem` — computed via SQL subquery on `session_scores` (latest completed score per session)
+- `latest_score`, `scoring_status`, and `score_id` added to `SessionDetailResponse` — same subquery approach
+- `GET /api/v1/sessions/:id/score` — returns the full `SessionScore` record (total_score, score_analysis, missing_tools_analysis, prompt_hash, score_triggered_by, timestamps, status)
+- `sort_by=score` option for session list sorting by latest score
+- `scoring_status` filter option for session list (scored, not_scored, scoring_in_progress, scoring_failed)
 
-See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation spec.
+### Frontend
 
-- **PR 1:** Add `stage_type` enum field (5 values), wire for investigation/synthesis/chat, API/WS changes, chat context simplification. Additive, no behavior changes.
-- **PR 2:** Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.
+- Score badge on session list items (color-coded)
+- Score indicator on session detail page with link to dedicated scoring view
+- Dedicated scoring page with reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default)
+- Handles "scoring in progress" (spinner), "not scored" (dash), and "scoring failed" (error badge) states
+- Real-time updates via existing WebSocket `stage.status` events for the scoring stage
 
-### Phase 2: Scoring Pipeline - ✅ DONE
+The scoring stage is visible in the session detail's `stages` array (stage_type: "scoring"), so the frontend derives scoring sub-status from stage presence + status. When re-scoring preserves older stages, the frontend picks the **latest** scoring stage (highest `stage_index` where `stage_type === "scoring"`) to avoid displaying stale status.
 
-1. Create `ScoringExecutor` in `pkg/queue/scoring_executor.go`
-2. Add `stage_id` FK to `session_scores` schema
-3. Implement context gathering: build full timeline from DB, filtered by stage type
-4. Wire auto-trigger: worker fires scoring goroutine after session completion (with graceful shutdown tracking)
-5. Add re-score API endpoint: `POST /api/v1/sessions/:id/score` (202 Accepted, 409 if in-progress)
-6. Integrate with existing ScoringController and ResolveScoringConfig
-7. Write results to both stage/agent-execution and `session_scores`
-8. Publish scoring events for real-time dashboard updates
-9. Update ScoringAgent comment to reflect ScoringExecutor (currently references "ScoringService")
+## Implementation Components
 
-### Phase 3: Dashboard Integration — Backend ✅ DONE / Frontend pending
+### Existing (pre-design)
 
-**Backend API additions** — ✅ DONE:
+- **ScoringController** (`pkg/agent/controller/scoring.go`) — 2-turn LLM flow (score + missing tools). Persists LLM interactions and creates streaming timeline events via `callLLMWithStreaming`.
+- **ScoringAgent** (`pkg/agent/scoring_agent.go`) — delegates to controller.
+- **Scoring prompts** (`pkg/agent/prompt/judges.go`) — detailed rubric and instructions with prompt hash versioning.
+- **SessionScore schema** (`ent/schema/sessionscore.go`) — DB table with score fields, status lifecycle, prompt hash.
+- **ResolveScoringConfig** (`pkg/agent/config_resolver.go`) — config resolution hierarchy.
+- **ScoringConfig** (`pkg/config/types.go`) — YAML config structure.
 
-1. ✅ Add `latest_score` (nullable int) and `scoring_status` (nullable string) to `DashboardSessionItem` — computed via SQL subquery on `session_scores` (latest completed score per session)
-2. ✅ Add `latest_score`, `scoring_status`, and `score_id` to `SessionDetailResponse` — same subquery approach
-3. ✅ Add `GET /api/v1/sessions/:id/score` endpoint — returns the full `SessionScore` record (total_score, score_analysis, missing_tools_analysis, prompt_hash, score_triggered_by, timestamps, status)
-4. ✅ Add `sort_by=score` option to session list for sorting by latest score
-5. ✅ Add `scoring_status` filter option to session list (scored, not_scored, scoring_in_progress, scoring_failed)
+### Phase 1: Stage Type System
 
-**Frontend work:**
+Implemented as [ADR-0004: Stage Types](0004-stage-types.md):
+- `stage_type` enum field (5 values), wired for investigation/synthesis/chat
+- Executive summary refactored into a typed stage (`exec_summary`)
+- Context-building functions updated to filter by stage type
 
-1. Score badge on session list items (color-coded: green ≥80, yellow ≥60, red <60)
-2. Score indicator on session detail page with link to dedicated scoring view
-3. Dedicated scoring page with reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default)
-4. Handle "scoring in progress" (spinner), "not scored" (dash), and "scoring failed" (error badge) states
-5. Real-time updates via existing WebSocket `stage.status` events for the scoring stage
+### Phase 2: Scoring Pipeline
 
-**Note:** The scoring stage is already visible in the session detail's `stages` array (stage_type: "scoring"), so the frontend can derive scoring sub-status from stage presence + status even before the dedicated endpoints are built. When re-scoring preserves older stages, the frontend must pick the **latest** scoring stage (highest `stage_index` where `stage_type === "scoring"`) to avoid displaying stale status.
+- `ScoringExecutor` in `pkg/queue/scoring_executor.go`
+- `stage_id` FK added to `session_scores` schema
+- Context gathering: full timeline from DB, filtered by stage type
+- Auto-trigger: worker fires scoring goroutine after session completion (with graceful shutdown tracking)
+- Re-score API endpoint: `POST /api/v1/sessions/:id/score` (202 Accepted, 409 if in-progress)
+- Integration with ScoringController and ResolveScoringConfig
+- Results written to both stage/agent-execution and `session_scores`
+- Scoring events published for real-time dashboard updates
+
+### Phase 3: Dashboard Integration
+
+- Backend: `latest_score`/`scoring_status` on list and detail responses, `GET /score` endpoint, sort/filter support
+- Frontend: score badge, session detail indicator, dedicated scoring page, real-time updates

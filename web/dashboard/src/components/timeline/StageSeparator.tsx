@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
-import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome, BuildOutlined } from '@mui/icons-material';
+import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome, BuildOutlined, GradingOutlined } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 import { STAGE_TYPE } from '../../constants/eventTypes';
@@ -22,6 +22,7 @@ function getStageTypeIcon(stageType: string | undefined) {
     case STAGE_TYPE.CHAT: return <SmsOutlined />;
     case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome />;
     case STAGE_TYPE.ACTION: return <BuildOutlined />;
+    case STAGE_TYPE.SCORING: return <GradingOutlined />;
     default: return <Search />;
   }
 }
@@ -35,11 +36,10 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const stageType = item.metadata?.stage_type as string | undefined;
   const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
   const isCancelledStatus = CANCELLED_EXECUTION_STATUSES.has(stageStatus);
-  // The backend prefixes stage names with the parent chain name
-  // (e.g. "investigation - Synthesis"). Display only the stage-specific part.
   const rawName = item.content;
   const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
   const errorMessage = (item.metadata?.error_message as string) || '';
+  const isScoringStage = stageType === STAGE_TYPE.SCORING;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -101,12 +101,14 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
           )}
         </Box>
       </Divider>
-      <Typography
-        variant="caption" color="text.secondary"
-        sx={{ display: 'block', textAlign: 'center', fontStyle: 'italic', fontSize: '0.75rem', opacity: isCollapsed ? 0.7 : 1 }}
-      >
-        Agent: {(item.metadata?.agent_name as string) || stageName}
-      </Typography>
+      {!isScoringStage && (
+        <Typography
+          variant="caption" color="text.secondary"
+          sx={{ display: 'block', textAlign: 'center', fontStyle: 'italic', fontSize: '0.75rem', opacity: isCollapsed ? 0.7 : 1 }}
+        >
+          Agent: {(item.metadata?.agent_name as string) || stageName}
+        </Typography>
+      )}
 
       {isErrorStatus && !isCollapsed && (
         <ErrorCard

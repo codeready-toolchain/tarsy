@@ -438,7 +438,7 @@ type Controller interface {
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
-| `"scoring"` | *(WIP — not yet implemented)* | Single-shot | Session quality evaluation |
+| `"scoring"` | ScoringController | 2-turn LLM conversation (score + missing tools) | Session quality evaluation |
 
 **LLMBackend determines the Python SDK path** (orthogonal to controller):
 
@@ -461,7 +461,11 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
-Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results, executive summary generation, and future scoring. Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
+Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results and executive summary generation. Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
+
+#### ScoringController — 2-turn scoring (`pkg/agent/controller/scoring.go`)
+
+Dedicated controller for session quality evaluation. Runs a 2-turn LLM conversation: Turn 1 evaluates the investigation against a scoring rubric (Logical Flow, Consistency, Tool Relevance, Synthesis Quality) and produces a total score (0–100) with detailed analysis. Turn 2 identifies missing MCP tools that should be built to improve future investigations. Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Orchestrated by `ScoringExecutor` (`pkg/queue/scoring_executor.go`) which handles stage/execution lifecycle and result persistence. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 
 #### Orchestrator Agent (`pkg/agent/orchestrator/`)
 

@@ -1,11 +1,14 @@
 import { useState, useEffect, forwardRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton } from '@mui/material';
 import { Psychology, ContentCopy, ExpandMore, AutoAwesome } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
 import ErrorCard from '../timeline/ErrorCard';
+import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
+import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
@@ -24,6 +27,12 @@ interface FinalAnalysisCardProps {
   collapseCounter?: number;
   /** Increment to expand the card externally (e.g. Jump to Summary) */
   expandCounter?: number;
+  /** Session ID for linking to the scoring page */
+  sessionId?: string;
+  /** Latest eval score */
+  latestScore?: number | null;
+  /** Scoring status */
+  scoringStatus?: string | null;
 }
 
 /**
@@ -48,7 +57,8 @@ function generateFakeAnalysis(status: string, errorMessage?: string | null): str
  * Supports counter-based expand/collapse from parent.
  */
 const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
-  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0 }, ref) => {
+  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus }, ref) => {
+    const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
     const [prevAnalysis, setPrevAnalysis] = useState<string | null>(null);
@@ -115,6 +125,11 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 <Psychology sx={{ fontSize: 24, color: 'primary.main' }} />
               </Box>
               <Typography variant="h6">Final AI Analysis</Typography>
+              {sessionId && (latestScore != null || scoringStatus) && (
+                <Box onClick={(e) => { e.stopPropagation(); navigate(sessionScoringPath(sessionId)); }}>
+                  <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
+                </Box>
+              )}
               {isNewlyUpdated && (
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'white', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
                   ✨ Updated

@@ -119,10 +119,11 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 - **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"action"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
-**Two controller types** (text-based ReAct parsing was completely removed):
+**Three controller types** (text-based ReAct parsing was completely removed):
 
 - **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also used by orchestrator agents with push-based sub-agent result injection.
-- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and future scoring
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis and executive summary generation.
+- **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces a numeric score (0–100) with detailed analysis; turn 2 identifies missing MCP tools. Runs async after session completion via `ScoringExecutor`.
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
@@ -189,6 +190,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Parallel execution tabs** for viewing multiple agent results side by side
 - **Orchestrator sub-agent cards** inline in the conversation timeline, with collapsible sub-agent detail and real-time streaming
 - **Trace view** with hierarchical LLM/MCP interaction details for debugging, including nested sub-agent traces
+- **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, missing tools), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **System status page** showing MCP server health and system warnings
 - **WebSocket-driven updates** with automatic reconnection and event catchup
@@ -206,6 +208,19 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 TARSy can automatically send Slack notifications when alert processing starts (for Slack-originated alerts) and reaches a terminal status (completed, failed, timed out, cancelled). The system supports both standard channel notifications and threaded replies to alert messages via fingerprint correlation.
 
 **For complete Slack setup guide**: See [Slack Integration Documentation](slack-integration.md)
+
+### 12. Session Scoring & Evaluation
+
+After an investigation completes, TARSy can automatically evaluate the quality of the investigation through session scoring. The scoring produces a numeric quality score (0–100) across four categories (Logical Flow, Consistency, Tool Relevance, Synthesis Quality), a detailed score analysis, and a missing tools report identifying MCP tools that should be built to improve future investigations.
+
+- **Async, fail-open** — scoring fires in a background goroutine after session completion and never delays results. Scoring failures don't affect session status.
+- **ScoringExecutor** (`pkg/queue/scoring_executor.go`) — orchestrates the full scoring workflow: context gathering, stage/execution creation, controller invocation, result persistence, event publishing.
+- **ScoringController** — 2-turn LLM conversation: Turn 1 evaluates the investigation and produces a score; Turn 2 identifies missing MCP tools.
+- **Re-scoring** — `POST /api/v1/sessions/:id/score` triggers on-demand re-scoring. Old scores are preserved as history; the dashboard shows the latest completed score.
+- **Dashboard integration** — color-coded score badges on session list, score indicator on session detail, and a dedicated scoring page with full reports.
+- **Configurable per chain** — scoring can be enabled/disabled and configured with different LLM providers per chain.
+
+**For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md)
 
 ## How It Works
 

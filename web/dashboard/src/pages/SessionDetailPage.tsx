@@ -1597,6 +1597,9 @@ export function SessionDetailPage() {
                 errorMessage={session.error_message}
                 expandCounter={expandCounter}
                 collapseCounter={collapseCounter}
+                sessionId={session.id}
+                latestScore={session.latest_score}
+                scoringStatus={session.scoring_status}
               />
             </Suspense>
 

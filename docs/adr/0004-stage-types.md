@@ -16,7 +16,7 @@ Additionally, executive summary generation is refactored from a special-cased di
 - PR 1: Data model, API, WS event changes, creation-path wiring, chat context builder simplification (additive, no behavior changes).
 - PR 2: Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.
 
-**Out of scope:** UI changes, scoring pipeline (Phase 2 of the [session scoring design](../proposals/session-scoring-design.md)).
+**Out of scope:** UI changes, scoring pipeline (see [ADR-0008: Session Scoring](0008-session-scoring.md)).
 
 **Follow-up:** Synthesis stages reference their "parent" stages by name (e.g. "my stage - Synthesis" is related to "my stage" stage). This is fragile and would benefit from a `referenced_stage_id` FK. See [ADR-0005](0005-referenced-stage-id.md). This proposal keeps name-based pairing.
 
