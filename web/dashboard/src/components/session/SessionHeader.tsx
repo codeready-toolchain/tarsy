@@ -28,6 +28,7 @@ import { formatTimestamp } from '../../utils/format';
 import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
+  EXECUTION_STATUS,
   isTerminalStatus,
   canCancelSession,
   type SessionStatus,
@@ -667,7 +668,7 @@ export default function SessionHeader({
               </Button>
             </Tooltip>
           ) : scoringTriggered ? (
-            <ScoreBadge scoringStatus="scoring_in_progress" />
+            <ScoreBadge scoringStatus={EXECUTION_STATUS.ACTIVE} />
           ) : null}
 
           {session.total_tokens > 0 && (

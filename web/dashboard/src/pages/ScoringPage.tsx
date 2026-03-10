@@ -37,7 +37,7 @@ import { remarkPlugins, finalAnswerMarkdownComponents } from '../utils/markdownC
 import { formatTimestamp } from '../utils/format.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
 import { EVENT_STAGE_STATUS, STAGE_TYPE } from '../constants/eventTypes.ts';
-import { TERMINAL_EXECUTION_STATUSES, EXECUTION_STATUS } from '../constants/sessionStatus.ts';
+import { TERMINAL_EXECUTION_STATUSES } from '../constants/sessionStatus.ts';
 import type { SessionDetailResponse } from '../types/session.ts';
 import type { SessionScoreResponse } from '../types/api.ts';
 import type { StageStatusPayload } from '../types/events.ts';
@@ -281,7 +281,7 @@ export function ScoringPage() {
                       </Typography>
                       {score ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-                          <ScoreBadge score={score.total_score} scoringStatus={score.status === EXECUTION_STATUS.COMPLETED ? 'scored' : score.status} />
+                          <ScoreBadge score={score.total_score} scoringStatus={score.status} />
                           <Typography variant="body2" color="text.secondary">
                             Triggered by: {score.score_triggered_by}
                           </Typography>

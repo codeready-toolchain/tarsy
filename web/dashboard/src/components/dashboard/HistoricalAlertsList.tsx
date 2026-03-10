@@ -215,14 +215,14 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Score — sortable */}
+                  {/* Eval Score — sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>
                     <TableSortLabel
                       active={sortState.field === 'score'}
                       direction={sortState.field === 'score' ? sortState.direction : 'desc'}
                       onClick={() => onSortChange('score')}
                     >
-                      Score
+                      Eval Score
                     </TableSortLabel>
                   </TableCell>
 
