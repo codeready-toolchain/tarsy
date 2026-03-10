@@ -891,11 +891,11 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				}))
 			case "scoring_in_progress":
 				sel.Where(sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("%s = 'in_progress'", latestStatus))
+					b.WriteString(fmt.Sprintf("%s IN ('pending','in_progress')", latestStatus))
 				}))
 			case "scoring_failed":
 				sel.Where(sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("%s = 'failed'", latestStatus))
+					b.WriteString(fmt.Sprintf("%s IN ('failed','timed_out','cancelled')", latestStatus))
 				}))
 			}
 		})

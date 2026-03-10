@@ -55,6 +55,7 @@ type ScoringExecutor struct {
 	wg            sync.WaitGroup
 	stopped       bool
 	cleanupTimers []*time.Timer
+	activeCancels map[string]context.CancelFunc // scoreID → cancel
 }
 
 // NewScoringExecutor creates a new ScoringExecutor.
@@ -80,6 +81,7 @@ func NewScoringExecutor(
 		interactionService: services.NewInteractionService(dbClient, msgService),
 		messageService:     msgService,
 		runbookService:     runbookService,
+		activeCancels:      make(map[string]context.CancelFunc),
 	}
 }
 
@@ -99,17 +101,19 @@ func (e *ScoringExecutor) ScoreSessionAsync(sessionID, triggeredBy string, check
 		defer e.wg.Done()
 
 		ctx, cancel := context.WithTimeout(context.Background(), scoringTimeout)
-		defer cancel()
 
-		scoreID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
+		scoreID, stageID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
 		if err != nil {
+			cancel()
 			if !errors.Is(err, ErrScoringDisabled) {
 				slog.Warn("Async scoring preparation failed",
 					"session_id", sessionID, "error", err)
 			}
 			return
 		}
-		e.executeScoring(ctx, scoreID, sessionID)
+		e.trackCancel(scoreID, cancel)
+		defer e.removeCancel(scoreID)
+		e.executeScoring(ctx, scoreID, stageID, sessionID)
 	}()
 }
 
@@ -128,7 +132,7 @@ func (e *ScoringExecutor) SubmitScoring(ctx context.Context, sessionID, triggere
 	e.wg.Add(1)
 	e.mu.RUnlock()
 
-	scoreID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
+	scoreID, stageID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
 	if err != nil {
 		e.wg.Done()
 		return "", err
@@ -137,48 +141,49 @@ func (e *ScoringExecutor) SubmitScoring(ctx context.Context, sessionID, triggere
 	go func() {
 		defer e.wg.Done()
 		execCtx, cancel := context.WithTimeout(context.Background(), scoringTimeout)
-		defer cancel()
-		e.executeScoring(execCtx, scoreID, sessionID)
+		e.trackCancel(scoreID, cancel)
+		defer e.removeCancel(scoreID)
+		e.executeScoring(execCtx, scoreID, stageID, sessionID)
 	}()
 
 	return scoreID, nil
 }
 
 // prepareScoring validates preconditions and creates all DB records (stage,
-// session_score, agent_execution). Returns the score ID on success.
-func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, triggeredBy string, checkEnabled bool) (string, error) {
+// session_score, agent_execution). Returns the score ID and stage ID on success.
+func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, triggeredBy string, checkEnabled bool) (string, string, error) {
 	// 1. Load session
 	session, err := e.dbClient.AlertSession.Get(ctx, sessionID)
 	if err != nil {
-		return "", fmt.Errorf("failed to load session: %w", err)
+		return "", "", fmt.Errorf("failed to load session: %w", err)
 	}
 
 	// 2. Validate terminal state
 	if !IsTerminalStatus(session.Status) {
-		return "", fmt.Errorf("session %s is not in a terminal state (status: %s)", sessionID, session.Status)
+		return "", "", fmt.Errorf("session %s is not in a terminal state (status: %s)", sessionID, session.Status)
 	}
 
 	// 3. Resolve chain config
 	chain, err := e.cfg.GetChain(session.ChainID)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve chain config: %w", err)
+		return "", "", fmt.Errorf("failed to resolve chain config: %w", err)
 	}
 
 	// 4. Check scoring enabled (for auto-trigger; API bypasses)
 	if checkEnabled && (chain.Scoring == nil || !chain.Scoring.Enabled) {
-		return "", ErrScoringDisabled
+		return "", "", ErrScoringDisabled
 	}
 
 	// 5. Resolve scoring config
 	resolvedConfig, err := agent.ResolveScoringConfig(e.cfg, chain, chain.Scoring)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve scoring config: %w", err)
+		return "", "", fmt.Errorf("failed to resolve scoring config: %w", err)
 	}
 
 	// 6. Get next stage index
 	maxIndex, err := e.stageService.GetMaxStageIndex(ctx, sessionID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get max stage index: %w", err)
+		return "", "", fmt.Errorf("failed to get max stage index: %w", err)
 	}
 	stageIndex := maxIndex + 1
 
@@ -189,7 +194,7 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 
 	tx, err := e.dbClient.Tx(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to start transaction: %w", err)
+		return "", "", fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -203,7 +208,10 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 		SetStatus(stage.StatusPending).
 		Save(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to create scoring stage: %w", err)
+		if ent.IsConstraintError(err) {
+			return "", "", ErrScoringInProgress
+		}
+		return "", "", fmt.Errorf("failed to create scoring stage: %w", err)
 	}
 
 	_, err = tx.SessionScore.Create().
@@ -216,13 +224,13 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 		Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return "", ErrScoringInProgress
+			return "", "", ErrScoringInProgress
 		}
-		return "", fmt.Errorf("failed to create session score: %w", err)
+		return "", "", fmt.Errorf("failed to create session score: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("failed to commit scoring records: %w", err)
+		return "", "", fmt.Errorf("failed to commit scoring records: %w", err)
 	}
 
 	// 8. Create AgentExecution record (outside tx — stage already committed)
@@ -238,40 +246,34 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 	if err != nil {
 		e.failScore(scoreID, "failed to create agent execution: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stageIndex, events.StageStatusFailed, err.Error())
-		return "", fmt.Errorf("failed to create agent execution: %w", err)
+		return "", "", fmt.Errorf("failed to create agent execution: %w", err)
 	}
 
-	return scoreID, nil
+	return scoreID, stageID, nil
 }
 
 // executeScoring runs the LLM evaluation phase for a previously prepared scoring.
-func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID string) {
-	logger := slog.With("session_id", sessionID, "score_id", scoreID)
+func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, sessionID string) {
+	logger := slog.With("session_id", sessionID, "score_id", scoreID, "stage_id", stageID)
 	logger.Info("Scoring executor: starting evaluation")
 
-	// Load the scoring stage and execution from DB.
-	// Use background context for cleanup calls so they succeed even if ctx is cancelled.
 	score, err := e.dbClient.SessionScore.Get(ctx, scoreID)
 	if err != nil {
 		logger.Error("Failed to load session score for execution", "error", err)
 		e.failScore(scoreID, "failed to load session score: "+err.Error())
+		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load session score: "+err.Error())
 		return
-	}
-
-	stageID := ""
-	if score.StageID != nil {
-		stageID = *score.StageID
 	}
 
 	stg, err := e.stageService.GetStageByID(ctx, stageID, true)
 	if err != nil {
 		logger.Error("Failed to load scoring stage", "error", err)
 		e.failScore(scoreID, "failed to load scoring stage: "+err.Error())
-		if stageID != "" {
-			_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load scoring stage: "+err.Error())
-		}
+		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load scoring stage: "+err.Error())
 		return
 	}
+
+	_ = score // loaded for validation; stageID already known from prepareScoring
 
 	execs := stg.Edges.AgentExecutions
 	if len(execs) == 0 {
@@ -401,11 +403,36 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	e.scheduleEventCleanup(stageID, time.Now())
 }
 
-// Stop marks the executor as stopped, cancels pending cleanup timers,
-// and waits for active scoring goroutines to drain.
+// trackCancel registers a cancel func for an in-flight scoring run.
+// If the executor is already stopped, the cancel func is invoked immediately.
+func (e *ScoringExecutor) trackCancel(scoreID string, cancel context.CancelFunc) {
+	e.mu.Lock()
+	if e.activeCancels != nil {
+		e.activeCancels[scoreID] = cancel
+	} else {
+		cancel()
+	}
+	e.mu.Unlock()
+}
+
+// removeCancel deregisters the cancel func for a finished scoring run.
+func (e *ScoringExecutor) removeCancel(scoreID string) {
+	e.mu.Lock()
+	if e.activeCancels != nil {
+		delete(e.activeCancels, scoreID)
+	}
+	e.mu.Unlock()
+}
+
+// Stop marks the executor as stopped, cancels in-flight scoring contexts
+// and pending cleanup timers, then waits for active goroutines to drain.
 func (e *ScoringExecutor) Stop() {
 	e.mu.Lock()
 	e.stopped = true
+	for _, cancel := range e.activeCancels {
+		cancel()
+	}
+	e.activeCancels = nil
 	for _, t := range e.cleanupTimers {
 		t.Stop()
 	}

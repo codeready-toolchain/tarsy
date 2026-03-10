@@ -283,18 +283,18 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		t:               t,
 	}
 
-	// Register cleanup in reverse-creation order.
+	// Register cleanup: stop workers first so in-flight sessions complete and
+	// auto-trigger scoring before the scoring executor drains.
 	t.Cleanup(func() {
 		chatExecutor.Stop()
+		workerPool.Stop()
 		if scoringExecutor != nil {
 			scoringExecutor.Stop()
 		}
-		workerPool.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 		notifyListener.Stop(context.Background())
-		// DB cleanup handled by testdb.NewTestClient/SetupTestDatabase
 	})
 
 	return app

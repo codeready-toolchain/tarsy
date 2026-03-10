@@ -113,7 +113,7 @@ func TestScoringExecutor_PrepareScoring_CreatesRecords(t *testing.T) {
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
-	scoreID, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
+	scoreID, _, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, scoreID)
 
@@ -153,11 +153,11 @@ func TestScoringExecutor_PrepareScoring_RejectsDuplicateInProgress(t *testing.T)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// First scoring succeeds
-	_, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
+	_, _, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
 	require.NoError(t, err)
 
 	// Second scoring fails with ErrScoringInProgress
-	_, err = executor.prepareScoring(ctx, session.ID, "test-user", false)
+	_, _, err = executor.prepareScoring(ctx, session.ID, "test-user", false)
 	assert.ErrorIs(t, err, ErrScoringInProgress)
 }
 
@@ -172,7 +172,7 @@ func TestScoringExecutor_PrepareScoring_RejectsNonTerminalSession(t *testing.T) 
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusInProgress)
 
-	_, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
+	_, _, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not in a terminal state")
 }
@@ -188,7 +188,7 @@ func TestScoringExecutor_PrepareScoring_RejectsDisabledScoring(t *testing.T) {
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
-	_, err := executor.prepareScoring(ctx, session.ID, "auto", true) // checkEnabled=true
+	_, _, err := executor.prepareScoring(ctx, session.ID, "auto", true) // checkEnabled=true
 	assert.ErrorIs(t, err, ErrScoringDisabled)
 }
 
@@ -204,7 +204,7 @@ func TestScoringExecutor_PrepareScoring_BypassesDisabledCheck(t *testing.T) {
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// With checkEnabled=false (API re-score), disabled flag is bypassed
-	scoreID, err := executor.prepareScoring(ctx, session.ID, "user@test.com", false)
+	scoreID, _, err := executor.prepareScoring(ctx, session.ID, "user@test.com", false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, scoreID)
 }
@@ -238,10 +238,15 @@ func TestScoringExecutor_SubmitScoring_ReturnsScoreID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sessionscore.StatusInProgress, score.Status)
 
-	// Wait for async execution to complete
+	// Poll until the background goroutine reaches a terminal state so we
+	// don't cancel it by calling Stop() (which now cancels active contexts).
+	require.Eventually(t, func() bool {
+		s, getErr := entClient.SessionScore.Get(t.Context(), scoreID)
+		return getErr == nil && s.Status != sessionscore.StatusInProgress && s.Status != sessionscore.StatusPending
+	}, 5*time.Second, 50*time.Millisecond, "score should reach terminal state")
+
 	executor.Stop()
 
-	// Verify stage events were published
 	assert.True(t, pub.hasStageStatus("Scoring", "started"), "expected scoring stage started event")
 }
 
@@ -279,7 +284,7 @@ func TestScoringExecutor_GracefulShutdown(t *testing.T) {
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	// LLM that blocks until we release it
+	// LLM that blocks until released or context is cancelled.
 	blockCh := make(chan struct{})
 	llm := &blockingMockLLMClient{blockCh: blockCh}
 	pub := &testEventPublisher{}
@@ -288,40 +293,37 @@ func TestScoringExecutor_GracefulShutdown(t *testing.T) {
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
-	// Submit scoring (will block in LLM call)
+	// Submit scoring (goroutine will block in LLM call)
 	scoreID, err := executor.SubmitScoring(t.Context(), session.ID, "test", false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, scoreID)
 
-	// Stop should block until LLM completes
+	// Give the goroutine time to reach the LLM call.
+	time.Sleep(200 * time.Millisecond)
+
+	// New submissions should be rejected after Stop() marks stopped=true.
+	// Stop() also cancels in-flight contexts, so the blocked LLM returns.
 	stopped := make(chan struct{})
 	go func() {
 		executor.Stop()
 		close(stopped)
 	}()
 
-	// Verify Stop is blocked
 	select {
 	case <-stopped:
-		t.Fatal("Stop() returned before LLM released")
-	case <-time.After(100 * time.Millisecond):
-		// Expected: Stop is waiting
+		// Expected: Stop() cancelled the context, LLM unblocked, goroutine finished.
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop() did not return after cancelling contexts")
 	}
 
 	// New submissions should be rejected
 	_, err = executor.SubmitScoring(t.Context(), session.ID, "test2", false)
 	assert.ErrorIs(t, err, ErrShuttingDown)
 
-	// Release the LLM
-	close(blockCh)
-
-	// Stop should now complete
-	select {
-	case <-stopped:
-		// Good
-	case <-time.After(5 * time.Second):
-		t.Fatal("Stop() did not return after LLM released")
-	}
+	// Score should be in a terminal failed/cancelled state
+	score, err := entClient.SessionScore.Get(t.Context(), scoreID)
+	require.NoError(t, err)
+	assert.NotEqual(t, sessionscore.StatusInProgress, score.Status)
 }
 
 func TestScoringExecutor_PrepareScoring_StageIndexAfterExistingStages(t *testing.T) {
@@ -346,7 +348,7 @@ func TestScoringExecutor_PrepareScoring_StageIndexAfterExistingStages(t *testing
 		Save(ctx)
 	require.NoError(t, err)
 
-	scoreID, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
+	scoreID, _, err := executor.prepareScoring(ctx, session.ID, "test-user", false)
 	require.NoError(t, err)
 
 	// Existing stage has index 0, so scoring stage should have index 1
@@ -376,7 +378,7 @@ func TestScoringExecutor_PrepareScoring_AcceptsAllTerminalStatuses(t *testing.T)
 			executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 			session := createScoringTestSession(t, entClient, chainID, status)
 
-			scoreID, err := executor.prepareScoring(t.Context(), session.ID, "test", false)
+			scoreID, _, err := executor.prepareScoring(t.Context(), session.ID, "test", false)
 			require.NoError(t, err)
 			assert.NotEmpty(t, scoreID)
 		})
@@ -403,11 +405,11 @@ func TestScoringExecutor_ExecuteScoring_FailsGracefully(t *testing.T) {
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// Prepare records
-	scoreID, err := executor.prepareScoring(t.Context(), session.ID, "test", false)
+	scoreID, stageID, err := executor.prepareScoring(t.Context(), session.ID, "test", false)
 	require.NoError(t, err)
 
 	// Execute (will fail because LLM doesn't produce parseable score)
-	executor.executeScoring(t.Context(), scoreID, session.ID)
+	executor.executeScoring(t.Context(), scoreID, stageID, session.ID)
 
 	// Verify the score was marked as failed
 	score, err := entClient.SessionScore.Get(t.Context(), scoreID)
@@ -1005,8 +1007,12 @@ type blockingMockLLMClient struct {
 	blockCh chan struct{}
 }
 
-func (m *blockingMockLLMClient) Generate(_ context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {
-	<-m.blockCh
+func (m *blockingMockLLMClient) Generate(ctx context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {
+	select {
+	case <-m.blockCh:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	ch := make(chan agent.Chunk, 1)
 	ch <- &agent.TextChunk{Content: "done"}
 	close(ch)

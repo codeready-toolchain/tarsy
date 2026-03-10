@@ -274,9 +274,3 @@ See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation 
 5. Real-time updates via existing WebSocket `stage.status` events for the scoring stage
 
 **Note:** The scoring stage is already visible in the session detail's `stages` array (stage_type: "scoring"), so the frontend can derive scoring sub-status from stage presence + status even before the dedicated endpoints are built. When re-scoring preserves older stages, the frontend must pick the **latest** scoring stage (highest `stage_index` where `stage_type === "scoring"`) to avoid displaying stale status.
-
-### Phase 4: Future Enhancements
-
-1. Score analytics (trends, distributions, per-chain averages)
-2. Aggregated missing tools report across sessions
-3. Additional evaluation types (cost analysis, latency analysis)
