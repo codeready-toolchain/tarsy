@@ -387,23 +387,23 @@ func TestE2E_Scoring_Disabled_NoAutoTrigger(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Poll over a verification window to confirm scoring never fires.
-	deadline := time.Now().Add(1 * time.Second)
-	for time.Now().Before(deadline) {
-		scoringStages, err := app.EntClient.Stage.Query().
-			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
-			All(context.Background())
-		require.NoError(t, err)
-		require.Empty(t, scoringStages, "scoring stage must not be created when scoring is disabled")
+	// Drain all scoring goroutines deterministically. The worker calls
+	// ScoreSessionAsync before completing the session; Stop() waits for the
+	// goroutine to finish (it returns immediately on ErrScoringDisabled).
+	// Stop() is idempotent, so the cleanup teardown calling it again is fine.
+	app.ScoringExecutor.Stop()
 
-		scores, err := app.EntClient.SessionScore.Query().
-			Where(sessionscore.SessionIDEQ(sessionID)).
-			All(context.Background())
-		require.NoError(t, err)
-		require.Empty(t, scores, "session_scores must not be created when scoring is disabled")
+	scoringStages, err := app.EntClient.Stage.Query().
+		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, scoringStages, "scoring stage must not be created when scoring is disabled")
 
-		time.Sleep(50 * time.Millisecond)
-	}
+	scores, err := app.EntClient.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, scores, "session_scores must not be created when scoring is disabled")
 
 	// ── Verify session detail has no scoring fields ──
 	sessionDetail := app.GetSession(t, sessionID)
@@ -566,15 +566,29 @@ func TestE2E_Scoring_API_DuplicatePrevention(t *testing.T) {
 		s, err := app.EntClient.SessionScore.Get(context.Background(), scoreID)
 		return err == nil && s.Status == sessionscore.StatusCompleted
 	}, 10*time.Second, 100*time.Millisecond, "blocked scoring did not complete after unblock")
+
+	// Verify the rejected duplicate created no extra DB rows.
+	scoreCount, err := app.EntClient.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		Count(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, scoreCount, "rejected duplicate must not create extra session_scores rows")
+
+	scoringStageCount, err := app.EntClient.Stage.Query().
+		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+		Count(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, scoringStageCount, "rejected duplicate must not create extra scoring stages")
 }
 
 func TestE2E_Scoring_API_NonTerminalSession(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	// Block both parallel investigation agents so the session stays in_progress.
-	blockCh := make(chan struct{})
-	llm.AddRouted("Investigator", LLMScriptEntry{WaitCh: blockCh, Text: "Investigating..."})
-	llm.AddRouted("MetricsChecker", LLMScriptEntry{WaitCh: blockCh, Text: "Checking metrics..."})
+	// BlockUntilCancelled waits for context cancellation (teardown), so the
+	// pipeline never completes and the session stays in_progress.
+	llm.AddRouted("Investigator", LLMScriptEntry{BlockUntilCancelled: true})
+	llm.AddRouted("MetricsChecker", LLMScriptEntry{BlockUntilCancelled: true})
 
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "scoring")),
@@ -585,6 +599,7 @@ func TestE2E_Scoring_API_NonTerminalSession(t *testing.T) {
 				"restart_pod": StaticToolHandler(`{}`),
 			},
 		}),
+		WithSessionTimeout(2*time.Second),
 	)
 
 	resp := app.SubmitAlert(t, "test-scoring", "Pod OOMKilled")
@@ -597,5 +612,16 @@ func TestE2E_Scoring_API_NonTerminalSession(t *testing.T) {
 	// Attempt to score a non-terminal session — should be rejected.
 	app.postJSON(t, "/api/v1/sessions/"+sessionID+"/score", nil, http.StatusConflict)
 
-	close(blockCh)
+	// Verify the rejected scoring created no artifacts.
+	scoreCount, err := app.EntClient.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		Count(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, scoreCount, "rejected scoring must not create session_scores rows")
+
+	scoringStageCount, err := app.EntClient.Stage.Query().
+		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+		Count(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, scoringStageCount, "rejected scoring must not create scoring stages")
 }
