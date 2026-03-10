@@ -23,7 +23,7 @@ import {
   isFlowItemTerminal,
   flowItemsToPlainText,
 } from '../../utils/timelineParser';
-import { TIMELINE_EVENT_TYPES, STAGE_TYPE } from '../../constants/eventTypes';
+import { TIMELINE_EVENT_TYPES, STAGE_TYPE, COLLAPSIBLE_STAGE_TYPES } from '../../constants/eventTypes';
 import StageSeparator from '../timeline/StageSeparator';
 import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -39,7 +39,7 @@ import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
  * can watch the reasoning flow in real time.
  */
 function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): boolean {
-  const isCollapsible = group.stageType === STAGE_TYPE.SYNTHESIS || group.stageType === STAGE_TYPE.EXEC_SUMMARY || group.stageType === STAGE_TYPE.ACTION || group.stageType === STAGE_TYPE.SCORING;
+  const isCollapsible = !!group.stageType && COLLAPSIBLE_STAGE_TYPES.has(group.stageType);
   if (!isCollapsible) return false;
   if (isSessionActive) return false;
   return TERMINAL_EXECUTION_STATUSES.has(group.stageStatus);

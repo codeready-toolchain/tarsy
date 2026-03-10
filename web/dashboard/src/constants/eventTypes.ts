@@ -61,6 +61,14 @@ export const STAGE_TYPE = {
 
 export type StageType = (typeof STAGE_TYPE)[keyof typeof STAGE_TYPE];
 
+/** Stage types that auto-collapse in the conversation timeline once terminal. */
+export const COLLAPSIBLE_STAGE_TYPES: ReadonlySet<string> = new Set<string>([
+  STAGE_TYPE.SYNTHESIS,
+  STAGE_TYPE.EXEC_SUMMARY,
+  STAGE_TYPE.ACTION,
+  STAGE_TYPE.SCORING,
+]);
+
 // Timeline event types (for routing to renderers)
 export const TIMELINE_EVENT_TYPES = {
   LLM_THINKING: 'llm_thinking',
