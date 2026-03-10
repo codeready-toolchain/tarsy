@@ -20,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -83,17 +84,18 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			agentexecution.Table:  agentexecution.ValidColumn,
-			alertsession.Table:    alertsession.ValidColumn,
-			chat.Table:            chat.ValidColumn,
-			chatusermessage.Table: chatusermessage.ValidColumn,
-			event.Table:           event.ValidColumn,
-			llminteraction.Table:  llminteraction.ValidColumn,
-			mcpinteraction.Table:  mcpinteraction.ValidColumn,
-			message.Table:         message.ValidColumn,
-			sessionscore.Table:    sessionscore.ValidColumn,
-			stage.Table:           stage.ValidColumn,
-			timelineevent.Table:   timelineevent.ValidColumn,
+			agentexecution.Table:        agentexecution.ValidColumn,
+			alertsession.Table:          alertsession.ValidColumn,
+			chat.Table:                  chat.ValidColumn,
+			chatusermessage.Table:       chatusermessage.ValidColumn,
+			event.Table:                 event.ValidColumn,
+			llminteraction.Table:        llminteraction.ValidColumn,
+			mcpinteraction.Table:        mcpinteraction.ValidColumn,
+			message.Table:               message.ValidColumn,
+			sessionreviewactivity.Table: sessionreviewactivity.ValidColumn,
+			sessionscore.Table:          sessionscore.ValidColumn,
+			stage.Table:                 stage.ValidColumn,
+			timelineevent.Table:         timelineevent.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -91,6 +91,12 @@ var (
 		{Name: "last_interaction_at", Type: field.TypeTime, Nullable: true},
 		{Name: "slack_message_fingerprint", Type: field.TypeString, Nullable: true},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "review_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "resolved"}},
+		{Name: "assignee", Type: field.TypeString, Nullable: true},
+		{Name: "assigned_at", Type: field.TypeTime, Nullable: true},
+		{Name: "resolved_at", Type: field.TypeTime, Nullable: true},
+		{Name: "resolution_reason", Type: field.TypeEnum, Nullable: true, Enums: []string{"actioned", "dismissed"}},
+		{Name: "resolution_note", Type: field.TypeString, Nullable: true, Size: 2147483647},
 	}
 	// AlertSessionsTable holds the schema information for the "alert_sessions" table.
 	AlertSessionsTable = &schema.Table{
@@ -140,6 +146,21 @@ var (
 				Annotation: &entsql.IndexAnnotation{
 					Where: "deleted_at IS NOT NULL",
 				},
+			},
+			{
+				Name:    "alertsession_review_status",
+				Unique:  false,
+				Columns: []*schema.Column{AlertSessionsColumns[23]},
+			},
+			{
+				Name:    "alertsession_review_status_assignee",
+				Unique:  false,
+				Columns: []*schema.Column{AlertSessionsColumns[23], AlertSessionsColumns[24]},
+			},
+			{
+				Name:    "alertsession_assignee",
+				Unique:  false,
+				Columns: []*schema.Column{AlertSessionsColumns[24]},
 			},
 		},
 	}
@@ -442,6 +463,39 @@ var (
 			},
 		},
 	}
+	// SessionReviewActivitiesColumns holds the columns for the "session_review_activities" table.
+	SessionReviewActivitiesColumns = []*schema.Column{
+		{Name: "activity_id", Type: field.TypeString, Unique: true},
+		{Name: "actor", Type: field.TypeString},
+		{Name: "action", Type: field.TypeEnum, Enums: []string{"claim", "unclaim", "resolve", "reopen"}},
+		{Name: "from_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "resolved"}},
+		{Name: "to_status", Type: field.TypeEnum, Enums: []string{"needs_review", "in_progress", "resolved"}},
+		{Name: "resolution_reason", Type: field.TypeEnum, Nullable: true, Enums: []string{"actioned", "dismissed"}},
+		{Name: "note", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "session_id", Type: field.TypeString},
+	}
+	// SessionReviewActivitiesTable holds the schema information for the "session_review_activities" table.
+	SessionReviewActivitiesTable = &schema.Table{
+		Name:       "session_review_activities",
+		Columns:    SessionReviewActivitiesColumns,
+		PrimaryKey: []*schema.Column{SessionReviewActivitiesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "session_review_activities_alert_sessions_review_activities",
+				Columns:    []*schema.Column{SessionReviewActivitiesColumns[8]},
+				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionreviewactivity_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionReviewActivitiesColumns[8], SessionReviewActivitiesColumns[7]},
+			},
+		},
+	}
 	// SessionScoresColumns holds the columns for the "session_scores" table.
 	SessionScoresColumns = []*schema.Column{
 		{Name: "score_id", Type: field.TypeString, Unique: true},
@@ -673,6 +727,7 @@ var (
 		LlmInteractionsTable,
 		McpInteractionsTable,
 		MessagesTable,
+		SessionReviewActivitiesTable,
 		SessionScoresTable,
 		StagesTable,
 		TimelineEventsTable,
@@ -696,6 +751,7 @@ func init() {
 	MessagesTable.ForeignKeys[0].RefTable = AgentExecutionsTable
 	MessagesTable.ForeignKeys[1].RefTable = AlertSessionsTable
 	MessagesTable.ForeignKeys[2].RefTable = StagesTable
+	SessionReviewActivitiesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	SessionScoresTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	SessionScoresTable.ForeignKeys[1].RefTable = StagesTable
 	StagesTable.ForeignKeys[0].RefTable = AlertSessionsTable

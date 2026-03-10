@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/schema"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -35,17 +36,18 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeAgentExecution  = "AgentExecution"
-	TypeAlertSession    = "AlertSession"
-	TypeChat            = "Chat"
-	TypeChatUserMessage = "ChatUserMessage"
-	TypeEvent           = "Event"
-	TypeLLMInteraction  = "LLMInteraction"
-	TypeMCPInteraction  = "MCPInteraction"
-	TypeMessage         = "Message"
-	TypeSessionScore    = "SessionScore"
-	TypeStage           = "Stage"
-	TypeTimelineEvent   = "TimelineEvent"
+	TypeAgentExecution        = "AgentExecution"
+	TypeAlertSession          = "AlertSession"
+	TypeChat                  = "Chat"
+	TypeChatUserMessage       = "ChatUserMessage"
+	TypeEvent                 = "Event"
+	TypeLLMInteraction        = "LLMInteraction"
+	TypeMCPInteraction        = "MCPInteraction"
+	TypeMessage               = "Message"
+	TypeSessionReviewActivity = "SessionReviewActivity"
+	TypeSessionScore          = "SessionScore"
+	TypeStage                 = "Stage"
+	TypeTimelineEvent         = "TimelineEvent"
 )
 
 // AgentExecutionMutation represents an operation that mutates the AgentExecution nodes in the graph.
@@ -2068,6 +2070,12 @@ type AlertSessionMutation struct {
 	last_interaction_at       *time.Time
 	slack_message_fingerprint *string
 	deleted_at                *time.Time
+	review_status             *alertsession.ReviewStatus
+	assignee                  *string
+	assigned_at               *time.Time
+	resolved_at               *time.Time
+	resolution_reason         *alertsession.ResolutionReason
+	resolution_note           *string
 	clearedFields             map[string]struct{}
 	stages                    map[string]struct{}
 	removedstages             map[string]struct{}
@@ -2095,6 +2103,9 @@ type AlertSessionMutation struct {
 	session_scores            map[string]struct{}
 	removedsession_scores     map[string]struct{}
 	clearedsession_scores     bool
+	review_activities         map[string]struct{}
+	removedreview_activities  map[string]struct{}
+	clearedreview_activities  bool
 	done                      bool
 	oldValue                  func(context.Context) (*AlertSession, error)
 	predicates                []predicate.AlertSession
@@ -3238,6 +3249,300 @@ func (m *AlertSessionMutation) ResetDeletedAt() {
 	delete(m.clearedFields, alertsession.FieldDeletedAt)
 }
 
+// SetReviewStatus sets the "review_status" field.
+func (m *AlertSessionMutation) SetReviewStatus(as alertsession.ReviewStatus) {
+	m.review_status = &as
+}
+
+// ReviewStatus returns the value of the "review_status" field in the mutation.
+func (m *AlertSessionMutation) ReviewStatus() (r alertsession.ReviewStatus, exists bool) {
+	v := m.review_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReviewStatus returns the old "review_status" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldReviewStatus(ctx context.Context) (v *alertsession.ReviewStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReviewStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReviewStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReviewStatus: %w", err)
+	}
+	return oldValue.ReviewStatus, nil
+}
+
+// ClearReviewStatus clears the value of the "review_status" field.
+func (m *AlertSessionMutation) ClearReviewStatus() {
+	m.review_status = nil
+	m.clearedFields[alertsession.FieldReviewStatus] = struct{}{}
+}
+
+// ReviewStatusCleared returns if the "review_status" field was cleared in this mutation.
+func (m *AlertSessionMutation) ReviewStatusCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldReviewStatus]
+	return ok
+}
+
+// ResetReviewStatus resets all changes to the "review_status" field.
+func (m *AlertSessionMutation) ResetReviewStatus() {
+	m.review_status = nil
+	delete(m.clearedFields, alertsession.FieldReviewStatus)
+}
+
+// SetAssignee sets the "assignee" field.
+func (m *AlertSessionMutation) SetAssignee(s string) {
+	m.assignee = &s
+}
+
+// Assignee returns the value of the "assignee" field in the mutation.
+func (m *AlertSessionMutation) Assignee() (r string, exists bool) {
+	v := m.assignee
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAssignee returns the old "assignee" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldAssignee(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAssignee is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAssignee requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAssignee: %w", err)
+	}
+	return oldValue.Assignee, nil
+}
+
+// ClearAssignee clears the value of the "assignee" field.
+func (m *AlertSessionMutation) ClearAssignee() {
+	m.assignee = nil
+	m.clearedFields[alertsession.FieldAssignee] = struct{}{}
+}
+
+// AssigneeCleared returns if the "assignee" field was cleared in this mutation.
+func (m *AlertSessionMutation) AssigneeCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldAssignee]
+	return ok
+}
+
+// ResetAssignee resets all changes to the "assignee" field.
+func (m *AlertSessionMutation) ResetAssignee() {
+	m.assignee = nil
+	delete(m.clearedFields, alertsession.FieldAssignee)
+}
+
+// SetAssignedAt sets the "assigned_at" field.
+func (m *AlertSessionMutation) SetAssignedAt(t time.Time) {
+	m.assigned_at = &t
+}
+
+// AssignedAt returns the value of the "assigned_at" field in the mutation.
+func (m *AlertSessionMutation) AssignedAt() (r time.Time, exists bool) {
+	v := m.assigned_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAssignedAt returns the old "assigned_at" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldAssignedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAssignedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAssignedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAssignedAt: %w", err)
+	}
+	return oldValue.AssignedAt, nil
+}
+
+// ClearAssignedAt clears the value of the "assigned_at" field.
+func (m *AlertSessionMutation) ClearAssignedAt() {
+	m.assigned_at = nil
+	m.clearedFields[alertsession.FieldAssignedAt] = struct{}{}
+}
+
+// AssignedAtCleared returns if the "assigned_at" field was cleared in this mutation.
+func (m *AlertSessionMutation) AssignedAtCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldAssignedAt]
+	return ok
+}
+
+// ResetAssignedAt resets all changes to the "assigned_at" field.
+func (m *AlertSessionMutation) ResetAssignedAt() {
+	m.assigned_at = nil
+	delete(m.clearedFields, alertsession.FieldAssignedAt)
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (m *AlertSessionMutation) SetResolvedAt(t time.Time) {
+	m.resolved_at = &t
+}
+
+// ResolvedAt returns the value of the "resolved_at" field in the mutation.
+func (m *AlertSessionMutation) ResolvedAt() (r time.Time, exists bool) {
+	v := m.resolved_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolvedAt returns the old "resolved_at" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldResolvedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolvedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolvedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolvedAt: %w", err)
+	}
+	return oldValue.ResolvedAt, nil
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (m *AlertSessionMutation) ClearResolvedAt() {
+	m.resolved_at = nil
+	m.clearedFields[alertsession.FieldResolvedAt] = struct{}{}
+}
+
+// ResolvedAtCleared returns if the "resolved_at" field was cleared in this mutation.
+func (m *AlertSessionMutation) ResolvedAtCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldResolvedAt]
+	return ok
+}
+
+// ResetResolvedAt resets all changes to the "resolved_at" field.
+func (m *AlertSessionMutation) ResetResolvedAt() {
+	m.resolved_at = nil
+	delete(m.clearedFields, alertsession.FieldResolvedAt)
+}
+
+// SetResolutionReason sets the "resolution_reason" field.
+func (m *AlertSessionMutation) SetResolutionReason(ar alertsession.ResolutionReason) {
+	m.resolution_reason = &ar
+}
+
+// ResolutionReason returns the value of the "resolution_reason" field in the mutation.
+func (m *AlertSessionMutation) ResolutionReason() (r alertsession.ResolutionReason, exists bool) {
+	v := m.resolution_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolutionReason returns the old "resolution_reason" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldResolutionReason(ctx context.Context) (v *alertsession.ResolutionReason, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolutionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolutionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolutionReason: %w", err)
+	}
+	return oldValue.ResolutionReason, nil
+}
+
+// ClearResolutionReason clears the value of the "resolution_reason" field.
+func (m *AlertSessionMutation) ClearResolutionReason() {
+	m.resolution_reason = nil
+	m.clearedFields[alertsession.FieldResolutionReason] = struct{}{}
+}
+
+// ResolutionReasonCleared returns if the "resolution_reason" field was cleared in this mutation.
+func (m *AlertSessionMutation) ResolutionReasonCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldResolutionReason]
+	return ok
+}
+
+// ResetResolutionReason resets all changes to the "resolution_reason" field.
+func (m *AlertSessionMutation) ResetResolutionReason() {
+	m.resolution_reason = nil
+	delete(m.clearedFields, alertsession.FieldResolutionReason)
+}
+
+// SetResolutionNote sets the "resolution_note" field.
+func (m *AlertSessionMutation) SetResolutionNote(s string) {
+	m.resolution_note = &s
+}
+
+// ResolutionNote returns the value of the "resolution_note" field in the mutation.
+func (m *AlertSessionMutation) ResolutionNote() (r string, exists bool) {
+	v := m.resolution_note
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolutionNote returns the old "resolution_note" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldResolutionNote(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolutionNote is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolutionNote requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolutionNote: %w", err)
+	}
+	return oldValue.ResolutionNote, nil
+}
+
+// ClearResolutionNote clears the value of the "resolution_note" field.
+func (m *AlertSessionMutation) ClearResolutionNote() {
+	m.resolution_note = nil
+	m.clearedFields[alertsession.FieldResolutionNote] = struct{}{}
+}
+
+// ResolutionNoteCleared returns if the "resolution_note" field was cleared in this mutation.
+func (m *AlertSessionMutation) ResolutionNoteCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldResolutionNote]
+	return ok
+}
+
+// ResetResolutionNote resets all changes to the "resolution_note" field.
+func (m *AlertSessionMutation) ResetResolutionNote() {
+	m.resolution_note = nil
+	delete(m.clearedFields, alertsession.FieldResolutionNote)
+}
+
 // AddStageIDs adds the "stages" edge to the Stage entity by ids.
 func (m *AlertSessionMutation) AddStageIDs(ids ...string) {
 	if m.stages == nil {
@@ -3709,6 +4014,60 @@ func (m *AlertSessionMutation) ResetSessionScores() {
 	m.removedsession_scores = nil
 }
 
+// AddReviewActivityIDs adds the "review_activities" edge to the SessionReviewActivity entity by ids.
+func (m *AlertSessionMutation) AddReviewActivityIDs(ids ...string) {
+	if m.review_activities == nil {
+		m.review_activities = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.review_activities[ids[i]] = struct{}{}
+	}
+}
+
+// ClearReviewActivities clears the "review_activities" edge to the SessionReviewActivity entity.
+func (m *AlertSessionMutation) ClearReviewActivities() {
+	m.clearedreview_activities = true
+}
+
+// ReviewActivitiesCleared reports if the "review_activities" edge to the SessionReviewActivity entity was cleared.
+func (m *AlertSessionMutation) ReviewActivitiesCleared() bool {
+	return m.clearedreview_activities
+}
+
+// RemoveReviewActivityIDs removes the "review_activities" edge to the SessionReviewActivity entity by IDs.
+func (m *AlertSessionMutation) RemoveReviewActivityIDs(ids ...string) {
+	if m.removedreview_activities == nil {
+		m.removedreview_activities = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.review_activities, ids[i])
+		m.removedreview_activities[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedReviewActivities returns the removed IDs of the "review_activities" edge to the SessionReviewActivity entity.
+func (m *AlertSessionMutation) RemovedReviewActivitiesIDs() (ids []string) {
+	for id := range m.removedreview_activities {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ReviewActivitiesIDs returns the "review_activities" edge IDs in the mutation.
+func (m *AlertSessionMutation) ReviewActivitiesIDs() (ids []string) {
+	for id := range m.review_activities {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetReviewActivities resets all changes to the "review_activities" edge.
+func (m *AlertSessionMutation) ResetReviewActivities() {
+	m.review_activities = nil
+	m.clearedreview_activities = false
+	m.removedreview_activities = nil
+}
+
 // Where appends a list predicates to the AlertSessionMutation builder.
 func (m *AlertSessionMutation) Where(ps ...predicate.AlertSession) {
 	m.predicates = append(m.predicates, ps...)
@@ -3743,7 +4102,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 28)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -3810,6 +4169,24 @@ func (m *AlertSessionMutation) Fields() []string {
 	if m.deleted_at != nil {
 		fields = append(fields, alertsession.FieldDeletedAt)
 	}
+	if m.review_status != nil {
+		fields = append(fields, alertsession.FieldReviewStatus)
+	}
+	if m.assignee != nil {
+		fields = append(fields, alertsession.FieldAssignee)
+	}
+	if m.assigned_at != nil {
+		fields = append(fields, alertsession.FieldAssignedAt)
+	}
+	if m.resolved_at != nil {
+		fields = append(fields, alertsession.FieldResolvedAt)
+	}
+	if m.resolution_reason != nil {
+		fields = append(fields, alertsession.FieldResolutionReason)
+	}
+	if m.resolution_note != nil {
+		fields = append(fields, alertsession.FieldResolutionNote)
+	}
 	return fields
 }
 
@@ -3862,6 +4239,18 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.SlackMessageFingerprint()
 	case alertsession.FieldDeletedAt:
 		return m.DeletedAt()
+	case alertsession.FieldReviewStatus:
+		return m.ReviewStatus()
+	case alertsession.FieldAssignee:
+		return m.Assignee()
+	case alertsession.FieldAssignedAt:
+		return m.AssignedAt()
+	case alertsession.FieldResolvedAt:
+		return m.ResolvedAt()
+	case alertsession.FieldResolutionReason:
+		return m.ResolutionReason()
+	case alertsession.FieldResolutionNote:
+		return m.ResolutionNote()
 	}
 	return nil, false
 }
@@ -3915,6 +4304,18 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldSlackMessageFingerprint(ctx)
 	case alertsession.FieldDeletedAt:
 		return m.OldDeletedAt(ctx)
+	case alertsession.FieldReviewStatus:
+		return m.OldReviewStatus(ctx)
+	case alertsession.FieldAssignee:
+		return m.OldAssignee(ctx)
+	case alertsession.FieldAssignedAt:
+		return m.OldAssignedAt(ctx)
+	case alertsession.FieldResolvedAt:
+		return m.OldResolvedAt(ctx)
+	case alertsession.FieldResolutionReason:
+		return m.OldResolutionReason(ctx)
+	case alertsession.FieldResolutionNote:
+		return m.OldResolutionNote(ctx)
 	}
 	return nil, fmt.Errorf("unknown AlertSession field %s", name)
 }
@@ -4078,6 +4479,48 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDeletedAt(v)
 		return nil
+	case alertsession.FieldReviewStatus:
+		v, ok := value.(alertsession.ReviewStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReviewStatus(v)
+		return nil
+	case alertsession.FieldAssignee:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAssignee(v)
+		return nil
+	case alertsession.FieldAssignedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAssignedAt(v)
+		return nil
+	case alertsession.FieldResolvedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolvedAt(v)
+		return nil
+	case alertsession.FieldResolutionReason:
+		v, ok := value.(alertsession.ResolutionReason)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolutionReason(v)
+		return nil
+	case alertsession.FieldResolutionNote:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolutionNote(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AlertSession field %s", name)
 }
@@ -4174,6 +4617,24 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldDeletedAt) {
 		fields = append(fields, alertsession.FieldDeletedAt)
 	}
+	if m.FieldCleared(alertsession.FieldReviewStatus) {
+		fields = append(fields, alertsession.FieldReviewStatus)
+	}
+	if m.FieldCleared(alertsession.FieldAssignee) {
+		fields = append(fields, alertsession.FieldAssignee)
+	}
+	if m.FieldCleared(alertsession.FieldAssignedAt) {
+		fields = append(fields, alertsession.FieldAssignedAt)
+	}
+	if m.FieldCleared(alertsession.FieldResolvedAt) {
+		fields = append(fields, alertsession.FieldResolvedAt)
+	}
+	if m.FieldCleared(alertsession.FieldResolutionReason) {
+		fields = append(fields, alertsession.FieldResolutionReason)
+	}
+	if m.FieldCleared(alertsession.FieldResolutionNote) {
+		fields = append(fields, alertsession.FieldResolutionNote)
+	}
 	return fields
 }
 
@@ -4238,6 +4699,24 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 		return nil
 	case alertsession.FieldDeletedAt:
 		m.ClearDeletedAt()
+		return nil
+	case alertsession.FieldReviewStatus:
+		m.ClearReviewStatus()
+		return nil
+	case alertsession.FieldAssignee:
+		m.ClearAssignee()
+		return nil
+	case alertsession.FieldAssignedAt:
+		m.ClearAssignedAt()
+		return nil
+	case alertsession.FieldResolvedAt:
+		m.ClearResolvedAt()
+		return nil
+	case alertsession.FieldResolutionReason:
+		m.ClearResolutionReason()
+		return nil
+	case alertsession.FieldResolutionNote:
+		m.ClearResolutionNote()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession nullable field %s", name)
@@ -4313,13 +4792,31 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 	case alertsession.FieldDeletedAt:
 		m.ResetDeletedAt()
 		return nil
+	case alertsession.FieldReviewStatus:
+		m.ResetReviewStatus()
+		return nil
+	case alertsession.FieldAssignee:
+		m.ResetAssignee()
+		return nil
+	case alertsession.FieldAssignedAt:
+		m.ResetAssignedAt()
+		return nil
+	case alertsession.FieldResolvedAt:
+		m.ResetResolvedAt()
+		return nil
+	case alertsession.FieldResolutionReason:
+		m.ResetResolutionReason()
+		return nil
+	case alertsession.FieldResolutionNote:
+		m.ResetResolutionNote()
+		return nil
 	}
 	return fmt.Errorf("unknown AlertSession field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AlertSessionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.stages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -4346,6 +4843,9 @@ func (m *AlertSessionMutation) AddedEdges() []string {
 	}
 	if m.session_scores != nil {
 		edges = append(edges, alertsession.EdgeSessionScores)
+	}
+	if m.review_activities != nil {
+		edges = append(edges, alertsession.EdgeReviewActivities)
 	}
 	return edges
 }
@@ -4406,13 +4906,19 @@ func (m *AlertSessionMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case alertsession.EdgeReviewActivities:
+		ids := make([]ent.Value, 0, len(m.review_activities))
+		for id := range m.review_activities {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AlertSessionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.removedstages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -4436,6 +4942,9 @@ func (m *AlertSessionMutation) RemovedEdges() []string {
 	}
 	if m.removedsession_scores != nil {
 		edges = append(edges, alertsession.EdgeSessionScores)
+	}
+	if m.removedreview_activities != nil {
+		edges = append(edges, alertsession.EdgeReviewActivities)
 	}
 	return edges
 }
@@ -4492,13 +5001,19 @@ func (m *AlertSessionMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case alertsession.EdgeReviewActivities:
+		ids := make([]ent.Value, 0, len(m.removedreview_activities))
+		for id := range m.removedreview_activities {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AlertSessionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.clearedstages {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -4526,6 +5041,9 @@ func (m *AlertSessionMutation) ClearedEdges() []string {
 	if m.clearedsession_scores {
 		edges = append(edges, alertsession.EdgeSessionScores)
 	}
+	if m.clearedreview_activities {
+		edges = append(edges, alertsession.EdgeReviewActivities)
+	}
 	return edges
 }
 
@@ -4551,6 +5069,8 @@ func (m *AlertSessionMutation) EdgeCleared(name string) bool {
 		return m.clearedchat
 	case alertsession.EdgeSessionScores:
 		return m.clearedsession_scores
+	case alertsession.EdgeReviewActivities:
+		return m.clearedreview_activities
 	}
 	return false
 }
@@ -4596,6 +5116,9 @@ func (m *AlertSessionMutation) ResetEdge(name string) error {
 		return nil
 	case alertsession.EdgeSessionScores:
 		m.ResetSessionScores()
+		return nil
+	case alertsession.EdgeReviewActivities:
+		m.ResetReviewActivities()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession edge %s", name)
@@ -10912,6 +11435,830 @@ func (m *MessageMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Message edge %s", name)
+}
+
+// SessionReviewActivityMutation represents an operation that mutates the SessionReviewActivity nodes in the graph.
+type SessionReviewActivityMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *string
+	actor             *string
+	action            *sessionreviewactivity.Action
+	from_status       *sessionreviewactivity.FromStatus
+	to_status         *sessionreviewactivity.ToStatus
+	resolution_reason *sessionreviewactivity.ResolutionReason
+	note              *string
+	created_at        *time.Time
+	clearedFields     map[string]struct{}
+	session           *string
+	clearedsession    bool
+	done              bool
+	oldValue          func(context.Context) (*SessionReviewActivity, error)
+	predicates        []predicate.SessionReviewActivity
+}
+
+var _ ent.Mutation = (*SessionReviewActivityMutation)(nil)
+
+// sessionreviewactivityOption allows management of the mutation configuration using functional options.
+type sessionreviewactivityOption func(*SessionReviewActivityMutation)
+
+// newSessionReviewActivityMutation creates new mutation for the SessionReviewActivity entity.
+func newSessionReviewActivityMutation(c config, op Op, opts ...sessionreviewactivityOption) *SessionReviewActivityMutation {
+	m := &SessionReviewActivityMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSessionReviewActivity,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSessionReviewActivityID sets the ID field of the mutation.
+func withSessionReviewActivityID(id string) sessionreviewactivityOption {
+	return func(m *SessionReviewActivityMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SessionReviewActivity
+		)
+		m.oldValue = func(ctx context.Context) (*SessionReviewActivity, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SessionReviewActivity.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSessionReviewActivity sets the old SessionReviewActivity of the mutation.
+func withSessionReviewActivity(node *SessionReviewActivity) sessionreviewactivityOption {
+	return func(m *SessionReviewActivityMutation) {
+		m.oldValue = func(context.Context) (*SessionReviewActivity, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SessionReviewActivityMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SessionReviewActivityMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SessionReviewActivity entities.
+func (m *SessionReviewActivityMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SessionReviewActivityMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SessionReviewActivityMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SessionReviewActivity.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SessionReviewActivityMutation) SetSessionID(s string) {
+	m.session = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SessionReviewActivityMutation) SessionID() (r string, exists bool) {
+	v := m.session
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SessionReviewActivityMutation) ResetSessionID() {
+	m.session = nil
+}
+
+// SetActor sets the "actor" field.
+func (m *SessionReviewActivityMutation) SetActor(s string) {
+	m.actor = &s
+}
+
+// Actor returns the value of the "actor" field in the mutation.
+func (m *SessionReviewActivityMutation) Actor() (r string, exists bool) {
+	v := m.actor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActor returns the old "actor" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldActor(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActor is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActor requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActor: %w", err)
+	}
+	return oldValue.Actor, nil
+}
+
+// ResetActor resets all changes to the "actor" field.
+func (m *SessionReviewActivityMutation) ResetActor() {
+	m.actor = nil
+}
+
+// SetAction sets the "action" field.
+func (m *SessionReviewActivityMutation) SetAction(s sessionreviewactivity.Action) {
+	m.action = &s
+}
+
+// Action returns the value of the "action" field in the mutation.
+func (m *SessionReviewActivityMutation) Action() (r sessionreviewactivity.Action, exists bool) {
+	v := m.action
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAction returns the old "action" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldAction(ctx context.Context) (v sessionreviewactivity.Action, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAction is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAction requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAction: %w", err)
+	}
+	return oldValue.Action, nil
+}
+
+// ResetAction resets all changes to the "action" field.
+func (m *SessionReviewActivityMutation) ResetAction() {
+	m.action = nil
+}
+
+// SetFromStatus sets the "from_status" field.
+func (m *SessionReviewActivityMutation) SetFromStatus(ss sessionreviewactivity.FromStatus) {
+	m.from_status = &ss
+}
+
+// FromStatus returns the value of the "from_status" field in the mutation.
+func (m *SessionReviewActivityMutation) FromStatus() (r sessionreviewactivity.FromStatus, exists bool) {
+	v := m.from_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFromStatus returns the old "from_status" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldFromStatus(ctx context.Context) (v *sessionreviewactivity.FromStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFromStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFromStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFromStatus: %w", err)
+	}
+	return oldValue.FromStatus, nil
+}
+
+// ClearFromStatus clears the value of the "from_status" field.
+func (m *SessionReviewActivityMutation) ClearFromStatus() {
+	m.from_status = nil
+	m.clearedFields[sessionreviewactivity.FieldFromStatus] = struct{}{}
+}
+
+// FromStatusCleared returns if the "from_status" field was cleared in this mutation.
+func (m *SessionReviewActivityMutation) FromStatusCleared() bool {
+	_, ok := m.clearedFields[sessionreviewactivity.FieldFromStatus]
+	return ok
+}
+
+// ResetFromStatus resets all changes to the "from_status" field.
+func (m *SessionReviewActivityMutation) ResetFromStatus() {
+	m.from_status = nil
+	delete(m.clearedFields, sessionreviewactivity.FieldFromStatus)
+}
+
+// SetToStatus sets the "to_status" field.
+func (m *SessionReviewActivityMutation) SetToStatus(ss sessionreviewactivity.ToStatus) {
+	m.to_status = &ss
+}
+
+// ToStatus returns the value of the "to_status" field in the mutation.
+func (m *SessionReviewActivityMutation) ToStatus() (r sessionreviewactivity.ToStatus, exists bool) {
+	v := m.to_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldToStatus returns the old "to_status" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldToStatus(ctx context.Context) (v sessionreviewactivity.ToStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldToStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldToStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldToStatus: %w", err)
+	}
+	return oldValue.ToStatus, nil
+}
+
+// ResetToStatus resets all changes to the "to_status" field.
+func (m *SessionReviewActivityMutation) ResetToStatus() {
+	m.to_status = nil
+}
+
+// SetResolutionReason sets the "resolution_reason" field.
+func (m *SessionReviewActivityMutation) SetResolutionReason(sr sessionreviewactivity.ResolutionReason) {
+	m.resolution_reason = &sr
+}
+
+// ResolutionReason returns the value of the "resolution_reason" field in the mutation.
+func (m *SessionReviewActivityMutation) ResolutionReason() (r sessionreviewactivity.ResolutionReason, exists bool) {
+	v := m.resolution_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolutionReason returns the old "resolution_reason" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldResolutionReason(ctx context.Context) (v *sessionreviewactivity.ResolutionReason, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolutionReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolutionReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolutionReason: %w", err)
+	}
+	return oldValue.ResolutionReason, nil
+}
+
+// ClearResolutionReason clears the value of the "resolution_reason" field.
+func (m *SessionReviewActivityMutation) ClearResolutionReason() {
+	m.resolution_reason = nil
+	m.clearedFields[sessionreviewactivity.FieldResolutionReason] = struct{}{}
+}
+
+// ResolutionReasonCleared returns if the "resolution_reason" field was cleared in this mutation.
+func (m *SessionReviewActivityMutation) ResolutionReasonCleared() bool {
+	_, ok := m.clearedFields[sessionreviewactivity.FieldResolutionReason]
+	return ok
+}
+
+// ResetResolutionReason resets all changes to the "resolution_reason" field.
+func (m *SessionReviewActivityMutation) ResetResolutionReason() {
+	m.resolution_reason = nil
+	delete(m.clearedFields, sessionreviewactivity.FieldResolutionReason)
+}
+
+// SetNote sets the "note" field.
+func (m *SessionReviewActivityMutation) SetNote(s string) {
+	m.note = &s
+}
+
+// Note returns the value of the "note" field in the mutation.
+func (m *SessionReviewActivityMutation) Note() (r string, exists bool) {
+	v := m.note
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNote returns the old "note" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldNote(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNote is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNote requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNote: %w", err)
+	}
+	return oldValue.Note, nil
+}
+
+// ClearNote clears the value of the "note" field.
+func (m *SessionReviewActivityMutation) ClearNote() {
+	m.note = nil
+	m.clearedFields[sessionreviewactivity.FieldNote] = struct{}{}
+}
+
+// NoteCleared returns if the "note" field was cleared in this mutation.
+func (m *SessionReviewActivityMutation) NoteCleared() bool {
+	_, ok := m.clearedFields[sessionreviewactivity.FieldNote]
+	return ok
+}
+
+// ResetNote resets all changes to the "note" field.
+func (m *SessionReviewActivityMutation) ResetNote() {
+	m.note = nil
+	delete(m.clearedFields, sessionreviewactivity.FieldNote)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SessionReviewActivityMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SessionReviewActivityMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SessionReviewActivityMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearSession clears the "session" edge to the AlertSession entity.
+func (m *SessionReviewActivityMutation) ClearSession() {
+	m.clearedsession = true
+	m.clearedFields[sessionreviewactivity.FieldSessionID] = struct{}{}
+}
+
+// SessionCleared reports if the "session" edge to the AlertSession entity was cleared.
+func (m *SessionReviewActivityMutation) SessionCleared() bool {
+	return m.clearedsession
+}
+
+// SessionIDs returns the "session" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// SessionID instead. It exists only for internal usage by the builders.
+func (m *SessionReviewActivityMutation) SessionIDs() (ids []string) {
+	if id := m.session; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetSession resets all changes to the "session" edge.
+func (m *SessionReviewActivityMutation) ResetSession() {
+	m.session = nil
+	m.clearedsession = false
+}
+
+// Where appends a list predicates to the SessionReviewActivityMutation builder.
+func (m *SessionReviewActivityMutation) Where(ps ...predicate.SessionReviewActivity) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SessionReviewActivityMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SessionReviewActivityMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SessionReviewActivity, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SessionReviewActivityMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SessionReviewActivityMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SessionReviewActivity).
+func (m *SessionReviewActivityMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SessionReviewActivityMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.session != nil {
+		fields = append(fields, sessionreviewactivity.FieldSessionID)
+	}
+	if m.actor != nil {
+		fields = append(fields, sessionreviewactivity.FieldActor)
+	}
+	if m.action != nil {
+		fields = append(fields, sessionreviewactivity.FieldAction)
+	}
+	if m.from_status != nil {
+		fields = append(fields, sessionreviewactivity.FieldFromStatus)
+	}
+	if m.to_status != nil {
+		fields = append(fields, sessionreviewactivity.FieldToStatus)
+	}
+	if m.resolution_reason != nil {
+		fields = append(fields, sessionreviewactivity.FieldResolutionReason)
+	}
+	if m.note != nil {
+		fields = append(fields, sessionreviewactivity.FieldNote)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sessionreviewactivity.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SessionReviewActivityMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sessionreviewactivity.FieldSessionID:
+		return m.SessionID()
+	case sessionreviewactivity.FieldActor:
+		return m.Actor()
+	case sessionreviewactivity.FieldAction:
+		return m.Action()
+	case sessionreviewactivity.FieldFromStatus:
+		return m.FromStatus()
+	case sessionreviewactivity.FieldToStatus:
+		return m.ToStatus()
+	case sessionreviewactivity.FieldResolutionReason:
+		return m.ResolutionReason()
+	case sessionreviewactivity.FieldNote:
+		return m.Note()
+	case sessionreviewactivity.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SessionReviewActivityMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sessionreviewactivity.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sessionreviewactivity.FieldActor:
+		return m.OldActor(ctx)
+	case sessionreviewactivity.FieldAction:
+		return m.OldAction(ctx)
+	case sessionreviewactivity.FieldFromStatus:
+		return m.OldFromStatus(ctx)
+	case sessionreviewactivity.FieldToStatus:
+		return m.OldToStatus(ctx)
+	case sessionreviewactivity.FieldResolutionReason:
+		return m.OldResolutionReason(ctx)
+	case sessionreviewactivity.FieldNote:
+		return m.OldNote(ctx)
+	case sessionreviewactivity.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SessionReviewActivity field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionReviewActivityMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sessionreviewactivity.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sessionreviewactivity.FieldActor:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActor(v)
+		return nil
+	case sessionreviewactivity.FieldAction:
+		v, ok := value.(sessionreviewactivity.Action)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAction(v)
+		return nil
+	case sessionreviewactivity.FieldFromStatus:
+		v, ok := value.(sessionreviewactivity.FromStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFromStatus(v)
+		return nil
+	case sessionreviewactivity.FieldToStatus:
+		v, ok := value.(sessionreviewactivity.ToStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetToStatus(v)
+		return nil
+	case sessionreviewactivity.FieldResolutionReason:
+		v, ok := value.(sessionreviewactivity.ResolutionReason)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolutionReason(v)
+		return nil
+	case sessionreviewactivity.FieldNote:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNote(v)
+		return nil
+	case sessionreviewactivity.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionReviewActivity field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SessionReviewActivityMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SessionReviewActivityMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionReviewActivityMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown SessionReviewActivity numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SessionReviewActivityMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sessionreviewactivity.FieldFromStatus) {
+		fields = append(fields, sessionreviewactivity.FieldFromStatus)
+	}
+	if m.FieldCleared(sessionreviewactivity.FieldResolutionReason) {
+		fields = append(fields, sessionreviewactivity.FieldResolutionReason)
+	}
+	if m.FieldCleared(sessionreviewactivity.FieldNote) {
+		fields = append(fields, sessionreviewactivity.FieldNote)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SessionReviewActivityMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SessionReviewActivityMutation) ClearField(name string) error {
+	switch name {
+	case sessionreviewactivity.FieldFromStatus:
+		m.ClearFromStatus()
+		return nil
+	case sessionreviewactivity.FieldResolutionReason:
+		m.ClearResolutionReason()
+		return nil
+	case sessionreviewactivity.FieldNote:
+		m.ClearNote()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionReviewActivity nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SessionReviewActivityMutation) ResetField(name string) error {
+	switch name {
+	case sessionreviewactivity.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sessionreviewactivity.FieldActor:
+		m.ResetActor()
+		return nil
+	case sessionreviewactivity.FieldAction:
+		m.ResetAction()
+		return nil
+	case sessionreviewactivity.FieldFromStatus:
+		m.ResetFromStatus()
+		return nil
+	case sessionreviewactivity.FieldToStatus:
+		m.ResetToStatus()
+		return nil
+	case sessionreviewactivity.FieldResolutionReason:
+		m.ResetResolutionReason()
+		return nil
+	case sessionreviewactivity.FieldNote:
+		m.ResetNote()
+		return nil
+	case sessionreviewactivity.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionReviewActivity field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SessionReviewActivityMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.session != nil {
+		edges = append(edges, sessionreviewactivity.EdgeSession)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SessionReviewActivityMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case sessionreviewactivity.EdgeSession:
+		if id := m.session; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SessionReviewActivityMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SessionReviewActivityMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SessionReviewActivityMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedsession {
+		edges = append(edges, sessionreviewactivity.EdgeSession)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SessionReviewActivityMutation) EdgeCleared(name string) bool {
+	switch name {
+	case sessionreviewactivity.EdgeSession:
+		return m.clearedsession
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SessionReviewActivityMutation) ClearEdge(name string) error {
+	switch name {
+	case sessionreviewactivity.EdgeSession:
+		m.ClearSession()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionReviewActivity unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SessionReviewActivityMutation) ResetEdge(name string) error {
+	switch name {
+	case sessionreviewactivity.EdgeSession:
+		m.ResetSession()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionReviewActivity edge %s", name)
 }
 
 // SessionScoreMutation represents an operation that mutates the SessionScore nodes in the graph.

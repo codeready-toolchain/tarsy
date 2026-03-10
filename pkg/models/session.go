@@ -62,6 +62,8 @@ type DashboardListParams struct {
 	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
 	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
 	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
+	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, resolved
+	Assignee      string     `json:"assignee"`       // exact match filter
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
@@ -94,6 +96,9 @@ type DashboardSessionItem struct {
 	MatchedInContent      bool       `json:"matched_in_content"`
 	LatestScore           *int       `json:"latest_score"`
 	ScoringStatus         *string    `json:"scoring_status"`
+	ReviewStatus          *string    `json:"review_status"`
+	Assignee              *string    `json:"assignee"`
+	ResolutionReason      *string    `json:"resolution_reason"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -263,4 +268,51 @@ type ChainStatistics struct {
 	CompletedStages   int  `json:"completed_stages"`
 	FailedStages      int  `json:"failed_stages"`
 	CurrentStageIndex *int `json:"current_stage_index"`
+}
+
+// --- Review workflow DTOs ---
+
+// ReviewAction represents a workflow transition action.
+type ReviewAction string
+
+const (
+	ReviewActionClaim   ReviewAction = "claim"
+	ReviewActionUnclaim ReviewAction = "unclaim"
+	ReviewActionResolve ReviewAction = "resolve"
+	ReviewActionReopen  ReviewAction = "reopen"
+)
+
+// ValidReviewAction returns true if the action is a known value.
+func ValidReviewAction(s string) bool {
+	switch ReviewAction(s) {
+	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionResolve, ReviewActionReopen:
+		return true
+	default:
+		return false
+	}
+}
+
+// UpdateReviewRequest is the request body for PATCH /sessions/:id/review.
+type UpdateReviewRequest struct {
+	Action           string  `json:"action"`            // claim, unclaim, resolve, reopen
+	Actor            string  `json:"-"`                 // populated from extractAuthor, not from JSON
+	ResolutionReason *string `json:"resolution_reason"` // required for resolve
+	Note             *string `json:"note"`              // optional free text
+}
+
+// ReviewActivityItem is a single entry in the review activity log.
+type ReviewActivityItem struct {
+	ID               string  `json:"id"`
+	Actor            string  `json:"actor"`
+	Action           string  `json:"action"`
+	FromStatus       *string `json:"from_status"`
+	ToStatus         string  `json:"to_status"`
+	ResolutionReason *string `json:"resolution_reason,omitempty"`
+	Note             *string `json:"note,omitempty"`
+	CreatedAt        string  `json:"created_at"`
+}
+
+// ReviewActivityResponse wraps the activity list for GET /sessions/:id/review-activity.
+type ReviewActivityResponse struct {
+	Activities []ReviewActivityItem `json:"activities"`
 }

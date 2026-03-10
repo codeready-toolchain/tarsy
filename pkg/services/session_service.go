@@ -842,6 +842,9 @@ type dashboardRow struct {
 	MatchedInContent int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
 	LatestScore      *int    `sql:"latest_score"`
 	ScoringStatus    *string `sql:"scoring_status"`
+	ReviewStatus     *string `sql:"review_status"`
+	Assignee         *string `sql:"assignee"`
+	ResolutionReason *string `sql:"resolution_reason"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -915,6 +918,17 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				}))
 			}
 		})
+	}
+	if params.ReviewStatus != "" {
+		statuses := strings.Split(params.ReviewStatus, ",")
+		reviewStatuses := make([]alertsession.ReviewStatus, 0, len(statuses))
+		for _, rs := range statuses {
+			reviewStatuses = append(reviewStatuses, alertsession.ReviewStatus(rs))
+		}
+		query = query.Where(alertsession.ReviewStatusIn(reviewStatuses...))
+	}
+	if params.Assignee != "" {
+		query = query.Where(alertsession.AssigneeEQ(params.Assignee))
 	}
 
 	// Count total (before pagination).
@@ -992,6 +1006,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldExecutiveSummary),
 				sel.C(alertsession.FieldCurrentStageIndex),
 				sel.C(alertsession.FieldCurrentStageID),
+				sel.C(alertsession.FieldReviewStatus),
+				sel.C(alertsession.FieldAssignee),
+				sel.C(alertsession.FieldResolutionReason),
 			)
 
 			// LLM interaction aggregates.
@@ -1136,6 +1153,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			MatchedInContent:      row.MatchedInContent != 0,
 			LatestScore:           row.LatestScore,
 			ScoringStatus:         row.ScoringStatus,
+			ReviewStatus:          row.ReviewStatus,
+			Assignee:              row.Assignee,
+			ResolutionReason:      row.ResolutionReason,
 		})
 	}
 

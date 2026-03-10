@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -297,6 +298,90 @@ func (_c *AlertSessionCreate) SetNillableDeletedAt(v *time.Time) *AlertSessionCr
 	return _c
 }
 
+// SetReviewStatus sets the "review_status" field.
+func (_c *AlertSessionCreate) SetReviewStatus(v alertsession.ReviewStatus) *AlertSessionCreate {
+	_c.mutation.SetReviewStatus(v)
+	return _c
+}
+
+// SetNillableReviewStatus sets the "review_status" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableReviewStatus(v *alertsession.ReviewStatus) *AlertSessionCreate {
+	if v != nil {
+		_c.SetReviewStatus(*v)
+	}
+	return _c
+}
+
+// SetAssignee sets the "assignee" field.
+func (_c *AlertSessionCreate) SetAssignee(v string) *AlertSessionCreate {
+	_c.mutation.SetAssignee(v)
+	return _c
+}
+
+// SetNillableAssignee sets the "assignee" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableAssignee(v *string) *AlertSessionCreate {
+	if v != nil {
+		_c.SetAssignee(*v)
+	}
+	return _c
+}
+
+// SetAssignedAt sets the "assigned_at" field.
+func (_c *AlertSessionCreate) SetAssignedAt(v time.Time) *AlertSessionCreate {
+	_c.mutation.SetAssignedAt(v)
+	return _c
+}
+
+// SetNillableAssignedAt sets the "assigned_at" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableAssignedAt(v *time.Time) *AlertSessionCreate {
+	if v != nil {
+		_c.SetAssignedAt(*v)
+	}
+	return _c
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (_c *AlertSessionCreate) SetResolvedAt(v time.Time) *AlertSessionCreate {
+	_c.mutation.SetResolvedAt(v)
+	return _c
+}
+
+// SetNillableResolvedAt sets the "resolved_at" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableResolvedAt(v *time.Time) *AlertSessionCreate {
+	if v != nil {
+		_c.SetResolvedAt(*v)
+	}
+	return _c
+}
+
+// SetResolutionReason sets the "resolution_reason" field.
+func (_c *AlertSessionCreate) SetResolutionReason(v alertsession.ResolutionReason) *AlertSessionCreate {
+	_c.mutation.SetResolutionReason(v)
+	return _c
+}
+
+// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableResolutionReason(v *alertsession.ResolutionReason) *AlertSessionCreate {
+	if v != nil {
+		_c.SetResolutionReason(*v)
+	}
+	return _c
+}
+
+// SetResolutionNote sets the "resolution_note" field.
+func (_c *AlertSessionCreate) SetResolutionNote(v string) *AlertSessionCreate {
+	_c.mutation.SetResolutionNote(v)
+	return _c
+}
+
+// SetNillableResolutionNote sets the "resolution_note" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableResolutionNote(v *string) *AlertSessionCreate {
+	if v != nil {
+		_c.SetResolutionNote(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *AlertSessionCreate) SetID(v string) *AlertSessionCreate {
 	_c.mutation.SetID(v)
@@ -442,6 +527,21 @@ func (_c *AlertSessionCreate) AddSessionScores(v ...*SessionScore) *AlertSession
 	return _c.AddSessionScoreIDs(ids...)
 }
 
+// AddReviewActivityIDs adds the "review_activities" edge to the SessionReviewActivity entity by IDs.
+func (_c *AlertSessionCreate) AddReviewActivityIDs(ids ...string) *AlertSessionCreate {
+	_c.mutation.AddReviewActivityIDs(ids...)
+	return _c
+}
+
+// AddReviewActivities adds the "review_activities" edges to the SessionReviewActivity entity.
+func (_c *AlertSessionCreate) AddReviewActivities(v ...*SessionReviewActivity) *AlertSessionCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddReviewActivityIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_c *AlertSessionCreate) Mutation() *AlertSessionMutation {
 	return _c.mutation
@@ -508,6 +608,16 @@ func (_c *AlertSessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.ChainID(); !ok {
 		return &ValidationError{Name: "chain_id", err: errors.New(`ent: missing required field "AlertSession.chain_id"`)}
+	}
+	if v, ok := _c.mutation.ReviewStatus(); ok {
+		if err := alertsession.ReviewStatusValidator(v); err != nil {
+			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.review_status": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ResolutionReason(); ok {
+		if err := alertsession.ResolutionReasonValidator(v); err != nil {
+			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "AlertSession.resolution_reason": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -631,6 +741,30 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.DeletedAt(); ok {
 		_spec.SetField(alertsession.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
+	}
+	if value, ok := _c.mutation.ReviewStatus(); ok {
+		_spec.SetField(alertsession.FieldReviewStatus, field.TypeEnum, value)
+		_node.ReviewStatus = &value
+	}
+	if value, ok := _c.mutation.Assignee(); ok {
+		_spec.SetField(alertsession.FieldAssignee, field.TypeString, value)
+		_node.Assignee = &value
+	}
+	if value, ok := _c.mutation.AssignedAt(); ok {
+		_spec.SetField(alertsession.FieldAssignedAt, field.TypeTime, value)
+		_node.AssignedAt = &value
+	}
+	if value, ok := _c.mutation.ResolvedAt(); ok {
+		_spec.SetField(alertsession.FieldResolvedAt, field.TypeTime, value)
+		_node.ResolvedAt = &value
+	}
+	if value, ok := _c.mutation.ResolutionReason(); ok {
+		_spec.SetField(alertsession.FieldResolutionReason, field.TypeEnum, value)
+		_node.ResolutionReason = &value
+	}
+	if value, ok := _c.mutation.ResolutionNote(); ok {
+		_spec.SetField(alertsession.FieldResolutionNote, field.TypeString, value)
+		_node.ResolutionNote = &value
 	}
 	if nodes := _c.mutation.StagesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -769,6 +903,22 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ReviewActivitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

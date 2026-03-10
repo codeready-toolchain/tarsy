@@ -59,6 +59,18 @@ const (
 	FieldSlackMessageFingerprint = "slack_message_fingerprint"
 	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
 	FieldDeletedAt = "deleted_at"
+	// FieldReviewStatus holds the string denoting the review_status field in the database.
+	FieldReviewStatus = "review_status"
+	// FieldAssignee holds the string denoting the assignee field in the database.
+	FieldAssignee = "assignee"
+	// FieldAssignedAt holds the string denoting the assigned_at field in the database.
+	FieldAssignedAt = "assigned_at"
+	// FieldResolvedAt holds the string denoting the resolved_at field in the database.
+	FieldResolvedAt = "resolved_at"
+	// FieldResolutionReason holds the string denoting the resolution_reason field in the database.
+	FieldResolutionReason = "resolution_reason"
+	// FieldResolutionNote holds the string denoting the resolution_note field in the database.
+	FieldResolutionNote = "resolution_note"
 	// EdgeStages holds the string denoting the stages edge name in mutations.
 	EdgeStages = "stages"
 	// EdgeAgentExecutions holds the string denoting the agent_executions edge name in mutations.
@@ -77,6 +89,8 @@ const (
 	EdgeChat = "chat"
 	// EdgeSessionScores holds the string denoting the session_scores edge name in mutations.
 	EdgeSessionScores = "session_scores"
+	// EdgeReviewActivities holds the string denoting the review_activities edge name in mutations.
+	EdgeReviewActivities = "review_activities"
 	// StageFieldID holds the string denoting the ID field of the Stage.
 	StageFieldID = "stage_id"
 	// AgentExecutionFieldID holds the string denoting the ID field of the AgentExecution.
@@ -95,6 +109,8 @@ const (
 	ChatFieldID = "chat_id"
 	// SessionScoreFieldID holds the string denoting the ID field of the SessionScore.
 	SessionScoreFieldID = "score_id"
+	// SessionReviewActivityFieldID holds the string denoting the ID field of the SessionReviewActivity.
+	SessionReviewActivityFieldID = "activity_id"
 	// Table holds the table name of the alertsession in the database.
 	Table = "alert_sessions"
 	// StagesTable is the table that holds the stages relation/edge.
@@ -160,6 +176,13 @@ const (
 	SessionScoresInverseTable = "session_scores"
 	// SessionScoresColumn is the table column denoting the session_scores relation/edge.
 	SessionScoresColumn = "session_id"
+	// ReviewActivitiesTable is the table that holds the review_activities relation/edge.
+	ReviewActivitiesTable = "session_review_activities"
+	// ReviewActivitiesInverseTable is the table name for the SessionReviewActivity entity.
+	// It exists in this package in order to avoid circular dependency with the "sessionreviewactivity" package.
+	ReviewActivitiesInverseTable = "session_review_activities"
+	// ReviewActivitiesColumn is the table column denoting the review_activities relation/edge.
+	ReviewActivitiesColumn = "session_id"
 )
 
 // Columns holds all SQL columns for alertsession fields.
@@ -187,6 +210,12 @@ var Columns = []string{
 	FieldLastInteractionAt,
 	FieldSlackMessageFingerprint,
 	FieldDeletedAt,
+	FieldReviewStatus,
+	FieldAssignee,
+	FieldAssignedAt,
+	FieldResolvedAt,
+	FieldResolutionReason,
+	FieldResolutionNote,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -232,6 +261,53 @@ func StatusValidator(s Status) error {
 		return nil
 	default:
 		return fmt.Errorf("alertsession: invalid enum value for status field: %q", s)
+	}
+}
+
+// ReviewStatus defines the type for the "review_status" enum field.
+type ReviewStatus string
+
+// ReviewStatus values.
+const (
+	ReviewStatusNeedsReview ReviewStatus = "needs_review"
+	ReviewStatusInProgress  ReviewStatus = "in_progress"
+	ReviewStatusResolved    ReviewStatus = "resolved"
+)
+
+func (rs ReviewStatus) String() string {
+	return string(rs)
+}
+
+// ReviewStatusValidator is a validator for the "review_status" field enum values. It is called by the builders before save.
+func ReviewStatusValidator(rs ReviewStatus) error {
+	switch rs {
+	case ReviewStatusNeedsReview, ReviewStatusInProgress, ReviewStatusResolved:
+		return nil
+	default:
+		return fmt.Errorf("alertsession: invalid enum value for review_status field: %q", rs)
+	}
+}
+
+// ResolutionReason defines the type for the "resolution_reason" enum field.
+type ResolutionReason string
+
+// ResolutionReason values.
+const (
+	ResolutionReasonActioned  ResolutionReason = "actioned"
+	ResolutionReasonDismissed ResolutionReason = "dismissed"
+)
+
+func (rr ResolutionReason) String() string {
+	return string(rr)
+}
+
+// ResolutionReasonValidator is a validator for the "resolution_reason" field enum values. It is called by the builders before save.
+func ResolutionReasonValidator(rr ResolutionReason) error {
+	switch rr {
+	case ResolutionReasonActioned, ResolutionReasonDismissed:
+		return nil
+	default:
+		return fmt.Errorf("alertsession: invalid enum value for resolution_reason field: %q", rr)
 	}
 }
 
@@ -341,6 +417,36 @@ func BySlackMessageFingerprint(opts ...sql.OrderTermOption) OrderOption {
 // ByDeletedAt orders the results by the deleted_at field.
 func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
+}
+
+// ByReviewStatus orders the results by the review_status field.
+func ByReviewStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReviewStatus, opts...).ToFunc()
+}
+
+// ByAssignee orders the results by the assignee field.
+func ByAssignee(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAssignee, opts...).ToFunc()
+}
+
+// ByAssignedAt orders the results by the assigned_at field.
+func ByAssignedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAssignedAt, opts...).ToFunc()
+}
+
+// ByResolvedAt orders the results by the resolved_at field.
+func ByResolvedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResolvedAt, opts...).ToFunc()
+}
+
+// ByResolutionReason orders the results by the resolution_reason field.
+func ByResolutionReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResolutionReason, opts...).ToFunc()
+}
+
+// ByResolutionNote orders the results by the resolution_note field.
+func ByResolutionNote(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResolutionNote, opts...).ToFunc()
 }
 
 // ByStagesCount orders the results by stages count.
@@ -461,6 +567,20 @@ func BySessionScores(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSessionScoresStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByReviewActivitiesCount orders the results by review_activities count.
+func ByReviewActivitiesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newReviewActivitiesStep(), opts...)
+	}
+}
+
+// ByReviewActivities orders the results by review_activities terms.
+func ByReviewActivities(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newReviewActivitiesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newStagesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -522,5 +642,12 @@ func newSessionScoresStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SessionScoresInverseTable, SessionScoreFieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SessionScoresTable, SessionScoresColumn),
+	)
+}
+func newReviewActivitiesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ReviewActivitiesInverseTable, SessionReviewActivityFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ReviewActivitiesTable, ReviewActivitiesColumn),
 	)
 }

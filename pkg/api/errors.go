@@ -25,6 +25,9 @@ func mapServiceError(err error) *echo.HTTPError {
 	if errors.Is(err, services.ErrAlreadyExists) {
 		return echo.NewHTTPError(http.StatusConflict, "resource already exists")
 	}
+	if errors.Is(err, services.ErrConflict) {
+		return echo.NewHTTPError(http.StatusConflict, "state conflict: session was modified concurrently")
+	}
 
 	// Unexpected error
 	slog.Error("Unexpected service error", "error", err)

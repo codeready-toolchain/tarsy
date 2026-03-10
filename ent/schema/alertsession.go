@@ -98,6 +98,34 @@ func (AlertSession) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Soft delete for retention policy"),
+
+		// Review workflow fields
+		field.Enum("review_status").
+			Values("needs_review", "in_progress", "resolved").
+			Optional().
+			Nillable().
+			Comment("Human review workflow state — NULL while investigation is active"),
+		field.String("assignee").
+			Optional().
+			Nillable().
+			Comment("User who claimed this session for review (X-Forwarded-User value)"),
+		field.Time("assigned_at").
+			Optional().
+			Nillable().
+			Comment("When the session was claimed"),
+		field.Time("resolved_at").
+			Optional().
+			Nillable().
+			Comment("When review_status transitioned to resolved"),
+		field.Enum("resolution_reason").
+			Values("actioned", "dismissed").
+			Optional().
+			Nillable().
+			Comment("Why the session was resolved"),
+		field.Text("resolution_note").
+			Optional().
+			Nillable().
+			Comment("Free-text context on resolution"),
 	}
 }
 
@@ -123,6 +151,8 @@ func (AlertSession) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("session_scores", SessionScore.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("review_activities", SessionReviewActivity.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 
@@ -143,6 +173,11 @@ func (AlertSession) Indexes() []ent.Index {
 		// Partial index for soft deletes
 		index.Fields("deleted_at").
 			Annotations(entsql.IndexWhere("deleted_at IS NOT NULL")),
+
+		// Review workflow indexes
+		index.Fields("review_status"),
+		index.Fields("review_status", "assignee"),
+		index.Fields("assignee"),
 	}
 }
 

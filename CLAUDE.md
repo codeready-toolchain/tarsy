@@ -39,6 +39,12 @@ Follow the same pattern:
 - Rust: scan for `rust-*`
 - etc.
 
+## 🔧 Workflow Skills (Always Apply When Relevant)
+
+These skills apply to specific workflows regardless of language:
+
+- `db-migration-review` - **MANDATORY** after every `make migrate-create`. Reviews generated `.up.sql` for Atlas schema drift (dropped partial indexes, no-op recreations).
+
 ## 📋 Available Commands
 
 When a user invokes a `/command-name`, scan `.cursor/commands/` for a matching `command-name.md` file, read it, and follow its instructions.

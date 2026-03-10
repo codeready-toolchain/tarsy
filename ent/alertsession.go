@@ -63,6 +63,18 @@ type AlertSession struct {
 	SlackMessageFingerprint *string `json:"slack_message_fingerprint,omitempty"`
 	// Soft delete for retention policy
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	// Human review workflow state — NULL while investigation is active
+	ReviewStatus *alertsession.ReviewStatus `json:"review_status,omitempty"`
+	// User who claimed this session for review (X-Forwarded-User value)
+	Assignee *string `json:"assignee,omitempty"`
+	// When the session was claimed
+	AssignedAt *time.Time `json:"assigned_at,omitempty"`
+	// When review_status transitioned to resolved
+	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+	// Why the session was resolved
+	ResolutionReason *alertsession.ResolutionReason `json:"resolution_reason,omitempty"`
+	// Free-text context on resolution
+	ResolutionNote *string `json:"resolution_note,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AlertSessionQuery when eager-loading is set.
 	Edges        AlertSessionEdges `json:"edges"`
@@ -89,9 +101,11 @@ type AlertSessionEdges struct {
 	Chat *Chat `json:"chat,omitempty"`
 	// SessionScores holds the value of the session_scores edge.
 	SessionScores []*SessionScore `json:"session_scores,omitempty"`
+	// ReviewActivities holds the value of the review_activities edge.
+	ReviewActivities []*SessionReviewActivity `json:"review_activities,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [10]bool
 }
 
 // StagesOrErr returns the Stages value or an error if the edge
@@ -177,6 +191,15 @@ func (e AlertSessionEdges) SessionScoresOrErr() ([]*SessionScore, error) {
 	return nil, &NotLoadedError{edge: "session_scores"}
 }
 
+// ReviewActivitiesOrErr returns the ReviewActivities value or an error if the edge
+// was not loaded in eager-loading.
+func (e AlertSessionEdges) ReviewActivitiesOrErr() ([]*SessionReviewActivity, error) {
+	if e.loadedTypes[9] {
+		return e.ReviewActivities, nil
+	}
+	return nil, &NotLoadedError{edge: "review_activities"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*AlertSession) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -186,9 +209,9 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case alertsession.FieldCurrentStageIndex:
 			values[i] = new(sql.NullInt64)
-		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint:
+		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint, alertsession.FieldReviewStatus, alertsession.FieldAssignee, alertsession.FieldResolutionReason, alertsession.FieldResolutionNote:
 			values[i] = new(sql.NullString)
-		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt:
+		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt, alertsession.FieldAssignedAt, alertsession.FieldResolvedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -361,6 +384,48 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 				_m.DeletedAt = new(time.Time)
 				*_m.DeletedAt = value.Time
 			}
+		case alertsession.FieldReviewStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field review_status", values[i])
+			} else if value.Valid {
+				_m.ReviewStatus = new(alertsession.ReviewStatus)
+				*_m.ReviewStatus = alertsession.ReviewStatus(value.String)
+			}
+		case alertsession.FieldAssignee:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field assignee", values[i])
+			} else if value.Valid {
+				_m.Assignee = new(string)
+				*_m.Assignee = value.String
+			}
+		case alertsession.FieldAssignedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field assigned_at", values[i])
+			} else if value.Valid {
+				_m.AssignedAt = new(time.Time)
+				*_m.AssignedAt = value.Time
+			}
+		case alertsession.FieldResolvedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field resolved_at", values[i])
+			} else if value.Valid {
+				_m.ResolvedAt = new(time.Time)
+				*_m.ResolvedAt = value.Time
+			}
+		case alertsession.FieldResolutionReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field resolution_reason", values[i])
+			} else if value.Valid {
+				_m.ResolutionReason = new(alertsession.ResolutionReason)
+				*_m.ResolutionReason = alertsession.ResolutionReason(value.String)
+			}
+		case alertsession.FieldResolutionNote:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field resolution_note", values[i])
+			} else if value.Valid {
+				_m.ResolutionNote = new(string)
+				*_m.ResolutionNote = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -417,6 +482,11 @@ func (_m *AlertSession) QueryChat() *ChatQuery {
 // QuerySessionScores queries the "session_scores" edge of the AlertSession entity.
 func (_m *AlertSession) QuerySessionScores() *SessionScoreQuery {
 	return NewAlertSessionClient(_m.config).QuerySessionScores(_m)
+}
+
+// QueryReviewActivities queries the "review_activities" edge of the AlertSession entity.
+func (_m *AlertSession) QueryReviewActivities() *SessionReviewActivityQuery {
+	return NewAlertSessionClient(_m.config).QueryReviewActivities(_m)
 }
 
 // Update returns a builder for updating this AlertSession.
@@ -534,6 +604,36 @@ func (_m *AlertSession) String() string {
 	if v := _m.DeletedAt; v != nil {
 		builder.WriteString("deleted_at=")
 		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.ReviewStatus; v != nil {
+		builder.WriteString("review_status=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.Assignee; v != nil {
+		builder.WriteString("assignee=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.AssignedAt; v != nil {
+		builder.WriteString("assigned_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.ResolvedAt; v != nil {
+		builder.WriteString("resolved_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.ResolutionReason; v != nil {
+		builder.WriteString("resolution_reason=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ResolutionNote; v != nil {
+		builder.WriteString("resolution_note=")
+		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')
 	return builder.String()

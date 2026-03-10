@@ -30,6 +30,9 @@ type MCPInteraction func(*sql.Selector)
 // Message is the predicate function for message builders.
 type Message func(*sql.Selector)
 
+// SessionReviewActivity is the predicate function for sessionreviewactivity builders.
+type SessionReviewActivity func(*sql.Selector)
+
 // SessionScore is the predicate function for sessionscore builders.
 type SessionScore func(*sql.Selector)
 

@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -29,20 +30,21 @@ import (
 // AlertSessionQuery is the builder for querying AlertSession entities.
 type AlertSessionQuery struct {
 	config
-	ctx                 *QueryContext
-	order               []alertsession.OrderOption
-	inters              []Interceptor
-	predicates          []predicate.AlertSession
-	withStages          *StageQuery
-	withAgentExecutions *AgentExecutionQuery
-	withTimelineEvents  *TimelineEventQuery
-	withMessages        *MessageQuery
-	withLlmInteractions *LLMInteractionQuery
-	withMcpInteractions *MCPInteractionQuery
-	withEvents          *EventQuery
-	withChat            *ChatQuery
-	withSessionScores   *SessionScoreQuery
-	modifiers           []func(*sql.Selector)
+	ctx                  *QueryContext
+	order                []alertsession.OrderOption
+	inters               []Interceptor
+	predicates           []predicate.AlertSession
+	withStages           *StageQuery
+	withAgentExecutions  *AgentExecutionQuery
+	withTimelineEvents   *TimelineEventQuery
+	withMessages         *MessageQuery
+	withLlmInteractions  *LLMInteractionQuery
+	withMcpInteractions  *MCPInteractionQuery
+	withEvents           *EventQuery
+	withChat             *ChatQuery
+	withSessionScores    *SessionScoreQuery
+	withReviewActivities *SessionReviewActivityQuery
+	modifiers            []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -277,6 +279,28 @@ func (_q *AlertSessionQuery) QuerySessionScores() *SessionScoreQuery {
 	return query
 }
 
+// QueryReviewActivities chains the current query on the "review_activities" edge.
+func (_q *AlertSessionQuery) QueryReviewActivities() *SessionReviewActivityQuery {
+	query := (&SessionReviewActivityClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, selector),
+			sqlgraph.To(sessionreviewactivity.Table, sessionreviewactivity.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.ReviewActivitiesTable, alertsession.ReviewActivitiesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first AlertSession entity from the query.
 // Returns a *NotFoundError when no AlertSession was found.
 func (_q *AlertSessionQuery) First(ctx context.Context) (*AlertSession, error) {
@@ -464,20 +488,21 @@ func (_q *AlertSessionQuery) Clone() *AlertSessionQuery {
 		return nil
 	}
 	return &AlertSessionQuery{
-		config:              _q.config,
-		ctx:                 _q.ctx.Clone(),
-		order:               append([]alertsession.OrderOption{}, _q.order...),
-		inters:              append([]Interceptor{}, _q.inters...),
-		predicates:          append([]predicate.AlertSession{}, _q.predicates...),
-		withStages:          _q.withStages.Clone(),
-		withAgentExecutions: _q.withAgentExecutions.Clone(),
-		withTimelineEvents:  _q.withTimelineEvents.Clone(),
-		withMessages:        _q.withMessages.Clone(),
-		withLlmInteractions: _q.withLlmInteractions.Clone(),
-		withMcpInteractions: _q.withMcpInteractions.Clone(),
-		withEvents:          _q.withEvents.Clone(),
-		withChat:            _q.withChat.Clone(),
-		withSessionScores:   _q.withSessionScores.Clone(),
+		config:               _q.config,
+		ctx:                  _q.ctx.Clone(),
+		order:                append([]alertsession.OrderOption{}, _q.order...),
+		inters:               append([]Interceptor{}, _q.inters...),
+		predicates:           append([]predicate.AlertSession{}, _q.predicates...),
+		withStages:           _q.withStages.Clone(),
+		withAgentExecutions:  _q.withAgentExecutions.Clone(),
+		withTimelineEvents:   _q.withTimelineEvents.Clone(),
+		withMessages:         _q.withMessages.Clone(),
+		withLlmInteractions:  _q.withLlmInteractions.Clone(),
+		withMcpInteractions:  _q.withMcpInteractions.Clone(),
+		withEvents:           _q.withEvents.Clone(),
+		withChat:             _q.withChat.Clone(),
+		withSessionScores:    _q.withSessionScores.Clone(),
+		withReviewActivities: _q.withReviewActivities.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -584,6 +609,17 @@ func (_q *AlertSessionQuery) WithSessionScores(opts ...func(*SessionScoreQuery))
 	return _q
 }
 
+// WithReviewActivities tells the query-builder to eager-load the nodes that are connected to
+// the "review_activities" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AlertSessionQuery) WithReviewActivities(opts ...func(*SessionReviewActivityQuery)) *AlertSessionQuery {
+	query := (&SessionReviewActivityClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withReviewActivities = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -662,7 +698,7 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*AlertSession{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [10]bool{
 			_q.withStages != nil,
 			_q.withAgentExecutions != nil,
 			_q.withTimelineEvents != nil,
@@ -672,6 +708,7 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withEvents != nil,
 			_q.withChat != nil,
 			_q.withSessionScores != nil,
+			_q.withReviewActivities != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -754,6 +791,15 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		if err := _q.loadSessionScores(ctx, query, nodes,
 			func(n *AlertSession) { n.Edges.SessionScores = []*SessionScore{} },
 			func(n *AlertSession, e *SessionScore) { n.Edges.SessionScores = append(n.Edges.SessionScores, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withReviewActivities; query != nil {
+		if err := _q.loadReviewActivities(ctx, query, nodes,
+			func(n *AlertSession) { n.Edges.ReviewActivities = []*SessionReviewActivity{} },
+			func(n *AlertSession, e *SessionReviewActivity) {
+				n.Edges.ReviewActivities = append(n.Edges.ReviewActivities, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -1012,6 +1058,36 @@ func (_q *AlertSessionQuery) loadSessionScores(ctx context.Context, query *Sessi
 	}
 	query.Where(predicate.SessionScore(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(alertsession.SessionScoresColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.SessionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "session_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AlertSessionQuery) loadReviewActivities(ctx context.Context, query *SessionReviewActivityQuery, nodes []*AlertSession, init func(*AlertSession), assign func(*AlertSession, *SessionReviewActivity)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AlertSession)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(sessionreviewactivity.FieldSessionID)
+	}
+	query.Where(predicate.SessionReviewActivity(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(alertsession.ReviewActivitiesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -439,6 +440,126 @@ func (_u *AlertSessionUpdate) ClearDeletedAt() *AlertSessionUpdate {
 	return _u
 }
 
+// SetReviewStatus sets the "review_status" field.
+func (_u *AlertSessionUpdate) SetReviewStatus(v alertsession.ReviewStatus) *AlertSessionUpdate {
+	_u.mutation.SetReviewStatus(v)
+	return _u
+}
+
+// SetNillableReviewStatus sets the "review_status" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableReviewStatus(v *alertsession.ReviewStatus) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetReviewStatus(*v)
+	}
+	return _u
+}
+
+// ClearReviewStatus clears the value of the "review_status" field.
+func (_u *AlertSessionUpdate) ClearReviewStatus() *AlertSessionUpdate {
+	_u.mutation.ClearReviewStatus()
+	return _u
+}
+
+// SetAssignee sets the "assignee" field.
+func (_u *AlertSessionUpdate) SetAssignee(v string) *AlertSessionUpdate {
+	_u.mutation.SetAssignee(v)
+	return _u
+}
+
+// SetNillableAssignee sets the "assignee" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableAssignee(v *string) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetAssignee(*v)
+	}
+	return _u
+}
+
+// ClearAssignee clears the value of the "assignee" field.
+func (_u *AlertSessionUpdate) ClearAssignee() *AlertSessionUpdate {
+	_u.mutation.ClearAssignee()
+	return _u
+}
+
+// SetAssignedAt sets the "assigned_at" field.
+func (_u *AlertSessionUpdate) SetAssignedAt(v time.Time) *AlertSessionUpdate {
+	_u.mutation.SetAssignedAt(v)
+	return _u
+}
+
+// SetNillableAssignedAt sets the "assigned_at" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableAssignedAt(v *time.Time) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetAssignedAt(*v)
+	}
+	return _u
+}
+
+// ClearAssignedAt clears the value of the "assigned_at" field.
+func (_u *AlertSessionUpdate) ClearAssignedAt() *AlertSessionUpdate {
+	_u.mutation.ClearAssignedAt()
+	return _u
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (_u *AlertSessionUpdate) SetResolvedAt(v time.Time) *AlertSessionUpdate {
+	_u.mutation.SetResolvedAt(v)
+	return _u
+}
+
+// SetNillableResolvedAt sets the "resolved_at" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableResolvedAt(v *time.Time) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetResolvedAt(*v)
+	}
+	return _u
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (_u *AlertSessionUpdate) ClearResolvedAt() *AlertSessionUpdate {
+	_u.mutation.ClearResolvedAt()
+	return _u
+}
+
+// SetResolutionReason sets the "resolution_reason" field.
+func (_u *AlertSessionUpdate) SetResolutionReason(v alertsession.ResolutionReason) *AlertSessionUpdate {
+	_u.mutation.SetResolutionReason(v)
+	return _u
+}
+
+// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableResolutionReason(v *alertsession.ResolutionReason) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetResolutionReason(*v)
+	}
+	return _u
+}
+
+// ClearResolutionReason clears the value of the "resolution_reason" field.
+func (_u *AlertSessionUpdate) ClearResolutionReason() *AlertSessionUpdate {
+	_u.mutation.ClearResolutionReason()
+	return _u
+}
+
+// SetResolutionNote sets the "resolution_note" field.
+func (_u *AlertSessionUpdate) SetResolutionNote(v string) *AlertSessionUpdate {
+	_u.mutation.SetResolutionNote(v)
+	return _u
+}
+
+// SetNillableResolutionNote sets the "resolution_note" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableResolutionNote(v *string) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetResolutionNote(*v)
+	}
+	return _u
+}
+
+// ClearResolutionNote clears the value of the "resolution_note" field.
+func (_u *AlertSessionUpdate) ClearResolutionNote() *AlertSessionUpdate {
+	_u.mutation.ClearResolutionNote()
+	return _u
+}
+
 // AddStageIDs adds the "stages" edge to the Stage entity by IDs.
 func (_u *AlertSessionUpdate) AddStageIDs(ids ...string) *AlertSessionUpdate {
 	_u.mutation.AddStageIDs(ids...)
@@ -576,6 +697,21 @@ func (_u *AlertSessionUpdate) AddSessionScores(v ...*SessionScore) *AlertSession
 		ids[i] = v[i].ID
 	}
 	return _u.AddSessionScoreIDs(ids...)
+}
+
+// AddReviewActivityIDs adds the "review_activities" edge to the SessionReviewActivity entity by IDs.
+func (_u *AlertSessionUpdate) AddReviewActivityIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.AddReviewActivityIDs(ids...)
+	return _u
+}
+
+// AddReviewActivities adds the "review_activities" edges to the SessionReviewActivity entity.
+func (_u *AlertSessionUpdate) AddReviewActivities(v ...*SessionReviewActivity) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReviewActivityIDs(ids...)
 }
 
 // Mutation returns the AlertSessionMutation object of the builder.
@@ -757,6 +893,27 @@ func (_u *AlertSessionUpdate) RemoveSessionScores(v ...*SessionScore) *AlertSess
 	return _u.RemoveSessionScoreIDs(ids...)
 }
 
+// ClearReviewActivities clears all "review_activities" edges to the SessionReviewActivity entity.
+func (_u *AlertSessionUpdate) ClearReviewActivities() *AlertSessionUpdate {
+	_u.mutation.ClearReviewActivities()
+	return _u
+}
+
+// RemoveReviewActivityIDs removes the "review_activities" edge to SessionReviewActivity entities by IDs.
+func (_u *AlertSessionUpdate) RemoveReviewActivityIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.RemoveReviewActivityIDs(ids...)
+	return _u
+}
+
+// RemoveReviewActivities removes "review_activities" edges to SessionReviewActivity entities.
+func (_u *AlertSessionUpdate) RemoveReviewActivities(v ...*SessionReviewActivity) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReviewActivityIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *AlertSessionUpdate) Save(ctx context.Context) (int, error) {
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
@@ -789,6 +946,16 @@ func (_u *AlertSessionUpdate) check() error {
 	if v, ok := _u.mutation.Status(); ok {
 		if err := alertsession.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ReviewStatus(); ok {
+		if err := alertsession.ReviewStatusValidator(v); err != nil {
+			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.review_status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResolutionReason(); ok {
+		if err := alertsession.ResolutionReasonValidator(v); err != nil {
+			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "AlertSession.resolution_reason": %w`, err)}
 		}
 	}
 	return nil
@@ -931,6 +1098,42 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(alertsession.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ReviewStatus(); ok {
+		_spec.SetField(alertsession.FieldReviewStatus, field.TypeEnum, value)
+	}
+	if _u.mutation.ReviewStatusCleared() {
+		_spec.ClearField(alertsession.FieldReviewStatus, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.Assignee(); ok {
+		_spec.SetField(alertsession.FieldAssignee, field.TypeString, value)
+	}
+	if _u.mutation.AssigneeCleared() {
+		_spec.ClearField(alertsession.FieldAssignee, field.TypeString)
+	}
+	if value, ok := _u.mutation.AssignedAt(); ok {
+		_spec.SetField(alertsession.FieldAssignedAt, field.TypeTime, value)
+	}
+	if _u.mutation.AssignedAtCleared() {
+		_spec.ClearField(alertsession.FieldAssignedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResolvedAt(); ok {
+		_spec.SetField(alertsession.FieldResolvedAt, field.TypeTime, value)
+	}
+	if _u.mutation.ResolvedAtCleared() {
+		_spec.ClearField(alertsession.FieldResolvedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResolutionReason(); ok {
+		_spec.SetField(alertsession.FieldResolutionReason, field.TypeEnum, value)
+	}
+	if _u.mutation.ResolutionReasonCleared() {
+		_spec.ClearField(alertsession.FieldResolutionReason, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.ResolutionNote(); ok {
+		_spec.SetField(alertsession.FieldResolutionNote, field.TypeString, value)
+	}
+	if _u.mutation.ResolutionNoteCleared() {
+		_spec.ClearField(alertsession.FieldResolutionNote, field.TypeString)
 	}
 	if _u.mutation.StagesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1314,6 +1517,51 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReviewActivitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReviewActivitiesIDs(); len(nodes) > 0 && !_u.mutation.ReviewActivitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReviewActivitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -1744,6 +1992,126 @@ func (_u *AlertSessionUpdateOne) ClearDeletedAt() *AlertSessionUpdateOne {
 	return _u
 }
 
+// SetReviewStatus sets the "review_status" field.
+func (_u *AlertSessionUpdateOne) SetReviewStatus(v alertsession.ReviewStatus) *AlertSessionUpdateOne {
+	_u.mutation.SetReviewStatus(v)
+	return _u
+}
+
+// SetNillableReviewStatus sets the "review_status" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableReviewStatus(v *alertsession.ReviewStatus) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetReviewStatus(*v)
+	}
+	return _u
+}
+
+// ClearReviewStatus clears the value of the "review_status" field.
+func (_u *AlertSessionUpdateOne) ClearReviewStatus() *AlertSessionUpdateOne {
+	_u.mutation.ClearReviewStatus()
+	return _u
+}
+
+// SetAssignee sets the "assignee" field.
+func (_u *AlertSessionUpdateOne) SetAssignee(v string) *AlertSessionUpdateOne {
+	_u.mutation.SetAssignee(v)
+	return _u
+}
+
+// SetNillableAssignee sets the "assignee" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableAssignee(v *string) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetAssignee(*v)
+	}
+	return _u
+}
+
+// ClearAssignee clears the value of the "assignee" field.
+func (_u *AlertSessionUpdateOne) ClearAssignee() *AlertSessionUpdateOne {
+	_u.mutation.ClearAssignee()
+	return _u
+}
+
+// SetAssignedAt sets the "assigned_at" field.
+func (_u *AlertSessionUpdateOne) SetAssignedAt(v time.Time) *AlertSessionUpdateOne {
+	_u.mutation.SetAssignedAt(v)
+	return _u
+}
+
+// SetNillableAssignedAt sets the "assigned_at" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableAssignedAt(v *time.Time) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetAssignedAt(*v)
+	}
+	return _u
+}
+
+// ClearAssignedAt clears the value of the "assigned_at" field.
+func (_u *AlertSessionUpdateOne) ClearAssignedAt() *AlertSessionUpdateOne {
+	_u.mutation.ClearAssignedAt()
+	return _u
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (_u *AlertSessionUpdateOne) SetResolvedAt(v time.Time) *AlertSessionUpdateOne {
+	_u.mutation.SetResolvedAt(v)
+	return _u
+}
+
+// SetNillableResolvedAt sets the "resolved_at" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableResolvedAt(v *time.Time) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetResolvedAt(*v)
+	}
+	return _u
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (_u *AlertSessionUpdateOne) ClearResolvedAt() *AlertSessionUpdateOne {
+	_u.mutation.ClearResolvedAt()
+	return _u
+}
+
+// SetResolutionReason sets the "resolution_reason" field.
+func (_u *AlertSessionUpdateOne) SetResolutionReason(v alertsession.ResolutionReason) *AlertSessionUpdateOne {
+	_u.mutation.SetResolutionReason(v)
+	return _u
+}
+
+// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableResolutionReason(v *alertsession.ResolutionReason) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetResolutionReason(*v)
+	}
+	return _u
+}
+
+// ClearResolutionReason clears the value of the "resolution_reason" field.
+func (_u *AlertSessionUpdateOne) ClearResolutionReason() *AlertSessionUpdateOne {
+	_u.mutation.ClearResolutionReason()
+	return _u
+}
+
+// SetResolutionNote sets the "resolution_note" field.
+func (_u *AlertSessionUpdateOne) SetResolutionNote(v string) *AlertSessionUpdateOne {
+	_u.mutation.SetResolutionNote(v)
+	return _u
+}
+
+// SetNillableResolutionNote sets the "resolution_note" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableResolutionNote(v *string) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetResolutionNote(*v)
+	}
+	return _u
+}
+
+// ClearResolutionNote clears the value of the "resolution_note" field.
+func (_u *AlertSessionUpdateOne) ClearResolutionNote() *AlertSessionUpdateOne {
+	_u.mutation.ClearResolutionNote()
+	return _u
+}
+
 // AddStageIDs adds the "stages" edge to the Stage entity by IDs.
 func (_u *AlertSessionUpdateOne) AddStageIDs(ids ...string) *AlertSessionUpdateOne {
 	_u.mutation.AddStageIDs(ids...)
@@ -1881,6 +2249,21 @@ func (_u *AlertSessionUpdateOne) AddSessionScores(v ...*SessionScore) *AlertSess
 		ids[i] = v[i].ID
 	}
 	return _u.AddSessionScoreIDs(ids...)
+}
+
+// AddReviewActivityIDs adds the "review_activities" edge to the SessionReviewActivity entity by IDs.
+func (_u *AlertSessionUpdateOne) AddReviewActivityIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.AddReviewActivityIDs(ids...)
+	return _u
+}
+
+// AddReviewActivities adds the "review_activities" edges to the SessionReviewActivity entity.
+func (_u *AlertSessionUpdateOne) AddReviewActivities(v ...*SessionReviewActivity) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReviewActivityIDs(ids...)
 }
 
 // Mutation returns the AlertSessionMutation object of the builder.
@@ -2062,6 +2445,27 @@ func (_u *AlertSessionUpdateOne) RemoveSessionScores(v ...*SessionScore) *AlertS
 	return _u.RemoveSessionScoreIDs(ids...)
 }
 
+// ClearReviewActivities clears all "review_activities" edges to the SessionReviewActivity entity.
+func (_u *AlertSessionUpdateOne) ClearReviewActivities() *AlertSessionUpdateOne {
+	_u.mutation.ClearReviewActivities()
+	return _u
+}
+
+// RemoveReviewActivityIDs removes the "review_activities" edge to SessionReviewActivity entities by IDs.
+func (_u *AlertSessionUpdateOne) RemoveReviewActivityIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.RemoveReviewActivityIDs(ids...)
+	return _u
+}
+
+// RemoveReviewActivities removes "review_activities" edges to SessionReviewActivity entities.
+func (_u *AlertSessionUpdateOne) RemoveReviewActivities(v ...*SessionReviewActivity) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReviewActivityIDs(ids...)
+}
+
 // Where appends a list predicates to the AlertSessionUpdate builder.
 func (_u *AlertSessionUpdateOne) Where(ps ...predicate.AlertSession) *AlertSessionUpdateOne {
 	_u.mutation.Where(ps...)
@@ -2107,6 +2511,16 @@ func (_u *AlertSessionUpdateOne) check() error {
 	if v, ok := _u.mutation.Status(); ok {
 		if err := alertsession.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ReviewStatus(); ok {
+		if err := alertsession.ReviewStatusValidator(v); err != nil {
+			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.review_status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResolutionReason(); ok {
+		if err := alertsession.ResolutionReasonValidator(v); err != nil {
+			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "AlertSession.resolution_reason": %w`, err)}
 		}
 	}
 	return nil
@@ -2266,6 +2680,42 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(alertsession.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ReviewStatus(); ok {
+		_spec.SetField(alertsession.FieldReviewStatus, field.TypeEnum, value)
+	}
+	if _u.mutation.ReviewStatusCleared() {
+		_spec.ClearField(alertsession.FieldReviewStatus, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.Assignee(); ok {
+		_spec.SetField(alertsession.FieldAssignee, field.TypeString, value)
+	}
+	if _u.mutation.AssigneeCleared() {
+		_spec.ClearField(alertsession.FieldAssignee, field.TypeString)
+	}
+	if value, ok := _u.mutation.AssignedAt(); ok {
+		_spec.SetField(alertsession.FieldAssignedAt, field.TypeTime, value)
+	}
+	if _u.mutation.AssignedAtCleared() {
+		_spec.ClearField(alertsession.FieldAssignedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResolvedAt(); ok {
+		_spec.SetField(alertsession.FieldResolvedAt, field.TypeTime, value)
+	}
+	if _u.mutation.ResolvedAtCleared() {
+		_spec.ClearField(alertsession.FieldResolvedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResolutionReason(); ok {
+		_spec.SetField(alertsession.FieldResolutionReason, field.TypeEnum, value)
+	}
+	if _u.mutation.ResolutionReasonCleared() {
+		_spec.ClearField(alertsession.FieldResolutionReason, field.TypeEnum)
+	}
+	if value, ok := _u.mutation.ResolutionNote(); ok {
+		_spec.SetField(alertsession.FieldResolutionNote, field.TypeString, value)
+	}
+	if _u.mutation.ResolutionNoteCleared() {
+		_spec.ClearField(alertsession.FieldResolutionNote, field.TypeString)
 	}
 	if _u.mutation.StagesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2649,6 +3099,51 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sessionscore.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReviewActivitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReviewActivitiesIDs(); len(nodes) > 0 && !_u.mutation.ReviewActivitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReviewActivitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.ReviewActivitiesTable,
+			Columns: []string{alertsession.ReviewActivitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

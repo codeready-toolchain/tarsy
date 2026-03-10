@@ -105,6 +105,18 @@ func (f MessageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MessageMutation", m)
 }
 
+// The SessionReviewActivityFunc type is an adapter to allow the use of ordinary
+// function as SessionReviewActivity mutator.
+type SessionReviewActivityFunc func(context.Context, *ent.SessionReviewActivityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionReviewActivityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionReviewActivityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionReviewActivityMutation", m)
+}
+
 // The SessionScoreFunc type is an adapter to allow the use of ordinary
 // function as SessionScore mutator.
 type SessionScoreFunc func(context.Context, *ent.SessionScoreMutation) (ent.Value, error)

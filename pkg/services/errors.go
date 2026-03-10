@@ -20,6 +20,10 @@ var (
 
 	// ErrNotCancellable is returned when attempting to cancel a session that is not in a cancellable state
 	ErrNotCancellable = errors.New("session is not in a cancellable state")
+
+	// ErrConflict is returned when a state transition fails because the current state
+	// doesn't match the expected precondition (e.g., concurrent claim/resolve race).
+	ErrConflict = errors.New("state conflict")
 )
 
 // ValidationError wraps field-specific validation errors

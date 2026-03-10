@@ -160,6 +160,26 @@ func DeletedAt(v time.Time) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldDeletedAt, v))
 }
 
+// Assignee applies equality check predicate on the "assignee" field. It's identical to AssigneeEQ.
+func Assignee(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldAssignee, v))
+}
+
+// AssignedAt applies equality check predicate on the "assigned_at" field. It's identical to AssignedAtEQ.
+func AssignedAt(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldAssignedAt, v))
+}
+
+// ResolvedAt applies equality check predicate on the "resolved_at" field. It's identical to ResolvedAtEQ.
+func ResolvedAt(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldResolvedAt, v))
+}
+
+// ResolutionNote applies equality check predicate on the "resolution_note" field. It's identical to ResolutionNoteEQ.
+func ResolutionNote(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldResolutionNote, v))
+}
+
 // AlertDataEQ applies the EQ predicate on the "alert_data" field.
 func AlertDataEQ(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldAlertData, v))
@@ -1435,6 +1455,316 @@ func DeletedAtNotNil() predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldNotNull(FieldDeletedAt))
 }
 
+// ReviewStatusEQ applies the EQ predicate on the "review_status" field.
+func ReviewStatusEQ(v ReviewStatus) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldReviewStatus, v))
+}
+
+// ReviewStatusNEQ applies the NEQ predicate on the "review_status" field.
+func ReviewStatusNEQ(v ReviewStatus) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldReviewStatus, v))
+}
+
+// ReviewStatusIn applies the In predicate on the "review_status" field.
+func ReviewStatusIn(vs ...ReviewStatus) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldReviewStatus, vs...))
+}
+
+// ReviewStatusNotIn applies the NotIn predicate on the "review_status" field.
+func ReviewStatusNotIn(vs ...ReviewStatus) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldReviewStatus, vs...))
+}
+
+// ReviewStatusIsNil applies the IsNil predicate on the "review_status" field.
+func ReviewStatusIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldReviewStatus))
+}
+
+// ReviewStatusNotNil applies the NotNil predicate on the "review_status" field.
+func ReviewStatusNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldReviewStatus))
+}
+
+// AssigneeEQ applies the EQ predicate on the "assignee" field.
+func AssigneeEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldAssignee, v))
+}
+
+// AssigneeNEQ applies the NEQ predicate on the "assignee" field.
+func AssigneeNEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldAssignee, v))
+}
+
+// AssigneeIn applies the In predicate on the "assignee" field.
+func AssigneeIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldAssignee, vs...))
+}
+
+// AssigneeNotIn applies the NotIn predicate on the "assignee" field.
+func AssigneeNotIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldAssignee, vs...))
+}
+
+// AssigneeGT applies the GT predicate on the "assignee" field.
+func AssigneeGT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldAssignee, v))
+}
+
+// AssigneeGTE applies the GTE predicate on the "assignee" field.
+func AssigneeGTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldAssignee, v))
+}
+
+// AssigneeLT applies the LT predicate on the "assignee" field.
+func AssigneeLT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldAssignee, v))
+}
+
+// AssigneeLTE applies the LTE predicate on the "assignee" field.
+func AssigneeLTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldAssignee, v))
+}
+
+// AssigneeContains applies the Contains predicate on the "assignee" field.
+func AssigneeContains(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContains(FieldAssignee, v))
+}
+
+// AssigneeHasPrefix applies the HasPrefix predicate on the "assignee" field.
+func AssigneeHasPrefix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasPrefix(FieldAssignee, v))
+}
+
+// AssigneeHasSuffix applies the HasSuffix predicate on the "assignee" field.
+func AssigneeHasSuffix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasSuffix(FieldAssignee, v))
+}
+
+// AssigneeIsNil applies the IsNil predicate on the "assignee" field.
+func AssigneeIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldAssignee))
+}
+
+// AssigneeNotNil applies the NotNil predicate on the "assignee" field.
+func AssigneeNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldAssignee))
+}
+
+// AssigneeEqualFold applies the EqualFold predicate on the "assignee" field.
+func AssigneeEqualFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEqualFold(FieldAssignee, v))
+}
+
+// AssigneeContainsFold applies the ContainsFold predicate on the "assignee" field.
+func AssigneeContainsFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContainsFold(FieldAssignee, v))
+}
+
+// AssignedAtEQ applies the EQ predicate on the "assigned_at" field.
+func AssignedAtEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldAssignedAt, v))
+}
+
+// AssignedAtNEQ applies the NEQ predicate on the "assigned_at" field.
+func AssignedAtNEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldAssignedAt, v))
+}
+
+// AssignedAtIn applies the In predicate on the "assigned_at" field.
+func AssignedAtIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldAssignedAt, vs...))
+}
+
+// AssignedAtNotIn applies the NotIn predicate on the "assigned_at" field.
+func AssignedAtNotIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldAssignedAt, vs...))
+}
+
+// AssignedAtGT applies the GT predicate on the "assigned_at" field.
+func AssignedAtGT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldAssignedAt, v))
+}
+
+// AssignedAtGTE applies the GTE predicate on the "assigned_at" field.
+func AssignedAtGTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldAssignedAt, v))
+}
+
+// AssignedAtLT applies the LT predicate on the "assigned_at" field.
+func AssignedAtLT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldAssignedAt, v))
+}
+
+// AssignedAtLTE applies the LTE predicate on the "assigned_at" field.
+func AssignedAtLTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldAssignedAt, v))
+}
+
+// AssignedAtIsNil applies the IsNil predicate on the "assigned_at" field.
+func AssignedAtIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldAssignedAt))
+}
+
+// AssignedAtNotNil applies the NotNil predicate on the "assigned_at" field.
+func AssignedAtNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldAssignedAt))
+}
+
+// ResolvedAtEQ applies the EQ predicate on the "resolved_at" field.
+func ResolvedAtEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldResolvedAt, v))
+}
+
+// ResolvedAtNEQ applies the NEQ predicate on the "resolved_at" field.
+func ResolvedAtNEQ(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldResolvedAt, v))
+}
+
+// ResolvedAtIn applies the In predicate on the "resolved_at" field.
+func ResolvedAtIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldResolvedAt, vs...))
+}
+
+// ResolvedAtNotIn applies the NotIn predicate on the "resolved_at" field.
+func ResolvedAtNotIn(vs ...time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldResolvedAt, vs...))
+}
+
+// ResolvedAtGT applies the GT predicate on the "resolved_at" field.
+func ResolvedAtGT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldResolvedAt, v))
+}
+
+// ResolvedAtGTE applies the GTE predicate on the "resolved_at" field.
+func ResolvedAtGTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldResolvedAt, v))
+}
+
+// ResolvedAtLT applies the LT predicate on the "resolved_at" field.
+func ResolvedAtLT(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldResolvedAt, v))
+}
+
+// ResolvedAtLTE applies the LTE predicate on the "resolved_at" field.
+func ResolvedAtLTE(v time.Time) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldResolvedAt, v))
+}
+
+// ResolvedAtIsNil applies the IsNil predicate on the "resolved_at" field.
+func ResolvedAtIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldResolvedAt))
+}
+
+// ResolvedAtNotNil applies the NotNil predicate on the "resolved_at" field.
+func ResolvedAtNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldResolvedAt))
+}
+
+// ResolutionReasonEQ applies the EQ predicate on the "resolution_reason" field.
+func ResolutionReasonEQ(v ResolutionReason) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldResolutionReason, v))
+}
+
+// ResolutionReasonNEQ applies the NEQ predicate on the "resolution_reason" field.
+func ResolutionReasonNEQ(v ResolutionReason) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldResolutionReason, v))
+}
+
+// ResolutionReasonIn applies the In predicate on the "resolution_reason" field.
+func ResolutionReasonIn(vs ...ResolutionReason) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldResolutionReason, vs...))
+}
+
+// ResolutionReasonNotIn applies the NotIn predicate on the "resolution_reason" field.
+func ResolutionReasonNotIn(vs ...ResolutionReason) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldResolutionReason, vs...))
+}
+
+// ResolutionReasonIsNil applies the IsNil predicate on the "resolution_reason" field.
+func ResolutionReasonIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldResolutionReason))
+}
+
+// ResolutionReasonNotNil applies the NotNil predicate on the "resolution_reason" field.
+func ResolutionReasonNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldResolutionReason))
+}
+
+// ResolutionNoteEQ applies the EQ predicate on the "resolution_note" field.
+func ResolutionNoteEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldResolutionNote, v))
+}
+
+// ResolutionNoteNEQ applies the NEQ predicate on the "resolution_note" field.
+func ResolutionNoteNEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldResolutionNote, v))
+}
+
+// ResolutionNoteIn applies the In predicate on the "resolution_note" field.
+func ResolutionNoteIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldResolutionNote, vs...))
+}
+
+// ResolutionNoteNotIn applies the NotIn predicate on the "resolution_note" field.
+func ResolutionNoteNotIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldResolutionNote, vs...))
+}
+
+// ResolutionNoteGT applies the GT predicate on the "resolution_note" field.
+func ResolutionNoteGT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldResolutionNote, v))
+}
+
+// ResolutionNoteGTE applies the GTE predicate on the "resolution_note" field.
+func ResolutionNoteGTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldResolutionNote, v))
+}
+
+// ResolutionNoteLT applies the LT predicate on the "resolution_note" field.
+func ResolutionNoteLT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldResolutionNote, v))
+}
+
+// ResolutionNoteLTE applies the LTE predicate on the "resolution_note" field.
+func ResolutionNoteLTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldResolutionNote, v))
+}
+
+// ResolutionNoteContains applies the Contains predicate on the "resolution_note" field.
+func ResolutionNoteContains(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContains(FieldResolutionNote, v))
+}
+
+// ResolutionNoteHasPrefix applies the HasPrefix predicate on the "resolution_note" field.
+func ResolutionNoteHasPrefix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasPrefix(FieldResolutionNote, v))
+}
+
+// ResolutionNoteHasSuffix applies the HasSuffix predicate on the "resolution_note" field.
+func ResolutionNoteHasSuffix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasSuffix(FieldResolutionNote, v))
+}
+
+// ResolutionNoteIsNil applies the IsNil predicate on the "resolution_note" field.
+func ResolutionNoteIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldResolutionNote))
+}
+
+// ResolutionNoteNotNil applies the NotNil predicate on the "resolution_note" field.
+func ResolutionNoteNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldResolutionNote))
+}
+
+// ResolutionNoteEqualFold applies the EqualFold predicate on the "resolution_note" field.
+func ResolutionNoteEqualFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEqualFold(FieldResolutionNote, v))
+}
+
+// ResolutionNoteContainsFold applies the ContainsFold predicate on the "resolution_note" field.
+func ResolutionNoteContainsFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContainsFold(FieldResolutionNote, v))
+}
+
 // HasStages applies the HasEdge predicate on the "stages" edge.
 func HasStages() predicate.AlertSession {
 	return predicate.AlertSession(func(s *sql.Selector) {
@@ -1634,6 +1964,29 @@ func HasSessionScores() predicate.AlertSession {
 func HasSessionScoresWith(preds ...predicate.SessionScore) predicate.AlertSession {
 	return predicate.AlertSession(func(s *sql.Selector) {
 		step := newSessionScoresStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasReviewActivities applies the HasEdge predicate on the "review_activities" edge.
+func HasReviewActivities() predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ReviewActivitiesTable, ReviewActivitiesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasReviewActivitiesWith applies the HasEdge predicate on the "review_activities" edge with a given conditions (other predicates).
+func HasReviewActivitiesWith(preds ...predicate.SessionReviewActivity) predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := newReviewActivitiesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

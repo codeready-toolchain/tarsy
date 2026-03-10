@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -49,6 +50,8 @@ type Client struct {
 	MCPInteraction *MCPInteractionClient
 	// Message is the client for interacting with the Message builders.
 	Message *MessageClient
+	// SessionReviewActivity is the client for interacting with the SessionReviewActivity builders.
+	SessionReviewActivity *SessionReviewActivityClient
 	// SessionScore is the client for interacting with the SessionScore builders.
 	SessionScore *SessionScoreClient
 	// Stage is the client for interacting with the Stage builders.
@@ -74,6 +77,7 @@ func (c *Client) init() {
 	c.LLMInteraction = NewLLMInteractionClient(c.config)
 	c.MCPInteraction = NewMCPInteractionClient(c.config)
 	c.Message = NewMessageClient(c.config)
+	c.SessionReviewActivity = NewSessionReviewActivityClient(c.config)
 	c.SessionScore = NewSessionScoreClient(c.config)
 	c.Stage = NewStageClient(c.config)
 	c.TimelineEvent = NewTimelineEventClient(c.config)
@@ -167,19 +171,20 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		AgentExecution:  NewAgentExecutionClient(cfg),
-		AlertSession:    NewAlertSessionClient(cfg),
-		Chat:            NewChatClient(cfg),
-		ChatUserMessage: NewChatUserMessageClient(cfg),
-		Event:           NewEventClient(cfg),
-		LLMInteraction:  NewLLMInteractionClient(cfg),
-		MCPInteraction:  NewMCPInteractionClient(cfg),
-		Message:         NewMessageClient(cfg),
-		SessionScore:    NewSessionScoreClient(cfg),
-		Stage:           NewStageClient(cfg),
-		TimelineEvent:   NewTimelineEventClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		AgentExecution:        NewAgentExecutionClient(cfg),
+		AlertSession:          NewAlertSessionClient(cfg),
+		Chat:                  NewChatClient(cfg),
+		ChatUserMessage:       NewChatUserMessageClient(cfg),
+		Event:                 NewEventClient(cfg),
+		LLMInteraction:        NewLLMInteractionClient(cfg),
+		MCPInteraction:        NewMCPInteractionClient(cfg),
+		Message:               NewMessageClient(cfg),
+		SessionReviewActivity: NewSessionReviewActivityClient(cfg),
+		SessionScore:          NewSessionScoreClient(cfg),
+		Stage:                 NewStageClient(cfg),
+		TimelineEvent:         NewTimelineEventClient(cfg),
 	}, nil
 }
 
@@ -197,19 +202,20 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		AgentExecution:  NewAgentExecutionClient(cfg),
-		AlertSession:    NewAlertSessionClient(cfg),
-		Chat:            NewChatClient(cfg),
-		ChatUserMessage: NewChatUserMessageClient(cfg),
-		Event:           NewEventClient(cfg),
-		LLMInteraction:  NewLLMInteractionClient(cfg),
-		MCPInteraction:  NewMCPInteractionClient(cfg),
-		Message:         NewMessageClient(cfg),
-		SessionScore:    NewSessionScoreClient(cfg),
-		Stage:           NewStageClient(cfg),
-		TimelineEvent:   NewTimelineEventClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		AgentExecution:        NewAgentExecutionClient(cfg),
+		AlertSession:          NewAlertSessionClient(cfg),
+		Chat:                  NewChatClient(cfg),
+		ChatUserMessage:       NewChatUserMessageClient(cfg),
+		Event:                 NewEventClient(cfg),
+		LLMInteraction:        NewLLMInteractionClient(cfg),
+		MCPInteraction:        NewMCPInteractionClient(cfg),
+		Message:               NewMessageClient(cfg),
+		SessionReviewActivity: NewSessionReviewActivityClient(cfg),
+		SessionScore:          NewSessionScoreClient(cfg),
+		Stage:                 NewStageClient(cfg),
+		TimelineEvent:         NewTimelineEventClient(cfg),
 	}, nil
 }
 
@@ -240,8 +246,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionScore, c.Stage,
-		c.TimelineEvent,
+		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionReviewActivity,
+		c.SessionScore, c.Stage, c.TimelineEvent,
 	} {
 		n.Use(hooks...)
 	}
@@ -252,8 +258,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionScore, c.Stage,
-		c.TimelineEvent,
+		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionReviewActivity,
+		c.SessionScore, c.Stage, c.TimelineEvent,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -278,6 +284,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.MCPInteraction.mutate(ctx, m)
 	case *MessageMutation:
 		return c.Message.mutate(ctx, m)
+	case *SessionReviewActivityMutation:
+		return c.SessionReviewActivity.mutate(ctx, m)
 	case *SessionScoreMutation:
 		return c.SessionScore.mutate(ctx, m)
 	case *StageMutation:
@@ -811,6 +819,22 @@ func (c *AlertSessionClient) QuerySessionScores(_m *AlertSession) *SessionScoreQ
 			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
 			sqlgraph.To(sessionscore.Table, sessionscore.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.SessionScoresTable, alertsession.SessionScoresColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryReviewActivities queries the review_activities edge of a AlertSession.
+func (c *AlertSessionClient) QueryReviewActivities(_m *AlertSession) *SessionReviewActivityQuery {
+	query := (&SessionReviewActivityClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
+			sqlgraph.To(sessionreviewactivity.Table, sessionreviewactivity.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.ReviewActivitiesTable, alertsession.ReviewActivitiesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1945,6 +1969,155 @@ func (c *MessageClient) mutate(ctx context.Context, m *MessageMutation) (Value, 
 	}
 }
 
+// SessionReviewActivityClient is a client for the SessionReviewActivity schema.
+type SessionReviewActivityClient struct {
+	config
+}
+
+// NewSessionReviewActivityClient returns a client for the SessionReviewActivity from the given config.
+func NewSessionReviewActivityClient(c config) *SessionReviewActivityClient {
+	return &SessionReviewActivityClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionreviewactivity.Hooks(f(g(h())))`.
+func (c *SessionReviewActivityClient) Use(hooks ...Hook) {
+	c.hooks.SessionReviewActivity = append(c.hooks.SessionReviewActivity, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionreviewactivity.Intercept(f(g(h())))`.
+func (c *SessionReviewActivityClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionReviewActivity = append(c.inters.SessionReviewActivity, interceptors...)
+}
+
+// Create returns a builder for creating a SessionReviewActivity entity.
+func (c *SessionReviewActivityClient) Create() *SessionReviewActivityCreate {
+	mutation := newSessionReviewActivityMutation(c.config, OpCreate)
+	return &SessionReviewActivityCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionReviewActivity entities.
+func (c *SessionReviewActivityClient) CreateBulk(builders ...*SessionReviewActivityCreate) *SessionReviewActivityCreateBulk {
+	return &SessionReviewActivityCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionReviewActivityClient) MapCreateBulk(slice any, setFunc func(*SessionReviewActivityCreate, int)) *SessionReviewActivityCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionReviewActivityCreateBulk{err: fmt.Errorf("calling to SessionReviewActivityClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionReviewActivityCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionReviewActivityCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionReviewActivity.
+func (c *SessionReviewActivityClient) Update() *SessionReviewActivityUpdate {
+	mutation := newSessionReviewActivityMutation(c.config, OpUpdate)
+	return &SessionReviewActivityUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionReviewActivityClient) UpdateOne(_m *SessionReviewActivity) *SessionReviewActivityUpdateOne {
+	mutation := newSessionReviewActivityMutation(c.config, OpUpdateOne, withSessionReviewActivity(_m))
+	return &SessionReviewActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionReviewActivityClient) UpdateOneID(id string) *SessionReviewActivityUpdateOne {
+	mutation := newSessionReviewActivityMutation(c.config, OpUpdateOne, withSessionReviewActivityID(id))
+	return &SessionReviewActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionReviewActivity.
+func (c *SessionReviewActivityClient) Delete() *SessionReviewActivityDelete {
+	mutation := newSessionReviewActivityMutation(c.config, OpDelete)
+	return &SessionReviewActivityDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionReviewActivityClient) DeleteOne(_m *SessionReviewActivity) *SessionReviewActivityDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionReviewActivityClient) DeleteOneID(id string) *SessionReviewActivityDeleteOne {
+	builder := c.Delete().Where(sessionreviewactivity.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionReviewActivityDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionReviewActivity.
+func (c *SessionReviewActivityClient) Query() *SessionReviewActivityQuery {
+	return &SessionReviewActivityQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionReviewActivity},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionReviewActivity entity by its id.
+func (c *SessionReviewActivityClient) Get(ctx context.Context, id string) (*SessionReviewActivity, error) {
+	return c.Query().Where(sessionreviewactivity.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionReviewActivityClient) GetX(ctx context.Context, id string) *SessionReviewActivity {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySession queries the session edge of a SessionReviewActivity.
+func (c *SessionReviewActivityClient) QuerySession(_m *SessionReviewActivity) *AlertSessionQuery {
+	query := (&AlertSessionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sessionreviewactivity.Table, sessionreviewactivity.FieldID, id),
+			sqlgraph.To(alertsession.Table, alertsession.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sessionreviewactivity.SessionTable, sessionreviewactivity.SessionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SessionReviewActivityClient) Hooks() []Hook {
+	return c.hooks.SessionReviewActivity
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionReviewActivityClient) Interceptors() []Interceptor {
+	return c.inters.SessionReviewActivity
+}
+
+func (c *SessionReviewActivityClient) mutate(ctx context.Context, m *SessionReviewActivityMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionReviewActivityCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionReviewActivityUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionReviewActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionReviewActivityDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionReviewActivity mutation op: %q", m.Op())
+	}
+}
+
 // SessionScoreClient is a client for the SessionScore schema.
 type SessionScoreClient struct {
 	config
@@ -2652,10 +2825,12 @@ func (c *TimelineEventClient) mutate(ctx context.Context, m *TimelineEventMutati
 type (
 	hooks struct {
 		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, SessionScore, Stage, TimelineEvent []ent.Hook
+		MCPInteraction, Message, SessionReviewActivity, SessionScore, Stage,
+		TimelineEvent []ent.Hook
 	}
 	inters struct {
 		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, SessionScore, Stage, TimelineEvent []ent.Interceptor
+		MCPInteraction, Message, SessionReviewActivity, SessionScore, Stage,
+		TimelineEvent []ent.Interceptor
 	}
 )
