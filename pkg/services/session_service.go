@@ -647,7 +647,7 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 		Where(alertsession.IDEQ(sessionID), alertsession.DeletedAtIsNil()).
 		WithStages().
 		WithSessionScores(func(q *ent.SessionScoreQuery) {
-			q.Order(sessionscore.ByStartedAt(sql.OrderDesc())).Limit(1)
+			q.Order(sessionscore.ByStartedAt(sql.OrderDesc()))
 		}).
 		Only(ctx)
 	if err != nil {
@@ -702,10 +702,14 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 	}
 
 	if scores := session.Edges.SessionScores; len(scores) > 0 {
-		latest := scores[0]
-		status := string(latest.Status)
+		status := string(scores[0].Status)
 		resp.ScoringStatus = &status
-		resp.TotalScore = latest.TotalScore
+		for _, sc := range scores {
+			if sc.Status == sessionscore.StatusCompleted && sc.TotalScore != nil {
+				resp.TotalScore = sc.TotalScore
+				break
+			}
+		}
 	}
 
 	return resp, nil

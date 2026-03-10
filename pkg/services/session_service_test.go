@@ -1429,6 +1429,37 @@ func TestSessionService_GetSessionSummary(t *testing.T) {
 		assert.Equal(t, "completed", *summary.ScoringStatus)
 	})
 
+	t.Run("in-progress rescore preserves completed score", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"rescore summary", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		client.SessionScore.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sessionID).
+			SetTotalScore(75).
+			SetScoreTriggeredBy("auto").
+			SetStatus(sessionscore.StatusCompleted).
+			SetStartedAt(time.Now().Add(-time.Minute)).
+			SaveX(ctx)
+
+		client.SessionScore.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sessionID).
+			SetScoreTriggeredBy("user").
+			SetStatus(sessionscore.StatusInProgress).
+			SaveX(ctx)
+
+		summary, err := service.GetSessionSummary(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.NotNil(t, summary.ScoringStatus)
+		assert.Equal(t, "in_progress", *summary.ScoringStatus, "status should reflect latest (in-progress) row")
+
+		require.NotNil(t, summary.TotalScore)
+		assert.Equal(t, 75, *summary.TotalScore, "score should come from the last completed row")
+	})
+
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
 		_, err := service.GetSessionSummary(ctx, "nonexistent-id")
 		assert.ErrorIs(t, err, ErrNotFound)
