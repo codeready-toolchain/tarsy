@@ -257,7 +257,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         }}
         sx={session.scoring_status || session.latest_score != null ? { cursor: 'pointer' } : undefined}
       >
-        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} />
+        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} variant="pill" showLabel={false} />
       </TableCell>
 
       {/* Tokens */}

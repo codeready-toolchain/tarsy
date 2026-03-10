@@ -644,6 +644,7 @@ export default function SessionHeader({
             <ScoreBadge
               score={session.latest_score}
               scoringStatus={session.scoring_status}
+              variant="pill"
               onClick={handleScoreClick}
             />
           ) : isTerminal && !scoringTriggered ? (
@@ -668,7 +669,7 @@ export default function SessionHeader({
               </Button>
             </Tooltip>
           ) : scoringTriggered ? (
-            <ScoreBadge scoringStatus={EXECUTION_STATUS.ACTIVE} />
+            <ScoreBadge scoringStatus={EXECUTION_STATUS.ACTIVE} variant="pill" />
           ) : null}
 
           {session.total_tokens > 0 && (

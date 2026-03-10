@@ -18,6 +18,11 @@ import {
   Divider,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -84,6 +89,7 @@ export function ScoringPage() {
 
   const [rescoring, setRescoring] = useState(false);
   const [rescoreError, setRescoreError] = useState<string | null>(null);
+  const [showRescoreDialog, setShowRescoreDialog] = useState(false);
 
   const scoringStageIdRef = useRef<string | null>(null);
 
@@ -174,14 +180,25 @@ export function ScoringPage() {
     return () => { unsubscribe(); };
   }, [id, loadScore]);
 
-  const handleRescore = useCallback(async () => {
+  const handleRescoreClick = useCallback(() => {
+    setShowRescoreDialog(true);
+    setRescoreError(null);
+  }, []);
+
+  const handleRescoreDialogClose = useCallback(() => {
+    if (!rescoring) {
+      setShowRescoreDialog(false);
+    }
+  }, [rescoring]);
+
+  const handleConfirmRescore = useCallback(async () => {
     if (!id) return;
     setRescoring(true);
     setRescoreError(null);
 
     try {
       await triggerScoring(id);
-      // Score will be updated via WS when scoring completes
+      setShowRescoreDialog(false);
     } catch (err) {
       setRescoreError(handleAPIError(err));
       setRescoring(false);
@@ -194,7 +211,7 @@ export function ScoringPage() {
 
   return (
     <>
-      <Container maxWidth="lg" sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         <SharedHeader title={headerTitle} showBackButton />
 
         <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -313,7 +330,7 @@ export function ScoringPage() {
                   <Button
                     variant="outlined"
                     startIcon={rescoring ? <CircularProgress size={16} color="inherit" /> : <Refresh />}
-                    onClick={handleRescore}
+                    onClick={handleRescoreClick}
                     disabled={rescoring}
                     sx={{ textTransform: 'none', fontWeight: 500 }}
                   >
@@ -392,7 +409,7 @@ export function ScoringPage() {
                   </Typography>
                   <Button
                     variant="contained"
-                    onClick={handleRescore}
+                    onClick={handleRescoreClick}
                     disabled={rescoring}
                     startIcon={rescoring ? <CircularProgress size={16} color="inherit" /> : <GradingOutlined />}
                     sx={{ textTransform: 'none' }}
@@ -405,6 +422,60 @@ export function ScoringPage() {
           )}
         </Box>
       </Container>
+
+      {/* Re-score confirmation dialog */}
+      <Dialog
+        open={showRescoreDialog}
+        onClose={handleRescoreDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Re-score Session?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will run a new scoring evaluation on this session. The previous
+            score will be replaced with the new result.
+          </DialogContentText>
+          {rescoreError && (
+            <Box
+              sx={(theme) => ({
+                mt: 2,
+                p: 1.5,
+                bgcolor: alpha(theme.palette.error.main, 0.05),
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'error.main',
+              })}
+            >
+              <Typography variant="body2" color="error.main">
+                {rescoreError}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={handleRescoreDialogClose}
+            disabled={rescoring}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmRescore}
+            variant="contained"
+            color="primary"
+            disabled={rescoring}
+            startIcon={
+              rescoring ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : undefined
+            }
+          >
+            {rescoring ? 'Scoring...' : 'Confirm Re-score'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <VersionFooter />
     </>
