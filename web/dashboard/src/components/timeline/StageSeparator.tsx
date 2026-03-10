@@ -39,7 +39,6 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const rawName = item.content;
   const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
   const errorMessage = (item.metadata?.error_message as string) || '';
-  const isScoringStage = stageType === STAGE_TYPE.SCORING;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -101,14 +100,6 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
           )}
         </Box>
       </Divider>
-      {!isScoringStage && (
-        <Typography
-          variant="caption" color="text.secondary"
-          sx={{ display: 'block', textAlign: 'center', fontStyle: 'italic', fontSize: '0.75rem', opacity: isCollapsed ? 0.7 : 1 }}
-        >
-          Agent: {(item.metadata?.agent_name as string) || stageName}
-        </Typography>
-      )}
 
       {isErrorStatus && !isCollapsed && (
         <ErrorCard
