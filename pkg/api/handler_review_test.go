@@ -83,6 +83,7 @@ func TestGetTriageHandler_InvalidResolvedLimit(t *testing.T) {
 	}{
 		{name: "non-numeric", query: "resolved_limit=abc"},
 		{name: "negative", query: "resolved_limit=-5"},
+		{name: "exceeds maximum", query: "resolved_limit=999"},
 	}
 
 	for _, tt := range tests {

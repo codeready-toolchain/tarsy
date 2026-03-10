@@ -265,6 +265,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Error("Failed to load session score for execution", "error", err)
 		e.failScore(scoreID, "failed to load session score: "+err.Error())
 		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load session score: "+err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 
@@ -273,6 +274,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Error("Failed to load scoring stage", "error", err)
 		e.failScore(scoreID, "failed to load scoring stage: "+err.Error())
 		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load scoring stage: "+err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 
@@ -282,6 +284,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	if len(execs) == 0 {
 		e.failScore(scoreID, "no agent execution found for scoring stage")
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, "no agent execution")
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	exec := execs[0]
@@ -291,18 +294,21 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	if err != nil {
 		e.failScore(scoreID, "failed to load session: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	chain, err := e.cfg.GetChain(session.ChainID)
 	if err != nil {
 		e.failScore(scoreID, "failed to resolve chain: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	resolvedConfig, err := agent.ResolveScoringConfig(e.cfg, chain, chain.Scoring)
 	if err != nil {
 		e.failScore(scoreID, "failed to resolve scoring config: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	promptHash := fmt.Sprintf("%x", prompt.GetCurrentPromptHash())
@@ -341,6 +347,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		errMsg := err.Error()
 		e.failExecution(exec.ID, sessionID, stageID, stg.StageIndex, errMsg)
 		e.failScore(scoreID, errMsg)
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +13,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
+
+const maxResolvedLimit = 200
 
 // updateReviewHandler handles PATCH /api/v1/sessions/:id/review.
 func (s *Server) updateReviewHandler(c *echo.Context) error {
@@ -31,7 +35,11 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 	}
 
 	// Publish review.status event (caller-owns-publishing pattern).
+	// Use a detached context so client disconnects don't cancel the publish.
 	if s.eventPublisher != nil {
+		pubCtx, pubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer pubCancel()
+
 		payload := events.ReviewStatusPayload{
 			BasePayload: events.BasePayload{
 				Type:      events.EventTypeReviewStatus,
@@ -42,13 +50,14 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 			Assignee: session.Assignee,
 		}
 		if session.ReviewStatus != nil {
-			payload.ReviewStatus = string(*session.ReviewStatus)
+			rs := string(*session.ReviewStatus)
+			payload.ReviewStatus = &rs
 		}
 		if session.ResolutionReason != nil {
 			reason := string(*session.ResolutionReason)
 			payload.ResolutionReason = &reason
 		}
-		if err := s.eventPublisher.PublishReviewStatus(c.Request().Context(), sessionID, payload); err != nil {
+		if err := s.eventPublisher.PublishReviewStatus(pubCtx, sessionID, payload); err != nil {
 			slog.Warn("Failed to publish review status from handler",
 				"session_id", sessionID, "error", err)
 		}
@@ -125,6 +134,10 @@ func (s *Server) getTriageHandler(c *echo.Context) error {
 		limit, err := strconv.Atoi(limitStr)
 		if err != nil || limit < 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "resolved_limit must be a non-negative integer")
+		}
+		if limit > maxResolvedLimit {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				fmt.Sprintf("resolved_limit must not exceed %d", maxResolvedLimit))
 		}
 		params.ResolvedLimit = limit
 	}

@@ -111,9 +111,21 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		params.EndDate = &t
 	}
 
-	params.ReviewStatus = c.QueryParam("review_status")
+	if v := c.QueryParam("review_status"); v != "" {
+		for _, rs := range strings.Split(v, ",") {
+			if err := alertsession.ReviewStatusValidator(alertsession.ReviewStatus(rs)); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid review_status: "+rs)
+			}
+		}
+		params.ReviewStatus = v
+	}
 	params.Assignee = c.QueryParam("assignee")
-	params.ResolutionReason = c.QueryParam("resolution_reason")
+	if v := c.QueryParam("resolution_reason"); v != "" {
+		if err := alertsession.ResolutionReasonValidator(alertsession.ResolutionReason(v)); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid resolution_reason: "+v)
+		}
+		params.ResolutionReason = v
+	}
 
 	result, err := s.sessionService.ListSessionsForDashboard(c.Request().Context(), params)
 	if err != nil {

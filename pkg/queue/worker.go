@@ -456,11 +456,13 @@ func (w *Worker) publishReviewStatus(ctx context.Context, sessionID string, term
 	}
 
 	if terminalStatus == alertsession.StatusCancelled {
-		payload.ReviewStatus = string(alertsession.ReviewStatusResolved)
+		rs := string(alertsession.ReviewStatusResolved)
+		payload.ReviewStatus = &rs
 		reason := string(alertsession.ResolutionReasonDismissed)
 		payload.ResolutionReason = &reason
 	} else {
-		payload.ReviewStatus = string(alertsession.ReviewStatusNeedsReview)
+		rs := string(alertsession.ReviewStatusNeedsReview)
+		payload.ReviewStatus = &rs
 	}
 
 	if err := w.eventPublisher.PublishReviewStatus(ctx, sessionID, payload); err != nil {

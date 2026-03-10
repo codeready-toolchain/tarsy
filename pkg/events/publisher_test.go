@@ -315,13 +315,14 @@ func TestInteractionCreatedPayload_JSON(t *testing.T) {
 func TestReviewStatusPayload_JSON(t *testing.T) {
 	reason := "actioned"
 	assignee := "jsmith@company.com"
+	rs := "resolved"
 	payload := ReviewStatusPayload{
 		BasePayload: BasePayload{
 			Type:      EventTypeReviewStatus,
 			SessionID: "sess-400",
 			Timestamp: "2026-03-05T11:30:00Z",
 		},
-		ReviewStatus:     "resolved",
+		ReviewStatus:     &rs,
 		Assignee:         &assignee,
 		ResolutionReason: &reason,
 		Actor:            "jsmith@company.com",
@@ -335,7 +336,8 @@ func TestReviewStatusPayload_JSON(t *testing.T) {
 
 	assert.Equal(t, EventTypeReviewStatus, decoded.Type)
 	assert.Equal(t, "sess-400", decoded.SessionID)
-	assert.Equal(t, "resolved", decoded.ReviewStatus)
+	require.NotNil(t, decoded.ReviewStatus)
+	assert.Equal(t, "resolved", *decoded.ReviewStatus)
 	require.NotNil(t, decoded.Assignee)
 	assert.Equal(t, "jsmith@company.com", *decoded.Assignee)
 	require.NotNil(t, decoded.ResolutionReason)
@@ -368,13 +370,14 @@ func TestSessionScoreUpdatedPayload_JSON(t *testing.T) {
 }
 
 func TestReviewStatusPayload_OmitsNilFields(t *testing.T) {
+	rs := "needs_review"
 	payload := ReviewStatusPayload{
 		BasePayload: BasePayload{
 			Type:      EventTypeReviewStatus,
 			SessionID: "sess-401",
 			Timestamp: "2026-03-05T10:00:00Z",
 		},
-		ReviewStatus: "needs_review",
+		ReviewStatus: &rs,
 		Actor:        "system",
 	}
 

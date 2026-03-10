@@ -71,13 +71,14 @@ const (
 	StageStatusCancelled = "cancelled"
 )
 
-// ScoringStatus values for session.score_updated payloads.
+// ScoringStatus represents the state of a session's scoring evaluation.
 type ScoringStatus string
 
+// Possible ScoringStatus values for session.score_updated payloads.
 const (
-	ScoringStatusInProgress ScoringStatus = "in_progress"
-	ScoringStatusCompleted  ScoringStatus = "completed"
-	ScoringStatusFailed     ScoringStatus = "failed"
+	ScoringStatusInProgress ScoringStatus = "in_progress" // LLM evaluation is running
+	ScoringStatusCompleted  ScoringStatus = "completed"   // scoring finished successfully
+	ScoringStatusFailed     ScoringStatus = "failed"      // scoring encountered an error
 )
 
 // Chat event types (stored in DB + NOTIFY).

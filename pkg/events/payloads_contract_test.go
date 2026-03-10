@@ -140,15 +140,18 @@ func TestSessionChannelPayloads_ContainSessionID(t *testing.T) {
 		},
 		{
 			name: "ReviewStatusPayload",
-			payload: ReviewStatusPayload{
-				BasePayload: BasePayload{
-					Type:      EventTypeReviewStatus,
-					SessionID: testSessionID,
-					Timestamp: "2026-01-01T00:00:00Z",
-				},
-				ReviewStatus: "needs_review",
-				Actor:        "system",
-			},
+			payload: func() ReviewStatusPayload {
+				rs := "needs_review"
+				return ReviewStatusPayload{
+					BasePayload: BasePayload{
+						Type:      EventTypeReviewStatus,
+						SessionID: testSessionID,
+						Timestamp: "2026-01-01T00:00:00Z",
+					},
+					ReviewStatus: &rs,
+					Actor:        "system",
+				}
+			}(),
 		},
 	}
 

@@ -56,6 +56,18 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			wantErr: http.StatusBadRequest,
 			errMsg:  "invalid end_date",
 		},
+		{
+			name:    "invalid review_status",
+			query:   "review_status=bogus",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid review_status",
+		},
+		{
+			name:    "invalid resolution_reason",
+			query:   "resolution_reason=invalid",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid resolution_reason",
+		},
 	}
 
 	for _, tt := range tests {
