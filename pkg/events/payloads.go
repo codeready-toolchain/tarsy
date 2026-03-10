@@ -118,7 +118,7 @@ type ExecutionProgressPayload struct {
 // or manual transition by SRE via API).
 type ReviewStatusPayload struct {
 	BasePayload
-	ReviewStatus     string  `json:"review_status"`              // needs_review, in_progress, resolved
+	ReviewStatus     string  `json:"review_status"`               // needs_review, in_progress, resolved
 	Assignee         *string `json:"assignee,omitempty"`          // null when unassigned
 	ResolutionReason *string `json:"resolution_reason,omitempty"` // actioned, dismissed
 	Actor            string  `json:"actor"`                       // who triggered the change ("system" for worker transitions)

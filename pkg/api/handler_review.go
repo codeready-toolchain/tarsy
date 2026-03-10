@@ -66,13 +66,13 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":               session.ID,
-		"review_status":    reviewStatus,
-		"assignee":         session.Assignee,
-		"assigned_at":      session.AssignedAt,
-		"resolved_at":      session.ResolvedAt,
+		"id":                session.ID,
+		"review_status":     reviewStatus,
+		"assignee":          session.Assignee,
+		"assigned_at":       session.AssignedAt,
+		"resolved_at":       session.ResolvedAt,
 		"resolution_reason": resolutionReason,
-		"resolution_note":  session.ResolutionNote,
+		"resolution_note":   session.ResolutionNote,
 	})
 }
 
