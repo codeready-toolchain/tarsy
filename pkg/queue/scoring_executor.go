@@ -257,11 +257,15 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	logger := slog.With("session_id", sessionID, "score_id", scoreID, "stage_id", stageID)
 	logger.Info("Scoring executor: starting evaluation")
 
+	// Notify dashboard so it shows the scoring spinner
+	e.publishScoreUpdated(sessionID, events.ScoringStatusInProgress)
+
 	score, err := e.dbClient.SessionScore.Get(ctx, scoreID)
 	if err != nil {
 		logger.Error("Failed to load session score for execution", "error", err)
 		e.failScore(scoreID, "failed to load session score: "+err.Error())
 		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load session score: "+err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 
@@ -270,6 +274,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Error("Failed to load scoring stage", "error", err)
 		e.failScore(scoreID, "failed to load scoring stage: "+err.Error())
 		_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load scoring stage: "+err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 
@@ -279,6 +284,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	if len(execs) == 0 {
 		e.failScore(scoreID, "no agent execution found for scoring stage")
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, "no agent execution")
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	exec := execs[0]
@@ -288,18 +294,21 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	if err != nil {
 		e.failScore(scoreID, "failed to load session: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	chain, err := e.cfg.GetChain(session.ChainID)
 	if err != nil {
 		e.failScore(scoreID, "failed to resolve chain: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	resolvedConfig, err := agent.ResolveScoringConfig(e.cfg, chain, chain.Scoring)
 	if err != nil {
 		e.failScore(scoreID, "failed to resolve scoring config: "+err.Error())
 		e.finishScoringStage(stageID, sessionID, stg.StageIndex, events.StageStatusFailed, err.Error())
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 	promptHash := fmt.Sprintf("%x", prompt.GetCurrentPromptHash())
@@ -338,6 +347,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		errMsg := err.Error()
 		e.failExecution(exec.ID, sessionID, stageID, stg.StageIndex, errMsg)
 		e.failScore(scoreID, errMsg)
+		e.publishScoreUpdated(sessionID, events.ScoringStatusFailed)
 		return
 	}
 
@@ -399,8 +409,34 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Warn("Scoring executor: failed", "error", errMsg)
 	}
 
+	// Notify global sessions channel so the dashboard refreshes the score
+	scoringStatus := events.ScoringStatusFailed
+	if scoreCompleted {
+		scoringStatus = events.ScoringStatusCompleted
+	}
+	e.publishScoreUpdated(sessionID, scoringStatus)
+
 	// Schedule event cleanup
 	e.scheduleEventCleanup(stageID, time.Now())
+}
+
+// publishScoreUpdated notifies the global sessions channel that scoring
+// started or finished, so the dashboard can show the spinner / final score.
+func (e *ScoringExecutor) publishScoreUpdated(sessionID string, scoringStatus events.ScoringStatus) {
+	if e.eventPublisher == nil {
+		return
+	}
+	if err := e.eventPublisher.PublishSessionScoreUpdated(context.Background(), sessionID, events.SessionScoreUpdatedPayload{
+		BasePayload: events.BasePayload{
+			Type:      events.EventTypeSessionScoreUpdated,
+			SessionID: sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		ScoringStatus: scoringStatus,
+	}); err != nil {
+		slog.Warn("Failed to publish session score updated",
+			"session_id", sessionID, "scoring_status", scoringStatus, "error", err)
+	}
 }
 
 // trackCancel registers a cancel func for an in-flight scoring run.

@@ -51,19 +51,20 @@ type SessionListResponse struct {
 
 // DashboardListParams holds query parameters for the dashboard session list.
 type DashboardListParams struct {
-	Page          int        `json:"page"`       // 1-based
-	PageSize      int        `json:"page_size"`  // max 100
-	SortBy        string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
-	SortOrder     string     `json:"sort_order"` // asc or desc
-	Status        string     `json:"status"`     // comma-separated status filter
-	AlertType     string     `json:"alert_type"`
-	ChainID       string     `json:"chain_id"`
-	Search        string     `json:"search"`         // ILIKE on alert_data, final_analysis
-	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
-	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
-	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
-	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, resolved
-	Assignee      string     `json:"assignee"`       // exact match filter
+	Page             int        `json:"page"`       // 1-based
+	PageSize         int        `json:"page_size"`  // max 100
+	SortBy           string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
+	SortOrder        string     `json:"sort_order"` // asc or desc
+	Status           string     `json:"status"`     // comma-separated status filter
+	AlertType        string     `json:"alert_type"`
+	ChainID          string     `json:"chain_id"`
+	Search           string     `json:"search"`            // ILIKE on alert_data, final_analysis
+	StartDate        *time.Time `json:"start_date"`        // created_at >= start_date
+	EndDate          *time.Time `json:"end_date"`          // created_at < end_date
+	ScoringStatus    string     `json:"scoring_status"`    // scored, not_scored, scoring_in_progress, scoring_failed
+	ReviewStatus     string     `json:"review_status"`     // comma-separated: needs_review, in_progress, resolved
+	Assignee         string     `json:"assignee"`          // exact match filter
+	ResolutionReason string     `json:"resolution_reason"` // actioned, dismissed
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
@@ -316,4 +317,27 @@ type ReviewActivityItem struct {
 // ReviewActivityResponse wraps the activity list for GET /sessions/:id/review-activity.
 type ReviewActivityResponse struct {
 	Activities []ReviewActivityItem `json:"activities"`
+}
+
+// --- Triage DTOs ---
+
+// TriageGroup is a single column/section in the triage view.
+type TriageGroup struct {
+	Count    int                    `json:"count"`
+	Sessions []DashboardSessionItem `json:"sessions"`
+	HasMore  bool                   `json:"has_more,omitempty"`
+}
+
+// TriageResponse is the grouped response for GET /sessions/triage.
+type TriageResponse struct {
+	Investigating TriageGroup `json:"investigating"`
+	NeedsReview   TriageGroup `json:"needs_review"`
+	InProgress    TriageGroup `json:"in_progress"`
+	Resolved      TriageGroup `json:"resolved"`
+}
+
+// TriageParams holds query parameters for the triage endpoint.
+type TriageParams struct {
+	ResolvedLimit int    // max resolved sessions to return (default 20)
+	Assignee      string // filter by assignee (exact match)
 }

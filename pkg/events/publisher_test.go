@@ -311,3 +311,79 @@ func TestInteractionCreatedPayload_JSON(t *testing.T) {
 	assert.Equal(t, "stg-2", decoded.StageID)
 	assert.Equal(t, "exec-2", decoded.ExecutionID)
 }
+
+func TestReviewStatusPayload_JSON(t *testing.T) {
+	reason := "actioned"
+	assignee := "jsmith@company.com"
+	rs := "resolved"
+	payload := ReviewStatusPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeReviewStatus,
+			SessionID: "sess-400",
+			Timestamp: "2026-03-05T11:30:00Z",
+		},
+		ReviewStatus:     &rs,
+		Assignee:         &assignee,
+		ResolutionReason: &reason,
+		Actor:            "jsmith@company.com",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded ReviewStatusPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeReviewStatus, decoded.Type)
+	assert.Equal(t, "sess-400", decoded.SessionID)
+	require.NotNil(t, decoded.ReviewStatus)
+	assert.Equal(t, "resolved", *decoded.ReviewStatus)
+	require.NotNil(t, decoded.Assignee)
+	assert.Equal(t, "jsmith@company.com", *decoded.Assignee)
+	require.NotNil(t, decoded.ResolutionReason)
+	assert.Equal(t, "actioned", *decoded.ResolutionReason)
+	assert.Equal(t, "jsmith@company.com", decoded.Actor)
+}
+
+func TestSessionScoreUpdatedPayload_JSON(t *testing.T) {
+	payload := SessionScoreUpdatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionScoreUpdated,
+			SessionID: "sess-500",
+			Timestamp: "2026-03-10T14:00:00Z",
+		},
+		ScoringStatus: ScoringStatusInProgress,
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded SessionScoreUpdatedPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeSessionScoreUpdated, decoded.Type)
+	assert.Equal(t, "sess-500", decoded.SessionID)
+	assert.Equal(t, ScoringStatusInProgress, decoded.ScoringStatus)
+
+	assert.Contains(t, string(data), `"type":"session.score_updated"`)
+	assert.Contains(t, string(data), `"scoring_status":"in_progress"`)
+}
+
+func TestReviewStatusPayload_OmitsNilFields(t *testing.T) {
+	rs := "needs_review"
+	payload := ReviewStatusPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeReviewStatus,
+			SessionID: "sess-401",
+			Timestamp: "2026-03-05T10:00:00Z",
+		},
+		ReviewStatus: &rs,
+		Actor:        "system",
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(data), "assignee")
+	assert.NotContains(t, string(data), "resolution_reason")
+}

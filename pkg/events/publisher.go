@@ -114,6 +114,34 @@ func (p *EventPublisher) PublishSessionStatus(ctx context.Context, sessionID str
 	return firstErr
 }
 
+// PublishReviewStatus persists a review status event to the session channel
+// and broadcasts a transient copy to the global sessions channel.
+// Both publishes are best-effort: if the persistent one fails, the transient
+// one is still attempted. Returns the first error encountered (if any).
+func (p *EventPublisher) PublishReviewStatus(ctx context.Context, sessionID string, payload ReviewStatusPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ReviewStatusPayload: %w", err)
+	}
+
+	var firstErr error
+	if err := p.persistAndNotify(ctx, sessionID, SessionChannel(sessionID), payloadJSON); err != nil {
+		slog.Warn("Failed to publish review status to session channel",
+			"session_id", sessionID, "review_status", payload.ReviewStatus, "error", err)
+		firstErr = err
+	}
+
+	if err := p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON); err != nil {
+		slog.Warn("Failed to publish review status to global channel",
+			"session_id", sessionID, "review_status", payload.ReviewStatus, "error", err)
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
+}
+
 // PublishChatCreated persists and broadcasts a chat.created event.
 // Used when a new chat is created for a session (first message).
 func (p *EventPublisher) PublishChatCreated(ctx context.Context, sessionID string, payload ChatCreatedPayload) error {
@@ -165,6 +193,16 @@ func (p *EventPublisher) PublishExecutionStatus(ctx context.Context, sessionID s
 		return fmt.Errorf("failed to marshal ExecutionStatusPayload: %w", err)
 	}
 	return p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON)
+}
+
+// PublishSessionScoreUpdated broadcasts a session.score_updated transient event
+// to the global sessions channel so the dashboard can refresh and show the score.
+func (p *EventPublisher) PublishSessionScoreUpdated(ctx context.Context, _ string, payload SessionScoreUpdatedPayload) error {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal SessionScoreUpdatedPayload: %w", err)
+	}
+	return p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON)
 }
 
 // --- Internal core methods ---

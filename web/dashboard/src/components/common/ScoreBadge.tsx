@@ -18,6 +18,7 @@ import { Box, Chip, CircularProgress, Tooltip, Typography, alpha } from '@mui/ma
 import { Error as ErrorIcon } from '@mui/icons-material';
 import {
   EXECUTION_STATUS,
+  SESSION_STATUS,
   FAILED_EXECUTION_STATUSES,
 } from '../../constants/sessionStatus.ts';
 
@@ -44,6 +45,7 @@ const IN_PROGRESS_STATUSES = new Set<string>([
   EXECUTION_STATUS.ACTIVE,
   EXECUTION_STATUS.PENDING,
   EXECUTION_STATUS.STARTED,
+  SESSION_STATUS.IN_PROGRESS,
 ]);
 
 function PillBadge({
@@ -149,9 +151,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
       return (
         <PillBadge
           color="info"
-          icon={<CircularProgress size={12} color="inherit" />}
-          value=""
-          label="scoring…"
+          value={<CircularProgress size={14} color="inherit" />}
           tooltip="Scoring in progress"
           onClick={onClick}
         />

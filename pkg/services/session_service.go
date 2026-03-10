@@ -930,6 +930,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.Assignee != "" {
 		query = query.Where(alertsession.AssigneeEQ(params.Assignee))
 	}
+	if params.ResolutionReason != "" {
+		query = query.Where(alertsession.ResolutionReasonEQ(alertsession.ResolutionReason(params.ResolutionReason)))
+	}
 
 	// Count total (before pagination).
 	totalCount, err := query.Clone().Count(ctx)

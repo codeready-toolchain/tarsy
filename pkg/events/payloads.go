@@ -113,6 +113,25 @@ type ExecutionProgressPayload struct {
 	Message           string `json:"message"`                       // human-readable message
 }
 
+// ReviewStatusPayload is the payload for review.status events.
+// Published when a session's review workflow state changes (auto-init by worker
+// or manual transition by SRE via API).
+type ReviewStatusPayload struct {
+	BasePayload
+	ReviewStatus     *string `json:"review_status,omitempty"`     // needs_review, in_progress, resolved; nil when unset
+	Assignee         *string `json:"assignee,omitempty"`          // null when unassigned
+	ResolutionReason *string `json:"resolution_reason,omitempty"` // actioned, dismissed
+	Actor            string  `json:"actor"`                       // who triggered the change ("system" for worker transitions)
+}
+
+// SessionScoreUpdatedPayload is the payload for session.score_updated transient events.
+// Published to GlobalSessionsChannel when scoring starts (in_progress) or finishes
+// (completed/failed), so the dashboard can show the spinner then the final score.
+type SessionScoreUpdatedPayload struct {
+	BasePayload
+	ScoringStatus ScoringStatus `json:"scoring_status"`
+}
+
 // ExecutionStatusPayload is the payload for execution.status transient events.
 // Published to SessionChannel(sessionID) when an agent execution transitions
 // to a new status. Allows the frontend to update individual agent cards

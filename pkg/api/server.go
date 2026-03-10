@@ -228,7 +228,7 @@ func (s *Server) setupRoutes() {
 
 	s.echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     s.corsAllowOrigins(),
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodOptions},
 		AllowHeaders:     []string{"Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
 		MaxAge:           3600,
@@ -245,6 +245,7 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions", s.listSessionsHandler)
 	v1.GET("/sessions/active", s.activeSessionsHandler)
 	v1.GET("/sessions/filter-options", s.filterOptionsHandler)
+	v1.GET("/sessions/triage", s.getTriageHandler)
 
 	// Session detail and actions.
 	v1.GET("/sessions/:id", s.getSessionHandler)
@@ -254,6 +255,8 @@ func (s *Server) setupRoutes() {
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 	v1.POST("/sessions/:id/score", s.scoreSessionHandler)
 	v1.GET("/sessions/:id/score", s.getScoreHandler)
+	v1.PATCH("/sessions/:id/review", s.updateReviewHandler)
+	v1.GET("/sessions/:id/review-activity", s.getReviewActivityHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 
 	// System endpoints.

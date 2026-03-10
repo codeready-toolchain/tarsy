@@ -134,6 +134,14 @@ func (p *testEventPublisher) PublishExecutionStatus(_ context.Context, _ string,
 	return nil
 }
 
+func (p *testEventPublisher) PublishReviewStatus(_ context.Context, _ string, _ events.ReviewStatusPayload) error {
+	return nil
+}
+
+func (p *testEventPublisher) PublishSessionScoreUpdated(_ context.Context, _ string, _ events.SessionScoreUpdatedPayload) error {
+	return nil
+}
+
 // hasStageStatus checks if a stage with the given name has the given status (thread-safe).
 func (p *testEventPublisher) hasStageStatus(stageName, status string) bool {
 	p.mu.Lock()

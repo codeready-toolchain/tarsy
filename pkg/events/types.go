@@ -57,6 +57,9 @@ const (
 
 	// Stage lifecycle — single event type for all stage status transitions
 	EventTypeStageStatus = "stage.status"
+
+	// Review workflow lifecycle
+	EventTypeReviewStatus = "review.status"
 )
 
 // Stage lifecycle status values (used in StageStatusPayload.Status).
@@ -66,6 +69,16 @@ const (
 	StageStatusFailed    = "failed"
 	StageStatusTimedOut  = "timed_out"
 	StageStatusCancelled = "cancelled"
+)
+
+// ScoringStatus represents the state of a session's scoring evaluation.
+type ScoringStatus string
+
+// Possible ScoringStatus values for session.score_updated payloads.
+const (
+	ScoringStatusInProgress ScoringStatus = "in_progress" // LLM evaluation is running
+	ScoringStatusCompleted  ScoringStatus = "completed"   // scoring finished successfully
+	ScoringStatusFailed     ScoringStatus = "failed"      // scoring encountered an error
 )
 
 // Chat event types (stored in DB + NOTIFY).
@@ -103,6 +116,10 @@ const (
 	// Fired when an agent execution transitions to a new status (active, completed, failed, etc.).
 	// Allows the frontend to update individual agent cards independently of stage completion.
 	EventTypeExecutionStatus = "execution.status"
+
+	// Score updated — published to GlobalSessionsChannel when scoring starts or finishes.
+	// Allows the dashboard session list to refresh and show the spinner / final score.
+	EventTypeSessionScoreUpdated = "session.score_updated"
 )
 
 // ProgressPhase values for execution-level progress events.

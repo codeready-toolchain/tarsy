@@ -138,6 +138,21 @@ func TestSessionChannelPayloads_ContainSessionID(t *testing.T) {
 				Message:     "Iteration 1/5",
 			},
 		},
+		{
+			name: "ReviewStatusPayload",
+			payload: func() ReviewStatusPayload {
+				rs := "needs_review"
+				return ReviewStatusPayload{
+					BasePayload: BasePayload{
+						Type:      EventTypeReviewStatus,
+						SessionID: testSessionID,
+						Timestamp: "2026-01-01T00:00:00Z",
+					},
+					ReviewStatus: &rs,
+					Actor:        "system",
+				}
+			}(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -184,4 +199,25 @@ func TestSessionProgressPayload_ContainsSessionID(t *testing.T) {
 	sid, ok := parsed["session_id"]
 	assert.True(t, ok, "SessionProgressPayload is missing session_id")
 	assert.Equal(t, "sess-progress", sid)
+}
+
+func TestSessionScoreUpdatedPayload_ContainsSessionID(t *testing.T) {
+	payload := SessionScoreUpdatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionScoreUpdated,
+			SessionID: "sess-score",
+			Timestamp: "2026-01-01T00:00:00Z",
+		},
+		ScoringStatus: ScoringStatusInProgress,
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	sid, ok := parsed["session_id"]
+	assert.True(t, ok, "SessionScoreUpdatedPayload is missing session_id")
+	assert.Equal(t, "sess-score", sid)
 }

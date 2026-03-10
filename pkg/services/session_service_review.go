@@ -7,6 +7,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
@@ -279,6 +280,127 @@ func (s *SessionService) GetReviewActivity(ctx context.Context, sessionID string
 		return nil, fmt.Errorf("failed to query review activity: %w", err)
 	}
 	return activities, nil
+}
+
+// GetTriageSessions returns sessions grouped by review status for the triage view.
+func (s *SessionService) GetTriageSessions(ctx context.Context, params models.TriageParams) (*models.TriageResponse, error) {
+	if params.ResolvedLimit <= 0 {
+		params.ResolvedLimit = 20
+	}
+
+	investigating, err := s.queryTriageGroup(ctx, nil, params.Assignee,
+		alertsession.StatusIn(alertsession.StatusPending, alertsession.StatusInProgress, alertsession.StatusCancelling),
+		alertsession.ReviewStatusIsNil(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query investigating sessions: %w", err)
+	}
+
+	needsReview, err := s.queryTriageGroup(ctx, nil, params.Assignee,
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query needs_review sessions: %w", err)
+	}
+
+	inProgress, err := s.queryTriageGroup(ctx, nil, params.Assignee,
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query in_progress sessions: %w", err)
+	}
+
+	resolvedLimit := params.ResolvedLimit + 1
+	resolved, err := s.queryTriageGroup(ctx, &resolvedLimit, params.Assignee,
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query resolved sessions: %w", err)
+	}
+
+	hasMore := len(resolved) > params.ResolvedLimit
+	if hasMore {
+		resolved = resolved[:params.ResolvedLimit]
+	}
+
+	return &models.TriageResponse{
+		Investigating: models.TriageGroup{Count: len(investigating), Sessions: investigating},
+		NeedsReview:   models.TriageGroup{Count: len(needsReview), Sessions: needsReview},
+		InProgress:    models.TriageGroup{Count: len(inProgress), Sessions: inProgress},
+		Resolved:      models.TriageGroup{Count: len(resolved), Sessions: resolved, HasMore: hasMore},
+	}, nil
+}
+
+// queryTriageGroup queries sessions matching the given predicates and maps them
+// to DashboardSessionItem. If limit is non-nil, at most *limit sessions are returned.
+func (s *SessionService) queryTriageGroup(ctx context.Context, limit *int, assignee string, predicates ...predicate.AlertSession) ([]models.DashboardSessionItem, error) {
+	q := s.client.AlertSession.Query().
+		Where(alertsession.DeletedAtIsNil()).
+		Where(predicates...).
+		Order(ent.Desc(alertsession.FieldCreatedAt))
+
+	if assignee != "" {
+		q = q.Where(alertsession.AssigneeEQ(assignee))
+	}
+	if limit != nil {
+		q = q.Limit(*limit)
+	}
+
+	sessions, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]models.DashboardSessionItem, 0, len(sessions))
+	for _, sess := range sessions {
+		items = append(items, sessionToTriageItem(sess))
+	}
+	return items, nil
+}
+
+// sessionToTriageItem maps an ent.AlertSession to a DashboardSessionItem with
+// the fields available directly on the entity. Aggregated stats (token counts,
+// stage counts, etc.) are not populated — the triage view doesn't display them.
+func sessionToTriageItem(sess *ent.AlertSession) models.DashboardSessionItem {
+	var alertType *string
+	if sess.AlertType != "" {
+		alertType = &sess.AlertType
+	}
+
+	var durationMs *int64
+	if sess.StartedAt != nil && sess.CompletedAt != nil {
+		ms := sess.CompletedAt.Sub(*sess.StartedAt).Milliseconds()
+		durationMs = &ms
+	}
+
+	var reviewStatus *string
+	if sess.ReviewStatus != nil {
+		s := string(*sess.ReviewStatus)
+		reviewStatus = &s
+	}
+
+	var resolutionReason *string
+	if sess.ResolutionReason != nil {
+		s := string(*sess.ResolutionReason)
+		resolutionReason = &s
+	}
+
+	return models.DashboardSessionItem{
+		ID:               sess.ID,
+		AlertType:        alertType,
+		ChainID:          sess.ChainID,
+		Status:           string(sess.Status),
+		Author:           sess.Author,
+		CreatedAt:        sess.CreatedAt,
+		StartedAt:        sess.StartedAt,
+		CompletedAt:      sess.CompletedAt,
+		DurationMs:       durationMs,
+		ErrorMessage:     sess.ErrorMessage,
+		ExecutiveSummary: sess.ExecutiveSummary,
+		ReviewStatus:     reviewStatus,
+		Assignee:         sess.Assignee,
+		ResolutionReason: resolutionReason,
+	}
 }
 
 func ptrFromStatus(s sessionreviewactivity.FromStatus) *sessionreviewactivity.FromStatus {
