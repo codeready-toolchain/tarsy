@@ -271,12 +271,18 @@ export default function ConversationTimeline({
   }, [streamingByStage]);
 
   // --- Processing indicator display status ---
-  const showProcessingIndicator = isActive || !!chatStageInProgress;
+  const scoringInProgress = useMemo(
+    () => stageGroups.some(g => g.stageType === STAGE_TYPE.SCORING && !TERMINAL_EXECUTION_STATUSES.has(g.stageStatus)),
+    [stageGroups],
+  );
+  const showProcessingIndicator = isActive || !!chatStageInProgress || scoringInProgress;
 
   const displayStatus = useMemo(() => {
     let status = progressStatus || 'Processing...';
 
-    if (chatStageInProgress && !isActive) {
+    if (scoringInProgress) {
+      status = 'Evaluating quality…';
+    } else if (chatStageInProgress && !isActive) {
       status = 'Processing...';
     }
 
@@ -326,7 +332,7 @@ export default function ConversationTimeline({
     }
 
     return status;
-  }, [progressStatus, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
+  }, [progressStatus, scoringInProgress, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
 
   if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
     // Session is active but no timeline items have arrived yet — show the
