@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -24,6 +26,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/google/uuid"
 )
@@ -46,6 +49,7 @@ type ScoringExecutor struct {
 	timelineService    *services.TimelineService
 	interactionService *services.InteractionService
 	messageService     *services.MessageService
+	runbookService     *runbook.Service
 
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
@@ -53,11 +57,13 @@ type ScoringExecutor struct {
 }
 
 // NewScoringExecutor creates a new ScoringExecutor.
+// runbookService may be nil (runbook content will be omitted from the scoring context).
 func NewScoringExecutor(
 	cfg *config.Config,
 	dbClient *ent.Client,
 	llmClient agent.LLMClient,
 	eventPublisher agent.EventPublisher,
+	runbookService *runbook.Service,
 ) *ScoringExecutor {
 	controllerFactory := controller.NewFactory()
 	msgService := services.NewMessageService(dbClient)
@@ -72,6 +78,7 @@ func NewScoringExecutor(
 		timelineService:    services.NewTimelineService(dbClient),
 		interactionService: services.NewInteractionService(dbClient, msgService),
 		messageService:     msgService,
+		runbookService:     runbookService,
 	}
 }
 
@@ -289,8 +296,8 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	publishExecutionStatus(ctx, e.eventPublisher, sessionID, stageID, exec.ID, 1, string(agentexecution.StatusActive), "")
 	publishStageStatus(ctx, e.eventPublisher, sessionID, stageID, "Scoring", stg.StageIndex, stage.StageTypeScoring, nil, events.StageStatusStarted)
 
-	// Build investigation context
-	investigationContext := e.buildScoringContext(ctx, sessionID)
+	// Build investigation context (includes alert data, runbook, available tools, timeline)
+	investigationContext := e.buildScoringContext(ctx, session)
 
 	// Build ExecutionContext and create agent
 	agentExecCtx := &agent.ExecutionContext{
@@ -382,16 +389,52 @@ func (e *ScoringExecutor) Stop() {
 // Context building
 // ────────────────────────────────────────────────────────────
 
-// buildScoringContext retrieves the structured investigation history for scoring.
-// Includes investigation, synthesis, exec_summary, and action stages.
-// Excludes chat and scoring stages.
-func (e *ScoringExecutor) buildScoringContext(ctx context.Context, sessionID string) string {
+// buildScoringContext builds the complete scoring context including alert data,
+// runbook, available tools per agent, and the investigation timeline.
+func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.AlertSession) string {
+	var sb strings.Builder
+
+	// Section 1: Original alert
+	sb.WriteString("## ORIGINAL ALERT\n\n")
+	if session.AlertData != "" {
+		sb.WriteString(session.AlertData)
+	} else {
+		sb.WriteString("(No alert data available)")
+	}
+	sb.WriteString("\n\n")
+
+	// Section 2: Runbook
+	runbookContent := e.resolveRunbook(ctx, session)
+	if runbookContent != "" {
+		sb.WriteString("## RUNBOOK\n\n")
+		sb.WriteString(runbookContent)
+		sb.WriteString("\n\n")
+	}
+
+	// Section 3: Available tools per agent + investigation timeline
+	timeline, toolsByExec := e.buildInvestigationData(ctx, session.ID)
+
+	if len(toolsByExec) > 0 {
+		sb.WriteString("## AVAILABLE TOOLS PER AGENT\n\n")
+		sb.WriteString(toolsByExec)
+	}
+
+	// Section 4: Investigation timeline
+	sb.WriteString("## INVESTIGATION TIMELINE\n\n")
+	sb.WriteString(timeline)
+
+	return sb.String()
+}
+
+// buildInvestigationData retrieves the structured investigation history for scoring
+// and the per-agent available tools. Returns the formatted timeline and tools sections.
+func (e *ScoringExecutor) buildInvestigationData(ctx context.Context, sessionID string) (timeline string, toolsSection string) {
 	logger := slog.With("session_id", sessionID)
 
 	stages, err := e.stageService.GetStagesBySession(ctx, sessionID, true)
 	if err != nil {
 		logger.Warn("Failed to get stages for scoring context", "error", err)
-		return ""
+		return "", ""
 	}
 
 	// Collect synthesis results keyed by parent stage ID
@@ -404,13 +447,18 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, sessionID str
 		}
 	}
 
+	// Track tools per agent (agent name → formatted tool list)
+	type agentTools struct {
+		name  string
+		tools string
+	}
+	var allAgentTools []agentTools
+
 	var investigations []agentctx.StageInvestigation
 	for _, stg := range stages {
 		switch stg.StageType {
 		case stage.StageTypeInvestigation, stage.StageTypeExecSummary, stage.StageTypeAction:
-			// Include these stage types so the scoring LLM sees the full pipeline.
 		default:
-			// Skip chat and scoring stages.
 			continue
 		}
 
@@ -421,12 +469,12 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, sessionID str
 		agents := make([]agentctx.AgentInvestigation, len(execs))
 		for i, exec := range execs {
 			var tlEvents []*ent.TimelineEvent
-			timeline, tlErr := e.timelineService.GetAgentTimeline(ctx, exec.ID)
+			tl, tlErr := e.timelineService.GetAgentTimeline(ctx, exec.ID)
 			if tlErr != nil {
 				logger.Warn("Failed to get agent timeline for scoring context",
 					"execution_id", exec.ID, "error", tlErr)
 			} else {
-				tlEvents = timeline
+				tlEvents = tl
 			}
 
 			agents[i] = agentctx.AgentInvestigation{
@@ -437,6 +485,11 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, sessionID str
 				Status:       mapExecStatusToSessionStatus(exec.Status),
 				Events:       tlEvents,
 				ErrorMessage: stringFromNillable(exec.ErrorMessage),
+			}
+
+			// Gather available tools for this agent
+			if toolsStr := e.formatAgentTools(ctx, exec.ID); toolsStr != "" {
+				allAgentTools = append(allAgentTools, agentTools{name: exec.AgentName, tools: toolsStr})
 			}
 		}
 
@@ -451,10 +504,90 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, sessionID str
 		investigations = append(investigations, si)
 	}
 
-	// Get executive summary from session-level timeline event
 	executiveSummary := e.getExecutiveSummary(ctx, sessionID)
+	timeline = agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
 
-	return agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
+	// Deduplicate agent tools (same agent name across stages shows tools only once)
+	seen := make(map[string]bool)
+	var sb strings.Builder
+	for _, at := range allAgentTools {
+		if seen[at.name] {
+			continue
+		}
+		seen[at.name] = true
+		sb.WriteString("### ")
+		sb.WriteString(at.name)
+		sb.WriteString("\n")
+		sb.WriteString(at.tools)
+		sb.WriteString("\n")
+	}
+
+	return timeline, sb.String()
+}
+
+// formatAgentTools queries mcp_interactions for tool_list entries for an execution
+// and formats them as a bullet list.
+func (e *ScoringExecutor) formatAgentTools(ctx context.Context, executionID string) string {
+	interactions, err := e.dbClient.MCPInteraction.Query().
+		Where(
+			mcpinteraction.ExecutionIDEQ(executionID),
+			mcpinteraction.InteractionTypeEQ(mcpinteraction.InteractionTypeToolList),
+		).
+		Order(ent.Asc(mcpinteraction.FieldServerName)).
+		All(ctx)
+	if err != nil || len(interactions) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for _, mi := range interactions {
+		for _, rawTool := range mi.AvailableTools {
+			toolMap, ok := rawTool.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name, _ := toolMap["name"].(string)
+			desc, _ := toolMap["description"].(string)
+			if name == "" {
+				continue
+			}
+			sb.WriteString("- ")
+			sb.WriteString(mi.ServerName)
+			sb.WriteString(".")
+			sb.WriteString(name)
+			if desc != "" {
+				sb.WriteString(" — ")
+				sb.WriteString(desc)
+			}
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+// resolveRunbook resolves runbook content for scoring context.
+func (e *ScoringExecutor) resolveRunbook(ctx context.Context, session *ent.AlertSession) string {
+	configDefault := ""
+	if e.cfg.Defaults != nil {
+		configDefault = e.cfg.Defaults.Runbook
+	}
+
+	if e.runbookService == nil {
+		return configDefault
+	}
+
+	alertURL := ""
+	if session.RunbookURL != nil {
+		alertURL = *session.RunbookURL
+	}
+
+	content, err := e.runbookService.Resolve(ctx, alertURL)
+	if err != nil {
+		slog.Warn("Scoring runbook resolution failed, using default",
+			"session_id", session.ID, "error", err)
+		return configDefault
+	}
+	return content
 }
 
 // getExecutiveSummary retrieves the executive summary from session-level timeline events.

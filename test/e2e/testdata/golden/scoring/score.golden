@@ -2,7 +2,7 @@
   "completed_at": "{TIMESTAMP}",
   "error_message": null,
   "missing_tools_analysis": "## Missing Tools Report\n\nThe following tools would improve future investigations:\n\n1. **get_resource_limits** — Query pod resource limits and requests to verify configuration.\n2. **get_memory_metrics** — Fetch Prometheus memory usage time series for trend analysis.",
-  "prompt_hash": "ffd8a5f8fe03986acc2d4237f6d59ef88f619ad9801735780af920e3de4e6712",
+  "prompt_hash": "777b238d39f6b16603bddb9dfe1055f08675d6eec275934fe6c9d5e3ce49162e",
   "score_analysis": "## Score Analysis\n\nThe investigation demonstrated good logical flow by systematically checking pod status and identifying the OOM kill. Tool usage was relevant — the agent queried pods and confirmed the issue.\n\nHowever, no memory metrics or resource limits were checked, which would have strengthened the diagnosis.\n\n**Logical Flow:** 20/25\n**Consistency:** 22/25\n**Tool Relevance:** 18/25\n**Synthesis Quality:** 15/25\n",
   "score_id": "{UUID}",
   "score_triggered_by": "auto",

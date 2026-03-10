@@ -20,9 +20,6 @@ func TestGetCurrentPromptHash_MatchesExpected(t *testing.T) {
 }
 
 func TestGetCurrentPromptHash_ChangesWithPrompts(t *testing.T) {
-	// Verify that different prompt content would produce a different hash.
-	// We can't mutate the constants, so we compute what a different set of prompts
-	// would hash to and confirm it differs from the current hash.
 	different := sha256.Sum256([]byte("different prompt content"))
 	assert.NotEqual(t, different, GetCurrentPromptHash(), "different prompts must produce a different hash")
 }
@@ -36,7 +33,8 @@ func TestBuildScoringSystemPrompt(t *testing.T) {
 	builder := newBuilderForTest()
 	result := builder.BuildScoringSystemPrompt()
 	assert.Equal(t, judgeSystemPrompt, result)
-	assert.Contains(t, result, "expert evaluator")
+	assert.Contains(t, result, "investigation quality evaluator")
+	assert.Contains(t, result, "TARSy")
 }
 
 func TestBuildScoringInitialPrompt(t *testing.T) {
@@ -52,14 +50,30 @@ func TestBuildScoringInitialPrompt(t *testing.T) {
 	assert.NotContains(t, result, "%[2]s", "no unresolved positional verbs")
 }
 
+func TestBuildScoringInitialPrompt_UsesInvestigationTerminology(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildScoringInitialPrompt("context", "schema")
+
+	assert.Contains(t, result, "investigation")
+	assert.NotContains(t, result, "evaluate evaluation tasks")
+	assert.NotContains(t, result, "the evaluator")
+}
+
+func TestBuildScoringInitialPrompt_NoMissingToolsSection(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildScoringInitialPrompt("context", "schema")
+
+	assert.NotContains(t, result, "IDENTIFYING MISSING TOOLS")
+}
+
 func TestBuildScoringOutputSchemaReminderPrompt(t *testing.T) {
 	builder := newBuilderForTest()
 
-	schema := "You MUST end your response with a single line containing ONLY the total score"
+	schema := "End your response with the total score"
 	result := builder.BuildScoringOutputSchemaReminderPrompt(schema)
 
 	assert.Contains(t, result, schema, "must include output schema")
-	assert.Contains(t, result, "failed to parse", "must include the retry instruction")
+	assert.Contains(t, result, "could not parse", "must include the retry instruction")
 	assert.NotContains(t, result, "%[1]s", "no unresolved positional verbs")
 }
 
@@ -69,6 +83,14 @@ func TestBuildScoringMissingToolsReportPrompt(t *testing.T) {
 
 	assert.Equal(t, judgePromptFollowupMissingTools, result)
 	assert.Contains(t, result, "missing tool")
+}
+
+func TestBuildScoringMissingToolsReportPrompt_UsesInvestigationTerminology(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildScoringMissingToolsReportPrompt()
+
+	assert.Contains(t, result, "investigation")
+	assert.NotContains(t, result, "evaluation")
 }
 
 func TestJudgePromptScore_HasPlaceholders(t *testing.T) {

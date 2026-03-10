@@ -15,8 +15,9 @@ import (
 
 // scoringOutputSchema instructs the LLM to end its response with the total score
 // on the last line. The controller parses this to extract the numeric score.
-const scoringOutputSchema = `End your response with the total score as a standalone number on the last line.
-For example, if the total score is 62, the last line of your response should be:
+const scoringOutputSchema = `End your response with the total score as a standalone number on the very last line.
+The last line must contain ONLY the number — no formatting, no markdown, no text.
+Example: if the total score is 62, the last line should be exactly:
 62`
 
 // ScoringResult holds the structured output of a scoring evaluation.

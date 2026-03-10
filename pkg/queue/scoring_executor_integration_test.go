@@ -109,7 +109,7 @@ func TestScoringExecutor_PrepareScoring_CreatesRecords(t *testing.T) {
 	cfg := scoringTestConfig(chainID, true)
 	pub := &testEventPublisher{}
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, pub)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, pub, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -148,7 +148,7 @@ func TestScoringExecutor_PrepareScoring_RejectsDuplicateInProgress(t *testing.T)
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -168,7 +168,7 @@ func TestScoringExecutor_PrepareScoring_RejectsNonTerminalSession(t *testing.T) 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusInProgress)
 
@@ -184,7 +184,7 @@ func TestScoringExecutor_PrepareScoring_RejectsDisabledScoring(t *testing.T) {
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, false) // scoring disabled
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -199,7 +199,7 @@ func TestScoringExecutor_PrepareScoring_BypassesDisabledCheck(t *testing.T) {
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, false) // scoring disabled
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -225,7 +225,7 @@ func TestScoringExecutor_SubmitScoring_ReturnsScoreID(t *testing.T) {
 		},
 	}
 
-	executor := NewScoringExecutor(cfg, entClient, llm, pub)
+	executor := NewScoringExecutor(cfg, entClient, llm, pub, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -254,7 +254,7 @@ func TestScoringExecutor_ScoreSessionAsync_SilentWhenScoringDisabled(t *testing.
 	llm := &mockLLMClient{}
 	pub := &testEventPublisher{}
 
-	executor := NewScoringExecutor(cfg, entClient, llm, pub)
+	executor := NewScoringExecutor(cfg, entClient, llm, pub, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -284,7 +284,7 @@ func TestScoringExecutor_GracefulShutdown(t *testing.T) {
 	llm := &blockingMockLLMClient{blockCh: blockCh}
 	pub := &testEventPublisher{}
 
-	executor := NewScoringExecutor(cfg, entClient, llm, pub)
+	executor := NewScoringExecutor(cfg, entClient, llm, pub, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -331,7 +331,7 @@ func TestScoringExecutor_PrepareScoring_StageIndexAfterExistingStages(t *testing
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
@@ -373,7 +373,7 @@ func TestScoringExecutor_PrepareScoring_AcceptsAllTerminalStatuses(t *testing.T)
 
 	for _, status := range terminalStatuses {
 		t.Run(string(status), func(t *testing.T) {
-			executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+			executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 			session := createScoringTestSession(t, entClient, chainID, status)
 
 			scoreID, err := executor.prepareScoring(t.Context(), session.ID, "test", false)
@@ -399,7 +399,7 @@ func TestScoringExecutor_ExecuteScoring_FailsGracefully(t *testing.T) {
 		},
 	}
 
-	executor := NewScoringExecutor(cfg, entClient, llm, pub)
+	executor := NewScoringExecutor(cfg, entClient, llm, pub, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// Prepare records
@@ -428,7 +428,7 @@ func TestScoringExecutor_BuildScoringContext_FiltersStageTypes(t *testing.T) {
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// Create stages of various types
@@ -462,7 +462,7 @@ func TestScoringExecutor_BuildScoringContext_FiltersStageTypes(t *testing.T) {
 	createStageWithExec("Exec Summary", 3, stage.StageTypeExecSummary)
 	createStageWithExec("Previous Scoring", 4, stage.StageTypeScoring)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_filters_stage_types", result)
 }
 
@@ -472,10 +472,10 @@ func TestScoringExecutor_BuildScoringContext_EmptyForNoStages(t *testing.T) {
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
 
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
-	result := executor.buildScoringContext(t.Context(), session.ID)
+	result := executor.buildScoringContext(t.Context(), session)
 
 	// Should still produce output (the header), but no stage content
 	assert.NotEmpty(t, result, "should produce investigation history header even with no stages")
@@ -487,7 +487,7 @@ func TestScoringExecutor_BuildScoringContext_TimelineEventsIncluded(t *testing.T
 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	stgID := uuid.New().String()
@@ -556,7 +556,7 @@ func TestScoringExecutor_BuildScoringContext_TimelineEventsIncluded(t *testing.T
 		Save(ctx)
 	require.NoError(t, err)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_timeline_events", result)
 }
 
@@ -566,7 +566,7 @@ func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *test
 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// Investigation stage with 2 parallel agents
@@ -669,7 +669,7 @@ func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *test
 		Save(ctx)
 	require.NoError(t, err)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_parallel_with_synthesis", result)
 }
 
@@ -679,7 +679,7 @@ func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	// Create an investigation stage (so context isn't empty)
@@ -717,7 +717,7 @@ func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_executive_summary", result)
 }
 
@@ -727,7 +727,7 @@ func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	stgID := uuid.New().String()
@@ -825,7 +825,7 @@ func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_orchestrated_stage", result)
 }
 
@@ -835,7 +835,7 @@ func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
 
 	chainID := "test-chain"
 	cfg := scoringTestConfig(chainID, true)
-	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil)
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	type stageSetup struct {
@@ -996,7 +996,7 @@ func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	result := executor.buildScoringContext(ctx, session.ID)
+	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_full_pipeline", result)
 }
 

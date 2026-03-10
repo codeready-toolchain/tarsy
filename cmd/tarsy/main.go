@@ -267,7 +267,7 @@ func main() {
 	}
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
-	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher)
+	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, scoringExecutor, eventPublisher, slackService)
