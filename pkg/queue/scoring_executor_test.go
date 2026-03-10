@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
@@ -8,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsTerminalStatus(t *testing.T) {
@@ -76,6 +78,61 @@ func TestMapScoringAgentStatus(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+func TestScoringExecutor_PublishScoreUpdatedNilPublisher(t *testing.T) {
+	exec := &ScoringExecutor{}
+
+	assert.NotPanics(t, func() {
+		exec.publishScoreUpdated("session-123", events.ScoringStatusInProgress)
+	})
+	assert.NotPanics(t, func() {
+		exec.publishScoreUpdated("session-456", events.ScoringStatusCompleted)
+	})
+	assert.NotPanics(t, func() {
+		exec.publishScoreUpdated("session-789", events.ScoringStatusFailed)
+	})
+}
+
+func TestScoringExecutor_PublishScoreUpdatedWithPublisher(t *testing.T) {
+	tests := []struct {
+		name           string
+		scoringStatus  events.ScoringStatus
+		expectedStatus events.ScoringStatus
+	}{
+		{"in_progress", events.ScoringStatusInProgress, events.ScoringStatusInProgress},
+		{"completed", events.ScoringStatusCompleted, events.ScoringStatusCompleted},
+		{"failed", events.ScoringStatusFailed, events.ScoringStatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pub := &mockScoreEventPublisher{}
+			exec := &ScoringExecutor{eventPublisher: pub}
+
+			exec.publishScoreUpdated("session-abc", tt.scoringStatus)
+
+			assert.Equal(t, 1, pub.callCount)
+			require.NotNil(t, pub.lastPayload)
+			assert.Equal(t, events.EventTypeSessionScoreUpdated, pub.lastPayload.Type)
+			assert.Equal(t, "session-abc", pub.lastPayload.SessionID)
+			assert.Equal(t, tt.expectedStatus, pub.lastPayload.ScoringStatus)
+			assert.NotEmpty(t, pub.lastPayload.Timestamp)
+		})
+	}
+}
+
+// mockScoreEventPublisher captures PublishSessionScoreUpdated calls.
+type mockScoreEventPublisher struct {
+	mockEventPublisher
+	callCount   int
+	lastPayload *events.SessionScoreUpdatedPayload
+}
+
+func (m *mockScoreEventPublisher) PublishSessionScoreUpdated(_ context.Context, _ string, payload events.SessionScoreUpdatedPayload) error {
+	m.callCount++
+	m.lastPayload = &payload
+	return nil
 }
 
 func TestResolveScoringProviderName(t *testing.T) {

@@ -343,6 +343,30 @@ func TestReviewStatusPayload_JSON(t *testing.T) {
 	assert.Equal(t, "jsmith@company.com", decoded.Actor)
 }
 
+func TestSessionScoreUpdatedPayload_JSON(t *testing.T) {
+	payload := SessionScoreUpdatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionScoreUpdated,
+			SessionID: "sess-500",
+			Timestamp: "2026-03-10T14:00:00Z",
+		},
+		ScoringStatus: ScoringStatusInProgress,
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var decoded SessionScoreUpdatedPayload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, EventTypeSessionScoreUpdated, decoded.Type)
+	assert.Equal(t, "sess-500", decoded.SessionID)
+	assert.Equal(t, ScoringStatusInProgress, decoded.ScoringStatus)
+
+	assert.Contains(t, string(data), `"type":"session.score_updated"`)
+	assert.Contains(t, string(data), `"scoring_status":"in_progress"`)
+}
+
 func TestReviewStatusPayload_OmitsNilFields(t *testing.T) {
 	payload := ReviewStatusPayload{
 		BasePayload: BasePayload{
