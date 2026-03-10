@@ -87,6 +87,7 @@ func (SessionScore) Indexes() []ent.Index {
 		index.Fields("status"),
 		index.Fields("session_id", "status"),
 		index.Fields("status", "started_at"),
+		index.Fields("stage_id"),
 		// Prevent duplicate in-progress scorings per session
 		index.Fields("session_id").
 			Unique().

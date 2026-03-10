@@ -503,6 +503,11 @@ var (
 				Columns: []*schema.Column{SessionScoresColumns[6], SessionScoresColumns[7]},
 			},
 			{
+				Name:    "sessionscore_stage_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[11]},
+			},
+			{
 				Name:    "sessionscore_session_id",
 				Unique:  true,
 				Columns: []*schema.Column{SessionScoresColumns[10]},

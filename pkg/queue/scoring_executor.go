@@ -51,9 +51,10 @@ type ScoringExecutor struct {
 	messageService     *services.MessageService
 	runbookService     *runbook.Service
 
-	mu      sync.RWMutex
-	wg      sync.WaitGroup
-	stopped bool
+	mu            sync.RWMutex
+	wg            sync.WaitGroup
+	stopped       bool
+	cleanupTimers []*time.Timer
 }
 
 // NewScoringExecutor creates a new ScoringExecutor.
@@ -117,19 +118,8 @@ func (e *ScoringExecutor) ScoreSessionAsync(sessionID, triggeredBy string, check
 // Returns the session_score ID immediately for the API response.
 // checkEnabled controls whether the chain's scoring.enabled flag is enforced.
 func (e *ScoringExecutor) SubmitScoring(ctx context.Context, sessionID, triggeredBy string, checkEnabled bool) (string, error) {
-	e.mu.RLock()
-	if e.stopped {
-		e.mu.RUnlock()
-		return "", ErrShuttingDown
-	}
-	e.mu.RUnlock()
-
-	scoreID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
-	if err != nil {
-		return "", err
-	}
-
-	// Register goroutine with double-check against Stop()
+	// Claim the worker slot before creating DB records to prevent orphans
+	// if Stop() is called between record creation and goroutine registration.
 	e.mu.RLock()
 	if e.stopped {
 		e.mu.RUnlock()
@@ -137,6 +127,12 @@ func (e *ScoringExecutor) SubmitScoring(ctx context.Context, sessionID, triggere
 	}
 	e.wg.Add(1)
 	e.mu.RUnlock()
+
+	scoreID, err := e.prepareScoring(ctx, sessionID, triggeredBy, checkEnabled)
+	if err != nil {
+		e.wg.Done()
+		return "", err
+	}
 
 	go func() {
 		defer e.wg.Done()
@@ -186,26 +182,34 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 	}
 	stageIndex := maxIndex + 1
 
-	// 7. Create Stage record (before SessionScore so we can set the immutable stage_id FK)
-	stg, err := e.stageService.CreateStage(ctx, models.CreateStageRequest{
-		SessionID:          sessionID,
-		StageName:          "Scoring",
-		StageIndex:         stageIndex,
-		ExpectedAgentCount: 1,
-		StageType:          string(stage.StageTypeScoring),
-	})
+	// 7. Create Stage + SessionScore in a transaction to prevent orphan stages.
+	promptHash := fmt.Sprintf("%x", prompt.GetCurrentPromptHash())
+	scoreID := uuid.New().String()
+	stageID := uuid.New().String()
+
+	tx, err := e.dbClient.Tx(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.Stage.Create().
+		SetID(stageID).
+		SetSessionID(sessionID).
+		SetStageName("Scoring").
+		SetStageIndex(stageIndex).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeScoring).
+		SetStatus(stage.StatusPending).
+		Save(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create scoring stage: %w", err)
 	}
 
-	// 8. Create SessionScore record (linked to the stage)
-	promptHash := fmt.Sprintf("%x", prompt.GetCurrentPromptHash())
-	scoreID := uuid.New().String()
-
-	_, err = e.dbClient.SessionScore.Create().
+	_, err = tx.SessionScore.Create().
 		SetID(scoreID).
 		SetSessionID(sessionID).
-		SetStageID(stg.ID).
+		SetStageID(stageID).
 		SetScoreTriggeredBy(triggeredBy).
 		SetPromptHash(promptHash).
 		SetStatus(sessionscore.StatusInProgress).
@@ -217,10 +221,14 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 		return "", fmt.Errorf("failed to create session score: %w", err)
 	}
 
-	// 9. Create AgentExecution record
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("failed to commit scoring records: %w", err)
+	}
+
+	// 8. Create AgentExecution record (outside tx — stage already committed)
 	scoringProviderName := resolveScoringProviderName(e.cfg.Defaults, chain, chain.Scoring)
 	_, err = e.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:     stg.ID,
+		StageID:     stageID,
 		SessionID:   sessionID,
 		AgentName:   resolvedConfig.AgentName,
 		AgentIndex:  1,
@@ -229,7 +237,7 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 	})
 	if err != nil {
 		e.failScore(scoreID, "failed to create agent execution: "+err.Error())
-		e.finishScoringStage(stg.ID, sessionID, stageIndex, events.StageStatusFailed, err.Error())
+		e.finishScoringStage(stageID, sessionID, stageIndex, events.StageStatusFailed, err.Error())
 		return "", fmt.Errorf("failed to create agent execution: %w", err)
 	}
 
@@ -241,10 +249,12 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	logger := slog.With("session_id", sessionID, "score_id", scoreID)
 	logger.Info("Scoring executor: starting evaluation")
 
-	// Load the scoring stage and execution from DB
+	// Load the scoring stage and execution from DB.
+	// Use background context for cleanup calls so they succeed even if ctx is cancelled.
 	score, err := e.dbClient.SessionScore.Get(ctx, scoreID)
 	if err != nil {
 		logger.Error("Failed to load session score for execution", "error", err)
+		e.failScore(scoreID, "failed to load session score: "+err.Error())
 		return
 	}
 
@@ -257,6 +267,9 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	if err != nil {
 		logger.Error("Failed to load scoring stage", "error", err)
 		e.failScore(scoreID, "failed to load scoring stage: "+err.Error())
+		if stageID != "" {
+			_ = e.stageService.ForceStageFailure(context.Background(), stageID, "failed to load scoring stage: "+err.Error())
+		}
 		return
 	}
 
@@ -348,6 +361,21 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 		}
 	}
 
+	// Persist the score BEFORE publishing terminal statuses so that a
+	// persistence failure can flip the terminal state to failed.
+	scoreCompleted := false
+	if agentStatus == agent.ExecutionStatusCompleted && result != nil {
+		if completeErr := e.completeScore(scoreID, result.FinalAnalysis, promptHash); completeErr != nil {
+			agentStatus = agent.ExecutionStatusFailed
+			errMsg = completeErr.Error()
+		} else {
+			scoreCompleted = true
+		}
+	}
+	if !scoreCompleted {
+		e.failScore(scoreID, errMsg)
+	}
+
 	// Update AgentExecution terminal status
 	entStatus := mapAgentStatusToEntStatus(agentStatus)
 	if updateErr := e.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entStatus, errMsg); updateErr != nil {
@@ -363,12 +391,9 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	stageEventStatus := mapScoringAgentStatus(agentStatus)
 	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, "Scoring", stg.StageIndex, stage.StageTypeScoring, nil, stageEventStatus)
 
-	// Update SessionScore
-	if agentStatus == agent.ExecutionStatusCompleted && result != nil {
-		e.completeScore(scoreID, result.FinalAnalysis, promptHash)
+	if scoreCompleted {
 		logger.Info("Scoring executor: completed successfully")
 	} else {
-		e.failScore(scoreID, errMsg)
 		logger.Warn("Scoring executor: failed", "error", errMsg)
 	}
 
@@ -376,10 +401,15 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 	e.scheduleEventCleanup(stageID, time.Now())
 }
 
-// Stop marks the executor as stopped and waits for active scoring goroutines to drain.
+// Stop marks the executor as stopped, cancels pending cleanup timers,
+// and waits for active scoring goroutines to drain.
 func (e *ScoringExecutor) Stop() {
 	e.mu.Lock()
 	e.stopped = true
+	for _, t := range e.cleanupTimers {
+		t.Stop()
+	}
+	e.cleanupTimers = nil
 	e.mu.Unlock()
 
 	e.wg.Wait()
@@ -609,12 +639,11 @@ func (e *ScoringExecutor) getExecutiveSummary(ctx context.Context, sessionID str
 // ────────────────────────────────────────────────────────────
 
 // completeScore parses the scoring result JSON and updates the SessionScore record.
-func (e *ScoringExecutor) completeScore(scoreID, finalAnalysisJSON, promptHash string) {
+// Returns an error if parsing or persistence fails.
+func (e *ScoringExecutor) completeScore(scoreID, finalAnalysisJSON, promptHash string) error {
 	var result controller.ScoringResult
 	if err := json.Unmarshal([]byte(finalAnalysisJSON), &result); err != nil {
-		slog.Error("Failed to parse scoring result JSON", "score_id", scoreID, "error", err)
-		e.failScore(scoreID, "failed to parse scoring result: "+err.Error())
-		return
+		return fmt.Errorf("failed to parse scoring result: %w", err)
 	}
 
 	now := time.Now()
@@ -626,8 +655,9 @@ func (e *ScoringExecutor) completeScore(scoreID, finalAnalysisJSON, promptHash s
 		SetStatus(sessionscore.StatusCompleted).
 		SetCompletedAt(now).
 		Exec(context.Background()); err != nil {
-		slog.Error("Failed to update session score to completed", "score_id", scoreID, "error", err)
+		return fmt.Errorf("failed to persist session score: %w", err)
 	}
+	return nil
 }
 
 // failScore marks a SessionScore as failed with an error message.
@@ -667,8 +697,16 @@ func (e *ScoringExecutor) finishScoringStage(stageID, sessionID string, stageInd
 }
 
 // scheduleEventCleanup schedules deletion of transient Event records after a grace period.
+// The timer is tracked so Stop() can cancel it.
 func (e *ScoringExecutor) scheduleEventCleanup(stageID string, cutoff time.Time) {
-	time.AfterFunc(60*time.Second, func() {
+	timer := time.AfterFunc(60*time.Second, func() {
+		e.mu.RLock()
+		stopped := e.stopped
+		e.mu.RUnlock()
+		if stopped {
+			return
+		}
+
 		stg, err := e.stageService.GetStageByID(context.Background(), stageID, false)
 		if err != nil {
 			slog.Warn("Failed to get stage for scoring event cleanup", "stage_id", stageID, "error", err)
@@ -683,6 +721,14 @@ func (e *ScoringExecutor) scheduleEventCleanup(stageID string, cutoff time.Time)
 			slog.Warn("Failed to cleanup scoring stage events", "stage_id", stageID, "error", err)
 		}
 	})
+
+	e.mu.Lock()
+	if e.stopped {
+		timer.Stop()
+	} else {
+		e.cleanupTimers = append(e.cleanupTimers, timer)
+	}
+	e.mu.Unlock()
 }
 
 // ────────────────────────────────────────────────────────────

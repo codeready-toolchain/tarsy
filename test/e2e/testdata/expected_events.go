@@ -849,10 +849,9 @@ var ScoringExpectedEvents = []ExpectedEvent{
 	{Type: "stage.status", StageName: "Executive Summary", Status: "started"},
 	{Type: "stage.status", StageName: "Executive Summary", Status: "completed"},
 
-	{Type: "session.status", Status: "completed"},
-
-	// ── Scoring stage (LLM interactions now persisted) ──
-	{Type: "stage.status", StageName: "Scoring", Status: "started"},
+	// Session completion and scoring start race — either order is valid.
+	{Type: "session.status", Status: "completed", Group: 3},
+	{Type: "stage.status", StageName: "Scoring", Status: "started", Group: 3},
 
 	// Scoring turn 1: score evaluation.
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},

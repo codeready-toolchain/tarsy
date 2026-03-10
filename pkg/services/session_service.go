@@ -564,19 +564,41 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		alertType = &session.AlertType
 	}
 
-	// Fetch latest scoring data.
+	// Fetch scoring data: latest_score from the most recent COMPLETED row,
+	// scoring_status from the most recent row (any status).
 	var latestScore *int
 	var scoringStatus *string
 	var scoreID *string
-	latestScoreRecord, scoreErr := s.client.SessionScore.Query().
+
+	latestCompleted, err := s.client.SessionScore.Query().
+		Where(
+			sessionscore.SessionIDEQ(sessionID),
+			sessionscore.StatusEQ(sessionscore.StatusCompleted),
+		).
+		Order(sessionscore.ByStartedAt(sql.OrderDesc())).
+		First(ctx)
+	if err != nil && !ent.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to get latest completed score: %w", err)
+	}
+	if latestCompleted != nil {
+		latestScore = latestCompleted.TotalScore
+		scoreID = &latestCompleted.ID
+	}
+
+	latestRow, err := s.client.SessionScore.Query().
 		Where(sessionscore.SessionIDEQ(sessionID)).
 		Order(sessionscore.ByStartedAt(sql.OrderDesc())).
 		First(ctx)
-	if scoreErr == nil {
-		status := string(latestScoreRecord.Status)
+	if err != nil && !ent.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to get latest scoring status: %w", err)
+	}
+	if latestRow != nil {
+		status := string(latestRow.Status)
 		scoringStatus = &status
-		scoreID = &latestScoreRecord.ID
-		latestScore = latestScoreRecord.TotalScore
+		// If no completed score exists, use the latest row's ID for reference.
+		if scoreID == nil {
+			scoreID = &latestRow.ID
+		}
 	}
 
 	return &models.SessionDetailResponse{
@@ -854,11 +876,13 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		query = query.Where(func(sel *sql.Selector) {
 			t := sel.TableName()
 			sid := fmt.Sprintf("%q.%q", t, alertsession.FieldID)
+			// Use the latest row per session for mutually exclusive buckets.
+			latestStatus := fmt.Sprintf(
+				"(SELECT status FROM session_scores WHERE session_id = %s ORDER BY started_at DESC LIMIT 1)", sid)
 			switch params.ScoringStatus {
 			case "scored":
 				sel.Where(sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf(
-						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'completed')", sid))
+					b.WriteString(fmt.Sprintf("%s = 'completed'", latestStatus))
 				}))
 			case "not_scored":
 				sel.Where(sql.P(func(b *sql.Builder) {
@@ -867,13 +891,11 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				}))
 			case "scoring_in_progress":
 				sel.Where(sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf(
-						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'in_progress')", sid))
+					b.WriteString(fmt.Sprintf("%s = 'in_progress'", latestStatus))
 				}))
 			case "scoring_failed":
 				sel.Where(sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf(
-						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'failed')", sid))
+					b.WriteString(fmt.Sprintf("%s = 'failed'", latestStatus))
 				}))
 			}
 		})

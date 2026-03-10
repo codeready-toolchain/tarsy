@@ -376,7 +376,24 @@ func main() {
 		slog.Warn("Chat executor shutdown timeout exceeded")
 	}
 
-	// Stop scoring executor (drain active scoring goroutines)
+	// Stop worker pool first so in-flight sessions can complete and trigger auto-scoring.
+	workerDone := make(chan struct{})
+	go func() {
+		workerPool.Stop()
+		close(workerDone)
+	}()
+
+	select {
+	case <-workerDone:
+		slog.Info("Worker pool stopped gracefully")
+	case <-workerShutdownCtx.Done():
+		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
+	}
+
+	// Then drain scoring executor (scoring goroutines spawned by completed sessions).
+	scoringShutdownCtx, scoringCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer scoringCancel()
+
 	scoringDone := make(chan struct{})
 	go func() {
 		scoringExecutor.Stop()
@@ -386,22 +403,8 @@ func main() {
 	select {
 	case <-scoringDone:
 		slog.Info("Scoring executor stopped gracefully")
-	case <-workerShutdownCtx.Done():
+	case <-scoringShutdownCtx.Done():
 		slog.Warn("Scoring executor shutdown timeout exceeded")
-	}
-
-	// Stop worker pool (wait for active sessions to complete)
-	done := make(chan struct{})
-	go func() {
-		workerPool.Stop()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		slog.Info("Worker pool stopped gracefully")
-	case <-workerShutdownCtx.Done():
-		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
 	}
 
 	// Stop HTTP server with its own timeout budget

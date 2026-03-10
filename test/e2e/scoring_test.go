@@ -373,22 +373,23 @@ func TestE2E_Scoring_Disabled_NoAutoTrigger(t *testing.T) {
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 
-	// Give a grace period for async scoring to (not) fire.
-	time.Sleep(500 * time.Millisecond)
+	// Poll over a verification window to confirm scoring never fires.
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		scoringStages, err := app.EntClient.Stage.Query().
+			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+			All(context.Background())
+		require.NoError(t, err)
+		require.Empty(t, scoringStages, "scoring stage must not be created when scoring is disabled")
 
-	// Verify NO scoring stage was created.
-	scoringStages, err := app.EntClient.Stage.Query().
-		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
-		All(context.Background())
-	require.NoError(t, err)
-	assert.Empty(t, scoringStages, "scoring stage should not be created when scoring is disabled")
+		scores, err := app.EntClient.SessionScore.Query().
+			Where(sessionscore.SessionIDEQ(sessionID)).
+			All(context.Background())
+		require.NoError(t, err)
+		require.Empty(t, scores, "session_scores must not be created when scoring is disabled")
 
-	// Verify NO session_scores record was created.
-	scores, err := app.EntClient.SessionScore.Query().
-		Where(sessionscore.SessionIDEQ(sessionID)).
-		All(context.Background())
-	require.NoError(t, err)
-	assert.Empty(t, scores, "session_scores should not be created when scoring is disabled")
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	// ── Verify session detail has no scoring fields ──
 	sessionDetail := app.GetSession(t, sessionID)

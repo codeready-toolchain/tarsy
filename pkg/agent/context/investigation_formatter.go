@@ -141,6 +141,7 @@ func formatAgentBody(sb *strings.Builder, a AgentInvestigation) {
 //     the immediately preceding llm_response, the duplicate is skipped. This
 //     avoids repeating the agent's last response verbatim.
 func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
+	prevWasLlmResponse := false
 	var lastResponseContent string
 
 	for i := 0; i < len(events); i++ {
@@ -151,25 +152,32 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 
 		switch event.EventType {
 		case timelineevent.EventTypeLlmThinking:
+			prevWasLlmResponse = false
 			sb.WriteString("**Internal Reasoning:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeLlmResponse:
+			prevWasLlmResponse = true
+			lastResponseContent = event.Content
 			sb.WriteString("**Agent Response:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
-			lastResponseContent = event.Content
 
 		case timelineevent.EventTypeLlmToolCall:
+			prevWasLlmResponse = false
 			lastResponseContent = ""
 			toolHeader := formatToolCallHeader(event)
-			if i+1 < len(events) && events[i+1] != nil && events[i+1].EventType == timelineevent.EventTypeMcpToolSummary {
+			if i+1 < len(events) && events[i+1] != nil &&
+				events[i+1].EventType == timelineevent.EventTypeMcpToolSummary {
 				sb.WriteString(toolHeader)
-				sb.WriteString("**Result (summarized):**\n\n")
-				sb.WriteString(events[i+1].Content)
-				sb.WriteString("\n\n")
-				i++ // skip the summary event
+				summary := events[i+1].Content
+				if strings.TrimSpace(summary) != "" {
+					sb.WriteString("**Result (summarized):**\n\n")
+					sb.WriteString(summary)
+					sb.WriteString("\n\n")
+				}
+				i++
 			} else {
 				sb.WriteString(toolHeader)
 				if event.Content != "" {
@@ -180,18 +188,21 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			}
 
 		case timelineevent.EventTypeMcpToolSummary:
+			prevWasLlmResponse = false
 			sb.WriteString("**Tool Result Summary:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeFinalAnalysis:
-			if event.Content != lastResponseContent {
+			if !(prevWasLlmResponse && event.Content == lastResponseContent) {
 				sb.WriteString("**Final Analysis:**\n\n")
 				sb.WriteString(event.Content)
 				sb.WriteString("\n\n")
 			}
+			prevWasLlmResponse = false
 
 		default:
+			prevWasLlmResponse = false
 			sb.WriteString("**" + strings.ReplaceAll(string(event.EventType), "_", " ") + ":**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")

@@ -192,6 +192,33 @@ func TestFormatTimelineEvents(t *testing.T) {
 			},
 			expected: "**Final Analysis:**\n\nRoot cause: OOM.\n\n",
 		},
+		{
+			name: "final analysis dedup: intervening thinking event prevents false dedup",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Root cause: OOM."},
+				{EventType: timelineevent.EventTypeLlmThinking, Content: "Let me reconsider..."},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n" +
+				"**Internal Reasoning:**\n\nLet me reconsider...\n\n" +
+				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "tool call with empty summary consumes summary without raw fallback",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeLlmToolCall,
+					Content:   "pod-1 Running\npod-2 Running",
+					Metadata: map[string]interface{}{
+						"server_name": "k8s",
+						"tool_name":   "pods_list",
+						"arguments":   "",
+					},
+				},
+				{EventType: timelineevent.EventTypeMcpToolSummary, Content: "   "},
+			},
+			expected: "**Tool Call:** k8s.pods_list()\n",
+		},
 	}
 
 	for _, tc := range tests {
