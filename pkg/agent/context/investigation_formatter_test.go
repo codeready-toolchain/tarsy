@@ -155,6 +155,70 @@ func TestFormatTimelineEvents(t *testing.T) {
 			expected: "**Tool Call:** k8s.pods_list()\n" +
 				"**Result:**\n\nk8s.pods_list()\n\n",
 		},
+		{
+			name: "final analysis dedup: identical to preceding response is skipped",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Root cause: OOM."},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "final analysis dedup: different content is kept",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Checking pods."},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Agent Response:**\n\nChecking pods.\n\n" +
+				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "final analysis dedup: tool call between response and analysis resets tracking",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Let me check."},
+				{EventType: timelineevent.EventTypeLlmToolCall, Content: "pod-1 Running",
+					Metadata: map[string]interface{}{"server_name": "k8s", "tool_name": "pods_list", "arguments": ""}},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Let me check."},
+			},
+			expected: "**Agent Response:**\n\nLet me check.\n\n" +
+				"**Tool Call:** k8s.pods_list()\n" +
+				"**Result:**\n\npod-1 Running\n\n" +
+				"**Final Analysis:**\n\nLet me check.\n\n",
+		},
+		{
+			name: "final analysis dedup: standalone final analysis (no preceding response) is kept",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Final Analysis:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "final analysis dedup: intervening thinking event prevents false dedup",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Root cause: OOM."},
+				{EventType: timelineevent.EventTypeLlmThinking, Content: "Let me reconsider..."},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n" +
+				"**Internal Reasoning:**\n\nLet me reconsider...\n\n" +
+				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "tool call with empty summary consumes summary without raw fallback",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeLlmToolCall,
+					Content:   "pod-1 Running\npod-2 Running",
+					Metadata: map[string]interface{}{
+						"server_name": "k8s",
+						"tool_name":   "pods_list",
+						"arguments":   "",
+					},
+				},
+				{EventType: timelineevent.EventTypeMcpToolSummary, Content: "   "},
+			},
+			expected: "**Tool Call:** k8s.pods_list()\n",
+		},
 	}
 
 	for _, tc := range tests {

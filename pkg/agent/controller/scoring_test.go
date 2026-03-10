@@ -64,20 +64,11 @@ func (m *mockScoringPromptBuilder) BuildScoringMissingToolsReportPrompt() string
 	return "List missing tools."
 }
 
-func newScoringExecCtx(llm agent.LLMClient) *agent.ExecutionContext {
-	return &agent.ExecutionContext{
-		SessionID:   "score-session",
-		ExecutionID: "score-exec",
-		AgentName:   "scorer",
-		AgentIndex:  1,
-		Config: &agent.ResolvedAgentConfig{
-			AgentName:   "scorer",
-			LLMProvider: &config.LLMProviderConfig{Model: "test-model"},
-		},
-		LLMClient:     llm,
-		PromptBuilder: &mockScoringPromptBuilder{},
-		// Services intentionally nil — ScoringController doesn't use them
-	}
+func newScoringExecCtx(t *testing.T, llm agent.LLMClient) *agent.ExecutionContext {
+	t.Helper()
+	execCtx := newTestExecCtx(t, llm, nil)
+	execCtx.PromptBuilder = &mockScoringPromptBuilder{}
+	return execCtx
 }
 
 func TestScoringController_Run(t *testing.T) {
@@ -99,7 +90,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		result, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "session investigation data")
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "session investigation data")
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -143,7 +134,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		result, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.NoError(t, err)
 
 		var sr ScoringResult
@@ -171,7 +162,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract score after retries")
 		assert.Equal(t, 6, mock.callCount) // 1 initial + maxExtractionRetries (5) retries
@@ -188,12 +179,12 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		_, err := ctrl.Run(ctx, newScoringExecCtx(mock), "data")
+		_, err := ctrl.Run(ctx, newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
 
-		// Should not retry
-		assert.Equal(t, 1, mock.callCount)
+		// LLM may never be called — DB message storage fails first on cancelled ctx
+		assert.LessOrEqual(t, mock.callCount, 1)
 	})
 
 	t.Run("context deadline propagates immediately", func(t *testing.T) {
@@ -204,7 +195,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 
@@ -213,7 +204,7 @@ func TestScoringController_Run(t *testing.T) {
 	})
 
 	t.Run("nil PromptBuilder returns error", func(t *testing.T) {
-		execCtx := newScoringExecCtx(&mockLLMClient{})
+		execCtx := newScoringExecCtx(t, &mockLLMClient{})
 		execCtx.PromptBuilder = nil
 
 		ctrl := NewScoringController()
@@ -223,7 +214,7 @@ func TestScoringController_Run(t *testing.T) {
 	})
 
 	t.Run("nil LLMClient returns error", func(t *testing.T) {
-		execCtx := newScoringExecCtx(nil)
+		execCtx := newScoringExecCtx(t, nil)
 		execCtx.LLMClient = nil
 
 		ctrl := NewScoringController()
@@ -240,7 +231,7 @@ func TestScoringController_Run(t *testing.T) {
 	})
 
 	t.Run("nil execCtx.Config returns error", func(t *testing.T) {
-		execCtx := newScoringExecCtx(&mockLLMClient{})
+		execCtx := newScoringExecCtx(t, &mockLLMClient{})
 		execCtx.Config = nil
 
 		ctrl := NewScoringController()
@@ -250,7 +241,7 @@ func TestScoringController_Run(t *testing.T) {
 	})
 
 	t.Run("nil execCtx.Config.LLMProvider returns error", func(t *testing.T) {
-		execCtx := newScoringExecCtx(&mockLLMClient{})
+		execCtx := newScoringExecCtx(t, &mockLLMClient{})
 		execCtx.Config.LLMProvider = nil
 
 		ctrl := NewScoringController()
@@ -268,7 +259,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "scoring extraction retry LLM call failed")
 		assert.Equal(t, 2, mock.callCount)
@@ -285,7 +276,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		_, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		_, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "missing tools LLM call failed")
 		assert.Equal(t, 2, mock.callCount)
@@ -309,7 +300,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		result, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "data")
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.NoError(t, err)
 
 		var sr ScoringResult
@@ -339,7 +330,7 @@ func TestScoringController_Run(t *testing.T) {
 		}
 
 		ctrl := NewScoringController()
-		result, err := ctrl.Run(context.Background(), newScoringExecCtx(mock), "session data")
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "session data")
 		require.NoError(t, err)
 
 		// Turn 2 should have full conversation: system + user + assistant + user(missing tools)

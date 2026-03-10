@@ -46,6 +46,8 @@ type Server struct {
 	stageService       *services.StageService          // nil until set (trace endpoints)
 	timelineService    *services.TimelineService       // nil until set (timeline endpoint)
 	runbookService     *runbook.Service                // nil until set (runbook endpoint)
+	scoringExecutor    *queue.ScoringExecutor          // nil until set (scoring endpoint)
+	scoringService     *services.ScoringService        // nil until set (score read endpoint)
 	cancelNotifier     events.SessionCancelNotifier    // nil until set (cross-pod cancel)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 	wsOriginPatterns   []string                        // allowed WebSocket origin patterns
@@ -125,6 +127,16 @@ func (s *Server) SetRunbookService(rs *runbook.Service) {
 // SetCancelNotifier sets the cross-pod cancel notifier for session cancellation.
 func (s *Server) SetCancelNotifier(cn events.SessionCancelNotifier) {
 	s.cancelNotifier = cn
+}
+
+// SetScoringExecutor sets the scoring executor for the re-score endpoint.
+func (s *Server) SetScoringExecutor(executor *queue.ScoringExecutor) {
+	s.scoringExecutor = executor
+}
+
+// SetScoringService sets the scoring service for score read endpoints.
+func (s *Server) SetScoringService(svc *services.ScoringService) {
+	s.scoringService = svc
 }
 
 // SetDashboardDir sets the path to the dashboard build directory and
@@ -240,6 +252,8 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id/status", s.sessionStatusHandler)
 	v1.POST("/sessions/:id/cancel", s.cancelSessionHandler)
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
+	v1.POST("/sessions/:id/score", s.scoreSessionHandler)
+	v1.GET("/sessions/:id/score", s.getScoreHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 
 	// System endpoints.

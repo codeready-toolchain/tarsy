@@ -51,16 +51,17 @@ type SessionListResponse struct {
 
 // DashboardListParams holds query parameters for the dashboard session list.
 type DashboardListParams struct {
-	Page      int        `json:"page"`       // 1-based
-	PageSize  int        `json:"page_size"`  // max 100
-	SortBy    string     `json:"sort_by"`    // created_at, status, alert_type, author, duration
-	SortOrder string     `json:"sort_order"` // asc or desc
-	Status    string     `json:"status"`     // comma-separated status filter
-	AlertType string     `json:"alert_type"`
-	ChainID   string     `json:"chain_id"`
-	Search    string     `json:"search"`     // ILIKE on alert_data, final_analysis
-	StartDate *time.Time `json:"start_date"` // created_at >= start_date
-	EndDate   *time.Time `json:"end_date"`   // created_at < end_date
+	Page          int        `json:"page"`       // 1-based
+	PageSize      int        `json:"page_size"`  // max 100
+	SortBy        string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
+	SortOrder     string     `json:"sort_order"` // asc or desc
+	Status        string     `json:"status"`     // comma-separated status filter
+	AlertType     string     `json:"alert_type"`
+	ChainID       string     `json:"chain_id"`
+	Search        string     `json:"search"`         // ILIKE on alert_data, final_analysis
+	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
+	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
+	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
@@ -91,6 +92,8 @@ type DashboardSessionItem struct {
 	CurrentStageIndex     *int       `json:"current_stage_index"`
 	CurrentStageID        *string    `json:"current_stage_id"`
 	MatchedInContent      bool       `json:"matched_in_content"`
+	LatestScore           *int       `json:"latest_score"`
+	ScoringStatus         *string    `json:"scoring_status"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -178,6 +181,11 @@ type SessionDetailResponse struct {
 	MCPInteractionCount int     `json:"mcp_interaction_count"`
 	CurrentStageIndex   *int    `json:"current_stage_index"`
 	CurrentStageID      *string `json:"current_stage_id"`
+
+	// Scoring fields
+	LatestScore   *int    `json:"latest_score"`
+	ScoringStatus *string `json:"scoring_status"`
+	ScoreID       *string `json:"score_id"`
 
 	// Stage list
 	Stages []StageOverview `json:"stages"`

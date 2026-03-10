@@ -803,3 +803,63 @@ var ActionChainExpectedEvents = []ExpectedEvent{
 	// ── Executive summary ── (DB-only, no WS timeline events)
 	{Type: "session.status", Status: "completed"},
 }
+
+// ScoringExpectedEvents defines the expected WebSocket event sequence
+// for a scored session with the scoring-chain config:
+//
+//	investigation (Investigator ∥ MetricsChecker) → synthesis → remediation → exec summary → scoring
+//
+// Parallel investigation timeline events are omitted because their ordering
+// is non-deterministic. Detailed content is validated via golden files instead.
+var ScoringExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (parallel agents — timeline events non-deterministic) ──
+	{Type: "stage.status", StageName: "investigation", Status: "started"},
+	{Type: "stage.status", StageName: "investigation", Status: "completed"},
+
+	// ── Stage 2: synthesis (auto-created for parallel investigation) ──
+	{Type: "stage.status", StageName: "investigation - Synthesis", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response"},
+	{Type: "stage.status", StageName: "investigation - Synthesis", Status: "completed"},
+
+	// ── Stage 3: remediation (action) ──
+	{Type: "stage.status", StageName: "remediation", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Evidence is clear — pod needs restart with higher memory limit.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Restarting pod-1 with increased memory.", Group: 1},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "restart_pod",
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Restart successful.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response", Group: 2},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed"},
+	{Type: "stage.status", StageName: "remediation", Status: "completed"},
+
+	// ── Executive summary stage ──
+	{Type: "stage.status", StageName: "Executive Summary", Status: "started"},
+	{Type: "stage.status", StageName: "Executive Summary", Status: "completed"},
+
+	// Session completion and scoring start race — either order is valid.
+	{Type: "session.status", Status: "completed", Group: 3},
+	{Type: "stage.status", StageName: "Scoring", Status: "started", Group: 3},
+
+	// Scoring turn 1: score evaluation.
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response"},
+
+	// Scoring turn 2: missing tools analysis.
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response"},
+
+	{Type: "stage.status", StageName: "Scoring", Status: "completed"},
+}

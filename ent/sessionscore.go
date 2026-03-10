@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 )
 
 // SessionScore is the model entity for the SessionScore schema.
@@ -38,6 +39,8 @@ type SessionScore struct {
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// FK to scoring stage (nullable for pre-migration rows)
+	StageID *string `json:"stage_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SessionScoreQuery when eager-loading is set.
 	Edges        SessionScoreEdges `json:"edges"`
@@ -48,9 +51,11 @@ type SessionScore struct {
 type SessionScoreEdges struct {
 	// Session holds the value of the session edge.
 	Session *AlertSession `json:"session,omitempty"`
+	// Stage holds the value of the stage edge.
+	Stage *Stage `json:"stage,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
 }
 
 // SessionOrErr returns the Session value or an error if the edge
@@ -64,6 +69,17 @@ func (e SessionScoreEdges) SessionOrErr() (*AlertSession, error) {
 	return nil, &NotLoadedError{edge: "session"}
 }
 
+// StageOrErr returns the Stage value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e SessionScoreEdges) StageOrErr() (*Stage, error) {
+	if e.Stage != nil {
+		return e.Stage, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: stage.Label}
+	}
+	return nil, &NotLoadedError{edge: "stage"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*SessionScore) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -71,7 +87,7 @@ func (*SessionScore) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case sessionscore.FieldTotalScore:
 			values[i] = new(sql.NullInt64)
-		case sessionscore.FieldID, sessionscore.FieldSessionID, sessionscore.FieldPromptHash, sessionscore.FieldScoreAnalysis, sessionscore.FieldMissingToolsAnalysis, sessionscore.FieldScoreTriggeredBy, sessionscore.FieldStatus, sessionscore.FieldErrorMessage:
+		case sessionscore.FieldID, sessionscore.FieldSessionID, sessionscore.FieldPromptHash, sessionscore.FieldScoreAnalysis, sessionscore.FieldMissingToolsAnalysis, sessionscore.FieldScoreTriggeredBy, sessionscore.FieldStatus, sessionscore.FieldErrorMessage, sessionscore.FieldStageID:
 			values[i] = new(sql.NullString)
 		case sessionscore.FieldStartedAt, sessionscore.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -162,6 +178,13 @@ func (_m *SessionScore) assignValues(columns []string, values []any) error {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
+		case sessionscore.FieldStageID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_id", values[i])
+			} else if value.Valid {
+				_m.StageID = new(string)
+				*_m.StageID = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -178,6 +201,11 @@ func (_m *SessionScore) Value(name string) (ent.Value, error) {
 // QuerySession queries the "session" edge of the SessionScore entity.
 func (_m *SessionScore) QuerySession() *AlertSessionQuery {
 	return NewSessionScoreClient(_m.config).QuerySession(_m)
+}
+
+// QueryStage queries the "stage" edge of the SessionScore entity.
+func (_m *SessionScore) QueryStage() *StageQuery {
+	return NewSessionScoreClient(_m.config).QueryStage(_m)
 }
 
 // Update returns a builder for updating this SessionScore.
@@ -242,6 +270,11 @@ func (_m *SessionScore) String() string {
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.StageID; v != nil {
+		builder.WriteString("stage_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')

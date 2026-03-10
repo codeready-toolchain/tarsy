@@ -245,13 +245,15 @@ func (v *Validator) validateChains() error {
 
 		// Validate scoring agent if enabled
 		if chain.Scoring != nil && chain.Scoring.Enabled {
-			// Scoring agent is required when scoring is enabled
-			if chain.Scoring.Agent == "" {
-				return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("scoring.agent required when scoring is enabled"))
+			scoringAgent := chain.Scoring.Agent
+			if scoringAgent == "" {
+				scoringAgent = AgentNameScoring
 			}
 
-			if !v.cfg.AgentRegistry.Has(chain.Scoring.Agent) {
-				return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("agent '%s' not found", chain.Scoring.Agent))
+			if !v.cfg.AgentRegistry.Has(scoringAgent) {
+				if _, isBuiltin := GetBuiltinConfig().Agents[scoringAgent]; !isBuiltin {
+					return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("agent '%s' not found", scoringAgent))
+				}
 			}
 
 			// Validate scoring LLM backend if specified

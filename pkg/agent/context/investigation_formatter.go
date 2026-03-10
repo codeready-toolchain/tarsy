@@ -133,10 +133,17 @@ func formatAgentBody(sb *strings.Builder, a AgentInvestigation) {
 }
 
 // formatTimelineEvents writes formatted timeline events to the builder.
-// Handles tool call / summary deduplication: when an mcp_tool_summary event
-// follows an llm_tool_call for the same tool invocation, the formatter shows
-// the tool name and arguments from the call but uses the summary content.
+//
+// Deduplication rules:
+//   - tool call / summary: when an mcp_tool_summary follows an llm_tool_call,
+//     the formatter uses the summary content instead of the raw result.
+//   - response / final analysis: when a final_analysis has the same content as
+//     the immediately preceding llm_response, the duplicate is skipped. This
+//     avoids repeating the agent's last response verbatim.
 func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
+	prevWasLlmResponse := false
+	var lastResponseContent string
+
 	for i := 0; i < len(events); i++ {
 		event := events[i]
 		if event == nil {
@@ -145,25 +152,32 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 
 		switch event.EventType {
 		case timelineevent.EventTypeLlmThinking:
+			prevWasLlmResponse = false
 			sb.WriteString("**Internal Reasoning:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeLlmResponse:
+			prevWasLlmResponse = true
+			lastResponseContent = event.Content
 			sb.WriteString("**Agent Response:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeLlmToolCall:
-			// Check if next event is an mcp_tool_summary for deduplication
+			prevWasLlmResponse = false
+			lastResponseContent = ""
 			toolHeader := formatToolCallHeader(event)
-			if i+1 < len(events) && events[i+1] != nil && events[i+1].EventType == timelineevent.EventTypeMcpToolSummary {
-				// Use summary content instead of raw result
+			if i+1 < len(events) && events[i+1] != nil &&
+				events[i+1].EventType == timelineevent.EventTypeMcpToolSummary {
 				sb.WriteString(toolHeader)
-				sb.WriteString("**Result (summarized):**\n\n")
-				sb.WriteString(events[i+1].Content)
-				sb.WriteString("\n\n")
-				i++ // skip the summary event
+				summary := events[i+1].Content
+				if strings.TrimSpace(summary) != "" {
+					sb.WriteString("**Result (summarized):**\n\n")
+					sb.WriteString(summary)
+					sb.WriteString("\n\n")
+				}
+				i++
 			} else {
 				sb.WriteString(toolHeader)
 				if event.Content != "" {
@@ -174,17 +188,21 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			}
 
 		case timelineevent.EventTypeMcpToolSummary:
-			// Standalone summary (not preceded by tool call — shouldn't happen, but handle gracefully)
+			prevWasLlmResponse = false
 			sb.WriteString("**Tool Result Summary:**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeFinalAnalysis:
-			sb.WriteString("**Final Analysis:**\n\n")
-			sb.WriteString(event.Content)
-			sb.WriteString("\n\n")
+			if !(prevWasLlmResponse && event.Content == lastResponseContent) {
+				sb.WriteString("**Final Analysis:**\n\n")
+				sb.WriteString(event.Content)
+				sb.WriteString("\n\n")
+			}
+			prevWasLlmResponse = false
 
 		default:
+			prevWasLlmResponse = false
 			sb.WriteString("**" + strings.ReplaceAll(string(event.EventType), "_", " ") + ":**\n\n")
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")

@@ -521,7 +521,7 @@ function formatLLMInteractionForCopy(interaction: LLMInteractionListItem): strin
 export function formatLLMDetailForCopy(detail: LLMInteractionDetailResponse): string {
   let content = `=== LLM CONVERSATION ===\n\n`;
 
-  for (const msg of detail.conversation) {
+  for (const msg of detail.conversation ?? []) {
     content += `${msg.role.toUpperCase()}:\n`;
     content += `${serializeMessageContent(msg.content)}\n`;
     if (msg.tool_calls?.length) {

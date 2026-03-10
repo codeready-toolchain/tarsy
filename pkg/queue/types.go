@@ -25,6 +25,13 @@ var (
 	// ErrShuttingDown indicates the executor is shutting down and not accepting new work.
 	// Mapped to HTTP 503 Service Unavailable by the API handler.
 	ErrShuttingDown = errors.New("executor is shutting down")
+
+	// ErrScoringInProgress indicates a scoring is already in progress for a session.
+	// Mapped to HTTP 409 Conflict by the API handler.
+	ErrScoringInProgress = errors.New("scoring already in progress for this session")
+
+	// ErrScoringDisabled indicates scoring is not enabled for the chain.
+	ErrScoringDisabled = errors.New("scoring not enabled for this chain")
 )
 
 // SessionExecutor is the interface for session processing.

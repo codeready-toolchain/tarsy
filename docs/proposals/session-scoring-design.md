@@ -1,6 +1,6 @@
 # Session Scoring & Evaluation
 
-**Status:** Final
+**Status:** Backend complete, frontend pending
 **Decisions:** [session-scoring-questions.md](session-scoring-questions.md)
 
 ## Overview
@@ -19,7 +19,7 @@ These evaluation reports feed a continuous improvement loop: identify weak agent
 
 Significant groundwork already exists:
 
-- **ScoringController** (`pkg/agent/controller/scoring.go`) — 2-turn LLM flow (score + missing tools). Currently stateless and operates outside the stage data model (no timeline events, no message storage).
+- **ScoringController** (`pkg/agent/controller/scoring.go`) — 2-turn LLM flow (score + missing tools). Persists LLM interactions and creates streaming timeline events via `callLLMWithStreaming`.
 - **ScoringAgent** (`pkg/agent/scoring_agent.go`) — delegates to controller. Does not manage AgentExecution status (expects external lifecycle management).
 - **Scoring prompts** (`pkg/agent/prompt/judges.go`) — detailed rubric and instructions with prompt hash versioning.
 - **SessionScore schema** (`ent/schema/sessionscore.go`) — DB table with score fields, status lifecycle, prompt hash. Already supports multiple scores per session (O2M edge, partial unique index only on in-progress rows).
@@ -27,7 +27,7 @@ Significant groundwork already exists:
 - **ScoringConfig** (`pkg/config/types.go`) — YAML config structure.
 - **Config validation** — scoring config validated per chain.
 
-What's missing: the orchestration layer (`ScoringExecutor`), stage type system, executive summary refactoring, and dashboard integration.
+What's missing: dashboard frontend integration.
 
 ## Design Principles
 
@@ -122,7 +122,7 @@ ScoringExecutor.ScoreSession(ctx, sessionID, triggeredBy)
   11. Publish events (stage status, scoring complete)
 ```
 
-The ScoringController remains lightweight — no timeline events or message storage within the controller itself. The ScoringExecutor handles all stage/execution bookkeeping around it (creating records, updating statuses, publishing events). This matches the existing pattern where the executor manages infrastructure and the controller manages the LLM conversation.
+The ScoringController persists LLM interactions and creates streaming timeline events via `callLLMWithStreaming`, matching the pattern used by other controllers. The ScoringExecutor handles stage/execution bookkeeping (creating records, updating statuses, publishing events, writing to `session_scores`).
 
 ### ScoringExecutor
 
@@ -243,7 +243,7 @@ See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation 
 - **PR 1:** Add `stage_type` enum field (5 values), wire for investigation/synthesis/chat, API/WS changes, chat context simplification. Additive, no behavior changes.
 - **PR 2:** Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.
 
-### Phase 2: Scoring Pipeline
+### Phase 2: Scoring Pipeline - ✅ DONE
 
 1. Create `ScoringExecutor` in `pkg/queue/scoring_executor.go`
 2. Add `stage_id` FK to `session_scores` schema
@@ -255,15 +255,22 @@ See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation 
 8. Publish scoring events for real-time dashboard updates
 9. Update ScoringAgent comment to reflect ScoringExecutor (currently references "ScoringService")
 
-### Phase 3: Dashboard
+### Phase 3: Dashboard Integration — Backend ✅ DONE / Frontend pending
 
-1. Score badge on session list items
-2. Score indicator on session detail page
-3. Dedicated scoring page with reports and timeline
-4. Handle "scoring in progress" and "not scored" states
+**Backend API additions** — ✅ DONE:
 
-### Phase 4: Future Enhancements
+1. ✅ Add `latest_score` (nullable int) and `scoring_status` (nullable string) to `DashboardSessionItem` — computed via SQL subquery on `session_scores` (latest completed score per session)
+2. ✅ Add `latest_score`, `scoring_status`, and `score_id` to `SessionDetailResponse` — same subquery approach
+3. ✅ Add `GET /api/v1/sessions/:id/score` endpoint — returns the full `SessionScore` record (total_score, score_analysis, missing_tools_analysis, prompt_hash, score_triggered_by, timestamps, status)
+4. ✅ Add `sort_by=score` option to session list for sorting by latest score
+5. ✅ Add `scoring_status` filter option to session list (scored, not_scored, scoring_in_progress, scoring_failed)
 
-1. Score analytics (trends, distributions, per-chain averages)
-2. Aggregated missing tools report across sessions
-3. Additional evaluation types (cost analysis, latency analysis)
+**Frontend work:**
+
+1. Score badge on session list items (color-coded: green ≥80, yellow ≥60, red <60)
+2. Score indicator on session detail page with link to dedicated scoring view
+3. Dedicated scoring page with reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default)
+4. Handle "scoring in progress" (spinner), "not scored" (dash), and "scoring failed" (error badge) states
+5. Real-time updates via existing WebSocket `stage.status` events for the scoring stage
+
+**Note:** The scoring stage is already visible in the session detail's `stages` array (stage_type: "scoring"), so the frontend can derive scoring sub-status from stage presence + status even before the dedicated endpoints are built. When re-scoring preserves older stages, the frontend must pick the **latest** scoring stage (highest `stage_index` where `stage_type === "scoring"`) to avoid displaying stale status.

@@ -1,0 +1,38 @@
+## ORIGINAL ALERT
+
+test alert data
+
+## INVESTIGATION TIMELINE
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: orchestrated-investigation
+
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "orchestrated-investigation" — 3/3 agents succeeded
+
+#### Agent 1: Orchestrator (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Orchestrator conclusion: delegated to sub-agents
+
+#### Agent 2: LogWorker (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Sub-agent found: OOM in pod-2 logs
+
+#### Agent 3: ResourceWorker (langchain)
+**Status**: completed
+
+**Final Analysis:**
+
+Resource limits: memory limit 512Mi too low
+
+<!-- PARALLEL_RESULTS_END -->

@@ -52,10 +52,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 	// Parse sorting.
 	if v := c.QueryParam("sort_by"); v != "" {
 		switch v {
-		case "created_at", "status", "alert_type", "author", "duration":
+		case "created_at", "status", "alert_type", "author", "duration", "score":
 			params.SortBy = v
 		default:
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, or duration")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, or score")
 		}
 	}
 	if v := c.QueryParam("sort_order"); v != "" {
@@ -80,6 +80,14 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 	}
 	params.AlertType = c.QueryParam("alert_type")
 	params.ChainID = c.QueryParam("chain_id")
+	if v := c.QueryParam("scoring_status"); v != "" {
+		switch v {
+		case "scored", "not_scored", "scoring_in_progress", "scoring_failed":
+			params.ScoringStatus = v
+		default:
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid scoring_status: must be scored, not_scored, scoring_in_progress, or scoring_failed")
+		}
+	}
 	if v := c.QueryParam("search"); v != "" {
 		if len(v) < 3 {
 			return echo.NewHTTPError(http.StatusBadRequest, "search query must be at least 3 characters")

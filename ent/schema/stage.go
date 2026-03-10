@@ -114,6 +114,8 @@ func (Stage) Edges() []ent.Edge {
 			Ref("stage").
 			Field("chat_user_message_id").
 			Unique(),
+		edge.To("session_scores", SessionScore.Type).
+			Annotations(entsql.OnDelete(entsql.SetNull)),
 		edge.To("referencing_stages", Stage.Type).
 			Annotations(entsql.OnDelete(entsql.SetNull)),
 		edge.From("referenced_stage", Stage.Type).

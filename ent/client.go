@@ -2069,6 +2069,22 @@ func (c *SessionScoreClient) QuerySession(_m *SessionScore) *AlertSessionQuery {
 	return query
 }
 
+// QueryStage queries the stage edge of a SessionScore.
+func (c *SessionScoreClient) QueryStage(_m *SessionScore) *StageQuery {
+	query := (&StageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sessionscore.Table, sessionscore.FieldID, id),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sessionscore.StageTable, sessionscore.StageColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *SessionScoreClient) Hooks() []Hook {
 	return c.hooks.SessionScore
@@ -2323,6 +2339,22 @@ func (c *StageClient) QueryChatUserMessage(_m *Stage) *ChatUserMessageQuery {
 			sqlgraph.From(stage.Table, stage.FieldID, id),
 			sqlgraph.To(chatusermessage.Table, chatusermessage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2O, true, stage.ChatUserMessageTable, stage.ChatUserMessageColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySessionScores queries the session_scores edge of a Stage.
+func (c *StageClient) QuerySessionScores(_m *Stage) *SessionScoreQuery {
+	query := (&SessionScoreClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, id),
+			sqlgraph.To(sessionscore.Table, sessionscore.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, stage.SessionScoresTable, stage.SessionScoresColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil

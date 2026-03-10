@@ -217,6 +217,12 @@ func (app *TestApp) GetMCPInteractionDetail(t *testing.T, sessionID, interaction
 	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/trace/mcp/"+interactionID, http.StatusOK)
 }
 
+// GetScore calls GET /api/v1/sessions/:id/score and returns the response body.
+func (app *TestApp) GetScore(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/score", http.StatusOK)
+}
+
 // ────────────────────────────────────────────────────────────
 // Polling Helpers
 // ────────────────────────────────────────────────────────────

@@ -110,6 +110,11 @@ func ErrorMessage(v string) predicate.SessionScore {
 	return predicate.SessionScore(sql.FieldEQ(FieldErrorMessage, v))
 }
 
+// StageID applies equality check predicate on the "stage_id" field. It's identical to StageIDEQ.
+func StageID(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEQ(FieldStageID, v))
+}
+
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
 func SessionIDEQ(v string) predicate.SessionScore {
 	return predicate.SessionScore(sql.FieldEQ(FieldSessionID, v))
@@ -700,6 +705,81 @@ func ErrorMessageContainsFold(v string) predicate.SessionScore {
 	return predicate.SessionScore(sql.FieldContainsFold(FieldErrorMessage, v))
 }
 
+// StageIDEQ applies the EQ predicate on the "stage_id" field.
+func StageIDEQ(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEQ(FieldStageID, v))
+}
+
+// StageIDNEQ applies the NEQ predicate on the "stage_id" field.
+func StageIDNEQ(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNEQ(FieldStageID, v))
+}
+
+// StageIDIn applies the In predicate on the "stage_id" field.
+func StageIDIn(vs ...string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldIn(FieldStageID, vs...))
+}
+
+// StageIDNotIn applies the NotIn predicate on the "stage_id" field.
+func StageIDNotIn(vs ...string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNotIn(FieldStageID, vs...))
+}
+
+// StageIDGT applies the GT predicate on the "stage_id" field.
+func StageIDGT(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldGT(FieldStageID, v))
+}
+
+// StageIDGTE applies the GTE predicate on the "stage_id" field.
+func StageIDGTE(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldGTE(FieldStageID, v))
+}
+
+// StageIDLT applies the LT predicate on the "stage_id" field.
+func StageIDLT(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldLT(FieldStageID, v))
+}
+
+// StageIDLTE applies the LTE predicate on the "stage_id" field.
+func StageIDLTE(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldLTE(FieldStageID, v))
+}
+
+// StageIDContains applies the Contains predicate on the "stage_id" field.
+func StageIDContains(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldContains(FieldStageID, v))
+}
+
+// StageIDHasPrefix applies the HasPrefix predicate on the "stage_id" field.
+func StageIDHasPrefix(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldHasPrefix(FieldStageID, v))
+}
+
+// StageIDHasSuffix applies the HasSuffix predicate on the "stage_id" field.
+func StageIDHasSuffix(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldHasSuffix(FieldStageID, v))
+}
+
+// StageIDIsNil applies the IsNil predicate on the "stage_id" field.
+func StageIDIsNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldIsNull(FieldStageID))
+}
+
+// StageIDNotNil applies the NotNil predicate on the "stage_id" field.
+func StageIDNotNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNotNull(FieldStageID))
+}
+
+// StageIDEqualFold applies the EqualFold predicate on the "stage_id" field.
+func StageIDEqualFold(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEqualFold(FieldStageID, v))
+}
+
+// StageIDContainsFold applies the ContainsFold predicate on the "stage_id" field.
+func StageIDContainsFold(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldContainsFold(FieldStageID, v))
+}
+
 // HasSession applies the HasEdge predicate on the "session" edge.
 func HasSession() predicate.SessionScore {
 	return predicate.SessionScore(func(s *sql.Selector) {
@@ -715,6 +795,29 @@ func HasSession() predicate.SessionScore {
 func HasSessionWith(preds ...predicate.AlertSession) predicate.SessionScore {
 	return predicate.SessionScore(func(s *sql.Selector) {
 		step := newSessionStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasStage applies the HasEdge predicate on the "stage" edge.
+func HasStage() predicate.SessionScore {
+	return predicate.SessionScore(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, StageTable, StageColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasStageWith applies the HasEdge predicate on the "stage" edge with a given conditions (other predicates).
+func HasStageWith(preds ...predicate.Stage) predicate.SessionScore {
+	return predicate.SessionScore(func(s *sql.Selector) {
+		step := newStageStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

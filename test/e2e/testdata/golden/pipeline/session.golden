@@ -21,10 +21,13 @@
   "has_parallel_stages": true,
   "id": "{SESSION_ID}",
   "input_tokens": 2110,
+  "latest_score": null,
   "llm_interaction_count": 22,
   "mcp_interaction_count": 21,
   "output_tokens": 445,
   "runbook_url": null,
+  "score_id": null,
+  "scoring_status": null,
   "stages": [
     {
       "completed_at": "{TIMESTAMP}",

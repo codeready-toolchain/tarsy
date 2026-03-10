@@ -10933,6 +10933,8 @@ type SessionScoreMutation struct {
 	clearedFields          map[string]struct{}
 	session                *string
 	clearedsession         bool
+	stage                  *string
+	clearedstage           bool
 	done                   bool
 	oldValue               func(context.Context) (*SessionScore, error)
 	predicates             []predicate.SessionScore
@@ -11501,6 +11503,55 @@ func (m *SessionScoreMutation) ResetErrorMessage() {
 	delete(m.clearedFields, sessionscore.FieldErrorMessage)
 }
 
+// SetStageID sets the "stage_id" field.
+func (m *SessionScoreMutation) SetStageID(s string) {
+	m.stage = &s
+}
+
+// StageID returns the value of the "stage_id" field in the mutation.
+func (m *SessionScoreMutation) StageID() (r string, exists bool) {
+	v := m.stage
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStageID returns the old "stage_id" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldStageID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStageID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStageID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStageID: %w", err)
+	}
+	return oldValue.StageID, nil
+}
+
+// ClearStageID clears the value of the "stage_id" field.
+func (m *SessionScoreMutation) ClearStageID() {
+	m.stage = nil
+	m.clearedFields[sessionscore.FieldStageID] = struct{}{}
+}
+
+// StageIDCleared returns if the "stage_id" field was cleared in this mutation.
+func (m *SessionScoreMutation) StageIDCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldStageID]
+	return ok
+}
+
+// ResetStageID resets all changes to the "stage_id" field.
+func (m *SessionScoreMutation) ResetStageID() {
+	m.stage = nil
+	delete(m.clearedFields, sessionscore.FieldStageID)
+}
+
 // ClearSession clears the "session" edge to the AlertSession entity.
 func (m *SessionScoreMutation) ClearSession() {
 	m.clearedsession = true
@@ -11526,6 +11577,33 @@ func (m *SessionScoreMutation) SessionIDs() (ids []string) {
 func (m *SessionScoreMutation) ResetSession() {
 	m.session = nil
 	m.clearedsession = false
+}
+
+// ClearStage clears the "stage" edge to the Stage entity.
+func (m *SessionScoreMutation) ClearStage() {
+	m.clearedstage = true
+	m.clearedFields[sessionscore.FieldStageID] = struct{}{}
+}
+
+// StageCleared reports if the "stage" edge to the Stage entity was cleared.
+func (m *SessionScoreMutation) StageCleared() bool {
+	return m.StageIDCleared() || m.clearedstage
+}
+
+// StageIDs returns the "stage" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// StageID instead. It exists only for internal usage by the builders.
+func (m *SessionScoreMutation) StageIDs() (ids []string) {
+	if id := m.stage; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetStage resets all changes to the "stage" edge.
+func (m *SessionScoreMutation) ResetStage() {
+	m.stage = nil
+	m.clearedstage = false
 }
 
 // Where appends a list predicates to the SessionScoreMutation builder.
@@ -11562,7 +11640,7 @@ func (m *SessionScoreMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionScoreMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.session != nil {
 		fields = append(fields, sessionscore.FieldSessionID)
 	}
@@ -11593,6 +11671,9 @@ func (m *SessionScoreMutation) Fields() []string {
 	if m.error_message != nil {
 		fields = append(fields, sessionscore.FieldErrorMessage)
 	}
+	if m.stage != nil {
+		fields = append(fields, sessionscore.FieldStageID)
+	}
 	return fields
 }
 
@@ -11621,6 +11702,8 @@ func (m *SessionScoreMutation) Field(name string) (ent.Value, bool) {
 		return m.CompletedAt()
 	case sessionscore.FieldErrorMessage:
 		return m.ErrorMessage()
+	case sessionscore.FieldStageID:
+		return m.StageID()
 	}
 	return nil, false
 }
@@ -11650,6 +11733,8 @@ func (m *SessionScoreMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCompletedAt(ctx)
 	case sessionscore.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
+	case sessionscore.FieldStageID:
+		return m.OldStageID(ctx)
 	}
 	return nil, fmt.Errorf("unknown SessionScore field %s", name)
 }
@@ -11729,6 +11814,13 @@ func (m *SessionScoreMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetErrorMessage(v)
 		return nil
+	case sessionscore.FieldStageID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStageID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown SessionScore field %s", name)
 }
@@ -11792,6 +11884,9 @@ func (m *SessionScoreMutation) ClearedFields() []string {
 	if m.FieldCleared(sessionscore.FieldErrorMessage) {
 		fields = append(fields, sessionscore.FieldErrorMessage)
 	}
+	if m.FieldCleared(sessionscore.FieldStageID) {
+		fields = append(fields, sessionscore.FieldStageID)
+	}
 	return fields
 }
 
@@ -11823,6 +11918,9 @@ func (m *SessionScoreMutation) ClearField(name string) error {
 		return nil
 	case sessionscore.FieldErrorMessage:
 		m.ClearErrorMessage()
+		return nil
+	case sessionscore.FieldStageID:
+		m.ClearStageID()
 		return nil
 	}
 	return fmt.Errorf("unknown SessionScore nullable field %s", name)
@@ -11862,15 +11960,21 @@ func (m *SessionScoreMutation) ResetField(name string) error {
 	case sessionscore.FieldErrorMessage:
 		m.ResetErrorMessage()
 		return nil
+	case sessionscore.FieldStageID:
+		m.ResetStageID()
+		return nil
 	}
 	return fmt.Errorf("unknown SessionScore field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *SessionScoreMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.session != nil {
 		edges = append(edges, sessionscore.EdgeSession)
+	}
+	if m.stage != nil {
+		edges = append(edges, sessionscore.EdgeStage)
 	}
 	return edges
 }
@@ -11883,13 +11987,17 @@ func (m *SessionScoreMutation) AddedIDs(name string) []ent.Value {
 		if id := m.session; id != nil {
 			return []ent.Value{*id}
 		}
+	case sessionscore.EdgeStage:
+		if id := m.stage; id != nil {
+			return []ent.Value{*id}
+		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *SessionScoreMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	return edges
 }
 
@@ -11901,9 +12009,12 @@ func (m *SessionScoreMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *SessionScoreMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.clearedsession {
 		edges = append(edges, sessionscore.EdgeSession)
+	}
+	if m.clearedstage {
+		edges = append(edges, sessionscore.EdgeStage)
 	}
 	return edges
 }
@@ -11914,6 +12025,8 @@ func (m *SessionScoreMutation) EdgeCleared(name string) bool {
 	switch name {
 	case sessionscore.EdgeSession:
 		return m.clearedsession
+	case sessionscore.EdgeStage:
+		return m.clearedstage
 	}
 	return false
 }
@@ -11925,6 +12038,9 @@ func (m *SessionScoreMutation) ClearEdge(name string) error {
 	case sessionscore.EdgeSession:
 		m.ClearSession()
 		return nil
+	case sessionscore.EdgeStage:
+		m.ClearStage()
+		return nil
 	}
 	return fmt.Errorf("unknown SessionScore unique edge %s", name)
 }
@@ -11935,6 +12051,9 @@ func (m *SessionScoreMutation) ResetEdge(name string) error {
 	switch name {
 	case sessionscore.EdgeSession:
 		m.ResetSession()
+		return nil
+	case sessionscore.EdgeStage:
+		m.ResetStage()
 		return nil
 	}
 	return fmt.Errorf("unknown SessionScore edge %s", name)
@@ -11982,6 +12101,9 @@ type StageMutation struct {
 	clearedchat               bool
 	chat_user_message         *string
 	clearedchat_user_message  bool
+	session_scores            map[string]struct{}
+	removedsession_scores     map[string]struct{}
+	clearedsession_scores     bool
 	referencing_stages        map[string]struct{}
 	removedreferencing_stages map[string]struct{}
 	clearedreferencing_stages bool
@@ -13165,6 +13287,60 @@ func (m *StageMutation) ResetChatUserMessage() {
 	m.clearedchat_user_message = false
 }
 
+// AddSessionScoreIDs adds the "session_scores" edge to the SessionScore entity by ids.
+func (m *StageMutation) AddSessionScoreIDs(ids ...string) {
+	if m.session_scores == nil {
+		m.session_scores = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.session_scores[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSessionScores clears the "session_scores" edge to the SessionScore entity.
+func (m *StageMutation) ClearSessionScores() {
+	m.clearedsession_scores = true
+}
+
+// SessionScoresCleared reports if the "session_scores" edge to the SessionScore entity was cleared.
+func (m *StageMutation) SessionScoresCleared() bool {
+	return m.clearedsession_scores
+}
+
+// RemoveSessionScoreIDs removes the "session_scores" edge to the SessionScore entity by IDs.
+func (m *StageMutation) RemoveSessionScoreIDs(ids ...string) {
+	if m.removedsession_scores == nil {
+		m.removedsession_scores = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.session_scores, ids[i])
+		m.removedsession_scores[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSessionScores returns the removed IDs of the "session_scores" edge to the SessionScore entity.
+func (m *StageMutation) RemovedSessionScoresIDs() (ids []string) {
+	for id := range m.removedsession_scores {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SessionScoresIDs returns the "session_scores" edge IDs in the mutation.
+func (m *StageMutation) SessionScoresIDs() (ids []string) {
+	for id := range m.session_scores {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSessionScores resets all changes to the "session_scores" edge.
+func (m *StageMutation) ResetSessionScores() {
+	m.session_scores = nil
+	m.clearedsession_scores = false
+	m.removedsession_scores = nil
+}
+
 // AddReferencingStageIDs adds the "referencing_stages" edge to the Stage entity by ids.
 func (m *StageMutation) AddReferencingStageIDs(ids ...string) {
 	if m.referencing_stages == nil {
@@ -13713,7 +13889,7 @@ func (m *StageMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *StageMutation) AddedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.session != nil {
 		edges = append(edges, stage.EdgeSession)
 	}
@@ -13737,6 +13913,9 @@ func (m *StageMutation) AddedEdges() []string {
 	}
 	if m.chat_user_message != nil {
 		edges = append(edges, stage.EdgeChatUserMessage)
+	}
+	if m.session_scores != nil {
+		edges = append(edges, stage.EdgeSessionScores)
 	}
 	if m.referencing_stages != nil {
 		edges = append(edges, stage.EdgeReferencingStages)
@@ -13793,6 +13972,12 @@ func (m *StageMutation) AddedIDs(name string) []ent.Value {
 		if id := m.chat_user_message; id != nil {
 			return []ent.Value{*id}
 		}
+	case stage.EdgeSessionScores:
+		ids := make([]ent.Value, 0, len(m.session_scores))
+		for id := range m.session_scores {
+			ids = append(ids, id)
+		}
+		return ids
 	case stage.EdgeReferencingStages:
 		ids := make([]ent.Value, 0, len(m.referencing_stages))
 		for id := range m.referencing_stages {
@@ -13809,7 +13994,7 @@ func (m *StageMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *StageMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.removedagent_executions != nil {
 		edges = append(edges, stage.EdgeAgentExecutions)
 	}
@@ -13824,6 +14009,9 @@ func (m *StageMutation) RemovedEdges() []string {
 	}
 	if m.removedmcp_interactions != nil {
 		edges = append(edges, stage.EdgeMcpInteractions)
+	}
+	if m.removedsession_scores != nil {
+		edges = append(edges, stage.EdgeSessionScores)
 	}
 	if m.removedreferencing_stages != nil {
 		edges = append(edges, stage.EdgeReferencingStages)
@@ -13865,6 +14053,12 @@ func (m *StageMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case stage.EdgeSessionScores:
+		ids := make([]ent.Value, 0, len(m.removedsession_scores))
+		for id := range m.removedsession_scores {
+			ids = append(ids, id)
+		}
+		return ids
 	case stage.EdgeReferencingStages:
 		ids := make([]ent.Value, 0, len(m.removedreferencing_stages))
 		for id := range m.removedreferencing_stages {
@@ -13877,7 +14071,7 @@ func (m *StageMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *StageMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.clearedsession {
 		edges = append(edges, stage.EdgeSession)
 	}
@@ -13901,6 +14095,9 @@ func (m *StageMutation) ClearedEdges() []string {
 	}
 	if m.clearedchat_user_message {
 		edges = append(edges, stage.EdgeChatUserMessage)
+	}
+	if m.clearedsession_scores {
+		edges = append(edges, stage.EdgeSessionScores)
 	}
 	if m.clearedreferencing_stages {
 		edges = append(edges, stage.EdgeReferencingStages)
@@ -13931,6 +14128,8 @@ func (m *StageMutation) EdgeCleared(name string) bool {
 		return m.clearedchat
 	case stage.EdgeChatUserMessage:
 		return m.clearedchat_user_message
+	case stage.EdgeSessionScores:
+		return m.clearedsession_scores
 	case stage.EdgeReferencingStages:
 		return m.clearedreferencing_stages
 	case stage.EdgeReferencedStage:
@@ -13986,6 +14185,9 @@ func (m *StageMutation) ResetEdge(name string) error {
 		return nil
 	case stage.EdgeChatUserMessage:
 		m.ResetChatUserMessage()
+		return nil
+	case stage.EdgeSessionScores:
+		m.ResetSessionScores()
 		return nil
 	case stage.EdgeReferencingStages:
 		m.ResetReferencingStages()

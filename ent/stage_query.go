@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 )
@@ -40,6 +41,7 @@ type StageQuery struct {
 	withMcpInteractions   *MCPInteractionQuery
 	withChat              *ChatQuery
 	withChatUserMessage   *ChatUserMessageQuery
+	withSessionScores     *SessionScoreQuery
 	withReferencingStages *StageQuery
 	withReferencedStage   *StageQuery
 	modifiers             []func(*sql.Selector)
@@ -248,6 +250,28 @@ func (_q *StageQuery) QueryChatUserMessage() *ChatUserMessageQuery {
 			sqlgraph.From(stage.Table, stage.FieldID, selector),
 			sqlgraph.To(chatusermessage.Table, chatusermessage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2O, true, stage.ChatUserMessageTable, stage.ChatUserMessageColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySessionScores chains the current query on the "session_scores" edge.
+func (_q *StageQuery) QuerySessionScores() *SessionScoreQuery {
+	query := (&SessionScoreClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stage.Table, stage.FieldID, selector),
+			sqlgraph.To(sessionscore.Table, sessionscore.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, stage.SessionScoresTable, stage.SessionScoresColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -499,6 +523,7 @@ func (_q *StageQuery) Clone() *StageQuery {
 		withMcpInteractions:   _q.withMcpInteractions.Clone(),
 		withChat:              _q.withChat.Clone(),
 		withChatUserMessage:   _q.withChatUserMessage.Clone(),
+		withSessionScores:     _q.withSessionScores.Clone(),
 		withReferencingStages: _q.withReferencingStages.Clone(),
 		withReferencedStage:   _q.withReferencedStage.Clone(),
 		// clone intermediate query.
@@ -593,6 +618,17 @@ func (_q *StageQuery) WithChatUserMessage(opts ...func(*ChatUserMessageQuery)) *
 		opt(query)
 	}
 	_q.withChatUserMessage = query
+	return _q
+}
+
+// WithSessionScores tells the query-builder to eager-load the nodes that are connected to
+// the "session_scores" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *StageQuery) WithSessionScores(opts ...func(*SessionScoreQuery)) *StageQuery {
+	query := (&SessionScoreClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSessionScores = query
 	return _q
 }
 
@@ -696,7 +732,7 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 	var (
 		nodes       = []*Stage{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [11]bool{
 			_q.withSession != nil,
 			_q.withAgentExecutions != nil,
 			_q.withTimelineEvents != nil,
@@ -705,6 +741,7 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 			_q.withMcpInteractions != nil,
 			_q.withChat != nil,
 			_q.withChatUserMessage != nil,
+			_q.withSessionScores != nil,
 			_q.withReferencingStages != nil,
 			_q.withReferencedStage != nil,
 		}
@@ -780,6 +817,13 @@ func (_q *StageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Stage,
 	if query := _q.withChatUserMessage; query != nil {
 		if err := _q.loadChatUserMessage(ctx, query, nodes, nil,
 			func(n *Stage, e *ChatUserMessage) { n.Edges.ChatUserMessage = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSessionScores; query != nil {
+		if err := _q.loadSessionScores(ctx, query, nodes,
+			func(n *Stage) { n.Edges.SessionScores = []*SessionScore{} },
+			func(n *Stage, e *SessionScore) { n.Edges.SessionScores = append(n.Edges.SessionScores, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -1045,6 +1089,39 @@ func (_q *StageQuery) loadChatUserMessage(ctx context.Context, query *ChatUserMe
 		for i := range nodes {
 			assign(nodes[i], n)
 		}
+	}
+	return nil
+}
+func (_q *StageQuery) loadSessionScores(ctx context.Context, query *SessionScoreQuery, nodes []*Stage, init func(*Stage), assign func(*Stage, *SessionScore)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Stage)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(sessionscore.FieldStageID)
+	}
+	query.Where(predicate.SessionScore(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(stage.SessionScoresColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.StageID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "stage_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "stage_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
 	}
 	return nil
 }

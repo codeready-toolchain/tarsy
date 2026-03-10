@@ -7,8 +7,8 @@ import (
 
 // ScoringAgent evaluates session quality by delegating to a Controller.
 // Unlike BaseAgent, it does not call UpdateAgentExecutionStatus because
-// the scoring lifecycle is managed externally by ScoringService via the
-// session_scores table.
+// the scoring lifecycle is managed externally by ScoringExecutor via the
+// session_scores table and stage infrastructure.
 type ScoringAgent struct {
 	controller Controller
 }

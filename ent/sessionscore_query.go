@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 )
 
 // SessionScoreQuery is the builder for querying SessionScore entities.
@@ -25,6 +26,7 @@ type SessionScoreQuery struct {
 	inters      []Interceptor
 	predicates  []predicate.SessionScore
 	withSession *AlertSessionQuery
+	withStage   *StageQuery
 	modifiers   []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -77,6 +79,28 @@ func (_q *SessionScoreQuery) QuerySession() *AlertSessionQuery {
 			sqlgraph.From(sessionscore.Table, sessionscore.FieldID, selector),
 			sqlgraph.To(alertsession.Table, alertsession.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, sessionscore.SessionTable, sessionscore.SessionColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryStage chains the current query on the "stage" edge.
+func (_q *SessionScoreQuery) QueryStage() *StageQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sessionscore.Table, sessionscore.FieldID, selector),
+			sqlgraph.To(stage.Table, stage.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sessionscore.StageTable, sessionscore.StageColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -277,6 +301,7 @@ func (_q *SessionScoreQuery) Clone() *SessionScoreQuery {
 		inters:      append([]Interceptor{}, _q.inters...),
 		predicates:  append([]predicate.SessionScore{}, _q.predicates...),
 		withSession: _q.withSession.Clone(),
+		withStage:   _q.withStage.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -292,6 +317,17 @@ func (_q *SessionScoreQuery) WithSession(opts ...func(*AlertSessionQuery)) *Sess
 		opt(query)
 	}
 	_q.withSession = query
+	return _q
+}
+
+// WithStage tells the query-builder to eager-load the nodes that are connected to
+// the "stage" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *SessionScoreQuery) WithStage(opts ...func(*StageQuery)) *SessionScoreQuery {
+	query := (&StageClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withStage = query
 	return _q
 }
 
@@ -373,8 +409,9 @@ func (_q *SessionScoreQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*SessionScore{}
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
 			_q.withSession != nil,
+			_q.withStage != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -404,6 +441,12 @@ func (_q *SessionScoreQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			return nil, err
 		}
 	}
+	if query := _q.withStage; query != nil {
+		if err := _q.loadStage(ctx, query, nodes, nil,
+			func(n *SessionScore, e *Stage) { n.Edges.Stage = e }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
@@ -429,6 +472,38 @@ func (_q *SessionScoreQuery) loadSession(ctx context.Context, query *AlertSessio
 		nodes, ok := nodeids[n.ID]
 		if !ok {
 			return fmt.Errorf(`unexpected foreign-key "session_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *SessionScoreQuery) loadStage(ctx context.Context, query *StageQuery, nodes []*SessionScore, init func(*SessionScore), assign func(*SessionScore, *Stage)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*SessionScore)
+	for i := range nodes {
+		if nodes[i].StageID == nil {
+			continue
+		}
+		fk := *nodes[i].StageID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(stage.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "stage_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -467,6 +542,9 @@ func (_q *SessionScoreQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withSession != nil {
 			_spec.Node.AddColumnOnce(sessionscore.FieldSessionID)
+		}
+		if _q.withStage != nil {
+			_spec.Node.AddColumnOnce(sessionscore.FieldStageID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

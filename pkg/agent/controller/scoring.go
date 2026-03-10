@@ -7,14 +7,17 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
 // scoringOutputSchema instructs the LLM to end its response with the total score
 // on the last line. The controller parses this to extract the numeric score.
-const scoringOutputSchema = `End your response with the total score as a standalone number on the last line.
-For example, if the total score is 62, the last line of your response should be:
+const scoringOutputSchema = `End your response with the total score as a standalone number on the very last line.
+The last line must contain ONLY the number — no formatting, no markdown, no text.
+Example: if the total score is 62, the last line should be exactly:
 62`
 
 // ScoringResult holds the structured output of a scoring evaluation.
@@ -26,8 +29,8 @@ type ScoringResult struct {
 
 // ScoringController conducts a multi-turn LLM conversation to evaluate
 // session quality and extract a score. Stateless — all state comes from
-// parameters. It operates outside the investigation data model: no
-// Services, no timeline events, no message storage.
+// parameters. It persists LLM interactions and timeline events so scoring
+// data is visible in the trace API.
 type ScoringController struct{}
 
 // NewScoringController creates a new scoring controller.
@@ -75,6 +78,9 @@ func (c *ScoringController) Run(
 	}
 
 	var totalUsage agent.TokenUsage
+	eventSeq := 0
+	msgSeq := 0
+	iteration := 1
 
 	// --- Turn 1: Score evaluation ---
 
@@ -83,27 +89,51 @@ func (c *ScoringController) Run(
 		{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringInitialPrompt(prevStageContext, scoringOutputSchema)},
 	}
 
-	resp, err := callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
+		return nil, fmt.Errorf("failed to store initial scoring messages: %w", err)
+	}
+
+	startTime := time.Now()
+	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("scoring LLM call failed: %w", err)
 	}
+	resp := streamed.LLMResponse
 	accumulateUsage(&totalUsage, resp)
+
+	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+	if storeErr != nil {
+		return nil, fmt.Errorf("failed to store scoring assistant message: %w", storeErr)
+	}
+	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
+	iteration++
 
 	// Extract score from the response text
 	score, analysis, err := extractScore(resp.Text)
 
 	// Retry extraction if parsing fails
 	for attempt := 0; err != nil && attempt < maxExtractionRetries; attempt++ {
+		retryPrompt := execCtx.PromptBuilder.BuildScoringOutputSchemaReminderPrompt(scoringOutputSchema)
 		messages = append(messages,
 			agent.ConversationMessage{Role: agent.RoleAssistant, Content: resp.Text},
-			agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringOutputSchemaReminderPrompt(scoringOutputSchema)},
+			agent.ConversationMessage{Role: agent.RoleUser, Content: retryPrompt},
 		)
+		storeObservationMessage(ctx, execCtx, retryPrompt, &msgSeq)
 
-		resp, err = callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+		startTime = time.Now()
+		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 		if err != nil {
 			return nil, fmt.Errorf("scoring extraction retry LLM call failed: %w", err)
 		}
+		resp = streamed.LLMResponse
 		accumulateUsage(&totalUsage, resp)
+
+		assistantMsg, storeErr = storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+		if storeErr != nil {
+			return nil, fmt.Errorf("failed to store scoring retry assistant message: %w", storeErr)
+		}
+		recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
+		iteration++
 		score, analysis, err = extractScore(resp.Text)
 	}
 	if err != nil {
@@ -112,16 +142,26 @@ func (c *ScoringController) Run(
 
 	// --- Turn 2: Missing tools analysis ---
 
+	missingToolsPrompt := execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()
 	messages = append(messages,
 		agent.ConversationMessage{Role: agent.RoleAssistant, Content: resp.Text},
-		agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()},
+		agent.ConversationMessage{Role: agent.RoleUser, Content: missingToolsPrompt},
 	)
+	storeObservationMessage(ctx, execCtx, missingToolsPrompt, &msgSeq)
 
-	missingToolsResp, err := callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+	startTime = time.Now()
+	missingToolsStreamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("missing tools LLM call failed: %w", err)
 	}
+	missingToolsResp := missingToolsStreamed.LLMResponse
 	accumulateUsage(&totalUsage, missingToolsResp)
+
+	missingToolsMsg, storeErr := storeAssistantMessage(ctx, execCtx, missingToolsResp, &msgSeq)
+	if storeErr != nil {
+		return nil, fmt.Errorf("failed to store missing tools assistant message: %w", storeErr)
+	}
+	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), missingToolsResp, &missingToolsMsg.ID, startTime)
 
 	// --- Build result ---
 

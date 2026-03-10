@@ -266,7 +266,7 @@ var (
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
@@ -455,6 +455,7 @@ var (
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "session_id", Type: field.TypeString},
+		{Name: "stage_id", Type: field.TypeString, Nullable: true},
 	}
 	// SessionScoresTable holds the schema information for the "session_scores" table.
 	SessionScoresTable = &schema.Table{
@@ -467,6 +468,12 @@ var (
 				Columns:    []*schema.Column{SessionScoresColumns[10]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "session_scores_stages_session_scores",
+				Columns:    []*schema.Column{SessionScoresColumns[11]},
+				RefColumns: []*schema.Column{StagesColumns[0]},
+				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -494,6 +501,11 @@ var (
 				Name:    "sessionscore_status_started_at",
 				Unique:  false,
 				Columns: []*schema.Column{SessionScoresColumns[6], SessionScoresColumns[7]},
+			},
+			{
+				Name:    "sessionscore_stage_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[11]},
 			},
 			{
 				Name:    "sessionscore_session_id",
@@ -685,6 +697,7 @@ func init() {
 	MessagesTable.ForeignKeys[1].RefTable = AlertSessionsTable
 	MessagesTable.ForeignKeys[2].RefTable = StagesTable
 	SessionScoresTable.ForeignKeys[0].RefTable = AlertSessionsTable
+	SessionScoresTable.ForeignKeys[1].RefTable = StagesTable
 	StagesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	StagesTable.ForeignKeys[1].RefTable = ChatsTable
 	StagesTable.ForeignKeys[2].RefTable = ChatUserMessagesTable

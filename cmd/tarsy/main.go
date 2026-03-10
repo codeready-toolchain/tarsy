@@ -267,9 +267,10 @@ func main() {
 	}
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
+	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService)
 
 	// 6. Start worker pool (before HTTP server)
-	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, eventPublisher, slackService)
+	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, scoringExecutor, eventPublisher, slackService)
 	if err := workerPool.Start(ctx); err != nil {
 		slog.Error("Failed to start worker pool", "error", err)
 		os.Exit(1)
@@ -308,6 +309,8 @@ func main() {
 	httpServer.SetEventPublisher(eventPublisher)
 	httpServer.SetCancelNotifier(eventPublisher)
 	httpServer.SetRunbookService(runbookService)
+	httpServer.SetScoringExecutor(scoringExecutor)
+	httpServer.SetScoringService(services.NewScoringService(dbClient.Client))
 
 	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)
@@ -373,18 +376,35 @@ func main() {
 		slog.Warn("Chat executor shutdown timeout exceeded")
 	}
 
-	// Stop worker pool (wait for active sessions to complete)
-	done := make(chan struct{})
+	// Stop worker pool first so in-flight sessions can complete and trigger auto-scoring.
+	workerDone := make(chan struct{})
 	go func() {
 		workerPool.Stop()
-		close(done)
+		close(workerDone)
 	}()
 
 	select {
-	case <-done:
+	case <-workerDone:
 		slog.Info("Worker pool stopped gracefully")
 	case <-workerShutdownCtx.Done():
 		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
+	}
+
+	// Then drain scoring executor (scoring goroutines spawned by completed sessions).
+	scoringShutdownCtx, scoringCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer scoringCancel()
+
+	scoringDone := make(chan struct{})
+	go func() {
+		scoringExecutor.Stop()
+		close(scoringDone)
+	}()
+
+	select {
+	case <-scoringDone:
+		slog.Info("Scoring executor stopped gracefully")
+	case <-scoringShutdownCtx.Done():
+		slog.Warn("Scoring executor shutdown timeout exceeded")
 	}
 
 	// Stop HTTP server with its own timeout budget
