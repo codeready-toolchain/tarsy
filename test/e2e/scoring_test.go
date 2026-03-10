@@ -520,10 +520,10 @@ func TestE2E_Scoring_API_DuplicatePrevention(t *testing.T) {
 	scriptSimpleInvestigation(llm)
 	scriptExecSummary(llm)
 
-	// Script two separate scoring rounds for two API re-scores.
-	// First re-score: will block in LLM to test concurrent rejection.
+	// First re-score: score eval blocks in LLM to test concurrent rejection.
 	blockCh := make(chan struct{})
 	llm.AddSequential(LLMScriptEntry{WaitCh: blockCh, Text: "Analysis text.\n\n70"})
+	llm.AddSequential(LLMScriptEntry{Text: "No missing tools."})
 
 	podsResult := `[{"name":"pod-1","status":"OOMKilled","restarts":3}]`
 
@@ -558,8 +558,14 @@ func TestE2E_Scoring_API_DuplicatePrevention(t *testing.T) {
 	// Second re-score — should be rejected with 409 Conflict (partial unique index).
 	app.postJSON(t, "/api/v1/sessions/"+sessionID+"/score", nil, http.StatusConflict)
 
-	// Unblock the first scoring.
+	// Unblock the first scoring and wait for it to complete.
 	close(blockCh)
+
+	scoreID := scoreResp["score_id"].(string)
+	require.Eventually(t, func() bool {
+		s, err := app.EntClient.SessionScore.Get(context.Background(), scoreID)
+		return err == nil && s.Status == sessionscore.StatusCompleted
+	}, 10*time.Second, 100*time.Millisecond, "blocked scoring did not complete after unblock")
 }
 
 func TestE2E_Scoring_API_NonTerminalSession(t *testing.T) {
