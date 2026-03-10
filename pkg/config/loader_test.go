@@ -999,3 +999,123 @@ agent_chains:
 	assert.Equal(t, "fb-agent-2", agentFB[1].Provider)
 	assert.Equal(t, "fb-agent-3", agentFB[2].Provider)
 }
+
+func TestLoadAppliesScoringEnabledDefault(t *testing.T) {
+	t.Run("scoring_enabled injects scoring config for chains without it", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  scoring_enabled: true
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  chain-no-scoring:
+    alert_types: ["test"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+  chain-explicit-scoring:
+    alert_types: ["test2"]
+    scoring:
+      enabled: true
+      llm_provider: "custom-provider"
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		// Chain without scoring: should get scoring injected
+		noScoring, err := cfg.GetChain("chain-no-scoring")
+		require.NoError(t, err)
+		require.NotNil(t, noScoring.Scoring)
+		assert.True(t, noScoring.Scoring.Enabled)
+		assert.Empty(t, noScoring.Scoring.LLMProvider, "injected scoring should not override provider")
+
+		// Chain with explicit scoring: should keep its own config
+		explicit, err := cfg.GetChain("chain-explicit-scoring")
+		require.NoError(t, err)
+		require.NotNil(t, explicit.Scoring)
+		assert.True(t, explicit.Scoring.Enabled)
+		assert.Equal(t, "custom-provider", explicit.Scoring.LLMProvider)
+	})
+
+	t.Run("scoring_enabled false does not inject scoring", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  scoring_enabled: false
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  chain-no-scoring:
+    alert_types: ["test"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		chain, err := cfg.GetChain("chain-no-scoring")
+		require.NoError(t, err)
+		assert.Nil(t, chain.Scoring, "scoring should not be injected when scoring_enabled is false")
+	})
+
+	t.Run("explicit scoring block is not overridden by default", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  scoring_enabled: true
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  chain-explicit-disabled:
+    alert_types: ["test"]
+    scoring:
+      enabled: false
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		chain, err := cfg.GetChain("chain-explicit-disabled")
+		require.NoError(t, err)
+		require.NotNil(t, chain.Scoring)
+		assert.False(t, chain.Scoring.Enabled, "explicit scoring.enabled=false should not be overridden by default")
+	})
+
+	t.Run("omitted scoring_enabled does not inject scoring", func(t *testing.T) {
+		dir := setupTestConfigDir(t)
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		assert.False(t, cfg.Defaults.ScoringEnabled)
+	})
+}

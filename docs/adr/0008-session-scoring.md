@@ -147,11 +147,12 @@ Key details:
 
 `POST /api/v1/sessions/:id/score`
 
-- **Auth**: Same auth as session creation (oauth2-proxy).
+- **Auth**: Same auth as session creation (oauth2-proxy). Any authenticated user may trigger re-scoring — no ownership check. `extractAuthor` is used only to record who triggered the re-score, not for authorization.
 - **Preconditions**: Session must exist. Session must be in a terminal state (`completed`, `failed`, etc.). If scoring is already in-progress for this session (checked via partial unique index), return `409 Conflict`.
 - **Scoring enabled check**: The API endpoint does NOT require chain scoring to be enabled — re-scoring is always available on demand.
 - **`triggeredBy`**: Extracted from the request auth context (same as `extractAuthor`).
 - **Response**: `202 Accepted` with the created `session_score` ID. Scoring runs async; the caller polls or watches via WebSocket for the scoring stage status.
+- **Abuse protection**: The `409 Conflict` on concurrent in-progress scoring is the only guard currently implemented. Future considerations if abuse is observed: per-user rate limits (e.g. 10/hour), per-session daily caps (e.g. 5/day), and monitoring thresholds.
 
 ### Scoring as Sub-Status
 
@@ -202,7 +203,7 @@ The partial unique index prevents concurrent in-progress scorings per session, w
 
 The scoring LLM receives the full investigation timeline: all LLM turns, all tool calls with arguments and results, intermediate reasoning, and final analysis. Context is filtered by stage type — `investigation` + `synthesis` + `exec_summary` stages only (excluding `chat` and `scoring` stages).
 
-For very long sessions, truncation of the oldest tool results is a pragmatic fallback to stay within the LLM's context window.
+For very long sessions, truncation of the oldest tool results is a pragmatic fallback to stay within the LLM's context window. No truncation logic is currently implemented — the full context is passed as-is, relying on the large context windows of modern LLMs (1M+ tokens). If context limits become a practical issue, a truncation strategy should be implemented (e.g. removing tool call results from oldest stages first while preserving arguments, final analysis, and synthesis outputs).
 
 ## Dashboard Integration
 
@@ -219,6 +220,10 @@ Three levels of detail:
 - `GET /api/v1/sessions/:id/score` — returns the full `SessionScore` record (total_score, score_analysis, missing_tools_analysis, prompt_hash, score_triggered_by, timestamps, status)
 - `sort_by=score` option for session list sorting by latest score
 - `scoring_status` filter option for session list (scored, not_scored, scoring_in_progress, scoring_failed)
+
+#### Query Performance
+
+The `latest_score` and `scoring_status` fields on `DashboardSessionItem` are computed via per-session SQL subqueries (`SELECT total_score/status FROM session_scores WHERE session_id = ? ORDER BY started_at DESC LIMIT 1`). The `session_scores` schema already has indexes on `(session_id, status)` and `(status, started_at)` which partially cover these queries. If performance degrades at scale, consider adding a denormalized `latest_score_id` FK on `alert_sessions` (updated on scoring completion) to eliminate the subqueries entirely.
 
 ### Frontend
 

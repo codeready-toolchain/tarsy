@@ -128,13 +128,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// 6. Build registries
-	agentRegistry := NewAgentRegistry(agents)
-	mcpServerRegistry := NewMCPServerRegistry(mcpServers)
-	chainRegistry := NewChainRegistry(chains)
-	llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
-
-	// 7. Resolve defaults (YAML overrides built-in)
+	// 6. Resolve defaults (YAML overrides built-in)
 	defaults := tarsyConfig.Defaults
 	if defaults == nil {
 		defaults = &Defaults{}
@@ -152,6 +146,21 @@ func load(_ context.Context, configDir string) (*Config, error) {
 			PatternGroup: "security",
 		}
 	}
+
+	// 7. Apply default scoring to chains without explicit scoring config
+	if defaults.ScoringEnabled {
+		for _, chain := range chains {
+			if chain.Scoring == nil {
+				chain.Scoring = &ScoringConfig{Enabled: true}
+			}
+		}
+	}
+
+	// 8. Build registries
+	agentRegistry := NewAgentRegistry(agents)
+	mcpServerRegistry := NewMCPServerRegistry(mcpServers)
+	chainRegistry := NewChainRegistry(chains)
+	llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
 
 	// Resolve queue config (merge user YAML with built-in defaults)
 	// Start with defaults, then merge user config on top to preserve unset defaults

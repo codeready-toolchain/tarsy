@@ -107,6 +107,10 @@ defaults:
   
   # Default scoring agent name (fallback when chain has no scoring config)
   scoring_agent: "ScoringAgent"
+
+  # Enable scoring by default for all chains.
+  # Chains with an explicit scoring: block are not affected.
+  # scoring_enabled: true
   
   # Default alert type for new sessions (used in UI dropdown)
   alert_type: "kubernetes"

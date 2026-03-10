@@ -18,6 +18,10 @@ type Defaults struct {
 	// Default scoring agent name (fallback when chain has no scoring config)
 	ScoringAgent string `yaml:"scoring_agent,omitempty"`
 
+	// Enable scoring by default for all chains that don't explicitly configure it.
+	// Chains with an explicit scoring: block (even with enabled: false) are not affected.
+	ScoringEnabled bool `yaml:"scoring_enabled,omitempty"`
+
 	// Success policy default for parallel stages
 	SuccessPolicy SuccessPolicy `yaml:"success_policy,omitempty"`
 

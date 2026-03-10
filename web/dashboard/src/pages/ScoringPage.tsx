@@ -36,6 +36,7 @@ import ReactMarkdown from 'react-markdown';
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { ScoreBadge } from '../components/common/ScoreBadge.tsx';
+import axios from 'axios';
 import { getSession, getScore, triggerScoring, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
 import { remarkPlugins, finalAnswerMarkdownComponents } from '../utils/markdownComponents.tsx';
@@ -117,11 +118,10 @@ export function ScoringPage() {
       const scoreData = await getScore(id);
       setScore(scoreData);
     } catch (err) {
-      const msg = handleAPIError(err);
-      if (msg.includes('404')) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
         setScore(null);
       } else {
-        setScoreError(msg);
+        setScoreError(handleAPIError(err));
       }
     } finally {
       setScoreLoading(false);

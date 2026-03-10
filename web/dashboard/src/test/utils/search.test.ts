@@ -136,6 +136,10 @@ describe('hasActiveFilters', () => {
     expect(hasActiveFilters({ ...defaultFilters, chain_id: 'test-chain' })).toBe(true);
   });
 
+  it('returns true when scoring_status is set', () => {
+    expect(hasActiveFilters({ ...defaultFilters, scoring_status: 'scored' })).toBe(true);
+  });
+
   it('returns true when start_date is set', () => {
     expect(hasActiveFilters({ ...defaultFilters, start_date: '2025-01-15T00:00:00Z' })).toBe(true);
   });

@@ -31,11 +31,45 @@ type ScoringResult struct {
 // session quality and extract a score. Stateless — all state comes from
 // parameters. It persists LLM interactions and timeline events so scoring
 // data is visible in the trace API.
+//
+// Supports LLM provider fallback: if a call fails with a retryable error,
+// the controller switches to the next configured fallback provider (using
+// SingleShot thresholds) and retries the failed call.
 type ScoringController struct{}
 
 // NewScoringController creates a new scoring controller.
 func NewScoringController() *ScoringController {
 	return &ScoringController{}
+}
+
+// scoringCallLLM wraps callLLMWithStreaming with fallback retry.
+// On provider failure it tries the next fallback provider before giving up.
+func scoringCallLLM(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	fbState *FallbackState,
+	messages []agent.ConversationMessage,
+	eventSeq *int,
+) (*StreamedResponse, error) {
+	for {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
+			SessionID:   execCtx.SessionID,
+			ExecutionID: execCtx.ExecutionID,
+			Messages:    messages,
+			Config:      execCtx.Config.LLMProvider,
+			Backend:     execCtx.Config.LLMBackend,
+			ClearCache:  fbState.consumeClearCache(),
+		}, eventSeq)
+		if err == nil {
+			return streamed, nil
+		}
+		if !tryFallback(ctx, execCtx, fbState, err, eventSeq) {
+			return nil, err
+		}
+	}
 }
 
 // scoreRegex matches a standalone integer (with optional sign) on a line.
@@ -81,6 +115,8 @@ func (c *ScoringController) Run(
 	eventSeq := 0
 	msgSeq := 0
 	iteration := 1
+	fbState := NewFallbackState(execCtx)
+	fbState.SingleShot = true
 
 	// --- Turn 1: Score evaluation ---
 
@@ -94,7 +130,7 @@ func (c *ScoringController) Run(
 	}
 
 	startTime := time.Now()
-	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
+	streamed, err := scoringCallLLM(ctx, execCtx, fbState, messages, &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("scoring LLM call failed: %w", err)
 	}
@@ -121,7 +157,7 @@ func (c *ScoringController) Run(
 		storeObservationMessage(ctx, execCtx, retryPrompt, &msgSeq)
 
 		startTime = time.Now()
-		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
+		streamed, err = scoringCallLLM(ctx, execCtx, fbState, messages, &eventSeq)
 		if err != nil {
 			return nil, fmt.Errorf("scoring extraction retry LLM call failed: %w", err)
 		}
@@ -150,7 +186,7 @@ func (c *ScoringController) Run(
 	storeObservationMessage(ctx, execCtx, missingToolsPrompt, &msgSeq)
 
 	startTime = time.Now()
-	missingToolsStreamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
+	missingToolsStreamed, err := scoringCallLLM(ctx, execCtx, fbState, messages, &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("missing tools LLM call failed: %w", err)
 	}
@@ -181,17 +217,6 @@ func (c *ScoringController) Run(
 		FinalAnalysis: string(resultJSON),
 		TokensUsed:    totalUsage,
 	}, nil
-}
-
-func llmInput(execCtx *agent.ExecutionContext, messages []agent.ConversationMessage) *agent.GenerateInput {
-	return &agent.GenerateInput{
-		SessionID:   execCtx.SessionID,
-		ExecutionID: execCtx.ExecutionID,
-		Messages:    messages,
-		Config:      execCtx.Config.LLMProvider,
-		Tools:       nil,
-		Backend:     execCtx.Config.LLMBackend,
-	}
 }
 
 // extractScore parses the LLM response to extract the numeric score from the

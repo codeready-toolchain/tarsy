@@ -282,6 +282,177 @@ func TestScoringController_Run(t *testing.T) {
 		assert.Equal(t, 2, mock.callCount)
 	})
 
+	t.Run("fallback: Turn 1 fails, retries with fallback provider", func(t *testing.T) {
+		mock := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("provider down"), Code: LLMErrorMaxRetries,
+				}},
+				// After fallback: Turn 1 succeeds
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Good analysis\n75"},
+					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+				}},
+				// Turn 2: missing tools
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "No missing tools."},
+					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+				}},
+			},
+		}
+
+		execCtx := newScoringExecCtx(t, mock)
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("fallback-scoring", config.LLMBackendLangChain, "fallback-model"),
+		}
+
+		ctrl := NewScoringController()
+		result, err := ctrl.Run(context.Background(), execCtx, "session data")
+		require.NoError(t, err)
+
+		var sr ScoringResult
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
+		assert.Equal(t, 75, sr.TotalScore)
+		assert.Equal(t, 3, mock.callCount)
+		assert.Equal(t, "fallback-scoring", execCtx.Config.LLMProviderName)
+	})
+
+	t.Run("fallback: Turn 2 fails, retries with fallback provider", func(t *testing.T) {
+		mock := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				// Turn 1 succeeds
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Score analysis\n60"},
+					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+				}},
+				// Turn 2 fails
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("provider overloaded"), Code: LLMErrorMaxRetries,
+				}},
+				// After fallback: Turn 2 succeeds
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Missing: tool-x"},
+					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+				}},
+			},
+		}
+
+		execCtx := newScoringExecCtx(t, mock)
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("fallback-scoring", config.LLMBackendLangChain, "fallback-model"),
+		}
+
+		ctrl := NewScoringController()
+		result, err := ctrl.Run(context.Background(), execCtx, "session data")
+		require.NoError(t, err)
+
+		var sr ScoringResult
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
+		assert.Equal(t, 60, sr.TotalScore)
+		assert.Equal(t, "Missing: tool-x", sr.MissingToolsAnalysis)
+		assert.Equal(t, 3, mock.callCount)
+	})
+
+	t.Run("fallback exhausted: all providers fail", func(t *testing.T) {
+		mock := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("primary down"), Code: LLMErrorMaxRetries,
+				}},
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("fallback down"), Code: LLMErrorMaxRetries,
+				}},
+			},
+		}
+
+		execCtx := newScoringExecCtx(t, mock)
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("fallback-scoring", config.LLMBackendLangChain, "fallback-model"),
+		}
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(context.Background(), execCtx, "data")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "scoring LLM call failed")
+		assert.Equal(t, 2, mock.callCount)
+	})
+
+	t.Run("fallback: extraction retry fails, retries with fallback provider", func(t *testing.T) {
+		mock := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				// Turn 1: no valid score on last line
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "I think the score is seventy."},
+					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+				}},
+				// Extraction retry: provider error
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("provider crashed"), Code: LLMErrorMaxRetries,
+				}},
+				// After fallback: extraction retry succeeds
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "70"},
+					&agent.UsageChunk{InputTokens: 30, OutputTokens: 10, TotalTokens: 40},
+				}},
+				// Turn 2: missing tools
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "No missing tools."},
+					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+				}},
+			},
+		}
+
+		execCtx := newScoringExecCtx(t, mock)
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("fallback-scoring", config.LLMBackendLangChain, "fallback-model"),
+		}
+
+		ctrl := NewScoringController()
+		result, err := ctrl.Run(context.Background(), execCtx, "session data")
+		require.NoError(t, err)
+
+		var sr ScoringResult
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
+		assert.Equal(t, 70, sr.TotalScore)
+		assert.Equal(t, 4, mock.callCount)
+		assert.Equal(t, "fallback-scoring", execCtx.Config.LLMProviderName)
+	})
+
+	t.Run("fallback: context cancelled during retry loop exits immediately", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		mock := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{err: &PartialOutputError{
+					Cause: fmt.Errorf("provider error"), Code: LLMErrorMaxRetries,
+				}},
+			},
+			onGenerate: func(callIndex int) {
+				if callIndex == 0 {
+					cancel()
+				}
+			},
+		}
+
+		execCtx := newScoringExecCtx(t, mock)
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("fallback-scoring", config.LLMBackendLangChain, "fallback-model"),
+		}
+
+		ctrl := NewScoringController()
+		_, err := ctrl.Run(ctx, execCtx, "data")
+		require.Error(t, err)
+		assert.Equal(t, 1, mock.callCount)
+	})
+
 	t.Run("thinking chunks are collected but don't affect score extraction", func(t *testing.T) {
 		mock := &mockLLMClient{
 			responses: []mockLLMResponse{

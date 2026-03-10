@@ -355,7 +355,7 @@ Non-stage components (executive summary, follow-up chat) use chain-level provide
 **Purpose**: Agent framework, controller system, and dynamic orchestration
 **Key Responsibility**: Agent behavior, iteration patterns, and LLM-driven sub-agent dispatch
 
-Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, Orchestrator, WebResearcher, CodeExecutor, GeneralWorker) and YAML-configured agents.
+Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, Orchestrator, WebResearcher, CodeExecutor, GeneralWorker, ScoringAgent) and YAML-configured agents.
 
 Agent behavior is governed by two orthogonal configuration axes:
 
@@ -375,12 +375,14 @@ graph TB
         WR["WebResearcher (built-in)"]
         CE["CodeExecutor (built-in)"]
         GW["GeneralWorker (built-in)"]
+        ScA["ScoringAgent (built-in)"]
         YA["YAML-configured agents"]
     end
 
     subgraph controllers [Controllers]
         FC["IteratingController<br/>(multi-turn with tools)"]
         SC["SingleShotController<br/>(one LLM call, no tools)"]
+        SCC["ScoringController<br/>(2-turn LLM conversation)"]
     end
 
     subgraph backends [LLM Backends]
@@ -395,6 +397,7 @@ graph TB
     BA --> WR
     BA --> CE
     BA --> GW
+    BA --> ScA
     BA --> YA
 
     KA -.-> FC
@@ -404,6 +407,7 @@ graph TB
     CE -.-> FC
     GW -.-> FC
     SA -.-> SC
+    ScA -.-> SCC
     YA -.-> FC
     YA -.-> SC
 
@@ -411,6 +415,8 @@ graph TB
     FC -.-> LC
     SC -.-> GN
     SC -.-> LC
+    SCC -.-> GN
+    SCC -.-> LC
 ```
 
 #### Core Interfaces
@@ -465,7 +471,21 @@ Parameterized single-shot controller: one LLM call without tools, configured via
 
 #### ScoringController — 2-turn scoring (`pkg/agent/controller/scoring.go`)
 
-Dedicated controller for session quality evaluation. Runs a 2-turn LLM conversation: Turn 1 evaluates the investigation against a scoring rubric (Logical Flow, Consistency, Tool Relevance, Synthesis Quality) and produces a total score (0–100) with detailed analysis. Turn 2 identifies missing MCP tools that should be built to improve future investigations. Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Orchestrated by `ScoringExecutor` (`pkg/queue/scoring_executor.go`) which handles stage/execution lifecycle and result persistence. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
+Dedicated controller for session quality evaluation. Orchestrated by `ScoringExecutor` (`pkg/queue/scoring_executor.go`) which handles stage/execution lifecycle and result persistence.
+
+```
+ScoringExecutor.ScoreSession(sessionID)
+  → Gather investigation context
+    (stages: investigation + exec_summary + action; synthesis results attached via parent reference)
+  → Create scoring Stage + AgentExecution records
+  → ScoringController.Run()
+    → Turn 1: Score evaluation (rubric: Logical Flow, Consistency, Tool Relevance, Synthesis Quality) → total_score (0–100) + score_analysis
+    → Turn 2: Missing tools analysis → missing_tools_analysis
+  → Write to session_scores table
+  → Publish scoring stage status events
+```
+
+Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled) or on-demand via `POST /api/v1/sessions/:id/score`. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 
 #### Orchestrator Agent (`pkg/agent/orchestrator/`)
 
@@ -547,6 +567,7 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/base_agent.go` -- BaseAgent with Controller delegation
 - `pkg/agent/controller/iterating.go` -- IteratingController (includes sub-agent drain/wait for orchestrators)
 - `pkg/agent/controller/single_shot.go` -- SingleShotController
+- `pkg/agent/controller/scoring.go` -- ScoringController (2-turn LLM conversation for session scoring)
 - `pkg/agent/controller/fallback.go` -- FallbackState, provider selection, callLLMWithFallback helper, error-code-aware triggers
 - `pkg/agent/controller/streaming.go` -- Stream collection with adaptive timeouts (initial response, stall, max call)
 - `pkg/agent/controller/tool_execution.go` -- Shared tool execution logic
@@ -554,6 +575,8 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
+- `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
+- `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow orchestration, stage/execution lifecycle)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
@@ -949,6 +972,8 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, final_analysis, executive_summary, error_message) |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
+| GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, missing tools) |
+| POST | `/api/v1/sessions/:id/score` | Trigger on-demand re-scoring (202 Accepted, 409 if in-progress) |
 | GET | `/health` | Health check (DB, worker pool) |
 
 ---
@@ -1043,6 +1068,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat |
 | `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
+| `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, missing tools), re-score trigger |
 | `/system` | SystemStatusPage | MCP server health, tools, system warnings |
 
 #### Data Flow
@@ -1053,6 +1079,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Optimistic UI**: Chat injects temporary `user_question` items before server confirmation
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
+- **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 
 #### Text Search
 
@@ -1077,7 +1104,7 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - API routes registered first take priority over the SPA fallback
 
 **Key Implementation Files**:
-- `web/dashboard/src/pages/` -- Page components
+- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx` for scoring reports)
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
