@@ -1,7 +1,9 @@
 import { memo, useCallback } from 'react';
-import { Box, Typography, Divider, Chip, IconButton, Alert, alpha } from '@mui/material';
-import type { Theme } from '@mui/material/styles';
-import { Search, ExpandMore, ExpandLess, MergeType, SmsOutlined, AutoAwesome, BuildOutlined, GradingOutlined } from '@mui/icons-material';
+import { Box, Typography, Divider, Alert } from '@mui/material';
+import {
+  Search, ExpandMore, ExpandLess,
+  MergeType, SmsOutlined, AutoAwesome, BuildOutlined, GradingOutlined,
+} from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 import { STAGE_TYPE } from '../../constants/eventTypes';
@@ -13,23 +15,21 @@ interface StageSeparatorProps {
   onToggleCollapse?: () => void;
 }
 
-const getStatusThemeColor = (theme: Theme, isError: boolean, isCancelled: boolean) =>
-  isError ? theme.palette.error.main : isCancelled ? theme.palette.text.secondary : theme.palette.primary.main;
-
 function getStageTypeIcon(stageType: string | undefined) {
+  const sx = { fontSize: 16 };
   switch (stageType) {
-    case STAGE_TYPE.SYNTHESIS: return <MergeType />;
-    case STAGE_TYPE.CHAT: return <SmsOutlined />;
-    case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome />;
-    case STAGE_TYPE.ACTION: return <BuildOutlined />;
-    case STAGE_TYPE.SCORING: return <GradingOutlined />;
-    default: return <Search />;
+    case STAGE_TYPE.SYNTHESIS: return <MergeType sx={sx} />;
+    case STAGE_TYPE.CHAT: return <SmsOutlined sx={sx} />;
+    case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome sx={sx} />;
+    case STAGE_TYPE.ACTION: return <BuildOutlined sx={sx} />;
+    case STAGE_TYPE.SCORING: return <GradingOutlined sx={sx} />;
+    default: return <Search sx={sx} />;
   }
 }
 
 /**
- * StageSeparator - renders stage boundary dividers.
- * Clickable chip with expand/collapse, agent name, and error alerts.
+ * StageSeparator — minimal stage boundary divider.
+ * A single clickable line: icon + stage name + chevron.
  */
 function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
@@ -39,6 +39,9 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const rawName = item.content;
   const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
   const errorMessage = (item.metadata?.error_message as string) || '';
+
+  const statusColor = isErrorStatus ? 'error.main' : isCancelledStatus ? 'text.disabled' : 'primary.main';
+  const hoverColor = isErrorStatus ? 'error.main' : 'primary.main';
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -51,52 +54,40 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   );
 
   return (
-    <Box sx={{ my: 2.5 }}>
-      <Divider sx={{ mb: 1, opacity: isCollapsed ? 0.6 : 1, transition: 'opacity 0.2s ease-in-out' }}>
+    <Box sx={{ my: 1.5 }}>
+      <Divider
+        role={onToggleCollapse ? 'button' : undefined}
+        tabIndex={onToggleCollapse ? 0 : undefined}
+        aria-label={onToggleCollapse ? (isCollapsed ? 'Expand stage' : 'Collapse stage') : undefined}
+        onKeyDown={onToggleCollapse ? handleKeyDown : undefined}
+        onClick={onToggleCollapse}
+        sx={{
+          cursor: onToggleCollapse ? 'pointer' : 'default',
+          opacity: isCollapsed ? 0.6 : 1,
+          transition: 'opacity 0.2s',
+          '&:hover': onToggleCollapse ? { opacity: 1, '& .stage-label': { color: hoverColor } } : {},
+          '&::before, &::after': { borderColor: 'divider' },
+        }}
+      >
         <Box
-          role={onToggleCollapse ? 'button' : undefined}
-          tabIndex={onToggleCollapse ? 0 : undefined}
-          aria-label={onToggleCollapse ? (isCollapsed ? 'Expand stage' : 'Collapse stage') : undefined}
-          onKeyDown={onToggleCollapse ? handleKeyDown : undefined}
+          className="stage-label"
           sx={{
-            display: 'flex', alignItems: 'center', gap: 1,
-            cursor: onToggleCollapse ? 'pointer' : 'default',
-            borderRadius: 1, px: 1, py: 0.5,
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': onToggleCollapse ? {
-              backgroundColor: (theme: Theme) => alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.08),
-              '& .MuiChip-root': {
-                backgroundColor: (theme: Theme) => alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.12),
-                borderColor: (theme: Theme) => getStatusThemeColor(theme, isErrorStatus, isCancelledStatus),
-              }
-            } : {}
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            color: statusColor,
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            transition: 'color 0.2s',
           }}
-          onClick={onToggleCollapse}
         >
-          <Chip
-            icon={getStageTypeIcon(stageType)}
-            label={stageName}
-            color={isErrorStatus ? 'error' : isCancelledStatus ? 'default' : 'primary'}
-            variant="outlined"
-            size="small"
-            sx={{ fontSize: '0.8rem', fontWeight: 600, opacity: isCollapsed ? 0.8 : 1, transition: 'all 0.2s ease-in-out' }}
-          />
+          {getStageTypeIcon(stageType)}
+          {stageName}
           {onToggleCollapse && (
-            <IconButton
-              size="small"
-              onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
-              sx={{
-                padding: 0.75,
-                backgroundColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.1) : alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.1),
-                border: '1px solid',
-                borderColor: (theme: Theme) => isCollapsed ? alpha(theme.palette.text.secondary, 0.2) : alpha(getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), 0.2),
-                color: isCollapsed ? 'text.secondary' : 'inherit',
-                '&:hover': { backgroundColor: (theme: Theme) => isCollapsed ? theme.palette.text.secondary : getStatusThemeColor(theme, isErrorStatus, isCancelledStatus), color: 'white', transform: 'scale(1.1)' },
-                transition: 'all 0.2s ease-in-out',
-              }}
-            >
-              {isCollapsed ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
-            </IconButton>
+            isCollapsed
+              ? <ExpandMore sx={{ fontSize: 18, ml: 0.25, transition: 'transform 0.3s' }} />
+              : <ExpandLess sx={{ fontSize: 18, ml: 0.25, transition: 'transform 0.3s' }} />
           )}
         </Box>
       </Divider>
