@@ -1685,7 +1685,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 		},
 		// Scoring validation tests
 		{
-			name: "scoring enabled but no agent",
+			name: "scoring enabled uses built-in agent by default",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
 					AlertTypes: []string{"test"},
@@ -1705,8 +1705,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			servers: map[string]*MCPServerConfig{
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
-			wantErr: true,
-			errMsg:  "scoring.agent required when scoring is enabled",
+			wantErr: false,
 		},
 		{
 			name: "scoring with invalid agent",

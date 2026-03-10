@@ -1,0 +1,49 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 3
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, gathering evidence about the alert."
+  MetricsChecker:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are MetricsChecker, analyzing resource metrics and SLO compliance."
+  Remediator:
+    type: action
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Remediator, executing justified remediation actions."
+
+agent_chains:
+  scoring-chain:
+    alert_types: [test-scoring]
+    executive_summary_provider: "test-provider"
+    scoring:
+      enabled: true
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+          - name: MetricsChecker
+      - name: remediation
+        agents:
+          - name: Remediator
+
+  scoring-disabled-chain:
+    alert_types: [test-scoring-disabled]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator

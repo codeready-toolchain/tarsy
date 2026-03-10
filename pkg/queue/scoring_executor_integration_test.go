@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	util "github.com/codeready-toolchain/tarsy/test/util"
@@ -468,10 +468,610 @@ func TestScoringExecutor_BuildScoringContext_EmptyForNoStages(t *testing.T) {
 	assert.NotEmpty(t, result, "should produce investigation history header even with no stages")
 }
 
+func TestScoringExecutor_BuildScoringContext_TimelineEventsIncluded(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	stgID := uuid.New().String()
+	_, err := entClient.Stage.Create().
+		SetID(stgID).
+		SetSessionID(session.ID).
+		SetStageName("investigation").
+		SetStageIndex(0).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeInvestigation).
+		Save(ctx)
+	require.NoError(t, err)
+
+	execID := uuid.New().String()
+	_, err = entClient.AgentExecution.Create().
+		SetID(execID).
+		SetStageID(stgID).
+		SetSessionID(session.ID).
+		SetAgentName("Investigator").
+		SetAgentIndex(1).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(execID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmThinking).
+		SetContent("Analyzing pod metrics for anomalies").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(execID).
+		SetSequenceNumber(2).
+		SetEventType(timelineevent.EventTypeLlmToolCall).
+		SetContent("pod-1 Running, pod-2 CrashLoopBackOff").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{
+			"server_name": "k8s",
+			"tool_name":   "get_pods",
+			"arguments":   `{"namespace":"prod"}`,
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(execID).
+		SetSequenceNumber(3).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Root cause: pod-2 is OOMKilled").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result := executor.buildScoringContext(ctx, session.ID)
+
+	assert.Contains(t, result, "Analyzing pod metrics for anomalies")
+	assert.Contains(t, result, "k8s.get_pods")
+	assert.Contains(t, result, "pod-1 Running, pod-2 CrashLoopBackOff")
+	assert.Contains(t, result, "Root cause: pod-2 is OOMKilled")
+}
+
+func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	// Investigation stage with 2 parallel agents
+	investStgID := uuid.New().String()
+	_, err := entClient.Stage.Create().
+		SetID(investStgID).
+		SetSessionID(session.ID).
+		SetStageName("parallel-investigation").
+		SetStageIndex(0).
+		SetExpectedAgentCount(2).
+		SetStageType(stage.StageTypeInvestigation).
+		Save(ctx)
+	require.NoError(t, err)
+
+	exec1ID := uuid.New().String()
+	_, err = entClient.AgentExecution.Create().
+		SetID(exec1ID).
+		SetStageID(investStgID).
+		SetSessionID(session.ID).
+		SetAgentName("LogAnalyzer").
+		SetAgentIndex(1).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(investStgID).
+		SetExecutionID(exec1ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Log analysis: detected OOM events").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	exec2ID := uuid.New().String()
+	_, err = entClient.AgentExecution.Create().
+		SetID(exec2ID).
+		SetStageID(investStgID).
+		SetSessionID(session.ID).
+		SetAgentName("MetricsChecker").
+		SetAgentIndex(2).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(investStgID).
+		SetExecutionID(exec2ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Memory usage at 98%, CPU normal").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Synthesis stage referencing the investigation stage
+	synthStgID := uuid.New().String()
+	_, err = entClient.Stage.Create().
+		SetID(synthStgID).
+		SetSessionID(session.ID).
+		SetStageName("synthesis").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeSynthesis).
+		SetReferencedStageID(investStgID).
+		Save(ctx)
+	require.NoError(t, err)
+
+	synthExecID := uuid.New().String()
+	_, err = entClient.AgentExecution.Create().
+		SetID(synthExecID).
+		SetStageID(synthStgID).
+		SetSessionID(session.ID).
+		SetAgentName("Synthesizer").
+		SetAgentIndex(1).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(synthStgID).
+		SetExecutionID(synthExecID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Combined: OOM + high memory confirm memory leak").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result := executor.buildScoringContext(ctx, session.ID)
+
+	// Parallel agents should appear in context
+	assert.Contains(t, result, "LogAnalyzer")
+	assert.Contains(t, result, "MetricsChecker")
+	assert.Contains(t, result, "Log analysis: detected OOM events")
+	assert.Contains(t, result, "Memory usage at 98%, CPU normal")
+
+	// Parallel format markers
+	assert.Contains(t, result, "PARALLEL_RESULTS_START")
+	assert.Contains(t, result, "2/2 agents succeeded")
+
+	// Synthesis result should be attached to the investigation stage
+	assert.Contains(t, result, "Synthesis Result")
+	assert.Contains(t, result, "Combined: OOM + high memory confirm memory leak")
+
+	// Synthesis stage itself should NOT appear as a separate stage section
+	stageCount := 0
+	for _, line := range splitLines(result) {
+		if len(line) > 3 && line[:3] == "## " {
+			stageCount++
+		}
+	}
+	assert.Equal(t, 1, stageCount, "only the investigation stage should appear as a top-level section")
+}
+
+func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	// Create an investigation stage (so context isn't empty)
+	stgID := uuid.New().String()
+	_, err := entClient.Stage.Create().
+		SetID(stgID).
+		SetSessionID(session.ID).
+		SetStageName("investigation").
+		SetStageIndex(0).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeInvestigation).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.AgentExecution.Create().
+		SetID(uuid.New().String()).
+		SetStageID(stgID).
+		SetSessionID(session.ID).
+		SetAgentName("Investigator").
+		SetAgentIndex(1).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Session-level executive summary event (no stage/execution)
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeExecutiveSummary).
+		SetContent("Overall: memory leak in pod-2 caused cascading failures").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result := executor.buildScoringContext(ctx, session.ID)
+
+	assert.Contains(t, result, "Executive Summary")
+	assert.Contains(t, result, "memory leak in pod-2 caused cascading failures")
+}
+
+func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	stgID := uuid.New().String()
+	_, err := entClient.Stage.Create().
+		SetID(stgID).
+		SetSessionID(session.ID).
+		SetStageName("orchestrated-investigation").
+		SetStageIndex(0).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeInvestigation).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Orchestrator execution (no parent)
+	orchExecID := uuid.New().String()
+	_, err = entClient.AgentExecution.Create().
+		SetID(orchExecID).
+		SetStageID(stgID).
+		SetSessionID(session.ID).
+		SetAgentName("Orchestrator").
+		SetAgentIndex(1).
+		SetLlmBackend("langchain").
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(orchExecID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Orchestrator conclusion: delegated to sub-agents").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Sub-agent 1 (parent = orchestrator)
+	sub1ExecID := uuid.New().String()
+	task1 := "Analyze pod logs"
+	_, err = entClient.AgentExecution.Create().
+		SetID(sub1ExecID).
+		SetStageID(stgID).
+		SetSessionID(session.ID).
+		SetAgentName("LogWorker").
+		SetAgentIndex(2).
+		SetLlmBackend("langchain").
+		SetParentExecutionID(orchExecID).
+		SetTask(task1).
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(sub1ExecID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Sub-agent found: OOM in pod-2 logs").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Sub-agent 2 (parent = orchestrator)
+	sub2ExecID := uuid.New().String()
+	task2 := "Check resource limits"
+	_, err = entClient.AgentExecution.Create().
+		SetID(sub2ExecID).
+		SetStageID(stgID).
+		SetSessionID(session.ID).
+		SetAgentName("ResourceWorker").
+		SetAgentIndex(3).
+		SetLlmBackend("langchain").
+		SetParentExecutionID(orchExecID).
+		SetTask(task2).
+		SetStatus("completed").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetStageID(stgID).
+		SetExecutionID(sub2ExecID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetContent("Resource limits: memory limit 512Mi too low").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result := executor.buildScoringContext(ctx, session.ID)
+
+	// All executions (orchestrator + sub-agents) should appear in context.
+	// WithAgentExecutions() loads all executions for the stage without filtering
+	// on parent_execution_id — this is the expected behavior.
+	assert.Contains(t, result, "Orchestrator")
+	assert.Contains(t, result, "LogWorker")
+	assert.Contains(t, result, "ResourceWorker")
+	assert.Contains(t, result, "Orchestrator conclusion: delegated to sub-agents")
+	assert.Contains(t, result, "Sub-agent found: OOM in pod-2 logs")
+	assert.Contains(t, result, "Resource limits: memory limit 512Mi too low")
+
+	// 3 agents → parallel format
+	assert.Contains(t, result, "PARALLEL_RESULTS_START")
+	assert.Contains(t, result, "3/3 agents succeeded")
+}
+
+func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{})
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	type stageSetup struct {
+		id        string
+		name      string
+		idx       int
+		stageType stage.StageType
+		refID     *string
+		agents    []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}
+	}
+
+	createStage := func(s stageSetup) {
+		t.Helper()
+		builder := entClient.Stage.Create().
+			SetID(s.id).
+			SetSessionID(session.ID).
+			SetStageName(s.name).
+			SetStageIndex(s.idx).
+			SetExpectedAgentCount(len(s.agents)).
+			SetStageType(s.stageType)
+		if s.refID != nil {
+			builder = builder.SetReferencedStageID(*s.refID)
+		}
+		_, err := builder.Save(ctx)
+		require.NoError(t, err)
+
+		for _, a := range s.agents {
+			execBuilder := entClient.AgentExecution.Create().
+				SetID(uuid.New().String()).
+				SetStageID(s.id).
+				SetSessionID(session.ID).
+				SetAgentName(a.name).
+				SetAgentIndex(a.idx).
+				SetLlmBackend("langchain").
+				SetStatus("completed")
+			if a.parentExecID != "" {
+				execBuilder = execBuilder.SetParentExecutionID(a.parentExecID)
+			}
+			exec, err := execBuilder.Save(ctx)
+			require.NoError(t, err)
+
+			if a.finalAnalysis != "" {
+				_, err = entClient.TimelineEvent.Create().
+					SetID(uuid.New().String()).
+					SetSessionID(session.ID).
+					SetStageID(s.id).
+					SetExecutionID(exec.ID).
+					SetSequenceNumber(1).
+					SetEventType(timelineevent.EventTypeFinalAnalysis).
+					SetContent(a.finalAnalysis).
+					SetStatus(timelineevent.StatusCompleted).
+					SetMetadata(map[string]interface{}{}).
+					Save(ctx)
+				require.NoError(t, err)
+			}
+		}
+	}
+
+	// 1. Investigation (parallel)
+	investID := uuid.New().String()
+	createStage(stageSetup{
+		id: investID, name: "investigation", idx: 0, stageType: stage.StageTypeInvestigation,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "Investigator", idx: 1, finalAnalysis: "Found OOM events"},
+			{name: "MetricsChecker", idx: 2, finalAnalysis: "Memory at 98%"},
+		},
+	})
+
+	// 2. Synthesis (references investigation)
+	synthID := uuid.New().String()
+	createStage(stageSetup{
+		id: synthID, name: "synthesis", idx: 1, stageType: stage.StageTypeSynthesis, refID: &investID,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "Synthesizer", idx: 1, finalAnalysis: "Confirmed memory leak"},
+		},
+	})
+
+	// 3. Action (remediation)
+	actionID := uuid.New().String()
+	createStage(stageSetup{
+		id: actionID, name: "remediation", idx: 2, stageType: stage.StageTypeAction,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "Remediator", idx: 1, finalAnalysis: "Restarted pod-2 successfully"},
+		},
+	})
+
+	// 4. Exec summary
+	execSumID := uuid.New().String()
+	createStage(stageSetup{
+		id: execSumID, name: "exec-summary", idx: 3, stageType: stage.StageTypeExecSummary,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "ExecSummaryAgent", idx: 1, finalAnalysis: "Investigation complete"},
+		},
+	})
+
+	// 5. Chat (should be excluded)
+	chatID := uuid.New().String()
+	createStage(stageSetup{
+		id: chatID, name: "chat", idx: 4, stageType: stage.StageTypeChat,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "ChatAgent", idx: 1, finalAnalysis: "Chat response here"},
+		},
+	})
+
+	// 6. Previous scoring (should be excluded)
+	prevScoreID := uuid.New().String()
+	createStage(stageSetup{
+		id: prevScoreID, name: "scoring", idx: 5, stageType: stage.StageTypeScoring,
+		agents: []struct {
+			name          string
+			idx           int
+			parentExecID  string
+			finalAnalysis string
+		}{
+			{name: "ScoringAgent", idx: 1, finalAnalysis: "Old score: 70"},
+		},
+	})
+
+	// Session-level executive summary
+	_, err := entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(session.ID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeExecutiveSummary).
+		SetContent("Executive: memory leak caused cascading pod failures").
+		SetStatus(timelineevent.StatusCompleted).
+		SetMetadata(map[string]interface{}{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result := executor.buildScoringContext(ctx, session.ID)
+
+	// Investigation stage: parallel agents
+	assert.Contains(t, result, "Investigator")
+	assert.Contains(t, result, "MetricsChecker")
+	assert.Contains(t, result, "Found OOM events")
+	assert.Contains(t, result, "Memory at 98%")
+
+	// Synthesis result attached to investigation
+	assert.Contains(t, result, "Synthesis Result")
+	assert.Contains(t, result, "Confirmed memory leak")
+
+	// Action stage included
+	assert.Contains(t, result, "remediation")
+	assert.Contains(t, result, "Restarted pod-2 successfully")
+
+	// Exec summary stage included
+	assert.Contains(t, result, "exec-summary")
+	assert.Contains(t, result, "Investigation complete")
+
+	// Executive summary section
+	assert.Contains(t, result, "Executive Summary")
+	assert.Contains(t, result, "Executive: memory leak caused cascading pod failures")
+
+	// Chat and scoring stages excluded
+	assert.NotContains(t, result, "Chat response here")
+	assert.NotContains(t, result, "Old score: 70")
+	assert.NotContains(t, result, "ChatAgent")
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := range len(s) {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
 // blockingMockLLMClient blocks Generate until blockCh is closed.
 type blockingMockLLMClient struct {
 	blockCh chan struct{}
-	mu      sync.Mutex
 }
 
 func (m *blockingMockLLMClient) Generate(_ context.Context, _ *agent.GenerateInput) (<-chan agent.Chunk, error) {

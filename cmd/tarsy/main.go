@@ -310,6 +310,7 @@ func main() {
 	httpServer.SetCancelNotifier(eventPublisher)
 	httpServer.SetRunbookService(runbookService)
 	httpServer.SetScoringExecutor(scoringExecutor)
+	httpServer.SetScoringService(services.NewScoringService(dbClient.Client))
 
 	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)

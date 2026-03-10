@@ -109,6 +109,12 @@ func TestBuiltinAgents(t *testing.T) {
 			wantDesc: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
 			wantType: AgentTypeOrchestrator,
 		},
+		{
+			name:     AgentNameScoring,
+			agentID:  AgentNameScoring,
+			wantDesc: "Evaluates session quality via a multi-turn LLM conversation",
+			wantType: AgentTypeScoring,
+		},
 	}
 
 	for _, tt := range tests {

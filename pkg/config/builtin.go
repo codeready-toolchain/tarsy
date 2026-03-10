@@ -80,6 +80,10 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 			Type:        AgentTypeExecSummary,
 			// No MCP servers — single-shot, no tools
 		},
+		AgentNameScoring: {
+			Description: "Evaluates session quality via a multi-turn LLM conversation",
+			Type:        AgentTypeScoring,
+		},
 		AgentNameSynthesis: {
 			Description: "Synthesizes parallel investigation results",
 			Type:        AgentTypeSynthesis,

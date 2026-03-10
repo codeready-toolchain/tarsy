@@ -38,12 +38,13 @@ type TestApp struct {
 	MCPFactory *mcp.ClientFactory // real factory backed by in-memory MCP SDK servers
 
 	// Real infrastructure
-	EventPublisher *events.EventPublisher
-	ConnManager    *events.ConnectionManager
-	NotifyListener *events.NotifyListener
-	WorkerPool     *queue.WorkerPool
-	ChatExecutor   *queue.ChatMessageExecutor
-	Server         *api.Server
+	EventPublisher  *events.EventPublisher
+	ConnManager     *events.ConnectionManager
+	NotifyListener  *events.NotifyListener
+	WorkerPool      *queue.WorkerPool
+	ScoringExecutor *queue.ScoringExecutor
+	ChatExecutor    *queue.ChatMessageExecutor
+	Server          *api.Server
 
 	// Runtime
 	BaseURL string // e.g. "http://127.0.0.1:54321"
@@ -208,12 +209,18 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	// 8. Session executor.
 	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService)
 
+	// 8a. Scoring executor — created when any chain has scoring enabled.
+	var scoringExecutor *queue.ScoringExecutor
+	if hasScoringEnabled(tc.cfg) {
+		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher)
+	}
+
 	// 9. Worker pool.
 	podID := tc.podID
 	if podID == "" {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
 	}
-	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, nil, eventPublisher, tc.slackService)
+	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, scoringExecutor, eventPublisher, tc.slackService)
 	require.NoError(t, workerPool.Start(ctx))
 
 	// 10. Chat executor.
@@ -240,6 +247,10 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	server.SetInteractionService(interactionService)
 	server.SetStageService(stageService)
 	server.SetTimelineService(timelineService)
+	server.SetScoringService(services.NewScoringService(entClient))
+	if scoringExecutor != nil {
+		server.SetScoringExecutor(scoringExecutor)
+	}
 
 	require.NoError(t, server.ValidateWiring(), "server wiring incomplete — did you forget a Set* call?")
 
@@ -255,25 +266,29 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	wsURL := fmt.Sprintf("ws://%s/api/v1/ws", addr)
 
 	app := &TestApp{
-		Config:         tc.cfg,
-		DBClient:       dbClient,
-		EntClient:      entClient,
-		LLMClient:      tc.llmClient,
-		MCPFactory:     mcpFactory,
-		EventPublisher: eventPublisher,
-		ConnManager:    connManager,
-		NotifyListener: notifyListener,
-		WorkerPool:     workerPool,
-		ChatExecutor:   chatExecutor,
-		Server:         server,
-		BaseURL:        baseURL,
-		WSURL:          wsURL,
-		t:              t,
+		Config:          tc.cfg,
+		DBClient:        dbClient,
+		EntClient:       entClient,
+		LLMClient:       tc.llmClient,
+		MCPFactory:      mcpFactory,
+		EventPublisher:  eventPublisher,
+		ConnManager:     connManager,
+		NotifyListener:  notifyListener,
+		WorkerPool:      workerPool,
+		ScoringExecutor: scoringExecutor,
+		ChatExecutor:    chatExecutor,
+		Server:          server,
+		BaseURL:         baseURL,
+		WSURL:           wsURL,
+		t:               t,
 	}
 
 	// Register cleanup in reverse-creation order.
 	t.Cleanup(func() {
 		chatExecutor.Stop()
+		if scoringExecutor != nil {
+			scoringExecutor.Stop()
+		}
 		workerPool.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -300,4 +315,17 @@ func defaultTestConfig() *config.Config {
 		MCPServerRegistry:   config.NewMCPServerRegistry(nil),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(nil),
 	}
+}
+
+// hasScoringEnabled checks if any chain in the config has scoring enabled.
+func hasScoringEnabled(cfg *config.Config) bool {
+	if cfg == nil || cfg.ChainRegistry == nil {
+		return false
+	}
+	for _, chain := range cfg.ChainRegistry.GetAll() {
+		if chain.Scoring != nil && chain.Scoring.Enabled {
+			return true
+		}
+	}
+	return false
 }

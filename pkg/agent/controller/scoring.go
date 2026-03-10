@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
@@ -26,8 +28,8 @@ type ScoringResult struct {
 
 // ScoringController conducts a multi-turn LLM conversation to evaluate
 // session quality and extract a score. Stateless — all state comes from
-// parameters. It operates outside the investigation data model: no
-// Services, no timeline events, no message storage.
+// parameters. It persists LLM interactions and timeline events so scoring
+// data is visible in the trace API.
 type ScoringController struct{}
 
 // NewScoringController creates a new scoring controller.
@@ -75,6 +77,8 @@ func (c *ScoringController) Run(
 	}
 
 	var totalUsage agent.TokenUsage
+	eventSeq := 0
+	iteration := 1
 
 	// --- Turn 1: Score evaluation ---
 
@@ -83,11 +87,21 @@ func (c *ScoringController) Run(
 		{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringInitialPrompt(prevStageContext, scoringOutputSchema)},
 	}
 
-	resp, err := callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+	record := func(iter, msgCount int, r *LLMResponse, start time.Time) {
+		if execCtx.Services != nil && execCtx.Services.Interaction != nil {
+			recordLLMInteraction(ctx, execCtx, iter, llminteraction.InteractionTypeScoring, msgCount, r, nil, start)
+		}
+	}
+
+	startTime := time.Now()
+	streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("scoring LLM call failed: %w", err)
 	}
+	resp := streamed.LLMResponse
 	accumulateUsage(&totalUsage, resp)
+	record(iteration, len(messages), resp, startTime)
+	iteration++
 
 	// Extract score from the response text
 	score, analysis, err := extractScore(resp.Text)
@@ -99,11 +113,15 @@ func (c *ScoringController) Run(
 			agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringOutputSchemaReminderPrompt(scoringOutputSchema)},
 		)
 
-		resp, err = callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+		startTime = time.Now()
+		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 		if err != nil {
 			return nil, fmt.Errorf("scoring extraction retry LLM call failed: %w", err)
 		}
+		resp = streamed.LLMResponse
 		accumulateUsage(&totalUsage, resp)
+		record(iteration, len(messages), resp, startTime)
+		iteration++
 		score, analysis, err = extractScore(resp.Text)
 	}
 	if err != nil {
@@ -117,11 +135,14 @@ func (c *ScoringController) Run(
 		agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()},
 	)
 
-	missingToolsResp, err := callLLM(ctx, execCtx.LLMClient, llmInput(execCtx, messages))
+	startTime = time.Now()
+	missingToolsStreamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
 	if err != nil {
 		return nil, fmt.Errorf("missing tools LLM call failed: %w", err)
 	}
+	missingToolsResp := missingToolsStreamed.LLMResponse
 	accumulateUsage(&totalUsage, missingToolsResp)
+	record(iteration, len(messages), missingToolsResp, startTime)
 
 	// --- Build result ---
 

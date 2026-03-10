@@ -243,7 +243,7 @@ See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation 
 - **PR 1:** Add `stage_type` enum field (5 values), wire for investigation/synthesis/chat, API/WS changes, chat context simplification. Additive, no behavior changes.
 - **PR 2:** Refactor executive summary into a typed stage (`exec_summary`). Update context-building functions to filter by stage type.
 
-### Phase 2: Scoring Pipeline
+### Phase 2: Scoring Pipeline - ✅ DONE
 
 1. Create `ScoringExecutor` in `pkg/queue/scoring_executor.go`
 2. Add `stage_id` FK to `session_scores` schema
@@ -255,12 +255,25 @@ See [ADR-0004: Stage Types](../adr/0004-stage-types.md) for full implementation 
 8. Publish scoring events for real-time dashboard updates
 9. Update ScoringAgent comment to reflect ScoringExecutor (currently references "ScoringService")
 
-### Phase 3: Dashboard
+### Phase 3: Dashboard Integration
 
-1. Score badge on session list items
-2. Score indicator on session detail page
-3. Dedicated scoring page with reports and timeline
-4. Handle "scoring in progress" and "not scored" states
+**Backend API additions** (needed before frontend work):
+
+1. Add `latest_score` (nullable int) and `scoring_status` (nullable string) to `DashboardSessionItem` — computed via SQL subquery on `session_scores` (latest completed score per session)
+2. Add `latest_score`, `scoring_status`, and `score_id` to `SessionDetailResponse` — same subquery approach
+3. Add `GET /api/v1/sessions/:id/score` endpoint — returns the full `SessionScore` record (total_score, score_analysis, missing_tools_analysis, prompt_hash, score_triggered_by, timestamps, status)
+4. Add `sort_by=score` option to session list for sorting by latest score
+5. Add `scoring_status` filter option to session list (scored, not_scored, scoring_in_progress, scoring_failed)
+
+**Frontend work:**
+
+1. Score badge on session list items (color-coded: green ≥80, yellow ≥60, red <60)
+2. Score indicator on session detail page with link to dedicated scoring view
+3. Dedicated scoring page with reports (score analysis, missing tools report) and the scoring stage timeline (collapsed by default)
+4. Handle "scoring in progress" (spinner), "not scored" (dash), and "scoring failed" (error badge) states
+5. Real-time updates via existing WebSocket `stage.status` events for the scoring stage
+
+**Note:** The scoring stage is already visible in the session detail's `stages` array (stage_type: "scoring"), so the frontend can derive scoring sub-status from stage presence + status even before the dedicated endpoints are built.
 
 ### Phase 4: Future Enhancements
 

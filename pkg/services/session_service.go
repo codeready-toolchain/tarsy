@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -563,6 +564,21 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		alertType = &session.AlertType
 	}
 
+	// Fetch latest scoring data.
+	var latestScore *int
+	var scoringStatus *string
+	var scoreID *string
+	latestScoreRecord, scoreErr := s.client.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		Order(sessionscore.ByStartedAt(sql.OrderDesc())).
+		First(ctx)
+	if scoreErr == nil {
+		status := string(latestScoreRecord.Status)
+		scoringStatus = &status
+		scoreID = &latestScoreRecord.ID
+		latestScore = latestScoreRecord.TotalScore
+	}
+
 	return &models.SessionDetailResponse{
 		ID:                      session.ID,
 		AlertData:               session.AlertData,
@@ -596,6 +612,9 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		MCPInteractionCount:     mcpCount,
 		CurrentStageIndex:       session.CurrentStageIndex,
 		CurrentStageID:          session.CurrentStageID,
+		LatestScore:             latestScore,
+		ScoringStatus:           scoringStatus,
+		ScoreID:                 scoreID,
 		Stages:                  stages,
 	}, nil
 }
@@ -770,19 +789,21 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount         int   `sql:"llm_count"`
-	LLMInputTokens   int64 `sql:"llm_input_tokens"`
-	LLMOutputTokens  int64 `sql:"llm_output_tokens"`
-	LLMTotalTokens   int64 `sql:"llm_total_tokens"`
-	MCPCount         int   `sql:"mcp_count"`
-	TotalStages      int   `sql:"total_stages"`
-	CompletedStages  int   `sql:"completed_stages"`
-	HasParallel      int   `sql:"has_parallel"`      // 0/1, mapped to bool on output
-	HasSubAgents     int   `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages  int   `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ChatMsgCount     int   `sql:"chat_msg_count"`
-	FallbackCount    int   `sql:"fallback_count"`
-	MatchedInContent int   `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LLMCount         int     `sql:"llm_count"`
+	LLMInputTokens   int64   `sql:"llm_input_tokens"`
+	LLMOutputTokens  int64   `sql:"llm_output_tokens"`
+	LLMTotalTokens   int64   `sql:"llm_total_tokens"`
+	MCPCount         int     `sql:"mcp_count"`
+	TotalStages      int     `sql:"total_stages"`
+	CompletedStages  int     `sql:"completed_stages"`
+	HasParallel      int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents     int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages  int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ChatMsgCount     int     `sql:"chat_msg_count"`
+	FallbackCount    int     `sql:"fallback_count"`
+	MatchedInContent int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LatestScore      *int    `sql:"latest_score"`
+	ScoringStatus    *string `sql:"scoring_status"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -829,6 +850,34 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.EndDate != nil {
 		query = query.Where(alertsession.CreatedAtLT(*params.EndDate))
 	}
+	if params.ScoringStatus != "" {
+		query = query.Where(func(sel *sql.Selector) {
+			t := sel.TableName()
+			sid := fmt.Sprintf("%q.%q", t, alertsession.FieldID)
+			switch params.ScoringStatus {
+			case "scored":
+				sel.Where(sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf(
+						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'completed')", sid))
+				}))
+			case "not_scored":
+				sel.Where(sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf(
+						"NOT EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s)", sid))
+				}))
+			case "scoring_in_progress":
+				sel.Where(sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf(
+						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'in_progress')", sid))
+				}))
+			case "scoring_failed":
+				sel.Where(sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf(
+						"EXISTS (SELECT 1 FROM session_scores WHERE session_id = %s AND status = 'failed')", sid))
+				}))
+			}
+		})
+	}
 
 	// Count total (before pagination).
 	totalCount, err := query.Clone().Count(ctx)
@@ -836,9 +885,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		return nil, fmt.Errorf("failed to count sessions: %w", err)
 	}
 
-	// Apply sorting. Duration sort uses a computed expression; others use Ent helpers.
-	isDurationSort := params.SortBy == "duration"
-	if !isDurationSort {
+	// Apply sorting. Duration and score sort use computed expressions; others use Ent helpers.
+	isComputedSort := params.SortBy == "duration" || params.SortBy == "score"
+	if !isComputedSort {
 		orderFunc := ent.Desc(alertsession.FieldCreatedAt)
 		switch params.SortBy {
 		case "created_at":
@@ -982,13 +1031,28 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.AppendSelectExprAs(sql.Expr("0"), "matched_in_content")
 			}
 
-			// Duration sort: ORDER BY (completed_at - started_at).
-			if isDurationSort {
-				dir := "DESC"
-				if params.SortOrder == "asc" {
-					dir = "ASC"
-				}
+			// Scoring subqueries: latest completed score and current scoring status.
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT total_score FROM session_scores WHERE session_id = %s AND status = 'completed' ORDER BY started_at DESC LIMIT 1)", sid),
+				"latest_score",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT status FROM session_scores WHERE session_id = %s ORDER BY started_at DESC LIMIT 1)", sid),
+				"scoring_status",
+			)
+
+			// Computed sort expressions applied inside Modify since they reference subquery results.
+			dir := "DESC"
+			if params.SortOrder == "asc" {
+				dir = "ASC"
+			}
+			switch params.SortBy {
+			case "duration":
 				sel.OrderExpr(sql.Expr(fmt.Sprintf("(completed_at - started_at) %s NULLS LAST", dir)))
+			case "score":
+				sel.OrderExpr(sql.Expr(fmt.Sprintf(
+					"(SELECT total_score FROM session_scores WHERE session_id = %s AND status = 'completed' ORDER BY started_at DESC LIMIT 1) %s NULLS LAST",
+					sid, dir)))
 			}
 		}).
 		Scan(ctx, &rows)
@@ -1032,6 +1096,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			CurrentStageIndex:     row.CurrentStageIndex,
 			CurrentStageID:        row.CurrentStageID,
 			MatchedInContent:      row.MatchedInContent != 0,
+			LatestScore:           row.LatestScore,
+			ScoringStatus:         row.ScoringStatus,
 		})
 	}
 

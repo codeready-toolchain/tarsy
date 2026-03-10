@@ -42,8 +42,10 @@ type ScoringExecutor struct {
 	eventPublisher agent.EventPublisher
 	promptBuilder  *prompt.PromptBuilder
 
-	stageService    *services.StageService
-	timelineService *services.TimelineService
+	stageService       *services.StageService
+	timelineService    *services.TimelineService
+	interactionService *services.InteractionService
+	messageService     *services.MessageService
 
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
@@ -58,15 +60,18 @@ func NewScoringExecutor(
 	eventPublisher agent.EventPublisher,
 ) *ScoringExecutor {
 	controllerFactory := controller.NewFactory()
+	msgService := services.NewMessageService(dbClient)
 	return &ScoringExecutor{
-		cfg:             cfg,
-		dbClient:        dbClient,
-		llmClient:       llmClient,
-		agentFactory:    agent.NewAgentFactory(controllerFactory),
-		eventPublisher:  eventPublisher,
-		promptBuilder:   prompt.NewPromptBuilder(cfg.MCPServerRegistry),
-		stageService:    services.NewStageService(dbClient),
-		timelineService: services.NewTimelineService(dbClient),
+		cfg:                cfg,
+		dbClient:           dbClient,
+		llmClient:          llmClient,
+		agentFactory:       agent.NewAgentFactory(controllerFactory),
+		eventPublisher:     eventPublisher,
+		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		stageService:       services.NewStageService(dbClient),
+		timelineService:    services.NewTimelineService(dbClient),
+		interactionService: services.NewInteractionService(dbClient, msgService),
+		messageService:     msgService,
 	}
 }
 
@@ -289,14 +294,21 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, sessionID
 
 	// Build ExecutionContext and create agent
 	agentExecCtx := &agent.ExecutionContext{
-		SessionID:     sessionID,
-		StageID:       stageID,
-		ExecutionID:   exec.ID,
-		AgentName:     resolvedConfig.AgentName,
-		AgentIndex:    1,
-		Config:        resolvedConfig,
-		LLMClient:     e.llmClient,
-		PromptBuilder: e.promptBuilder,
+		SessionID:      sessionID,
+		StageID:        stageID,
+		ExecutionID:    exec.ID,
+		AgentName:      resolvedConfig.AgentName,
+		AgentIndex:     1,
+		Config:         resolvedConfig,
+		LLMClient:      e.llmClient,
+		EventPublisher: e.eventPublisher,
+		PromptBuilder:  e.promptBuilder,
+		Services: &agent.ServiceBundle{
+			Timeline:    e.timelineService,
+			Message:     e.messageService,
+			Interaction: e.interactionService,
+			Stage:       e.stageService,
+		},
 	}
 
 	agentInstance, err := e.agentFactory.CreateAgent(agentExecCtx)

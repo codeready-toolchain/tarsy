@@ -6,6 +6,7 @@ import (
 
 	echo "github.com/labstack/echo/v5"
 
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 )
 
@@ -52,5 +53,37 @@ func (s *Server) scoreSessionHandler(c *echo.Context) error {
 
 	return c.JSON(http.StatusAccepted, &ScoreSessionResponse{
 		ScoreID: scoreID,
+	})
+}
+
+// getScoreHandler handles GET /api/v1/sessions/:id/score.
+// Returns the latest score for the session.
+func (s *Server) getScoreHandler(c *echo.Context) error {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
+	}
+
+	if s.scoringService == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "scoring service is not available")
+	}
+
+	score, err := s.scoringService.GetLatestScore(c.Request().Context(), sessionID)
+	if err != nil {
+		return mapServiceError(err)
+	}
+
+	return c.JSON(http.StatusOK, &models.SessionScoreResponse{
+		ScoreID:              score.ID,
+		TotalScore:           score.TotalScore,
+		ScoreAnalysis:        score.ScoreAnalysis,
+		MissingToolsAnalysis: score.MissingToolsAnalysis,
+		PromptHash:           score.PromptHash,
+		ScoreTriggeredBy:     score.ScoreTriggeredBy,
+		Status:               string(score.Status),
+		StageID:              score.StageID,
+		StartedAt:            score.StartedAt,
+		CompletedAt:          score.CompletedAt,
+		ErrorMessage:         score.ErrorMessage,
 	})
 }
