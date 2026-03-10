@@ -1,0 +1,349 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_13}",
+  "input_tokens": 500,
+  "interaction_type": "scoring",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 424,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 100,
+  "total_tokens": 600
+}
+
+=== MESSAGE: system ===
+You are an expert investigation quality evaluator for TARSy, an automated incident investigation platform.
+
+TARSy uses agent chains — multi-stage pipelines where AI agents investigate incidents by calling external tools (MCP tools), analyzing evidence, and producing findings. Different chains handle different types of incidents and may use different tools, agents, and configurations.
+
+Your role is to critically assess investigation quality: how well the agents gathered evidence, used available tools, reasoned through the problem, and synthesized findings. You evaluate the investigation process and methodology, not just the outcome.
+
+=== MESSAGE: user ===
+Your task is to critically evaluate the following automated incident investigation with rigorous methodology. You are a perfectionist who:
+- Demands optimal investigation paths, not just successful outcomes
+- Penalizes logical shortcuts, premature conclusions, or incomplete exploration
+- Holds investigations to the highest professional standards
+- Identifies what SHOULD HAVE been done, not just what WAS done
+
+## EVALUATION PHILOSOPHY
+
+Your default stance is skeptical. When an investigation reaches a conclusion:
+1. First ask: "Was ALL available evidence gathered?"
+2. Then ask: "Were ALL available tools used appropriately?"
+3. Then ask: "Does the confidence level match the evidence quality?"
+
+## SCORING FRAMEWORK
+
+Score the investigation across 4 categories, each worth 25 points (100 total):
+
+### 1. LOGICAL FLOW (0-25 points)
+**What to evaluate:**
+- Did the agents follow optimal reasoning paths?
+- Were steps sequenced efficiently, or was there trial-and-error waste?
+- Did the agents pivot at the right time, or give up prematurely/persist too long?
+- Are there logical leaps or shortcuts that bypass valuable investigation steps?
+
+**Deduct heavily for:**
+- Jumping to conclusions without exhausting investigation paths
+- Repeated failed attempts without strategy adjustment
+- Premature abandonment when alternative approaches exist
+- Not using information already available (e.g., timestamps, provided context)
+- Trial-and-error guessing instead of systematic discovery
+
+**Typical score range:** 10-22 points. Award 23+ only for near-flawless investigation flow.
+
+### 2. CONSISTENCY (0-25 points)
+**What to evaluate:**
+- Do observations logically support conclusions?
+- Is confidence level justified by evidence gathered?
+- Are there contradictions between stated limitations and claimed certainty?
+- Does the assessment match the evidence quality?
+
+**Deduct heavily for:**
+- HIGH confidence with incomplete evidence gathering
+- Claiming definitive conclusions without verifying direct evidence vs. indirect indicators
+- Over-interpreting weak signals (e.g., indirect correlation = causation)
+- Under-interpreting strong signals (e.g., dismissing repeated failures)
+
+**Typical score range:** 15-22 points. Award 23+ only for ironclad logical consistency.
+
+### 3. TOOL RELEVANCE (0-25 points)
+**What to evaluate:**
+- Were the most appropriate available tools selected for each investigation phase?
+- Were all relevant available tools utilized, or were some obvious ones ignored?
+- Was tool failure handled by trying alternative tools, or by giving up?
+- Were tools used efficiently (right parameters, right sequence)?
+
+**Deduct heavily for:**
+- Not attempting to use available tools to access data sources, records, or other evidence
+- Guessing parameters instead of discovering correct values first
+- Not checking historical data when current resources are unavailable
+- Ignoring available tools that would have provided critical evidence
+
+**Important:** This category evaluates whether the agents made optimal use of the tools that were available to them. If an available tool wasn't used when it should have been, deduct points here. Refer to the AVAILABLE TOOLS section in the session data below to see what each agent had access to.
+
+**Typical score range:** 10-22 points. Award 23+ only if tool selection was optimal AND comprehensive.
+
+### 4. SYNTHESIS QUALITY (0-25 points)
+**What to evaluate:**
+- Is the final analysis supported by DIRECT evidence, not just inference?
+- Does the report acknowledge gaps and limitations appropriately?
+- Are recommendations proportional to evidence strength?
+- Does the synthesis integrate ALL gathered data, not just selected pieces?
+
+**Deduct heavily for:**
+- Conclusions based on circumstantial evidence when direct evidence was accessible
+- Severe assessments without verification of actual impact/significance
+- Not acknowledging critical investigation gaps
+- Failing to consider alternative explanations
+- Ignoring contradictory evidence
+
+**Typical score range:** 8-20 points. Award 21+ only for evidence-rich, nuanced synthesis.
+
+## CRITICAL EVALUATION CHECKLIST
+
+Systematically check:
+
+**Evidence Quality:**
+- [ ] Was direct evidence gathered (data sources, records, runtime information) or only metrics?
+- [ ] Were data sources ACCESSED and verified, or only detected indirectly?
+- [ ] Was runtime state EXAMINED, or activity inferred from indirect indicators?
+
+**Tool Completeness:**
+- [ ] Were all relevant available tools used? (Refer to the AVAILABLE TOOLS section)
+- [ ] Were historical data sources attempted?
+- [ ] Were cross-reference tools used?
+
+**Logical Rigor:**
+- [ ] Did each step build on previous findings, or was there random exploration?
+- [ ] Were failed attempts analyzed to inform next steps?
+- [ ] Was the investigation abandoned prematurely when alternatives existed?
+
+**Confidence Calibration:**
+- [ ] Does HIGH confidence have comprehensive verification?
+- [ ] Does MEDIUM confidence acknowledge specific gaps?
+- [ ] Are limitations explicitly stated when evidence is incomplete?
+
+## SESSION DATA
+
+Below is the complete data for the investigation session, including the original alert, runbook (if any), available tools per agent, and the full investigation timeline.
+
+----------------------------------- Session data start -----------------------------------
+## ORIGINAL ALERT
+
+Pod OOMKilled
+
+## RUNBOOK
+
+# Generic Troubleshooting Guide
+
+## Investigation Steps
+
+1. **Analyze the alert** - Review alert data and identify affected system/service
+2. **Gather context** - Use tools to check current state and recent changes
+3. **Identify root cause** - Investigate potential causes based on alert type
+4. **Assess impact** - Determine scope and severity
+5. **Recommend actions** - Suggest safe investigation or remediation steps
+
+## Guidelines
+
+- Verify information before suggesting changes
+- Consider dependencies and potential side effects
+- Document findings and actions taken
+- Focus on understanding the problem before proposing solutions
+- When in doubt, gather more information rather than making assumptions
+
+## Common Investigation Patterns
+
+### For Performance Issues
+- Check resource utilization (CPU, memory, disk, network)
+- Review recent deployments or configuration changes
+- Analyze metrics and logs for anomalies
+- Identify bottlenecks in the request path
+
+### For Availability Issues
+- Verify service health and readiness
+- Check for recent restarts or crashes
+- Review dependencies and upstream services
+- Examine load balancer and routing configuration
+
+### For Error Rate Spikes
+- Analyze error messages and stack traces
+- Correlate with recent deployments
+- Check for external service failures
+- Review input validation and edge cases
+
+
+## AVAILABLE TOOLS PER AGENT
+
+### Investigator
+- test-mcp.get_pods — test tool: get_pods
+- test-mcp.restart_pod — test tool: restart_pod
+
+### MetricsChecker
+- test-mcp.get_pods — test tool: get_pods
+- test-mcp.restart_pod — test tool: restart_pod
+
+### Remediator
+- test-mcp.get_pods — test tool: get_pods
+- test-mcp.restart_pod — test tool: restart_pod
+
+## INVESTIGATION TIMELINE
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+<!-- PARALLEL_RESULTS_START -->
+
+### Parallel Investigation: "investigation" — 2/2 agents succeeded
+
+#### Agent 1: Investigator (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me check the pod status.
+
+**Agent Response:**
+
+Checking pods.
+
+**Tool Call:** test-mcp.get_pods({"namespace":"default"})
+**Result:**
+
+[{"name":"pod-1","status":"OOMKilled","restarts":5}]
+
+**Internal Reasoning:**
+
+Pod is OOMKilled.
+
+**Agent Response:**
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+#### Agent 2: MetricsChecker (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Analyzing memory metrics.
+
+**Agent Response:**
+
+Memory usage at 98% of limit (500Mi/512Mi). OOM pattern confirmed over last 2 hours.
+
+<!-- PARALLEL_RESULTS_END -->
+### Synthesis Result
+
+Combined analysis: pod-1 is OOMKilled (5 restarts) with memory at 98% of 512Mi limit. Both agents confirm memory pressure as root cause.
+
+## Stage 2: remediation
+
+**Agent:** Remediator (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Evidence is clear — pod needs restart with higher memory limit.
+
+**Agent Response:**
+
+Restarting pod-1 with increased memory.
+
+**Tool Call:** test-mcp.restart_pod({"pod":"pod-1","namespace":"default"})
+**Result:**
+
+{"pod":"pod-1","action":"restart","result":"success"}
+
+**Internal Reasoning:**
+
+Restart successful.
+
+**Agent Response:**
+
+Remediation complete: restarted pod-1.
+
+## Actions Taken
+Restarted pod-1. Recommend increasing memory limit to 1Gi.
+
+## Stage 3: Executive Summary
+
+**Agent:** ExecSummaryAgent (google-native, test-provider)
+**Status**: completed
+
+**Agent Response:**
+
+Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi.
+
+
+-----------------------------------  Session data end  -----------------------------------
+
+## YOUR TASK NOW
+
+Provide your critical evaluation following the methodology-focused framework above.
+
+**BEFORE YOU SCORE:**
+
+1. **Evidence Gathering**: Did the agents gather DIRECT evidence (access data sources, verify records, examine runtime state) or just rely on metrics and indirect indicators?
+
+2. **Tool Completeness**: List available tools that COULD have been used but WEREN'T. Deduct points in Tool Relevance for each.
+
+3. **Logical Shortcuts**: Identify places where agents jumped to conclusions, gave up when alternatives existed, or used trial-and-error instead of systematic discovery.
+
+4. **Confidence vs Evidence**: Does the confidence level match the evidence actually gathered?
+
+5. **Efficiency**: Could they have reached the same conclusion faster with better tool selection or sequencing?
+
+**SCORING CALIBRATION:**
+
+- 80-100: Thorough investigation with near-optimal methodology (achievable but demanding)
+- 60-79: Adequate investigation with notable gaps
+- 40-59: Weak investigation with major methodology problems
+- 0-39: Failed investigation (truly incomplete work)
+
+Your average score should be 50-70. Investigations that didn't exhaust available tools or made logical leaps without evidence typically score below 60.
+
+**CRITICAL PRINCIPLES:**
+
+1. Process > Outcome: Reaching the right conclusion via inefficient methods still deserves criticism
+2. Direct > Circumstantial: Correlation is not verification. Demand direct evidence.
+3. Explore > Conclude: Premature conclusion is worse than over-exploration
+4. Evidence > Confidence: High confidence requires comprehensive evidence gathering
+
+**Your evaluation must:**
+- Explain point deductions explicitly for each category
+- Include a score breakdown:
+  * Logical Flow: X/25
+  * Consistency: Y/25
+  * Tool Relevance: Z/25
+  * Synthesis Quality: W/25
+
+End your response with the total score as a standalone number on the very last line.
+The last line must contain ONLY the number — no formatting, no markdown, no text.
+Example: if the total score is 62, the last line should be exactly:
+62
+
+
+=== MESSAGE: assistant ===
+## Score Analysis
+
+The investigation demonstrated good logical flow by systematically checking pod status and identifying the OOM kill. Tool usage was relevant — the agent queried pods and confirmed the issue.
+
+However, no memory metrics or resource limits were checked, which would have strengthened the diagnosis.
+
+**Logical Flow:** 20/25
+**Consistency:** 22/25
+**Tool Relevance:** 18/25
+**Synthesis Quality:** 15/25
+
+75
+

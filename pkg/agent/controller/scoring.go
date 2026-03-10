@@ -79,6 +79,7 @@ func (c *ScoringController) Run(
 
 	var totalUsage agent.TokenUsage
 	eventSeq := 0
+	msgSeq := 0
 	iteration := 1
 
 	// --- Turn 1: Score evaluation ---
@@ -88,10 +89,8 @@ func (c *ScoringController) Run(
 		{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringInitialPrompt(prevStageContext, scoringOutputSchema)},
 	}
 
-	record := func(iter, msgCount int, r *LLMResponse, start time.Time) {
-		if execCtx.Services != nil && execCtx.Services.Interaction != nil {
-			recordLLMInteraction(ctx, execCtx, iter, llminteraction.InteractionTypeScoring, msgCount, r, nil, start)
-		}
+	if err := storeMessages(ctx, execCtx, messages, &msgSeq); err != nil {
+		return nil, fmt.Errorf("failed to store initial scoring messages: %w", err)
 	}
 
 	startTime := time.Now()
@@ -101,7 +100,12 @@ func (c *ScoringController) Run(
 	}
 	resp := streamed.LLMResponse
 	accumulateUsage(&totalUsage, resp)
-	record(iteration, len(messages), resp, startTime)
+
+	assistantMsg, storeErr := storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+	if storeErr != nil {
+		return nil, fmt.Errorf("failed to store scoring assistant message: %w", storeErr)
+	}
+	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
 	iteration++
 
 	// Extract score from the response text
@@ -109,10 +113,12 @@ func (c *ScoringController) Run(
 
 	// Retry extraction if parsing fails
 	for attempt := 0; err != nil && attempt < maxExtractionRetries; attempt++ {
+		retryPrompt := execCtx.PromptBuilder.BuildScoringOutputSchemaReminderPrompt(scoringOutputSchema)
 		messages = append(messages,
 			agent.ConversationMessage{Role: agent.RoleAssistant, Content: resp.Text},
-			agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringOutputSchemaReminderPrompt(scoringOutputSchema)},
+			agent.ConversationMessage{Role: agent.RoleUser, Content: retryPrompt},
 		)
+		storeObservationMessage(ctx, execCtx, retryPrompt, &msgSeq)
 
 		startTime = time.Now()
 		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
@@ -121,7 +127,12 @@ func (c *ScoringController) Run(
 		}
 		resp = streamed.LLMResponse
 		accumulateUsage(&totalUsage, resp)
-		record(iteration, len(messages), resp, startTime)
+
+		assistantMsg, storeErr = storeAssistantMessage(ctx, execCtx, resp, &msgSeq)
+		if storeErr != nil {
+			return nil, fmt.Errorf("failed to store scoring retry assistant message: %w", storeErr)
+		}
+		recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
 		iteration++
 		score, analysis, err = extractScore(resp.Text)
 	}
@@ -131,10 +142,12 @@ func (c *ScoringController) Run(
 
 	// --- Turn 2: Missing tools analysis ---
 
+	missingToolsPrompt := execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()
 	messages = append(messages,
 		agent.ConversationMessage{Role: agent.RoleAssistant, Content: resp.Text},
-		agent.ConversationMessage{Role: agent.RoleUser, Content: execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()},
+		agent.ConversationMessage{Role: agent.RoleUser, Content: missingToolsPrompt},
 	)
+	storeObservationMessage(ctx, execCtx, missingToolsPrompt, &msgSeq)
 
 	startTime = time.Now()
 	missingToolsStreamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, llmInput(execCtx, messages), &eventSeq)
@@ -143,7 +156,12 @@ func (c *ScoringController) Run(
 	}
 	missingToolsResp := missingToolsStreamed.LLMResponse
 	accumulateUsage(&totalUsage, missingToolsResp)
-	record(iteration, len(messages), missingToolsResp, startTime)
+
+	missingToolsMsg, storeErr := storeAssistantMessage(ctx, execCtx, missingToolsResp, &msgSeq)
+	if storeErr != nil {
+		return nil, fmt.Errorf("failed to store missing tools assistant message: %w", storeErr)
+	}
+	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), missingToolsResp, &missingToolsMsg.ID, startTime)
 
 	// --- Build result ---
 

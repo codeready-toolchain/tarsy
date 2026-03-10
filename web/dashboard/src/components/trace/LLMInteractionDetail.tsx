@@ -141,7 +141,7 @@ function ConversationMessageView({ message, index }: { message: ConversationMess
 function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
   const rawCopyText = (() => {
     let text = '';
-    for (const msg of detail.conversation) {
+    for (const msg of detail.conversation ?? []) {
       text += `${msg.role.toUpperCase()}:\n${serializeMessageContent(msg.content)}\n\n`;
     }
     text += `MODEL: ${detail.model_name}`;
@@ -197,7 +197,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
         )}
 
         {/* Conversation messages */}
-        {detail.conversation.length > 0 && (
+        {detail.conversation?.length > 0 && (
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>

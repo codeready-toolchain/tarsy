@@ -265,8 +265,8 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 	// interactions (e.g. summarization) that don't use the Message table.
 	llmRequest := li.LlmRequest
 	if len(conversation) == 0 {
-		conversation = extractInlineConversation(llmRequest)
-		if len(conversation) > 0 {
+		if inline := extractInlineConversation(llmRequest); len(inline) > 0 {
+			conversation = inline
 			// Strip the inline conversation from the metadata — it's
 			// surfaced as the top-level Conversation field.
 			llmRequest = make(map[string]any, len(li.LlmRequest))

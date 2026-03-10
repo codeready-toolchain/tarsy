@@ -341,12 +341,13 @@ agent_chains:
     chat:
       enabled: true
       agent: "ChatAgent"
+    # Automatic scoring — evaluates session quality after investigation completes.
+    # Omit this block entirely to disable scoring for the chain.
     scoring:
-      enabled: true
-      agent: "ScoringAgent"
-      llm_backend: "langchain"
-      llm_provider: "google-default"
-      max_iterations: 5
+      enabled: true                       # Auto-score sessions on completion (default: false)
+      # agent: "ScoringAgent"               # Agent to use (default: built-in ScoringAgent)
+      llm_backend: "langchain"            # Override LLM backend (default: global default)
+      llm_provider: "google-default"      # Override LLM provider (default: global default)
 
   # Multi-stage chain with different strategies
   kubernetes-deep-troubleshooting:
@@ -370,6 +371,8 @@ agent_chains:
     alert_types: ["Kubernetes - Multiple Agents"]
     description: "Multiple agents with custom synthesis"
     llm_provider: "google-default"
+    scoring:
+      enabled: true                       # Only 'enabled' is required; rest inherits from defaults
     stages:
       - name: "Investigation"
         max_iterations: 10

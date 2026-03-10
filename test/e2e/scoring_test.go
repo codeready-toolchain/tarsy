@@ -2,7 +2,9 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -331,6 +333,18 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 
 	AssertGoldenJSON(t, GoldenPath("scoring", "score.golden"), scoreResp, normalizer)
 	AssertGoldenJSON(t, GoldenPath("scoring", "trace_list.golden"), traceResp, normalizer)
+
+	// ── Verify scoring LLM interaction detail via golden files ──
+	// Fetch each scoring interaction detail and compare full response (metadata + conversation)
+	// against golden files, exactly like pipeline_test.go does for all its interactions.
+	scoringInteractionLabels := []string{"scoring_eval", "scoring_missing_tools"}
+	for i, raw := range scoringLLMInteractions {
+		interaction := raw.(map[string]interface{})
+		interactionID := interaction["id"].(string)
+		detail := app.GetLLMInteractionDetail(t, sessionID, interactionID)
+		goldenPath := GoldenPath("scoring", filepath.Join("trace_interactions", fmt.Sprintf("%02d_scoring_llm_%s.golden", i+1, scoringInteractionLabels[i])))
+		AssertGoldenLLMInteraction(t, goldenPath, detail, normalizer)
+	}
 
 	// ── WS event structural assertions ──
 
