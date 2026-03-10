@@ -237,10 +237,14 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer finalizeCancel()
 
-	reviewInitialized, err := w.updateSessionTerminalStatus(finalizeCtx, session, result)
+	statusUpdated, reviewInitialized, err := w.updateSessionTerminalStatus(finalizeCtx, session, result)
 	if err != nil {
 		log.Error("Failed to update session terminal status", "error", err)
 		return err
+	}
+	if !statusUpdated {
+		log.Info("Terminal status already written by another worker, skipping downstream effects")
+		return nil
 	}
 
 	// 11a. Publish terminal session status event
@@ -337,12 +341,16 @@ func (w *Worker) runHeartbeat(ctx context.Context, sessionID string) {
 }
 
 // updateSessionTerminalStatus writes the final session status and initializes
-// the review workflow atomically. Returns whether review_status was initialized
-// (the caller should publish a review.status event when true).
-func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.AlertSession, result *ExecutionResult) (bool, error) {
+// the review workflow atomically. Returns two booleans:
+//   - statusUpdated: true if the terminal status CAS succeeded (false = another worker won the race)
+//   - reviewInitialized: true if review_status was set (false = already set or status CAS lost)
+//
+// The caller should gate ALL downstream effects (events, Slack, scoring) on statusUpdated,
+// and gate review-specific events on reviewInitialized.
+func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.AlertSession, result *ExecutionResult) (statusUpdated bool, reviewInitialized bool, err error) {
 	tx, err := w.client.Tx(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to begin transaction: %w", err)
+		return false, false, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -374,10 +382,10 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 
 	statusAffected, err := update.Save(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to update session terminal status: %w", err)
+		return false, false, fmt.Errorf("failed to update session terminal status: %w", err)
 	}
 	if statusAffected == 0 {
-		return false, nil
+		return false, false, nil
 	}
 
 	// 2. Initialize review_status (conditional on review_status IS NULL to avoid TOCTOU).
@@ -402,14 +410,14 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 			Save(ctx)
 	}
 	if err != nil {
-		return false, fmt.Errorf("failed to initialize review status: %w", err)
+		return false, false, fmt.Errorf("failed to initialize review status: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("failed to commit terminal status: %w", err)
+		return false, false, fmt.Errorf("failed to commit terminal status: %w", err)
 	}
 
-	return reviewAffected > 0, nil
+	return true, reviewAffected > 0, nil
 }
 
 // publishSessionStatus publishes a session status event to both the session-specific

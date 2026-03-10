@@ -632,11 +632,12 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 			ExecX(ctx)
 
 		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
-		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+		statusUpdated, reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
 			Status:        alertsession.StatusCompleted,
 			FinalAnalysis: "done",
 		})
 		require.NoError(t, err)
+		assert.True(t, statusUpdated, "terminal status CAS should succeed")
 		assert.True(t, reviewInit, "review_status should be initialized")
 
 		updated := client.AlertSession.GetX(ctx, session.ID)
@@ -654,11 +655,12 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 			ExecX(ctx)
 
 		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
-		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+		statusUpdated, reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
 			Status: alertsession.StatusCancelled,
 			Error:  fmt.Errorf("user cancelled"),
 		})
 		require.NoError(t, err)
+		assert.True(t, statusUpdated)
 		assert.True(t, reviewInit)
 
 		updated := client.AlertSession.GetX(ctx, session.ID)
@@ -681,10 +683,11 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 			ExecX(ctx)
 
 		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
-		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+		statusUpdated, reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
 			Status: alertsession.StatusCompleted,
 		})
 		require.NoError(t, err)
+		assert.True(t, statusUpdated, "terminal status CAS should succeed")
 		assert.False(t, reviewInit, "review_status was already set, should not re-init")
 
 		updated := client.AlertSession.GetX(ctx, session.ID)
@@ -701,10 +704,11 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 			ExecX(ctx)
 
 		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
-		reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+		statusUpdated, reviewInit, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
 			Status: alertsession.StatusFailed,
 		})
 		require.NoError(t, err)
-		assert.False(t, reviewInit, "status CAS should fail for already-terminal session")
+		assert.False(t, statusUpdated, "status CAS should fail for already-terminal session")
+		assert.False(t, reviewInit)
 	})
 }

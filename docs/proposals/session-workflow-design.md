@@ -653,7 +653,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 
 ## Implementation Plan
 
-### Phase 1: Backend — Schema + Service
+### Phase 1: Backend — Schema + Service - ✅ DONE
 
 1. Add fields and `review_activities` edge to `ent/schema/alertsession.go`
 2. Create `ent/schema/sessionreviewactivity.go`
