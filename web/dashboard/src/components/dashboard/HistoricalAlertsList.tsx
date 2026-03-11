@@ -17,7 +17,8 @@ import {
   CircularProgress,
   Alert,
   Box,
-  Button,
+  Chip,
+  IconButton,
   TableSortLabel,
   Tooltip,
 } from '@mui/material';
@@ -62,30 +63,45 @@ export function HistoricalAlertsList({
   onPageSizeChange,
 }: HistoricalAlertsListProps) {
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 2,
+          py: 1,
+          backgroundColor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
           Alert History
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-            ({filteredCount.toLocaleString()} result{filteredCount !== 1 ? 's' : ''})
-          </Typography>
         </Typography>
-
-        <Button
-          variant="outlined"
+        <Chip
+          label={filteredCount.toLocaleString()}
           size="small"
-          startIcon={loading ? <CircularProgress size={16} /> : <Refresh />}
+          sx={{
+            height: 22,
+            minWidth: 28,
+            fontSize: '0.75rem',
+            fontWeight: 600,
+          }}
+        />
+        <IconButton
+          size="small"
           onClick={onRefresh}
           disabled={loading}
         >
-          {loading ? 'Loading...' : 'Refresh'}
-        </Button>
+          {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+        </IconButton>
       </Box>
 
       {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mx: 2, mb: 1 }}>
           {error}
         </Alert>
       )}
@@ -98,7 +114,7 @@ export function HistoricalAlertsList({
       ) : (
         <>
           <TableContainer>
-            <Table>
+            <Table size="small">
               <TableHead>
                 <TableRow>
                   {/* Status — sortable */}
