@@ -14,7 +14,7 @@ import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
-import { formatTimestamp, compactTimeAgo } from '../../utils/format.ts';
+import { formatTimestamp } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -97,7 +97,7 @@ export function TriageSessionRow({
       <TableCell>
         <Tooltip title={formatTimestamp(session.created_at, 'absolute')}>
           <Typography variant="body2" color="text.secondary">
-            {compactTimeAgo(session.created_at)}
+            {formatTimestamp(session.created_at, 'short')}
           </Typography>
         </Tooltip>
       </TableCell>
@@ -117,15 +117,27 @@ export function TriageSessionRow({
           onClick={(e) => e.stopPropagation()}
         >
           {group === 'needs_review' && (
-            <Button
-              size="small"
-              variant="contained"
-              disabled={actionLoading}
-              onClick={() => onClaim?.(session.id)}
-              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-            >
-              Claim
-            </Button>
+            <>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={actionLoading}
+                onClick={() => onClaim?.(session.id)}
+                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+              >
+                Claim
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                disabled={actionLoading}
+                onClick={() => onResolve?.(session.id)}
+                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+              >
+                Resolve
+              </Button>
+            </>
           )}
 
           {group === 'in_progress' && (
