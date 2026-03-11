@@ -358,5 +358,5 @@ type TriageGroup struct {
 type TriageGroupParams struct {
 	Page     int
 	PageSize int
-	Assignee string
+	Assignee *string // nil=no filter, *""=unassigned, *"val"=specific assignee
 }

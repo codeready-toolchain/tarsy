@@ -81,18 +81,18 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "claim",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusInProgress, *sess.ReviewStatus)
 		assert.NotNil(t, sess.Assignee)
-		assert.Equal(t, "alice@test.com", *sess.Assignee)
+		assert.Equal(t, "john@test.com", *sess.Assignee)
 		assert.NotNil(t, sess.AssignedAt)
 	})
 
 	t.Run("claim reassignment from in_progress", func(t *testing.T) {
-		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "claim",
@@ -105,7 +105,7 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	})
 
 	t.Run("claim conflict from resolved", func(t *testing.T) {
-		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		id := seedReviewSession(t, service, "resolved", "john@test.com")
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "claim",
@@ -115,11 +115,11 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	})
 
 	t.Run("unclaim from in_progress", func(t *testing.T) {
-		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "unclaim",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
@@ -133,19 +133,19 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "unclaim",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		assert.ErrorIs(t, err, ErrConflict)
 	})
 
 	t.Run("resolve from in_progress", func(t *testing.T) {
-		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 		reason := "actioned"
 		note := "Applied fix from runbook"
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action:           "resolve",
-			Actor:            "alice@test.com",
+			Actor:            "john@test.com",
 			ResolutionReason: &reason,
 			Note:             &note,
 		})
@@ -165,13 +165,13 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action:           "resolve",
-			Actor:            "alice@test.com",
+			Actor:            "john@test.com",
 			ResolutionReason: &reason,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus)
-		assert.Equal(t, "alice@test.com", *sess.Assignee, "direct resolve should auto-assign")
+		assert.Equal(t, "john@test.com", *sess.Assignee, "direct resolve should auto-assign")
 		assert.Equal(t, alertsession.ResolutionReasonDismissed, *sess.ResolutionReason)
 
 		// Direct resolve should create 2 activity rows (claim + resolve).
@@ -183,17 +183,17 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	})
 
 	t.Run("resolve without resolution_reason returns validation error", func(t *testing.T) {
-		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "resolve",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		assert.True(t, IsValidationError(err))
 	})
 
 	t.Run("resolve conflict from resolved", func(t *testing.T) {
-		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		id := seedReviewSession(t, service, "resolved", "john@test.com")
 		reason := "actioned"
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
@@ -205,7 +205,7 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	})
 
 	t.Run("reopen from resolved", func(t *testing.T) {
-		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		id := seedReviewSession(t, service, "resolved", "john@test.com")
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "reopen",
@@ -226,18 +226,18 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "reopen",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		assert.ErrorIs(t, err, ErrConflict)
 	})
 
 	t.Run("update_note on resolved session", func(t *testing.T) {
-		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		id := seedReviewSession(t, service, "resolved", "john@test.com")
 		note := "Updated fix details"
 
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "update_note",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 			Note:   &note,
 		})
 		require.NoError(t, err)
@@ -247,30 +247,30 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	})
 
 	t.Run("update_note clears note when nil", func(t *testing.T) {
-		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		id := seedReviewSession(t, service, "resolved", "john@test.com")
 
 		// Set a note first.
 		note := "Some note"
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
-			Action: "update_note", Actor: "alice@test.com", Note: &note,
+			Action: "update_note", Actor: "john@test.com", Note: &note,
 		})
 		require.NoError(t, err)
 
 		// Clear it.
 		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
-			Action: "update_note", Actor: "alice@test.com",
+			Action: "update_note", Actor: "john@test.com",
 		})
 		require.NoError(t, err)
 		assert.Nil(t, sess.ResolutionNote)
 	})
 
 	t.Run("update_note conflict on non-resolved session", func(t *testing.T) {
-		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 		note := "Should fail"
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "update_note",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 			Note:   &note,
 		})
 		assert.ErrorIs(t, err, ErrConflict)
@@ -281,7 +281,7 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
 			Action: "bogus",
-			Actor:  "alice@test.com",
+			Actor:  "john@test.com",
 		})
 		assert.True(t, IsValidationError(err))
 	})
@@ -297,13 +297,13 @@ func TestSessionService_GetReviewActivity(t *testing.T) {
 
 		// Perform claim then resolve — creates 2 activity rows.
 		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
-			Action: "claim", Actor: "alice@test.com",
+			Action: "claim", Actor: "john@test.com",
 		})
 		require.NoError(t, err)
 
 		reason := "actioned"
 		_, err = service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
-			Action: "resolve", Actor: "alice@test.com", ResolutionReason: &reason,
+			Action: "resolve", Actor: "john@test.com", ResolutionReason: &reason,
 		})
 		require.NoError(t, err)
 
@@ -338,10 +338,10 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 	investigatingID := seedActiveSession(t, service, alertsession.StatusInProgress)
 	pendingID := seedActiveSession(t, service, alertsession.StatusPending)
 	needsReviewID := seedReviewSession(t, service, "needs_review", "")
-	inProgressID := seedReviewSession(t, service, "in_progress", "alice@test.com")
-	resolvedID1 := seedReviewSession(t, service, "resolved", "alice@test.com")
+	inProgressID := seedReviewSession(t, service, "in_progress", "john@test.com")
+	resolvedID1 := seedReviewSession(t, service, "resolved", "john@test.com")
 	resolvedID2 := seedReviewSession(t, service, "resolved", "bob@test.com")
-	resolvedID3 := seedReviewSession(t, service, "resolved", "alice@test.com")
+	resolvedID3 := seedReviewSession(t, service, "resolved", "john@test.com")
 
 	defaultParams := models.TriageGroupParams{Page: 1, PageSize: 20}
 
@@ -376,7 +376,7 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 		assert.Equal(t, 1, result.Count)
 		assert.Equal(t, inProgressID, result.Sessions[0].ID)
 		require.NotNil(t, result.Sessions[0].Assignee)
-		assert.Equal(t, "alice@test.com", *result.Sessions[0].Assignee)
+		assert.Equal(t, "john@test.com", *result.Sessions[0].Assignee)
 		require.NotNil(t, result.Sessions[0].ReviewStatus)
 		assert.Equal(t, "in_progress", *result.Sessions[0].ReviewStatus)
 	})
@@ -418,7 +418,7 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 
 	t.Run("assignee filter", func(t *testing.T) {
 		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
-			Page: 1, PageSize: 20, Assignee: "alice@test.com",
+			Page: 1, PageSize: 20, Assignee: strPtr("john@test.com"),
 		})
 		require.NoError(t, err)
 
@@ -431,7 +431,7 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 
 	t.Run("empty group", func(t *testing.T) {
 		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
-			Page: 1, PageSize: 20, Assignee: "nobody@test.com",
+			Page: 1, PageSize: 20, Assignee: strPtr("nobody@test.com"),
 		})
 		require.NoError(t, err)
 
@@ -448,7 +448,7 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 			ExecX(ctx)
 
 		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
-			Page: 1, PageSize: 20, Assignee: "alice@test.com",
+			Page: 1, PageSize: 20, Assignee: strPtr("john@test.com"),
 		})
 		require.NoError(t, err)
 

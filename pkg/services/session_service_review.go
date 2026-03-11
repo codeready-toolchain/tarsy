@@ -363,7 +363,7 @@ type triageRow struct {
 
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
 // the given predicates, returning a fully populated TriageGroup.
-func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize int, assignee string, predicates ...predicate.AlertSession) (*models.TriageGroup, error) {
+func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize int, assignee *string, predicates ...predicate.AlertSession) (*models.TriageGroup, error) {
 	if pageSize < 1 {
 		pageSize = 20
 	}
@@ -375,8 +375,12 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 		Where(alertsession.DeletedAtIsNil()).
 		Where(predicates...)
 
-	if assignee != "" {
-		base = base.Where(alertsession.AssigneeEQ(assignee))
+	if assignee != nil {
+		if *assignee == "" {
+			base = base.Where(alertsession.AssigneeIsNil())
+		} else {
+			base = base.Where(alertsession.AssigneeEQ(*assignee))
+		}
 	}
 
 	total, err := base.Clone().Count(ctx)

@@ -175,6 +175,9 @@ describe('formatTokens', () => {
 // ---------------------------------------------------------------------------
 
 describe('compactTimeAgo', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
   it('returns "—" for null/undefined', () => {
     expect(compactTimeAgo(null)).toBe('—');
     expect(compactTimeAgo(undefined)).toBe('—');
@@ -185,38 +188,73 @@ describe('compactTimeAgo', () => {
   });
 
   it('returns "0s" for future timestamps', () => {
-    const future = new Date(Date.now() + 60_000).toISOString();
-    expect(compactTimeAgo(future)).toBe('0s');
+    vi.setSystemTime(new Date('2025-06-15T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:01:00Z')).toBe('0s');
   });
 
-  it('formats recent timestamps as seconds', () => {
-    const thirtySecsAgo = new Date(Date.now() - 30_000).toISOString();
-    const result = compactTimeAgo(thirtySecsAgo);
-    expect(result).toMatch(/^\d+s$/);
+  it('formats exact seconds', () => {
+    vi.setSystemTime(new Date('2025-06-15T12:00:30Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('30s');
   });
 
-  it('formats minutes', () => {
-    const fiveMinsAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-    const result = compactTimeAgo(fiveMinsAgo);
-    expect(result).toMatch(/^\d+m$/);
+  it('boundary: 59 seconds stays in seconds', () => {
+    vi.setSystemTime(new Date('2025-06-15T12:00:59Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('59s');
   });
 
-  it('formats hours', () => {
-    const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString();
-    const result = compactTimeAgo(threeHoursAgo);
-    expect(result).toMatch(/^\d+h$/);
+  it('boundary: 60 seconds flips to minutes', () => {
+    vi.setSystemTime(new Date('2025-06-15T12:01:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('1m');
   });
 
-  it('formats days', () => {
-    const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString();
-    const result = compactTimeAgo(fiveDaysAgo);
-    expect(result).toMatch(/^\d+d$/);
+  it('formats exact minutes', () => {
+    vi.setSystemTime(new Date('2025-06-15T12:05:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('5m');
   });
 
-  it('formats months', () => {
-    const sixtyDaysAgo = new Date(Date.now() - 60 * 86_400_000).toISOString();
-    const result = compactTimeAgo(sixtyDaysAgo);
-    expect(result).toMatch(/^\d+mo$/);
+  it('boundary: 59 minutes stays in minutes', () => {
+    vi.setSystemTime(new Date('2025-06-15T12:59:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('59m');
+  });
+
+  it('boundary: 60 minutes flips to hours', () => {
+    vi.setSystemTime(new Date('2025-06-15T13:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('1h');
+  });
+
+  it('formats exact hours', () => {
+    vi.setSystemTime(new Date('2025-06-15T15:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('3h');
+  });
+
+  it('boundary: 23 hours stays in hours', () => {
+    vi.setSystemTime(new Date('2025-06-16T11:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('23h');
+  });
+
+  it('boundary: 24 hours flips to days', () => {
+    vi.setSystemTime(new Date('2025-06-16T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('1d');
+  });
+
+  it('formats exact days', () => {
+    vi.setSystemTime(new Date('2025-06-20T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('5d');
+  });
+
+  it('boundary: 29 days stays in days', () => {
+    vi.setSystemTime(new Date('2025-07-14T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('29d');
+  });
+
+  it('boundary: 30 days flips to months', () => {
+    vi.setSystemTime(new Date('2025-07-15T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('1mo');
+  });
+
+  it('formats exact months', () => {
+    vi.setSystemTime(new Date('2025-08-14T12:00:00Z'));
+    expect(compactTimeAgo('2025-06-15T12:00:00Z')).toBe('2mo');
   });
 });
 

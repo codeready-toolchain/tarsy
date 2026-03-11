@@ -136,7 +136,9 @@ func (s *Server) getTriageGroupHandler(c *echo.Context) error {
 	params := models.TriageGroupParams{
 		Page:     1,
 		PageSize: defaultPageSize,
-		Assignee: c.QueryParam("assignee"),
+	}
+	if assigneeVal := c.QueryParam("assignee"); c.Request().URL.Query().Has("assignee") {
+		params.Assignee = &assigneeVal
 	}
 
 	if v := c.QueryParam("page"); v != "" {

@@ -484,9 +484,11 @@ export function DashboardView() {
         return;
       }
 
-      // review.status → triage refresh only
+      // review.status → triage refresh only (if tab active)
       if (type === EVENT_REVIEW_STATUS) {
-        fetchAllTriageGroupsRef.current();
+        if (activeTabRef.current === 'triage') {
+          fetchAllTriageGroupsRef.current();
+        }
         return;
       }
     };
@@ -496,7 +498,9 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
-        fetchAllTriageGroupsRef.current();
+        if (activeTabRef.current === 'triage') {
+          fetchAllTriageGroupsRef.current();
+        }
       }
     };
 
