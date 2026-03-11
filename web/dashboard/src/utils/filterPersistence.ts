@@ -2,12 +2,14 @@
  * localStorage persistence for dashboard filter, pagination, and sort state.
  */
 
-import type { SessionFilter, PaginationState, SortState } from '../types/dashboard.ts';
+import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../types/dashboard.ts';
 
 // Storage keys
 const FILTER_KEY = 'tarsy-filters';
 const PAGINATION_KEY = 'tarsy-pagination';
 const SORT_KEY = 'tarsy-sort';
+const DASHBOARD_TAB_KEY = 'tarsy-dashboard-tab';
+const TRIAGE_FILTERS_KEY = 'tarsy-triage-filters';
 
 // ────────────────────────────────────────────────────────────
 // Defaults
@@ -142,4 +144,52 @@ export function clearAllDashboardState(): void {
   } catch {
     // ignore
   }
+}
+
+// ────────────────────────────────────────────────────────────
+// Dashboard tab
+// ────────────────────────────────────────────────────────────
+
+export function saveDashboardTab(tab: DashboardTab): void {
+  try {
+    localStorage.setItem(DASHBOARD_TAB_KEY, tab);
+  } catch {
+    // ignore
+  }
+}
+
+export function loadDashboardTab(): DashboardTab {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_TAB_KEY);
+    if (raw === 'sessions' || raw === 'triage') return raw;
+  } catch {
+    // ignore
+  }
+  return 'sessions';
+}
+
+// ────────────────────────────────────────────────────────────
+// Triage filters
+// ────────────────────────────────────────────────────────────
+
+export function getDefaultTriageFilters(): TriageFilter {
+  return { assignee: 'all' };
+}
+
+export function saveTriageFilters(filters: TriageFilter): void {
+  try {
+    localStorage.setItem(TRIAGE_FILTERS_KEY, JSON.stringify(filters));
+  } catch {
+    // ignore
+  }
+}
+
+export function loadTriageFilters(): TriageFilter | null {
+  try {
+    const raw = localStorage.getItem(TRIAGE_FILTERS_KEY);
+    if (raw) return JSON.parse(raw) as TriageFilter;
+  } catch {
+    // ignore
+  }
+  return null;
 }

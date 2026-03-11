@@ -28,11 +28,14 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Refresh, Menu as MenuIcon, Send as SendIcon, Dns as DnsIcon } from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
+import { TriageView } from './TriageView.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
@@ -42,6 +45,8 @@ import {
   getSessions,
   getActiveSessions,
   getFilterOptions,
+  getTriageSessions,
+  updateReview,
   handleAPIError,
 } from '../../services/api.ts';
 import { websocketService } from '../../services/websocket.ts';
@@ -49,10 +54,11 @@ import {
   EVENT_SESSION_STATUS,
   EVENT_SESSION_PROGRESS,
   EVENT_SESSION_SCORE_UPDATED,
+  EVENT_REVIEW_STATUS,
 } from '../../constants/eventTypes.ts';
-import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
+import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
-import type { DashboardListParams } from '../../types/api.ts';
+import type { DashboardListParams, TriageResponse } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
 import {
@@ -66,6 +72,11 @@ import {
   getDefaultPagination,
   getDefaultSort,
   mergeWithDefaults,
+  saveDashboardTab,
+  loadDashboardTab,
+  saveTriageFilters,
+  loadTriageFilters,
+  getDefaultTriageFilters,
 } from '../../utils/filterPersistence.ts';
 const REFRESH_THROTTLE_MS = 1000;
 const FILTER_DEBOUNCE_MS = 300;
@@ -111,7 +122,7 @@ function buildQueryParams(
 }
 
 export function DashboardView() {
-  const { isAuthenticated, authAvailable } = useAuth();
+  const { isAuthenticated, authAvailable, user } = useAuth();
 
   // ── Navigation menu state ──
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -159,6 +170,17 @@ export function DashboardView() {
 
   // ── WebSocket connection status ──
   const [wsConnected, setWsConnected] = useState(false);
+
+  // ── Tab state (persisted) ──
+  const [activeTab, setActiveTab] = useState<DashboardTab>(loadDashboardTab);
+
+  // ── Triage state ──
+  const [triageData, setTriageData] = useState<TriageResponse | null>(null);
+  const [triageLoading, setTriageLoading] = useState(false);
+  const [triageError, setTriageError] = useState<string | null>(null);
+  const [triageFilters, setTriageFilters] = useState<TriageFilter>(() =>
+    mergeWithDefaults(loadTriageFilters(), getDefaultTriageFilters()),
+  );
 
   // ── Refs for stable callbacks & stale-update detection ──
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -296,6 +318,56 @@ export function DashboardView() {
     throttledRefreshRef.current = throttledRefresh;
   }, [throttledRefresh]);
 
+  // ── Triage data fetching ──
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  const triageFiltersRef = useRef(triageFilters);
+  useEffect(() => {
+    triageFiltersRef.current = triageFilters;
+  }, [triageFilters]);
+
+  const fetchTriageData = useCallback(async () => {
+    try {
+      setTriageLoading(true);
+      setTriageError(null);
+      const assigneeParam =
+        triageFiltersRef.current.assignee === 'mine' ? user?.email ?? '' :
+        triageFiltersRef.current.assignee === 'unassigned' ? '' :
+        undefined;
+      const params = assigneeParam !== undefined ? { assignee: assigneeParam } : undefined;
+      const data = await getTriageSessions(params);
+      setTriageData(data);
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    } finally {
+      setTriageLoading(false);
+    }
+  }, [user?.email]);
+
+  const triageRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const throttledTriageRefresh = useCallback(() => {
+    if (triageRefreshTimeoutRef.current) clearTimeout(triageRefreshTimeoutRef.current);
+    triageRefreshTimeoutRef.current = setTimeout(() => {
+      fetchTriageData();
+      triageRefreshTimeoutRef.current = null;
+    }, REFRESH_THROTTLE_MS);
+  }, [fetchTriageData]);
+
+  const throttledTriageRefreshRef = useRef(throttledTriageRefresh);
+  useEffect(() => {
+    throttledTriageRefreshRef.current = throttledTriageRefresh;
+  }, [throttledTriageRefresh]);
+
+  // Cleanup triage timer
+  useEffect(() => {
+    return () => {
+      if (triageRefreshTimeoutRef.current) clearTimeout(triageRefreshTimeoutRef.current);
+    };
+  }, []);
+
   // ────────────────────────────────────────────────────────────
   // Initial load + filter options
   // ────────────────────────────────────────────────────────────
@@ -304,6 +376,9 @@ export function DashboardView() {
     mountedRef.current = true;
     fetchActiveAlerts();
     fetchHistoricalAlerts();
+    if (activeTabRef.current === 'triage') {
+      fetchTriageData();
+    }
 
     (async () => {
       try {
@@ -378,6 +453,15 @@ export function DashboardView() {
       // session.score_updated → throttled refresh to pick up spinner / final score
       if (type === EVENT_SESSION_SCORE_UPDATED) {
         throttledRefreshRef.current();
+        return;
+      }
+
+      // review.status → throttled triage refresh (only when triage tab is active)
+      if (type === EVENT_REVIEW_STATUS) {
+        if (activeTabRef.current === 'triage') {
+          throttledTriageRefreshRef.current();
+        }
+        return;
       }
     };
 
@@ -386,6 +470,9 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
+        if (activeTabRef.current === 'triage') {
+          throttledTriageRefreshRef.current();
+        }
       }
     };
 
@@ -451,6 +538,52 @@ export function DashboardView() {
 
   const handleWebSocketRetry = () => {
     websocketService.connect();
+  };
+
+  // ── Tab switching ──
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: DashboardTab) => {
+    setActiveTab(newValue);
+    saveDashboardTab(newValue);
+    if (newValue === 'triage' && !triageData) {
+      fetchTriageData();
+    }
+  };
+
+  // ── Triage filter / action callbacks ──
+
+  const handleTriageFiltersChange = (newFilters: TriageFilter) => {
+    setTriageFilters(newFilters);
+    saveTriageFilters(newFilters);
+  };
+
+  // Refetch when triage filters change
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    if (activeTabRef.current === 'triage') {
+      fetchTriageData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triageFilters]);
+
+  const handleTriageClaim = async (sessionId: string) => {
+    await updateReview(sessionId, { action: 'claim' });
+    fetchTriageData();
+  };
+
+  const handleTriageUnclaim = async (sessionId: string) => {
+    await updateReview(sessionId, { action: 'unclaim' });
+    fetchTriageData();
+  };
+
+  const handleTriageResolve = async (sessionId: string, reason: string, note?: string) => {
+    await updateReview(sessionId, { action: 'resolve', resolution_reason: reason, note });
+    fetchTriageData();
+  };
+
+  const handleTriageReopen = async (sessionId: string) => {
+    await updateReview(sessionId, { action: 'reopen' });
+    fetchTriageData();
   };
 
   // ────────────────────────────────────────────────────────────
@@ -720,42 +853,71 @@ export function DashboardView() {
         </MenuItem>
       </Menu>
 
-      {/* Filter Panel */}
-      <FilterPanel
-        filters={filters}
-        onFiltersChange={handleFiltersChange}
-        onClearFilters={handleClearFilters}
-        filterOptions={filterOptions}
-      />
-
-      {/* Main content area */}
-      <Box sx={{ mt: 2 }}>
-        {/* Active Alerts Panel */}
-        <ActiveAlertsPanel
-          activeSessions={activeSessions}
-          queuedSessions={queuedSessions}
-          progressData={progressData}
-          loading={activeLoading}
-          error={activeError}
-          wsConnected={wsConnected}
-          onRefresh={handleRefreshActive}
-        />
-
-        {/* Historical Alerts Table */}
-        <HistoricalAlertsList
-          sessions={historicalSessions}
-          loading={historicalLoading}
-          error={historicalError}
-          filters={filters}
-          filteredCount={pagination.totalItems}
-          sortState={sortState}
-          pagination={pagination}
-          onRefresh={handleRefreshHistorical}
-          onSortChange={handleSortChange}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-        />
+      {/* Tab bar */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 1 }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          aria-label="Dashboard tabs"
+        >
+          <Tab label="Sessions" value="sessions" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          <Tab label="Triage" value="triage" sx={{ textTransform: 'none', fontWeight: 600 }} />
+        </Tabs>
       </Box>
+
+      {/* Sessions tab content */}
+      {activeTab === 'sessions' && (
+        <>
+          <FilterPanel
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onClearFilters={handleClearFilters}
+            filterOptions={filterOptions}
+          />
+
+          <Box sx={{ mt: 2 }}>
+            <ActiveAlertsPanel
+              activeSessions={activeSessions}
+              queuedSessions={queuedSessions}
+              progressData={progressData}
+              loading={activeLoading}
+              error={activeError}
+              wsConnected={wsConnected}
+              onRefresh={handleRefreshActive}
+            />
+
+            <HistoricalAlertsList
+              sessions={historicalSessions}
+              loading={historicalLoading}
+              error={historicalError}
+              filters={filters}
+              filteredCount={pagination.totalItems}
+              sortState={sortState}
+              pagination={pagination}
+              onRefresh={handleRefreshHistorical}
+              onSortChange={handleSortChange}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </Box>
+        </>
+      )}
+
+      {/* Triage tab content */}
+      {activeTab === 'triage' && (
+        <TriageView
+          data={triageData}
+          loading={triageLoading}
+          error={triageError}
+          filters={triageFilters}
+          onFiltersChange={handleTriageFiltersChange}
+          onRefresh={fetchTriageData}
+          onClaim={handleTriageClaim}
+          onUnclaim={handleTriageUnclaim}
+          onResolve={handleTriageResolve}
+          onReopen={handleTriageReopen}
+        />
+      )}
 
       {/* Version footer */}
       <VersionFooter />

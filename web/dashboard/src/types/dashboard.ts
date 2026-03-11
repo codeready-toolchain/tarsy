@@ -30,3 +30,11 @@ export interface SortState {
   field: string;
   direction: 'asc' | 'desc';
 }
+
+/** Active dashboard tab. */
+export type DashboardTab = 'sessions' | 'triage';
+
+/** Filter state for the triage view. */
+export interface TriageFilter {
+  assignee: 'all' | 'mine' | 'unassigned';
+}

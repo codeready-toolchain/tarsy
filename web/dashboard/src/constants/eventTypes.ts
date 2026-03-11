@@ -16,6 +16,7 @@ export const EVENT_SESSION_PROGRESS = 'session.progress' as const;
 export const EVENT_EXECUTION_PROGRESS = 'execution.progress' as const;
 export const EVENT_EXECUTION_STATUS = 'execution.status' as const;
 export const EVENT_SESSION_SCORE_UPDATED = 'session.score_updated' as const;
+export const EVENT_REVIEW_STATUS = 'review.status' as const;
 
 // Server → client control events
 export const EVENT_CONNECTION_ESTABLISHED = 'connection.established' as const;

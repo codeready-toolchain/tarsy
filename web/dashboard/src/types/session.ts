@@ -32,6 +32,9 @@ export interface DashboardSessionItem {
   matched_in_content: boolean;
   latest_score?: number | null;
   scoring_status?: string | null;
+  review_status?: string | null;
+  assignee?: string | null;
+  resolution_reason?: string | null;
 }
 
 /** Active (in-progress / cancelling) session. */

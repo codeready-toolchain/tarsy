@@ -675,7 +675,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 6. Publish `review.status` events from API handler after `UpdateReviewStatus` calls (manual transitions)
 7. Unit tests for service methods, Worker review init, and handlers
 
-### Phase 3: Frontend — Tab bar + Triage grouped list
+### Phase 3: Frontend — Tab bar + Triage grouped list - ✅ DONE
 
 1. Add tab bar to `DashboardView` (Sessions | Triage)
 2. Add `review_status`, `assignee`, `resolution_reason` to TypeScript types

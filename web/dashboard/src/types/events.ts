@@ -119,6 +119,17 @@ export interface ExecutionStatusPayload {
   timestamp: string;
 }
 
+/** review.status payload. */
+export interface ReviewStatusPayload {
+  type: 'review.status';
+  session_id: string;
+  review_status?: string | null;
+  assignee?: string | null;
+  resolution_reason?: string | null;
+  actor: string;
+  timestamp: string;
+}
+
 /** Union of all possible WebSocket event payloads. */
 export type WebSocketEvent =
   | TimelineCreatedPayload
@@ -130,4 +141,5 @@ export type WebSocketEvent =
   | InteractionCreatedPayload
   | SessionProgressPayload
   | ExecutionProgressPayload
-  | ExecutionStatusPayload;
+  | ExecutionStatusPayload
+  | ReviewStatusPayload;
