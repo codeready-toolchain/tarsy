@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -244,6 +245,14 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		require.NotNil(t, sess.ResolutionNote)
 		assert.Equal(t, "Updated fix details", *sess.ResolutionNote)
 		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus, "status should not change")
+
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		last := activities[len(activities)-1]
+		assert.Equal(t, sessionreviewactivity.ActionUpdateNote, last.Action)
+		assert.Equal(t, "john@test.com", last.Actor)
+		require.NotNil(t, last.Note)
+		assert.Equal(t, "Updated fix details", *last.Note)
 	})
 
 	t.Run("update_note clears note when nil", func(t *testing.T) {

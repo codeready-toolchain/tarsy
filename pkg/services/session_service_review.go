@@ -119,6 +119,13 @@ func (s *SessionService) UpdateReviewStatus(_ context.Context, sessionID string,
 		if affected == 0 {
 			return nil, ErrConflict
 		}
+		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
+			sessionreviewactivity.ActionUpdateNote,
+			ptrFromStatus(sessionreviewactivity.FromStatusResolved),
+			sessionreviewactivity.ToStatusResolved,
+			nil, req.Note, now); err != nil {
+			return nil, err
+		}
 	}
 
 	session, err := tx.AlertSession.Get(writeCtx, sessionID)
@@ -399,7 +406,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 	offset := (page - 1) * pageSize
 	var rows []triageRow
 	err = base.Clone().
-		Order(ent.Desc(alertsession.FieldCreatedAt)).
+		Order(ent.Desc(alertsession.FieldCreatedAt), ent.Desc(alertsession.FieldID)).
 		Offset(offset).
 		Limit(pageSize).
 		Modify(func(sel *sql.Selector) {

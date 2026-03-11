@@ -79,10 +79,11 @@ type Action string
 
 // Action values.
 const (
-	ActionClaim   Action = "claim"
-	ActionUnclaim Action = "unclaim"
-	ActionResolve Action = "resolve"
-	ActionReopen  Action = "reopen"
+	ActionClaim      Action = "claim"
+	ActionUnclaim    Action = "unclaim"
+	ActionResolve    Action = "resolve"
+	ActionReopen     Action = "reopen"
+	ActionUpdateNote Action = "update_note"
 )
 
 func (a Action) String() string {
@@ -92,7 +93,7 @@ func (a Action) String() string {
 // ActionValidator is a validator for the "action" field enum values. It is called by the builders before save.
 func ActionValidator(a Action) error {
 	switch a {
-	case ActionClaim, ActionUnclaim, ActionResolve, ActionReopen:
+	case ActionClaim, ActionUnclaim, ActionResolve, ActionReopen, ActionUpdateNote:
 		return nil
 	default:
 		return fmt.Errorf("sessionreviewactivity: invalid enum value for action field: %q", a)

@@ -107,7 +107,7 @@ export function ActiveAlertsPanel({
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : error ? null : totalCount === 0 ? (
+      ) : error && totalCount === 0 ? null : totalCount === 0 ? (
         <Box sx={{ py: 6, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No Active Alerts

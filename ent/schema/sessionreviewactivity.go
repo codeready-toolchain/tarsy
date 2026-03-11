@@ -27,7 +27,7 @@ func (SessionReviewActivity) Fields() []ent.Field {
 			Comment("User who performed the action (X-Forwarded-User)"),
 		field.Enum("action").
 			Immutable().
-			Values("claim", "unclaim", "resolve", "reopen").
+			Values("claim", "unclaim", "resolve", "reopen", "update_note").
 			Comment("What happened"),
 		field.Enum("from_status").
 			Immutable().
