@@ -196,6 +196,54 @@ func (app *TestApp) GetHealth(t *testing.T) map[string]interface{} {
 }
 
 // ────────────────────────────────────────────────────────────
+// Review Workflow API Helpers
+// ────────────────────────────────────────────────────────────
+
+func (app *TestApp) patchJSON(t *testing.T, path string, body interface{}, expectedStatus int) map[string]interface{} {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		require.NoError(t, err)
+		reader = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPatch, app.BaseURL+path, reader)
+	require.NoError(t, err)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, expectedStatus, resp.StatusCode, "PATCH %s: unexpected status", path)
+	var result map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	return result
+}
+
+// PatchReview calls PATCH /api/v1/sessions/:id/review.
+func (app *TestApp) PatchReview(t *testing.T, sessionID string, body map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	return app.patchJSON(t, "/api/v1/sessions/"+sessionID+"/review", body, http.StatusOK)
+}
+
+// GetReviewActivity calls GET /api/v1/sessions/:id/review-activity.
+func (app *TestApp) GetReviewActivity(t *testing.T, sessionID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/review-activity", http.StatusOK)
+}
+
+// GetTriage calls GET /api/v1/sessions/triage with optional query params.
+func (app *TestApp) GetTriage(t *testing.T, queryParams string) map[string]interface{} {
+	t.Helper()
+	path := "/api/v1/sessions/triage"
+	if queryParams != "" {
+		path += "?" + queryParams
+	}
+	return app.getJSON(t, path, http.StatusOK)
+}
+
+// ────────────────────────────────────────────────────────────
 // Trace API Helpers
 // ────────────────────────────────────────────────────────────
 
@@ -753,6 +801,16 @@ func matchesExpected(actual WSEvent, expected testdata.ExpectedEvent) bool {
 			}
 		}
 	}
+	if expected.ReviewStatus != "" {
+		if rs, _ := actual.Parsed["review_status"].(string); rs != expected.ReviewStatus {
+			return false
+		}
+	}
+	if expected.Actor != "" {
+		if a, _ := actual.Parsed["actor"].(string); a != expected.Actor {
+			return false
+		}
+	}
 	return true
 }
 
@@ -777,6 +835,12 @@ func formatExpected(e testdata.ExpectedEvent) string {
 	}
 	for k, v := range e.Metadata {
 		s += fmt.Sprintf(" meta.%s=%q", k, v)
+	}
+	if e.ReviewStatus != "" {
+		s += " review_status=" + e.ReviewStatus
+	}
+	if e.Actor != "" {
+		s += " actor=" + e.Actor
 	}
 	return s
 }
