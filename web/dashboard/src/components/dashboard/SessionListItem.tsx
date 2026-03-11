@@ -219,11 +219,6 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Typography>
       </TableCell>
 
-      {/* Agent Chain */}
-      <TableCell>
-        <Typography variant="body2">{session.chain_id}</Typography>
-      </TableCell>
-
       {/* Submitted by */}
       <TableCell>
         <Typography variant="body2" color="text.secondary">

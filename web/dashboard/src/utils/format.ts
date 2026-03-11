@@ -5,7 +5,7 @@
  * (the format returned by the new Go backend).
  */
 
-import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
+import { formatDistanceToNow, format, parseISO, isValid, differenceInSeconds, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
 
 // ────────────────────────────────────────────────────────────
 // Timestamps
@@ -50,6 +50,26 @@ export function formatTimestamp(
  */
 export function timeAgo(isoString: string | null | undefined): string {
   return formatTimestamp(isoString, 'relative');
+}
+
+/**
+ * Compact relative time (e.g. "5m", "2h", "3d") for tight UI spaces.
+ */
+export function compactTimeAgo(isoString: string | null | undefined): string {
+  if (!isoString) return '—';
+  const date = parseISO(isoString);
+  if (!isValid(date)) return '—';
+
+  const now = new Date();
+  const secs = differenceInSeconds(now, date);
+  if (secs < 60) return `${secs}s`;
+  const mins = differenceInMinutes(now, date);
+  if (mins < 60) return `${mins}m`;
+  const hrs = differenceInHours(now, date);
+  if (hrs < 24) return `${hrs}h`;
+  const days = differenceInDays(now, date);
+  if (days < 30) return `${days}d`;
+  return `${Math.floor(days / 30)}mo`;
 }
 
 // ────────────────────────────────────────────────────────────

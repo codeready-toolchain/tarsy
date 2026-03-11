@@ -28,8 +28,8 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Tabs,
-  Tab,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import { Refresh, Menu as MenuIcon, Send as SendIcon, Dns as DnsIcon } from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
@@ -303,21 +303,6 @@ export function DashboardView() {
     fetchHistoricalRetryRef.current = fetchHistoricalWithRetry;
   }, [fetchHistoricalWithRetry]);
 
-  // ── Throttled refresh ──
-  const throttledRefresh = useCallback(() => {
-    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(() => {
-      fetchActiveAlerts();
-      fetchHistoricalAlerts();
-      refreshTimeoutRef.current = null;
-    }, REFRESH_THROTTLE_MS);
-  }, [fetchActiveAlerts, fetchHistoricalAlerts]);
-
-  const throttledRefreshRef = useRef(throttledRefresh);
-  useEffect(() => {
-    throttledRefreshRef.current = throttledRefresh;
-  }, [throttledRefresh]);
-
   // ── Triage data fetching ──
   const activeTabRef = useRef(activeTab);
   useEffect(() => {
@@ -329,12 +314,17 @@ export function DashboardView() {
     triageFiltersRef.current = triageFilters;
   }, [triageFilters]);
 
+  const userEmailRef = useRef(user?.email);
+  useEffect(() => {
+    userEmailRef.current = user?.email;
+  }, [user?.email]);
+
   const fetchTriageData = useCallback(async () => {
     try {
       setTriageLoading(true);
       setTriageError(null);
       const assigneeParam =
-        triageFiltersRef.current.assignee === 'mine' ? user?.email ?? '' :
+        triageFiltersRef.current.assignee === 'mine' ? userEmailRef.current ?? '' :
         triageFiltersRef.current.assignee === 'unassigned' ? '' :
         undefined;
       const params = assigneeParam !== undefined ? { assignee: assigneeParam } : undefined;
@@ -345,28 +335,28 @@ export function DashboardView() {
     } finally {
       setTriageLoading(false);
     }
-  }, [user?.email]);
+  }, []);
 
-  const triageRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const throttledTriageRefresh = useCallback(() => {
-    if (triageRefreshTimeoutRef.current) clearTimeout(triageRefreshTimeoutRef.current);
-    triageRefreshTimeoutRef.current = setTimeout(() => {
-      fetchTriageData();
-      triageRefreshTimeoutRef.current = null;
-    }, REFRESH_THROTTLE_MS);
+  const fetchTriageDataRef = useRef(fetchTriageData);
+  useEffect(() => {
+    fetchTriageDataRef.current = fetchTriageData;
   }, [fetchTriageData]);
 
-  const throttledTriageRefreshRef = useRef(throttledTriageRefresh);
-  useEffect(() => {
-    throttledTriageRefreshRef.current = throttledTriageRefresh;
-  }, [throttledTriageRefresh]);
+  // ── Throttled refresh (sessions + triage together) ──
+  const throttledRefresh = useCallback(() => {
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(() => {
+      fetchActiveAlerts();
+      fetchHistoricalAlerts();
+      fetchTriageDataRef.current();
+      refreshTimeoutRef.current = null;
+    }, REFRESH_THROTTLE_MS);
+  }, [fetchActiveAlerts, fetchHistoricalAlerts]);
 
-  // Cleanup triage timer
+  const throttledRefreshRef = useRef(throttledRefresh);
   useEffect(() => {
-    return () => {
-      if (triageRefreshTimeoutRef.current) clearTimeout(triageRefreshTimeoutRef.current);
-    };
-  }, []);
+    throttledRefreshRef.current = throttledRefresh;
+  }, [throttledRefresh]);
 
   // ────────────────────────────────────────────────────────────
   // Initial load + filter options
@@ -435,9 +425,8 @@ export function DashboardView() {
         return;
       }
 
-      // session.status → throttled full refresh
+      // session.status → throttled refresh (sessions + triage together)
       if (type === EVENT_SESSION_STATUS) {
-        // Clean progress data for sessions that just completed
         const sessionId = data.session_id as string | undefined;
         if (sessionId) {
           setProgressData((prev) => {
@@ -456,11 +445,9 @@ export function DashboardView() {
         return;
       }
 
-      // review.status → throttled triage refresh (only when triage tab is active)
+      // review.status → triage refresh only
       if (type === EVENT_REVIEW_STATUS) {
-        if (activeTabRef.current === 'triage') {
-          throttledTriageRefreshRef.current();
-        }
+        fetchTriageDataRef.current();
         return;
       }
     };
@@ -470,9 +457,7 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
-        if (activeTabRef.current === 'triage') {
-          throttledTriageRefreshRef.current();
-        }
+        fetchTriageDataRef.current();
       }
     };
 
@@ -542,10 +527,11 @@ export function DashboardView() {
 
   // ── Tab switching ──
 
-  const handleTabChange = (_: React.SyntheticEvent, newValue: DashboardTab) => {
+  const handleTabChange = (_: React.MouseEvent<HTMLElement>, newValue: DashboardTab | null) => {
+    if (!newValue) return;
     setActiveTab(newValue);
     saveDashboardTab(newValue);
-    if (newValue === 'triage' && !triageData) {
+    if (newValue === 'triage') {
       fetchTriageData();
     }
   };
@@ -744,6 +730,50 @@ export function DashboardView() {
               </Tooltip>
             )}
 
+            {/* Sessions / Triage toggle */}
+            <ToggleButtonGroup
+              value={activeTab}
+              exclusive
+              onChange={handleTabChange}
+              size="small"
+              aria-label="Dashboard tabs"
+              sx={{
+                mr: 2,
+                bgcolor: 'rgba(255,255,255,0.1)',
+                borderRadius: 3,
+                padding: 0.5,
+                border: '1px solid rgba(255,255,255,0.2)',
+                '& .MuiToggleButton-root': {
+                  color: 'rgba(255,255,255,0.8)',
+                  border: 'none',
+                  borderRadius: 2,
+                  px: 2,
+                  py: 0.5,
+                  minWidth: 100,
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.15)',
+                    color: 'rgba(255,255,255,0.95)',
+                  },
+                  '&.Mui-selected': {
+                    bgcolor: 'rgba(255,255,255,0.25)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.3)',
+                    },
+                  },
+                },
+              }}
+            >
+              <ToggleButton value="sessions">Sessions</ToggleButton>
+              <ToggleButton value="triage">Triage</ToggleButton>
+            </ToggleButtonGroup>
+
             {/* Connection Status Indicator - Fancy LIVE / Offline badge */}
             <Tooltip
               title={
@@ -852,18 +882,6 @@ export function DashboardView() {
           <ListItemText>System Status</ListItemText>
         </MenuItem>
       </Menu>
-
-      {/* Tab bar */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 1 }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          aria-label="Dashboard tabs"
-        >
-          <Tab label="Sessions" value="sessions" sx={{ textTransform: 'none', fontWeight: 600 }} />
-          <Tab label="Triage" value="triage" sx={{ textTransform: 'none', fontWeight: 600 }} />
-        </Tabs>
-      </Box>
 
       {/* Sessions tab content */}
       {activeTab === 'sessions' && (

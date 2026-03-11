@@ -29,10 +29,10 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
 
 /**
- * Column order: Status | Indicators | Type | Chain | Author | Time | Duration | Tokens | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
-const TOTAL_COLUMNS = 10;
+const TOTAL_COLUMNS = 9;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -178,9 +178,6 @@ export function HistoricalAlertsList({
                       Type
                     </TableSortLabel>
                   </TableCell>
-
-                  {/* Agent Chain — not sortable (matches old dashboard column order) */}
-                  <TableCell sx={{ fontWeight: 600 }}>Agent Chain</TableCell>
 
                   {/* Submitted by — sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>

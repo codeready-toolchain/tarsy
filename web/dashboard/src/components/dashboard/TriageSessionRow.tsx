@@ -1,10 +1,12 @@
 import {
-  Box,
+  TableRow,
+  TableCell,
   Typography,
   Button,
   Chip,
   Tooltip,
   IconButton,
+  Box,
 } from '@mui/material';
 import {
   OpenInNew,
@@ -13,7 +15,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
-import { formatTimestamp } from '../../utils/format.ts';
+import { formatTimestamp, compactTimeAgo } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -37,7 +39,7 @@ function getAssigneeInitials(assignee: string): string {
   return assignee.substring(0, 2).toUpperCase();
 }
 
-const resolutionReasonLabel: Record<string, { label: string; color: 'success' | 'default' }> = {
+const resolutionReasonConfig: Record<string, { label: string; color: 'success' | 'default' }> = {
   actioned: { label: 'Actioned', color: 'success' },
   dismissed: { label: 'Dismissed', color: 'default' },
 };
@@ -66,163 +68,162 @@ export function TriageSessionRow({
     );
   };
 
-  const summarySnippet = session.executive_summary
-    ? session.executive_summary.length > 120
-      ? session.executive_summary.substring(0, 120) + '...'
-      : session.executive_summary
-    : null;
+  const hasActions = group !== 'investigating';
 
   return (
-    <Box
+    <TableRow
+      hover
       onClick={handleRowClick}
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 2,
-        py: 1.25,
         cursor: 'pointer',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        transition: 'background-color 0.15s',
-        '&:hover': { backgroundColor: 'action.hover' },
-        '&:last-child': { borderBottom: 'none' },
+        '&:hover .triage-actions': { opacity: 1 },
       }}
     >
-      {/* Status badge */}
-      <StatusBadge status={session.status} size="small" />
+      {/* Status */}
+      <TableCell>
+        <StatusBadge status={session.status} size="small" />
+      </TableCell>
 
-      {/* Alert type + chain */}
-      <Box sx={{ minWidth: 140, flexShrink: 0 }}>
+      {/* Alert type */}
+      <TableCell>
         <Typography variant="body2" fontWeight={500} noWrap>
           {session.alert_type ?? '—'}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
-          {session.chain_id}
-        </Typography>
-      </Box>
+      </TableCell>
 
       {/* Author */}
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        noWrap
-        sx={{ minWidth: 80, flexShrink: 0 }}
-      >
-        {session.author ?? '—'}
-      </Typography>
+      <TableCell>
+        <Typography variant="body2" color="text.secondary" noWrap>
+          {session.author ?? '—'}
+        </Typography>
+      </TableCell>
 
-      {/* Executive summary snippet */}
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        noWrap
-        sx={{ flex: 1, minWidth: 0 }}
-        title={session.executive_summary ?? undefined}
-      >
-        {summarySnippet ?? '—'}
-      </Typography>
-
-      {/* Assignee badge */}
-      {session.assignee && (
-        <Tooltip title={session.assignee}>
-          <Chip
-            icon={<PersonOutline sx={{ fontSize: 14 }} />}
-            label={getAssigneeInitials(session.assignee)}
-            size="small"
-            variant="outlined"
-            sx={{ height: 24, fontSize: '0.7rem', fontWeight: 600 }}
-            onClick={(e) => e.stopPropagation()}
-          />
+      {/* Executive summary */}
+      <TableCell sx={{ maxWidth: 350 }}>
+        <Tooltip
+          title={session.executive_summary ?? ''}
+          enterDelay={500}
+          placement="bottom-start"
+          slotProps={{ tooltip: { sx: { maxWidth: 500, fontSize: '0.8rem' } } }}
+        >
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {session.executive_summary ?? '—'}
+          </Typography>
         </Tooltip>
-      )}
+      </TableCell>
+
+      {/* Assignee */}
+      <TableCell>
+        {session.assignee ? (
+          <Tooltip title={session.assignee}>
+            <Chip
+              icon={<PersonOutline sx={{ fontSize: 14 }} />}
+              label={getAssigneeInitials(session.assignee)}
+              size="small"
+              variant="outlined"
+              color="primary"
+              sx={{ height: 24, fontSize: '0.7rem', fontWeight: 600 }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Tooltip>
+        ) : (
+          <Typography variant="body2" color="text.disabled">—</Typography>
+        )}
+      </TableCell>
 
       {/* Time */}
-      <Tooltip title={formatTimestamp(session.created_at, 'absolute')}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          noWrap
-          sx={{ minWidth: 70, textAlign: 'right', flexShrink: 0 }}
+      <TableCell>
+        <Tooltip title={formatTimestamp(session.created_at, 'absolute')}>
+          <Typography variant="body2" color="text.secondary">
+            {compactTimeAgo(session.created_at)}
+          </Typography>
+        </Tooltip>
+      </TableCell>
+
+      {/* Actions */}
+      <TableCell sx={{ width: 140, textAlign: 'right' }}>
+        <Box
+          className="triage-actions"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            justifyContent: 'flex-end',
+            opacity: hasActions ? 0 : 0.5,
+            transition: 'opacity 0.15s',
+          }}
+          onClick={(e) => e.stopPropagation()}
         >
-          {formatTimestamp(session.created_at, 'relative')}
-        </Typography>
-      </Tooltip>
-
-      {/* Action buttons */}
-      <Box
-        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, minWidth: 100, justifyContent: 'flex-end' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {group === 'needs_review' && (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={actionLoading}
-            onClick={() => onClaim?.(session.id)}
-            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-          >
-            Claim
-          </Button>
-        )}
-
-        {group === 'in_progress' && (
-          <>
+          {group === 'needs_review' && (
             <Button
               size="small"
               variant="contained"
-              color="success"
               disabled={actionLoading}
-              onClick={() => onResolve?.(session.id)}
+              onClick={() => onClaim?.(session.id)}
               sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
             >
-              Resolve
+              Claim
             </Button>
-            <Tooltip title="Unclaim">
-              <IconButton
-                size="small"
-                disabled={actionLoading}
-                onClick={() => onUnclaim?.(session.id)}
-              >
-                <Undo sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-          </>
-        )}
+          )}
 
-        {group === 'resolved' && (
-          <>
-            {session.resolution_reason && (
-              <Chip
-                label={resolutionReasonLabel[session.resolution_reason]?.label ?? session.resolution_reason}
-                color={resolutionReasonLabel[session.resolution_reason]?.color ?? 'default'}
+          {group === 'in_progress' && (
+            <>
+              <Button
                 size="small"
-                variant="outlined"
-                sx={{ height: 22, fontSize: '0.7rem' }}
-              />
-            )}
-            <Tooltip title="Reopen">
-              <IconButton
-                size="small"
+                variant="contained"
+                color="success"
                 disabled={actionLoading}
-                onClick={() => onReopen?.(session.id)}
+                onClick={() => onResolve?.(session.id)}
+                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
               >
-                <Undo sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-          </>
-        )}
+                Resolve
+              </Button>
+              <Tooltip title="Unclaim">
+                <IconButton
+                  size="small"
+                  disabled={actionLoading}
+                  onClick={() => onUnclaim?.(session.id)}
+                >
+                  <Undo sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
 
-        <Tooltip title="Open in new tab">
-          <IconButton
-            size="small"
-            onClick={handleNewTab}
-            sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}
-          >
-            <OpenInNew sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
-      </Box>
-    </Box>
+          {group === 'resolved' && (
+            <>
+              {session.resolution_reason && (
+                <Chip
+                  label={resolutionReasonConfig[session.resolution_reason]?.label ?? session.resolution_reason}
+                  color={resolutionReasonConfig[session.resolution_reason]?.color ?? 'default'}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 22, fontSize: '0.7rem' }}
+                />
+              )}
+              <Tooltip title="Reopen">
+                <IconButton
+                  size="small"
+                  disabled={actionLoading}
+                  onClick={() => onReopen?.(session.id)}
+                >
+                  <Undo sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+
+          <Tooltip title="Open in new tab">
+            <IconButton
+              size="small"
+              onClick={handleNewTab}
+              sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}
+            >
+              <OpenInNew sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </TableCell>
+    </TableRow>
   );
 }

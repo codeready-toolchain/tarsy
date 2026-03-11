@@ -6,6 +6,12 @@ import {
   Chip,
   Collapse,
   IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -34,6 +40,7 @@ interface GroupConfig {
   icon: React.ReactElement;
   defaultOpen: boolean;
   color: string;
+  accentBorder?: boolean;
 }
 
 const groups: GroupConfig[] = [
@@ -52,6 +59,7 @@ const groups: GroupConfig[] = [
     icon: <RateReview sx={{ fontSize: 18 }} />,
     defaultOpen: true,
     color: '#ed6c02',
+    accentBorder: true,
   },
   {
     key: 'in_progress',
@@ -92,14 +100,66 @@ export function TriageGroupedList({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {groups.map((group) => {
         const groupData = data[group.dataKey];
         const isOpen = openSections[group.key];
         const isEmpty = groupData.count === 0;
 
+        // Compact single-line header for empty investigating
+        if (group.key === 'investigating' && isEmpty) {
+          return (
+            <Paper key={group.key} variant="outlined">
+              <Box
+                onClick={() => toggleSection(group.key)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 2,
+                  py: 0.75,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  '&:hover': { backgroundColor: 'action.hover' },
+                }}
+              >
+                <Box sx={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                  {group.icon}
+                </Box>
+                <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
+                  {group.label}
+                </Typography>
+                <Chip
+                  label={0}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    minWidth: 24,
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    backgroundColor: 'action.disabledBackground',
+                    color: 'text.disabled',
+                  }}
+                />
+                <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+                  No active investigations
+                </Typography>
+              </Box>
+            </Paper>
+          );
+        }
+
         return (
-          <Paper key={group.key} variant="outlined" sx={{ overflow: 'hidden' }}>
+          <Paper
+            key={group.key}
+            variant="outlined"
+            sx={{
+              overflow: 'hidden',
+              borderLeft: group.accentBorder && !isEmpty
+                ? `3px solid ${group.color}`
+                : undefined,
+            }}
+          >
             {/* Group header */}
             <Box
               onClick={() => toggleSection(group.key)}
@@ -108,7 +168,7 @@ export function TriageGroupedList({
                 alignItems: 'center',
                 gap: 1,
                 px: 2,
-                py: 1.25,
+                py: 1,
                 cursor: 'pointer',
                 userSelect: 'none',
                 backgroundColor: 'background.default',
@@ -143,25 +203,42 @@ export function TriageGroupedList({
             {/* Group content */}
             <Collapse in={isOpen}>
               {isEmpty ? (
-                <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+                <Box sx={{ px: 2, py: 2.5, textAlign: 'center' }}>
                   <Typography variant="body2" color="text.secondary">
                     No sessions
                   </Typography>
                 </Box>
               ) : (
                 <>
-                  {groupData.sessions.map((session) => (
-                    <TriageSessionRow
-                      key={session.id}
-                      session={session}
-                      group={group.key}
-                      onClaim={onClaim}
-                      onUnclaim={onUnclaim}
-                      onResolve={onResolve}
-                      onReopen={onReopen}
-                      actionLoading={actionLoading}
-                    />
-                  ))}
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Summary</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
+                          <TableCell sx={{ fontWeight: 600, width: 140, textAlign: 'right' }} />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {groupData.sessions.map((session) => (
+                          <TriageSessionRow
+                            key={session.id}
+                            session={session}
+                            group={group.key}
+                            onClaim={onClaim}
+                            onUnclaim={onUnclaim}
+                            onResolve={onResolve}
+                            onReopen={onReopen}
+                            actionLoading={actionLoading}
+                          />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                   {groupData.has_more && (
                     <Box sx={{ px: 2, py: 1.5, textAlign: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
                       <Typography variant="caption" color="text.secondary">
