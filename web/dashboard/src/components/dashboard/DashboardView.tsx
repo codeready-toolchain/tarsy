@@ -193,6 +193,7 @@ export function DashboardView() {
   const activeReconnRef = useRef(false);
   const historicalReconnRef = useRef(false);
   const mountedRef = useRef(false); // suppress effect-based fetches on first render
+  const triageFilterInitRef = useRef(true); // skip first triage-filter effect (initial fetch handles it)
   const filtersRef = useRef(filters);
   const paginationRef = useRef(pagination);
   const sortRef = useRef(sortState);
@@ -350,9 +351,8 @@ export function DashboardView() {
     try {
       setTriageLoading(true);
       setTriageError(null);
-      const params = buildTriageParams();
       const results = await Promise.all(
-        TRIAGE_GROUPS.map(g => getTriageGroup(g, params)),
+        TRIAGE_GROUPS.map(g => getTriageGroup(g, buildTriageParams(g))),
       );
       if (requestId !== triageRequestIdRef.current) return;
       setTriageGroups({
@@ -593,9 +593,12 @@ export function DashboardView() {
     saveTriageFilters(newFilters);
   };
 
-  // Refetch when triage filters change
+  // Refetch when triage filters change (skip first run — initial fetch handles it)
   useEffect(() => {
-    if (!mountedRef.current) return;
+    if (triageFilterInitRef.current) {
+      triageFilterInitRef.current = false;
+      return;
+    }
     if (activeTabRef.current === 'triage') {
       fetchAllTriageGroups();
     }
