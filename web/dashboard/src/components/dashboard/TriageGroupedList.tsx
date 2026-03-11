@@ -94,7 +94,13 @@ export function TriageGroupedList({
   onPageSizeChange,
   actionLoading,
 }: TriageGroupedListProps) {
+  const STORAGE_KEY = 'triage-open-sections';
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch { /* ignore */ }
     const initial: Record<string, boolean> = {};
     for (const g of groups_config) {
       initial[g.key] = g.defaultOpen;
@@ -103,7 +109,11 @@ export function TriageGroupedList({
   });
 
   const toggleSection = (key: string) => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   return (

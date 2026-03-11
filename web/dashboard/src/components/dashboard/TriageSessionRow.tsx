@@ -8,7 +8,7 @@ import {
   IconButton,
   Box,
 } from '@mui/material';
-import { Undo, StickyNote2Outlined } from '@mui/icons-material';
+import { Undo, StickyNote2Outlined, Check, NotInterested } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -63,10 +63,31 @@ export function TriageSessionRow({
         '&:hover .triage-actions': { opacity: 1 },
       }}
     >
-      {/* Status + Summary hover */}
+      {/* Status + Summary hover + Resolution reason */}
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} size="small" />
+          {group === 'resolved' && session.resolution_reason && (
+            <Tooltip title={resolutionReasonConfig[session.resolution_reason]?.label ?? session.resolution_reason}>
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  border: '1px solid',
+                  borderColor: session.resolution_reason === 'actioned' ? 'success.main' : 'warning.main',
+                  color: session.resolution_reason === 'actioned' ? 'success.main' : 'warning.main',
+                }}
+              >
+                {session.resolution_reason === 'actioned'
+                  ? <Check sx={{ fontSize: 14 }} />
+                  : <NotInterested sx={{ fontSize: 14 }} />}
+              </Box>
+            </Tooltip>
+          )}
           <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>
@@ -168,15 +189,6 @@ export function TriageSessionRow({
 
           {group === 'resolved' && (
             <>
-              {session.resolution_reason && (
-                <Chip
-                  label={resolutionReasonConfig[session.resolution_reason]?.label ?? session.resolution_reason}
-                  color={resolutionReasonConfig[session.resolution_reason]?.color ?? 'default'}
-                  size="small"
-                  variant="outlined"
-                  sx={{ height: 22, fontSize: '0.7rem' }}
-                />
-              )}
               <Tooltip title={session.resolution_note || 'Add note'}>
                 <IconButton
                   size="small"
