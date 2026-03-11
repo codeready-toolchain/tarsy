@@ -20,6 +20,9 @@ type ExpectedEvent struct {
 	Content   string            // optional: exact match on "content" field if non-empty
 	Metadata  map[string]string // optional: partial match on metadata — only specified keys are checked
 	Group     int               // optional: non-zero = events with same Group can match in any order
+
+	ReviewStatus string // optional: match "review_status" field if non-empty (for review.status events)
+	Actor        string // optional: match "actor" field if non-empty (for review.status events)
 }
 
 // ────────────────────────────────────────────────────────────

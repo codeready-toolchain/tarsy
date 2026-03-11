@@ -1,0 +1,29 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 1
+
+mcp_servers:
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  QuickInvestigator:
+    custom_instructions: "You are QuickInvestigator."
+
+agent_chains:
+  review-complete:
+    alert_types: [test-review]
+    stages:
+      - name: investigation
+        agents:
+          - name: QuickInvestigator
+
+  review-cancel:
+    alert_types: [test-review-cancel]
+    stages:
+      - name: investigation
+        agents:
+          - name: QuickInvestigator
