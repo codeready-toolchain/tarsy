@@ -552,6 +552,11 @@ var (
 				Columns: []*schema.Column{SessionScoresColumns[10], SessionScoresColumns[6]},
 			},
 			{
+				Name:    "sessionscore_session_id_started_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionScoresColumns[10], SessionScoresColumns[7]},
+			},
+			{
 				Name:    "sessionscore_status_started_at",
 				Unique:  false,
 				Columns: []*schema.Column{SessionScoresColumns[6], SessionScoresColumns[7]},

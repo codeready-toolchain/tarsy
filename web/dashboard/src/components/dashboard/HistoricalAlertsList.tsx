@@ -91,14 +91,16 @@ export function HistoricalAlertsList({
           }}
         />
         <Tooltip title="Refresh sessions">
-          <IconButton
-            size="small"
-            onClick={onRefresh}
-            disabled={loading}
-            aria-label="Refresh sessions"
-          >
-            {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onRefresh}
+              disabled={loading}
+              aria-label="Refresh sessions"
+            >
+              {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+            </IconButton>
+          </span>
         </Tooltip>
       </Box>
 

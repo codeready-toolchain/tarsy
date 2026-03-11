@@ -329,6 +329,8 @@ export function DashboardView() {
     triageGroupsRef.current = triageGroups;
   }, [triageGroups]);
 
+  const triageRequestIdRef = useRef(0);
+
   const buildTriageParams = useCallback((groupKey?: TriageGroupKey): TriageGroupParams => {
     const assignee =
       triageFiltersRef.current.assignee === 'mine' ? (userEmailRef.current || undefined) :
@@ -344,6 +346,7 @@ export function DashboardView() {
   }, []);
 
   const fetchAllTriageGroups = useCallback(async () => {
+    const requestId = ++triageRequestIdRef.current;
     try {
       setTriageLoading(true);
       setTriageError(null);
@@ -351,6 +354,7 @@ export function DashboardView() {
       const results = await Promise.all(
         TRIAGE_GROUPS.map(g => getTriageGroup(g, params)),
       );
+      if (requestId !== triageRequestIdRef.current) return;
       setTriageGroups({
         investigating: results[0],
         needs_review: results[1],
@@ -358,9 +362,12 @@ export function DashboardView() {
         resolved: results[3],
       });
     } catch (err) {
+      if (requestId !== triageRequestIdRef.current) return;
       setTriageError(handleAPIError(err));
     } finally {
-      setTriageLoading(false);
+      if (requestId === triageRequestIdRef.current) {
+        setTriageLoading(false);
+      }
     }
   }, [buildTriageParams]);
 

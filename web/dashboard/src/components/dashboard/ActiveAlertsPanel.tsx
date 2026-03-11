@@ -45,6 +45,9 @@ export function ActiveAlertsPanel({
   onRefresh,
 }: ActiveAlertsPanelProps) {
   const totalCount = activeSessions.length + queuedSessions.length;
+  const isInitialLoad = loading && totalCount === 0;
+  const isErrorOnly = !!error && totalCount === 0;
+  const isEmpty = !error && totalCount === 0;
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', mb: 3 }}>
@@ -89,9 +92,11 @@ export function ActiveAlertsPanel({
         />
 
         <Tooltip title="Refresh alerts">
-          <IconButton size="small" onClick={onRefresh} disabled={loading} aria-label="Refresh alerts">
-            {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-          </IconButton>
+          <span>
+            <IconButton size="small" onClick={onRefresh} disabled={loading} aria-label="Refresh alerts">
+              {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+            </IconButton>
+          </span>
         </Tooltip>
       </Box>
 
@@ -102,12 +107,15 @@ export function ActiveAlertsPanel({
         </Alert>
       )}
 
-      {/* Loading state */}
-      {loading && totalCount === 0 ? (
+      {isInitialLoad && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : error && totalCount === 0 ? null : totalCount === 0 ? (
+      )}
+
+      {!isInitialLoad && isErrorOnly && null}
+
+      {!isInitialLoad && isEmpty && (
         <Box sx={{ py: 6, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No Active Alerts
@@ -116,7 +124,9 @@ export function ActiveAlertsPanel({
             All alerts are currently completed or there are no alerts in the system.
           </Typography>
         </Box>
-      ) : (
+      )}
+
+      {!isInitialLoad && !isErrorOnly && totalCount > 0 && (
         <Box sx={{ p: 2 }}>
           {queuedSessions.length > 0 && (
             <Box sx={{ mb: 2 }}>
