@@ -867,10 +867,10 @@ func (p *EventPublisher) PublishTransient(ctx, channel, payload) error          
 func (p *EventPublisher) PublishStageStatus(ctx, sessionID, payload) error       // Stage lifecycle
 ```
 
-The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
+The `agent.EventPublisher` interface (`pkg/agent/context.go`) exposes typed methods: `PublishTimelineCreated`, `PublishTimelineCompleted`, `PublishStreamChunk`, `PublishSessionStatus`, `PublishStageStatus`, `PublishReviewStatus`, `PublishChatCreated`, `PublishChatUserMessage`.
 
 **Event Types**:
-- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `chat.created`, `chat.user_message`
+- **Persistent** (DB + NOTIFY): `timeline_event.created`, `timeline_event.completed`, `session.status`, `stage.status`, `execution.status`, `execution.progress`, `review.status`, `chat.created`, `chat.user_message`
 - **Transient** (NOTIFY only): `stream.chunk` (LLM token deltas)
 
 Timeline event payloads carry an `event_type` field that distinguishes the kind of event (e.g., `llm_response`, `llm_tool_call`, `final_analysis`, `provider_fallback`). See the [TimelineEvent schema](#8-history--audit-trail) for the full list.
@@ -928,6 +928,7 @@ AlertSession (session metadata, status, alert data)
   |           +-- Layer 1: TimelineEvent (UX timeline -- what the user sees)
   |           +-- Layer 2: Message (LLM conversation -- linear, no duplication)
   |           +-- Layer 3-4: LLMInteraction / MCPInteraction (trace/observability)
+  +-- SessionReviewActivity (review workflow audit trail)
   +-- Event (WebSocket distribution -- transient)
   +-- Chat -> ChatUserMessage (follow-up chat)
 ```
@@ -935,7 +936,7 @@ AlertSession (session metadata, status, alert data)
 #### Key Entity Fields
 
 **AlertSession** (`ent/schema/alertsession.go`):
-`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `deleted_at` (soft delete), timestamps
+`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `review_status` (needs_review/in_progress/resolved, nullable — NULL while investigation active), `assignee`, `assigned_at`, `resolved_at`, `resolution_reason` (actioned/dismissed), `resolution_note`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
 `id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action), `referenced_stage_id` (nullable FK — synthesis→investigation pairing), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
@@ -948,6 +949,9 @@ AlertSession (session metadata, status, alert data)
 
 **Message** (`ent/schema/message.go`):
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
+
+**SessionReviewActivity** (`ent/schema/sessionreviewactivity.go`):
+`activity_id`, `session_id`, `actor`, `action` (claim/unclaim/resolve/reopen), `from_status`, `to_status`, `resolution_reason` (actioned/dismissed), `note`, `created_at`. Every review workflow transition is logged here for auditability. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md).
 
 #### Service Layer
 
@@ -974,6 +978,9 @@ AlertSession (session metadata, status, alert data)
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
 | GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, missing tools) |
 | POST | `/api/v1/sessions/:id/score` | Trigger on-demand re-scoring (202 Accepted, 409 if in-progress) |
+| PATCH | `/api/v1/sessions/:id/review` | Review workflow transition (claim/unclaim/resolve/reopen) |
+| GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
+| GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/resolved) |
 | GET | `/health` | Health check (DB, worker pool) |
 
 ---
@@ -1064,7 +1071,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 
 | Route | Page | Purpose |
 |-------|------|---------|
-| `/` | DashboardPage | Session list with active/queued/historical panels, filters, pagination |
+| `/` | DashboardPage | Session list + Triage view (tabbed: Sessions \| Triage) with filters, pagination |
 | `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat |
 | `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
@@ -1080,6 +1087,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
+- **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `resolved`) with collapsible sections and action buttons (Claim, Resolve, Reopen). Review transitions use `PATCH /api/v1/sessions/:id/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md).
 
 #### Text Search
 
@@ -1111,6 +1119,8 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - `web/dashboard/src/utils/rehypeSearchHighlight.ts` -- Rehype plugin for search term highlighting in markdown
 - `web/dashboard/src/services/websocketService.ts` -- WebSocket with reconnect + catchup
 - `web/dashboard/src/services/api.ts` -- Axios-based API client with retry
+- `web/dashboard/src/components/dashboard/TriageGroupedList.tsx` -- Triage grouped list with collapsible sections
+- `web/dashboard/src/components/dashboard/TriageFilterBar.tsx` -- Triage filter bar with assignee filter
 - `web/dashboard/src/hooks/` -- useChatState, useVersionMonitor, useAdvancedAutoScroll
 - `web/dashboard/src/contexts/` -- AuthContext, VersionContext
 

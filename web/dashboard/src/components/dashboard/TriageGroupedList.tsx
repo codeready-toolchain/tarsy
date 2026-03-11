@@ -67,7 +67,7 @@ const groups_config: GroupConfig[] = [
   },
   {
     key: 'in_progress',
-    label: 'In Progress',
+    label: 'In Review',
     dataKey: 'in_progress',
     icon: <AssignmentTurnedIn sx={{ fontSize: 18 }} />,
     defaultOpen: true,

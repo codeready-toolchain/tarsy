@@ -1,21 +1,11 @@
-# Session Workflow — Detailed Design
+# ADR-0009: Session Workflow
 
-**Status:** Final
-**Decisions:** [session-workflow-design-questions.md](session-workflow-design-questions.md)
-**Sketch:** [session-workflow-sketch.md](session-workflow-sketch.md)
+**Status:** Implemented (Phases 1–3); Phases 4–5 deferred
+**Date:** 2026-03-11
 
 ## Overview
 
 TARSy automates incident investigation but has no human workflow after the AI finishes. This design adds a lightweight review lifecycle on top of the existing investigation lifecycle, giving SRE teams an action-oriented "Triage" view alongside the current session list.
-
-Sketch decisions (from [session-workflow-questions.md](session-workflow-questions.md)):
-
-- **Data model**: `review_status` + `assignee` fields on `alert_sessions` (fast queries) + `session_review_activity` table (history/feedback).
-- **States**: `needs_review` → `in_progress` → `resolved`, with `resolution_reason` (`actioned` / `dismissed`) on resolve.
-- **Entry**: All terminal sessions auto-enter as `needs_review`. Cancelled sessions auto-resolve as `dismissed`. Active investigations appear as a virtual "Investigating" column.
-- **Assignment**: Self-claim only, using `X-Forwarded-User` header value.
-- **Dashboard**: "Sessions" | "Triage" tabs. Triage has grouped list + Kanban sub-layouts.
-- **Interactions**: Contextual action buttons (both views) + drag-and-drop (Kanban) + keyboard shortcuts.
 
 ## Design Principles
 
@@ -24,6 +14,26 @@ Sketch decisions (from [session-workflow-questions.md](session-workflow-question
 3. **Auditable.** Every workflow transition is logged in the activity table with actor, timestamp, from/to state.
 4. **Real-time.** Workflow state changes propagate via WebSocket so all users see the same board state.
 5. **Consistent patterns.** Follow existing TARSy conventions: Ent schema for DB, service layer for business logic, Echo handlers for API, event publisher for WebSocket, MUI for frontend.
+
+## Decisions
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| S-Q1 | Where does the review lifecycle live? | Hybrid: fields on session + activity table | Fast list queries (no JOIN), history in activity table, follows scoring pattern (denormalized current state + related table) |
+| S-Q2 | View paradigm for workflow dashboard? | Additive hybrid: keep current list + new Triage tab | Purely additive — existing list unchanged; clean separation of "what has the system done" vs. "what do I need to do" |
+| S-Q3 | How does assignment work? | Self-claim only (X-Forwarded-User) | No user registry exists; extend to assign-to-others when OIDC groups land |
+| S-Q4 | Review workflow states? | 3 states (`needs_review` → `in_progress` → `resolved`) + `resolution_reason` | Simple state machine; resolution reason (`actioned`/`dismissed`) captures outcome without extra states |
+| S-Q5 | Which sessions enter the workflow? | All terminal sessions auto-enter + virtual "Investigating" column | Nothing falls through cracks; SREs see full picture; `dismissed` is escape valve for noise |
+| S-Q6 | Where does the workflow view live? | Tabs on existing dashboard (Sessions \| Triage) | Everything in one place; default stays as current view; last-used tab persisted |
+| S-Q7 | How to identify users? | Raw `X-Forwarded-User` header value | Zero infrastructure; consistent with existing `author` pattern |
+| D-Q1 | How to backfill existing terminal sessions? | Backfill all to `resolved`/`dismissed` | Clean start; only new investigations enter the workflow queue |
+| D-Q2 | Claiming already-claimed session? | Allow with frontend confirmation | Prevents accidental overrides while allowing handoff when someone is off-shift |
+| D-Q3 | Direct resolve from `needs_review`? | Allow, auto-set assignee to resolver | Fast noise dismissal; clean data (no NULL assignees on resolved sessions) |
+| D-Q4 | Dedicated triage API endpoint? | Yes — `GET /api/v1/sessions/triage` with grouped response | Single call for entire view; server-side counts; bounded resolved group |
+| D-Q5 | `review.status` event channels? | Both SessionChannel and GlobalSessionsChannel | Session detail page gets real-time updates; consistent with `session.status` pattern |
+| D-Q6 | Kanban card content? | Alert type, chain, author, time, exec summary snippet, assignee/score badges | Enough to triage without opening detail page; no investigation internals |
+| D-Q7 | Triage view fetch strategy? | Single call with `resolved_limit` | Atomic + bounded response; active groups return in full (small); resolved is capped |
+| D-Q8 | Drag-and-drop library? | `@dnd-kit/core` + `@dnd-kit/sortable` | React 19 compatible, accessible, ~27kB, largest community |
 
 ## Architecture
 
@@ -65,7 +75,7 @@ SRE clicks "Resolve"
 | **API** | `pkg/api/handler_review.go` | New handler for `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity`, `GET /sessions/triage` |
 | **API** | `pkg/api/server.go` | Register new routes |
 | **Events** | `pkg/events/types.go`, `payloads.go`, `publisher.go` | Add `review.status` event type, payload, and `PublishReviewStatus` method |
-| **Frontend** | Dashboard components | Tab bar, Triage view, Kanban board, grouped list, action buttons, resolve modal |
+| **Frontend** | Dashboard components | Tab bar, Triage view, grouped list, action buttons, resolve modal |
 
 ## Database Schema
 
@@ -429,7 +439,7 @@ Single endpoint for all workflow transitions.
 | `404 Not Found` | Session doesn't exist. |
 | `409 Conflict` | State changed since last read — the atomic compare-and-transition found zero affected rows (e.g., unclaiming a session that was already resolved by another user, reopening a session that is currently `in_progress`). |
 
-**Auth:** `extractAuthor` provides the actor identity from the `X-Forwarded-User` header (set by oauth2-proxy or kube-rbac-proxy running as colocated sidecars). **Deployment requirement:** the ingress must strip any client-supplied `X-Forwarded-User` header (e.g., `proxy_set_header X-Forwarded-User "";`) to prevent identity spoofing — the auth proxy is the sole source of truth. See [token-exchange-sketch.md](token-exchange-sketch.md) and [session-authorization-sketch.md](session-authorization-sketch.md) for the full trust model and deployment guarantees.
+**Auth:** `extractAuthor` provides the actor identity from the `X-Forwarded-User` header (set by oauth2-proxy or kube-rbac-proxy running as colocated sidecars). **Deployment requirement:** the ingress must strip any client-supplied `X-Forwarded-User` header (e.g., `proxy_set_header X-Forwarded-User "";`) to prevent identity spoofing — the auth proxy is the sole source of truth. See [token-exchange-sketch.md](../proposals/token-exchange-sketch.md) and [session-authorization-sketch.md](../proposals/session-authorization-sketch.md) for the full trust model and deployment guarantees.
 
 ### GET /api/v1/sessions/:id/review-activity
 
@@ -559,7 +569,7 @@ func (p *EventPublisher) PublishReviewStatus(ctx context.Context, sessionID stri
 }
 ```
 
-The frontend Triage view subscribes to the `sessions` channel (already subscribed for `session.status` and `session.progress`). On `review.status` events, it updates the card's position in the Kanban/grouped list. The session detail page subscribes to `session:{id}` and can show the current review state with real-time updates.
+The frontend Triage view subscribes to the `sessions` channel (already subscribed for `session.status` and `session.progress`). On `review.status` events, it updates the card's position in the grouped list. The session detail page subscribes to `session:{id}` and can show the current review state with real-time updates.
 
 ## Frontend
 
@@ -579,37 +589,22 @@ DashboardView (existing, modified)
     │   ├── Search
     │   ├── Alert type / chain filters (shared with Sessions)
     │   └── Assignee filter ("My sessions" / "Unassigned" / "All")
-    ├── LayoutToggle: "List" | "Board"
-    │   └── ToggleButtonGroup (persisted to localStorage 'tarsy-triage-layout')
-    ├── [List layout] TriageGroupedList
-    │   ├── TriageGroupSection ("Investigating", count, collapsible)
-    │   │   └── TriageSessionRow[] (compact, read-only)
-    │   ├── TriageGroupSection ("Needs Review", count)
-    │   │   └── TriageSessionRow[] (with Claim button)
-    │   ├── TriageGroupSection ("In Progress", count)
-    │   │   └── TriageSessionRow[] (with Resolve button)
-    │   └── TriageGroupSection ("Resolved", count, collapsed by default)
-    │       └── TriageSessionRow[] (with resolution reason badge)
-    └── [Board layout] TriageKanbanBoard
-        ├── KanbanColumn ("Investigating", read-only)
-        │   └── KanbanCard[] (compact, no actions)
-        ├── KanbanColumn ("Needs Review")
-        │   └── KanbanCard[] (Claim button, droppable)
-        ├── KanbanColumn ("In Progress")
-        │   └── KanbanCard[] (Resolve button, droppable)
-        └── KanbanColumn ("Resolved", collapsed/scrollable)
-            └── KanbanCard[] (resolution badge, droppable for reopen)
+    └── TriageGroupedList
+        ├── TriageGroupSection ("Investigating", count, collapsible)
+        │   └── TriageSessionRow[] (compact, read-only)
+        ├── TriageGroupSection ("Needs Review", count)
+        │   └── TriageSessionRow[] (with Claim button)
+        ├── TriageGroupSection ("In Progress", count)
+        │   └── TriageSessionRow[] (with Resolve button)
+        └── TriageGroupSection ("Resolved", count, collapsed by default)
+            └── TriageSessionRow[] (with resolution reason badge)
 ```
 
 ### Key components
 
 **TriageSessionRow** — Table row for the grouped list view. Reuses data from `DashboardSessionItem` (extended with review fields). Shows: status badge, alert type, chain, author, assignee badge, time, action button.
 
-**KanbanCard** — Card for the Kanban board. Compact: alert type, chain, author/assignee, time, executive summary snippet (truncated). Primary action button contextual to column. Three-dot menu for secondary actions.
-
-**ResolveModal** — Compact dialog for resolving a session. Resolution reason radio group (`actioned` / `dismissed`) + optional note textarea + confirm button. Used by both the Resolve button and drag-to-Resolved.
-
-**Card content:** Standard operational info — alert type, chain, author, timestamp, executive summary snippet, assignee badge (for claimed cards), severity/score badge. No investigation internals (tool calls, reasoning steps) — those belong on the detail page.
+**ResolveModal** — Compact dialog for resolving a session. Resolution reason radio group (`actioned` / `dismissed`) + optional note textarea + confirm button.
 
 ### Data fetching
 
@@ -619,41 +614,19 @@ Single API call to `GET /api/v1/sessions/triage` returns all four groups — inc
 
 Extend the existing `sessions` channel handler in `DashboardView`:
 
-- On `review.status` event: update the session's review state in the Triage view (move card between columns/groups).
+- On `review.status` event: update the session's review state in the Triage view (move between groups).
 - On `session.status` with terminal status: the backend already sets `review_status`, so the next data refresh picks it up. Alternatively, a `review.status` event fires simultaneously.
-
-### Drag-and-drop
-
-Kanban drag-and-drop using `@dnd-kit/core` and `@dnd-kit/sortable`:
-- Each `KanbanColumn` is a droppable area.
-- Each `KanbanCard` is a draggable item.
-- On drop: determine source and target columns, validate transition, call API, optimistic UI update.
-- If target is "Resolved": intercept drop, show `ResolveModal`, call API only after confirmation.
-- Investigating column: not droppable as source (cards can't be dragged out).
-
-**DnD library:** `@dnd-kit/core` + `@dnd-kit/sortable` — React 19 compatible, accessible, ~27kB, largest community. See [questions document](session-workflow-design-questions.md), Q8 for full comparison.
-
-### Keyboard shortcuts
-
-Global keyboard handler (active when Triage tab is focused):
-- `C` — claim the currently focused/selected card.
-- `R` — resolve the currently focused card (opens ResolveModal).
-- Arrow keys — navigate between cards.
-- `Esc` — close ResolveModal.
-
-Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 
 ### localStorage keys
 
 | Key | Value | Default |
 |---|---|---|
 | `tarsy-dashboard-tab` | `"sessions"` \| `"triage"` | `"sessions"` |
-| `tarsy-triage-layout` | `"list"` \| `"board"` | `"board"` |
 | `tarsy-triage-filters` | `TriageFilter` JSON | `{}` |
 
 ## Implementation Plan
 
-### Phase 1: Backend — Schema + Service - ✅ DONE
+### Phase 1: Backend — Schema + Service — DONE
 
 1. Add fields and `review_activities` edge to `ent/schema/alertsession.go`
 2. Create `ent/schema/sessionreviewactivity.go`
@@ -665,7 +638,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 8. Extend `ListSessionsForDashboard` with `review_status` and `assignee` filters
 9. Add review fields to `DashboardSessionItem` response DTO
 
-### Phase 2: Backend — Events + API handlers - ✅ DONE
+### Phase 2: Backend — Events + API handlers — DONE
 
 1. Add `EventTypeReviewStatus` and `ReviewStatusPayload` to `pkg/events/types.go` and `payloads.go`
 2. Add `PublishReviewStatus` to `EventPublisher` (dual-channel: persist to session channel, transient to global)
@@ -675,7 +648,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 6. Publish `review.status` events from API handler after `UpdateReviewStatus` calls (manual transitions)
 7. Unit tests for service methods, Worker review init, and handlers
 
-### Phase 3: Frontend — Tab bar + Triage grouped list - ✅ DONE
+### Phase 3: Frontend — Tab bar + Triage grouped list — DONE
 
 1. Add tab bar to `DashboardView` (Sessions | Triage)
 2. Add `review_status`, `assignee`, `resolution_reason` to TypeScript types
@@ -687,16 +660,16 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 8. Wire WebSocket `review.status` events
 9. localStorage persistence for tab and filters
 
-### Phase 4: Frontend — Kanban board
+### Phase 4: Frontend — Kanban board — DEFERRED
 
-1. Add drag-and-drop library dependency
+1. Add drag-and-drop library dependency (`@dnd-kit/core` + `@dnd-kit/sortable`)
 2. Build `TriageKanbanBoard` with `KanbanColumn` and `KanbanCard`
 3. Implement drag-and-drop transitions with optimistic UI
 4. Intercept drag-to-Resolved with ResolveModal
 5. Layout toggle (List | Board) in Triage tab
 6. Keyboard shortcuts
 
-### Phase 5: Polish
+### Phase 5: Polish — DEFERRED
 
 1. Review activity display on session detail page
 2. Assignee badge on SessionListItem (Sessions tab, optional column)

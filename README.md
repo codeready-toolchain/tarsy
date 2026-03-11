@@ -88,6 +88,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
+- **Triage Workflow**: Post-investigation review lifecycle with self-claim assignment, resolve with reason/notes, and a grouped Triage view alongside the session list — real-time updates via WebSocket
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
 - **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
 - **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views
@@ -124,8 +125,9 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 7. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
 8. **Comprehensive analysis** provided to engineers with actionable recommendations
 9. **Session scored** (if enabled) -- async quality evaluation with score, analysis, and missing tools report
-10. **Follow-up chat available** after investigation completes
-11. **Full audit trail** captured with stage-level detail and sub-agent trace trees
+10. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, resolve, dismiss)
+11. **Follow-up chat available** after investigation completes
+12. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
 ### Components
 
@@ -162,6 +164,11 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 ### Scoring
 - `GET /api/v1/sessions/:id/score` -- Get latest session score (analysis, missing tools report, metadata)
 - `POST /api/v1/sessions/:id/score` -- Trigger (re-)scoring (202 Accepted, 409 if already in progress)
+
+### Review & Triage
+- `PATCH /api/v1/sessions/:id/review` -- Review workflow transition (claim, unclaim, resolve, reopen)
+- `GET /api/v1/sessions/:id/review-activity` -- Review activity audit log
+- `GET /api/v1/sessions/triage/:group` -- Per-group paginated triage view
 
 ### Trace & Observability
 - `GET /api/v1/sessions/:id/timeline` -- Session timeline events
