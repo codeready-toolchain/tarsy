@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -321,23 +322,39 @@ type ReviewActivityResponse struct {
 
 // --- Triage DTOs ---
 
-// TriageGroup is a single column/section in the triage view.
+// TriageGroupKey identifies a triage group in the URL path.
+type TriageGroupKey string
+
+// TriageGroupKey constants for each triage bucket.
+const (
+	TriageGroupInvestigating TriageGroupKey = "investigating"
+	TriageGroupNeedsReview   TriageGroupKey = "needs_review"
+	TriageGroupInProgress    TriageGroupKey = "in_progress"
+	TriageGroupResolved      TriageGroupKey = "resolved"
+)
+
+// ParseTriageGroupKey validates a raw string from the URL path.
+func ParseTriageGroupKey(s string) (TriageGroupKey, error) {
+	switch TriageGroupKey(s) {
+	case TriageGroupInvestigating, TriageGroupNeedsReview, TriageGroupInProgress, TriageGroupResolved:
+		return TriageGroupKey(s), nil
+	default:
+		return "", fmt.Errorf("unknown triage group %q", s)
+	}
+}
+
+// TriageGroup is the paginated response for a single triage group.
 type TriageGroup struct {
-	Count    int                    `json:"count"`
-	Sessions []DashboardSessionItem `json:"sessions"`
-	HasMore  bool                   `json:"has_more,omitempty"`
+	Count      int                    `json:"count"`
+	Page       int                    `json:"page"`
+	PageSize   int                    `json:"page_size"`
+	TotalPages int                    `json:"total_pages"`
+	Sessions   []DashboardSessionItem `json:"sessions"`
 }
 
-// TriageResponse is the grouped response for GET /sessions/triage.
-type TriageResponse struct {
-	Investigating TriageGroup `json:"investigating"`
-	NeedsReview   TriageGroup `json:"needs_review"`
-	InProgress    TriageGroup `json:"in_progress"`
-	Resolved      TriageGroup `json:"resolved"`
-}
-
-// TriageParams holds query parameters for the triage endpoint.
-type TriageParams struct {
-	ResolvedLimit int    // max resolved sessions to return (default 20)
-	Assignee      string // filter by assignee (exact match)
+// TriageGroupParams holds query parameters for the per-group triage endpoint.
+type TriageGroupParams struct {
+	Page     int
+	PageSize int
+	Assignee string
 }

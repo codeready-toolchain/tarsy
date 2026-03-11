@@ -245,7 +245,7 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions", s.listSessionsHandler)
 	v1.GET("/sessions/active", s.activeSessionsHandler)
 	v1.GET("/sessions/filter-options", s.filterOptionsHandler)
-	v1.GET("/sessions/triage", s.getTriageHandler)
+	v1.GET("/sessions/triage/:group", s.getTriageGroupHandler)
 
 	// Session detail and actions.
 	v1.GET("/sessions/:id", s.getSessionHandler)

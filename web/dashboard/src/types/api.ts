@@ -86,24 +86,21 @@ export interface ScoreSessionResponse {
 
 // --- Triage / Review ---
 
-/** Single group in the triage response. */
+export type TriageGroupKey = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
+
+/** Paginated response for a single triage group. */
 export interface TriageGroup {
   count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
   sessions: DashboardSessionItem[];
-  has_more?: boolean;
 }
 
-/** Grouped response from GET /sessions/triage. */
-export interface TriageResponse {
-  investigating: TriageGroup;
-  needs_review: TriageGroup;
-  in_progress: TriageGroup;
-  resolved: TriageGroup;
-}
-
-/** Query parameters for the triage endpoint. */
-export interface TriageParams {
-  resolved_limit?: number;
+/** Query parameters for GET /sessions/triage/:group. */
+export interface TriageGroupParams {
+  page?: number;
+  page_size?: number;
   assignee?: string;
 }
 

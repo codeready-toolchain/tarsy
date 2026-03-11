@@ -282,80 +282,85 @@ func (s *SessionService) GetReviewActivity(ctx context.Context, sessionID string
 	return activities, nil
 }
 
-// GetTriageSessions returns sessions grouped by review status for the triage view.
-func (s *SessionService) GetTriageSessions(ctx context.Context, params models.TriageParams) (*models.TriageResponse, error) {
-	if params.ResolvedLimit <= 0 {
-		params.ResolvedLimit = 20
-	}
+// GetTriageGroup returns a single paginated triage group.
+func (s *SessionService) GetTriageGroup(ctx context.Context, group models.TriageGroupKey, params models.TriageGroupParams) (*models.TriageGroup, error) {
+	predicates := triageGroupPredicates(group)
 
-	investigating, err := s.queryTriageGroup(ctx, nil, params.Assignee,
-		alertsession.StatusIn(alertsession.StatusPending, alertsession.StatusInProgress, alertsession.StatusCancelling),
-		alertsession.ReviewStatusIsNil(),
-	)
+	result, err := s.queryTriageGroup(ctx, params.Page, params.PageSize, params.Assignee, predicates...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query investigating sessions: %w", err)
+		return nil, fmt.Errorf("failed to query %s sessions: %w", group, err)
 	}
-
-	needsReview, err := s.queryTriageGroup(ctx, nil, params.Assignee,
-		alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query needs_review sessions: %w", err)
-	}
-
-	inProgress, err := s.queryTriageGroup(ctx, nil, params.Assignee,
-		alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query in_progress sessions: %w", err)
-	}
-
-	resolvedLimit := params.ResolvedLimit + 1
-	resolved, err := s.queryTriageGroup(ctx, &resolvedLimit, params.Assignee,
-		alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query resolved sessions: %w", err)
-	}
-
-	hasMore := len(resolved) > params.ResolvedLimit
-	if hasMore {
-		resolved = resolved[:params.ResolvedLimit]
-	}
-
-	return &models.TriageResponse{
-		Investigating: models.TriageGroup{Count: len(investigating), Sessions: investigating},
-		NeedsReview:   models.TriageGroup{Count: len(needsReview), Sessions: needsReview},
-		InProgress:    models.TriageGroup{Count: len(inProgress), Sessions: inProgress},
-		Resolved:      models.TriageGroup{Count: len(resolved), Sessions: resolved, HasMore: hasMore},
-	}, nil
+	return result, nil
 }
 
-// queryTriageGroup queries sessions matching the given predicates and maps them
-// to DashboardSessionItem. If limit is non-nil, at most *limit sessions are returned.
-func (s *SessionService) queryTriageGroup(ctx context.Context, limit *int, assignee string, predicates ...predicate.AlertSession) ([]models.DashboardSessionItem, error) {
-	q := s.client.AlertSession.Query().
+// triageGroupPredicates returns the ent predicates for a given triage group key.
+func triageGroupPredicates(group models.TriageGroupKey) []predicate.AlertSession {
+	switch group {
+	case models.TriageGroupInvestigating:
+		return []predicate.AlertSession{
+			alertsession.StatusIn(alertsession.StatusPending, alertsession.StatusInProgress, alertsession.StatusCancelling),
+			alertsession.ReviewStatusIsNil(),
+		}
+	case models.TriageGroupNeedsReview:
+		return []predicate.AlertSession{
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
+		}
+	case models.TriageGroupInProgress:
+		return []predicate.AlertSession{
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
+		}
+	case models.TriageGroupResolved:
+		return []predicate.AlertSession{
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+		}
+	default:
+		return nil
+	}
+}
+
+// queryTriageGroup counts and fetches a paginated slice of sessions matching
+// the given predicates, returning a fully populated TriageGroup.
+func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize int, assignee string, predicates ...predicate.AlertSession) (*models.TriageGroup, error) {
+	base := s.client.AlertSession.Query().
 		Where(alertsession.DeletedAtIsNil()).
-		Where(predicates...).
-		Order(ent.Desc(alertsession.FieldCreatedAt))
+		Where(predicates...)
 
 	if assignee != "" {
-		q = q.Where(alertsession.AssigneeEQ(assignee))
-	}
-	if limit != nil {
-		q = q.Limit(*limit)
+		base = base.Where(alertsession.AssigneeEQ(assignee))
 	}
 
-	sessions, err := q.All(ctx)
+	total, err := base.Clone().Count(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("count: %w", err)
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	offset := (page - 1) * pageSize
+	sessions, err := base.Clone().
+		Order(ent.Desc(alertsession.FieldCreatedAt)).
+		Offset(offset).
+		Limit(pageSize).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch: %w", err)
 	}
 
 	items := make([]models.DashboardSessionItem, 0, len(sessions))
 	for _, sess := range sessions {
 		items = append(items, sessionToTriageItem(sess))
 	}
-	return items, nil
+
+	return &models.TriageGroup{
+		Count:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+		Sessions:   items,
+	}, nil
 }
 
 // sessionToTriageItem maps an ent.AlertSession to a DashboardSessionItem with

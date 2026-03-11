@@ -283,7 +283,7 @@ func TestSessionService_GetReviewActivity(t *testing.T) {
 	})
 }
 
-func TestSessionService_GetTriageSessions(t *testing.T) {
+func TestSessionService_GetTriageGroup(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
@@ -297,86 +297,101 @@ func TestSessionService_GetTriageSessions(t *testing.T) {
 	resolvedID2 := seedReviewSession(t, service, "resolved", "bob@test.com")
 	resolvedID3 := seedReviewSession(t, service, "resolved", "alice@test.com")
 
-	t.Run("groups sessions correctly", func(t *testing.T) {
-		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 20})
+	defaultParams := models.TriageGroupParams{Page: 1, PageSize: 20}
+
+	t.Run("investigating group", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupInvestigating, defaultParams)
 		require.NoError(t, err)
 
-		assert.Equal(t, 2, result.Investigating.Count)
-		investigatingIDs := collectIDs(result.Investigating.Sessions)
-		assert.Contains(t, investigatingIDs, investigatingID)
-		assert.Contains(t, investigatingIDs, pendingID)
+		assert.Equal(t, 2, result.Count)
+		assert.Equal(t, 1, result.Page)
+		assert.Equal(t, 1, result.TotalPages)
+		ids := collectIDs(result.Sessions)
+		assert.Contains(t, ids, investigatingID)
+		assert.Contains(t, ids, pendingID)
 
-		assert.Equal(t, 1, result.NeedsReview.Count)
-		assert.Equal(t, needsReviewID, result.NeedsReview.Sessions[0].ID)
-
-		assert.Equal(t, 1, result.InProgress.Count)
-		assert.Equal(t, inProgressID, result.InProgress.Sessions[0].ID)
-		assert.NotNil(t, result.InProgress.Sessions[0].Assignee)
-		assert.Equal(t, "alice@test.com", *result.InProgress.Sessions[0].Assignee)
-
-		assert.Equal(t, 3, result.Resolved.Count)
-		assert.False(t, result.Resolved.HasMore)
-	})
-
-	t.Run("resolved_limit caps resolved group", func(t *testing.T) {
-		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 2})
-		require.NoError(t, err)
-
-		assert.Equal(t, 2, result.Resolved.Count)
-		assert.True(t, result.Resolved.HasMore)
-		assert.Len(t, result.Resolved.Sessions, 2)
-
-		// Other groups unaffected.
-		assert.Equal(t, 2, result.Investigating.Count)
-		assert.Equal(t, 1, result.NeedsReview.Count)
-	})
-
-	t.Run("assignee filter", func(t *testing.T) {
-		result, err := service.GetTriageSessions(ctx, models.TriageParams{
-			ResolvedLimit: 20,
-			Assignee:      "alice@test.com",
-		})
-		require.NoError(t, err)
-
-		assert.Equal(t, 1, result.InProgress.Count)
-		assert.Equal(t, inProgressID, result.InProgress.Sessions[0].ID)
-
-		// Resolved sessions: 2 from alice, 1 from bob (filtered out).
-		resolvedIDs := collectIDs(result.Resolved.Sessions)
-		assert.Contains(t, resolvedIDs, resolvedID1)
-		assert.Contains(t, resolvedIDs, resolvedID3)
-		assert.NotContains(t, resolvedIDs, resolvedID2)
-	})
-
-	t.Run("defaults to limit 20 when zero", func(t *testing.T) {
-		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 0})
-		require.NoError(t, err)
-
-		assert.Equal(t, 3, result.Resolved.Count)
-		assert.False(t, result.Resolved.HasMore)
-	})
-
-	t.Run("review fields populated in items", func(t *testing.T) {
-		result, err := service.GetTriageSessions(ctx, models.TriageParams{ResolvedLimit: 20})
-		require.NoError(t, err)
-
-		// Investigating sessions have nil review_status.
-		for _, s := range result.Investigating.Sessions {
+		for _, s := range result.Sessions {
 			assert.Nil(t, s.ReviewStatus)
 		}
+	})
 
-		// In-progress session has review_status and assignee.
-		require.Len(t, result.InProgress.Sessions, 1)
-		require.NotNil(t, result.InProgress.Sessions[0].ReviewStatus)
-		assert.Equal(t, "in_progress", *result.InProgress.Sessions[0].ReviewStatus)
-		assert.NotNil(t, result.InProgress.Sessions[0].Assignee)
+	t.Run("needs_review group", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupNeedsReview, defaultParams)
+		require.NoError(t, err)
 
-		// Resolved sessions have resolution_reason.
-		for _, s := range result.Resolved.Sessions {
+		assert.Equal(t, 1, result.Count)
+		assert.Equal(t, needsReviewID, result.Sessions[0].ID)
+	})
+
+	t.Run("in_progress group", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupInProgress, defaultParams)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, result.Count)
+		assert.Equal(t, inProgressID, result.Sessions[0].ID)
+		require.NotNil(t, result.Sessions[0].Assignee)
+		assert.Equal(t, "alice@test.com", *result.Sessions[0].Assignee)
+		require.NotNil(t, result.Sessions[0].ReviewStatus)
+		assert.Equal(t, "in_progress", *result.Sessions[0].ReviewStatus)
+	})
+
+	t.Run("resolved group", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, defaultParams)
+		require.NoError(t, err)
+
+		assert.Equal(t, 3, result.Count)
+		assert.Len(t, result.Sessions, 3)
+		for _, s := range result.Sessions {
 			require.NotNil(t, s.ReviewStatus)
 			assert.Equal(t, "resolved", *s.ReviewStatus)
 			assert.NotNil(t, s.ResolutionReason)
 		}
+	})
+
+	t.Run("pagination", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 1, PageSize: 2,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 3, result.Count)
+		assert.Equal(t, 1, result.Page)
+		assert.Equal(t, 2, result.PageSize)
+		assert.Equal(t, 2, result.TotalPages)
+		assert.Len(t, result.Sessions, 2)
+
+		// Page 2 should return the remaining session.
+		result2, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 2, PageSize: 2,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result2.Count)
+		assert.Equal(t, 2, result2.Page)
+		assert.Len(t, result2.Sessions, 1)
+	})
+
+	t.Run("assignee filter", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 1, PageSize: 20, Assignee: "alice@test.com",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, result.Count)
+		ids := collectIDs(result.Sessions)
+		assert.Contains(t, ids, resolvedID1)
+		assert.Contains(t, ids, resolvedID3)
+		assert.NotContains(t, ids, resolvedID2)
+	})
+
+	t.Run("empty group", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 1, PageSize: 20, Assignee: "nobody@test.com",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, result.Count)
+		assert.Equal(t, 1, result.TotalPages)
+		assert.Empty(t, result.Sessions)
 	})
 }
 

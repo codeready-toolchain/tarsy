@@ -10,7 +10,6 @@ import {
 } from '@mui/material';
 import {
   OpenInNew,
-  PersonOutline,
   Undo,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -29,14 +28,6 @@ interface TriageSessionRowProps {
   onResolve?: (sessionId: string) => void;
   onReopen?: (sessionId: string) => void;
   actionLoading?: boolean;
-}
-
-function getAssigneeInitials(assignee: string): string {
-  const parts = assignee.split('@')[0].split(/[._-]/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-  return assignee.substring(0, 2).toUpperCase();
 }
 
 const resolutionReasonConfig: Record<string, { label: string; color: 'success' | 'default' }> = {
@@ -114,21 +105,9 @@ export function TriageSessionRow({
 
       {/* Assignee */}
       <TableCell>
-        {session.assignee ? (
-          <Tooltip title={session.assignee}>
-            <Chip
-              icon={<PersonOutline sx={{ fontSize: 14 }} />}
-              label={getAssigneeInitials(session.assignee)}
-              size="small"
-              variant="outlined"
-              color="primary"
-              sx={{ height: 24, fontSize: '0.7rem', fontWeight: 600 }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Tooltip>
-        ) : (
-          <Typography variant="body2" color="text.disabled">—</Typography>
-        )}
+        <Typography variant="body2" color={session.assignee ? 'text.secondary' : 'text.disabled'} noWrap>
+          {session.assignee ?? '—'}
+        </Typography>
       </TableCell>
 
       {/* Time */}

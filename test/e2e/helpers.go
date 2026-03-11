@@ -233,10 +233,10 @@ func (app *TestApp) GetReviewActivity(t *testing.T, sessionID string) map[string
 	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/review-activity", http.StatusOK)
 }
 
-// GetTriage calls GET /api/v1/sessions/triage with optional query params.
-func (app *TestApp) GetTriage(t *testing.T, queryParams string) map[string]interface{} {
+// GetTriageGroup calls GET /api/v1/sessions/triage/:group with optional query params.
+func (app *TestApp) GetTriageGroup(t *testing.T, group string, queryParams string) map[string]interface{} {
 	t.Helper()
-	path := "/api/v1/sessions/triage"
+	path := "/api/v1/sessions/triage/" + group
 	if queryParams != "" {
 		path += "?" + queryParams
 	}

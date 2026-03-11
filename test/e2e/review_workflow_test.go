@@ -108,10 +108,8 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	assert.Equal(t, "actioned", act1["resolution_reason"])
 
 	// ── Triage ──
-	triage := app.GetTriage(t, "")
-	resolved, ok := triage["resolved"].(map[string]interface{})
-	require.True(t, ok, "expected resolved group in triage")
-	resolvedSessions, ok := resolved["sessions"].([]interface{})
+	resolvedGroup := app.GetTriageGroup(t, "resolved", "")
+	resolvedSessions, ok := resolvedGroup["sessions"].([]interface{})
 	require.True(t, ok, "expected sessions array in resolved group")
 
 	found := false
@@ -177,10 +175,8 @@ func TestE2E_ReviewWorkflow_CancelledAutoResolved(t *testing.T) {
 	assert.Equal(t, alertsession.ResolutionReasonDismissed, *session.ResolutionReason)
 
 	// ── Triage ──
-	triage := app.GetTriage(t, "")
-	resolved, ok := triage["resolved"].(map[string]interface{})
-	require.True(t, ok, "expected resolved group in triage")
-	resolvedSessions, ok := resolved["sessions"].([]interface{})
+	resolvedGroup := app.GetTriageGroup(t, "resolved", "")
+	resolvedSessions, ok := resolvedGroup["sessions"].([]interface{})
 	require.True(t, ok, "expected sessions array in resolved group")
 
 	found := false

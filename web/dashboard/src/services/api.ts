@@ -20,8 +20,8 @@ import type {
   SendChatMessageResponse,
   SessionScoreResponse,
   ScoreSessionResponse,
-  TriageResponse,
-  TriageParams,
+  TriageGroup,
+  TriageGroupParams,
   UpdateReviewRequest,
   UpdateReviewResponse,
   ReviewActivityResponse,
@@ -176,9 +176,9 @@ export async function sendChatMessage(
 
 // --- Triage / Review ---
 
-export async function getTriageSessions(params?: TriageParams): Promise<TriageResponse> {
+export async function getTriageGroup(group: string, params?: TriageGroupParams): Promise<TriageGroup> {
   const response = await retryOnTemporaryError(() =>
-    client.get<TriageResponse>('/api/v1/sessions/triage', { params }),
+    client.get<TriageGroup>(`/api/v1/sessions/triage/${group}`, { params }),
   );
   return response.data;
 }

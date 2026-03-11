@@ -14,7 +14,10 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
-const maxResolvedLimit = 200
+const (
+	defaultPageSize = 20
+	maxPageSize     = 200
+)
 
 // updateReviewHandler handles PATCH /api/v1/sessions/:id/review.
 func (s *Server) updateReviewHandler(c *echo.Context) error {
@@ -123,26 +126,40 @@ func (s *Server) getReviewActivityHandler(c *echo.Context) error {
 	return c.JSON(http.StatusOK, models.ReviewActivityResponse{Activities: items})
 }
 
-// getTriageHandler handles GET /api/v1/sessions/triage.
-func (s *Server) getTriageHandler(c *echo.Context) error {
-	params := models.TriageParams{
-		ResolvedLimit: 20,
-		Assignee:      c.QueryParam("assignee"),
+// getTriageGroupHandler handles GET /api/v1/sessions/triage/:group.
+func (s *Server) getTriageGroupHandler(c *echo.Context) error {
+	group, err := models.ParseTriageGroupKey(c.Param("group"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if limitStr := c.QueryParam("resolved_limit"); limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit < 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, "resolved_limit must be a non-negative integer")
+	params := models.TriageGroupParams{
+		Page:     1,
+		PageSize: defaultPageSize,
+		Assignee: c.QueryParam("assignee"),
+	}
+
+	if v := c.QueryParam("page"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil || p < 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, "page must be a positive integer")
 		}
-		if limit > maxResolvedLimit {
+		params.Page = p
+	}
+
+	if v := c.QueryParam("page_size"); v != "" {
+		ps, err := strconv.Atoi(v)
+		if err != nil || ps < 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, "page_size must be a positive integer")
+		}
+		if ps > maxPageSize {
 			return echo.NewHTTPError(http.StatusBadRequest,
-				fmt.Sprintf("resolved_limit must not exceed %d", maxResolvedLimit))
+				fmt.Sprintf("page_size must not exceed %d", maxPageSize))
 		}
-		params.ResolvedLimit = limit
+		params.PageSize = ps
 	}
 
-	result, err := s.sessionService.GetTriageSessions(c.Request().Context(), params)
+	result, err := s.sessionService.GetTriageGroup(c.Request().Context(), group, params)
 	if err != nil {
 		return mapServiceError(err)
 	}

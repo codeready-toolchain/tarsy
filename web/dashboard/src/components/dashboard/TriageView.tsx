@@ -8,11 +8,11 @@ import {
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { ResolveModal } from './ResolveModal.tsx';
-import type { TriageResponse } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 
 interface TriageViewProps {
-  data: TriageResponse | null;
+  groups: Record<TriageGroupKey, TriageGroup | null>;
   loading: boolean;
   error: string | null;
   filters: TriageFilter;
@@ -22,10 +22,12 @@ interface TriageViewProps {
   onUnclaim: (sessionId: string) => Promise<void>;
   onResolve: (sessionId: string, reason: string, note?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
+  onPageChange: (group: TriageGroupKey, page: number) => void;
+  onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
 }
 
 export function TriageView({
-  data,
+  groups,
   loading,
   error,
   filters,
@@ -35,6 +37,8 @@ export function TriageView({
   onUnclaim,
   onResolve,
   onReopen,
+  onPageChange,
+  onPageSizeChange,
 }: TriageViewProps) {
   const [resolveSessionId, setResolveSessionId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -75,6 +79,11 @@ export function TriageView({
     withAction(() => onReopen(sessionId));
   };
 
+  const hasAnyData = Object.values(groups).some(g => g !== null);
+  const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
+    investigating: null, needs_review: null, in_progress: null, resolved: null,
+  };
+
   if (error) {
     return (
       <Box sx={{ mt: 2 }}>
@@ -82,7 +91,7 @@ export function TriageView({
           filters={filters}
           onFiltersChange={onFiltersChange}
           onRefresh={onRefresh}
-          data={null}
+          groups={emptyGroups}
           loading={loading}
         />
         <Alert severity="error" sx={{ mt: 1 }}>
@@ -92,14 +101,14 @@ export function TriageView({
     );
   }
 
-  if (loading && !data) {
+  if (loading && !hasAnyData) {
     return (
       <Box sx={{ mt: 2 }}>
         <TriageFilterBar
           filters={filters}
           onFiltersChange={onFiltersChange}
           onRefresh={onRefresh}
-          data={null}
+          groups={emptyGroups}
           loading={loading}
         />
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -109,7 +118,7 @@ export function TriageView({
     );
   }
 
-  if (!data) return null;
+  if (!hasAnyData) return null;
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -117,16 +126,18 @@ export function TriageView({
         filters={filters}
         onFiltersChange={onFiltersChange}
         onRefresh={onRefresh}
-        data={data}
+        groups={groups}
         loading={loading}
       />
 
       <TriageGroupedList
-        data={data}
+        groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
         onResolve={handleResolveClick}
         onReopen={handleReopen}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
         actionLoading={actionLoading}
       />
 

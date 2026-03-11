@@ -73,32 +73,30 @@ func TestGetReviewActivityHandler_MissingSessionID(t *testing.T) {
 	}
 }
 
-func TestGetTriageHandler_InvalidResolvedLimit(t *testing.T) {
+func TestGetTriageGroupHandler_InvalidParams(t *testing.T) {
 	s := &Server{}
 	e := echo.New()
+	e.GET("/api/v1/sessions/triage/:group", s.getTriageGroupHandler)
 
 	tests := []struct {
-		name  string
-		query string
+		name string
+		path string
 	}{
-		{name: "non-numeric", query: "resolved_limit=abc"},
-		{name: "negative", query: "resolved_limit=-5"},
-		{name: "exceeds maximum", query: "resolved_limit=999"},
+		{name: "unknown group", path: "/api/v1/sessions/triage/bogus"},
+		{name: "page non-numeric", path: "/api/v1/sessions/triage/investigating?page=abc"},
+		{name: "page zero", path: "/api/v1/sessions/triage/investigating?page=0"},
+		{name: "page_size non-numeric", path: "/api/v1/sessions/triage/resolved?page_size=xyz"},
+		{name: "page_size zero", path: "/api/v1/sessions/triage/resolved?page_size=0"},
+		{name: "page_size exceeds max", path: "/api/v1/sessions/triage/resolved?page_size=999"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/triage?"+tt.query, nil)
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
+			e.ServeHTTP(rec, req)
 
-			err := s.getTriageHandler(c)
-			if assert.Error(t, err) {
-				he, ok := err.(*echo.HTTPError)
-				if assert.True(t, ok) {
-					assert.Equal(t, http.StatusBadRequest, he.Code)
-				}
-			}
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
 		})
 	}
 }

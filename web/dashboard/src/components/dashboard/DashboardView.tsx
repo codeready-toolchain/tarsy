@@ -45,7 +45,7 @@ import {
   getSessions,
   getActiveSessions,
   getFilterOptions,
-  getTriageSessions,
+  getTriageGroup,
   updateReview,
   handleAPIError,
 } from '../../services/api.ts';
@@ -58,7 +58,7 @@ import {
 } from '../../constants/eventTypes.ts';
 import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
-import type { DashboardListParams, TriageResponse } from '../../types/api.ts';
+import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
 import {
@@ -80,6 +80,11 @@ import {
 } from '../../utils/filterPersistence.ts';
 const REFRESH_THROTTLE_MS = 1000;
 const FILTER_DEBOUNCE_MS = 300;
+const TRIAGE_GROUPS: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'resolved'];
+
+const EMPTY_TRIAGE: Record<TriageGroupKey, TriageGroup | null> = {
+  investigating: null, needs_review: null, in_progress: null, resolved: null,
+};
 
 /**
  * Build query params from the current filter + pagination + sort state.
@@ -175,7 +180,7 @@ export function DashboardView() {
   const [activeTab, setActiveTab] = useState<DashboardTab>(loadDashboardTab);
 
   // ── Triage state ──
-  const [triageData, setTriageData] = useState<TriageResponse | null>(null);
+  const [triageGroups, setTriageGroups] = useState<Record<TriageGroupKey, TriageGroup | null>>({ ...EMPTY_TRIAGE });
   const [triageLoading, setTriageLoading] = useState(false);
   const [triageError, setTriageError] = useState<string | null>(null);
   const [triageFilters, setTriageFilters] = useState<TriageFilter>(() =>
@@ -319,28 +324,56 @@ export function DashboardView() {
     userEmailRef.current = user?.email;
   }, [user?.email]);
 
-  const fetchTriageData = useCallback(async () => {
+  const triageGroupsRef = useRef(triageGroups);
+  useEffect(() => {
+    triageGroupsRef.current = triageGroups;
+  }, [triageGroups]);
+
+  const buildTriageParams = useCallback((groupKey?: TriageGroupKey): TriageGroupParams => {
+    const assignee =
+      triageFiltersRef.current.assignee === 'mine' ? userEmailRef.current ?? '' :
+      triageFiltersRef.current.assignee === 'unassigned' ? '' :
+      undefined;
+    const params: TriageGroupParams = {};
+    if (assignee !== undefined) params.assignee = assignee;
+    if (groupKey) {
+      const current = triageGroupsRef.current[groupKey];
+      if (current) params.page_size = current.page_size;
+    }
+    return params;
+  }, []);
+
+  const fetchAllTriageGroups = useCallback(async () => {
     try {
       setTriageLoading(true);
       setTriageError(null);
-      const assigneeParam =
-        triageFiltersRef.current.assignee === 'mine' ? userEmailRef.current ?? '' :
-        triageFiltersRef.current.assignee === 'unassigned' ? '' :
-        undefined;
-      const params = assigneeParam !== undefined ? { assignee: assigneeParam } : undefined;
-      const data = await getTriageSessions(params);
-      setTriageData(data);
+      const params = buildTriageParams();
+      const results = await Promise.all(
+        TRIAGE_GROUPS.map(g => getTriageGroup(g, params)),
+      );
+      setTriageGroups({
+        investigating: results[0],
+        needs_review: results[1],
+        in_progress: results[2],
+        resolved: results[3],
+      });
     } catch (err) {
       setTriageError(handleAPIError(err));
     } finally {
       setTriageLoading(false);
     }
-  }, []);
+  }, [buildTriageParams]);
 
-  const fetchTriageDataRef = useRef(fetchTriageData);
+  const fetchSingleTriageGroup = useCallback(async (groupKey: TriageGroupKey, extraParams?: Partial<TriageGroupParams>) => {
+    const params = { ...buildTriageParams(groupKey), ...extraParams };
+    const data = await getTriageGroup(groupKey, params);
+    setTriageGroups(prev => ({ ...prev, [groupKey]: data }));
+  }, [buildTriageParams]);
+
+  const fetchAllTriageGroupsRef = useRef(fetchAllTriageGroups);
   useEffect(() => {
-    fetchTriageDataRef.current = fetchTriageData;
-  }, [fetchTriageData]);
+    fetchAllTriageGroupsRef.current = fetchAllTriageGroups;
+  }, [fetchAllTriageGroups]);
 
   // ── Throttled refresh (sessions + triage together) ──
   const throttledRefresh = useCallback(() => {
@@ -348,7 +381,7 @@ export function DashboardView() {
     refreshTimeoutRef.current = setTimeout(() => {
       fetchActiveAlerts();
       fetchHistoricalAlerts();
-      fetchTriageDataRef.current();
+      fetchAllTriageGroupsRef.current();
       refreshTimeoutRef.current = null;
     }, REFRESH_THROTTLE_MS);
   }, [fetchActiveAlerts, fetchHistoricalAlerts]);
@@ -367,7 +400,7 @@ export function DashboardView() {
     fetchActiveAlerts();
     fetchHistoricalAlerts();
     if (activeTabRef.current === 'triage') {
-      fetchTriageData();
+      fetchAllTriageGroups();
     }
 
     (async () => {
@@ -447,7 +480,7 @@ export function DashboardView() {
 
       // review.status → triage refresh only
       if (type === EVENT_REVIEW_STATUS) {
-        fetchTriageDataRef.current();
+        fetchAllTriageGroupsRef.current();
         return;
       }
     };
@@ -457,7 +490,7 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
-        fetchTriageDataRef.current();
+        fetchAllTriageGroupsRef.current();
       }
     };
 
@@ -532,7 +565,7 @@ export function DashboardView() {
     setActiveTab(newValue);
     saveDashboardTab(newValue);
     if (newValue === 'triage') {
-      fetchTriageData();
+      fetchAllTriageGroups();
     }
   };
 
@@ -547,30 +580,38 @@ export function DashboardView() {
   useEffect(() => {
     if (!mountedRef.current) return;
     if (activeTabRef.current === 'triage') {
-      fetchTriageData();
+      fetchAllTriageGroups();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triageFilters]);
 
   const handleTriageClaim = async (sessionId: string) => {
     await updateReview(sessionId, { action: 'claim' });
-    fetchTriageData();
+    fetchAllTriageGroups();
   };
 
   const handleTriageUnclaim = async (sessionId: string) => {
     await updateReview(sessionId, { action: 'unclaim' });
-    fetchTriageData();
+    fetchAllTriageGroups();
   };
 
   const handleTriageResolve = async (sessionId: string, reason: string, note?: string) => {
     await updateReview(sessionId, { action: 'resolve', resolution_reason: reason, note });
-    fetchTriageData();
+    fetchAllTriageGroups();
   };
 
   const handleTriageReopen = async (sessionId: string) => {
     await updateReview(sessionId, { action: 'reopen' });
-    fetchTriageData();
+    fetchAllTriageGroups();
   };
+
+  const handleTriagePageChange = useCallback((group: TriageGroupKey, page: number) => {
+    fetchSingleTriageGroup(group, { page });
+  }, [fetchSingleTriageGroup]);
+
+  const handleTriagePageSizeChange = useCallback((group: TriageGroupKey, pageSize: number) => {
+    fetchSingleTriageGroup(group, { page: 1, page_size: pageSize });
+  }, [fetchSingleTriageGroup]);
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -924,16 +965,18 @@ export function DashboardView() {
       {/* Triage tab content */}
       {activeTab === 'triage' && (
         <TriageView
-          data={triageData}
+          groups={triageGroups}
           loading={triageLoading}
           error={triageError}
           filters={triageFilters}
           onFiltersChange={handleTriageFiltersChange}
-          onRefresh={fetchTriageData}
+          onRefresh={fetchAllTriageGroups}
           onClaim={handleTriageClaim}
           onUnclaim={handleTriageUnclaim}
           onResolve={handleTriageResolve}
           onReopen={handleTriageReopen}
+          onPageChange={handleTriagePageChange}
+          onPageSizeChange={handleTriagePageSizeChange}
         />
       )}
 

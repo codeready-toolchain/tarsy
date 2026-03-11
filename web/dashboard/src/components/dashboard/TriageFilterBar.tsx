@@ -8,13 +8,13 @@ import {
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
 import type { TriageFilter } from '../../types/dashboard.ts';
-import type { TriageResponse } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
 interface TriageFilterBarProps {
   filters: TriageFilter;
   onFiltersChange: (filters: TriageFilter) => void;
   onRefresh: () => void;
-  data: TriageResponse | null;
+  groups: Record<TriageGroupKey, TriageGroup | null>;
   loading?: boolean;
 }
 
@@ -22,7 +22,7 @@ export function TriageFilterBar({
   filters,
   onFiltersChange,
   onRefresh,
-  data,
+  groups,
   loading,
 }: TriageFilterBarProps) {
   const handleAssigneeChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
@@ -31,9 +31,8 @@ export function TriageFilterBar({
     }
   };
 
-  const totalCount = data
-    ? data.investigating.count + data.needs_review.count + data.in_progress.count + data.resolved.count
-    : 0;
+  const totalCount = Object.values(groups).reduce((sum, g) => sum + (g?.count ?? 0), 0);
+  const hasData = Object.values(groups).some(g => g !== null);
 
   return (
     <Box
@@ -64,7 +63,7 @@ export function TriageFilterBar({
 
       <Box sx={{ flexGrow: 1 }} />
 
-      {data && (
+      {hasData && (
         <Typography variant="body2" color="text.secondary">
           {totalCount} session{totalCount !== 1 ? 's' : ''}
         </Typography>

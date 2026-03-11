@@ -21,29 +21,32 @@ import {
   AssignmentTurnedIn,
   CheckCircleOutline,
 } from '@mui/icons-material';
+import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
-import type { TriageResponse } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
 interface TriageGroupedListProps {
-  data: TriageResponse;
+  groups: Record<TriageGroupKey, TriageGroup | null>;
   onClaim: (sessionId: string) => void;
   onUnclaim: (sessionId: string) => void;
   onResolve: (sessionId: string) => void;
   onReopen: (sessionId: string) => void;
+  onPageChange: (group: TriageGroupKey, page: number) => void;
+  onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
   actionLoading?: boolean;
 }
 
 interface GroupConfig {
   key: TriageGroupName;
   label: string;
-  dataKey: keyof TriageResponse;
+  dataKey: TriageGroupKey;
   icon: React.ReactElement;
   defaultOpen: boolean;
   color: string;
   accentBorder?: boolean;
 }
 
-const groups: GroupConfig[] = [
+const groups_config: GroupConfig[] = [
   {
     key: 'investigating',
     label: 'Investigating',
@@ -80,16 +83,18 @@ const groups: GroupConfig[] = [
 ];
 
 export function TriageGroupedList({
-  data,
+  groups,
   onClaim,
   onUnclaim,
   onResolve,
   onReopen,
+  onPageChange,
+  onPageSizeChange,
   actionLoading,
 }: TriageGroupedListProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    for (const g of groups) {
+    for (const g of groups_config) {
       initial[g.key] = g.defaultOpen;
     }
     return initial;
@@ -101,8 +106,9 @@ export function TriageGroupedList({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {groups.map((group) => {
-        const groupData = data[group.dataKey];
+      {groups_config.map((group) => {
+        const groupData = groups[group.dataKey];
+        if (!groupData) return null;
         const isOpen = openSections[group.key];
         const isEmpty = groupData.count === 0;
 
@@ -239,11 +245,18 @@ export function TriageGroupedList({
                       </TableBody>
                     </Table>
                   </TableContainer>
-                  {groupData.has_more && (
-                    <Box sx={{ px: 2, py: 1.5, textAlign: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Showing {groupData.sessions.length} of {groupData.count} resolved sessions
-                      </Typography>
+                  {groupData.count > 10 && (
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+                      <PaginationControls
+                        pagination={{
+                          page: groupData.page,
+                          pageSize: groupData.page_size,
+                          totalPages: groupData.total_pages,
+                          totalItems: groupData.count,
+                        }}
+                        onPageChange={(page) => onPageChange(group.dataKey, page)}
+                        onPageSizeChange={(pageSize) => onPageSizeChange(group.dataKey, pageSize)}
+                      />
                     </Box>
                   )}
                 </>
