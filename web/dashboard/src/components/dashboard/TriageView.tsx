@@ -8,6 +8,7 @@ import {
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { ResolveModal } from './ResolveModal.tsx';
+import { EditNoteModal } from './EditNoteModal.tsx';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 
@@ -22,6 +23,7 @@ interface TriageViewProps {
   onUnclaim: (sessionId: string) => Promise<void>;
   onResolve: (sessionId: string, reason: string, note?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
+  onUpdateNote: (sessionId: string, note: string) => Promise<void>;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
 }
@@ -37,10 +39,12 @@ export function TriageView({
   onUnclaim,
   onResolve,
   onReopen,
+  onUpdateNote,
   onPageChange,
   onPageSizeChange,
 }: TriageViewProps) {
   const [resolveSessionId, setResolveSessionId] = useState<string | null>(null);
+  const [editNoteState, setEditNoteState] = useState<{ sessionId: string; note: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
 
@@ -77,6 +81,17 @@ export function TriageView({
 
   const handleReopen = (sessionId: string) => {
     withAction(() => onReopen(sessionId));
+  };
+
+  const handleEditNote = (sessionId: string, currentNote: string) => {
+    setEditNoteState({ sessionId, note: currentNote });
+  };
+
+  const handleEditNoteSave = (note: string) => {
+    if (!editNoteState) return;
+    const sessionId = editNoteState.sessionId;
+    setEditNoteState(null);
+    withAction(() => onUpdateNote(sessionId, note));
   };
 
   const hasAnyData = Object.values(groups).some(g => g !== null);
@@ -136,6 +151,7 @@ export function TriageView({
         onUnclaim={handleUnclaim}
         onResolve={handleResolveClick}
         onReopen={handleReopen}
+        onEditNote={handleEditNote}
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
         actionLoading={actionLoading}
@@ -145,6 +161,14 @@ export function TriageView({
         open={resolveSessionId !== null}
         onClose={() => setResolveSessionId(null)}
         onResolve={handleResolveConfirm}
+        loading={actionLoading}
+      />
+
+      <EditNoteModal
+        open={editNoteState !== null}
+        initialNote={editNoteState?.note ?? ''}
+        onClose={() => setEditNoteState(null)}
+        onSave={handleEditNoteSave}
         loading={actionLoading}
       />
 

@@ -231,6 +231,51 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.ErrorIs(t, err, ErrConflict)
 	})
 
+	t.Run("update_note on resolved session", func(t *testing.T) {
+		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+		note := "Updated fix details"
+
+		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+			Action: "update_note",
+			Actor:  "alice@test.com",
+			Note:   &note,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, sess.ResolutionNote)
+		assert.Equal(t, "Updated fix details", *sess.ResolutionNote)
+		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus, "status should not change")
+	})
+
+	t.Run("update_note clears note when nil", func(t *testing.T) {
+		id := seedReviewSession(t, service, "resolved", "alice@test.com")
+
+		// Set a note first.
+		note := "Some note"
+		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+			Action: "update_note", Actor: "alice@test.com", Note: &note,
+		})
+		require.NoError(t, err)
+
+		// Clear it.
+		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+			Action: "update_note", Actor: "alice@test.com",
+		})
+		require.NoError(t, err)
+		assert.Nil(t, sess.ResolutionNote)
+	})
+
+	t.Run("update_note conflict on non-resolved session", func(t *testing.T) {
+		id := seedReviewSession(t, service, "in_progress", "alice@test.com")
+		note := "Should fail"
+
+		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+			Action: "update_note",
+			Actor:  "alice@test.com",
+			Note:   &note,
+		})
+		assert.ErrorIs(t, err, ErrConflict)
+	})
+
 	t.Run("unknown action returns validation error", func(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
@@ -393,6 +438,29 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 		assert.Equal(t, 0, result.Count)
 		assert.Equal(t, 1, result.TotalPages)
 		assert.Empty(t, result.Sessions)
+	})
+
+	t.Run("includes resolution_note in resolved group", func(t *testing.T) {
+		// Set a resolution note on one resolved session.
+		noteText := "Root cause was memory leak"
+		service.client.AlertSession.UpdateOneID(resolvedID1).
+			SetResolutionNote(noteText).
+			ExecX(ctx)
+
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 1, PageSize: 20, Assignee: "alice@test.com",
+		})
+		require.NoError(t, err)
+
+		var found bool
+		for _, s := range result.Sessions {
+			if s.ID == resolvedID1 {
+				found = true
+				require.NotNil(t, s.ResolutionNote)
+				assert.Equal(t, noteText, *s.ResolutionNote)
+			}
+		}
+		assert.True(t, found, "resolvedID1 should be in results")
 	})
 
 	t.Run("includes scoring fields", func(t *testing.T) {

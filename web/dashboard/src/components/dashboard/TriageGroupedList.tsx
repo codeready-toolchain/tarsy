@@ -31,6 +31,7 @@ interface TriageGroupedListProps {
   onUnclaim: (sessionId: string) => void;
   onResolve: (sessionId: string) => void;
   onReopen: (sessionId: string) => void;
+  onEditNote: (sessionId: string, currentNote: string) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
   actionLoading?: boolean;
@@ -88,6 +89,7 @@ export function TriageGroupedList({
   onUnclaim,
   onResolve,
   onReopen,
+  onEditNote,
   onPageChange,
   onPageSizeChange,
   actionLoading,
@@ -239,6 +241,7 @@ export function TriageGroupedList({
                             onUnclaim={onUnclaim}
                             onResolve={onResolve}
                             onReopen={onReopen}
+                            onEditNote={onEditNote}
                             actionLoading={actionLoading}
                           />
                         ))}

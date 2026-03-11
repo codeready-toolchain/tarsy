@@ -35,6 +35,7 @@ export interface DashboardSessionItem {
   review_status?: string | null;
   assignee?: string | null;
   resolution_reason?: string | null;
+  resolution_note?: string | null;
 }
 
 /** Active (in-progress / cancelling) session. */

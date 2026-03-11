@@ -101,6 +101,7 @@ type DashboardSessionItem struct {
 	ReviewStatus          *string    `json:"review_status"`
 	Assignee              *string    `json:"assignee"`
 	ResolutionReason      *string    `json:"resolution_reason"`
+	ResolutionNote        *string    `json:"resolution_note"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -279,16 +280,17 @@ type ReviewAction string
 
 // Review workflow actions.
 const (
-	ReviewActionClaim   ReviewAction = "claim"
-	ReviewActionUnclaim ReviewAction = "unclaim"
-	ReviewActionResolve ReviewAction = "resolve"
-	ReviewActionReopen  ReviewAction = "reopen"
+	ReviewActionClaim      ReviewAction = "claim"
+	ReviewActionUnclaim    ReviewAction = "unclaim"
+	ReviewActionResolve    ReviewAction = "resolve"
+	ReviewActionReopen     ReviewAction = "reopen"
+	ReviewActionUpdateNote ReviewAction = "update_note"
 )
 
 // ValidReviewAction returns true if the action is a known value.
 func ValidReviewAction(s string) bool {
 	switch ReviewAction(s) {
-	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionResolve, ReviewActionReopen:
+	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionResolve, ReviewActionReopen, ReviewActionUpdateNote:
 		return true
 	default:
 		return false

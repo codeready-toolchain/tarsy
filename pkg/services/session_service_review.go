@@ -100,6 +100,25 @@ func (s *SessionService) UpdateReviewStatus(_ context.Context, sessionID string,
 			nil, req.Note, now); err != nil {
 			return nil, err
 		}
+
+	case models.ReviewActionUpdateNote:
+		update := tx.AlertSession.Update().
+			Where(
+				alertsession.IDEQ(sessionID),
+				alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+			)
+		if req.Note != nil {
+			update = update.SetResolutionNote(*req.Note)
+		} else {
+			update = update.ClearResolutionNote()
+		}
+		affected, err := update.Save(writeCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update note: %w", err)
+		}
+		if affected == 0 {
+			return nil, ErrConflict
+		}
 	}
 
 	session, err := tx.AlertSession.Get(writeCtx, sessionID)
@@ -334,6 +353,7 @@ type triageRow struct {
 	ReviewStatus     *string    `sql:"review_status"`
 	Assignee         *string    `sql:"assignee"`
 	ResolutionReason *string    `sql:"resolution_reason"`
+	ResolutionNote   *string    `sql:"resolution_note"`
 	LatestScore      *int       `sql:"latest_score"`
 	ScoringStatus    *string    `sql:"scoring_status"`
 }
@@ -383,6 +403,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
 				sel.C(alertsession.FieldResolutionReason),
+			sel.C(alertsession.FieldResolutionNote),
 			)
 
 			sel.AppendSelectAs(
@@ -421,6 +442,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			ReviewStatus:     row.ReviewStatus,
 			Assignee:         row.Assignee,
 			ResolutionReason: row.ResolutionReason,
+			ResolutionNote:   row.ResolutionNote,
 			LatestScore:      row.LatestScore,
 			ScoringStatus:    row.ScoringStatus,
 		})

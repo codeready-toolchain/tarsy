@@ -8,7 +8,7 @@ import {
   IconButton,
   Box,
 } from '@mui/material';
-import { Undo } from '@mui/icons-material';
+import { Undo, StickyNote2Outlined } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -27,6 +27,7 @@ interface TriageSessionRowProps {
   onUnclaim?: (sessionId: string) => void;
   onResolve?: (sessionId: string) => void;
   onReopen?: (sessionId: string) => void;
+  onEditNote?: (sessionId: string, currentNote: string) => void;
   actionLoading?: boolean;
 }
 
@@ -42,6 +43,7 @@ export function TriageSessionRow({
   onUnclaim,
   onResolve,
   onReopen,
+  onEditNote,
   actionLoading,
 }: TriageSessionRowProps) {
   const navigate = useNavigate();
@@ -175,6 +177,17 @@ export function TriageSessionRow({
                   sx={{ height: 22, fontSize: '0.7rem' }}
                 />
               )}
+              <Tooltip title={session.resolution_note || 'Add note'}>
+                <IconButton
+                  size="small"
+                  onClick={() => onEditNote?.(session.id, session.resolution_note ?? '')}
+                  sx={{
+                    color: session.resolution_note ? 'primary.main' : 'text.disabled',
+                  }}
+                >
+                  <StickyNote2Outlined sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Reopen">
                 <IconButton
                   size="small"

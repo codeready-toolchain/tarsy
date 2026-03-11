@@ -605,6 +605,11 @@ export function DashboardView() {
     fetchAllTriageGroups();
   };
 
+  const handleTriageUpdateNote = async (sessionId: string, note: string) => {
+    await updateReview(sessionId, { action: 'update_note', note: note || undefined });
+    fetchAllTriageGroups();
+  };
+
   const handleTriagePageChange = useCallback((group: TriageGroupKey, page: number) => {
     fetchSingleTriageGroup(group, { page });
   }, [fetchSingleTriageGroup]);
@@ -975,6 +980,7 @@ export function DashboardView() {
           onUnclaim={handleTriageUnclaim}
           onResolve={handleTriageResolve}
           onReopen={handleTriageReopen}
+          onUpdateNote={handleTriageUpdateNote}
           onPageChange={handleTriagePageChange}
           onPageSizeChange={handleTriagePageSizeChange}
         />
