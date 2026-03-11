@@ -202,16 +202,17 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
     );
   }
 
-  // Not scored or unknown — match Chip/pill dimensions for alignment
+  // Not scored or unknown — match pill's inline-flex layout for alignment
   return (
     <Typography
       variant="body2"
       color="text.disabled"
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         height: size === 'small' ? 24 : 32,
-        lineHeight: size === 'small' ? '24px' : '32px',
         minWidth: 40,
-        textAlign: 'center',
       }}
     >
       —

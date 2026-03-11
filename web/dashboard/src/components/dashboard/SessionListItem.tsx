@@ -10,13 +10,11 @@ import {
   TableRow,
   TableCell,
   Typography,
-  IconButton,
   Tooltip,
   Chip,
   Box,
 } from '@mui/material';
 import {
-  OpenInNew,
   SmsOutlined as ChatIcon,
   CallSplit,
   FindInPage,
@@ -27,11 +25,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
+import { ScoreCell } from './ScoreCell.tsx';
+import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
-import { ScoreBadge } from '../common/ScoreBadge.tsx';
-import { sessionDetailPath, sessionScoringPath } from '../../constants/routes.ts';
+import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface SessionListItemProps {
@@ -51,15 +50,6 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
 
   const handleRowClick = () => {
     navigate(sessionDetailPath(session.id));
-  };
-
-  const handleNewTabClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.open(
-      `${window.location.origin}${sessionDetailPath(session.id)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
 
   return (
@@ -183,17 +173,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
       </TableCell>
 
       {/* Score — click navigates to scoring page when scoring was triggered */}
-      <TableCell
-        onClick={(e) => {
-          if (session.scoring_status || session.latest_score != null) {
-            e.stopPropagation();
-            navigate(sessionScoringPath(session.id));
-          }
-        }}
-        sx={session.scoring_status || session.latest_score != null ? { cursor: 'pointer' } : undefined}
-      >
-        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} variant="pill" showLabel={false} />
-      </TableCell>
+      <ScoreCell sessionId={session.id} score={session.latest_score} scoringStatus={session.scoring_status} />
 
       {/* Tokens */}
       <TableCell>
@@ -217,15 +197,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
 
       {/* Actions */}
       <TableCell sx={{ width: 60, textAlign: 'center' }}>
-        <Tooltip title="Open in new tab">
-          <IconButton
-            size="small"
-            onClick={handleNewTabClick}
-            sx={{ opacity: 0.7, '&:hover': { opacity: 1, backgroundColor: 'action.hover' } }}
-          >
-            <OpenInNew fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <OpenNewTabButton sessionId={session.id} />
       </TableCell>
     </TableRow>
   );

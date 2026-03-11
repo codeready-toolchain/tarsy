@@ -8,16 +8,14 @@ import {
   IconButton,
   Box,
 } from '@mui/material';
-import {
-  OpenInNew,
-  Undo,
-} from '@mui/icons-material';
+import { Undo } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
-import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
+import { ScoreCell } from './ScoreCell.tsx';
+import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { formatTimestamp, compactTimeAgo } from '../../utils/format.ts';
-import { sessionDetailPath, sessionScoringPath } from '../../constants/routes.ts';
+import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
@@ -50,15 +48,6 @@ export function TriageSessionRow({
 
   const handleRowClick = () => {
     navigate(sessionDetailPath(session.id));
-  };
-
-  const handleNewTab = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.open(
-      `${window.location.origin}${sessionDetailPath(session.id)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
 
   const hasActions = group !== 'investigating';
@@ -102,17 +91,7 @@ export function TriageSessionRow({
       </TableCell>
 
       {/* Eval Score */}
-      <TableCell
-        onClick={(e) => {
-          if (session.scoring_status || session.latest_score != null) {
-            e.stopPropagation();
-            navigate(sessionScoringPath(session.id));
-          }
-        }}
-        sx={session.scoring_status || session.latest_score != null ? { cursor: 'pointer' } : undefined}
-      >
-        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} variant="pill" showLabel={false} />
-      </TableCell>
+      <ScoreCell sessionId={session.id} score={session.latest_score} scoringStatus={session.scoring_status} />
 
       {/* Time */}
       <TableCell>
@@ -196,15 +175,7 @@ export function TriageSessionRow({
             </>
           )}
 
-          <Tooltip title="Open in new tab">
-            <IconButton
-              size="small"
-              onClick={handleNewTab}
-              sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}
-            >
-              <OpenInNew sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
+          <OpenNewTabButton sessionId={session.id} />
         </Box>
       </TableCell>
     </TableRow>
