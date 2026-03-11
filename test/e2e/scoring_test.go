@@ -260,6 +260,23 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	}
 	require.True(t, found, "session not found in list")
 
+	// ── Verify scoring fields on triage API ──
+
+	needsReviewGroup := app.GetTriageGroup(t, "needs_review", "")
+	triageSessions, ok := needsReviewGroup["sessions"].([]interface{})
+	require.True(t, ok, "expected sessions array in needs_review group")
+	var triageFound bool
+	for _, raw := range triageSessions {
+		s := raw.(map[string]interface{})
+		if s["id"] == sessionID {
+			assert.Equal(t, float64(75), s["latest_score"])
+			assert.Equal(t, "completed", s["scoring_status"])
+			triageFound = true
+			break
+		}
+	}
+	require.True(t, triageFound, "session should appear in triage needs_review group with score")
+
 	// ── Verify scoring prompts via golden files ──
 
 	captured := llm.CapturedInputs()

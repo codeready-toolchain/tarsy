@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -392,6 +393,27 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 		assert.Equal(t, 0, result.Count)
 		assert.Equal(t, 1, result.TotalPages)
 		assert.Empty(t, result.Sessions)
+	})
+
+	t.Run("includes scoring fields", func(t *testing.T) {
+		client.SessionScore.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(needsReviewID).
+			SetTotalScore(88).
+			SetScoreTriggeredBy("auto").
+			SetStatus(sessionscore.StatusCompleted).
+			SaveX(ctx)
+
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupNeedsReview, defaultParams)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.Count)
+
+		s := result.Sessions[0]
+		assert.Equal(t, needsReviewID, s.ID)
+		require.NotNil(t, s.LatestScore)
+		assert.Equal(t, 88, *s.LatestScore)
+		require.NotNil(t, s.ScoringStatus)
+		assert.Equal(t, "completed", *s.ScoringStatus)
 	})
 }
 

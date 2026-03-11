@@ -6,7 +6,6 @@
  * RFC3339 timestamps, `total_tokens` instead of `session_total_tokens`.
  */
 
-import { useState } from 'react';
 import {
   TableRow,
   TableCell,
@@ -15,9 +14,6 @@ import {
   Tooltip,
   Chip,
   Box,
-  Popover,
-  Card,
-  Divider,
 } from '@mui/material';
 import {
   OpenInNew,
@@ -25,20 +21,17 @@ import {
   CallSplit,
   FindInPage,
   Hub,
-  Summarize,
   SwapHoriz,
   BuildOutlined,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
-import { remarkPlugins } from '../../utils/markdownComponents';
 import { StatusBadge } from '../common/StatusBadge.tsx';
+import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { sessionDetailPath, sessionScoringPath } from '../../constants/routes.ts';
-import { executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface SessionListItemProps {
@@ -55,10 +48,6 @@ const iconOnlyChipSx = {
 
 export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
   const navigate = useNavigate();
-  const [summaryAnchorEl, setSummaryAnchorEl] = useState<HTMLElement | null>(null);
-
-  const hasSummary =
-    session.executive_summary && session.executive_summary.trim().length > 0;
 
   const handleRowClick = () => {
     navigate(sessionDetailPath(session.id));
@@ -83,56 +72,7 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} />
-          {hasSummary && (
-            <>
-              <Chip
-                label="Summary"
-                size="small"
-                variant="outlined"
-                color="primary"
-                onMouseEnter={(e) => setSummaryAnchorEl(e.currentTarget)}
-                onMouseLeave={() => setSummaryAnchorEl(null)}
-                onClick={(e) => e.stopPropagation()}
-                sx={{
-                  cursor: 'pointer',
-                  height: 24,
-                  fontSize: '0.75rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': (theme) => ({
-                    backgroundColor: `${theme.palette.grey[700]} !important`,
-                    color: `${theme.palette.common.white} !important`,
-                    borderColor: `${theme.palette.grey[700]} !important`,
-                  }),
-                }}
-              />
-              <Popover
-                sx={{ pointerEvents: 'none' }}
-                open={Boolean(summaryAnchorEl)}
-                anchorEl={summaryAnchorEl}
-                anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                onClose={() => setSummaryAnchorEl(null)}
-                disableRestoreFocus
-              >
-                <Card sx={{ maxWidth: 500, p: 2.5, boxShadow: 3 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                    <Summarize color="primary" />
-                    <Typography
-                      variant="subtitle1"
-                      sx={{ fontWeight: 600, color: 'primary.main' }}
-                    >
-                      Executive Summary
-                    </Typography>
-                  </Box>
-                  <Divider sx={{ mb: 1.5 }} />
-                  <Box sx={executiveSummaryMarkdownStyles}>
-                    <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{session.executive_summary}</ReactMarkdown>
-                  </Box>
-                </Card>
-              </Popover>
-            </>
-          )}
+          <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>
 

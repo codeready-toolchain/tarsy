@@ -14,8 +14,10 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
+import { ScoreBadge } from '../common/ScoreBadge.tsx';
+import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { formatTimestamp, compactTimeAgo } from '../../utils/format.ts';
-import { sessionDetailPath } from '../../constants/routes.ts';
+import { sessionDetailPath, sessionScoringPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
@@ -70,9 +72,12 @@ export function TriageSessionRow({
         '&:hover .triage-actions': { opacity: 1 },
       }}
     >
-      {/* Status */}
+      {/* Status + Summary hover */}
       <TableCell>
-        <StatusBadge status={session.status} size="small" />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <StatusBadge status={session.status} size="small" />
+          <SummaryTooltip summary={session.executive_summary ?? ''} />
+        </Box>
       </TableCell>
 
       {/* Alert type */}
@@ -89,25 +94,24 @@ export function TriageSessionRow({
         </Typography>
       </TableCell>
 
-      {/* Executive summary */}
-      <TableCell sx={{ maxWidth: 350 }}>
-        <Tooltip
-          title={session.executive_summary ?? ''}
-          enterDelay={500}
-          placement="bottom-start"
-          slotProps={{ tooltip: { sx: { maxWidth: 500, fontSize: '0.8rem' } } }}
-        >
-          <Typography variant="body2" color="text.secondary" noWrap>
-            {session.executive_summary ?? '—'}
-          </Typography>
-        </Tooltip>
-      </TableCell>
-
       {/* Assignee */}
       <TableCell>
         <Typography variant="body2" color={session.assignee ? 'text.secondary' : 'text.disabled'} noWrap>
           {session.assignee ?? '—'}
         </Typography>
+      </TableCell>
+
+      {/* Eval Score */}
+      <TableCell
+        onClick={(e) => {
+          if (session.scoring_status || session.latest_score != null) {
+            e.stopPropagation();
+            navigate(sessionScoringPath(session.id));
+          }
+        }}
+        sx={session.scoring_status || session.latest_score != null ? { cursor: 'pointer' } : undefined}
+      >
+        <ScoreBadge score={session.latest_score} scoringStatus={session.scoring_status} variant="pill" showLabel={false} />
       </TableCell>
 
       {/* Time */}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
@@ -318,6 +319,25 @@ func triageGroupPredicates(group models.TriageGroupKey) []predicate.AlertSession
 	}
 }
 
+// triageRow is the scan target for the triage group query.
+type triageRow struct {
+	ID               string     `sql:"session_id"`
+	AlertType        *string    `sql:"alert_type"`
+	ChainID          string     `sql:"chain_id"`
+	Status           string     `sql:"status"`
+	Author           *string    `sql:"author"`
+	CreatedAt        time.Time  `sql:"created_at"`
+	StartedAt        *time.Time `sql:"started_at"`
+	CompletedAt      *time.Time `sql:"completed_at"`
+	ErrorMessage     *string    `sql:"error_message"`
+	ExecutiveSummary *string    `sql:"executive_summary"`
+	ReviewStatus     *string    `sql:"review_status"`
+	Assignee         *string    `sql:"assignee"`
+	ResolutionReason *string    `sql:"resolution_reason"`
+	LatestScore      *int       `sql:"latest_score"`
+	ScoringStatus    *string    `sql:"scoring_status"`
+}
+
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
 // the given predicates, returning a fully populated TriageGroup.
 func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize int, assignee string, predicates ...predicate.AlertSession) (*models.TriageGroup, error) {
@@ -340,18 +360,70 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 	}
 
 	offset := (page - 1) * pageSize
-	sessions, err := base.Clone().
+	var rows []triageRow
+	err = base.Clone().
 		Order(ent.Desc(alertsession.FieldCreatedAt)).
 		Offset(offset).
 		Limit(pageSize).
-		All(ctx)
+		Modify(func(sel *sql.Selector) {
+			t := sel.TableName()
+			sid := fmt.Sprintf("%q.%q", t, alertsession.FieldID)
+
+			sel.Select(
+				sel.C(alertsession.FieldID),
+				sel.C(alertsession.FieldAlertType),
+				sel.C(alertsession.FieldChainID),
+				sel.C(alertsession.FieldStatus),
+				sel.C(alertsession.FieldAuthor),
+				sel.C(alertsession.FieldCreatedAt),
+				sel.C(alertsession.FieldStartedAt),
+				sel.C(alertsession.FieldCompletedAt),
+				sel.C(alertsession.FieldErrorMessage),
+				sel.C(alertsession.FieldExecutiveSummary),
+				sel.C(alertsession.FieldReviewStatus),
+				sel.C(alertsession.FieldAssignee),
+				sel.C(alertsession.FieldResolutionReason),
+			)
+
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT total_score FROM session_scores WHERE session_id = %s AND status = 'completed' ORDER BY started_at DESC LIMIT 1)", sid),
+				"latest_score",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT status FROM session_scores WHERE session_id = %s ORDER BY started_at DESC LIMIT 1)", sid),
+				"scoring_status",
+			)
+		}).
+		Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
 
-	items := make([]models.DashboardSessionItem, 0, len(sessions))
-	for _, sess := range sessions {
-		items = append(items, sessionToTriageItem(sess))
+	items := make([]models.DashboardSessionItem, 0, len(rows))
+	for _, row := range rows {
+		var durationMs *int64
+		if row.StartedAt != nil && row.CompletedAt != nil {
+			ms := row.CompletedAt.Sub(*row.StartedAt).Milliseconds()
+			durationMs = &ms
+		}
+		items = append(items, models.DashboardSessionItem{
+			ID:               row.ID,
+			AlertType:        row.AlertType,
+			ChainID:          row.ChainID,
+			Status:           row.Status,
+			Author:           row.Author,
+			CreatedAt:        row.CreatedAt,
+			StartedAt:        row.StartedAt,
+			CompletedAt:      row.CompletedAt,
+			DurationMs:       durationMs,
+			ErrorMessage:     row.ErrorMessage,
+			ExecutiveSummary: row.ExecutiveSummary,
+			ReviewStatus:     row.ReviewStatus,
+			Assignee:         row.Assignee,
+			ResolutionReason: row.ResolutionReason,
+			LatestScore:      row.LatestScore,
+			ScoringStatus:    row.ScoringStatus,
+		})
 	}
 
 	return &models.TriageGroup{
@@ -361,51 +433,6 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 		TotalPages: totalPages,
 		Sessions:   items,
 	}, nil
-}
-
-// sessionToTriageItem maps an ent.AlertSession to a DashboardSessionItem with
-// the fields available directly on the entity. Aggregated stats (token counts,
-// stage counts, etc.) are not populated — the triage view doesn't display them.
-func sessionToTriageItem(sess *ent.AlertSession) models.DashboardSessionItem {
-	var alertType *string
-	if sess.AlertType != "" {
-		alertType = &sess.AlertType
-	}
-
-	var durationMs *int64
-	if sess.StartedAt != nil && sess.CompletedAt != nil {
-		ms := sess.CompletedAt.Sub(*sess.StartedAt).Milliseconds()
-		durationMs = &ms
-	}
-
-	var reviewStatus *string
-	if sess.ReviewStatus != nil {
-		s := string(*sess.ReviewStatus)
-		reviewStatus = &s
-	}
-
-	var resolutionReason *string
-	if sess.ResolutionReason != nil {
-		s := string(*sess.ResolutionReason)
-		resolutionReason = &s
-	}
-
-	return models.DashboardSessionItem{
-		ID:               sess.ID,
-		AlertType:        alertType,
-		ChainID:          sess.ChainID,
-		Status:           string(sess.Status),
-		Author:           sess.Author,
-		CreatedAt:        sess.CreatedAt,
-		StartedAt:        sess.StartedAt,
-		CompletedAt:      sess.CompletedAt,
-		DurationMs:       durationMs,
-		ErrorMessage:     sess.ErrorMessage,
-		ExecutiveSummary: sess.ExecutiveSummary,
-		ReviewStatus:     reviewStatus,
-		Assignee:         sess.Assignee,
-		ResolutionReason: resolutionReason,
-	}
 }
 
 func ptrFromStatus(s sessionreviewactivity.FromStatus) *sessionreviewactivity.FromStatus {

@@ -223,8 +223,8 @@ export function TriageGroupedList({
                           <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Summary</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Eval Score</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
                           <TableCell sx={{ fontWeight: 600, width: 140, textAlign: 'right' }} />
                         </TableRow>

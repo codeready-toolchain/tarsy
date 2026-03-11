@@ -1,0 +1,74 @@
+import { useState } from 'react';
+import {
+  Chip,
+  Popover,
+  Card,
+  Box,
+  Typography,
+  Divider,
+} from '@mui/material';
+import { Summarize } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
+import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
+
+interface SummaryTooltipProps {
+  summary: string;
+}
+
+export function SummaryTooltip({ summary }: SummaryTooltipProps) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+
+  if (!summary || summary.trim().length === 0) return null;
+
+  return (
+    <>
+      <Chip
+        label="Summary"
+        size="small"
+        variant="outlined"
+        color="primary"
+        onMouseEnter={(e) => setAnchorEl(e.currentTarget)}
+        onMouseLeave={() => setAnchorEl(null)}
+        onClick={(e) => e.stopPropagation()}
+        sx={{
+          cursor: 'pointer',
+          height: 24,
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': (theme) => ({
+            backgroundColor: `${theme.palette.grey[700]} !important`,
+            color: `${theme.palette.common.white} !important`,
+            borderColor: `${theme.palette.grey[700]} !important`,
+          }),
+        }}
+      />
+      <Popover
+        sx={{ pointerEvents: 'none' }}
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        onClose={() => setAnchorEl(null)}
+        disableRestoreFocus
+        disableScrollLock
+      >
+        <Card sx={{ maxWidth: 500, p: 2.5, boxShadow: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Summarize color="primary" />
+            <Typography
+              variant="subtitle1"
+              sx={{ fontWeight: 600, color: 'primary.main' }}
+            >
+              Executive Summary
+            </Typography>
+          </Box>
+          <Divider sx={{ mb: 1.5 }} />
+          <Box sx={executiveSummaryMarkdownStyles}>
+            <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{summary}</ReactMarkdown>
+          </Box>
+        </Card>
+      </Popover>
+    </>
+  );
+}
