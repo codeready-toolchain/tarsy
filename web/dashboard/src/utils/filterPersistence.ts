@@ -141,6 +141,8 @@ export function clearAllDashboardState(): void {
   try {
     localStorage.removeItem(PAGINATION_KEY);
     localStorage.removeItem(SORT_KEY);
+    localStorage.removeItem(DASHBOARD_TAB_KEY);
+    localStorage.removeItem(TRIAGE_FILTERS_KEY);
   } catch {
     // ignore
   }

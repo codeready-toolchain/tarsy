@@ -1,4 +1,4 @@
-import { TableCell } from '@mui/material';
+import { TableCell, ButtonBase } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { sessionScoringPath } from '../../constants/routes.ts';
@@ -14,16 +14,21 @@ export function ScoreCell({ sessionId, score, scoringStatus }: ScoreCellProps) {
   const hasScoring = scoringStatus || score != null;
 
   return (
-    <TableCell
-      onClick={(e) => {
-        if (hasScoring) {
-          e.stopPropagation();
-          navigate(sessionScoringPath(sessionId));
-        }
-      }}
-      sx={hasScoring ? { cursor: 'pointer' } : undefined}
-    >
-      <ScoreBadge score={score} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
+    <TableCell>
+      {hasScoring ? (
+        <ButtonBase
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(sessionScoringPath(sessionId));
+          }}
+          aria-label="View scoring details"
+          sx={{ cursor: 'pointer', borderRadius: 1 }}
+        >
+          <ScoreBadge score={score} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
+        </ButtonBase>
+      ) : (
+        <ScoreBadge score={score} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
+      )}
     </TableCell>
   );
 }

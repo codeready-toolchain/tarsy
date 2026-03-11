@@ -1,7 +1,7 @@
 /**
  * Tests for format.ts
  *
- * Covers: formatTimestamp, formatDurationMs, formatTokens, formatTokensCompact
+ * Covers: formatTimestamp, formatDurationMs, formatTokens, formatTokensCompact, compactTimeAgo
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   formatDurationMs,
   formatTokens,
   formatTokensCompact,
+  compactTimeAgo,
   timeAgo,
   liveDuration,
 } from '../../utils/format';
@@ -166,6 +167,56 @@ describe('formatTokens', () => {
 
   it('formats small numbers', () => {
     expect(formatTokens(42)).toBe('42');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compactTimeAgo
+// ---------------------------------------------------------------------------
+
+describe('compactTimeAgo', () => {
+  it('returns "—" for null/undefined', () => {
+    expect(compactTimeAgo(null)).toBe('—');
+    expect(compactTimeAgo(undefined)).toBe('—');
+  });
+
+  it('returns "—" for invalid dates', () => {
+    expect(compactTimeAgo('not-a-date')).toBe('—');
+  });
+
+  it('returns "0s" for future timestamps', () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    expect(compactTimeAgo(future)).toBe('0s');
+  });
+
+  it('formats recent timestamps as seconds', () => {
+    const thirtySecsAgo = new Date(Date.now() - 30_000).toISOString();
+    const result = compactTimeAgo(thirtySecsAgo);
+    expect(result).toMatch(/^\d+s$/);
+  });
+
+  it('formats minutes', () => {
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    const result = compactTimeAgo(fiveMinsAgo);
+    expect(result).toMatch(/^\d+m$/);
+  });
+
+  it('formats hours', () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const result = compactTimeAgo(threeHoursAgo);
+    expect(result).toMatch(/^\d+h$/);
+  });
+
+  it('formats days', () => {
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString();
+    const result = compactTimeAgo(fiveDaysAgo);
+    expect(result).toMatch(/^\d+d$/);
+  });
+
+  it('formats months', () => {
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    const result = compactTimeAgo(sixtyDaysAgo);
+    expect(result).toMatch(/^\d+mo$/);
   });
 });
 

@@ -463,6 +463,31 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 		assert.True(t, found, "resolvedID1 should be in results")
 	})
 
+	t.Run("page beyond total is clamped", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 999, PageSize: 20,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Count)
+		assert.Equal(t, 1, result.Page, "page should be clamped to totalPages")
+		assert.NotEmpty(t, result.Sessions)
+	})
+
+	t.Run("zero pageSize defaults to 20", func(t *testing.T) {
+		result, err := service.GetTriageGroup(ctx, models.TriageGroupResolved, models.TriageGroupParams{
+			Page: 1, PageSize: 0,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Count)
+		assert.Equal(t, 20, result.PageSize)
+		assert.Len(t, result.Sessions, 3)
+	})
+
+	t.Run("unknown group returns validation error", func(t *testing.T) {
+		_, err := service.GetTriageGroup(ctx, "bogus", defaultParams)
+		assert.True(t, IsValidationError(err))
+	})
+
 	t.Run("includes scoring fields", func(t *testing.T) {
 		client.SessionScore.Create().
 			SetID(uuid.New().String()).

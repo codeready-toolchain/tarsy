@@ -21,6 +21,7 @@ import type {
   SessionScoreResponse,
   ScoreSessionResponse,
   TriageGroup,
+  TriageGroupKey,
   TriageGroupParams,
   UpdateReviewRequest,
   UpdateReviewResponse,
@@ -176,7 +177,7 @@ export async function sendChatMessage(
 
 // --- Triage / Review ---
 
-export async function getTriageGroup(group: string, params?: TriageGroupParams): Promise<TriageGroup> {
+export async function getTriageGroup(group: TriageGroupKey, params?: TriageGroupParams): Promise<TriageGroup> {
   const response = await retryOnTemporaryError(() =>
     client.get<TriageGroup>(`/api/v1/sessions/triage/${group}`, { params }),
   );

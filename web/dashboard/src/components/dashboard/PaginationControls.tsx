@@ -72,6 +72,7 @@ export function PaginationControls({
           onChange={(e) => handlePageSizeChange(e.target.value as number)}
           disabled={disabled}
           disableUnderline
+          inputProps={{ 'aria-label': 'Results per page' }}
           sx={{ fontSize: '0.75rem', color: 'text.secondary' }}
         >
           {PAGE_SIZE_OPTIONS.map((size) => (

@@ -331,7 +331,7 @@ export function DashboardView() {
 
   const buildTriageParams = useCallback((groupKey?: TriageGroupKey): TriageGroupParams => {
     const assignee =
-      triageFiltersRef.current.assignee === 'mine' ? userEmailRef.current ?? '' :
+      triageFiltersRef.current.assignee === 'mine' ? (userEmailRef.current || undefined) :
       triageFiltersRef.current.assignee === 'unassigned' ? '' :
       undefined;
     const params: TriageGroupParams = {};
@@ -365,9 +365,13 @@ export function DashboardView() {
   }, [buildTriageParams]);
 
   const fetchSingleTriageGroup = useCallback(async (groupKey: TriageGroupKey, extraParams?: Partial<TriageGroupParams>) => {
-    const params = { ...buildTriageParams(groupKey), ...extraParams };
-    const data = await getTriageGroup(groupKey, params);
-    setTriageGroups(prev => ({ ...prev, [groupKey]: data }));
+    try {
+      const params = { ...buildTriageParams(groupKey), ...extraParams };
+      const data = await getTriageGroup(groupKey, params);
+      setTriageGroups(prev => ({ ...prev, [groupKey]: data }));
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    }
   }, [buildTriageParams]);
 
   const fetchAllTriageGroupsRef = useRef(fetchAllTriageGroups);
@@ -381,7 +385,9 @@ export function DashboardView() {
     refreshTimeoutRef.current = setTimeout(() => {
       fetchActiveAlerts();
       fetchHistoricalAlerts();
-      fetchAllTriageGroupsRef.current();
+      if (activeTabRef.current === 'triage') {
+        fetchAllTriageGroupsRef.current();
+      }
       refreshTimeoutRef.current = null;
     }, REFRESH_THROTTLE_MS);
   }, [fetchActiveAlerts, fetchHistoricalAlerts]);

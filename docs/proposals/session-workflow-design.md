@@ -670,7 +670,7 @@ Implemented via `useEffect` with `keydown` listener, scoped to the Triage tab.
 1. Add `EventTypeReviewStatus` and `ReviewStatusPayload` to `pkg/events/types.go` and `payloads.go`
 2. Add `PublishReviewStatus` to `EventPublisher` (dual-channel: persist to session channel, transient to global)
 3. Add `Worker.publishReviewStatus` helper; call from `processSession` after terminal status write
-4. Create `pkg/api/handler_review.go` with `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity`, `GET /sessions/triage`
+4. Create `pkg/api/handler_review.go` with `PATCH /sessions/:id/review`, `GET /sessions/:id/review-activity`, `GET /sessions/triage/:group` (per-group paginated endpoint; `:group` is one of `investigating`, `needs_review`, `in_progress`, `resolved`; accepts `page`, `page_size`, `assignee` query params; returns `{ count, page, page_size, total_pages, sessions[] }`)
 5. Register routes in `setupRoutes()`
 6. Publish `review.status` events from API handler after `UpdateReviewStatus` calls (manual transitions)
 7. Unit tests for service methods, Worker review init, and handlers

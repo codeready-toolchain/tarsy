@@ -104,9 +104,12 @@ export interface TriageGroupParams {
   assignee?: string;
 }
 
+/** Allowed review workflow actions. */
+export type ReviewAction = 'claim' | 'unclaim' | 'resolve' | 'reopen' | 'update_note';
+
 /** Request body for PATCH /sessions/:id/review. */
 export interface UpdateReviewRequest {
-  action: string;
+  action: ReviewAction;
   resolution_reason?: string;
   note?: string;
 }

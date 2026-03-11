@@ -3,7 +3,6 @@ import {
   TableCell,
   Typography,
   Button,
-  Chip,
   Tooltip,
   IconButton,
   Box,
@@ -31,9 +30,9 @@ interface TriageSessionRowProps {
   actionLoading?: boolean;
 }
 
-const resolutionReasonConfig: Record<string, { label: string; color: 'success' | 'default' }> = {
-  actioned: { label: 'Actioned', color: 'success' },
-  dismissed: { label: 'Dismissed', color: 'default' },
+const resolutionReasonConfig: Record<string, { label: string }> = {
+  actioned: { label: 'Actioned' },
+  dismissed: { label: 'Dismissed' },
 };
 
 export function TriageSessionRow({

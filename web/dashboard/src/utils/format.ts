@@ -61,13 +61,13 @@ export function compactTimeAgo(isoString: string | null | undefined): string {
   if (!isValid(date)) return '—';
 
   const now = new Date();
-  const secs = differenceInSeconds(now, date);
+  const secs = Math.max(0, differenceInSeconds(now, date));
   if (secs < 60) return `${secs}s`;
-  const mins = differenceInMinutes(now, date);
+  const mins = Math.max(0, differenceInMinutes(now, date));
   if (mins < 60) return `${mins}m`;
-  const hrs = differenceInHours(now, date);
+  const hrs = Math.max(0, differenceInHours(now, date));
   if (hrs < 24) return `${hrs}h`;
-  const days = differenceInDays(now, date);
+  const days = Math.max(0, differenceInDays(now, date));
   if (days < 30) return `${days}d`;
   return `${Math.floor(days / 30)}mo`;
 }

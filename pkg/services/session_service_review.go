@@ -305,6 +305,9 @@ func (s *SessionService) GetReviewActivity(ctx context.Context, sessionID string
 // GetTriageGroup returns a single paginated triage group.
 func (s *SessionService) GetTriageGroup(ctx context.Context, group models.TriageGroupKey, params models.TriageGroupParams) (*models.TriageGroup, error) {
 	predicates := triageGroupPredicates(group)
+	if len(predicates) == 0 {
+		return nil, NewValidationError("group", fmt.Sprintf("unknown triage group %q", group))
+	}
 
 	result, err := s.queryTriageGroup(ctx, params.Page, params.PageSize, params.Assignee, predicates...)
 	if err != nil {
@@ -361,6 +364,13 @@ type triageRow struct {
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
 // the given predicates, returning a fully populated TriageGroup.
 func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize int, assignee string, predicates ...predicate.AlertSession) (*models.TriageGroup, error) {
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if page < 1 {
+		page = 1
+	}
+
 	base := s.client.AlertSession.Query().
 		Where(alertsession.DeletedAtIsNil()).
 		Where(predicates...)
@@ -377,6 +387,9 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 	totalPages := (total + pageSize - 1) / pageSize
 	if totalPages == 0 {
 		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
 	}
 
 	offset := (page - 1) * pageSize
@@ -403,7 +416,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
 				sel.C(alertsession.FieldResolutionReason),
-			sel.C(alertsession.FieldResolutionNote),
+				sel.C(alertsession.FieldResolutionNote),
 			)
 
 			sel.AppendSelectAs(

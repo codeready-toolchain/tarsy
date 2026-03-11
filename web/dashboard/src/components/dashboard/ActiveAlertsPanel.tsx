@@ -17,6 +17,7 @@ import {
   Alert,
   Stack,
   Chip,
+  Tooltip,
 } from '@mui/material';
 import { Refresh, Wifi, WifiOff } from '@mui/icons-material';
 import { ActiveSessionCard } from './ActiveSessionCard.tsx';
@@ -87,9 +88,11 @@ export function ActiveAlertsPanel({
           variant={wsConnected ? 'filled' : 'outlined'}
         />
 
-        <IconButton size="small" onClick={onRefresh} disabled={loading}>
-          {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-        </IconButton>
+        <Tooltip title="Refresh alerts">
+          <IconButton size="small" onClick={onRefresh} disabled={loading} aria-label="Refresh alerts">
+            {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Error */}
@@ -104,7 +107,7 @@ export function ActiveAlertsPanel({
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : totalCount === 0 ? (
+      ) : !error && totalCount === 0 ? (
         <Box sx={{ py: 6, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No Active Alerts

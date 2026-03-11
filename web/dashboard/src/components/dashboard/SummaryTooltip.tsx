@@ -29,7 +29,14 @@ export function SummaryTooltip({ summary }: SummaryTooltipProps) {
         color="primary"
         onMouseEnter={(e) => setAnchorEl(e.currentTarget)}
         onMouseLeave={() => setAnchorEl(null)}
+        onFocus={(e) => setAnchorEl(e.currentTarget)}
+        onBlur={() => setAnchorEl(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { setAnchorEl(null); e.currentTarget.blur(); }
+        }}
         onClick={(e) => e.stopPropagation()}
+        tabIndex={0}
+        aria-label="Show executive summary"
         sx={{
           cursor: 'pointer',
           height: 24,

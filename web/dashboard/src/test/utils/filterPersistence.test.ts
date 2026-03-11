@@ -18,6 +18,10 @@ import {
   saveSortToStorage,
   loadSortFromStorage,
   clearAllDashboardState,
+  saveDashboardTab,
+  loadDashboardTab,
+  saveTriageFilters,
+  loadTriageFilters,
 } from '../../utils/filterPersistence';
 import type { SessionFilter, SortState } from '../../types/dashboard';
 
@@ -202,15 +206,19 @@ describe('sort persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('clearAllDashboardState', () => {
-  it('clears all storage keys', () => {
+  it('clears all storage keys including tab and triage filters', () => {
     saveFiltersToStorage(getDefaultFilters());
     savePaginationToStorage({ page: 5 });
     saveSortToStorage({ field: 'created_at', direction: 'desc' });
+    saveDashboardTab('triage');
+    saveTriageFilters({ assignee: 'mine' });
 
     clearAllDashboardState();
 
     expect(loadFiltersFromStorage()).toBeNull();
     expect(loadPaginationFromStorage()).toBeNull();
     expect(loadSortFromStorage()).toBeNull();
+    expect(loadDashboardTab()).toBe('sessions');
+    expect(loadTriageFilters()).toBeNull();
   });
 });

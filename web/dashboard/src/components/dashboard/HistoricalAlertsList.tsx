@@ -30,7 +30,7 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Tokens | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
 const TOTAL_COLUMNS = 9;
@@ -90,13 +90,16 @@ export function HistoricalAlertsList({
             fontWeight: 600,
           }}
         />
-        <IconButton
-          size="small"
-          onClick={onRefresh}
-          disabled={loading}
-        >
-          {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-        </IconButton>
+        <Tooltip title="Refresh sessions">
+          <IconButton
+            size="small"
+            onClick={onRefresh}
+            disabled={loading}
+            aria-label="Refresh sessions"
+          >
+            {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Error */}
