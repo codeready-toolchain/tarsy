@@ -16,6 +16,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 )
 
@@ -245,6 +246,15 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	if !statusUpdated {
 		log.Info("Terminal status already written by another worker, skipping downstream effects")
 		return nil
+	}
+
+	completedAt := time.Now()
+	metrics.SessionsTerminalTotal.WithLabelValues(session.AlertType, string(result.Status)).Inc()
+	if session.StartedAt != nil {
+		metrics.SessionDurationSeconds.WithLabelValues(session.AlertType, string(result.Status)).
+			Observe(completedAt.Sub(*session.StartedAt).Seconds())
+		metrics.SessionWaitSeconds.WithLabelValues(session.AlertType).
+			Observe(session.StartedAt.Sub(session.CreatedAt).Seconds())
 	}
 
 	// 11a. Publish terminal session status event
@@ -556,4 +566,11 @@ func (w *Worker) setStatus(status WorkerStatus, sessionID string) {
 	w.status = status
 	w.currentSessionID = sessionID
 	w.lastActivity = time.Now()
+
+	switch status {
+	case WorkerStatusWorking:
+		metrics.WorkersActive.Inc()
+	case WorkerStatusIdle:
+		metrics.WorkersActive.Dec()
+	}
 }

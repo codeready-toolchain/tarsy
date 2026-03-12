@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // orphanState tracks orphan detection metrics (thread-safe).
@@ -82,6 +83,10 @@ func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 	p.orphans.lastOrphanScan = time.Now()
 	p.orphans.orphansRecovered += recovered
 	p.orphans.mu.Unlock()
+
+	if recovered > 0 {
+		metrics.OrphansRecoveredTotal.Add(float64(recovered))
+	}
 
 	if failed > 0 {
 		slog.Warn("Orphan recovery completed with failures",

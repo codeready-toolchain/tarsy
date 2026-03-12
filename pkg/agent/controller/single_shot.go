@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // SingleShotConfig parameterizes SingleShotController behavior.
@@ -100,6 +101,7 @@ func (c *SingleShotController) Run(
 				TokensUsed: totalUsage,
 			}, nil
 		}
+		llmStart := time.Now()
 		streamed, err = callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
@@ -109,6 +111,8 @@ func (c *SingleShotController) Run(
 			Backend:     execCtx.Config.LLMBackend,
 			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
+		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+			time.Since(llmStart), streamed.MetricsTokens(), err)
 		if err == nil {
 			accumulateUsage(&totalUsage, streamed.LLMResponse)
 			resp := streamed.LLMResponse

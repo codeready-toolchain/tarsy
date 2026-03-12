@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // Error code constants are defined in streaming.go as LLMErrorCode values.
@@ -185,6 +186,7 @@ func tryFallback(
 	execCtx.Config.LLMProvider = entry.Config
 	execCtx.Config.LLMProviderName = entry.ProviderName
 	execCtx.Config.LLMBackend = entry.Backend
+	metrics.LLMFallbacksTotal.WithLabelValues(prevProvider, entry.ProviderName).Inc()
 
 	state.CurrentProviderIndex = nextIdx
 	state.FallbackReason = err.Error()

@@ -10,6 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
+
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // catchupLimit is the maximum number of events returned in a catchup response.
@@ -409,6 +411,7 @@ func (m *ConnectionManager) registerConnection(c *Connection) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.connections[c.ID] = c
+	metrics.WSConnectionsActive.Inc()
 }
 
 // unregisterConnection removes a connection and all its subscriptions.
@@ -421,6 +424,7 @@ func (m *ConnectionManager) unregisterConnection(c *Connection) {
 	m.mu.Lock()
 	delete(m.connections, c.ID)
 	m.mu.Unlock()
+	metrics.WSConnectionsActive.Dec()
 
 	c.cancel()
 	_ = c.Conn.Close(websocket.StatusNormalClosure, "")

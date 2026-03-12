@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -75,7 +76,12 @@ func executeToolCall(
 	startTime := time.Now()
 	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, call)
 	toolCancel()
+
+	metrics.MCPCallsTotal.WithLabelValues(serverID, toolName).Inc()
+	metrics.MCPDurationSeconds.WithLabelValues(serverID, toolName).Observe(time.Since(startTime).Seconds())
+
 	if toolErr != nil {
+		metrics.MCPErrorsTotal.WithLabelValues(serverID, toolName).Inc()
 		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
 		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
 		recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, nil, startTime, toolErr)

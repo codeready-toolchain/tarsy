@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -300,6 +301,20 @@ type StreamedResponse struct {
 	// TextEventCreated is true if a streaming llm_response timeline event
 	// was created (and completed) during the LLM call.
 	TextEventCreated bool
+}
+
+// MetricsTokens converts the token usage into a metrics-safe struct, or nil if
+// the receiver or embedded LLMResponse is nil. Safe to call on a nil
+// *StreamedResponse.
+func (s *StreamedResponse) MetricsTokens() *metrics.LLMTokens {
+	if s == nil || s.LLMResponse == nil || s.Usage == nil {
+		return nil
+	}
+	return &metrics.LLMTokens{
+		Input:    s.Usage.InputTokens,
+		Output:   s.Usage.OutputTokens,
+		Thinking: s.Usage.ThinkingTokens,
+	}
 }
 
 // callLLMWithStreaming performs an LLM call with real-time streaming of chunks

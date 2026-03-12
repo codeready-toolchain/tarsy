@@ -7,6 +7,7 @@ import (
 	echo "github.com/labstack/echo/v5"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
@@ -64,6 +65,8 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 	if err != nil {
 		return mapServiceError(err)
 	}
+
+	metrics.SessionsSubmittedTotal.WithLabelValues(req.AlertType).Inc()
 
 	// 8. Return response
 	return c.JSON(http.StatusAccepted, &AlertResponse{

@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/cleanup"
@@ -23,6 +25,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -73,6 +76,21 @@ func parseLogLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+// entSessionCounter implements metrics.SessionCounter using Ent queries.
+type entSessionCounter struct{ client *ent.Client }
+
+func (c *entSessionCounter) PendingCount(ctx context.Context) (int, error) {
+	return c.client.AlertSession.Query().
+		Where(alertsession.StatusEQ(alertsession.StatusPending), alertsession.DeletedAtIsNil()).
+		Count(ctx)
+}
+
+func (c *entSessionCounter) ActiveCount(ctx context.Context) (int, error) {
+	return c.client.AlertSession.Query().
+		Where(alertsession.StatusEQ(alertsession.StatusInProgress), alertsession.DeletedAtIsNil()).
+		Count(ctx)
 }
 
 func main() {
@@ -275,6 +293,12 @@ func main() {
 		slog.Error("Failed to start worker pool", "error", err)
 		os.Exit(1)
 	}
+
+	// 6. Metrics: set worker gauge and start DB-polled session gauges
+	metrics.WorkersTotal.Set(float64(cfg.Queue.WorkerCount))
+	gaugeCollector := metrics.NewGaugeCollector(&entSessionCounter{client: dbClient.Client})
+	gaugeCollector.Start(ctx)
+	defer gaugeCollector.Stop()
 
 	// 6a. Create chat message executor (for follow-up chat processing)
 	chatService := services.NewChatService(dbClient.Client)

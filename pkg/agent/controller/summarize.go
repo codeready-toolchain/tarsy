@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -145,6 +146,8 @@ func callSummarizationLLM(
 
 	// Use dedicated summarization streaming (creates mcp_tool_summary events, not llm_response)
 	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq)
+	metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+		time.Since(startTime), streamed.MetricsTokens(), err)
 	if err != nil {
 		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
 	}

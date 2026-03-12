@@ -989,3 +989,37 @@ func TestCallLLMWithStreaming_ChunkBatching(t *testing.T) {
 		assert.False(t, resp.ThinkingEventCreated)
 	})
 }
+
+// ============================================================================
+// MetricsTokens tests
+// ============================================================================
+
+func TestStreamedResponse_MetricsTokens(t *testing.T) {
+	t.Run("nil receiver", func(t *testing.T) {
+		var s *StreamedResponse
+		assert.Nil(t, s.MetricsTokens())
+	})
+
+	t.Run("nil LLMResponse", func(t *testing.T) {
+		s := &StreamedResponse{}
+		assert.Nil(t, s.MetricsTokens())
+	})
+
+	t.Run("nil Usage", func(t *testing.T) {
+		s := &StreamedResponse{LLMResponse: &LLMResponse{Usage: nil}}
+		assert.Nil(t, s.MetricsTokens())
+	})
+
+	t.Run("converts usage", func(t *testing.T) {
+		s := &StreamedResponse{LLMResponse: &LLMResponse{
+			Usage: &agent.TokenUsage{
+				InputTokens: 100, OutputTokens: 200, ThinkingTokens: 50,
+			},
+		}}
+		tokens := s.MetricsTokens()
+		require.NotNil(t, tokens)
+		assert.Equal(t, 100, tokens.Input)
+		assert.Equal(t, 200, tokens.Output)
+		assert.Equal(t, 50, tokens.Thinking)
+	})
+}

@@ -10,6 +10,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
@@ -243,6 +244,12 @@ func (m *HealthMonitor) setStatus(serverID string, healthy bool, errMsg string, 
 		Error:     errMsg,
 		ToolCount: toolCount,
 	}
+
+	val := 0.0
+	if healthy {
+		val = 1.0
+	}
+	metrics.MCPHealthStatus.WithLabelValues(serverID).Set(val)
 }
 
 // GetStatuses returns the current health status of all monitored servers.

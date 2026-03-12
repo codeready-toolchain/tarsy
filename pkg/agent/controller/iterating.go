@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // maxEmptyResponseRetries is the number of times to retry when the LLM
@@ -104,6 +105,7 @@ func (c *IteratingController) Run(
 		// Call LLM WITH tools and streaming (native function calling).
 		// LLM call gets its own sub-timeout within the iteration budget.
 		llmCtx, llmCancel := context.WithTimeout(iterCtx, execCtx.Config.LLMCallTimeout)
+		llmStart := time.Now()
 		streamed, err := callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
@@ -114,6 +116,8 @@ func (c *IteratingController) Run(
 			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
 		llmCancel()
+		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+			time.Since(llmStart), streamed.MetricsTokens(), err)
 
 		if err != nil {
 			iterCancel()
@@ -324,6 +328,7 @@ func (c *IteratingController) forceConclusion(
 			}, nil
 		}
 		llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
+		llmStart := time.Now()
 		streamed, err = callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
@@ -334,6 +339,8 @@ func (c *IteratingController) forceConclusion(
 			ClearCache:  fbState.consumeClearCache(),
 		}, eventSeq, forcedMeta)
 		llmCancel()
+		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+			time.Since(llmStart), streamed.MetricsTokens(), err)
 		if err == nil {
 			accumulateUsage(totalUsage, streamed.LLMResponse)
 			if strings.TrimSpace(streamed.LLMResponse.Text) != "" || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {

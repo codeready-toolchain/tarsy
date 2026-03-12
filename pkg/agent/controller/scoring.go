@@ -11,6 +11,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
 // scoringOutputSchema instructs the LLM to end its response with the total score
@@ -55,6 +56,7 @@ func scoringCallLLM(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		llmStart := time.Now()
 		streamed, err := callLLMWithStreaming(ctx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
 			SessionID:   execCtx.SessionID,
 			ExecutionID: execCtx.ExecutionID,
@@ -63,6 +65,8 @@ func scoringCallLLM(
 			Backend:     execCtx.Config.LLMBackend,
 			ClearCache:  fbState.consumeClearCache(),
 		}, eventSeq)
+		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+			time.Since(llmStart), streamed.MetricsTokens(), err)
 		if err == nil {
 			return streamed, nil
 		}

@@ -16,6 +16,7 @@ import (
 
 	echo "github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -234,8 +235,12 @@ func (s *Server) setupRoutes() {
 		MaxAge:           3600,
 	}))
 
-	// Health check
+	// Prometheus metrics middleware (records request count/duration for all API routes)
+	s.echo.Use(prometheusMiddleware())
+
+	// Health check and Prometheus metrics endpoint
 	s.echo.GET("/health", s.healthHandler)
+	s.echo.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 
 	// API v1
 	v1 := s.echo.Group("/api/v1")
