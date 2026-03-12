@@ -66,7 +66,7 @@ func scoringCallLLM(
 			ClearCache:  fbState.consumeClearCache(),
 		}, eventSeq)
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
-			time.Since(llmStart), streamed.MetricsTokens(), err)
+			time.Since(llmStart), metricsTokens(streamed, err), err)
 		if err == nil {
 			return streamed, nil
 		}

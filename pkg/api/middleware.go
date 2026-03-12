@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,7 +31,7 @@ func prometheusMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			path := c.RouteInfo().Path
-			if path == "/health" || path == "/metrics" {
+			if path == "/health" || path == "/metrics" || path == "/api/v1/ws" {
 				return next(c)
 			}
 
@@ -41,12 +42,33 @@ func prometheusMiddleware() echo.MiddlewareFunc {
 			err := next(c)
 			duration := time.Since(start)
 
+			status := sw.code
+			if err != nil {
+				status = resolveErrorStatus(err, sw)
+			}
+
 			method := c.Request().Method
-			metrics.HTTPRequestsTotal.WithLabelValues(method, path, strconv.Itoa(sw.code)).Inc()
+			metrics.HTTPRequestsTotal.WithLabelValues(method, path, strconv.Itoa(status)).Inc()
 			metrics.HTTPDurationSeconds.WithLabelValues(method, path).Observe(duration.Seconds())
 			return err
 		}
 	}
+}
+
+// resolveErrorStatus determines the HTTP status code when a handler returns an
+// error. Echo processes errors after middleware, so the response may not yet
+// have the final status written. If the error is an *echo.HTTPError, use its
+// code; otherwise fall back to what the response writer recorded, defaulting to
+// 500 for unwritten responses.
+func resolveErrorStatus(err error, sw *statusWriter) int {
+	var he *echo.HTTPError
+	if errors.As(err, &he) {
+		return he.StatusCode()
+	}
+	if sw.written {
+		return sw.code
+	}
+	return http.StatusInternalServerError
 }
 
 // statusWriter wraps http.ResponseWriter to capture the status code.

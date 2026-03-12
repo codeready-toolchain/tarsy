@@ -1,0 +1,24 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tarsy
+  labels:
+    app.kubernetes.io/name: tarsy
+    prometheus: sandbox-sre
+spec:
+  namespaceSelector:
+    matchNames:
+      - tarsy
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tarsy
+  endpoints:
+    - bearerTokenSecret:
+        name: prometheus-k8s-token
+        key: token
+      interval: 15s
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      port: kube-rbac-proxy

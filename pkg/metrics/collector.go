@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const pollInterval = 15 * time.Second
+const (
+	pollInterval = 15 * time.Second
+	pollTimeout  = 10 * time.Second
+)
 
 // SessionCounter abstracts the DB queries needed for gauge polling.
 type SessionCounter interface {
@@ -38,14 +41,14 @@ func (g *GaugeCollector) Start(ctx context.Context) {
 	g.wg.Add(1)
 	go func() {
 		defer g.wg.Done()
-		g.poll(pollCtx)
+		g.boundedPoll(pollCtx)
 
 		for {
 			select {
 			case <-pollCtx.Done():
 				return
 			case <-time.After(pollInterval):
-				g.poll(pollCtx)
+				g.boundedPoll(pollCtx)
 			}
 		}
 	}()
@@ -57,6 +60,12 @@ func (g *GaugeCollector) Stop() {
 		g.stopFn()
 	}
 	g.wg.Wait()
+}
+
+func (g *GaugeCollector) boundedPoll(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, pollTimeout)
+	defer cancel()
+	g.poll(ctx)
 }
 
 func (g *GaugeCollector) poll(ctx context.Context) {

@@ -117,7 +117,7 @@ func (c *IteratingController) Run(
 		}, &eventSeq)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
-			time.Since(llmStart), streamed.MetricsTokens(), err)
+			time.Since(llmStart), metricsTokens(streamed, err), err)
 
 		if err != nil {
 			iterCancel()
@@ -340,7 +340,7 @@ func (c *IteratingController) forceConclusion(
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
-			time.Since(llmStart), streamed.MetricsTokens(), err)
+			time.Since(llmStart), metricsTokens(streamed, err), err)
 		if err == nil {
 			accumulateUsage(totalUsage, streamed.LLMResponse)
 			if strings.TrimSpace(streamed.LLMResponse.Text) != "" || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {

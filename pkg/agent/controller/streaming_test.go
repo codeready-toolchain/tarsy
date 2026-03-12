@@ -1023,3 +1023,36 @@ func TestStreamedResponse_MetricsTokens(t *testing.T) {
 		assert.Equal(t, 50, tokens.Thinking)
 	})
 }
+
+func TestMetricsTokens(t *testing.T) {
+	t.Run("prefers response tokens", func(t *testing.T) {
+		resp := &StreamedResponse{LLMResponse: &LLMResponse{
+			Usage: &agent.TokenUsage{InputTokens: 10, OutputTokens: 20},
+		}}
+		tokens := metricsTokens(resp, nil)
+		require.NotNil(t, tokens)
+		assert.Equal(t, 10, tokens.Input)
+		assert.Equal(t, 20, tokens.Output)
+	})
+
+	t.Run("extracts from PartialOutputError", func(t *testing.T) {
+		poe := &PartialOutputError{
+			Cause: fmt.Errorf("stream error"),
+			Usage: &agent.TokenUsage{InputTokens: 5, OutputTokens: 3, ThinkingTokens: 1},
+		}
+		tokens := metricsTokens(nil, poe)
+		require.NotNil(t, tokens)
+		assert.Equal(t, 5, tokens.Input)
+		assert.Equal(t, 3, tokens.Output)
+		assert.Equal(t, 1, tokens.Thinking)
+	})
+
+	t.Run("nil when no usage anywhere", func(t *testing.T) {
+		poe := &PartialOutputError{Cause: fmt.Errorf("error")}
+		assert.Nil(t, metricsTokens(nil, poe))
+	})
+
+	t.Run("nil on non-PartialOutputError", func(t *testing.T) {
+		assert.Nil(t, metricsTokens(nil, fmt.Errorf("generic error")))
+	})
+}

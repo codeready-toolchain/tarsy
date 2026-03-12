@@ -112,7 +112,7 @@ func (c *SingleShotController) Run(
 			ClearCache:  fbState.consumeClearCache(),
 		}, &eventSeq)
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
-			time.Since(llmStart), streamed.MetricsTokens(), err)
+			time.Since(llmStart), metricsTokens(streamed, err), err)
 		if err == nil {
 			accumulateUsage(&totalUsage, streamed.LLMResponse)
 			resp := streamed.LLMResponse

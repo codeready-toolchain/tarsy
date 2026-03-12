@@ -37,9 +37,10 @@ type PartialOutputError struct {
 	Cause           error
 	PartialText     string
 	PartialThinking string
-	IsLoop          bool         // true when caused by degenerate loop detection
-	Code            LLMErrorCode // error code from LLM service
-	Retryable       bool         // whether the LLM service considers the error retryable
+	IsLoop          bool              // true when caused by degenerate loop detection
+	Code            LLMErrorCode      // error code from LLM service
+	Retryable       bool              // whether the LLM service considers the error retryable
+	Usage           *agent.TokenUsage // partial token usage accumulated before the error
 }
 
 func (e *PartialOutputError) Error() string { return e.Cause.Error() }
@@ -241,18 +242,19 @@ loop:
 					TotalTokens:    c.TotalTokens,
 					ThinkingTokens: c.ThinkingTokens,
 				}
-			case *agent.ErrorChunk:
-				if loopDetected {
-					continue // expected error from stream cancellation
-				}
-				return nil, &PartialOutputError{
-					Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-						c.Message, c.Code, c.Retryable),
-					PartialText:     textBuf.String(),
-					PartialThinking: thinkingBuf.String(),
-					Code:            LLMErrorCode(c.Code),
-					Retryable:       c.Retryable,
-				}
+		case *agent.ErrorChunk:
+			if loopDetected {
+				continue // expected error from stream cancellation
+			}
+			return nil, &PartialOutputError{
+				Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+					c.Message, c.Code, c.Retryable),
+				PartialText:     textBuf.String(),
+				PartialThinking: thinkingBuf.String(),
+				Code:            LLMErrorCode(c.Code),
+				Retryable:       c.Retryable,
+				Usage:           resp.Usage,
+			}
 			}
 
 		case <-timeoutCh:
@@ -271,6 +273,7 @@ loop:
 				PartialThinking: thinkingBuf.String(),
 				Code:            code,
 				Retryable:       true,
+				Usage:           resp.Usage,
 			}
 		}
 	}
@@ -284,6 +287,7 @@ loop:
 			PartialText:     resp.Text,
 			PartialThinking: resp.ThinkingText,
 			IsLoop:          true,
+			Usage:           resp.Usage,
 		}
 	}
 
@@ -315,6 +319,24 @@ func (s *StreamedResponse) MetricsTokens() *metrics.LLMTokens {
 		Output:   s.Usage.OutputTokens,
 		Thinking: s.Usage.ThinkingTokens,
 	}
+}
+
+// metricsTokens extracts token usage from a successful response or, when the
+// response is nil, from a PartialOutputError so that partial-failure LLM calls
+// still report consumed tokens.
+func metricsTokens(resp *StreamedResponse, err error) *metrics.LLMTokens {
+	if t := resp.MetricsTokens(); t != nil {
+		return t
+	}
+	var poe *PartialOutputError
+	if errors.As(err, &poe) && poe.Usage != nil {
+		return &metrics.LLMTokens{
+			Input:    poe.Usage.InputTokens,
+			Output:   poe.Usage.OutputTokens,
+			Thinking: poe.Usage.ThinkingTokens,
+		}
+	}
+	return nil
 }
 
 // callLLMWithStreaming performs an LLM call with real-time streaming of chunks

@@ -147,7 +147,7 @@ func callSummarizationLLM(
 	// Use dedicated summarization streaming (creates mcp_tool_summary events, not llm_response)
 	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq)
 	metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
-		time.Since(startTime), streamed.MetricsTokens(), err)
+		time.Since(startTime), metricsTokens(streamed, err), err)
 	if err != nil {
 		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
 	}

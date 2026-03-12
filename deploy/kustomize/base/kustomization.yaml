@@ -10,6 +10,7 @@ resources:
   - routes.yaml
   - imagestreams.yaml
   - rbac.yaml
+  - service-monitor.yaml
 
 commonLabels:
   app: tarsy

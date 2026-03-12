@@ -66,7 +66,7 @@ func (s *Server) submitAlertHandler(c *echo.Context) error {
 		return mapServiceError(err)
 	}
 
-	metrics.SessionsSubmittedTotal.WithLabelValues(req.AlertType).Inc()
+	metrics.SessionsSubmittedTotal.WithLabelValues(session.AlertType).Inc()
 
 	// 8. Return response
 	return c.JSON(http.StatusAccepted, &AlertResponse{

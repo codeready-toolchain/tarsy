@@ -88,7 +88,11 @@ func executeToolCall(
 		return toolCallResult{Content: errContent, IsError: true, Err: toolErr}
 	}
 
-	// Record successful MCP interaction
+	if result.IsError {
+		metrics.MCPErrorsTotal.WithLabelValues(serverID, toolName).Inc()
+	}
+
+	// Record MCP interaction
 	recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, result, startTime, nil)
 
 	// Step 4: Complete tool call event with storage-truncated result
