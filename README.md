@@ -85,6 +85,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Tool Result Summarization**: Enabled by default — LLM-powered summarization of verbose MCP outputs (>5K tokens) to reduce token usage and improve reasoning
 
 ### Observability & Operations
+- **Prometheus Metrics**: `/metrics` endpoint exposing session lifecycle, LLM performance, MCP tool reliability, worker pool health, HTTP request patterns, and WebSocket connections with custom histogram buckets
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
@@ -148,6 +149,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `GET /api/v1/alert-types` -- Supported alert types
 - `GET /api/v1/ws` -- WebSocket for real-time progress updates with channel subscriptions
 - `GET /health` -- Health check with service status and queue metrics
+- `GET /metrics` -- Prometheus metrics endpoint
 
 ### Sessions
 - `GET /api/v1/sessions` -- List sessions with filtering and pagination

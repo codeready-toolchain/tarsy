@@ -1,12 +1,13 @@
-# Prometheus Metrics — Design
+# ADR-0010: Prometheus Metrics
 
-**Status:** Final
+**Status:** Implemented
+**Date:** 2026-03-12
 
 ## Overview
 
 TARSy has no runtime metrics export. This design adds Prometheus metrics to the Go orchestrator, exposing session lifecycle, LLM call performance, MCP tool reliability, worker pool health, HTTP request patterns, and WebSocket connection counts via a `/metrics` endpoint.
 
-The design builds on the [sketch](prometheus-metrics-sketch.md), which established:
+The sketch phase established:
 
 - **Labels:** `provider`+`model` for LLM, `server`+`tool` for MCP
 - **HTTP middleware:** Echo middleware with promhttp (custom fallback for v5)
@@ -62,6 +63,22 @@ MCPBuckets     = []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60}
 HTTPBuckets    = prometheus.DefBuckets // 0.005 – 10s, fine for HTTP
 SessionBuckets = []float64{30, 60, 120, 180, 300, 600, 900, 1200, 1800}
 ```
+
+## Key Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| S-Q1 | `provider`+`model` labels for LLM | ~15 series per metric is safe; model-level granularity needed for cost/latency tracking |
+| S-Q2 | `server`+`tool` labels for MCP | ~30 series is modest; per-tool latency/error rates are the primary diagnostic signal |
+| S-Q3 | Echo middleware with `promhttp.Handler()` | Standard pattern; use `echo-contrib` if v5-compatible, else custom middleware with `c.RouteInfo().Path()` |
+| S-Q4 | Single `pkg/metrics` package | All ~20 metrics discoverable in one place; standard for this scale |
+| S-Q5 | Hybrid gauges: event-driven local, DB-polled global | Instant for local worker metrics, consistent for global queue/session state across pods |
+| D-Q1 | Custom histogram buckets per metric type | Default buckets produce only `+Inf` for LLM (1–180s) and session (30s–30min) ranges |
+| D-Q2 | Instrument LLM at controller layer with shared helper | Full context (provider, model, usage, errors) available; `observeLLMCall()` keeps each site to one line |
+| D-Q3 | Separate `duration_seconds` and `wait_seconds` histograms | Processing time and queue wait are different signals; one extra histogram is cheap |
+| D-Q4 | Include Go runtime/process metrics via default registry | Zero effort, universally expected, useful for debugging memory/goroutine leaks |
+| D-Q5 | `GaugeCollector` in `pkg/metrics` with `SessionCounter` interface | Clean ownership, testable, decoupled from worker pool |
+| D-Q6 | Single PR for all metrics | ~300–400 lines of straightforward instrumentation; metrics most useful as a complete set |
 
 ## Metric Definitions
 

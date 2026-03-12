@@ -62,6 +62,7 @@ This single command:
 | Dashboard | http://localhost:5173 |
 | API | http://localhost:8080 |
 | Health | http://localhost:8080/health |
+| Metrics | http://localhost:8080/metrics |
 
 ### 4. Stop
 
@@ -105,6 +106,7 @@ This builds both container images (`tarsy:dev`, `tarsy-llm:dev`), generates `oau
 |---------|-----|
 | Dashboard | http://localhost:8080 (GitHub login required) |
 | Health | http://localhost:8080/health (unauthenticated) |
+| Metrics | http://localhost:8080/metrics |
 
 ### 4. Useful commands
 
@@ -167,6 +169,7 @@ make openshift-urls
 | API (browser) | `https://<route-host>/api/v1/` |
 | API (in-cluster) | `https://tarsy-api.tarsy.svc:8443/api/v1/` (ServiceAccount token via kube-rbac-proxy) |
 | Health | `https://<route-host>/health` (unauthenticated) |
+| Metrics | Container port 8080 `/metrics` (unauthenticated, not exposed via route) |
 
 ### 5. Useful commands
 

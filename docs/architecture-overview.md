@@ -210,7 +210,22 @@ TARSy can automatically send Slack notifications when alert processing starts (f
 
 **For complete Slack setup guide**: See [Slack Integration Documentation](slack-integration.md)
 
-### 12. Session Scoring & Evaluation
+### 12. Prometheus Metrics
+
+TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP server (port 8080, unauthenticated). Metrics cover session lifecycle, worker pool health, LLM call performance, MCP tool reliability, HTTP request patterns, and WebSocket connections.
+
+- **Session metrics**: submission counts, terminal state counts, processing duration, queue wait time, active/queued gauges (DB-polled)
+- **Worker metrics**: configured workers, active workers (event-driven), orphan recovery count
+- **LLM metrics**: call counts, errors, duration histograms, token usage, provider fallback events — labeled by `provider`+`model`
+- **MCP metrics**: call counts, errors, duration histograms, health status — labeled by `server`+`tool`
+- **HTTP metrics**: request counts and duration via Echo middleware — labeled by `method`+`path`+`status_code`
+- **WebSocket metrics**: active connection gauge
+
+Custom histogram buckets are tuned per metric type (LLM 1–180s, MCP 0.1–60s, sessions 30s–30min). Standard Go runtime/process metrics are included via the default registry.
+
+**For detailed design**: See [ADR-0010: Prometheus Metrics](adr/0010-prometheus-metrics.md)
+
+### 13. Session Scoring & Evaluation
 
 After an investigation completes, TARSy can automatically evaluate the quality of the investigation through session scoring. The scoring produces a numeric quality score (0–100) across four categories (Logical Flow, Consistency, Tool Relevance, Synthesis Quality), a detailed score analysis, and a missing tools report identifying MCP tools that should be built to improve future investigations.
 

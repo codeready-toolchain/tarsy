@@ -50,6 +50,7 @@ TARSy is an AI-powered incident analysis system built on a Go/Python split archi
 - [13. Authentication & Access Control](#13-authentication--access-control)
 - [14. Trace / Observability API](#14-trace--observability-api)
 - [15. Cleanup & Retention](#15-cleanup--retention)
+- [16. Prometheus Metrics](#16-prometheus-metrics)
 
 ---
 
@@ -1336,3 +1337,48 @@ system:
 **Key Implementation Files**:
 - `pkg/cleanup/service.go` -- CleanupService with periodic loop
 - `ent/schema/` -- FK constraints for cascade deletes
+
+---
+
+### 16. Prometheus Metrics
+**Purpose**: Runtime observability via Prometheus time-series metrics
+**Key Responsibility**: Exposing quantitative signals for capacity planning, performance monitoring, and incident detection
+
+TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP server, covering all major subsystems.
+
+#### Package Layout
+
+```
+pkg/metrics/
+├── metrics.go          # All metric declarations + init() registration
+└── collector.go        # GaugeCollector: DB-polling goroutine for global gauges
+```
+
+All metrics are declared as package-level vars registered against `prometheus.DefaultRegisterer`. Other packages import `pkg/metrics` and call `.Inc()`, `.Observe()`, etc. at instrumentation points.
+
+#### Metric Categories
+
+| Category | Key Metrics | Labels |
+|----------|-------------|--------|
+| Session Lifecycle | `tarsy_sessions_submitted_total`, `tarsy_sessions_terminal_total`, `tarsy_session_duration_seconds`, `tarsy_session_wait_seconds`, `tarsy_sessions_active`, `tarsy_sessions_queued` | `alert_type`, `status` |
+| Worker Pool | `tarsy_workers_total`, `tarsy_workers_active`, `tarsy_orphans_recovered_total` | — |
+| LLM Calls | `tarsy_llm_calls_total`, `tarsy_llm_errors_total`, `tarsy_llm_duration_seconds`, `tarsy_llm_tokens_total`, `tarsy_llm_fallbacks_total` | `provider`, `model`, `direction`, `error_code` |
+| MCP Tool Calls | `tarsy_mcp_calls_total`, `tarsy_mcp_errors_total`, `tarsy_mcp_duration_seconds`, `tarsy_mcp_health_status` | `server`, `tool` |
+| HTTP API | `tarsy_http_requests_total`, `tarsy_http_duration_seconds` | `method`, `path`, `status_code` |
+| WebSocket | `tarsy_ws_connections_active` | — |
+
+#### Gauge Strategy
+
+- **Event-driven** for local worker gauges (`tarsy_workers_active`) — `Inc()`/`Dec()` on worker status transitions
+- **DB-polled** for global session gauges (`tarsy_sessions_active`, `tarsy_sessions_queued`) — `GaugeCollector` queries the DB every ~15s via a `SessionCounter` interface
+
+#### `/metrics` Endpoint
+
+Served via `promhttp.Handler()` alongside `/health` on port 8080 without authentication. Includes standard Go runtime/process metrics via the default registry.
+
+**For detailed design**: See [ADR-0010: Prometheus Metrics](adr/0010-prometheus-metrics.md)
+
+**Key Implementation Files**:
+- `pkg/metrics/metrics.go` -- All metric declarations
+- `pkg/metrics/collector.go` -- GaugeCollector for DB-polled gauges
+- `pkg/api/server.go` -- `/metrics` endpoint, HTTP metrics middleware
