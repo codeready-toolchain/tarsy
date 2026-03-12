@@ -1,0 +1,255 @@
+# TARSy Main Configuration
+
+# System-wide infrastructure settings (GitHub integration, runbooks, Slack).
+system:
+  dashboard_url: "http://localhost:5173"   # Base URL for dashboard links (used in Slack notifications)
+  github:
+    token_env: "GITHUB_TOKEN"       # Env var containing GitHub PAT (default: GITHUB_TOKEN)
+  runbooks:
+    repo_url: "https://github.com/codeready-toolchain/sandbox-sre/tree/master/runbooks/ai"  # GitHub directory listing
+#     cache_ttl: "1m"                 # Cache duration (default: 1m)
+#     allowed_domains:                # URL domain allowlist (default below)
+#       - "github.com"
+#       - "raw.githubusercontent.com"
+  slack:
+    enabled: true                    # Set to true to enable Slack notifications
+    token_env: "SLACK_BOT_TOKEN"     # Env var name for Slack bot token (default: SLACK_BOT_TOKEN)
+    channel: "C0ABZ5V8RHS"           # Slack channel ID (required when enabled)
+
+queue:
+  max_concurrent_sessions: 2
+
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 5
+  llm_backend: "google-native"
+  success_policy: "any"
+  alert_type: "Kubernetes - Multiple agents - Custom Synthesis"
+  scoring_enabled: true
+  fallback_providers:
+    - provider: "gemini-3-flash"
+      backend: "google-native"
+    - provider: "gemini-2.5-flash"
+      backend: "google-native"
+
+mcp_servers:
+  # HTTP-based kubernetes-server - connects to MCP server running on host
+  kubernetes-server:
+    transport:
+      type: "http"
+      # url: "http://host.containers.internal:8888/mcp" # Podman compose internal
+      url: "http://localhost:8888/mcp" # Local development
+      timeout: 30
+    # transport:
+    #   type: "stdio"
+    #   command: "npx"
+    #   args:
+    #     - "-y"
+    #     - "kubernetes-mcp-server@0.0.53"
+    #     - "--read-only"
+    #     - "--disable-destructive"
+    #     - "--kubeconfig"
+    #     - "${MCP_KUBECONFIG}"
+    instructions: |
+      For Kubernetes operations:
+      - If you get "server could not find the requested resource" error, check if you're using the namespace parameter correctly:
+        * Cluster-scoped resources (Namespace, Node, ClusterRole, PersistentVolume) should NOT have a namespace parameter
+        * Namespace-scoped resources (Pod, Deployment, Service, ConfigMap) REQUIRE a namespace parameter
+    data_masking:
+      enabled: true
+      pattern_groups:
+        - "kubernetes"
+      patterns:
+        - "certificate"
+        - "token"
+        - "email"
+    summarization:
+      enabled: true
+      size_threshold_tokens: 1000
+
+agents:
+  KubernetesActionAgent:
+    type: action
+    mcp_servers: [kubernetes-server]
+    custom_instructions: |
+      You are a Kubernetes expert in automated remediation.
+      
+      If some resource has a finalizer which prevents the deletion, you should take the following actions:
+      - Remove the finalizer to unblock the deletion
+
+# Chain configurations for multi-stage alert processing
+agent_chains:
+  kubernetes-native-thinking-one-stage:
+    alert_types: ["Kubernetes - Native Thinking - Gemini 3 Pro"]
+    stages:
+      - name: "native-thinking"
+        agents:
+          - name: "KubernetesAgent"
+            llm_backend: "google-native"
+    description: "Native thinking for Kubernetes troubleshooting"
+
+  kubernetes-anthropic:
+    alert_types: ["Kubernetes - Anthropic"]
+    stages:
+      - name: "investigation"
+        agents:
+          - name: "KubernetesAgent"
+            llm_backend: "langchain"
+            llm_provider: "vertexai-anthropic"
+
+  kubernetes-native-thinking-two-stages:
+    alert_types: ["Kubernetes - Native Thinking - Two stages - Two models - Default Synthesis"]
+    stages:
+      - name: "langchain-2.5-flash"
+        agents:
+          - name: "KubernetesAgent"
+            llm_backend: "langchain"
+            llm_provider: "gemini-2.5-flash"
+      - name: "native-thinking-3.1-pro"
+        agents:
+          - name: "KubernetesAgent"
+            llm_backend: "google-native"
+    description: "Two stages - Two models - LangChain and Native Thinking"
+    llm_provider: "gemini-3.1-pro"
+
+  kubernetes-2-replicas:
+    alert_types: ["Kubernetes - 2 replicas - Default Synthesis"]
+    stages:
+      - name: "replicas"
+        agents:
+          - name: "KubernetesAgent"
+        replicas: 2
+    description: "2 replicas"
+    llm_provider: "gemini-2.5-flash"
+
+  kubernetes-multiple-agents:
+    alert_types: ["Kubernetes - Multiple agents - Custom Synthesis"]
+    stages:
+      - name: "Investigation"
+        max_iterations: 10
+        agents:
+          # - name: "KubernetesAgent"
+          #   llm_backend: "langchain"
+          #   llm_provider: "gemini-2.5-flash"
+          #   force_conclusion_at_max_iterations: true
+          #   max_iterations: 3
+          # - name: "KubernetesAgent"
+          #   llm_backend: "google-native"
+          #   llm_provider: "gemini-3-flash"
+          - name: "KubernetesAgent"
+            llm_provider: "gemini-3-flash"
+            llm_backend: "google-native"
+            max_iterations: 5
+          - name: "KubernetesAgent"
+            llm_provider: "gemini-3-flash"
+            llm_backend: "langchain"
+            max_iterations: 5
+          # - name: "KubernetesAgent"
+          #   llm_backend: "google-native"
+          #   llm_provider: "gemini-3-flash"
+        synthesis:
+          agent: "SynthesisAgent"
+          llm_backend: "google-native"
+          llm_provider: "gemini-3-flash"
+
+      # - name: "Remediation"
+      #   agents:
+      #     - name: "KubernetesActionAgent"
+      #       llm_provider: "gemini-3.1-pro"
+      #       llm_backend: "google-native"
+    description: "Multiple agents - LangChain, Native Thinking, and Gemini 3 Flash"
+
+  orchestrator-investigation:
+    alert_types: ["Orchestrator Investigation"]
+    description: "Deep orchestrated investigation with custom overrides"
+    stages:
+      - name: "orchestrate"
+        agents:
+          - name: "Orchestrator"
+            llm_provider: "gemini-2.5-flash"        # use a more capable model for orchestration
+            llm_backend: "google-native"
+            mcp_servers: [kubernetes-server]
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: WebResearcher               # built-in: web search + URL analysis
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: CodeExecutor                # built-in: Python code execution
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: GeneralWorker               # built-in: pure reasoning / summarization
+                mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+          - name: "Orchestrator"
+            llm_provider: "gemini-2.5-flash"        # use a more capable model for orchestration
+            llm_backend: "google-native"
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+        synthesis:
+          llm_backend: "google-native"
+          llm_provider: "gemini-2.5-flash"
+
+  orchestrator-investigation-anthropic:
+    alert_types: ["Orchestrator Investigation - Anthropic"]
+    description: "Deep orchestrated investigation with custom overrides"
+    stages:
+      - name: "orchestrate"
+        agents:
+          - name: "Orchestrator"
+            llm_provider: "vertexai-anthropic"
+            llm_backend: "langchain"
+            mcp_servers: [kubernetes-server]
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+                llm_provider: "vertexai-anthropic"
+                llm_backend: "langchain"
+              - name: WebResearcher               # built-in: web search + URL analysis
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: CodeExecutor                # built-in: Python code execution
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: GeneralWorker               # built-in: pure reasoning / summarization
+                mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+          - name: "Orchestrator"
+            llm_provider: "gemini-3.1-pro"
+            llm_backend: "google-native"
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+                llm_provider: "gemini-3.1-pro"
+                llm_backend: "google-native"
+              - name: WebResearcher               # built-in: web search + URL analysis
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: CodeExecutor                # built-in: Python code execution
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+              - name: GeneralWorker               # built-in: pure reasoning / summarization
+                mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
+                llm_provider: "gemini-2.5-flash"
+                llm_backend: "google-native"
+        synthesis:
+          llm_backend: "langchain"
+          llm_provider: "vertexai-anthropic"
+
+  orchestrator-investigation-3-flash:
+    alert_types: ["Orchestrator Investigation - Gemini 3 Flash"]
+    description: "Deep orchestrated investigation with custom overrides"
+    stages:
+      - name: "orchestrate"
+        agents:
+          - name: "Orchestrator"
+            llm_provider: "gemini-3.1-flash"        # use a more capable model for orchestration
+            llm_backend: "google-native"
+            mcp_servers: [kubernetes-server]
+            sub_agents:
+              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
+                llm_provider: "gemini-3.1-flash"
+                llm_backend: "google-native"
