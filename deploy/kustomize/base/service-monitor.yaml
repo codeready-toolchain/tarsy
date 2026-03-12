@@ -12,7 +12,7 @@ spec:
       - tarsy
   selector:
     matchLabels:
-      app.kubernetes.io/name: tarsy
+      app: tarsy
   endpoints:
     - bearerTokenSecret:
         name: prometheus-k8s-token
