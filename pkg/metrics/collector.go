@@ -24,6 +24,7 @@ type GaugeCollector struct {
 	wg      sync.WaitGroup
 }
 
+// NewGaugeCollector returns a GaugeCollector that polls the given counter.
 func NewGaugeCollector(counter SessionCounter) *GaugeCollector {
 	return &GaugeCollector{counter: counter}
 }

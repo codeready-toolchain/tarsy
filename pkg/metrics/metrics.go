@@ -1,3 +1,4 @@
+// Package metrics provides Prometheus metrics for TARSy.
 package metrics
 
 import (
@@ -16,8 +17,7 @@ var (
 	SessionBuckets = []float64{30, 60, 120, 180, 300, 600, 900, 1200, 1800}
 )
 
-// --- Session Lifecycle ---
-
+// Session lifecycle metrics.
 var (
 	SessionsSubmittedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "tarsy_sessions_submitted_total",
@@ -52,8 +52,7 @@ var (
 	})
 )
 
-// --- Worker Pool ---
-
+// Worker pool metrics.
 var (
 	WorkersTotal = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "tarsy_workers_total",
@@ -71,8 +70,7 @@ var (
 	})
 )
 
-// --- LLM Calls ---
-
+// LLM call metrics.
 var (
 	LLMCallsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "tarsy_llm_calls_total",
@@ -101,8 +99,7 @@ var (
 	}, []string{"from_provider", "to_provider"})
 )
 
-// --- MCP Tool Calls ---
-
+// MCP tool call metrics.
 var (
 	MCPCallsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "tarsy_mcp_calls_total",
@@ -126,8 +123,7 @@ var (
 	}, []string{"server"})
 )
 
-// --- HTTP API ---
-
+// HTTP API metrics.
 var (
 	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "tarsy_http_requests_total",
@@ -141,8 +137,7 @@ var (
 	}, []string{"method", "path"})
 )
 
-// --- WebSocket ---
-
+// WSConnectionsActive tracks active WebSocket connections.
 var WSConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{
 	Name: "tarsy_ws_connections_active",
 	Help: "Active WebSocket connections.",
