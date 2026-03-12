@@ -242,19 +242,19 @@ loop:
 					TotalTokens:    c.TotalTokens,
 					ThinkingTokens: c.ThinkingTokens,
 				}
-		case *agent.ErrorChunk:
-			if loopDetected {
-				continue // expected error from stream cancellation
-			}
-			return nil, &PartialOutputError{
-				Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
-					c.Message, c.Code, c.Retryable),
-				PartialText:     textBuf.String(),
-				PartialThinking: thinkingBuf.String(),
-				Code:            LLMErrorCode(c.Code),
-				Retryable:       c.Retryable,
-				Usage:           resp.Usage,
-			}
+			case *agent.ErrorChunk:
+				if loopDetected {
+					continue // expected error from stream cancellation
+				}
+				return nil, &PartialOutputError{
+					Cause: fmt.Errorf("LLM error: %s (code: %s, retryable: %v)",
+						c.Message, c.Code, c.Retryable),
+					PartialText:     textBuf.String(),
+					PartialThinking: thinkingBuf.String(),
+					Code:            LLMErrorCode(c.Code),
+					Retryable:       c.Retryable,
+					Usage:           resp.Usage,
+				}
 			}
 
 		case <-timeoutCh:
