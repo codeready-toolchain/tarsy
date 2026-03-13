@@ -44,9 +44,9 @@ Redesign the evaluation framework — the judge prompt, evaluation structure, an
 The judge evaluates in two phases but produces a single holistic score (0-100):
 
 **Phase 1 — Assess investigation outcome.** Was the conclusion correct, well-supported, and actionable? This determines the score ceiling:
-- Strong, evidence-backed conclusion → eligible for 60-100
-- Partially correct or weakly supported → capped at 40-65
-- Wrong or unsupported conclusion → capped at 0-40
+- Correct, well-supported conclusion → 60-100
+- Partially correct or weakly supported → 35-59
+- Wrong or unsupported conclusion → 0-34
 
 **Phase 2 — Assess investigation process.** Evidence gathering, tool usage, reasoning quality, efficiency. This places the score within the ceiling set by Phase 1.
 
