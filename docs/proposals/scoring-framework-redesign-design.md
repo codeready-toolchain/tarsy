@@ -18,10 +18,12 @@ The scoring infrastructure (ScoringExecutor, ScoringController, 2-turn flow, aut
 ## Design Principles
 
 1. **Outcome > Process** — a wrong conclusion can never produce a high score, regardless of process quality. A flawed conclusion indicates a flawed process.
-2. **Don't constrain the judge** — the failure vocabulary is guidance, not a hard requirement; evaluation quality always takes priority
-3. **Single source of truth** — the failure vocabulary Go slice drives both prompt generation and tag scanning
-4. **Minimal infrastructure changes** — same single score, same extraction method, same 2-turn flow
-5. **Backward compatible** — the `failure_tags` column is nullable; old scores with NULL tags work fine
+2. **Structured analysis, holistic judgment** — the judge evaluates five broad dimensions before scoring, grounding its thinking. The score itself remains holistic — dimensions interact in ways that fixed-weight formulas cannot capture. Based on EvalPlanner (ICML 2025) showing structured-then-holistic outperforms both pure decomposition and pure holistic evaluation.
+3. **Don't constrain the judge** — dimensions are broad and universally applicable; the failure vocabulary is guidance, not a hard requirement; evaluation quality always takes priority over structural compliance
+4. **Evidence-anchored** — every claim in a dimension assessment must cite specific timeline events, making evaluations verifiable and actionable
+5. **Single source of truth** — the failure vocabulary Go slice drives both prompt generation and tag scanning
+6. **Minimal infrastructure changes** — same single score, same extraction method, same 2-turn flow
+7. **Backward compatible** — the `failure_tags` column is nullable; old scores with NULL tags work fine
 
 ## Architecture
 
@@ -78,11 +80,41 @@ process, with outcome quality as the dominant factor.
 
 ### Turn 1 prompt (`judgePromptScore`)
 
-The new Turn 1 prompt replaces the 4-category framework with a two-phase evaluation using explicit non-overlapping score ranges.
+The new Turn 1 prompt replaces the 4-category framework with structured dimension assessments followed by holistic scoring. This approach is grounded in EvalPlanner (ICML 2025) research showing that LLMs produce more consistent and accurate evaluations when they explicitly analyze along defined dimensions before committing to a score.
 
-**Phase 1 — Investigation Outcome (determines score range)**
+The dimensions are deliberately broad — they apply universally to any investigation regardless of alert type. The LLM is never forced into narrow yes/no questions that might be irrelevant; instead, it writes free-form assessments per dimension, naturally using failure vocabulary terms where applicable.
 
-The judge assesses the quality of the conclusion, recommendations, and overall report. This determines the score range:
+**Part 1 — Dimension Assessments**
+
+The judge evaluates the investigation across five broad dimensions. For each dimension, it writes a 2-4 sentence assessment, with every claim citing specific evidence from the investigation timeline (tool calls, agent responses, or absence of expected actions).
+
+1. **Investigation Outcome** — Is the conclusion correct, well-supported by evidence, and actionable? Were alternative explanations considered? Does the confidence level match the evidence quality?
+
+2. **Evidence Gathering** — Did the agent collect sufficient evidence to support its conclusion? Did it verify claims with direct data, or rely on assumptions? Were relevant data sources left unexplored?
+
+3. **Tool Utilization** — Were available tools used appropriately? Were obvious tools missed? Were tool results interpreted correctly? Did the agent recover from tool failures?
+
+4. **Analytical Reasoning** — Was the reasoning logically sound? Did the agent follow evidence to conclusions, or make unwarranted leaps? Was contradictory evidence addressed?
+
+5. **Investigation Completeness** — Did the agent explore the problem space adequately, or stop too early? Were there wasted loops or irrelevant tangents?
+
+The evidence-anchoring requirement is embedded in the dimension assessment instructions:
+
+```
+For each dimension, cite specific evidence from the session data — exact tool
+calls, agent responses, or missing actions. Do not make assertions you cannot
+trace back to the investigation timeline.
+
+Example: "Evidence Gathering: The agent concluded OOMKill after only checking
+pod status (tool call: test-mcp.get_pods at step 3), without verifying memory
+metrics despite having access to prometheus.query_range — incomplete_evidence."
+```
+
+Any dimension may not be particularly relevant to a given investigation. The judge can note this briefly ("Tool Utilization: Only one tool was relevant here; it was used correctly") and move on.
+
+**Part 2 — Holistic Narrative & Score**
+
+The judge synthesizes the five dimension assessments into an overall narrative and score. The Investigation Outcome dimension determines the score range (outcome-first ceiling mechanic):
 
 | Outcome quality | Score range |
 |---|---|
@@ -90,25 +122,7 @@ The judge assesses the quality of the conclusion, recommendations, and overall r
 | Partially correct or weakly supported conclusion | 35-59 |
 | Wrong or unsupported conclusion | 0-34 |
 
-A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong.
-
-What to evaluate:
-- Is the root cause / diagnosis well-supported by the evidence gathered?
-- Were alternative explanations considered?
-- Are the recommendations specific, actionable, and proportional to the evidence?
-- Does the report cover all aspects of the alert, or are there blind spots?
-- Does the confidence level match the evidence quality?
-
-**Phase 2 — Investigation Process (places score within range)**
-
-The judge assesses how the agents reached their conclusion. This determines where the score falls within the range set by Phase 1.
-
-What to evaluate:
-- Were all relevant available tools used? Were any obvious ones ignored?
-- Was direct evidence sought, or did agents rely on indirect indicators?
-- Was the investigation path logical and efficient, or were there wasted loops?
-- Did agents pivot appropriately when approaches failed?
-- Were tool failures handled by trying alternatives, or by giving up?
+The remaining four dimensions (Evidence Gathering, Tool Utilization, Analytical Reasoning, Investigation Completeness) determine where the score falls within that range. A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong.
 
 **Failure vocabulary section (dynamically injected)**
 
@@ -352,15 +366,27 @@ The scripted LLM response in `scriptScoringSuccess()` needs updating to match th
 func scriptScoringSuccess(llm *ScriptedLLMClient) {
     llm.AddSequential(LLMScriptEntry{
         Chunks: []agent.Chunk{
-            &agent.TextChunk{Content: "## Investigation Outcome\n\n" +
-                "The conclusion is correct — pod-1 is OOMKilled...\n\n" +
-                "## Investigation Process\n\n" +
-                "The agent demonstrated incomplete_evidence gathering — " +
-                "no memory metrics or resource limits were checked.\n\n" +
-                "The agent also showed missed_available_tool behavior — " +
-                "the get_resource_limits tool was available but not used.\n\n" +
-                "**Outcome:** Correct, well-supported\n" +
-                "**Process:** Adequate with gaps\n\n70"},
+            &agent.TextChunk{Content: "## Dimension Assessments\n\n" +
+                "**Investigation Outcome:** The conclusion is correct — pod-1 is " +
+                "OOMKilled, matching the evidence from get_pods (step 2). " +
+                "Confidence is appropriate given the evidence gathered.\n\n" +
+                "**Evidence Gathering:** The agent showed incomplete_evidence — " +
+                "after confirming pod status via test-mcp.get_pods (step 2), it " +
+                "did not check memory metrics or resource limits despite having " +
+                "access to prometheus.query_range and get_resource_limits.\n\n" +
+                "**Tool Utilization:** missed_available_tool — get_resource_limits " +
+                "was available but never called. The agent relied solely on pod " +
+                "status from test-mcp.get_pods.\n\n" +
+                "**Analytical Reasoning:** The reasoning from pod status to " +
+                "OOMKill was sound, but the agent did not consider alternative " +
+                "explanations for the restart.\n\n" +
+                "**Investigation Completeness:** The agent stopped after a single " +
+                "tool call (step 2), leaving memory and resource dimensions " +
+                "unexplored.\n\n" +
+                "## Overall Assessment\n\n" +
+                "Correct conclusion with significant gaps in evidence gathering " +
+                "and tool utilization. The outcome places this in the 60-100 " +
+                "range, but process weaknesses pull it toward the lower end.\n\n70"},
             &agent.UsageChunk{InputTokens: 500, OutputTokens: 100, TotalTokens: 600},
         },
     })
@@ -378,7 +404,8 @@ func scriptScoringSuccess(llm *ScriptedLLMClient) {
 ```
 
 Assertions updated to verify:
-- `score.FailureTags` contains `["missed_available_tool", "incomplete_evidence"]`
+- `score.FailureTags` contains `["missed_available_tool", "incomplete_evidence"]` (in vocabulary order)
+- Score analysis contains dimension headings
 - API response includes `failure_tags`
 - Golden files regenerated
 
