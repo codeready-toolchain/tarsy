@@ -148,7 +148,7 @@ func (b *PromptBuilder) BuildScoringSystemPrompt() string {
 }
 
 func (b *PromptBuilder) BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string {
-	return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema)
+	return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema, RenderFailureVocabularySection(FailureVocabulary))
 }
 
 func (b *PromptBuilder) BuildScoringOutputSchemaReminderPrompt(outputSchema string) string {

@@ -15,8 +15,8 @@ func TestGetCurrentPromptHash_Deterministic(t *testing.T) {
 }
 
 func TestGetCurrentPromptHash_MatchesExpected(t *testing.T) {
-	expected := sha256.Sum256([]byte(judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder + judgePromptFollowupMissingTools))
-	assert.Equal(t, expected, GetCurrentPromptHash(), "hash must match SHA256 of concatenated prompts")
+	expected := sha256.Sum256([]byte(buildJudgeHashInput()))
+	assert.Equal(t, expected, GetCurrentPromptHash(), "hash must match SHA256 of concatenated prompts + vocabulary")
 }
 
 func TestGetCurrentPromptHash_ChangesWithPrompts(t *testing.T) {
@@ -48,6 +48,7 @@ func TestBuildScoringInitialPrompt(t *testing.T) {
 	assert.Contains(t, result, schema, "must include output schema")
 	assert.NotContains(t, result, "%[1]s", "no unresolved positional verbs")
 	assert.NotContains(t, result, "%[2]s", "no unresolved positional verbs")
+	assert.NotContains(t, result, "%[3]s", "no unresolved positional verbs")
 }
 
 func TestBuildScoringInitialPrompt_UsesInvestigationTerminology(t *testing.T) {
@@ -64,6 +65,16 @@ func TestBuildScoringInitialPrompt_NoMissingToolsSection(t *testing.T) {
 	result := builder.BuildScoringInitialPrompt("context", "schema")
 
 	assert.NotContains(t, result, "IDENTIFYING MISSING TOOLS")
+}
+
+func TestBuildScoringInitialPrompt_InjectsVocabulary(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildScoringInitialPrompt("context", "schema")
+
+	for _, ft := range FailureVocabulary {
+		assert.Contains(t, result, ft.Term, "rendered prompt must include vocabulary term %q", ft.Term)
+		assert.Contains(t, result, ft.Description, "rendered prompt must include vocabulary description for %q", ft.Term)
+	}
 }
 
 func TestBuildScoringOutputSchemaReminderPrompt(t *testing.T) {
@@ -90,12 +101,21 @@ func TestBuildScoringMissingToolsReportPrompt_UsesInvestigationTerminology(t *te
 	result := builder.BuildScoringMissingToolsReportPrompt()
 
 	assert.Contains(t, result, "investigation")
-	assert.NotContains(t, result, "evaluation")
+}
+
+func TestBuildScoringMissingToolsReportPrompt_HasExistingToolImprovements(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildScoringMissingToolsReportPrompt()
+
+	assert.Contains(t, result, "Existing Tool Improvements")
+	assert.Contains(t, result, "Argument clarity")
+	assert.Contains(t, result, "Response format")
 }
 
 func TestJudgePromptScore_HasPlaceholders(t *testing.T) {
 	require.Contains(t, judgePromptScore, "%[1]s", "must have session context placeholder")
 	require.Contains(t, judgePromptScore, "%[2]s", "must have output schema placeholder")
+	require.Contains(t, judgePromptScore, "%[3]s", "must have vocabulary placeholder")
 }
 
 func TestJudgePromptScoreReminder_HasPlaceholder(t *testing.T) {
@@ -105,4 +125,18 @@ func TestJudgePromptScoreReminder_HasPlaceholder(t *testing.T) {
 func TestJudgePromptFollowupMissingTools_NoPlaceholders(t *testing.T) {
 	assert.NotContains(t, judgePromptFollowupMissingTools, "%[1]s", "must have no placeholders")
 	assert.NotContains(t, judgePromptFollowupMissingTools, "%[2]s", "must have no placeholders")
+}
+
+func TestRenderFailureVocabularySection_Deterministic(t *testing.T) {
+	h1 := RenderFailureVocabularySection(FailureVocabulary)
+	h2 := RenderFailureVocabularySection(FailureVocabulary)
+	assert.Equal(t, h1, h2, "same vocabulary must produce the same rendered section")
+}
+
+func TestRenderFailureVocabularySection_ChangesWithVocabulary(t *testing.T) {
+	original := RenderFailureVocabularySection(FailureVocabulary)
+	modified := RenderFailureVocabularySection([]FailureTag{
+		{"different_tag", "different description"},
+	})
+	assert.NotEqual(t, original, modified, "different vocabulary must produce different rendered section")
 }
