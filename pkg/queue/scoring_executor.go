@@ -811,11 +811,14 @@ func IsTerminalStatus(status alertsession.Status) bool {
 }
 
 // resolveScoringProviderName resolves the LLM provider name for scoring using
-// the hierarchy: defaults → chain → scoringCfg.
+// the hierarchy: defaults → defaults.Scoring → chain → scoringCfg.
 func resolveScoringProviderName(defaults *config.Defaults, chain *config.ChainConfig, scoringCfg *config.ScoringConfig) string {
 	var providerName string
 	if defaults != nil {
 		providerName = defaults.LLMProvider
+		if defaults.Scoring != nil && defaults.Scoring.LLMProvider != "" {
+			providerName = defaults.Scoring.LLMProvider
+		}
 	}
 	if chain != nil && chain.LLMProvider != "" {
 		providerName = chain.LLMProvider

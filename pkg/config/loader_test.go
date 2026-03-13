@@ -1001,11 +1001,12 @@ agent_chains:
 }
 
 func TestLoadAppliesScoringEnabledDefault(t *testing.T) {
-	t.Run("scoring_enabled injects scoring config for chains without it", func(t *testing.T) {
+	t.Run("defaults.scoring.enabled injects scoring config for chains without it", func(t *testing.T) {
 		dir := t.TempDir()
 		tarsyYAML := `
 defaults:
-  scoring_enabled: true
+  scoring:
+    enabled: true
 
 agents:
   test-agent:
@@ -1049,11 +1050,12 @@ agent_chains:
 		assert.Equal(t, "custom-provider", explicit.Scoring.LLMProvider)
 	})
 
-	t.Run("scoring_enabled false does not inject scoring", func(t *testing.T) {
+	t.Run("defaults.scoring.enabled false does not inject scoring", func(t *testing.T) {
 		dir := t.TempDir()
 		tarsyYAML := `
 defaults:
-  scoring_enabled: false
+  scoring:
+    enabled: false
 
 agents:
   test-agent:
@@ -1075,14 +1077,15 @@ agent_chains:
 
 		chain, err := cfg.GetChain("chain-no-scoring")
 		require.NoError(t, err)
-		assert.Nil(t, chain.Scoring, "scoring should not be injected when scoring_enabled is false")
+		assert.Nil(t, chain.Scoring, "scoring should not be injected when scoring.enabled is false")
 	})
 
 	t.Run("explicit scoring block is not overridden by default", func(t *testing.T) {
 		dir := t.TempDir()
 		tarsyYAML := `
 defaults:
-  scoring_enabled: true
+  scoring:
+    enabled: true
 
 agents:
   test-agent:
@@ -1110,12 +1113,45 @@ agent_chains:
 		assert.False(t, chain.Scoring.Enabled, "explicit scoring.enabled=false should not be overridden by default")
 	})
 
-	t.Run("omitted scoring_enabled does not inject scoring", func(t *testing.T) {
+	t.Run("omitted defaults.scoring does not inject scoring", func(t *testing.T) {
 		dir := setupTestConfigDir(t)
 
 		cfg, err := load(context.Background(), dir)
 		require.NoError(t, err)
 
-		assert.False(t, cfg.Defaults.ScoringEnabled)
+		assert.Nil(t, cfg.Defaults.Scoring)
+	})
+
+	t.Run("defaults.scoring with llm_provider is parsed", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  scoring:
+    enabled: true
+    llm_provider: "gemini-3-flash"
+    llm_backend: "google-native"
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Defaults.Scoring)
+		assert.True(t, cfg.Defaults.Scoring.Enabled)
+		assert.Equal(t, "gemini-3-flash", cfg.Defaults.Scoring.LLMProvider)
+		assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.Scoring.LLMBackend)
 	})
 }

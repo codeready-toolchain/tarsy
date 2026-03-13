@@ -148,7 +148,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	}
 
 	// 7. Apply default scoring to chains without explicit scoring config
-	if defaults.ScoringEnabled {
+	if defaults.Scoring != nil && defaults.Scoring.Enabled {
 		for _, chain := range chains {
 			if chain.Scoring == nil {
 				chain.Scoring = &ScoringConfig{Enabled: true}

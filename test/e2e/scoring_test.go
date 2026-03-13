@@ -685,3 +685,65 @@ func TestE2E_Scoring_API_NonTerminalSession(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, scoringStageCount, "rejected scoring must not create scoring stages")
 }
+
+// TestE2E_Scoring_DefaultsBlock verifies that scoring auto-triggers when
+// enabled via the defaults.scoring block (no chain-level scoring: config).
+// This exercises the loader path that injects ScoringConfig into chains.
+func TestE2E_Scoring_DefaultsBlock(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// Simple investigation (2) + exec summary (1) + scoring (2) = 5 total.
+	scriptSimpleInvestigation(llm)
+	scriptExecSummary(llm)
+	scriptScoringSuccess(llm)
+
+	podsResult := `[{"name":"pod-1","status":"OOMKilled","restarts":3}]`
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "scoring-defaults")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_pods": StaticToolHandler(podsResult),
+			},
+		}),
+	)
+
+	resp := app.SubmitAlert(t, "test-scoring-defaults", "Pod OOMKilled")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Wait for the scoring stage to complete (auto-triggered via defaults.scoring).
+	require.Eventually(t, func() bool {
+		stgs, err := app.EntClient.Stage.Query().
+			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+			All(context.Background())
+		if err != nil || len(stgs) == 0 {
+			return false
+		}
+		return stgs[0].Status == stage.StatusCompleted
+	}, 30*time.Second, 200*time.Millisecond, "scoring stage did not complete")
+
+	// Verify scoring record was created.
+	scores, err := app.EntClient.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, scores, 1)
+
+	score := scores[0]
+	assert.Equal(t, sessionscore.StatusCompleted, score.Status)
+	require.NotNil(t, score.TotalScore)
+	assert.Equal(t, 75, *score.TotalScore)
+	assert.Equal(t, "auto", score.ScoreTriggeredBy)
+
+	// Verify session detail reflects the score.
+	sessionDetail := app.GetSession(t, sessionID)
+	assert.Equal(t, float64(75), sessionDetail["latest_score"])
+	assert.Equal(t, "completed", sessionDetail["scoring_status"])
+
+	// Investigation (2) + exec summary (1) + scoring (2) = 5.
+	assert.Equal(t, 5, llm.CallCount())
+}

@@ -153,6 +153,17 @@ func TestResolveScoringProviderName(t *testing.T) {
 			expected: "default-provider",
 		},
 		{
+			name:     "defaults.Scoring overrides defaults.LLMProvider",
+			defaults: &config.Defaults{LLMProvider: "default-provider", Scoring: &config.ScoringConfig{LLMProvider: "scoring-default"}},
+			expected: "scoring-default",
+		},
+		{
+			name:     "chain overrides defaults.Scoring",
+			defaults: &config.Defaults{LLMProvider: "default-provider", Scoring: &config.ScoringConfig{LLMProvider: "scoring-default"}},
+			chain:    &config.ChainConfig{LLMProvider: "chain-provider"},
+			expected: "chain-provider",
+		},
+		{
 			name:     "chain overrides defaults",
 			defaults: &config.Defaults{LLMProvider: "default-provider"},
 			chain:    &config.ChainConfig{LLMProvider: "chain-provider"},
@@ -161,6 +172,13 @@ func TestResolveScoringProviderName(t *testing.T) {
 		{
 			name:     "scoring overrides chain",
 			defaults: &config.Defaults{LLMProvider: "default-provider"},
+			chain:    &config.ChainConfig{LLMProvider: "chain-provider"},
+			scoring:  &config.ScoringConfig{LLMProvider: "scoring-provider"},
+			expected: "scoring-provider",
+		},
+		{
+			name:     "full hierarchy: scoring overrides chain overrides defaults.Scoring overrides defaults",
+			defaults: &config.Defaults{LLMProvider: "default-provider", Scoring: &config.ScoringConfig{LLMProvider: "scoring-default"}},
 			chain:    &config.ChainConfig{LLMProvider: "chain-provider"},
 			scoring:  &config.ScoringConfig{LLMProvider: "scoring-provider"},
 			expected: "scoring-provider",

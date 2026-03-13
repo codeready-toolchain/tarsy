@@ -106,10 +106,24 @@ func (v *Validator) validateDefaults() error {
 		return nil
 	}
 
-	// Validate scoring agent reference if specified
-	if defaults.ScoringAgent != "" && !v.cfg.AgentRegistry.Has(defaults.ScoringAgent) {
-		return NewValidationError("defaults", "", "scoring_agent",
-			fmt.Errorf("agent '%s' not found", defaults.ScoringAgent))
+	// Validate defaults.scoring block if specified
+	if defaults.Scoring != nil {
+		if defaults.Scoring.Agent != "" && !v.cfg.AgentRegistry.Has(defaults.Scoring.Agent) {
+			return NewValidationError("defaults", "", "scoring.agent",
+				fmt.Errorf("agent '%s' not found", defaults.Scoring.Agent))
+		}
+		if defaults.Scoring.LLMBackend != "" && !defaults.Scoring.LLMBackend.IsValid() {
+			return NewValidationError("defaults", "", "scoring.llm_backend",
+				fmt.Errorf("invalid LLM backend: %s", defaults.Scoring.LLMBackend))
+		}
+		if defaults.Scoring.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(defaults.Scoring.LLMProvider) {
+			return NewValidationError("defaults", "", "scoring.llm_provider",
+				fmt.Errorf("LLM provider '%s' not found", defaults.Scoring.LLMProvider))
+		}
+		if defaults.Scoring.MaxIterations != nil && *defaults.Scoring.MaxIterations < 1 {
+			return NewValidationError("defaults", "", "scoring.max_iterations",
+				fmt.Errorf("must be at least 1"))
+		}
 	}
 
 	// Validate fallback providers if specified
@@ -560,6 +574,9 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		}
 		for _, fb := range v.cfg.Defaults.FallbackProviders {
 			referenced[fb.Provider] = true
+		}
+		if v.cfg.Defaults.Scoring != nil && v.cfg.Defaults.Scoring.LLMProvider != "" {
+			referenced[v.cfg.Defaults.Scoring.LLMProvider] = true
 		}
 	}
 

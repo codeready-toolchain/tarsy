@@ -2108,18 +2108,19 @@ func TestValidateDefaults(t *testing.T) {
 	}
 }
 
-func TestValidateDefaultsScoringAgent(t *testing.T) {
+func TestValidateDefaultsScoring(t *testing.T) {
 	tests := []struct {
-		name     string
-		defaults *Defaults
-		agents   map[string]*AgentConfig
-		wantErr  bool
-		errMsg   string
+		name      string
+		defaults  *Defaults
+		agents    map[string]*AgentConfig
+		providers map[string]*LLMProviderConfig
+		wantErr   bool
+		errMsg    string
 	}{
 		{
 			name: "valid scoring agent passes",
 			defaults: &Defaults{
-				ScoringAgent: "scoring-agent",
+				Scoring: &ScoringConfig{Agent: "scoring-agent"},
 			},
 			agents: map[string]*AgentConfig{
 				"scoring-agent": {},
@@ -2129,25 +2130,77 @@ func TestValidateDefaultsScoringAgent(t *testing.T) {
 		{
 			name: "invalid scoring agent fails",
 			defaults: &Defaults{
-				ScoringAgent: "nonexistent-agent",
+				Scoring: &ScoringConfig{Agent: "nonexistent-agent"},
 			},
 			agents:  map[string]*AgentConfig{},
 			wantErr: true,
 			errMsg:  "agent 'nonexistent-agent' not found",
 		},
 		{
-			name:     "empty scoring agent passes",
+			name:     "nil scoring passes",
 			defaults: &Defaults{},
 			agents:   map[string]*AgentConfig{},
 			wantErr:  false,
+		},
+		{
+			name: "invalid scoring llm_backend fails",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{LLMBackend: "invalid-backend"},
+			},
+			agents:  map[string]*AgentConfig{},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
+		},
+		{
+			name: "valid scoring llm_backend passes",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{LLMBackend: LLMBackendNativeGemini},
+			},
+			agents:  map[string]*AgentConfig{},
+			wantErr: false,
+		},
+		{
+			name: "invalid scoring llm_provider fails",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{LLMProvider: "nonexistent-provider"},
+			},
+			agents:    map[string]*AgentConfig{},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "LLM provider 'nonexistent-provider' not found",
+		},
+		{
+			name: "valid scoring llm_provider passes",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{LLMProvider: "test-provider"},
+			},
+			agents: map[string]*AgentConfig{},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test", MaxToolResultTokens: 1000},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid scoring max_iterations fails",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{MaxIterations: intPtr(0)},
+			},
+			agents:  map[string]*AgentConfig{},
+			wantErr: true,
+			errMsg:  "must be at least 1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			providers := tt.providers
+			if providers == nil {
+				providers = map[string]*LLMProviderConfig{}
+			}
 			cfg := &Config{
-				Defaults:      tt.defaults,
-				AgentRegistry: NewAgentRegistry(tt.agents),
+				Defaults:            tt.defaults,
+				AgentRegistry:       NewAgentRegistry(tt.agents),
+				LLMProviderRegistry: NewLLMProviderRegistry(providers),
 			}
 
 			validator := NewValidator(cfg)

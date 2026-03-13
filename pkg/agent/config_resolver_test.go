@@ -698,12 +698,12 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeScoring, resolved.Type)
 	})
 
-	t.Run("defaults.ScoringAgent used as fallback", func(t *testing.T) {
+	t.Run("defaults.Scoring.Agent used as fallback", func(t *testing.T) {
 		cfgWithDefault := &config.Config{
 			Defaults: &config.Defaults{
 				LLMProvider:   "google-default",
 				MaxIterations: &maxIter25,
-				ScoringAgent:  "CustomScorer",
+				Scoring:       &config.ScoringConfig{Agent: "CustomScorer"},
 			},
 			AgentRegistry:       cfg.AgentRegistry,
 			LLMProviderRegistry: cfg.LLMProviderRegistry,
@@ -715,12 +715,12 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.Equal(t, "CustomScorer", resolved.AgentName)
 	})
 
-	t.Run("scoringCfg agent overrides defaults.ScoringAgent", func(t *testing.T) {
+	t.Run("scoringCfg agent overrides defaults.Scoring.Agent", func(t *testing.T) {
 		cfgWithDefault := &config.Config{
 			Defaults: &config.Defaults{
 				LLMProvider:   "google-default",
 				MaxIterations: &maxIter25,
-				ScoringAgent:  config.AgentNameKubernetes,
+				Scoring:       &config.ScoringConfig{Agent: config.AgentNameKubernetes},
 			},
 			AgentRegistry:       cfg.AgentRegistry,
 			LLMProviderRegistry: cfg.LLMProviderRegistry,
@@ -733,6 +733,42 @@ func TestResolveScoringConfig(t *testing.T) {
 		resolved, err := ResolveScoringConfig(cfgWithDefault, chain, scoringCfg)
 		require.NoError(t, err)
 		assert.Equal(t, "CustomScorer", resolved.AgentName)
+	})
+
+	t.Run("defaults.Scoring LLM provider overrides defaults.LLMProvider", func(t *testing.T) {
+		cfgWithDefault := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				Scoring:     &config.ScoringConfig{LLMProvider: "openai-default"},
+			},
+			AgentRegistry:       cfg.AgentRegistry,
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+
+		resolved, err := ResolveScoringConfig(cfgWithDefault, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, openaiProvider, resolved.LLMProvider)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+	})
+
+	t.Run("defaults.Scoring LLM backend overrides defaults.LLMBackend", func(t *testing.T) {
+		cfgWithDefault := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				LLMBackend:  config.LLMBackendLangChain,
+				Scoring:     &config.ScoringConfig{LLMBackend: config.LLMBackendNativeGemini},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+
+		resolved, err := ResolveScoringConfig(cfgWithDefault, chain, nil)
+		require.NoError(t, err)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 	})
 
 	t.Run("LLM backend resolution: scoringCfg overrides agentDef", func(t *testing.T) {
@@ -847,6 +883,66 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
 		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolURLContext])
 		assert.NotSame(t, providerWithNative, resolved.LLMProvider)
+	})
+
+	t.Run("LLM provider full hierarchy: scoringCfg overrides chain overrides defaults.Scoring overrides defaults", func(t *testing.T) {
+		cfgFull := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				Scoring:     &config.ScoringConfig{LLMProvider: "openai-default"},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleProvider,
+				"openai-default": openaiProvider,
+			}),
+		}
+
+		// defaults.Scoring overrides defaults
+		resolved, err := ResolveScoringConfig(cfgFull, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+
+		// chain overrides defaults.Scoring
+		resolved, err = ResolveScoringConfig(cfgFull, &config.ChainConfig{LLMProvider: "google-default"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+
+		// scoringCfg overrides chain
+		resolved, err = ResolveScoringConfig(cfgFull,
+			&config.ChainConfig{LLMProvider: "google-default"},
+			&config.ScoringConfig{LLMProvider: "openai-default"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+	})
+
+	t.Run("LLM backend full hierarchy: scoringCfg overrides defaults.Scoring overrides agentDef overrides defaults", func(t *testing.T) {
+		cfgFull := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				LLMBackend:  config.LLMBackendLangChain,
+				Scoring:     &config.ScoringConfig{LLMBackend: config.LLMBackendNativeGemini},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+
+		// defaults.Scoring overrides defaults + agentDef (both LangChain)
+		resolved, err := ResolveScoringConfig(cfgFull, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+
+		// scoringCfg overrides defaults.Scoring
+		resolved, err = ResolveScoringConfig(cfgFull, &config.ChainConfig{},
+			&config.ScoringConfig{LLMBackend: config.LLMBackendLangChain},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {

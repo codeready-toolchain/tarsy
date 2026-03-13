@@ -1,0 +1,25 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  scoring:
+    enabled: true
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, gathering evidence about the alert."
+
+agent_chains:
+  scoring-via-defaults:
+    alert_types: [test-scoring-defaults]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator

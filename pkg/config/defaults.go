@@ -15,12 +15,10 @@ type Defaults struct {
 	// Ordered list of fallback providers to try when the primary provider fails
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 
-	// Default scoring agent name (fallback when chain has no scoring config)
-	ScoringAgent string `yaml:"scoring_agent,omitempty"`
-
-	// Enable scoring by default for all chains that don't explicitly configure it.
-	// Chains with an explicit scoring: block (even with enabled: false) are not affected.
-	ScoringEnabled bool `yaml:"scoring_enabled,omitempty"`
+	// Default scoring configuration for all chains.
+	// Chains with an explicit scoring: block are not affected.
+	// Provides defaults for enabled, agent, llm_provider, llm_backend, etc.
+	Scoring *ScoringConfig `yaml:"scoring,omitempty"`
 
 	// Success policy default for parallel stages
 	SuccessPolicy SuccessPolicy `yaml:"success_policy,omitempty"`

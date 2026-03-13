@@ -274,10 +274,10 @@ func ResolveScoringConfig(
 		defaults = *cfg.Defaults
 	}
 
-	// Agent name: AgentNameScoring → defaults.ScoringAgent → scoringCfg.Agent
+	// Agent name: AgentNameScoring → defaults.Scoring.Agent → scoringCfg.Agent
 	agentName := config.AgentNameScoring
-	if defaults.ScoringAgent != "" {
-		agentName = defaults.ScoringAgent
+	if defaults.Scoring != nil && defaults.Scoring.Agent != "" {
+		agentName = defaults.Scoring.Agent
 	}
 	if scoringCfg != nil && scoringCfg.Agent != "" {
 		agentName = scoringCfg.Agent
@@ -289,7 +289,14 @@ func ResolveScoringConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentName, err)
 	}
 
-	// Extract optional overrides from scoringCfg (may be nil)
+	// Extract optional overrides from defaults.Scoring and scoringCfg
+	var defaultsScoringBackend config.LLMBackend
+	var defaultsScoringProvider string
+	if defaults.Scoring != nil {
+		defaultsScoringBackend = defaults.Scoring.LLMBackend
+		defaultsScoringProvider = defaults.Scoring.LLMProvider
+	}
+
 	var scoringBackend config.LLMBackend
 	var scoringProvider string
 	var scoringMaxIter *int
@@ -299,16 +306,18 @@ func ResolveScoringConfig(
 		scoringMaxIter = scoringCfg.MaxIterations
 	}
 
-	// Resolve LLM backend (defaults → agentDef → scoringCfg).
+	// Resolve LLM backend (defaults → agentDef → defaults.Scoring → scoringCfg).
 	// chain.LLMBackend is intentionally excluded: the chain-level
 	// backend targets investigation agents.
 	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend, scoringBackend,
+		defaults.LLMBackend, agentDef.LLMBackend,
+		defaultsScoringBackend, scoringBackend,
 	)
 
-	// Resolve LLM provider (defaults → chain → scoringCfg)
+	// Resolve LLM provider (defaults → defaults.Scoring → chain → scoringCfg)
 	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, chain.LLMProvider, scoringProvider,
+		defaults.LLMProvider, defaultsScoringProvider,
+		chain.LLMProvider, scoringProvider,
 	)
 	if err != nil {
 		return nil, err

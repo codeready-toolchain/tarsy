@@ -105,12 +105,13 @@ defaults:
   #   - provider: "anthropic-vertex"
   #     backend: "langchain"
   
-  # Default scoring agent name (fallback when chain has no scoring config)
-  scoring_agent: "ScoringAgent"
-
-  # Enable scoring by default for all chains.
+  # Default scoring configuration for all chains.
   # Chains with an explicit scoring: block are not affected.
-  # scoring_enabled: true
+  # scoring:
+  #   enabled: true                       # Enable scoring for all chains by default
+  #   agent: "ScoringAgent"               # Default scoring agent name
+  #   llm_provider: "gemini-3-flash"      # Default LLM provider for scoring
+  #   llm_backend: "google-native"        # Default LLM backend for scoring
   
   # Default alert type for new sessions (used in UI dropdown)
   alert_type: "kubernetes"
