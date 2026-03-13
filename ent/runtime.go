@@ -75,7 +75,7 @@ func init() {
 	sessionscoreFields := schema.SessionScore{}.Fields()
 	_ = sessionscoreFields
 	// sessionscoreDescStartedAt is the schema descriptor for started_at field.
-	sessionscoreDescStartedAt := sessionscoreFields[8].Descriptor()
+	sessionscoreDescStartedAt := sessionscoreFields[9].Descriptor()
 	// sessionscore.DefaultStartedAt holds the default value on creation for the started_at field.
 	sessionscore.DefaultStartedAt = sessionscoreDescStartedAt.Default.(func() time.Time)
 	stageFields := schema.Stage{}.Fields()

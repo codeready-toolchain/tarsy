@@ -713,7 +713,8 @@ func (e *ScoringExecutor) completeScore(scoreID, finalAnalysisJSON, promptHash s
 	if err := e.dbClient.SessionScore.UpdateOneID(scoreID).
 		SetTotalScore(result.TotalScore).
 		SetScoreAnalysis(result.ScoreAnalysis).
-		SetMissingToolsAnalysis(result.MissingToolsAnalysis).
+		SetToolImprovementReport(result.ToolImprovementReport).
+		SetFailureTags(result.FailureTags).
 		SetPromptHash(promptHash).
 		SetStatus(sessionscore.StatusCompleted).
 		SetCompletedAt(now).

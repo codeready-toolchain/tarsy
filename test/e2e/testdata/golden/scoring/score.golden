@@ -1,13 +1,17 @@
 {
   "completed_at": "{TIMESTAMP}",
   "error_message": null,
-  "missing_tools_analysis": "## Missing Tools Report\n\nThe following tools would improve future investigations:\n\n1. **get_resource_limits** — Query pod resource limits and requests to verify configuration.\n2. **get_memory_metrics** — Fetch Prometheus memory usage time series for trend analysis.",
+  "failure_tags": [
+    "missed_available_tool",
+    "incomplete_evidence"
+  ],
   "prompt_hash": "326be643681e3d12cc100f87358053fbb9734d28c63314221b024b16d3aa0108",
-  "score_analysis": "## Score Analysis\n\nThe investigation demonstrated good logical flow by systematically checking pod status and identifying the OOM kill. Tool usage was relevant — the agent queried pods and confirmed the issue.\n\nHowever, no memory metrics or resource limits were checked, which would have strengthened the diagnosis.\n\n**Logical Flow:** 20/25\n**Consistency:** 22/25\n**Tool Relevance:** 18/25\n**Synthesis Quality:** 15/25\n",
+  "score_analysis": "## Dimension Assessments\n\n**Investigation Outcome:** The conclusion is correct — pod-1 is OOMKilled, matching the evidence from get_pods (step 2). Confidence is appropriate given the evidence gathered.\n\n**Evidence Gathering:** The agent showed incomplete_evidence — after confirming pod status via test-mcp.get_pods (step 2), it did not check memory metrics or resource limits despite having access to prometheus.query_range and get_resource_limits.\n\n**Tool Utilization:** missed_available_tool — get_resource_limits was available but never called. The agent relied solely on pod status from test-mcp.get_pods.\n\n**Analytical Reasoning:** The reasoning from pod status to OOMKill was sound, but the agent did not consider alternative explanations for the restart.\n\n**Investigation Completeness:** The agent stopped after a single tool call (step 2), leaving memory and resource dimensions unexplored.\n\n## Overall Assessment\n\nCorrect conclusion with significant gaps in evidence gathering and tool utilization. The outcome places this in the 60-100 range, but process weaknesses pull it toward the lower end.\n",
   "score_id": "{UUID}",
   "score_triggered_by": "auto",
   "stage_id": "{STAGE_ID_5}",
   "started_at": "{TIMESTAMP}",
   "status": "completed",
+  "tool_improvement_report": "## Missing Tools\n\n1. **get_memory_metrics** — Fetch Prometheus memory usage time series.\n\n## Existing Tool Improvements\n\n1. **test-mcp.get_pods** — Response format: include resource limits in pod listing.",
   "total_score": 75
 }

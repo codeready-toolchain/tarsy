@@ -60,8 +60,8 @@ func (m *mockScoringPromptBuilder) BuildScoringOutputSchemaReminderPrompt(schema
 	return fmt.Sprintf("Reminder: %s", schema)
 }
 
-func (m *mockScoringPromptBuilder) BuildScoringMissingToolsReportPrompt() string {
-	return "List missing tools."
+func (m *mockScoringPromptBuilder) BuildScoringToolImprovementReportPrompt() string {
+	return "List tool improvements."
 }
 
 func newScoringExecCtx(t *testing.T, llm agent.LLMClient) *agent.ExecutionContext {
@@ -72,7 +72,7 @@ func newScoringExecCtx(t *testing.T, llm agent.LLMClient) *agent.ExecutionContex
 }
 
 func TestScoringController_Run(t *testing.T) {
-	t.Run("happy path: score + missing tools", func(t *testing.T) {
+	t.Run("happy path: score + tool improvement report", func(t *testing.T) {
 		mock := &mockLLMClient{
 			capture: true,
 			responses: []mockLLMResponse{
@@ -81,9 +81,9 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "Logical Flow: 20/25\nConsistency: 18/25\nTool Relevance: 15/25\nSynthesis: 14/25\n67"},
 					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
 				}},
-				// Turn 2: Missing tools
+				// Turn 2: Tool improvement report
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "No critical missing tools identified."},
+					&agent.TextChunk{Content: "No critical tool improvements identified."},
 					&agent.UsageChunk{InputTokens: 200, OutputTokens: 30, TotalTokens: 230},
 				}},
 			},
@@ -100,7 +100,8 @@ func TestScoringController_Run(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
 		assert.Equal(t, 67, sr.TotalScore)
 		assert.Equal(t, "Logical Flow: 20/25\nConsistency: 18/25\nTool Relevance: 15/25\nSynthesis: 14/25", sr.ScoreAnalysis)
-		assert.Equal(t, "No critical missing tools identified.", sr.MissingToolsAnalysis)
+		assert.Equal(t, "No critical tool improvements identified.", sr.ToolImprovementReport)
+		assert.Empty(t, sr.FailureTags)
 
 		// Verify token accumulation
 		assert.Equal(t, 300, result.TokensUsed.InputTokens)
@@ -125,9 +126,9 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "67"},
 					&agent.UsageChunk{InputTokens: 50, OutputTokens: 10, TotalTokens: 60},
 				}},
-				// Turn 2: Missing tools
+				// Turn 2: Tool improvement report
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "No missing tools."},
+					&agent.TextChunk{Content: "No tool improvements."},
 					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 				}},
 			},
@@ -141,7 +142,7 @@ func TestScoringController_Run(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
 		assert.Equal(t, 67, sr.TotalScore)
 
-		// 3 LLM calls: initial + 1 extraction retry + missing tools
+		// 3 LLM calls: initial + 1 extraction retry + tool improvement report
 		assert.Equal(t, 3, mock.callCount)
 
 		// Verify conversation grew: extraction retry should have 4 messages
@@ -265,7 +266,7 @@ func TestScoringController_Run(t *testing.T) {
 		assert.Equal(t, 2, mock.callCount)
 	})
 
-	t.Run("LLM failure during missing tools turn", func(t *testing.T) {
+	t.Run("LLM failure during tool improvement report turn", func(t *testing.T) {
 		mock := &mockLLMClient{
 			responses: []mockLLMResponse{
 				{chunks: []agent.Chunk{
@@ -278,7 +279,7 @@ func TestScoringController_Run(t *testing.T) {
 		ctrl := NewScoringController()
 		_, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "missing tools LLM call failed")
+		assert.Contains(t, err.Error(), "tool improvement report LLM call failed")
 		assert.Equal(t, 2, mock.callCount)
 	})
 
@@ -294,9 +295,9 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "Good analysis\n75"},
 					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
 				}},
-				// Turn 2: missing tools
+				// Turn 2: tool improvement report
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "No missing tools."},
+					&agent.TextChunk{Content: "No tool improvements."},
 					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 				}},
 			},
@@ -334,7 +335,7 @@ func TestScoringController_Run(t *testing.T) {
 				}},
 				// After fallback: Turn 2 succeeds
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "Missing: tool-x"},
+					&agent.TextChunk{Content: "Improvement: tool-x"},
 					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 				}},
 			},
@@ -353,7 +354,7 @@ func TestScoringController_Run(t *testing.T) {
 		var sr ScoringResult
 		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
 		assert.Equal(t, 60, sr.TotalScore)
-		assert.Equal(t, "Missing: tool-x", sr.MissingToolsAnalysis)
+		assert.Equal(t, "Improvement: tool-x", sr.ToolImprovementReport)
 		assert.Equal(t, 3, mock.callCount)
 	})
 
@@ -400,9 +401,9 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "70"},
 					&agent.UsageChunk{InputTokens: 30, OutputTokens: 10, TotalTokens: 40},
 				}},
-				// Turn 2: missing tools
+				// Turn 2: tool improvement report
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "No missing tools."},
+					&agent.TextChunk{Content: "No tool improvements."},
 					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 				}},
 			},
@@ -462,7 +463,7 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "My analysis\n80"},
 					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150, ThinkingTokens: 30},
 				}},
-				// Turn 2: Missing tools
+				// Turn 2: Tool improvement report
 				{chunks: []agent.Chunk{
 					&agent.TextChunk{Content: "None."},
 					&agent.UsageChunk{InputTokens: 50, OutputTokens: 10, TotalTokens: 60},
@@ -492,9 +493,9 @@ func TestScoringController_Run(t *testing.T) {
 					&agent.TextChunk{Content: "Score analysis\n45"},
 					&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
 				}},
-				// Turn 2: Missing tools
+				// Turn 2: Tool improvement report
 				{chunks: []agent.Chunk{
-					&agent.TextChunk{Content: "Missing: tool-a, tool-b"},
+					&agent.TextChunk{Content: "Improvement: tool-a, tool-b"},
 					&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
 				}},
 			},
@@ -504,7 +505,7 @@ func TestScoringController_Run(t *testing.T) {
 		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "session data")
 		require.NoError(t, err)
 
-		// Turn 2 should have full conversation: system + user + assistant + user(missing tools)
+		// Turn 2 should have full conversation: system + user + assistant + user(tool improvement report)
 		require.Len(t, mock.capturedInputs, 2)
 		turn2Messages := mock.capturedInputs[1].Messages
 		assert.Len(t, turn2Messages, 4)
@@ -513,12 +514,12 @@ func TestScoringController_Run(t *testing.T) {
 		assert.Equal(t, agent.RoleAssistant, turn2Messages[2].Role)
 		assert.Equal(t, "Score analysis\n45", turn2Messages[2].Content)
 		assert.Equal(t, agent.RoleUser, turn2Messages[3].Role)
-		assert.Contains(t, turn2Messages[3].Content, "missing tools")
+		assert.Contains(t, turn2Messages[3].Content, "tool improvements")
 
 		var sr ScoringResult
 		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
 		assert.Equal(t, 45, sr.TotalScore)
-		assert.Equal(t, "Missing: tool-a, tool-b", sr.MissingToolsAnalysis)
+		assert.Equal(t, "Improvement: tool-a, tool-b", sr.ToolImprovementReport)
 	})
 }
 
@@ -598,4 +599,50 @@ func TestScoringController_extractScore(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "empty response")
 	})
+}
+
+func TestScanFailureTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		analysis string
+		expected []string
+	}{
+		{
+			name:     "empty analysis",
+			analysis: "",
+			expected: []string{},
+		},
+		{
+			name:     "no vocabulary terms",
+			analysis: "The investigation was thorough and well-executed.",
+			expected: []string{},
+		},
+		{
+			name:     "single term",
+			analysis: "The agent showed premature_conclusion by stopping after one tool call.",
+			expected: []string{"premature_conclusion"},
+		},
+		{
+			name:     "multiple terms in vocabulary order",
+			analysis: "The agent showed incomplete_evidence and missed_available_tool — get_resource_limits was never called.",
+			expected: []string{"missed_available_tool", "incomplete_evidence"},
+		},
+		{
+			name:     "partial match not matched",
+			analysis: "The conclusion was partially correct.",
+			expected: []string{},
+		},
+		{
+			name:     "all terms present",
+			analysis: "premature_conclusion, missed_available_tool, unsupported_confidence, incomplete_evidence, hallucinated_evidence, wrong_conclusion",
+			expected: []string{"premature_conclusion", "missed_available_tool", "unsupported_confidence", "incomplete_evidence", "hallucinated_evidence", "wrong_conclusion"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tags := scanFailureTags(tt.analysis)
+			assert.Equal(t, tt.expected, tags)
+		})
+	}
 }

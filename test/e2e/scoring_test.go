@@ -119,19 +119,43 @@ func scriptRichPipeline(llm *ScriptedLLMClient) {
 }
 
 // scriptScoringSuccess adds scoring LLM responses that produce a valid score.
-// The scoring controller makes 2 LLM calls: score evaluation + missing tools.
+// The scoring controller makes 2 LLM calls: score evaluation + tool improvement report.
 func scriptScoringSuccess(llm *ScriptedLLMClient) {
-	// Turn 1: Score evaluation — analysis text followed by the numeric score on the last line.
+	// Turn 1: Score evaluation — dimension assessments with failure vocabulary terms,
+	// followed by the numeric score on the last line.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "## Score Analysis\n\nThe investigation demonstrated good logical flow by systematically checking pod status and identifying the OOM kill. Tool usage was relevant — the agent queried pods and confirmed the issue.\n\nHowever, no memory metrics or resource limits were checked, which would have strengthened the diagnosis.\n\n**Logical Flow:** 20/25\n**Consistency:** 22/25\n**Tool Relevance:** 18/25\n**Synthesis Quality:** 15/25\n\n75"},
+			&agent.TextChunk{Content: "## Dimension Assessments\n\n" +
+				"**Investigation Outcome:** The conclusion is correct — pod-1 is " +
+				"OOMKilled, matching the evidence from get_pods (step 2). " +
+				"Confidence is appropriate given the evidence gathered.\n\n" +
+				"**Evidence Gathering:** The agent showed incomplete_evidence — " +
+				"after confirming pod status via test-mcp.get_pods (step 2), it " +
+				"did not check memory metrics or resource limits despite having " +
+				"access to prometheus.query_range and get_resource_limits.\n\n" +
+				"**Tool Utilization:** missed_available_tool — get_resource_limits " +
+				"was available but never called. The agent relied solely on pod " +
+				"status from test-mcp.get_pods.\n\n" +
+				"**Analytical Reasoning:** The reasoning from pod status to " +
+				"OOMKill was sound, but the agent did not consider alternative " +
+				"explanations for the restart.\n\n" +
+				"**Investigation Completeness:** The agent stopped after a single " +
+				"tool call (step 2), leaving memory and resource dimensions " +
+				"unexplored.\n\n" +
+				"## Overall Assessment\n\n" +
+				"Correct conclusion with significant gaps in evidence gathering " +
+				"and tool utilization. The outcome places this in the 60-100 " +
+				"range, but process weaknesses pull it toward the lower end.\n\n75"},
 			&agent.UsageChunk{InputTokens: 500, OutputTokens: 100, TotalTokens: 600},
 		},
 	})
-	// Turn 2: Missing tools analysis.
+	// Turn 2: Tool improvement report.
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "## Missing Tools Report\n\nThe following tools would improve future investigations:\n\n1. **get_resource_limits** — Query pod resource limits and requests to verify configuration.\n2. **get_memory_metrics** — Fetch Prometheus memory usage time series for trend analysis."},
+			&agent.TextChunk{Content: "## Missing Tools\n\n" +
+				"1. **get_memory_metrics** — Fetch Prometheus memory usage time series.\n\n" +
+				"## Existing Tool Improvements\n\n" +
+				"1. **test-mcp.get_pods** — Response format: include resource limits in pod listing."},
 			&agent.UsageChunk{InputTokens: 600, OutputTokens: 80, TotalTokens: 680},
 		},
 	})
@@ -223,12 +247,20 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Equal(t, scoringStageID, *score.StageID)
 	assert.NotNil(t, score.CompletedAt)
 	assert.NotNil(t, score.PromptHash)
+	assert.Equal(t, []string{"missed_available_tool", "incomplete_evidence"}, score.FailureTags,
+		"failure tags should contain vocabulary terms found in analysis, in vocabulary order")
 
 	// ── Verify GET /api/v1/sessions/:id/score API ──
 
 	scoreResp := app.GetScore(t, sessionID)
 	assert.Equal(t, score.ID, scoreResp["score_id"], "API score_id should match DB record")
 	assert.Equal(t, scoringStageID, scoreResp["stage_id"], "API stage_id should match scoring stage")
+	assert.NotNil(t, scoreResp["tool_improvement_report"], "API response should include tool_improvement_report")
+	assert.Nil(t, scoreResp["missing_tools_analysis"], "API response should not include old field name")
+	apiTags, ok := scoreResp["failure_tags"].([]interface{})
+	if assert.True(t, ok, "failure_tags should be a JSON array") {
+		assert.Len(t, apiTags, 2, "API should return 2 failure tags")
+	}
 
 	// ── Verify scoring fields on session detail ──
 
@@ -312,7 +344,7 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	require.Len(t, scoringTraceExecs, 1)
 	scoringTraceExec := scoringTraceExecs[0].(map[string]interface{})
 	scoringLLMInteractions := scoringTraceExec["llm_interactions"].([]interface{})
-	assert.Len(t, scoringLLMInteractions, 2, "scoring should have 2 LLM interactions (eval + missing tools)")
+	assert.Len(t, scoringLLMInteractions, 2, "scoring should have 2 LLM interactions (eval + tool improvement report)")
 
 	// Verify interaction types.
 	for _, raw := range scoringLLMInteractions {
@@ -360,7 +392,7 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	// ── Verify scoring LLM interaction detail via golden files ──
 	// Fetch each scoring interaction detail and compare full response (metadata + conversation)
 	// against golden files, exactly like pipeline_test.go does for all its interactions.
-	scoringInteractionLabels := []string{"scoring_eval", "scoring_missing_tools"}
+	scoringInteractionLabels := []string{"scoring_eval", "scoring_tool_report"}
 	for i, raw := range scoringLLMInteractions {
 		interaction := raw.(map[string]interface{})
 		interactionID := interaction["id"].(string)

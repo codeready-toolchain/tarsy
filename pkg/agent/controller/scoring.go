@@ -11,6 +11,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
@@ -23,9 +24,10 @@ Example: if the total score is 62, the last line should be exactly:
 
 // ScoringResult holds the structured output of a scoring evaluation.
 type ScoringResult struct {
-	TotalScore           int    `json:"total_score"`
-	ScoreAnalysis        string `json:"score_analysis"`
-	MissingToolsAnalysis string `json:"missing_tools_analysis"`
+	TotalScore            int      `json:"total_score"`
+	ScoreAnalysis         string   `json:"score_analysis"`
+	ToolImprovementReport string   `json:"tool_improvement_report"`
+	FailureTags           []string `json:"failure_tags"`
 }
 
 // ScoringController conducts a multi-turn LLM conversation to evaluate
@@ -93,7 +95,7 @@ const (
 )
 
 // Run executes the scoring evaluation: a score evaluation turn followed by a
-// missing-tools analysis turn. Returns the result as JSON in FinalAnalysis.
+// tool improvement report turn. Returns the result as JSON in FinalAnalysis.
 func (c *ScoringController) Run(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -180,35 +182,38 @@ func (c *ScoringController) Run(
 		return nil, fmt.Errorf("failed to extract score after retries: %w", err)
 	}
 
-	// --- Turn 2: Missing tools analysis ---
+	failureTags := scanFailureTags(analysis)
 
-	missingToolsPrompt := execCtx.PromptBuilder.BuildScoringMissingToolsReportPrompt()
+	// --- Turn 2: Tool improvement report ---
+
+	toolReportPrompt := execCtx.PromptBuilder.BuildScoringToolImprovementReportPrompt()
 	messages = append(messages,
 		agent.ConversationMessage{Role: agent.RoleAssistant, Content: resp.Text},
-		agent.ConversationMessage{Role: agent.RoleUser, Content: missingToolsPrompt},
+		agent.ConversationMessage{Role: agent.RoleUser, Content: toolReportPrompt},
 	)
-	storeObservationMessage(ctx, execCtx, missingToolsPrompt, &msgSeq)
+	storeObservationMessage(ctx, execCtx, toolReportPrompt, &msgSeq)
 
 	startTime = time.Now()
-	missingToolsStreamed, err := scoringCallLLM(ctx, execCtx, fbState, messages, &eventSeq)
+	toolReportStreamed, err := scoringCallLLM(ctx, execCtx, fbState, messages, &eventSeq)
 	if err != nil {
-		return nil, fmt.Errorf("missing tools LLM call failed: %w", err)
+		return nil, fmt.Errorf("tool improvement report LLM call failed: %w", err)
 	}
-	missingToolsResp := missingToolsStreamed.LLMResponse
-	accumulateUsage(&totalUsage, missingToolsResp)
+	toolReportResp := toolReportStreamed.LLMResponse
+	accumulateUsage(&totalUsage, toolReportResp)
 
-	missingToolsMsg, storeErr := storeAssistantMessage(ctx, execCtx, missingToolsResp, &msgSeq)
+	toolReportMsg, storeErr := storeAssistantMessage(ctx, execCtx, toolReportResp, &msgSeq)
 	if storeErr != nil {
-		return nil, fmt.Errorf("failed to store missing tools assistant message: %w", storeErr)
+		return nil, fmt.Errorf("failed to store tool improvement report assistant message: %w", storeErr)
 	}
-	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), missingToolsResp, &missingToolsMsg.ID, startTime)
+	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), toolReportResp, &toolReportMsg.ID, startTime)
 
 	// --- Build result ---
 
 	result := ScoringResult{
-		TotalScore:           score,
-		ScoreAnalysis:        analysis,
-		MissingToolsAnalysis: missingToolsResp.Text,
+		TotalScore:            score,
+		ScoreAnalysis:         analysis,
+		ToolImprovementReport: toolReportResp.Text,
+		FailureTags:           failureTags,
 	}
 
 	resultJSON, err := json.Marshal(result)
@@ -262,4 +267,17 @@ func extractScore(text string) (score int, analysis string, err error) {
 	}
 
 	return score, analysis, nil
+}
+
+// scanFailureTags scans the score analysis text for failure vocabulary terms.
+// Returns matched terms in vocabulary order. Always returns a non-nil slice
+// so JSON marshaling produces [] instead of null.
+func scanFailureTags(analysis string) []string {
+	tags := make([]string, 0)
+	for _, ft := range prompt.FailureVocabulary {
+		if strings.Contains(analysis, ft.Term) {
+			tags = append(tags, ft.Term)
+		}
+	}
+	return tags
 }

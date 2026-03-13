@@ -85,9 +85,9 @@ func ScoreAnalysis(v string) predicate.SessionScore {
 	return predicate.SessionScore(sql.FieldEQ(FieldScoreAnalysis, v))
 }
 
-// MissingToolsAnalysis applies equality check predicate on the "missing_tools_analysis" field. It's identical to MissingToolsAnalysisEQ.
-func MissingToolsAnalysis(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldEQ(FieldMissingToolsAnalysis, v))
+// ToolImprovementReport applies equality check predicate on the "tool_improvement_report" field. It's identical to ToolImprovementReportEQ.
+func ToolImprovementReport(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEQ(FieldToolImprovementReport, v))
 }
 
 // ScoreTriggeredBy applies equality check predicate on the "score_triggered_by" field. It's identical to ScoreTriggeredByEQ.
@@ -380,79 +380,89 @@ func ScoreAnalysisContainsFold(v string) predicate.SessionScore {
 	return predicate.SessionScore(sql.FieldContainsFold(FieldScoreAnalysis, v))
 }
 
-// MissingToolsAnalysisEQ applies the EQ predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisEQ(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldEQ(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportEQ applies the EQ predicate on the "tool_improvement_report" field.
+func ToolImprovementReportEQ(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEQ(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisNEQ applies the NEQ predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisNEQ(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldNEQ(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportNEQ applies the NEQ predicate on the "tool_improvement_report" field.
+func ToolImprovementReportNEQ(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNEQ(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisIn applies the In predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisIn(vs ...string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldIn(FieldMissingToolsAnalysis, vs...))
+// ToolImprovementReportIn applies the In predicate on the "tool_improvement_report" field.
+func ToolImprovementReportIn(vs ...string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldIn(FieldToolImprovementReport, vs...))
 }
 
-// MissingToolsAnalysisNotIn applies the NotIn predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisNotIn(vs ...string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldNotIn(FieldMissingToolsAnalysis, vs...))
+// ToolImprovementReportNotIn applies the NotIn predicate on the "tool_improvement_report" field.
+func ToolImprovementReportNotIn(vs ...string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNotIn(FieldToolImprovementReport, vs...))
 }
 
-// MissingToolsAnalysisGT applies the GT predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisGT(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldGT(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportGT applies the GT predicate on the "tool_improvement_report" field.
+func ToolImprovementReportGT(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldGT(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisGTE applies the GTE predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisGTE(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldGTE(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportGTE applies the GTE predicate on the "tool_improvement_report" field.
+func ToolImprovementReportGTE(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldGTE(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisLT applies the LT predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisLT(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldLT(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportLT applies the LT predicate on the "tool_improvement_report" field.
+func ToolImprovementReportLT(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldLT(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisLTE applies the LTE predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisLTE(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldLTE(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportLTE applies the LTE predicate on the "tool_improvement_report" field.
+func ToolImprovementReportLTE(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldLTE(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisContains applies the Contains predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisContains(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldContains(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportContains applies the Contains predicate on the "tool_improvement_report" field.
+func ToolImprovementReportContains(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldContains(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisHasPrefix applies the HasPrefix predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisHasPrefix(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldHasPrefix(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportHasPrefix applies the HasPrefix predicate on the "tool_improvement_report" field.
+func ToolImprovementReportHasPrefix(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldHasPrefix(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisHasSuffix applies the HasSuffix predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisHasSuffix(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldHasSuffix(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportHasSuffix applies the HasSuffix predicate on the "tool_improvement_report" field.
+func ToolImprovementReportHasSuffix(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldHasSuffix(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisIsNil applies the IsNil predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisIsNil() predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldIsNull(FieldMissingToolsAnalysis))
+// ToolImprovementReportIsNil applies the IsNil predicate on the "tool_improvement_report" field.
+func ToolImprovementReportIsNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldIsNull(FieldToolImprovementReport))
 }
 
-// MissingToolsAnalysisNotNil applies the NotNil predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisNotNil() predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldNotNull(FieldMissingToolsAnalysis))
+// ToolImprovementReportNotNil applies the NotNil predicate on the "tool_improvement_report" field.
+func ToolImprovementReportNotNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNotNull(FieldToolImprovementReport))
 }
 
-// MissingToolsAnalysisEqualFold applies the EqualFold predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisEqualFold(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldEqualFold(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportEqualFold applies the EqualFold predicate on the "tool_improvement_report" field.
+func ToolImprovementReportEqualFold(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldEqualFold(FieldToolImprovementReport, v))
 }
 
-// MissingToolsAnalysisContainsFold applies the ContainsFold predicate on the "missing_tools_analysis" field.
-func MissingToolsAnalysisContainsFold(v string) predicate.SessionScore {
-	return predicate.SessionScore(sql.FieldContainsFold(FieldMissingToolsAnalysis, v))
+// ToolImprovementReportContainsFold applies the ContainsFold predicate on the "tool_improvement_report" field.
+func ToolImprovementReportContainsFold(v string) predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldContainsFold(FieldToolImprovementReport, v))
+}
+
+// FailureTagsIsNil applies the IsNil predicate on the "failure_tags" field.
+func FailureTagsIsNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldIsNull(FieldFailureTags))
+}
+
+// FailureTagsNotNil applies the NotNil predicate on the "failure_tags" field.
+func FailureTagsNotNil() predicate.SessionScore {
+	return predicate.SessionScore(sql.FieldNotNull(FieldFailureTags))
 }
 
 // ScoreTriggeredByEQ applies the EQ predicate on the "score_triggered_by" field.

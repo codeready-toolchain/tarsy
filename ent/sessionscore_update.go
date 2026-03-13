@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
@@ -96,23 +97,41 @@ func (_u *SessionScoreUpdate) ClearScoreAnalysis() *SessionScoreUpdate {
 	return _u
 }
 
-// SetMissingToolsAnalysis sets the "missing_tools_analysis" field.
-func (_u *SessionScoreUpdate) SetMissingToolsAnalysis(v string) *SessionScoreUpdate {
-	_u.mutation.SetMissingToolsAnalysis(v)
+// SetToolImprovementReport sets the "tool_improvement_report" field.
+func (_u *SessionScoreUpdate) SetToolImprovementReport(v string) *SessionScoreUpdate {
+	_u.mutation.SetToolImprovementReport(v)
 	return _u
 }
 
-// SetNillableMissingToolsAnalysis sets the "missing_tools_analysis" field if the given value is not nil.
-func (_u *SessionScoreUpdate) SetNillableMissingToolsAnalysis(v *string) *SessionScoreUpdate {
+// SetNillableToolImprovementReport sets the "tool_improvement_report" field if the given value is not nil.
+func (_u *SessionScoreUpdate) SetNillableToolImprovementReport(v *string) *SessionScoreUpdate {
 	if v != nil {
-		_u.SetMissingToolsAnalysis(*v)
+		_u.SetToolImprovementReport(*v)
 	}
 	return _u
 }
 
-// ClearMissingToolsAnalysis clears the value of the "missing_tools_analysis" field.
-func (_u *SessionScoreUpdate) ClearMissingToolsAnalysis() *SessionScoreUpdate {
-	_u.mutation.ClearMissingToolsAnalysis()
+// ClearToolImprovementReport clears the value of the "tool_improvement_report" field.
+func (_u *SessionScoreUpdate) ClearToolImprovementReport() *SessionScoreUpdate {
+	_u.mutation.ClearToolImprovementReport()
+	return _u
+}
+
+// SetFailureTags sets the "failure_tags" field.
+func (_u *SessionScoreUpdate) SetFailureTags(v []string) *SessionScoreUpdate {
+	_u.mutation.SetFailureTags(v)
+	return _u
+}
+
+// AppendFailureTags appends value to the "failure_tags" field.
+func (_u *SessionScoreUpdate) AppendFailureTags(v []string) *SessionScoreUpdate {
+	_u.mutation.AppendFailureTags(v)
+	return _u
+}
+
+// ClearFailureTags clears the value of the "failure_tags" field.
+func (_u *SessionScoreUpdate) ClearFailureTags() *SessionScoreUpdate {
+	_u.mutation.ClearFailureTags()
 	return _u
 }
 
@@ -268,11 +287,22 @@ func (_u *SessionScoreUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.ScoreAnalysisCleared() {
 		_spec.ClearField(sessionscore.FieldScoreAnalysis, field.TypeString)
 	}
-	if value, ok := _u.mutation.MissingToolsAnalysis(); ok {
-		_spec.SetField(sessionscore.FieldMissingToolsAnalysis, field.TypeString, value)
+	if value, ok := _u.mutation.ToolImprovementReport(); ok {
+		_spec.SetField(sessionscore.FieldToolImprovementReport, field.TypeString, value)
 	}
-	if _u.mutation.MissingToolsAnalysisCleared() {
-		_spec.ClearField(sessionscore.FieldMissingToolsAnalysis, field.TypeString)
+	if _u.mutation.ToolImprovementReportCleared() {
+		_spec.ClearField(sessionscore.FieldToolImprovementReport, field.TypeString)
+	}
+	if value, ok := _u.mutation.FailureTags(); ok {
+		_spec.SetField(sessionscore.FieldFailureTags, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedFailureTags(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, sessionscore.FieldFailureTags, value)
+		})
+	}
+	if _u.mutation.FailureTagsCleared() {
+		_spec.ClearField(sessionscore.FieldFailureTags, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ScoreTriggeredBy(); ok {
 		_spec.SetField(sessionscore.FieldScoreTriggeredBy, field.TypeString, value)
@@ -381,23 +411,41 @@ func (_u *SessionScoreUpdateOne) ClearScoreAnalysis() *SessionScoreUpdateOne {
 	return _u
 }
 
-// SetMissingToolsAnalysis sets the "missing_tools_analysis" field.
-func (_u *SessionScoreUpdateOne) SetMissingToolsAnalysis(v string) *SessionScoreUpdateOne {
-	_u.mutation.SetMissingToolsAnalysis(v)
+// SetToolImprovementReport sets the "tool_improvement_report" field.
+func (_u *SessionScoreUpdateOne) SetToolImprovementReport(v string) *SessionScoreUpdateOne {
+	_u.mutation.SetToolImprovementReport(v)
 	return _u
 }
 
-// SetNillableMissingToolsAnalysis sets the "missing_tools_analysis" field if the given value is not nil.
-func (_u *SessionScoreUpdateOne) SetNillableMissingToolsAnalysis(v *string) *SessionScoreUpdateOne {
+// SetNillableToolImprovementReport sets the "tool_improvement_report" field if the given value is not nil.
+func (_u *SessionScoreUpdateOne) SetNillableToolImprovementReport(v *string) *SessionScoreUpdateOne {
 	if v != nil {
-		_u.SetMissingToolsAnalysis(*v)
+		_u.SetToolImprovementReport(*v)
 	}
 	return _u
 }
 
-// ClearMissingToolsAnalysis clears the value of the "missing_tools_analysis" field.
-func (_u *SessionScoreUpdateOne) ClearMissingToolsAnalysis() *SessionScoreUpdateOne {
-	_u.mutation.ClearMissingToolsAnalysis()
+// ClearToolImprovementReport clears the value of the "tool_improvement_report" field.
+func (_u *SessionScoreUpdateOne) ClearToolImprovementReport() *SessionScoreUpdateOne {
+	_u.mutation.ClearToolImprovementReport()
+	return _u
+}
+
+// SetFailureTags sets the "failure_tags" field.
+func (_u *SessionScoreUpdateOne) SetFailureTags(v []string) *SessionScoreUpdateOne {
+	_u.mutation.SetFailureTags(v)
+	return _u
+}
+
+// AppendFailureTags appends value to the "failure_tags" field.
+func (_u *SessionScoreUpdateOne) AppendFailureTags(v []string) *SessionScoreUpdateOne {
+	_u.mutation.AppendFailureTags(v)
+	return _u
+}
+
+// ClearFailureTags clears the value of the "failure_tags" field.
+func (_u *SessionScoreUpdateOne) ClearFailureTags() *SessionScoreUpdateOne {
+	_u.mutation.ClearFailureTags()
 	return _u
 }
 
@@ -583,11 +631,22 @@ func (_u *SessionScoreUpdateOne) sqlSave(ctx context.Context) (_node *SessionSco
 	if _u.mutation.ScoreAnalysisCleared() {
 		_spec.ClearField(sessionscore.FieldScoreAnalysis, field.TypeString)
 	}
-	if value, ok := _u.mutation.MissingToolsAnalysis(); ok {
-		_spec.SetField(sessionscore.FieldMissingToolsAnalysis, field.TypeString, value)
+	if value, ok := _u.mutation.ToolImprovementReport(); ok {
+		_spec.SetField(sessionscore.FieldToolImprovementReport, field.TypeString, value)
 	}
-	if _u.mutation.MissingToolsAnalysisCleared() {
-		_spec.ClearField(sessionscore.FieldMissingToolsAnalysis, field.TypeString)
+	if _u.mutation.ToolImprovementReportCleared() {
+		_spec.ClearField(sessionscore.FieldToolImprovementReport, field.TypeString)
+	}
+	if value, ok := _u.mutation.FailureTags(); ok {
+		_spec.SetField(sessionscore.FieldFailureTags, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedFailureTags(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, sessionscore.FieldFailureTags, value)
+		})
+	}
+	if _u.mutation.FailureTagsCleared() {
+		_spec.ClearField(sessionscore.FieldFailureTags, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ScoreTriggeredBy(); ok {
 		_spec.SetField(sessionscore.FieldScoreTriggeredBy, field.TypeString, value)

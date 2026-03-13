@@ -484,7 +484,7 @@ Add unit tests for the updated `extractScore()` (unchanged logic, but verify it 
 
 Two PRs, each independently deployable and green on CI.
 
-### PR 1: Prompt rewrite + vocabulary infrastructure
+### PR 1: Prompt rewrite + vocabulary infrastructure - DONE
 
 Purely prompt-side changes. No schema changes, no plumbing, no renames. The existing extraction/storage pipeline handles the new prompt output unchanged — `extractScore()` still finds the number on the last line, `score_analysis` stores the new dimension-based narrative, `missing_tools_analysis` stores the broader tool report (naming is stale but functional). The prompt hash changes, so old and new scores are distinguishable.
 

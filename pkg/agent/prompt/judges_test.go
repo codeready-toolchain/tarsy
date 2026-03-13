@@ -88,24 +88,24 @@ func TestBuildScoringOutputSchemaReminderPrompt(t *testing.T) {
 	assert.NotContains(t, result, "%[1]s", "no unresolved positional verbs")
 }
 
-func TestBuildScoringMissingToolsReportPrompt(t *testing.T) {
+func TestBuildScoringToolImprovementReportPrompt(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildScoringMissingToolsReportPrompt()
+	result := builder.BuildScoringToolImprovementReportPrompt()
 
 	assert.Equal(t, judgePromptFollowupMissingTools, result)
 	assert.Contains(t, result, "missing tool")
 }
 
-func TestBuildScoringMissingToolsReportPrompt_UsesInvestigationTerminology(t *testing.T) {
+func TestBuildScoringToolImprovementReportPrompt_UsesInvestigationTerminology(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildScoringMissingToolsReportPrompt()
+	result := builder.BuildScoringToolImprovementReportPrompt()
 
 	assert.Contains(t, result, "investigation")
 }
 
-func TestBuildScoringMissingToolsReportPrompt_HasExistingToolImprovements(t *testing.T) {
+func TestBuildScoringToolImprovementReportPrompt_HasExistingToolImprovements(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildScoringMissingToolsReportPrompt()
+	result := builder.BuildScoringToolImprovementReportPrompt()
 
 	assert.Contains(t, result, "Existing Tool Improvements")
 	assert.Contains(t, result, "Argument clarity")

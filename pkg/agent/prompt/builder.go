@@ -155,7 +155,7 @@ func (b *PromptBuilder) BuildScoringOutputSchemaReminderPrompt(outputSchema stri
 	return fmt.Sprintf(judgePromptScoreReminder, outputSchema)
 }
 
-func (b *PromptBuilder) BuildScoringMissingToolsReportPrompt() string {
+func (b *PromptBuilder) BuildScoringToolImprovementReportPrompt() string {
 	return judgePromptFollowupMissingTools
 }
 

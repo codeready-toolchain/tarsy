@@ -69,7 +69,8 @@ export interface SessionScoreResponse {
   score_id: string;
   total_score: number | null;
   score_analysis: string | null;
-  missing_tools_analysis: string | null;
+  tool_improvement_report: string | null;
+  failure_tags: string[] | null;
   prompt_hash: string | null;
   score_triggered_by: string;
   status: string;

@@ -23,8 +23,10 @@ const (
 	FieldTotalScore = "total_score"
 	// FieldScoreAnalysis holds the string denoting the score_analysis field in the database.
 	FieldScoreAnalysis = "score_analysis"
-	// FieldMissingToolsAnalysis holds the string denoting the missing_tools_analysis field in the database.
-	FieldMissingToolsAnalysis = "missing_tools_analysis"
+	// FieldToolImprovementReport holds the string denoting the tool_improvement_report field in the database.
+	FieldToolImprovementReport = "tool_improvement_report"
+	// FieldFailureTags holds the string denoting the failure_tags field in the database.
+	FieldFailureTags = "failure_tags"
 	// FieldScoreTriggeredBy holds the string denoting the score_triggered_by field in the database.
 	FieldScoreTriggeredBy = "score_triggered_by"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -70,7 +72,8 @@ var Columns = []string{
 	FieldPromptHash,
 	FieldTotalScore,
 	FieldScoreAnalysis,
-	FieldMissingToolsAnalysis,
+	FieldToolImprovementReport,
+	FieldFailureTags,
 	FieldScoreTriggeredBy,
 	FieldStatus,
 	FieldStartedAt,
@@ -152,9 +155,9 @@ func ByScoreAnalysis(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldScoreAnalysis, opts...).ToFunc()
 }
 
-// ByMissingToolsAnalysis orders the results by the missing_tools_analysis field.
-func ByMissingToolsAnalysis(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldMissingToolsAnalysis, opts...).ToFunc()
+// ByToolImprovementReport orders the results by the tool_improvement_report field.
+func ByToolImprovementReport(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldToolImprovementReport, opts...).ToFunc()
 }
 
 // ByScoreTriggeredBy orders the results by the score_triggered_by field.

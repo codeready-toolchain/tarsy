@@ -70,17 +70,23 @@ func (_c *SessionScoreCreate) SetNillableScoreAnalysis(v *string) *SessionScoreC
 	return _c
 }
 
-// SetMissingToolsAnalysis sets the "missing_tools_analysis" field.
-func (_c *SessionScoreCreate) SetMissingToolsAnalysis(v string) *SessionScoreCreate {
-	_c.mutation.SetMissingToolsAnalysis(v)
+// SetToolImprovementReport sets the "tool_improvement_report" field.
+func (_c *SessionScoreCreate) SetToolImprovementReport(v string) *SessionScoreCreate {
+	_c.mutation.SetToolImprovementReport(v)
 	return _c
 }
 
-// SetNillableMissingToolsAnalysis sets the "missing_tools_analysis" field if the given value is not nil.
-func (_c *SessionScoreCreate) SetNillableMissingToolsAnalysis(v *string) *SessionScoreCreate {
+// SetNillableToolImprovementReport sets the "tool_improvement_report" field if the given value is not nil.
+func (_c *SessionScoreCreate) SetNillableToolImprovementReport(v *string) *SessionScoreCreate {
 	if v != nil {
-		_c.SetMissingToolsAnalysis(*v)
+		_c.SetToolImprovementReport(*v)
 	}
+	return _c
+}
+
+// SetFailureTags sets the "failure_tags" field.
+func (_c *SessionScoreCreate) SetFailureTags(v []string) *SessionScoreCreate {
+	_c.mutation.SetFailureTags(v)
 	return _c
 }
 
@@ -290,9 +296,13 @@ func (_c *SessionScoreCreate) createSpec() (*SessionScore, *sqlgraph.CreateSpec)
 		_spec.SetField(sessionscore.FieldScoreAnalysis, field.TypeString, value)
 		_node.ScoreAnalysis = &value
 	}
-	if value, ok := _c.mutation.MissingToolsAnalysis(); ok {
-		_spec.SetField(sessionscore.FieldMissingToolsAnalysis, field.TypeString, value)
-		_node.MissingToolsAnalysis = &value
+	if value, ok := _c.mutation.ToolImprovementReport(); ok {
+		_spec.SetField(sessionscore.FieldToolImprovementReport, field.TypeString, value)
+		_node.ToolImprovementReport = &value
+	}
+	if value, ok := _c.mutation.FailureTags(); ok {
+		_spec.SetField(sessionscore.FieldFailureTags, field.TypeJSON, value)
+		_node.FailureTags = value
 	}
 	if value, ok := _c.mutation.ScoreTriggeredBy(); ok {
 		_spec.SetField(sessionscore.FieldScoreTriggeredBy, field.TypeString, value)

@@ -125,7 +125,7 @@ type PromptBuilder interface {
 	BuildScoringSystemPrompt() string
 	BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string
 	BuildScoringOutputSchemaReminderPrompt(outputSchema string) string
-	BuildScoringMissingToolsReportPrompt() string
+	BuildScoringToolImprovementReportPrompt() string
 	MCPServerRegistry() *config.MCPServerRegistry
 }
 

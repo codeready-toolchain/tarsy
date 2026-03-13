@@ -502,7 +502,8 @@ var (
 		{Name: "prompt_hash", Type: field.TypeString, Nullable: true},
 		{Name: "total_score", Type: field.TypeInt, Nullable: true},
 		{Name: "score_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
-		{Name: "missing_tools_analysis", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "tool_improvement_report", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "failure_tags", Type: field.TypeJSON, Nullable: true},
 		{Name: "score_triggered_by", Type: field.TypeString},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "in_progress", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime},
@@ -519,13 +520,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "session_scores_alert_sessions_session_scores",
-				Columns:    []*schema.Column{SessionScoresColumns[10]},
+				Columns:    []*schema.Column{SessionScoresColumns[11]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "session_scores_stages_session_scores",
-				Columns:    []*schema.Column{SessionScoresColumns[11]},
+				Columns:    []*schema.Column{SessionScoresColumns[12]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -544,32 +545,32 @@ var (
 			{
 				Name:    "sessionscore_status",
 				Unique:  false,
-				Columns: []*schema.Column{SessionScoresColumns[6]},
+				Columns: []*schema.Column{SessionScoresColumns[7]},
 			},
 			{
 				Name:    "sessionscore_session_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{SessionScoresColumns[10], SessionScoresColumns[6]},
+				Columns: []*schema.Column{SessionScoresColumns[11], SessionScoresColumns[7]},
 			},
 			{
 				Name:    "sessionscore_session_id_started_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionScoresColumns[10], SessionScoresColumns[7]},
+				Columns: []*schema.Column{SessionScoresColumns[11], SessionScoresColumns[8]},
 			},
 			{
 				Name:    "sessionscore_status_started_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionScoresColumns[6], SessionScoresColumns[7]},
+				Columns: []*schema.Column{SessionScoresColumns[7], SessionScoresColumns[8]},
 			},
 			{
 				Name:    "sessionscore_stage_id",
 				Unique:  false,
-				Columns: []*schema.Column{SessionScoresColumns[11]},
+				Columns: []*schema.Column{SessionScoresColumns[12]},
 			},
 			{
 				Name:    "sessionscore_session_id",
 				Unique:  true,
-				Columns: []*schema.Column{SessionScoresColumns[10]},
+				Columns: []*schema.Column{SessionScoresColumns[11]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "status IN ('pending', 'in_progress')",
 				},

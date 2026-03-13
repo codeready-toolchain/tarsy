@@ -12264,27 +12264,29 @@ func (m *SessionReviewActivityMutation) ResetEdge(name string) error {
 // SessionScoreMutation represents an operation that mutates the SessionScore nodes in the graph.
 type SessionScoreMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *string
-	prompt_hash            *string
-	total_score            *int
-	addtotal_score         *int
-	score_analysis         *string
-	missing_tools_analysis *string
-	score_triggered_by     *string
-	status                 *sessionscore.Status
-	started_at             *time.Time
-	completed_at           *time.Time
-	error_message          *string
-	clearedFields          map[string]struct{}
-	session                *string
-	clearedsession         bool
-	stage                  *string
-	clearedstage           bool
-	done                   bool
-	oldValue               func(context.Context) (*SessionScore, error)
-	predicates             []predicate.SessionScore
+	op                      Op
+	typ                     string
+	id                      *string
+	prompt_hash             *string
+	total_score             *int
+	addtotal_score          *int
+	score_analysis          *string
+	tool_improvement_report *string
+	failure_tags            *[]string
+	appendfailure_tags      []string
+	score_triggered_by      *string
+	status                  *sessionscore.Status
+	started_at              *time.Time
+	completed_at            *time.Time
+	error_message           *string
+	clearedFields           map[string]struct{}
+	session                 *string
+	clearedsession          bool
+	stage                   *string
+	clearedstage            bool
+	done                    bool
+	oldValue                func(context.Context) (*SessionScore, error)
+	predicates              []predicate.SessionScore
 }
 
 var _ ent.Mutation = (*SessionScoreMutation)(nil)
@@ -12595,53 +12597,118 @@ func (m *SessionScoreMutation) ResetScoreAnalysis() {
 	delete(m.clearedFields, sessionscore.FieldScoreAnalysis)
 }
 
-// SetMissingToolsAnalysis sets the "missing_tools_analysis" field.
-func (m *SessionScoreMutation) SetMissingToolsAnalysis(s string) {
-	m.missing_tools_analysis = &s
+// SetToolImprovementReport sets the "tool_improvement_report" field.
+func (m *SessionScoreMutation) SetToolImprovementReport(s string) {
+	m.tool_improvement_report = &s
 }
 
-// MissingToolsAnalysis returns the value of the "missing_tools_analysis" field in the mutation.
-func (m *SessionScoreMutation) MissingToolsAnalysis() (r string, exists bool) {
-	v := m.missing_tools_analysis
+// ToolImprovementReport returns the value of the "tool_improvement_report" field in the mutation.
+func (m *SessionScoreMutation) ToolImprovementReport() (r string, exists bool) {
+	v := m.tool_improvement_report
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldMissingToolsAnalysis returns the old "missing_tools_analysis" field's value of the SessionScore entity.
+// OldToolImprovementReport returns the old "tool_improvement_report" field's value of the SessionScore entity.
 // If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SessionScoreMutation) OldMissingToolsAnalysis(ctx context.Context) (v *string, err error) {
+func (m *SessionScoreMutation) OldToolImprovementReport(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldMissingToolsAnalysis is only allowed on UpdateOne operations")
+		return v, errors.New("OldToolImprovementReport is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldMissingToolsAnalysis requires an ID field in the mutation")
+		return v, errors.New("OldToolImprovementReport requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldMissingToolsAnalysis: %w", err)
+		return v, fmt.Errorf("querying old value for OldToolImprovementReport: %w", err)
 	}
-	return oldValue.MissingToolsAnalysis, nil
+	return oldValue.ToolImprovementReport, nil
 }
 
-// ClearMissingToolsAnalysis clears the value of the "missing_tools_analysis" field.
-func (m *SessionScoreMutation) ClearMissingToolsAnalysis() {
-	m.missing_tools_analysis = nil
-	m.clearedFields[sessionscore.FieldMissingToolsAnalysis] = struct{}{}
+// ClearToolImprovementReport clears the value of the "tool_improvement_report" field.
+func (m *SessionScoreMutation) ClearToolImprovementReport() {
+	m.tool_improvement_report = nil
+	m.clearedFields[sessionscore.FieldToolImprovementReport] = struct{}{}
 }
 
-// MissingToolsAnalysisCleared returns if the "missing_tools_analysis" field was cleared in this mutation.
-func (m *SessionScoreMutation) MissingToolsAnalysisCleared() bool {
-	_, ok := m.clearedFields[sessionscore.FieldMissingToolsAnalysis]
+// ToolImprovementReportCleared returns if the "tool_improvement_report" field was cleared in this mutation.
+func (m *SessionScoreMutation) ToolImprovementReportCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldToolImprovementReport]
 	return ok
 }
 
-// ResetMissingToolsAnalysis resets all changes to the "missing_tools_analysis" field.
-func (m *SessionScoreMutation) ResetMissingToolsAnalysis() {
-	m.missing_tools_analysis = nil
-	delete(m.clearedFields, sessionscore.FieldMissingToolsAnalysis)
+// ResetToolImprovementReport resets all changes to the "tool_improvement_report" field.
+func (m *SessionScoreMutation) ResetToolImprovementReport() {
+	m.tool_improvement_report = nil
+	delete(m.clearedFields, sessionscore.FieldToolImprovementReport)
+}
+
+// SetFailureTags sets the "failure_tags" field.
+func (m *SessionScoreMutation) SetFailureTags(s []string) {
+	m.failure_tags = &s
+	m.appendfailure_tags = nil
+}
+
+// FailureTags returns the value of the "failure_tags" field in the mutation.
+func (m *SessionScoreMutation) FailureTags() (r []string, exists bool) {
+	v := m.failure_tags
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureTags returns the old "failure_tags" field's value of the SessionScore entity.
+// If the SessionScore object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionScoreMutation) OldFailureTags(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureTags is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureTags requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureTags: %w", err)
+	}
+	return oldValue.FailureTags, nil
+}
+
+// AppendFailureTags adds s to the "failure_tags" field.
+func (m *SessionScoreMutation) AppendFailureTags(s []string) {
+	m.appendfailure_tags = append(m.appendfailure_tags, s...)
+}
+
+// AppendedFailureTags returns the list of values that were appended to the "failure_tags" field in this mutation.
+func (m *SessionScoreMutation) AppendedFailureTags() ([]string, bool) {
+	if len(m.appendfailure_tags) == 0 {
+		return nil, false
+	}
+	return m.appendfailure_tags, true
+}
+
+// ClearFailureTags clears the value of the "failure_tags" field.
+func (m *SessionScoreMutation) ClearFailureTags() {
+	m.failure_tags = nil
+	m.appendfailure_tags = nil
+	m.clearedFields[sessionscore.FieldFailureTags] = struct{}{}
+}
+
+// FailureTagsCleared returns if the "failure_tags" field was cleared in this mutation.
+func (m *SessionScoreMutation) FailureTagsCleared() bool {
+	_, ok := m.clearedFields[sessionscore.FieldFailureTags]
+	return ok
+}
+
+// ResetFailureTags resets all changes to the "failure_tags" field.
+func (m *SessionScoreMutation) ResetFailureTags() {
+	m.failure_tags = nil
+	m.appendfailure_tags = nil
+	delete(m.clearedFields, sessionscore.FieldFailureTags)
 }
 
 // SetScoreTriggeredBy sets the "score_triggered_by" field.
@@ -12987,7 +13054,7 @@ func (m *SessionScoreMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionScoreMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.session != nil {
 		fields = append(fields, sessionscore.FieldSessionID)
 	}
@@ -13000,8 +13067,11 @@ func (m *SessionScoreMutation) Fields() []string {
 	if m.score_analysis != nil {
 		fields = append(fields, sessionscore.FieldScoreAnalysis)
 	}
-	if m.missing_tools_analysis != nil {
-		fields = append(fields, sessionscore.FieldMissingToolsAnalysis)
+	if m.tool_improvement_report != nil {
+		fields = append(fields, sessionscore.FieldToolImprovementReport)
+	}
+	if m.failure_tags != nil {
+		fields = append(fields, sessionscore.FieldFailureTags)
 	}
 	if m.score_triggered_by != nil {
 		fields = append(fields, sessionscore.FieldScoreTriggeredBy)
@@ -13037,8 +13107,10 @@ func (m *SessionScoreMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalScore()
 	case sessionscore.FieldScoreAnalysis:
 		return m.ScoreAnalysis()
-	case sessionscore.FieldMissingToolsAnalysis:
-		return m.MissingToolsAnalysis()
+	case sessionscore.FieldToolImprovementReport:
+		return m.ToolImprovementReport()
+	case sessionscore.FieldFailureTags:
+		return m.FailureTags()
 	case sessionscore.FieldScoreTriggeredBy:
 		return m.ScoreTriggeredBy()
 	case sessionscore.FieldStatus:
@@ -13068,8 +13140,10 @@ func (m *SessionScoreMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldTotalScore(ctx)
 	case sessionscore.FieldScoreAnalysis:
 		return m.OldScoreAnalysis(ctx)
-	case sessionscore.FieldMissingToolsAnalysis:
-		return m.OldMissingToolsAnalysis(ctx)
+	case sessionscore.FieldToolImprovementReport:
+		return m.OldToolImprovementReport(ctx)
+	case sessionscore.FieldFailureTags:
+		return m.OldFailureTags(ctx)
 	case sessionscore.FieldScoreTriggeredBy:
 		return m.OldScoreTriggeredBy(ctx)
 	case sessionscore.FieldStatus:
@@ -13119,12 +13193,19 @@ func (m *SessionScoreMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetScoreAnalysis(v)
 		return nil
-	case sessionscore.FieldMissingToolsAnalysis:
+	case sessionscore.FieldToolImprovementReport:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetMissingToolsAnalysis(v)
+		m.SetToolImprovementReport(v)
+		return nil
+	case sessionscore.FieldFailureTags:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureTags(v)
 		return nil
 	case sessionscore.FieldScoreTriggeredBy:
 		v, ok := value.(string)
@@ -13222,8 +13303,11 @@ func (m *SessionScoreMutation) ClearedFields() []string {
 	if m.FieldCleared(sessionscore.FieldScoreAnalysis) {
 		fields = append(fields, sessionscore.FieldScoreAnalysis)
 	}
-	if m.FieldCleared(sessionscore.FieldMissingToolsAnalysis) {
-		fields = append(fields, sessionscore.FieldMissingToolsAnalysis)
+	if m.FieldCleared(sessionscore.FieldToolImprovementReport) {
+		fields = append(fields, sessionscore.FieldToolImprovementReport)
+	}
+	if m.FieldCleared(sessionscore.FieldFailureTags) {
+		fields = append(fields, sessionscore.FieldFailureTags)
 	}
 	if m.FieldCleared(sessionscore.FieldCompletedAt) {
 		fields = append(fields, sessionscore.FieldCompletedAt)
@@ -13257,8 +13341,11 @@ func (m *SessionScoreMutation) ClearField(name string) error {
 	case sessionscore.FieldScoreAnalysis:
 		m.ClearScoreAnalysis()
 		return nil
-	case sessionscore.FieldMissingToolsAnalysis:
-		m.ClearMissingToolsAnalysis()
+	case sessionscore.FieldToolImprovementReport:
+		m.ClearToolImprovementReport()
+		return nil
+	case sessionscore.FieldFailureTags:
+		m.ClearFailureTags()
 		return nil
 	case sessionscore.FieldCompletedAt:
 		m.ClearCompletedAt()
@@ -13289,8 +13376,11 @@ func (m *SessionScoreMutation) ResetField(name string) error {
 	case sessionscore.FieldScoreAnalysis:
 		m.ResetScoreAnalysis()
 		return nil
-	case sessionscore.FieldMissingToolsAnalysis:
-		m.ResetMissingToolsAnalysis()
+	case sessionscore.FieldToolImprovementReport:
+		m.ResetToolImprovementReport()
+		return nil
+	case sessionscore.FieldFailureTags:
+		m.ResetFailureTags()
 		return nil
 	case sessionscore.FieldScoreTriggeredBy:
 		m.ResetScoreTriggeredBy()

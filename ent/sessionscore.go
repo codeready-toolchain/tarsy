@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,8 +28,10 @@ type SessionScore struct {
 	TotalScore *int `json:"total_score,omitempty"`
 	// ScoreAnalysis holds the value of the "score_analysis" field.
 	ScoreAnalysis *string `json:"score_analysis,omitempty"`
-	// MissingToolsAnalysis holds the value of the "missing_tools_analysis" field.
-	MissingToolsAnalysis *string `json:"missing_tools_analysis,omitempty"`
+	// ToolImprovementReport holds the value of the "tool_improvement_report" field.
+	ToolImprovementReport *string `json:"tool_improvement_report,omitempty"`
+	// Failure vocabulary terms found in score_analysis, NULL for pre-redesign scores
+	FailureTags []string `json:"failure_tags,omitempty"`
 	// Who triggered scoring (from extractAuthor)
 	ScoreTriggeredBy string `json:"score_triggered_by,omitempty"`
 	// Status holds the value of the "status" field.
@@ -85,9 +88,11 @@ func (*SessionScore) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case sessionscore.FieldFailureTags:
+			values[i] = new([]byte)
 		case sessionscore.FieldTotalScore:
 			values[i] = new(sql.NullInt64)
-		case sessionscore.FieldID, sessionscore.FieldSessionID, sessionscore.FieldPromptHash, sessionscore.FieldScoreAnalysis, sessionscore.FieldMissingToolsAnalysis, sessionscore.FieldScoreTriggeredBy, sessionscore.FieldStatus, sessionscore.FieldErrorMessage, sessionscore.FieldStageID:
+		case sessionscore.FieldID, sessionscore.FieldSessionID, sessionscore.FieldPromptHash, sessionscore.FieldScoreAnalysis, sessionscore.FieldToolImprovementReport, sessionscore.FieldScoreTriggeredBy, sessionscore.FieldStatus, sessionscore.FieldErrorMessage, sessionscore.FieldStageID:
 			values[i] = new(sql.NullString)
 		case sessionscore.FieldStartedAt, sessionscore.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -139,12 +144,20 @@ func (_m *SessionScore) assignValues(columns []string, values []any) error {
 				_m.ScoreAnalysis = new(string)
 				*_m.ScoreAnalysis = value.String
 			}
-		case sessionscore.FieldMissingToolsAnalysis:
+		case sessionscore.FieldToolImprovementReport:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field missing_tools_analysis", values[i])
+				return fmt.Errorf("unexpected type %T for field tool_improvement_report", values[i])
 			} else if value.Valid {
-				_m.MissingToolsAnalysis = new(string)
-				*_m.MissingToolsAnalysis = value.String
+				_m.ToolImprovementReport = new(string)
+				*_m.ToolImprovementReport = value.String
+			}
+		case sessionscore.FieldFailureTags:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field failure_tags", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.FailureTags); err != nil {
+					return fmt.Errorf("unmarshal field failure_tags: %w", err)
+				}
 			}
 		case sessionscore.FieldScoreTriggeredBy:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -249,10 +262,13 @@ func (_m *SessionScore) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
-	if v := _m.MissingToolsAnalysis; v != nil {
-		builder.WriteString("missing_tools_analysis=")
+	if v := _m.ToolImprovementReport; v != nil {
+		builder.WriteString("tool_improvement_report=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("failure_tags=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailureTags))
 	builder.WriteString(", ")
 	builder.WriteString("score_triggered_by=")
 	builder.WriteString(_m.ScoreTriggeredBy)

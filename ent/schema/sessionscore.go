@@ -36,9 +36,12 @@ func (SessionScore) Fields() []ent.Field {
 		field.Text("score_analysis").
 			Optional().
 			Nillable(),
-		field.Text("missing_tools_analysis").
+		field.Text("tool_improvement_report").
 			Optional().
 			Nillable(),
+		field.JSON("failure_tags", []string{}).
+			Optional().
+			Comment("Failure vocabulary terms found in score_analysis, NULL for pre-redesign scores"),
 		field.String("score_triggered_by").
 			Comment("Who triggered scoring (from extractAuthor)"),
 		field.Enum("status").

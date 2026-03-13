@@ -74,16 +74,17 @@ func (s *Server) getScoreHandler(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &models.SessionScoreResponse{
-		ScoreID:              score.ID,
-		TotalScore:           score.TotalScore,
-		ScoreAnalysis:        score.ScoreAnalysis,
-		MissingToolsAnalysis: score.MissingToolsAnalysis,
-		PromptHash:           score.PromptHash,
-		ScoreTriggeredBy:     score.ScoreTriggeredBy,
-		Status:               string(score.Status),
-		StageID:              score.StageID,
-		StartedAt:            score.StartedAt,
-		CompletedAt:          score.CompletedAt,
-		ErrorMessage:         score.ErrorMessage,
+		ScoreID:               score.ID,
+		TotalScore:            score.TotalScore,
+		ScoreAnalysis:         score.ScoreAnalysis,
+		ToolImprovementReport: score.ToolImprovementReport,
+		FailureTags:           score.FailureTags,
+		PromptHash:            score.PromptHash,
+		ScoreTriggeredBy:      score.ScoreTriggeredBy,
+		Status:                string(score.Status),
+		StageID:               score.StageID,
+		StartedAt:             score.StartedAt,
+		CompletedAt:           score.CompletedAt,
+		ErrorMessage:          score.ErrorMessage,
 	})
 }
