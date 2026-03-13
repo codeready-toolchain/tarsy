@@ -488,7 +488,7 @@ ScoringExecutor.ScoreSession(sessionID)
 
 Turn 1 uses an outcome-first ceiling mechanic: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality places the score within that range. A failure vocabulary (defined as a Go slice in `pkg/agent/prompt/vocabulary.go`) is dynamically injected into the prompt; after scoring, `scanFailureTags()` extracts matched terms into a `failure_tags` JSON column. Turn 2 covers both missing MCP tools and improvements to existing tools.
 
-Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled) or on-demand via `POST /api/v1/sessions/:id/score`. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
+Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
 
 #### Orchestrator Agent (`pkg/agent/orchestrator/`)
 

@@ -109,8 +109,10 @@ func (v *Validator) validateDefaults() error {
 	// Validate defaults.scoring block if specified
 	if defaults.Scoring != nil {
 		if defaults.Scoring.Agent != "" && !v.cfg.AgentRegistry.Has(defaults.Scoring.Agent) {
-			return NewValidationError("defaults", "", "scoring.agent",
-				fmt.Errorf("agent '%s' not found", defaults.Scoring.Agent))
+			if _, isBuiltin := GetBuiltinConfig().Agents[defaults.Scoring.Agent]; !isBuiltin {
+				return NewValidationError("defaults", "", "scoring.agent",
+					fmt.Errorf("agent '%s' not found", defaults.Scoring.Agent))
+			}
 		}
 		if defaults.Scoring.LLMBackend != "" && !defaults.Scoring.LLMBackend.IsValid() {
 			return NewValidationError("defaults", "", "scoring.llm_backend",

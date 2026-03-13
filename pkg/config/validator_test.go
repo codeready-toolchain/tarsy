@@ -2128,6 +2128,14 @@ func TestValidateDefaultsScoring(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "built-in scoring agent passes without registry entry",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{Agent: AgentNameScoring},
+			},
+			agents:  map[string]*AgentConfig{},
+			wantErr: false,
+		},
+		{
 			name: "invalid scoring agent fails",
 			defaults: &Defaults{
 				Scoring: &ScoringConfig{Agent: "nonexistent-agent"},
