@@ -1,7 +1,7 @@
 /**
  * ScoringPage — dedicated view for session scoring reports.
  *
- * Shows: total score, score analysis (markdown), missing tools report (markdown),
+ * Shows: total score, score analysis (markdown), tool improvement report (markdown),
  * re-score button, and back link to session detail.
  */
 

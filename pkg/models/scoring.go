@@ -8,7 +8,7 @@ type SessionScoreResponse struct {
 	TotalScore            *int       `json:"total_score"`
 	ScoreAnalysis         *string    `json:"score_analysis"`
 	ToolImprovementReport *string    `json:"tool_improvement_report"`
-	FailureTags           []string   `json:"failure_tags,omitempty"`
+	FailureTags           []string   `json:"failure_tags"`
 	PromptHash            *string    `json:"prompt_hash"`
 	ScoreTriggeredBy      string     `json:"score_triggered_by"`
 	Status                string     `json:"status"`

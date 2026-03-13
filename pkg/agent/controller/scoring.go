@@ -150,8 +150,15 @@ func (c *ScoringController) Run(
 	recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
 	iteration++
 
-	// Extract score from the response text
+	// Extract score from the response text.
+	// Preserve the best analysis across retries: a score-only retry ("67")
+	// returns empty analysis, but the original response already contained the
+	// full rationale we need for score_analysis and failure_tags.
 	score, analysis, err := extractScore(resp.Text)
+	bestAnalysis := analysis
+	if err != nil {
+		bestAnalysis = strings.TrimRight(resp.Text, "\n\r ")
+	}
 
 	// Retry extraction if parsing fails
 	for attempt := 0; err != nil && attempt < maxExtractionRetries; attempt++ {
@@ -177,9 +184,15 @@ func (c *ScoringController) Run(
 		recordLLMInteraction(ctx, execCtx, iteration, llminteraction.InteractionTypeScoring, len(messages), resp, &assistantMsg.ID, startTime)
 		iteration++
 		score, analysis, err = extractScore(resp.Text)
+		if analysis != "" {
+			bestAnalysis = analysis
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract score after retries: %w", err)
+	}
+	if analysis == "" {
+		analysis = bestAnalysis
 	}
 
 	failureTags := scanFailureTags(analysis)

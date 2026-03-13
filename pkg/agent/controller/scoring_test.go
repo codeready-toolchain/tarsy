@@ -179,6 +179,8 @@ func TestScoringController_Run(t *testing.T) {
 		var sr ScoringResult
 		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
 		assert.Equal(t, 67, sr.TotalScore)
+		assert.Equal(t, "I think the score is around sixty-seven.", sr.ScoreAnalysis,
+			"analysis from initial response should be preserved when retry returns score-only")
 
 		// 3 LLM calls: initial + 1 extraction retry + tool improvement report
 		assert.Equal(t, 3, mock.callCount)
@@ -186,6 +188,40 @@ func TestScoringController_Run(t *testing.T) {
 		// Verify conversation grew: extraction retry should have 4 messages
 		// (system + user + assistant + reminder)
 		assert.Len(t, mock.capturedInputs[1].Messages, 4)
+	})
+
+	t.Run("extraction retry preserves analysis with failure tags", func(t *testing.T) {
+		mock := &mockLLMClient{
+			responses: []mockLLMResponse{
+				// Turn 1: Rich analysis with vocabulary terms but no parseable score
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "The agent showed incomplete_evidence and missed_available_tool.\nI'd rate this about sixty."},
+					&agent.UsageChunk{InputTokens: 100, OutputTokens: 60, TotalTokens: 160},
+				}},
+				// Extraction retry: score only
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "60"},
+					&agent.UsageChunk{InputTokens: 50, OutputTokens: 5, TotalTokens: 55},
+				}},
+				// Turn 2: Tool improvement report
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Add memory metrics tool."},
+					&agent.UsageChunk{InputTokens: 200, OutputTokens: 30, TotalTokens: 230},
+				}},
+			},
+		}
+
+		ctrl := NewScoringController()
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
+		require.NoError(t, err)
+
+		var sr ScoringResult
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
+		assert.Equal(t, 60, sr.TotalScore)
+		assert.Contains(t, sr.ScoreAnalysis, "incomplete_evidence",
+			"original analysis should be preserved through score-only retry")
+		assert.Equal(t, []string{"missed_available_tool", "incomplete_evidence"}, sr.FailureTags,
+			"failure tags should be scanned from preserved analysis, not empty retry response")
 	})
 
 	t.Run("extraction retry exhaustion: all retries fail", func(t *testing.T) {
