@@ -445,7 +445,7 @@ type Controller interface {
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
-| `"scoring"` | ScoringController | 2-turn LLM conversation (score + missing tools) | Session quality evaluation |
+| `"scoring"` | ScoringController | 2-turn LLM conversation (score + tool improvement report) | Session quality evaluation |
 
 **LLMBackend determines the Python SDK path** (orthogonal to controller):
 
@@ -480,13 +480,15 @@ ScoringExecutor.ScoreSession(sessionID)
     (stages: investigation + exec_summary + action; synthesis results attached via parent reference)
   → Create scoring Stage + AgentExecution records
   → ScoringController.Run()
-    → Turn 1: Score evaluation (rubric: Logical Flow, Consistency, Tool Relevance, Synthesis Quality) → total_score (0–100) + score_analysis
-    → Turn 2: Missing tools analysis → missing_tools_analysis
+    → Turn 1: Outcome-first evaluation (5 dimensions → holistic score) → total_score (0–100) + score_analysis + failure_tags
+    → Turn 2: Tool improvement report (missing tools + existing tool improvements) → tool_improvement_report
   → Write to session_scores table
   → Publish scoring stage status events
 ```
 
-Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled) or on-demand via `POST /api/v1/sessions/:id/score`. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
+Turn 1 uses an outcome-first ceiling mechanic: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality places the score within that range. A failure vocabulary (defined as a Go slice in `pkg/agent/prompt/vocabulary.go`) is dynamically injected into the prompt; after scoring, `scanFailureTags()` extracts matched terms into a `failure_tags` JSON column. Turn 2 covers both missing MCP tools and improvements to existing tools.
+
+Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled) or on-demand via `POST /api/v1/sessions/:id/score`. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
 
 #### Orchestrator Agent (`pkg/agent/orchestrator/`)
 
@@ -977,7 +979,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, final_analysis, executive_summary, error_message) |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
-| GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, missing tools) |
+| GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, failure tags, tool improvement report) |
 | POST | `/api/v1/sessions/:id/score` | Trigger on-demand re-scoring (202 Accepted, 409 if in-progress) |
 | PATCH | `/api/v1/sessions/:id/review` | Review workflow transition (claim/unclaim/resolve/reopen) |
 | GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
@@ -1076,7 +1078,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat |
 | `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
-| `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, missing tools), re-score trigger |
+| `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, failure tags, tool improvement report), re-score trigger |
 | `/system` | SystemStatusPage | MCP server health, tools, system warnings |
 
 #### Data Flow

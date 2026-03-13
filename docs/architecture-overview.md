@@ -123,7 +123,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 - **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also used by orchestrator agents with push-based sub-agent result injection.
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis and executive summary generation.
-- **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces a numeric score (0–100) with detailed analysis; turn 2 identifies missing MCP tools. Runs async after session completion via `ScoringExecutor`.
+- **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
@@ -190,7 +190,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Parallel execution tabs** for viewing multiple agent results side by side
 - **Orchestrator sub-agent cards** inline in the conversation timeline, with collapsible sub-agent detail and real-time streaming
 - **Trace view** with hierarchical LLM/MCP interaction details for debugging, including nested sub-agent traces
-- **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, missing tools), and real-time scoring status updates
+- **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **System status page** showing MCP server health and system warnings
 - **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `resolved`), self-claim assignment, resolve with reason/notes, and real-time updates via `review.status` WebSocket events
@@ -227,16 +227,18 @@ Custom histogram buckets are tuned per metric type (LLM 1–180s, MCP 0.1–60s,
 
 ### 13. Session Scoring & Evaluation
 
-After an investigation completes, TARSy can automatically evaluate the quality of the investigation through session scoring. The scoring produces a numeric quality score (0–100) across four categories (Logical Flow, Consistency, Tool Relevance, Synthesis Quality), a detailed score analysis, and a missing tools report identifying MCP tools that should be built to improve future investigations.
+After an investigation completes, TARSy can automatically evaluate the quality of the investigation through session scoring. The scoring uses an outcome-first evaluation framework: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality (evidence gathering, tool utilization, analytical reasoning, investigation completeness) places the score within that range. The judge produces a detailed score analysis with failure tags for aggregation, and a tool improvement report identifying both missing MCP tools and improvements to existing tools.
 
+- **Outcome-first evaluation** — the most important question is whether the investigation reached the right conclusion. A wrong conclusion can never produce a high score, regardless of process quality.
+- **Failure vocabulary** — a set of failure pattern terms (e.g., `premature_conclusion`, `missed_available_tool`) is injected into the prompt as non-constraining guidance. Server-side `strings.Contains` scanning extracts matched tags into a `failure_tags` JSON column for aggregation queries.
 - **Async, fail-open** — scoring fires in a background goroutine after session completion and never delays results. Scoring failures don't affect session status.
 - **ScoringExecutor** (`pkg/queue/scoring_executor.go`) — orchestrates the full scoring workflow: context gathering, stage/execution creation, controller invocation, result persistence, event publishing.
-- **ScoringController** — 2-turn LLM conversation: Turn 1 evaluates the investigation and produces a score; Turn 2 identifies missing MCP tools.
+- **ScoringController** — 2-turn LLM conversation: Turn 1 evaluates the investigation (5 dimensions → holistic score + failure tags); Turn 2 produces a tool improvement report (missing tools + existing tool improvements).
 - **Re-scoring** — `POST /api/v1/sessions/:id/score` triggers on-demand re-scoring. Old scores are preserved as history; the dashboard shows the latest completed score.
 - **Dashboard integration** — color-coded score badges on session list, score indicator on session detail, and a dedicated scoring page with full reports.
 - **Configurable per chain** — scoring can be enabled/disabled and configured with different LLM providers per chain.
 
-**For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md)
+**For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
 
 ## How It Works
 

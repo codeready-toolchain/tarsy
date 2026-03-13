@@ -1,12 +1,12 @@
-# Scoring Framework Redesign — Detailed Design
+# ADR-0011: Scoring Framework Redesign
 
-**Status:** Final
-
-**Related:** [Sketch](scoring-framework-redesign-sketch.md) | [Design questions](scoring-framework-redesign-design-questions.md) | [ADR-0008: Session Scoring](../adr/0008-session-scoring.md)
+**Status:** Implemented
+**Date:** 2026-03-12
+**Related:** [ADR-0008: Session Scoring](0008-session-scoring.md)
 
 ## Overview
 
-This design implements the decisions from the [sketch](scoring-framework-redesign-sketch.md): rewrite the judge evaluation prompts to be outcome-first, add a failure vocabulary with server-side tag extraction, and expand Turn 2 to cover existing tool improvements alongside missing tools.
+This ADR documents the redesign of the judge evaluation prompts to be outcome-first, the addition of a failure vocabulary with server-side tag extraction, and the expansion of Turn 2 to cover existing tool improvements alongside missing tools.
 
 The scoring infrastructure (ScoringExecutor, ScoringController, 2-turn flow, auto-trigger, re-score API, dashboard) is unchanged. The changes are:
 
@@ -14,6 +14,18 @@ The scoring infrastructure (ScoringExecutor, ScoringController, 2-turn flow, aut
 2. **Failure vocabulary + tag extraction** in `pkg/agent/prompt/vocabulary.go` (new) and `pkg/agent/controller/scoring.go`
 3. **Schema changes** on `session_scores`: rename `missing_tools_analysis` → `tool_improvement_report`, add `failure_tags` column
 4. **Plumbing** to pass tags through ScoringResult → completeScore → DB
+
+## Problem
+
+TARSy's session scoring exists to drive a continuous improvement loop: identify what to change in prompts, tools, chain config, and LLM selection to improve the quality of alert investigations. The scoring infrastructure ([ADR-0008](0008-session-scoring.md)) is solid — ScoringExecutor, ScoringController, session_scores table, dashboard UI all work well.
+
+The problem was with **what the judge evaluates and how it reports findings**:
+
+1. **Outcome and process were conflated, with process over-weighted.** The 4 categories (Logical Flow, Consistency, Tool Relevance, Synthesis Quality) were all primarily process-focused. The prompt stated "Process > Outcome." An investigation that reaches the wrong conclusion via methodical steps could outscore one that nails the root cause through a messy path.
+
+2. **No structured failure signals for aggregation.** The analysis was a narrative. Finding systemic patterns across many sessions required reading every report manually.
+
+3. **Turn 2 (missing tools) only identified new tools, not improvements to existing ones.** The judge sees every tool call with arguments and results, but was only asked about tools that don't exist — never about tools that exist but are hard for agents to use.
 
 ## Design Principles
 
@@ -34,6 +46,42 @@ DeCE (EMNLP 2025) achieves high correlation with human judgment by decomposing e
 3. **LFQA-E (ICLR 2026)** confirmed that no automatic metric performs comparably to human judgment for long-form evaluation — the class of problem TARSy's evaluation falls into.
 
 The structured-then-holistic approach (EvalPlanner, ICML 2025) captures the consistency benefit of decomposition — forcing the LLM to analyze before judging — without requiring criteria to be independent or mechanically scorable.
+
+## Key Decisions
+
+### D1: Single holistic score with outcome-first ceiling mechanic
+
+Keep a single 0-100 score. The judge evaluates in two phases — first outcome (conclusion quality), then process — but produces one holistic number. Conclusion quality determines the score range via non-overlapping ceilings:
+
+| Outcome quality | Score range |
+|---|---|
+| Correct, well-supported conclusion | 60-100 |
+| Partially correct or weakly supported | 35-59 |
+| Wrong or unsupported conclusion | 0-34 |
+
+A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong. This natural correlation between process and outcome eliminates the need for overlapping ranges or edge case caveats.
+
+**Rationale:** The score directly answers "was this investigation good?" with outcome as the dominant factor. Two-phase evaluation structures the judge's thinking without requiring structured sub-score extraction. Zero infrastructure changes — the change is purely in the prompt. Rejected: 5 sub-scores (extraction complexity), 2 stored scores (schema/API/UI changes), overlapping ranges (unnecessary given the correlation).
+
+### D2: Start small with ~6 failure tags, dynamic injection from Go slice
+
+A Go slice of `{term, description}` structs is the single source of truth for both prompt injection and post-analysis tag scanning. Adding a tag is a one-line Go change with no prompt template edits.
+
+Starting vocabulary: `premature_conclusion`, `missed_available_tool`, `unsupported_confidence`, `incomplete_evidence`, `hallucinated_evidence`, `wrong_conclusion`.
+
+**Rationale:** Dynamic injection means the prompt updates automatically when the vocabulary changes. Each term is exclusively negative, making false-positive matches negligible. Starting small avoids overlap; vocabulary grows based on observed patterns. Rejected: hardcoded in prompt (requires prompt edits when adding tags), ~12 terms (premature, some overlap).
+
+### D3: Two clearly separated sections in Turn 2
+
+Turn 2 has two explicit sections: Part 1 (Missing Tools) and Part 2 (Existing Tool Improvements). The improvement section guides the judge to assess argument clarity, response format, tool description, and missing discoverability.
+
+**Rationale:** Explicit separation ensures both categories get proper attention. Structured criteria guide the LLM to assess specific observable aspects of tool interactions. Rejected: single unified section (improvements may get less attention when mixed with missing tools).
+
+### D4: Nillable failure_tags column (NULL for pre-redesign scores)
+
+`failure_tags` is `Optional().Nillable()` — NULL means "pre-redesign, not scanned", empty array means "scanned, no failures found".
+
+**Rationale:** Cleanly distinguishes pre-redesign scores from clean scans without backfilling old rows. Rejected: Optional only with empty array default (can't distinguish pre-redesign from clean scores).
 
 ## Architecture
 
@@ -74,7 +122,7 @@ ScoringExecutor.executeScoring()
 
 ### System prompt (`judgeSystemPrompt`)
 
-The current system prompt focuses on process evaluation ("how well the agents gathered evidence, used available tools, reasoned through the problem"). The new version shifts to outcome-first evaluation.
+The system prompt shifts from process evaluation ("how well the agents gathered evidence, used available tools, reasoned through the problem") to outcome-first evaluation:
 
 ```
 You are an expert investigation quality evaluator for TARSy, an automated
@@ -167,7 +215,7 @@ This section is NOT hardcoded in the prompt template. It is generated from `Fail
 
 **Scoring calibration**
 
-Same bands as today, re-anchored to the outcome-first philosophy:
+Same bands as before, re-anchored to the outcome-first philosophy:
 
 - 80-100: Correct conclusion, well-supported, efficient process
 - 60-79: Correct conclusion with some gaps in evidence or process
@@ -178,9 +226,9 @@ Same bands as today, re-anchored to the outcome-first philosophy:
 
 ### Turn 2 prompt (`judgePromptFollowupToolReport`)
 
-The existing Turn 2 asks only about missing tools. The new version has two clearly separated sections:
+Turn 2 has two clearly separated sections:
 
-**Part 1: Missing Tools** — new MCP tools that should be built. Same scope as today, slightly reworded for consistency.
+**Part 1: Missing Tools** — new MCP tools that should be built. Same scope as before, slightly reworded for consistency.
 
 **Part 2: Existing Tool Improvements** — based on observed tool interactions in the investigation. The judge reviews every tool call (arguments, results, how the agent interpreted them) and identifies:
 
@@ -205,20 +253,16 @@ Unchanged in structure — still asks for the total score on the last line. Word
 Defined in `pkg/agent/prompt/vocabulary.go` — a new file in the prompt package. This location is chosen because both consumers need access:
 
 - `BuildScoringInitialPrompt()` in `prompt/builder.go` — same package, direct access
-- `scanFailureTags()` in `controller/scoring.go` — imports from `prompt/` (the controller currently does not import `prompt`, but `prompt` does not import `controller`, so adding `controller → prompt` introduces no cycle)
+- `scanFailureTags()` in `controller/scoring.go` — imports from `prompt/` (the controller did not previously import `prompt`, but `prompt` does not import `controller`, so adding `controller → prompt` introduces no cycle)
 
 ```go
 // pkg/agent/prompt/vocabulary.go
 
-// FailureTag defines a failure pattern term and its description for the scoring vocabulary.
 type FailureTag struct {
     Term        string
     Description string
 }
 
-// FailureVocabulary is the single source of truth for failure pattern terms.
-// Used by BuildScoringInitialPrompt() for prompt injection and by
-// controller.scanFailureTags() for post-analysis tag extraction.
 var FailureVocabulary = []FailureTag{
     {"premature_conclusion", "reached a diagnosis without gathering sufficient evidence"},
     {"missed_available_tool", "a relevant tool was available but not used"},
@@ -295,7 +339,7 @@ No new indexes needed — the JSONB column supports `@>` containment queries nat
 
 ### Migration
 
-A single `make migrate-create` + review. The migration will contain:
+A single `make migrate-create` + review. The migration contains:
 
 1. `ALTER TABLE session_scores RENAME COLUMN missing_tools_analysis TO tool_improvement_report` — rename existing column
 2. `ALTER TABLE session_scores ADD COLUMN failure_tags jsonb` — add new nullable column (existing rows get NULL, no backfill needed)
@@ -399,9 +443,9 @@ return c.JSON(http.StatusOK, &models.SessionScoreResponse{
 
 ## Prompt Hash
 
-The `combinedPromptsHash` in `judges.go` currently hashes all prompt constants together. Since the vocabulary is now injected dynamically (not part of the static prompt constants), the hash computation must include the vocabulary — otherwise adding or removing a vocabulary term changes the rendered prompt but leaves the hash unchanged, silently preventing automatic re-scoring detection.
+The `combinedPromptsHash` in `judges.go` hashes all prompt constants together. Since the vocabulary is now injected dynamically (not part of the static prompt constants), the hash computation includes the vocabulary — otherwise adding or removing a vocabulary term would change the rendered prompt but leave the hash unchanged, silently preventing automatic re-scoring detection.
 
-The `init()` function in `judges.go` is updated to include the formatted vocabulary string:
+The `init()` function in `judges.go` includes the formatted vocabulary string:
 
 ```go
 func init() {
@@ -413,78 +457,13 @@ func init() {
 }
 ```
 
-`FormatVocabularyForHash` produces a deterministic string from the vocabulary slice (e.g., concatenating all terms and descriptions). This ensures that any change to `FailureVocabulary` — adding, removing, or editing a term — changes the hash.
+`FormatVocabularyForHash` produces a deterministic string from the vocabulary slice (concatenating all terms and descriptions). Any change to `FailureVocabulary` — adding, removing, or editing a term — changes the hash.
 
-## Testing
+## Implementation
 
-### E2E test updates
+Delivered in two PRs, each independently deployable and green on CI.
 
-The scripted LLM response in `scriptScoringSuccess()` needs updating to match the new prompt format. The response should include failure vocabulary terms so the tag scanning can be tested:
-
-```go
-func scriptScoringSuccess(llm *ScriptedLLMClient) {
-    llm.AddSequential(LLMScriptEntry{
-        Chunks: []agent.Chunk{
-            &agent.TextChunk{Content: "## Dimension Assessments\n\n" +
-                "**Investigation Outcome:** The conclusion is correct — pod-1 is " +
-                "OOMKilled, matching the evidence from get_pods (step 2). " +
-                "Confidence is appropriate given the evidence gathered.\n\n" +
-                "**Evidence Gathering:** The agent showed incomplete_evidence — " +
-                "after confirming pod status via test-mcp.get_pods (step 2), it " +
-                "did not check memory metrics or resource limits despite having " +
-                "access to prometheus.query_range and get_resource_limits.\n\n" +
-                "**Tool Utilization:** missed_available_tool — get_resource_limits " +
-                "was available but never called. The agent relied solely on pod " +
-                "status from test-mcp.get_pods.\n\n" +
-                "**Analytical Reasoning:** The reasoning from pod status to " +
-                "OOMKill was sound, but the agent did not consider alternative " +
-                "explanations for the restart.\n\n" +
-                "**Investigation Completeness:** The agent stopped after a single " +
-                "tool call (step 2), leaving memory and resource dimensions " +
-                "unexplored.\n\n" +
-                "## Overall Assessment\n\n" +
-                "Correct conclusion with significant gaps in evidence gathering " +
-                "and tool utilization. The outcome places this in the 60-100 " +
-                "range, but process weaknesses pull it toward the lower end.\n\n70"},
-            &agent.UsageChunk{InputTokens: 500, OutputTokens: 100, TotalTokens: 600},
-        },
-    })
-    // Turn 2: tool improvement report
-    llm.AddSequential(LLMScriptEntry{
-        Chunks: []agent.Chunk{
-            &agent.TextChunk{Content: "## Missing Tools\n\n" +
-                "1. **get_memory_metrics** — Fetch Prometheus memory usage time series.\n\n" +
-                "## Existing Tool Improvements\n\n" +
-                "1. **test-mcp.get_pods** — Response format: include resource limits in pod listing."},
-            &agent.UsageChunk{InputTokens: 600, OutputTokens: 80, TotalTokens: 680},
-        },
-    })
-}
-```
-
-Assertions updated to verify:
-- `score.FailureTags` contains `["missed_available_tool", "incomplete_evidence"]` (in vocabulary order)
-- Score analysis contains dimension headings
-- API response includes `failure_tags`
-- Golden files regenerated
-
-### Unit tests
-
-Add unit tests for `scanFailureTags()`:
-
-- Empty analysis → empty slice
-- Analysis with no vocabulary terms → empty slice
-- Analysis with one vocabulary term → `["term"]`
-- Analysis with multiple vocabulary terms → all matched, in vocabulary order
-- Analysis with partial match (e.g., "conclusion" but not "premature_conclusion") → not matched
-
-Add unit tests for the updated `extractScore()` (unchanged logic, but verify it still works with new prompt format).
-
-## Implementation Plan
-
-Two PRs, each independently deployable and green on CI.
-
-### PR 1: Prompt rewrite + vocabulary infrastructure - DONE
+### PR 1: Prompt rewrite + vocabulary infrastructure
 
 Purely prompt-side changes. No schema changes, no plumbing, no renames. The existing extraction/storage pipeline handles the new prompt output unchanged — `extractScore()` still finds the number on the last line, `score_analysis` stores the new dimension-based narrative, `missing_tools_analysis` stores the broader tool report (naming is stale but functional). The prompt hash changes, so old and new scores are distinguishable.
 
@@ -514,11 +493,11 @@ All tightly coupled changes that must land together: the column rename, new colu
 9. Update `SessionScoreResponse` in `models/scoring.go` (renamed field + failure tags)
 10. Update `getScoreHandler` in `handler_scoring.go` (renamed field + nil-safe `*[]string` → `[]string`)
 11. Update frontend: `web/dashboard/src/types/api.ts` and `web/dashboard/src/pages/ScoringPage.tsx`
-12. Update dashboard score badge colors to reflect the new outcome-first score ranges. The `getScoreColor()` thresholds in `web/dashboard/src/components/common/ScoreBadge.tsx` and `getScoreColorHex()` in `web/dashboard/src/pages/ScoringPage.tsx` currently use green >= 80 / yellow >= 60 / red < 60. Verify these align with the new calibration bands (80-100 excellent, 60-79 good with gaps, 35-59 partial, 0-34 wrong) and adjust if needed.
+12. Update dashboard score badge colors to reflect the new outcome-first score ranges
 
 **Tests:**
-12. Unit tests for `scanFailureTags()`
-13. Update `scriptScoringSuccess()` and assertions in `scoring_test.go`
-14. Update unit tests in `scoring_test.go` for renamed field
-15. Regenerate golden files
-16. Run full e2e test suite
+13. Unit tests for `scanFailureTags()`
+14. Update `scriptScoringSuccess()` and assertions in `scoring_test.go`
+15. Update unit tests in `scoring_test.go` for renamed field
+16. Regenerate golden files
+17. Run full e2e test suite
