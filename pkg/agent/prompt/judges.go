@@ -129,11 +129,17 @@ const judgePromptScoreReminder = `I could not parse the total score from your re
 var combinedPromptsHash [32]byte
 
 func init() {
-	vocabStr := FormatVocabularyForHash(FailureVocabulary)
-	combinedPromptsHash = sha256.Sum256([]byte(
-		judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder +
-			judgePromptFollowupMissingTools + vocabStr,
-	))
+	combinedPromptsHash = sha256.Sum256([]byte(buildJudgeHashInput()))
+}
+
+// buildJudgeHashInput concatenates all prompt constants and the rendered
+// vocabulary section into a single string for hash computation. The vocabulary
+// section is rendered with RenderFailureVocabularySection — the same function
+// used by BuildScoringInitialPrompt — so the hash changes whenever the
+// injected prompt content changes.
+func buildJudgeHashInput() string {
+	return judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder +
+		judgePromptFollowupMissingTools + RenderFailureVocabularySection(FailureVocabulary)
 }
 
 // GetCurrentPromptHash returns the hash of the current version of the judge prompts.

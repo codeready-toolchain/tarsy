@@ -148,12 +148,7 @@ func (b *PromptBuilder) BuildScoringSystemPrompt() string {
 }
 
 func (b *PromptBuilder) BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string {
-	var vocabSection strings.Builder
-	vocabSection.WriteString("Common failure patterns to watch for (use these terms when applicable, but describe any problems you identify even if they don't match these patterns):\n\n")
-	for _, ft := range FailureVocabulary {
-		fmt.Fprintf(&vocabSection, "- %s — %s\n", ft.Term, ft.Description)
-	}
-	return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema, vocabSection.String())
+	return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema, RenderFailureVocabularySection(FailureVocabulary))
 }
 
 func (b *PromptBuilder) BuildScoringOutputSchemaReminderPrompt(outputSchema string) string {

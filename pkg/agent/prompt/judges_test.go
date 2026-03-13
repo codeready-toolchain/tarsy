@@ -15,11 +15,7 @@ func TestGetCurrentPromptHash_Deterministic(t *testing.T) {
 }
 
 func TestGetCurrentPromptHash_MatchesExpected(t *testing.T) {
-	vocabStr := FormatVocabularyForHash(FailureVocabulary)
-	expected := sha256.Sum256([]byte(
-		judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder +
-			judgePromptFollowupMissingTools + vocabStr,
-	))
+	expected := sha256.Sum256([]byte(buildJudgeHashInput()))
 	assert.Equal(t, expected, GetCurrentPromptHash(), "hash must match SHA256 of concatenated prompts + vocabulary")
 }
 
@@ -131,16 +127,16 @@ func TestJudgePromptFollowupMissingTools_NoPlaceholders(t *testing.T) {
 	assert.NotContains(t, judgePromptFollowupMissingTools, "%[2]s", "must have no placeholders")
 }
 
-func TestFormatVocabularyForHash_Deterministic(t *testing.T) {
-	h1 := FormatVocabularyForHash(FailureVocabulary)
-	h2 := FormatVocabularyForHash(FailureVocabulary)
-	assert.Equal(t, h1, h2, "same vocabulary must produce the same hash string")
+func TestRenderFailureVocabularySection_Deterministic(t *testing.T) {
+	h1 := RenderFailureVocabularySection(FailureVocabulary)
+	h2 := RenderFailureVocabularySection(FailureVocabulary)
+	assert.Equal(t, h1, h2, "same vocabulary must produce the same rendered section")
 }
 
-func TestFormatVocabularyForHash_ChangesWithVocabulary(t *testing.T) {
-	original := FormatVocabularyForHash(FailureVocabulary)
-	modified := FormatVocabularyForHash([]FailureTag{
+func TestRenderFailureVocabularySection_ChangesWithVocabulary(t *testing.T) {
+	original := RenderFailureVocabularySection(FailureVocabulary)
+	modified := RenderFailureVocabularySection([]FailureTag{
 		{"different_tag", "different description"},
 	})
-	assert.NotEqual(t, original, modified, "different vocabulary must produce different hash string")
+	assert.NotEqual(t, original, modified, "different vocabulary must produce different rendered section")
 }

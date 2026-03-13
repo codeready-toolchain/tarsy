@@ -1,6 +1,9 @@
 package prompt
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // FailureTag defines a failure pattern term and its description for the scoring vocabulary.
 type FailureTag struct {
@@ -20,13 +23,14 @@ var FailureVocabulary = []FailureTag{
 	{"wrong_conclusion", "the final diagnosis is incorrect or contradicted by gathered evidence"},
 }
 
-// FormatVocabularyForHash produces a deterministic string from the vocabulary
-// slice for inclusion in prompt hash computation. Any change to terms or
-// descriptions changes the hash.
-func FormatVocabularyForHash(vocab []FailureTag) string {
-	var s string
+// RenderFailureVocabularySection produces the prompt section injected into the
+// scoring prompt via %[3]s. This same output is included in the prompt hash,
+// so any change to terms, descriptions, or preamble wording changes the hash.
+func RenderFailureVocabularySection(vocab []FailureTag) string {
+	var sb strings.Builder
+	sb.WriteString("Common failure patterns to watch for (use these terms when applicable, but describe any problems you identify even if they don't match these patterns):\n\n")
 	for _, ft := range vocab {
-		s += fmt.Sprintf("%s:%s;", ft.Term, ft.Description)
+		fmt.Fprintf(&sb, "- %s — %s\n", ft.Term, ft.Description)
 	}
-	return s
+	return sb.String()
 }
