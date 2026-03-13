@@ -514,6 +514,7 @@ All tightly coupled changes that must land together: the column rename, new colu
 9. Update `SessionScoreResponse` in `models/scoring.go` (renamed field + failure tags)
 10. Update `getScoreHandler` in `handler_scoring.go` (renamed field + nil-safe `*[]string` → `[]string`)
 11. Update frontend: `web/dashboard/src/types/api.ts` and `web/dashboard/src/pages/ScoringPage.tsx`
+12. Update dashboard score badge colors to reflect the new outcome-first score ranges. The `getScoreColor()` thresholds in `web/dashboard/src/components/common/ScoreBadge.tsx` and `getScoreColorHex()` in `web/dashboard/src/pages/ScoringPage.tsx` currently use green >= 80 / yellow >= 60 / red < 60. Verify these align with the new calibration bands (80-100 excellent, 60-79 good with gaps, 35-59 partial, 0-34 wrong) and adjust if needed.
 
 **Tests:**
 12. Unit tests for `scanFailureTags()`

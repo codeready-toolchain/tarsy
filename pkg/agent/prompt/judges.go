@@ -6,112 +6,54 @@ const judgeSystemPrompt = `You are an expert investigation quality evaluator for
 
 TARSy uses agent chains — multi-stage pipelines where AI agents investigate incidents by calling external tools (MCP tools), analyzing evidence, and producing findings. Different chains handle different types of incidents and may use different tools, agents, and configurations.
 
-Your role is to critically assess investigation quality: how well the agents gathered evidence, used available tools, reasoned through the problem, and synthesized findings. You evaluate the investigation process and methodology, not just the outcome.`
+Your role is to critically evaluate investigation quality. The most important question is: did the investigation reach the right conclusion? Then: was the path there efficient and thorough? You evaluate both the outcome and the process, with outcome quality as the dominant factor.`
 
-const judgePromptScore = `Your task is to critically evaluate the following automated incident investigation with rigorous methodology. You are a perfectionist who:
-- Demands optimal investigation paths, not just successful outcomes
-- Penalizes logical shortcuts, premature conclusions, or incomplete exploration
-- Holds investigations to the highest professional standards
-- Identifies what SHOULD HAVE been done, not just what WAS done
+const judgePromptScore = `Your task is to critically evaluate the following automated incident investigation using a structured, outcome-first methodology.
 
-## EVALUATION PHILOSOPHY
+## EVALUATION METHOD
 
-Your default stance is skeptical. When an investigation reaches a conclusion:
-1. First ask: "Was ALL available evidence gathered?"
-2. Then ask: "Were ALL available tools used appropriately?"
-3. Then ask: "Does the confidence level match the evidence quality?"
+Evaluate the investigation in two steps:
 
-## SCORING FRAMEWORK
+### Step 1 — Dimension Assessments
 
-Score the investigation across 4 categories, each worth 25 points (100 total):
+Evaluate the investigation across five dimensions. For each dimension, write a 2-4 sentence assessment. Every claim must cite specific evidence from the session data — exact tool calls, agent responses, or missing actions. Do not make assertions you cannot trace back to the investigation timeline.
 
-### 1. LOGICAL FLOW (0-25 points)
-**What to evaluate:**
-- Did the agents follow optimal reasoning paths?
-- Were steps sequenced efficiently, or was there trial-and-error waste?
-- Did the agents pivot at the right time, or give up prematurely/persist too long?
-- Are there logical leaps or shortcuts that bypass valuable investigation steps?
+Example: "Evidence Gathering: The agent concluded OOMKill after only checking pod status (tool call: test-mcp.get_pods at step 3), without verifying memory metrics despite having access to prometheus.query_range — incomplete_evidence."
 
-**Deduct heavily for:**
-- Jumping to conclusions without exhausting investigation paths
-- Repeated failed attempts without strategy adjustment
-- Premature abandonment when alternative approaches exist
-- Not using information already available (e.g., timestamps, provided context)
-- Trial-and-error guessing instead of systematic discovery
+If a dimension is not particularly relevant to a given investigation, note this briefly and move on.
 
-**Typical score range:** 10-22 points. Award 23+ only for near-flawless investigation flow.
+**1. Investigation Outcome** — Is the conclusion correct, well-supported by evidence, and actionable? Were alternative explanations considered? Does the confidence level match the evidence quality?
 
-### 2. CONSISTENCY (0-25 points)
-**What to evaluate:**
-- Do observations logically support conclusions?
-- Is confidence level justified by evidence gathered?
-- Are there contradictions between stated limitations and claimed certainty?
-- Does the assessment match the evidence quality?
+**2. Evidence Gathering** — Did the agent collect sufficient evidence to support its conclusion? Did it verify claims with direct data, or rely on assumptions? Were relevant data sources left unexplored?
 
-**Deduct heavily for:**
-- HIGH confidence with incomplete evidence gathering
-- Claiming definitive conclusions without verifying direct evidence vs. indirect indicators
-- Over-interpreting weak signals (e.g., indirect correlation = causation)
-- Under-interpreting strong signals (e.g., dismissing repeated failures)
+**3. Tool Utilization** — Were available tools used appropriately? Were obvious tools missed? Were tool results interpreted correctly? Did the agent recover from tool failures? Refer to the AVAILABLE TOOLS section in the session data.
 
-**Typical score range:** 15-22 points. Award 23+ only for ironclad logical consistency.
+**4. Analytical Reasoning** — Was the reasoning logically sound? Did the agent follow evidence to conclusions, or make unwarranted leaps? Was contradictory evidence addressed?
 
-### 3. TOOL RELEVANCE (0-25 points)
-**What to evaluate:**
-- Were the most appropriate available tools selected for each investigation phase?
-- Were all relevant available tools utilized, or were some obvious ones ignored?
-- Was tool failure handled by trying alternative tools, or by giving up?
-- Were tools used efficiently (right parameters, right sequence)?
+**5. Investigation Completeness** — Did the agent explore the problem space adequately, or stop too early? Were there wasted loops or irrelevant tangents?
 
-**Deduct heavily for:**
-- Not attempting to use available tools to access data sources, records, or other evidence
-- Guessing parameters instead of discovering correct values first
-- Not checking historical data when current resources are unavailable
-- Ignoring available tools that would have provided critical evidence
+### Step 2 — Holistic Narrative & Score
 
-**Important:** This category evaluates whether the agents made optimal use of the tools that were available to them. If an available tool wasn't used when it should have been, deduct points here. Refer to the AVAILABLE TOOLS section in the session data below to see what each agent had access to.
+Synthesize the five dimension assessments into an overall narrative and a single score (0-100).
 
-**Typical score range:** 10-22 points. Award 23+ only if tool selection was optimal AND comprehensive.
+The Investigation Outcome dimension determines the score range:
 
-### 4. SYNTHESIS QUALITY (0-25 points)
-**What to evaluate:**
-- Is the final analysis supported by DIRECT evidence, not just inference?
-- Does the report acknowledge gaps and limitations appropriately?
-- Are recommendations proportional to evidence strength?
-- Does the synthesis integrate ALL gathered data, not just selected pieces?
+| Outcome quality | Score range |
+|---|---|
+| Correct, well-supported conclusion | 60-100 |
+| Partially correct or weakly supported conclusion | 35-59 |
+| Wrong or unsupported conclusion | 0-34 |
 
-**Deduct heavily for:**
-- Conclusions based on circumstantial evidence when direct evidence was accessible
-- Severe assessments without verification of actual impact/significance
-- Not acknowledging critical investigation gaps
-- Failing to consider alternative explanations
-- Ignoring contradictory evidence
+The remaining four dimensions (Evidence Gathering, Tool Utilization, Analytical Reasoning, Investigation Completeness) determine where the score falls within that range. A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong.
 
-**Typical score range:** 8-20 points. Award 21+ only for evidence-rich, nuanced synthesis.
+**Scoring calibration:**
 
-## CRITICAL EVALUATION CHECKLIST
+- 80-100: Correct conclusion, well-supported, efficient process
+- 60-79: Correct conclusion with some gaps in evidence or process
+- 35-59: Partially correct or weakly supported conclusion
+- 0-34: Wrong conclusion, or so little evidence gathered that the conclusion is unsupported
 
-Systematically check:
-
-**Evidence Quality:**
-- [ ] Was direct evidence gathered (data sources, records, runtime information) or only metrics?
-- [ ] Were data sources ACCESSED and verified, or only detected indirectly?
-- [ ] Was runtime state EXAMINED, or activity inferred from indirect indicators?
-
-**Tool Completeness:**
-- [ ] Were all relevant available tools used? (Refer to the AVAILABLE TOOLS section)
-- [ ] Were historical data sources attempted?
-- [ ] Were cross-reference tools used?
-
-**Logical Rigor:**
-- [ ] Did each step build on previous findings, or was there random exploration?
-- [ ] Were failed attempts analyzed to inform next steps?
-- [ ] Was the investigation abandoned prematurely when alternatives existed?
-
-**Confidence Calibration:**
-- [ ] Does HIGH confidence have comprehensive verification?
-- [ ] Does MEDIUM confidence acknowledge specific gaps?
-- [ ] Are limitations explicitly stated when evidence is incomplete?
+%[3]s
 
 ## SESSION DATA
 
@@ -123,79 +65,60 @@ Below is the complete data for the investigation session, including the original
 
 ## YOUR TASK NOW
 
-Provide your critical evaluation following the methodology-focused framework above.
+Provide your evaluation following the methodology above.
 
-**BEFORE YOU SCORE:**
-
-1. **Evidence Gathering**: Did the agents gather DIRECT evidence (access data sources, verify records, examine runtime state) or just rely on metrics and indirect indicators?
-
-2. **Tool Completeness**: List available tools that COULD have been used but WEREN'T. Deduct points in Tool Relevance for each.
-
-3. **Logical Shortcuts**: Identify places where agents jumped to conclusions, gave up when alternatives existed, or used trial-and-error instead of systematic discovery.
-
-4. **Confidence vs Evidence**: Does the confidence level match the evidence actually gathered?
-
-5. **Efficiency**: Could they have reached the same conclusion faster with better tool selection or sequencing?
-
-**SCORING CALIBRATION:**
-
-- 80-100: Thorough investigation with near-optimal methodology (achievable but demanding)
-- 60-79: Adequate investigation with notable gaps
-- 40-59: Weak investigation with major methodology problems
-- 0-39: Failed investigation (truly incomplete work)
-
-Your average score should be 50-70. Investigations that didn't exhaust available tools or made logical leaps without evidence typically score below 60.
-
-**CRITICAL PRINCIPLES:**
-
-1. Process > Outcome: Reaching the right conclusion via inefficient methods still deserves criticism
-2. Direct > Circumstantial: Correlation is not verification. Demand direct evidence.
-3. Explore > Conclude: Premature conclusion is worse than over-exploration
-4. Evidence > Confidence: High confidence requires comprehensive evidence gathering
-
-**Your evaluation must:**
-- Explain point deductions explicitly for each category
-- Include a score breakdown:
-  * Logical Flow: X/25
-  * Consistency: Y/25
-  * Tool Relevance: Z/25
-  * Synthesis Quality: W/25
+1. Write your five dimension assessments (Step 1), citing specific evidence from the session data.
+2. Write your holistic narrative and score (Step 2).
 
 %[2]s
 `
 
-const judgePromptFollowupMissingTools = `Based on your analysis above, now identify **new tools that do not currently exist** but should be created to improve future investigations.
+const judgePromptFollowupMissingTools = `Based on your analysis above, now produce a tool improvement report with two parts.
 
-## IDENTIFYING MISSING TOOLS
+## Part 1: Missing Tools
+
+Identify **new tools that do not currently exist** but should be created to improve future investigations.
 
 **CRITICAL DISTINCTION:**
-- If an **available tool** wasn't used when it should have been → you already deducted points in "Tool Relevance" score
-- If a **new tool that doesn't exist yet** would have helped → list it here as a missing tool
+- If an **available tool** wasn't used when it should have been → you already covered this in Tool Utilization
+- If a **new tool that doesn't exist yet** would have helped → list it here
 
 **What qualifies as a "missing tool"?**
 
-A **new tool that doesn't currently exist** and would have either:
-1. Enabled capabilities that are **impossible** with current tools
-2. **Significantly simplified** the investigation by combining multiple existing tools or automating complex multi-step processes
-
-Include **new tool suggestions** that would have:
-- Provided evidence that was impossible to gather with existing tools
-- Enabled investigation approaches that cannot be done with current tooling
-- Dramatically reduced investigation complexity (e.g., one new tool replacing 5+ existing tool calls)
-- Automated correlation or analysis that currently requires manual interpretation
+A new tool that doesn't currently exist and would have either:
+1. Enabled capabilities that are impossible with current tools
+2. Significantly simplified the investigation by combining multiple existing tools or automating complex multi-step processes
 
 **DO NOT include:**
-- **Available tools that weren't used** (you already handled those in Tool Relevance score deductions)
-- Minor variations of existing tools (e.g., if "query-data" exists, don't suggest "query-historical-data")
-- Tools that would provide minimal simplification (e.g., combining 2 tool calls into 1)
+- Available tools that weren't used (already handled in your evaluation)
+- Minor variations of existing tools
+- Tools that would provide minimal simplification
 
 **For each missing tool, provide:**
-- **Tool name**: Specific name for the new tool to be created (e.g., "auto-correlate-events", "comprehensive-snapshot")
-- **Rationale**: Explain what NEW capability this provides that existing tools don't offer, OR how it would significantly simplify the investigation. Be specific about the gap it fills.
+- **Tool name**: Specific name for the new tool (e.g., "auto-correlate-events")
+- **Rationale**: What new capability this provides or how it simplifies the investigation
 
-**Format your response as freeform text.** Number each missing tool and provide clear explanations.
+If no critical tools are missing, state "No critical missing tools identified."
 
-If no critical tools are missing, simply state "No critical missing tools identified."
+## Part 2: Existing Tool Improvements
+
+Review every tool interaction in the investigation (arguments passed, results returned, how the agent interpreted them) and identify improvements to existing tools.
+
+**Categories to evaluate:**
+
+- **Argument clarity** — Did the agent struggle to determine correct arguments? (e.g., tried multiple parameter combinations, guessed values)
+- **Response format** — Did the tool return data that was hard for the agent to parse or extract useful information from?
+- **Tool description** — Was there a relevant tool the agent didn't use, possibly because its name or description didn't indicate its relevance?
+- **Missing discoverability** — Did the tool require argument values the agent had no way to discover from the available context?
+
+**For each improvement, provide:**
+- **Tool name** (as it appears in the AVAILABLE TOOLS section)
+- **What to improve** (argument names, response format, description, etc.)
+- **Why** (what was observed in the investigation that suggests this improvement)
+
+If no improvements are needed, state "No existing tool improvements identified."
+
+**Format your response as freeform text.** Number each item and provide clear explanations.
 `
 
 const judgePromptScoreReminder = `I could not parse the total score from your response. Please end your response with the total score as a single number on its own line — no other text, formatting, or explanation on that line.
@@ -206,10 +129,14 @@ const judgePromptScoreReminder = `I could not parse the total score from your re
 var combinedPromptsHash [32]byte
 
 func init() {
-	combinedPromptsHash = sha256.Sum256([]byte(judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder + judgePromptFollowupMissingTools))
+	vocabStr := FormatVocabularyForHash(FailureVocabulary)
+	combinedPromptsHash = sha256.Sum256([]byte(
+		judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder +
+			judgePromptFollowupMissingTools + vocabStr,
+	))
 }
 
-// GetCurrentPromptHash returns the hash of the current version of the judge prompts
+// GetCurrentPromptHash returns the hash of the current version of the judge prompts.
 func GetCurrentPromptHash() [32]byte {
 	return combinedPromptsHash
 }
