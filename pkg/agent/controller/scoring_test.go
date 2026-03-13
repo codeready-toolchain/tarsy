@@ -112,6 +112,44 @@ func TestScoringController_Run(t *testing.T) {
 		assert.Equal(t, 2, mock.callCount)
 	})
 
+	t.Run("failure tags extracted from analysis", func(t *testing.T) {
+		mock := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				// Turn 1: Analysis containing vocabulary terms
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "The agent showed incomplete_evidence — it stopped after checking pod status " +
+						"without examining memory metrics. Additionally, missed_available_tool — " +
+						"get_resource_limits was available but never called.\n55"},
+					&agent.UsageChunk{InputTokens: 100, OutputTokens: 60, TotalTokens: 160},
+				}},
+				// Turn 2: Tool improvement report
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Add get_resource_limits."},
+					&agent.UsageChunk{InputTokens: 200, OutputTokens: 30, TotalTokens: 230},
+				}},
+			},
+		}
+
+		ctrl := NewScoringController()
+		result, err := ctrl.Run(context.Background(), newScoringExecCtx(t, mock), "data")
+		require.NoError(t, err)
+
+		var sr ScoringResult
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &sr))
+		assert.Equal(t, 55, sr.TotalScore)
+		assert.Equal(t, []string{"missed_available_tool", "incomplete_evidence"}, sr.FailureTags,
+			"tags should be in vocabulary order, not analysis order")
+		assert.Equal(t, "Add get_resource_limits.", sr.ToolImprovementReport)
+
+		// Verify JSON uses correct field names (not old "missing_tools_analysis")
+		var raw map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(result.FinalAnalysis), &raw))
+		assert.Contains(t, raw, "failure_tags")
+		assert.Contains(t, raw, "tool_improvement_report")
+		assert.NotContains(t, raw, "missing_tools_analysis")
+	})
+
 	t.Run("extraction retry: first response lacks score, second succeeds", func(t *testing.T) {
 		mock := &mockLLMClient{
 			capture: true,
