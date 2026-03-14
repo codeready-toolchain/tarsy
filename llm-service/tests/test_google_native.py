@@ -682,7 +682,7 @@ class TestGoogleNativeProvider:
         mock_usage.prompt_token_count = 10
         mock_usage.candidates_token_count = 20
         mock_usage.total_token_count = 30
-        mock_usage.thinking_token_count = 5
+        mock_usage.thoughts_token_count = 5
         
         mock_chunk = MagicMock()
         mock_chunk.candidates = [mock_candidate]
@@ -1234,7 +1234,7 @@ class TestBuildGroundingDelta:
         mock_usage.prompt_token_count = 10
         mock_usage.candidates_token_count = 20
         mock_usage.total_token_count = 30
-        mock_usage.thinking_token_count = 0
+        mock_usage.thoughts_token_count = 0
 
         mock_chunk = MagicMock()
         mock_chunk.candidates = [mock_candidate]
