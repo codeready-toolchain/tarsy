@@ -448,7 +448,7 @@ class GoogleNativeProvider(LLMProvider):
                                     input_tokens=um.prompt_token_count or 0,
                                     output_tokens=um.candidates_token_count or 0,
                                     total_tokens=um.total_token_count or 0,
-                                    thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
+                                    thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
                                 )
                             )
                         continue
@@ -468,7 +468,7 @@ class GoogleNativeProvider(LLMProvider):
                                     input_tokens=um.prompt_token_count or 0,
                                     output_tokens=um.candidates_token_count or 0,
                                     total_tokens=um.total_token_count or 0,
-                                    thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
+                                    thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
                                 )
                             )
                         continue
@@ -526,7 +526,7 @@ class GoogleNativeProvider(LLMProvider):
                                 input_tokens=um.prompt_token_count or 0,
                                 output_tokens=um.candidates_token_count or 0,
                                 total_tokens=um.total_token_count or 0,
-                                thinking_tokens=getattr(um, "thinking_token_count", 0) or 0,
+                                thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
                             )
                         )
 
