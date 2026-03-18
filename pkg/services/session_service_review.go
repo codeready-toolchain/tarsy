@@ -21,6 +21,14 @@ import (
 // Returns the per-session results and the list of successfully updated
 // ent sessions (for event publishing).
 func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []*ent.AlertSession) {
+	if err := validateReviewRequest(req); err != nil {
+		results := make([]models.UpdateReviewResult, len(req.SessionIDs))
+		for i, sid := range req.SessionIDs {
+			results[i] = models.UpdateReviewResult{SessionID: sid, Success: false, Error: err.Error()}
+		}
+		return models.UpdateReviewResponse{Results: results}, nil
+	}
+
 	results := make([]models.UpdateReviewResult, 0, len(req.SessionIDs))
 	var updated []*ent.AlertSession
 	for _, sid := range req.SessionIDs {
@@ -50,14 +58,21 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 	return models.UpdateReviewResponse{Results: results}, updated
 }
 
+func validateReviewRequest(req models.UpdateReviewRequest) error {
+	if !models.ValidReviewAction(req.Action) {
+		return NewValidationError("action", fmt.Sprintf("unknown action %q", req.Action))
+	}
+	if models.ReviewAction(req.Action) == models.ReviewActionResolve && req.ResolutionReason == nil {
+		return NewValidationError("resolution_reason", "required for resolve action")
+	}
+	return nil
+}
+
 // updateSingleReview performs an atomic compare-and-transition on one session's
 // review_status. Returns the updated session or ErrConflict if the precondition
 // (expected current review_status) was not met.
+// Caller must validate req via validateReviewRequest before calling.
 func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateReviewRequest) (*ent.AlertSession, error) {
-	if !models.ValidReviewAction(req.Action) {
-		return nil, NewValidationError("action", fmt.Sprintf("unknown action %q", req.Action))
-	}
-
 	writeCtx, cancel := context.WithTimeoutCause(
 		context.Background(), 5*time.Second,
 		fmt.Errorf("update review status for %s: db write timed out", sessionID),
@@ -103,9 +118,6 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		}
 
 	case models.ReviewActionResolve:
-		if req.ResolutionReason == nil {
-			return nil, NewValidationError("resolution_reason", "required for resolve action")
-		}
 		if err := s.doResolve(writeCtx, tx, sessionID, req.Actor, *req.ResolutionReason, req.Note, now); err != nil {
 			return nil, err
 		}
