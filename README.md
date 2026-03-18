@@ -168,7 +168,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `POST /api/v1/sessions/:id/score` -- Trigger (re-)scoring (202 Accepted, 409 if already in progress)
 
 ### Review & Triage
-- `PATCH /api/v1/sessions/:id/review` -- Review workflow transition (claim, unclaim, resolve, reopen)
+- `PATCH /api/v1/sessions/review` -- Review workflow transition for one or more sessions (claim, unclaim, resolve, reopen, update_note)
 - `GET /api/v1/sessions/:id/review-activity` -- Review activity audit log
 - `GET /api/v1/sessions/triage/:group` -- Per-group paginated triage view
 

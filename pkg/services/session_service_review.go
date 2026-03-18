@@ -16,12 +16,22 @@ import (
 
 // UpdateReviewStatus applies a review action to one or more sessions.
 // Each session is processed independently in its own transaction; a failure
-// on one does not affect others. Returns the per-session results and the
-// list of successfully updated ent sessions (for event publishing).
-func (s *SessionService) UpdateReviewStatus(_ context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []*ent.AlertSession) {
+// on one does not affect others. The parent context is checked between
+// iterations so bulk operations abort early if the caller disconnects.
+// Returns the per-session results and the list of successfully updated
+// ent sessions (for event publishing).
+func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []*ent.AlertSession) {
 	results := make([]models.UpdateReviewResult, 0, len(req.SessionIDs))
 	var updated []*ent.AlertSession
 	for _, sid := range req.SessionIDs {
+		if err := ctx.Err(); err != nil {
+			results = append(results, models.UpdateReviewResult{
+				SessionID: sid,
+				Success:   false,
+				Error:     err.Error(),
+			})
+			continue
+		}
 		session, err := s.updateSingleReview(sid, req)
 		if err != nil {
 			results = append(results, models.UpdateReviewResult{
