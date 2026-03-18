@@ -108,16 +108,20 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 		rest = rest[1:]
 	}
 
-	endIdx := strings.Index(rest, "\n---")
-	if endIdx < 0 {
+	// Require the closing delimiter to be exactly "---" on its own line:
+	// match "\n---\n" or "\n---" at end of content.
+	endIdx := strings.Index(rest, "\n---\n")
+	var fmContent, body string
+	if endIdx >= 0 {
+		fmContent = rest[:endIdx]
+		body = rest[endIdx+5:] // skip "\n---\n"
+	} else if strings.HasSuffix(rest, "\n---") {
+		endIdx = len(rest) - 4
+		fmContent = rest[:endIdx]
+		body = ""
+	} else {
 		return fm, "", fmt.Errorf("missing closing frontmatter delimiter '---'")
 	}
-
-	fmContent := rest[:endIdx]
-	body := rest[endIdx+4:] // skip "\n---"
-	// Strip at most one leading newline (the line break ending the --- line)
-	// but preserve all other whitespace to keep markdown formatting intact.
-	body, _ = strings.CutPrefix(body, "\n")
 
 	if err := yaml.Unmarshal([]byte(fmContent), &fm); err != nil {
 		return fm, "", fmt.Errorf("invalid frontmatter YAML: %w", err)

@@ -29,7 +29,8 @@ func TestLoadSkills(t *testing.T) {
 	})
 
 	t.Run("missing skills directory returns empty registry", func(t *testing.T) {
-		registry, err := LoadSkills("/nonexistent/path")
+		missingDir := filepath.Join(t.TempDir(), "missing")
+		registry, err := LoadSkills(missingDir)
 		require.NoError(t, err)
 		assert.Equal(t, 0, registry.Len())
 	})
@@ -211,6 +212,18 @@ func TestParseFrontmatter(t *testing.T) {
 			wantName: "cr-skill",
 			wantDesc: "Old Mac file",
 			wantBody: "\n# CR Body\n",
+		},
+		{
+			name:        "malformed closing delimiter with extra dashes",
+			content:     "---\nname: test\ndescription: test\n----\n# Body",
+			wantErr:     true,
+			errContains: "closing frontmatter delimiter",
+		},
+		{
+			name:        "malformed closing delimiter with trailing text",
+			content:     "---\nname: test\ndescription: test\n---extra\n# Body",
+			wantErr:     true,
+			errContains: "closing frontmatter delimiter",
 		},
 	}
 
