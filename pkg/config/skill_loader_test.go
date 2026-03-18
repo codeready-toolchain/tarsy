@@ -170,11 +170,18 @@ func TestParseFrontmatter(t *testing.T) {
 			content:  "---\nname: my-skill\ndescription: A useful skill\n---\n\n# My Skill\n\nSome content here.",
 			wantName: "my-skill",
 			wantDesc: "A useful skill",
-			wantBody: "# My Skill\n\nSome content here.",
+			wantBody: "\n# My Skill\n\nSome content here.",
 		},
 		{
-			name:     "body with leading/trailing whitespace is trimmed",
+			name:     "body preserves whitespace",
 			content:  "---\nname: test\ndescription: test\n---\n\n  \n# Body\n\n  ",
+			wantName: "test",
+			wantDesc: "test",
+			wantBody: "\n  \n# Body\n\n  ",
+		},
+		{
+			name:     "body immediately after closing delimiter",
+			content:  "---\nname: test\ndescription: test\n---\n# Body",
 			wantName: "test",
 			wantDesc: "test",
 			wantBody: "# Body",
@@ -196,14 +203,14 @@ func TestParseFrontmatter(t *testing.T) {
 			content:  "---\r\nname: crlf-skill\r\ndescription: Windows file\r\n---\r\n\r\n# CRLF Body\r\n",
 			wantName: "crlf-skill",
 			wantDesc: "Windows file",
-			wantBody: "# CRLF Body",
+			wantBody: "\n# CRLF Body\n",
 		},
 		{
 			name:     "lone CR line endings",
 			content:  "---\rname: cr-skill\rdescription: Old Mac file\r---\r\r# CR Body\r",
 			wantName: "cr-skill",
 			wantDesc: "Old Mac file",
-			wantBody: "# CR Body",
+			wantBody: "\n# CR Body\n",
 		},
 	}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -96,7 +97,7 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
 
-	trimmed := strings.TrimSpace(content)
+	trimmed := strings.TrimLeftFunc(content, unicode.IsSpace)
 	if !strings.HasPrefix(trimmed, "---") {
 		return fm, "", fmt.Errorf("missing frontmatter delimiters (expected '---' at start)")
 	}
@@ -113,7 +114,10 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 	}
 
 	fmContent := rest[:endIdx]
-	body := strings.TrimSpace(rest[endIdx+4:]) // skip "\n---"
+	body := rest[endIdx+4:] // skip "\n---"
+	// Strip at most one leading newline (the line break ending the --- line)
+	// but preserve all other whitespace to keep markdown formatting intact.
+	body, _ = strings.CutPrefix(body, "\n")
 
 	if err := yaml.Unmarshal([]byte(fmContent), &fm); err != nil {
 		return fm, "", fmt.Errorf("invalid frontmatter YAML: %w", err)
