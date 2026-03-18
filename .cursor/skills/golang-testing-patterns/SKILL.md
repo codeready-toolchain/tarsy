@@ -175,11 +175,23 @@ if !errors.Is(err, ErrNotFound) {
 }
 ```
 
-**Check error message:**
+**Check error message — prefer exact match:**
+
+Use `Equal` / direct comparison for error messages you control. Only fall back to
+`Contains` when the message includes third-party or runtime text you don't own.
+
 ```go
-if err == nil || !strings.Contains(err.Error(), "required") {
-	t.Errorf("expected validation error, got %v", err)
-}
+// GOOD — exact match on our own error message
+assert.Equal(t, "missing required field 'name'", err.Error())
+
+// GOOD — unwrap first when error is wrapped (e.g. LoadError)
+var loadErr *LoadError
+require.ErrorAs(t, err, &loadErr)
+assert.Equal(t, "missing required field 'name'", loadErr.Err.Error())
+
+// OK — Contains is justified when part of the message comes from a third-party
+// library (e.g. yaml.Unmarshal, sql driver) whose text we don't control.
+assert.Contains(t, err.Error(), "invalid YAML")
 ```
 
 ## Test Helpers
@@ -240,10 +252,10 @@ func TestSessionService_CreateSession(t *testing.T) {
 	service := services.NewSessionService(client)
 	
 	tests := []struct {
-		name    string
-		req     models.CreateSessionRequest
-		wantErr bool
-		errMsg  string
+		name       string
+		req        models.CreateSessionRequest
+		wantErr    bool
+		wantErrMsg string
 	}{
 		{
 			name: "valid session",
@@ -258,8 +270,8 @@ func TestSessionService_CreateSession(t *testing.T) {
 			req: models.CreateSessionRequest{
 				SessionID: "",
 			},
-			wantErr: true,
-			errMsg:  "session_id",
+			wantErr:    true,
+			wantErrMsg: "session_id is required",
 		},
 	}
 	
@@ -272,8 +284,11 @@ func TestSessionService_CreateSession(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("error %q doesn't contain %q", err.Error(), tt.errMsg)
+				if tt.wantErrMsg != "" {
+					// Exact match — we own this error message
+					if err.Error() != tt.wantErrMsg {
+						t.Errorf("error = %q, want %q", err.Error(), tt.wantErrMsg)
+					}
 				}
 				return
 			}
@@ -312,3 +327,5 @@ t.Parallel() // Use for fast, independent tests
 - Use `t.Errorf()` for non-fatal assertions
 - Use `t.Fatalf()` when continuing would panic or is meaningless
 - Always include both `got` and `want` in error messages
+- Prefer `Equal` over `Contains` for values you control (catches regressions, documents the exact contract)
+- Reserve `Contains` for third-party/runtime strings you don't own

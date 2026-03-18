@@ -10,8 +10,12 @@ import (
 )
 
 func TestLoadSkills(t *testing.T) {
-	t.Run("valid skills from testdata", func(t *testing.T) {
-		registry, err := LoadSkills("testdata")
+	t.Run("loads multiple valid skills", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTestSkill(t, dir, "k8s", "---\nname: kubernetes-basics\ndescription: Kubernetes troubleshooting\n---\n# Kubernetes Basics\n\nCheck pod status first.")
+		writeTestSkill(t, dir, "net", "---\nname: networking\ndescription: Network debugging skills\n---\n# Networking\n\nCheck DNS resolution.")
+
+		registry, err := LoadSkills(dir)
 		require.NoError(t, err)
 
 		assert.Equal(t, 2, registry.Len())
@@ -19,13 +23,14 @@ func TestLoadSkills(t *testing.T) {
 		k8s, err := registry.Get("kubernetes-basics")
 		require.NoError(t, err)
 		assert.Equal(t, "kubernetes-basics", k8s.Name)
-		assert.Contains(t, k8s.Description, "Kubernetes")
-		assert.Contains(t, k8s.Body, "# Kubernetes Basics")
+		assert.Equal(t, "Kubernetes troubleshooting", k8s.Description)
+		assert.Equal(t, "# Kubernetes Basics\n\nCheck pod status first.", k8s.Body)
 
 		net, err := registry.Get("networking")
 		require.NoError(t, err)
 		assert.Equal(t, "networking", net.Name)
-		assert.Contains(t, net.Description, "Network")
+		assert.Equal(t, "Network debugging skills", net.Description)
+		assert.Equal(t, "# Networking\n\nCheck DNS resolution.", net.Body)
 	})
 
 	t.Run("missing skills directory returns empty registry", func(t *testing.T) {
@@ -69,8 +74,10 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "bad-skill", "# No frontmatter here\nJust markdown.")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "frontmatter")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, "missing frontmatter delimiters (expected '---' at start)", loadErr.Err.Error())
 	})
 
 	t.Run("missing name field returns error", func(t *testing.T) {
@@ -78,8 +85,10 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "no-name", "---\ndescription: has description\n---\n# Body")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "name")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, "missing required field 'name' in frontmatter", loadErr.Err.Error())
 	})
 
 	t.Run("missing description field returns error", func(t *testing.T) {
@@ -87,8 +96,10 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "no-desc", "---\nname: no-desc\n---\n# Body")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "description")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, "missing required field 'description' in frontmatter", loadErr.Err.Error())
 	})
 
 	t.Run("empty body is valid", func(t *testing.T) {
@@ -109,8 +120,10 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "dir-b", "---\nname: duplicate-name\ndescription: second\n---\n# B")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "duplicate skill name")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, `duplicate skill name "duplicate-name"`, loadErr.Err.Error())
 	})
 
 	t.Run("invalid YAML in frontmatter returns error", func(t *testing.T) {
@@ -118,8 +131,10 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "bad-yaml", "---\n{{{\n---\n# Body")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "YAML")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Contains(t, loadErr.Err.Error(), "invalid frontmatter YAML")
 	})
 
 	t.Run("missing closing frontmatter delimiter returns error", func(t *testing.T) {
@@ -127,21 +142,21 @@ func TestLoadSkills(t *testing.T) {
 		writeTestSkill(t, dir, "no-close", "---\nname: test\ndescription: test\n# Body without closing ---")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "closing frontmatter delimiter")
+
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, "missing closing frontmatter delimiter '---'", loadErr.Err.Error())
 	})
 
-	t.Run("errors are wrapped in LoadError", func(t *testing.T) {
+	t.Run("errors are wrapped in LoadError with file path", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestSkill(t, dir, "bad", "---\nname: bad\n---\n# Missing description")
 
 		_, err := LoadSkills(dir)
-		require.Error(t, err)
 
 		var loadErr *LoadError
 		require.ErrorAs(t, err, &loadErr)
-		assert.Contains(t, loadErr.File, "bad")
-		assert.Contains(t, loadErr.File, "SKILL.md")
+		assert.Equal(t, filepath.Join(dir, "skills", "bad", "SKILL.md"), loadErr.File)
 	})
 
 	t.Run("skill name comes from frontmatter not directory name", func(t *testing.T) {
@@ -158,13 +173,13 @@ func TestLoadSkills(t *testing.T) {
 
 func TestParseFrontmatter(t *testing.T) {
 	tests := []struct {
-		name        string
-		content     string
-		wantName    string
-		wantDesc    string
-		wantBody    string
-		wantErr     bool
-		errContains string
+		name       string
+		content    string
+		wantName   string
+		wantDesc   string
+		wantBody   string
+		wantErr    bool
+		wantErrMsg string
 	}{
 		{
 			name:     "standard skill file",
@@ -188,16 +203,16 @@ func TestParseFrontmatter(t *testing.T) {
 			wantBody: "# Body",
 		},
 		{
-			name:        "no frontmatter delimiters",
-			content:     "# Just markdown",
-			wantErr:     true,
-			errContains: "frontmatter",
+			name:       "no frontmatter delimiters",
+			content:    "# Just markdown",
+			wantErr:    true,
+			wantErrMsg: "missing frontmatter delimiters (expected '---' at start)",
 		},
 		{
-			name:        "only opening delimiter",
-			content:     "---\nname: test\ndescription: test",
-			wantErr:     true,
-			errContains: "closing",
+			name:       "only opening delimiter",
+			content:    "---\nname: test\ndescription: test",
+			wantErr:    true,
+			wantErrMsg: "missing closing frontmatter delimiter '---'",
 		},
 		{
 			name:     "CRLF line endings",
@@ -214,16 +229,16 @@ func TestParseFrontmatter(t *testing.T) {
 			wantBody: "\n# CR Body\n",
 		},
 		{
-			name:        "malformed closing delimiter with extra dashes",
-			content:     "---\nname: test\ndescription: test\n----\n# Body",
-			wantErr:     true,
-			errContains: "closing frontmatter delimiter",
+			name:       "malformed closing delimiter with extra dashes",
+			content:    "---\nname: test\ndescription: test\n----\n# Body",
+			wantErr:    true,
+			wantErrMsg: "missing closing frontmatter delimiter '---'",
 		},
 		{
-			name:        "malformed closing delimiter with trailing text",
-			content:     "---\nname: test\ndescription: test\n---extra\n# Body",
-			wantErr:     true,
-			errContains: "closing frontmatter delimiter",
+			name:       "malformed closing delimiter with trailing text",
+			content:    "---\nname: test\ndescription: test\n---extra\n# Body",
+			wantErr:    true,
+			wantErrMsg: "missing closing frontmatter delimiter '---'",
 		},
 	}
 
@@ -233,8 +248,8 @@ func TestParseFrontmatter(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantErrMsg != "" {
+					assert.Equal(t, tt.wantErrMsg, err.Error())
 				}
 				return
 			}
