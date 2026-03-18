@@ -31,7 +31,7 @@ export function ResolveModal({ open, onClose, onResolve, loading, title }: Resol
 
   useEffect(() => {
     if (open) {
-      setReason('');
+      setReason('actioned');
       setNote('');
     }
   }, [open]);
