@@ -260,6 +260,51 @@ func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
 	assert.Len(t, builtin["web-agent"].NativeTools, 2)
 }
 
+func TestMergeAgentsCarriesSkillFields(t *testing.T) {
+	allowlist := []string{"k8s-basics", "networking"}
+	builtin := map[string]BuiltinAgentConfig{
+		"with-skills": {
+			Description:    "Agent with skills",
+			Skills:         &allowlist,
+			RequiredSkills: []string{"k8s-basics"},
+		},
+		"no-skills": {
+			Description: "Agent without skills config",
+		},
+	}
+
+	result := mergeAgents(builtin, map[string]AgentConfig{})
+
+	// with-skills should carry Skills and RequiredSkills
+	assert.NotNil(t, result["with-skills"].Skills)
+	assert.Equal(t, []string{"k8s-basics", "networking"}, *result["with-skills"].Skills)
+	assert.Equal(t, []string{"k8s-basics"}, result["with-skills"].RequiredSkills)
+
+	// no-skills should have nil Skills and nil RequiredSkills
+	assert.Nil(t, result["no-skills"].Skills)
+	assert.Nil(t, result["no-skills"].RequiredSkills)
+
+	// Defensive copy: mutating the result should not affect original
+	*result["with-skills"].Skills = append(*result["with-skills"].Skills, "injected")
+	assert.Len(t, allowlist, 2)
+}
+
+func TestMergeAgentsSkillsEmptySlice(t *testing.T) {
+	empty := []string{}
+	builtin := map[string]BuiltinAgentConfig{
+		"no-skills-agent": {
+			Description: "Agent with empty skills (opt-out)",
+			Skills:      &empty,
+		},
+	}
+
+	result := mergeAgents(builtin, map[string]AgentConfig{})
+
+	// Empty slice pointer should be preserved (not nil)
+	assert.NotNil(t, result["no-skills-agent"].Skills)
+	assert.Empty(t, *result["no-skills-agent"].Skills)
+}
+
 // TestMergeEmptyMaps tests merging with empty built-in or user configs
 func TestMergeEmptyMaps(t *testing.T) {
 	t.Run("empty user agents", func(t *testing.T) {

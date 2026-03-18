@@ -3128,6 +3128,223 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 	assert.True(t, referenced["agent-subagent"], "agent sub-agent provider should be referenced")
 }
 
+func TestValidateSkills(t *testing.T) {
+	baseSkills := map[string]*SkillConfig{
+		"k8s-basics":   {Name: "k8s-basics", Description: "Kubernetes basics"},
+		"networking":   {Name: "networking", Description: "Network skills"},
+		"log-analysis": {Name: "log-analysis", Description: "Log analysis"},
+	}
+
+	tests := []struct {
+		name    string
+		agents  map[string]*AgentConfig
+		skills  map[string]*SkillConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "nil skills allowlist passes (all skills available)",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: nil},
+			},
+			skills: baseSkills,
+		},
+		{
+			name: "valid skills allowlist passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"k8s-basics", "networking"}},
+			},
+			skills: baseSkills,
+		},
+		{
+			name: "empty skills allowlist passes (opt-out)",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{}},
+			},
+			skills: baseSkills,
+		},
+		{
+			name: "skills allowlist references nonexistent skill",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"k8s-basics", "nonexistent"}},
+			},
+			skills:  baseSkills,
+			wantErr: true,
+			errMsg:  "nonexistent",
+		},
+		{
+			name: "valid required_skills passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {RequiredSkills: []string{"k8s-basics"}},
+			},
+			skills: baseSkills,
+		},
+		{
+			name: "required_skills references nonexistent skill",
+			agents: map[string]*AgentConfig{
+				"agent1": {RequiredSkills: []string{"nonexistent"}},
+			},
+			skills:  baseSkills,
+			wantErr: true,
+			errMsg:  "nonexistent",
+		},
+		{
+			name: "required skill within allowlist passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {
+					Skills:         &[]string{"k8s-basics", "networking"},
+					RequiredSkills: []string{"k8s-basics"},
+				},
+			},
+			skills: baseSkills,
+		},
+		{
+			name: "required skill outside allowlist fails",
+			agents: map[string]*AgentConfig{
+				"agent1": {
+					Skills:         &[]string{"k8s-basics"},
+					RequiredSkills: []string{"networking"},
+				},
+			},
+			skills:  baseSkills,
+			wantErr: true,
+			errMsg:  "not in the skills allowlist",
+		},
+		{
+			name: "nil skill registry passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: nil},
+			},
+			skills: nil,
+		},
+		{
+			name: "empty skill registry with no agent skill refs passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {},
+			},
+			skills: map[string]*SkillConfig{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var skillRegistry *SkillRegistry
+			if tt.skills != nil {
+				skillRegistry = NewSkillRegistry(tt.skills)
+			}
+
+			cfg := &Config{
+				AgentRegistry:       NewAgentRegistry(tt.agents),
+				ChainRegistry:       NewChainRegistry(nil),
+				MCPServerRegistry:   NewMCPServerRegistry(nil),
+				LLMProviderRegistry: NewLLMProviderRegistry(nil),
+				SkillRegistry:       skillRegistry,
+			}
+
+			v := NewValidator(cfg)
+			err := v.validateSkills()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidateSkills_ErrorTypes(t *testing.T) {
+	skills := map[string]*SkillConfig{
+		"k8s-basics": {Name: "k8s-basics", Description: "Kubernetes basics"},
+	}
+
+	t.Run("allowlist miss wraps ErrSkillNotFound in ValidationError", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"nonexistent"}},
+			}),
+			ChainRegistry:       NewChainRegistry(nil),
+			MCPServerRegistry:   NewMCPServerRegistry(nil),
+			LLMProviderRegistry: NewLLMProviderRegistry(nil),
+			SkillRegistry:       NewSkillRegistry(skills),
+		}
+
+		err := NewValidator(cfg).validateSkills()
+		require.Error(t, err)
+
+		var ve *ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "agent", ve.Component)
+		assert.Equal(t, "agent1", ve.ID)
+		assert.Equal(t, "skills", ve.Field)
+		assert.ErrorIs(t, ve.Err, ErrSkillNotFound)
+	})
+
+	t.Run("required skill miss wraps ErrSkillNotFound in ValidationError", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"agent1": {RequiredSkills: []string{"ghost"}},
+			}),
+			ChainRegistry:       NewChainRegistry(nil),
+			MCPServerRegistry:   NewMCPServerRegistry(nil),
+			LLMProviderRegistry: NewLLMProviderRegistry(nil),
+			SkillRegistry:       NewSkillRegistry(skills),
+		}
+
+		err := NewValidator(cfg).validateSkills()
+		require.Error(t, err)
+
+		var ve *ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "required_skills", ve.Field)
+		assert.ErrorIs(t, ve.Err, ErrSkillNotFound)
+	})
+}
+
+func TestValidateSkills_IntegrationWithValidateAll(t *testing.T) {
+	t.Run("invalid skill ref fails ValidateAll", func(t *testing.T) {
+		cfg := &Config{
+			Queue: DefaultQueueConfig(),
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"nonexistent"}},
+			}),
+			ChainRegistry:       NewChainRegistry(nil),
+			MCPServerRegistry:   NewMCPServerRegistry(nil),
+			LLMProviderRegistry: NewLLMProviderRegistry(nil),
+			SkillRegistry:       NewSkillRegistry(map[string]*SkillConfig{}),
+		}
+
+		err := NewValidator(cfg).ValidateAll()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "skill validation failed")
+	})
+
+	t.Run("valid skills pass ValidateAll", func(t *testing.T) {
+		cfg := &Config{
+			Queue: DefaultQueueConfig(),
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"agent1": {
+					Skills:         &[]string{"k8s"},
+					RequiredSkills: []string{"k8s"},
+				},
+			}),
+			ChainRegistry:       NewChainRegistry(nil),
+			MCPServerRegistry:   NewMCPServerRegistry(nil),
+			LLMProviderRegistry: NewLLMProviderRegistry(nil),
+			SkillRegistry: NewSkillRegistry(map[string]*SkillConfig{
+				"k8s": {Name: "k8s", Description: "Kubernetes"},
+			}),
+		}
+
+		err := NewValidator(cfg).ValidateAll()
+		require.NoError(t, err)
+	})
+}
+
 func intPtr(i int) *int {
 	return &i
 }

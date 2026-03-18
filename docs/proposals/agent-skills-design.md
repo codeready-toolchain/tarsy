@@ -272,7 +272,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 ## Implementation Plan
 
-### Phase 1: Foundation — SkillRegistry + Config Loading
+### Phase 1: Foundation — SkillRegistry + Config Loading - DONE
 
 **New files:**
 - `pkg/config/skill.go` — SkillConfig, SkillRegistry

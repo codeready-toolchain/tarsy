@@ -27,6 +27,8 @@ type BuiltinAgentConfig struct {
 	CustomInstructions string
 	LLMBackend         LLMBackend
 	NativeTools        map[GoogleNativeTool]bool
+	Skills             *[]string
+	RequiredSkills     []string
 }
 
 // Built-in agent names. Use these constants instead of string literals

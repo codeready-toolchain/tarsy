@@ -30,6 +30,10 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("agent validation failed: %w", err)
 	}
 
+	if err := v.validateSkills(); err != nil {
+		return fmt.Errorf("skill validation failed: %w", err)
+	}
+
 	if err := v.validateMCPServers(); err != nil {
 		return fmt.Errorf("MCP server validation failed: %w", err)
 	}
@@ -786,6 +790,50 @@ func (v *Validator) validateSlack() error {
 
 	if token := os.Getenv(s.TokenEnv); token == "" {
 		return fmt.Errorf("system.slack.token_env: environment variable %s is not set", s.TokenEnv)
+	}
+
+	return nil
+}
+
+func (v *Validator) validateSkills() error {
+	if v.cfg.SkillRegistry == nil {
+		return nil
+	}
+
+	agents := v.cfg.AgentRegistry.GetAll()
+	for name, agent := range agents {
+		// Validate Skills allowlist references
+		if agent.Skills != nil {
+			for _, skillName := range *agent.Skills {
+				if !v.cfg.SkillRegistry.Has(skillName) {
+					return NewValidationError("agent", name, "skills",
+						fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
+				}
+			}
+		}
+
+		// Validate RequiredSkills references
+		for _, skillName := range agent.RequiredSkills {
+			if !v.cfg.SkillRegistry.Has(skillName) {
+				return NewValidationError("agent", name, "required_skills",
+					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
+			}
+
+			// If Skills allowlist is set, required skills must be within it
+			if agent.Skills != nil {
+				found := false
+				for _, allowed := range *agent.Skills {
+					if allowed == skillName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return NewValidationError("agent", name, "required_skills",
+						fmt.Errorf("required skill %q is not in the skills allowlist", skillName))
+				}
+			}
+		}
 	}
 
 	return nil

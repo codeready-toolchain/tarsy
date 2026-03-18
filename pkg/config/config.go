@@ -35,6 +35,7 @@ type Config struct {
 	ChainRegistry       *ChainRegistry
 	MCPServerRegistry   *MCPServerRegistry
 	LLMProviderRegistry *LLMProviderRegistry
+	SkillRegistry       *SkillRegistry
 }
 
 // Initialize is defined in loader.go
@@ -45,6 +46,7 @@ type Stats struct {
 	Chains       int
 	MCPServers   int
 	LLMProviders int
+	Skills       int
 }
 
 // Stats returns configuration statistics for logging/monitoring
@@ -61,6 +63,9 @@ func (c *Config) Stats() Stats {
 	}
 	if c.LLMProviderRegistry != nil {
 		s.LLMProviders = c.LLMProviderRegistry.Len()
+	}
+	if c.SkillRegistry != nil {
+		s.Skills = c.SkillRegistry.Len()
 	}
 	return s
 }

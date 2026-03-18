@@ -117,6 +117,7 @@ func TestStats(t *testing.T) {
 		ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{"c1": {}}),
 		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{"m1": {}, "m2": {}, "m3": {}}),
 		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{"l1": {}, "l2": {}, "l3": {}, "l4": {}}),
+		SkillRegistry:       NewSkillRegistry(map[string]*SkillConfig{"s1": {}, "s2": {}}),
 	}
 
 	stats := cfg.Stats()
@@ -124,4 +125,17 @@ func TestStats(t *testing.T) {
 	assert.Equal(t, 1, stats.Chains)
 	assert.Equal(t, 3, stats.MCPServers)
 	assert.Equal(t, 4, stats.LLMProviders)
+	assert.Equal(t, 2, stats.Skills)
+}
+
+func TestStatsNilSkillRegistry(t *testing.T) {
+	cfg := &Config{
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"a1": {}}),
+		ChainRegistry:       NewChainRegistry(nil),
+		MCPServerRegistry:   NewMCPServerRegistry(nil),
+		LLMProviderRegistry: NewLLMProviderRegistry(nil),
+	}
+
+	stats := cfg.Stats()
+	assert.Equal(t, 0, stats.Skills)
 }

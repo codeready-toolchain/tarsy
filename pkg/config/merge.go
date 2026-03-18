@@ -27,6 +27,8 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 			CustomInstructions: builtin.CustomInstructions,
 			LLMBackend:         builtin.LLMBackend,
 			NativeTools:        nativeToolsCopy,
+			Skills:             copyStringSlicePtr(builtin.Skills),
+			RequiredSkills:     copyStringSlice(builtin.RequiredSkills),
 		}
 	}
 
@@ -37,6 +39,25 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 	}
 
 	return result
+}
+
+func copyStringSlice(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	c := make([]string, len(s))
+	copy(c, s)
+	return c
+}
+
+// copyStringSlicePtr does a nil-preserving deep copy of *[]string.
+// nil → nil, &[] → &[], &["a","b"] → &["a","b"] (new backing array).
+func copyStringSlicePtr(p *[]string) *[]string {
+	if p == nil {
+		return nil
+	}
+	c := copyStringSlice(*p)
+	return &c
 }
 
 // mergeMCPServers merges built-in and user-defined MCP server configurations.

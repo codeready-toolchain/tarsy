@@ -35,6 +35,7 @@ func TestInitialize(t *testing.T) {
 	assert.NotNil(t, cfg.ChainRegistry)
 	assert.NotNil(t, cfg.MCPServerRegistry)
 	assert.NotNil(t, cfg.LLMProviderRegistry)
+	assert.NotNil(t, cfg.SkillRegistry)
 	assert.NotNil(t, cfg.Defaults)
 
 	// Verify built-in configs are loaded
@@ -1154,4 +1155,82 @@ agent_chains:
 		assert.Equal(t, "gemini-3-flash", cfg.Defaults.Scoring.LLMProvider)
 		assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.Scoring.LLMBackend)
 	})
+}
+
+func TestLoadTarsyYAML_SkillFields(t *testing.T) {
+	configDir := t.TempDir()
+
+	config := `
+agents:
+  all-skills-agent:
+    description: "Uses all skills (default)"
+    mcp_servers: []
+  restricted-agent:
+    description: "Only certain skills"
+    mcp_servers: []
+    skills:
+      - "k8s-basics"
+      - "networking"
+    required_skills:
+      - "k8s-basics"
+  no-skills-agent:
+    description: "Skills disabled"
+    mcp_servers: []
+    skills: []
+
+mcp_servers: {}
+agent_chains: {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(config), 0o644))
+
+	loader := &configLoader{configDir: configDir}
+	cfg, err := loader.loadTarsyYAML()
+	require.NoError(t, err)
+
+	// nil Skills = all skills available
+	assert.Nil(t, cfg.Agents["all-skills-agent"].Skills)
+	assert.Nil(t, cfg.Agents["all-skills-agent"].RequiredSkills)
+
+	// explicit allowlist + required
+	require.NotNil(t, cfg.Agents["restricted-agent"].Skills)
+	assert.Equal(t, []string{"k8s-basics", "networking"}, *cfg.Agents["restricted-agent"].Skills)
+	assert.Equal(t, []string{"k8s-basics"}, cfg.Agents["restricted-agent"].RequiredSkills)
+
+	// empty slice = opt-out
+	require.NotNil(t, cfg.Agents["no-skills-agent"].Skills)
+	assert.Empty(t, *cfg.Agents["no-skills-agent"].Skills)
+}
+
+func TestInitializeWithSkillsDirectory(t *testing.T) {
+	configDir := setupTestConfigDir(t)
+
+	// Add a skills directory with one skill
+	skillDir := filepath.Join(configDir, "skills", "test-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(
+		"---\nname: test-skill\ndescription: A test skill\n---\n# Test\nContent here.",
+	), 0o644))
+
+	t.Setenv("GOOGLE_API_KEY", "test-key")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("XAI_API_KEY", "test-key")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+	t.Setenv("KUBECONFIG", "/test/kubeconfig")
+
+	cfg, err := Initialize(context.Background(), configDir)
+	require.NoError(t, err)
+
+	require.NotNil(t, cfg.SkillRegistry)
+	assert.Equal(t, 1, cfg.SkillRegistry.Len())
+	assert.True(t, cfg.SkillRegistry.Has("test-skill"))
+
+	skill, err := cfg.SkillRegistry.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "A test skill", skill.Description)
+	assert.Contains(t, skill.Body, "Content here.")
+
+	stats := cfg.Stats()
+	assert.Equal(t, 1, stats.Skills)
 }

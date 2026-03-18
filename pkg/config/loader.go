@@ -89,7 +89,8 @@ func Initialize(ctx context.Context, configDir string) (*Config, error) {
 		"agents", stats.Agents,
 		"chains", stats.Chains,
 		"mcp_servers", stats.MCPServers,
-		"llm_providers", stats.LLMProviders)
+		"llm_providers", stats.LLMProviders,
+		"skills", stats.Skills)
 
 	return cfg, nil
 }
@@ -162,6 +163,12 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	chainRegistry := NewChainRegistry(chains)
 	llmProviderRegistry := NewLLMProviderRegistry(llmProvidersMerged)
 
+	// 9. Load skills from configDir/skills/*/SKILL.md
+	skillRegistry, err := LoadSkills(configDir)
+	if err != nil {
+		return nil, NewLoadError("skills", err)
+	}
+
 	// Resolve queue config (merge user YAML with built-in defaults)
 	// Start with defaults, then merge user config on top to preserve unset defaults
 	queueConfig := DefaultQueueConfig()
@@ -194,6 +201,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,
 		LLMProviderRegistry: llmProviderRegistry,
+		SkillRegistry:       skillRegistry,
 	}, nil
 }
 

@@ -35,6 +35,14 @@ type AgentConfig struct {
 
 	// Orchestrator-specific configuration (only valid when Type == orchestrator)
 	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
+
+	// Skills allowlist. nil = all skills available (default).
+	// Empty slice = no skills. Non-nil = only these skills.
+	Skills *[]string `yaml:"skills,omitempty"`
+
+	// RequiredSkills are injected into the system prompt (Tier 2.5).
+	// These are excluded from the on-demand catalog.
+	RequiredSkills []string `yaml:"required_skills,omitempty"`
 }
 
 // OrchestratorConfig holds orchestrator-specific settings.

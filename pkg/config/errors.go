@@ -27,6 +27,9 @@ var (
 	// ErrLLMProviderNotFound indicates LLM provider was not found in registry
 	ErrLLMProviderNotFound = errors.New("LLM provider not found")
 
+	// ErrSkillNotFound indicates skill was not found in registry
+	ErrSkillNotFound = errors.New("skill not found")
+
 	// ErrInvalidReference indicates an invalid cross-reference in configuration
 	ErrInvalidReference = errors.New("invalid configuration reference")
 
