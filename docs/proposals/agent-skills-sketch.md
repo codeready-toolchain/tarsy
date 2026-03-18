@@ -187,29 +187,27 @@ Each agent (including sub-agents) resolves skills independently via the scoping 
 
 ```yaml
 agents:
-  SecurityAgent:
+  InfraAgent:
     custom_instructions: |
-      You are a Security Operations Engineer...
-      ## About the Platform                   # ← copy 1 of 5
+      You are an SRE specializing in infrastructure alerts...
+      ## About the Platform                   # ← copy 1 of 3
       - Multi-tenant shared cluster...
-      ## ALERT CLASSIFICATION CRITERIA        # ← copy 1 of 2
-      ...
-      ## REQUIRED OUTPUT FORMAT               # ← copy 1 of 2
+      ## INVESTIGATION REPORT FORMAT          # ← copy 1 of 2
       ...
 
-  VMSecurityAgent:
+  NetworkAgent:
     custom_instructions: |
-      You are a Security Operations Engineer...
-      ## About the Platform                   # ← copy 2 of 5
+      You are an SRE specializing in network issues...
+      ## About the Platform                   # ← copy 2 of 3
       - Multi-tenant shared cluster...
-      # VM-specific stuff here
+      # Network-specific stuff here
 
-  SecurityOrchestrator:
+  InvestigationOrchestrator:
     custom_instructions: |
-      You are a Security Operations Engineer...
-      ## About the Platform                   # ← copy 3 of 5
+      You are an SRE coordinating investigations...
+      ## About the Platform                   # ← copy 3 of 3
       - Multi-tenant shared cluster...
-      ## ALERT CLASSIFICATION CRITERIA        # ← copy 2 of 2
+      ## INVESTIGATION REPORT FORMAT          # ← copy 2 of 2
       ...
 ```
 
@@ -219,8 +217,7 @@ Skills live as standard `SKILL.md` files:
 
 ```
 config/skills/platform-environment-context/SKILL.md     # Platform details — defined once
-config/skills/alert-classification-criteria/SKILL.md    # Classification criteria — defined once
-config/skills/investigation-report-format/SKILL.md      # Output format — defined once
+config/skills/investigation-report-format/SKILL.md      # Report format — defined once
 ```
 
 `tarsy.yaml` is dramatically smaller — all skills are available by default, no per-agent skill lists needed:
@@ -229,22 +226,21 @@ config/skills/investigation-report-format/SKILL.md      # Output format — defi
 # Skills are discovered from config/skills/*/SKILL.md — no skills section in tarsy.yaml
 
 agents:
-  SecurityAgent:
+  InfraAgent:
     # No skills field → sees all skills; LLM loads what's relevant based on descriptions
     custom_instructions: |
-      You are a Security Operations Engineer specializing in platform security investigations.
-      Your mission is to distinguish legitimate usage from abuse and exploitation.
+      You are an SRE specializing in infrastructure alerts.
+      Focus on resource utilization, pod health, and node conditions.
 
-  VMSecurityAgent:
+  NetworkAgent:
     # No skills field → sees all skills; description-based filtering handles scoping
     custom_instructions: |
-      You are a Security Operations Engineer with expertise in Kubevirt Virtual Machines...
-      ⚠️ CRITICAL: VM-ONLY AGENT — CHECK WORKLOAD TYPE FIRST ⚠️
-      ...
+      You are an SRE specializing in network issues.
+      Focus on connectivity, DNS resolution, and ingress configuration.
 
-  ArgoCD:
-    # Explicit allowlist — only sees ArgoCD-related skills
-    skills: [argocd-troubleshooting]
+  InvestigationOrchestrator:
+    # No skills field → sees all skills; loads what's relevant before dispatching sub-agents
     custom_instructions: |
-      You are a Kubernetes expert analyzing Argo CD Applications...
+      You are an SRE coordinating investigations.
+      Dispatch specialized sub-agents based on the alert context.
 ```
