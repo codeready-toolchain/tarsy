@@ -93,6 +93,9 @@ func parseSkillFile(path string) (*SkillConfig, error) {
 func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 	var fm skillFrontmatter
 
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+
 	trimmed := strings.TrimSpace(content)
 	if !strings.HasPrefix(trimmed, "---") {
 		return fm, "", fmt.Errorf("missing frontmatter delimiters (expected '---' at start)")

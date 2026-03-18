@@ -191,6 +191,20 @@ func TestParseFrontmatter(t *testing.T) {
 			wantErr:     true,
 			errContains: "closing",
 		},
+		{
+			name:     "CRLF line endings",
+			content:  "---\r\nname: crlf-skill\r\ndescription: Windows file\r\n---\r\n\r\n# CRLF Body\r\n",
+			wantName: "crlf-skill",
+			wantDesc: "Windows file",
+			wantBody: "# CRLF Body",
+		},
+		{
+			name:     "lone CR line endings",
+			content:  "---\rname: cr-skill\rdescription: Old Mac file\r---\r\r# CR Body\r",
+			wantName: "cr-skill",
+			wantDesc: "Old Mac file",
+			wantBody: "# CR Body",
+		},
 	}
 
 	for _, tt := range tests {

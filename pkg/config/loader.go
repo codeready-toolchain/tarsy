@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -166,6 +167,10 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	// 9. Load skills from configDir/skills/*/SKILL.md
 	skillRegistry, err := LoadSkills(configDir)
 	if err != nil {
+		var loadErr *LoadError
+		if errors.As(err, &loadErr) {
+			return nil, err
+		}
 		return nil, NewLoadError("skills", err)
 	}
 

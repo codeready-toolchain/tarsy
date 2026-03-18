@@ -796,8 +796,9 @@ func (v *Validator) validateSlack() error {
 }
 
 func (v *Validator) validateSkills() error {
-	if v.cfg.SkillRegistry == nil {
-		return nil
+	registry := v.cfg.SkillRegistry
+	if registry == nil {
+		registry = NewSkillRegistry(nil)
 	}
 
 	agents := v.cfg.AgentRegistry.GetAll()
@@ -805,7 +806,7 @@ func (v *Validator) validateSkills() error {
 		// Validate Skills allowlist references
 		if agent.Skills != nil {
 			for _, skillName := range *agent.Skills {
-				if !v.cfg.SkillRegistry.Has(skillName) {
+				if !registry.Has(skillName) {
 					return NewValidationError("agent", name, "skills",
 						fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
 				}
@@ -814,7 +815,7 @@ func (v *Validator) validateSkills() error {
 
 		// Validate RequiredSkills references
 		for _, skillName := range agent.RequiredSkills {
-			if !v.cfg.SkillRegistry.Has(skillName) {
+			if !registry.Has(skillName) {
 				return NewValidationError("agent", name, "required_skills",
 					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
 			}

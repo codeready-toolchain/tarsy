@@ -3211,11 +3211,29 @@ func TestValidateSkills(t *testing.T) {
 			errMsg:  "not in the skills allowlist",
 		},
 		{
-			name: "nil skill registry passes",
+			name: "nil skill registry with no refs passes",
 			agents: map[string]*AgentConfig{
 				"agent1": {Skills: nil},
 			},
 			skills: nil,
+		},
+		{
+			name: "nil skill registry with allowlist ref fails",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"nonexistent"}},
+			},
+			skills:  nil,
+			wantErr: true,
+			errMsg:  "nonexistent",
+		},
+		{
+			name: "nil skill registry with required_skills ref fails",
+			agents: map[string]*AgentConfig{
+				"agent1": {RequiredSkills: []string{"ghost"}},
+			},
+			skills:  nil,
+			wantErr: true,
+			errMsg:  "ghost",
 		},
 		{
 			name: "empty skill registry with no agent skill refs passes",
