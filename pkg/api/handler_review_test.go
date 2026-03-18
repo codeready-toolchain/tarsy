@@ -10,29 +10,52 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUpdateReviewHandler_MissingSessionID(t *testing.T) {
+func TestUpdateReviewHandler_Validation(t *testing.T) {
 	s := &Server{}
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions//review", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	e.PATCH("/api/v1/sessions/review", s.updateReviewHandler)
 
-	err := s.updateReviewHandler(c)
-	if assert.Error(t, err) {
-		he, ok := err.(*echo.HTTPError)
-		if assert.True(t, ok) {
-			assert.Equal(t, http.StatusBadRequest, he.Code)
-		}
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "invalid json", body: "{bad json"},
+		{name: "empty session_ids", body: `{"session_ids":[],"action":"claim"}`},
+		{name: "missing session_ids", body: `{"action":"claim"}`},
+		{name: "unknown action", body: `{"session_ids":["id1"],"action":"bogus"}`},
+		{name: "resolve without resolution_reason", body: `{"session_ids":["id1"],"action":"resolve"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/review",
+				strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
 	}
 }
 
-func TestUpdateReviewHandler_InvalidBody(t *testing.T) {
+func TestUpdateReviewHandler_TooManyIDs(t *testing.T) {
 	s := &Server{}
 	e := echo.New()
-	e.PATCH("/api/v1/sessions/:id/review", s.updateReviewHandler)
+	e.PATCH("/api/v1/sessions/review", s.updateReviewHandler)
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/test-123/review",
-		strings.NewReader("{invalid json"))
+	var ids strings.Builder
+	ids.WriteString(`{"session_ids":[`)
+	for i := range 51 {
+		if i > 0 {
+			ids.WriteString(",")
+		}
+		ids.WriteString(`"id-` + strings.Repeat("x", 5) + `"`)
+	}
+	ids.WriteString(`],"action":"claim"}`)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/review",
+		strings.NewReader(ids.String()))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -43,15 +66,14 @@ func TestUpdateReviewHandler_InvalidBody(t *testing.T) {
 func TestUpdateReviewHandler_NilSessionService(t *testing.T) {
 	s := &Server{}
 	e := echo.New()
-	e.PATCH("/api/v1/sessions/:id/review", s.updateReviewHandler)
+	e.PATCH("/api/v1/sessions/review", s.updateReviewHandler)
 
-	body := `{"action": "claim"}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/test-123/review",
+	body := `{"session_ids":["test-123"],"action":"claim"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/review",
 		strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	// sessionService is nil — should panic or 500, testing that it doesn't crash silently
 	assert.Panics(t, func() {
 		e.ServeHTTP(rec, req)
 	})

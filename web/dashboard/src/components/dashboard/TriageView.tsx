@@ -24,6 +24,10 @@ interface TriageViewProps {
   onResolve: (sessionId: string, reason: string, note?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
   onUpdateNote: (sessionId: string, note: string) => Promise<void>;
+  onBulkClaim: (sessionIds: string[]) => Promise<void>;
+  onBulkResolve: (sessionIds: string[], reason: string, note?: string) => Promise<void>;
+  onBulkUnclaim: (sessionIds: string[]) => Promise<void>;
+  onBulkReopen: (sessionIds: string[]) => Promise<void>;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
 }
@@ -40,10 +44,14 @@ export function TriageView({
   onResolve,
   onReopen,
   onUpdateNote,
+  onBulkClaim,
+  onBulkResolve,
+  onBulkUnclaim,
+  onBulkReopen,
   onPageChange,
   onPageSizeChange,
 }: TriageViewProps) {
-  const [resolveSessionId, setResolveSessionId] = useState<string | null>(null);
+  const [resolveSessionIds, setResolveSessionIds] = useState<string[] | null>(null);
   const [editNoteState, setEditNoteState] = useState<{ sessionId: string; note: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
@@ -69,14 +77,18 @@ export function TriageView({
   };
 
   const handleResolveClick = (sessionId: string) => {
-    setResolveSessionId(sessionId);
+    setResolveSessionIds([sessionId]);
   };
 
   const handleResolveConfirm = (reason: string, note?: string) => {
-    if (!resolveSessionId) return;
-    const sessionId = resolveSessionId;
-    setResolveSessionId(null);
-    withAction(() => onResolve(sessionId, reason, note));
+    if (!resolveSessionIds) return;
+    const ids = resolveSessionIds;
+    setResolveSessionIds(null);
+    if (ids.length === 1) {
+      withAction(() => onResolve(ids[0], reason, note));
+    } else {
+      withAction(() => onBulkResolve(ids, reason, note));
+    }
   };
 
   const handleReopen = (sessionId: string) => {
@@ -94,10 +106,30 @@ export function TriageView({
     withAction(() => onUpdateNote(sessionId, note));
   };
 
+  const handleBulkClaim = (sessionIds: string[]) => {
+    withAction(() => onBulkClaim(sessionIds));
+  };
+
+  const handleBulkResolve = (sessionIds: string[]) => {
+    setResolveSessionIds(sessionIds);
+  };
+
+  const handleBulkUnclaim = (sessionIds: string[]) => {
+    withAction(() => onBulkUnclaim(sessionIds));
+  };
+
+  const handleBulkReopen = (sessionIds: string[]) => {
+    withAction(() => onBulkReopen(sessionIds));
+  };
+
   const hasAnyData = Object.values(groups).some(g => g !== null);
   const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
     investigating: null, needs_review: null, in_progress: null, resolved: null,
   };
+
+  const resolveModalTitle = resolveSessionIds && resolveSessionIds.length > 1
+    ? `Resolve ${resolveSessionIds.length} Sessions`
+    : undefined;
 
   if (error) {
     return (
@@ -152,16 +184,21 @@ export function TriageView({
         onResolve={handleResolveClick}
         onReopen={handleReopen}
         onEditNote={handleEditNote}
+        onBulkClaim={handleBulkClaim}
+        onBulkResolve={handleBulkResolve}
+        onBulkUnclaim={handleBulkUnclaim}
+        onBulkReopen={handleBulkReopen}
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
         actionLoading={actionLoading}
       />
 
       <ResolveModal
-        open={resolveSessionId !== null}
-        onClose={() => setResolveSessionId(null)}
+        open={resolveSessionIds !== null}
+        onClose={() => setResolveSessionIds(null)}
         onResolve={handleResolveConfirm}
         loading={actionLoading}
+        title={resolveModalTitle}
       />
 
       <EditNoteModal

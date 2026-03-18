@@ -106,24 +106,34 @@ export interface TriageGroupParams {
 }
 
 /** Allowed review workflow actions. */
-export type ReviewAction = 'claim' | 'unclaim' | 'resolve' | 'reopen' | 'update_note';
+export const REVIEW_ACTION = {
+  CLAIM: 'claim',
+  UNCLAIM: 'unclaim',
+  RESOLVE: 'resolve',
+  REOPEN: 'reopen',
+  UPDATE_NOTE: 'update_note',
+} as const;
 
-/** Request body for PATCH /sessions/:id/review. */
+export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
+
+/** Request body for PATCH /api/v1/sessions/review. */
 export interface UpdateReviewRequest {
+  session_ids: string[];
   action: ReviewAction;
   resolution_reason?: string;
   note?: string;
 }
 
-/** Response from PATCH /sessions/:id/review. */
+/** Per-session result from a review action. */
+export interface UpdateReviewResult {
+  session_id: string;
+  success: boolean;
+  error?: string;
+}
+
+/** Response from PATCH /api/v1/sessions/review. */
 export interface UpdateReviewResponse {
-  id: string;
-  review_status: string;
-  assignee: string | null;
-  assigned_at: string | null;
-  resolved_at: string | null;
-  resolution_reason: string | null;
-  resolution_note: string | null;
+  results: UpdateReviewResult[];
 }
 
 /** Single entry in the review activity log. */

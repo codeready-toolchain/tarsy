@@ -297,12 +297,26 @@ func ValidReviewAction(s string) bool {
 	}
 }
 
-// UpdateReviewRequest is the request body for PATCH /sessions/:id/review.
+// UpdateReviewRequest is the request body for PATCH /api/v1/sessions/review.
+// SessionIDs contains one or more session IDs to apply the action to.
 type UpdateReviewRequest struct {
-	Action           string  `json:"action"`            // claim, unclaim, resolve, reopen
-	Actor            string  `json:"-"`                 // populated from extractAuthor, not from JSON
-	ResolutionReason *string `json:"resolution_reason"` // required for resolve
-	Note             *string `json:"note"`              // optional free text
+	SessionIDs       []string `json:"session_ids"`
+	Action           string   `json:"action"`
+	Actor            string   `json:"-"`
+	ResolutionReason *string  `json:"resolution_reason,omitempty"`
+	Note             *string  `json:"note,omitempty"`
+}
+
+// UpdateReviewResponse reports per-session results from a review action.
+type UpdateReviewResponse struct {
+	Results []UpdateReviewResult `json:"results"`
+}
+
+// UpdateReviewResult is the outcome for a single session in a review action.
+type UpdateReviewResult struct {
+	SessionID string `json:"session_id"`
+	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
 }
 
 // ReviewActivityItem is a single entry in the review activity log.

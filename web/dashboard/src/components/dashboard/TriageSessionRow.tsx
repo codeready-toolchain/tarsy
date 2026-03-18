@@ -6,6 +6,7 @@ import {
   Tooltip,
   IconButton,
   Box,
+  Checkbox,
 } from '@mui/material';
 import { Undo, StickyNote2Outlined, Check, NotInterested } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +23,9 @@ export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 're
 interface TriageSessionRowProps {
   session: DashboardSessionItem;
   group: TriageGroup;
+  selected?: boolean;
+  selectionDisabled?: boolean;
+  onToggleSelect?: (sessionId: string) => void;
   onClaim?: (sessionId: string) => void;
   onUnclaim?: (sessionId: string) => void;
   onResolve?: (sessionId: string) => void;
@@ -38,6 +42,9 @@ const resolutionReasonConfig: Record<string, { label: string }> = {
 export function TriageSessionRow({
   session,
   group,
+  selected,
+  selectionDisabled,
+  onToggleSelect,
   onClaim,
   onUnclaim,
   onResolve,
@@ -52,17 +59,28 @@ export function TriageSessionRow({
   };
 
   const hasActions = group !== 'investigating';
+  const selectable = hasActions && onToggleSelect;
 
   return (
     <TableRow
       hover
+      selected={selected}
       onClick={handleRowClick}
       sx={{
         cursor: 'pointer',
         '&:hover .triage-actions': { opacity: 1 },
       }}
     >
-      {/* Status + Summary hover + Resolution reason */}
+      {selectable && (
+        <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            size="small"
+            checked={!!selected}
+            disabled={!selected && selectionDisabled}
+            onChange={() => onToggleSelect(session.id)}
+          />
+        </TableCell>
+      )}
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} size="small" />

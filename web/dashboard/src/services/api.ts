@@ -184,12 +184,9 @@ export async function getTriageGroup(group: TriageGroupKey, params?: TriageGroup
   return response.data;
 }
 
-export async function updateReview(
-  sessionId: string,
-  req: UpdateReviewRequest,
-): Promise<UpdateReviewResponse> {
+export async function updateReview(req: UpdateReviewRequest): Promise<UpdateReviewResponse> {
   const response = await client.patch<UpdateReviewResponse>(
-    `/api/v1/sessions/${sessionId}/review`,
+    '/api/v1/sessions/review',
     req,
   );
   return response.data;

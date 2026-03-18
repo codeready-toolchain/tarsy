@@ -19,73 +19,62 @@ const (
 	maxPageSize     = 200
 )
 
-// updateReviewHandler handles PATCH /api/v1/sessions/:id/review.
-func (s *Server) updateReviewHandler(c *echo.Context) error {
-	sessionID := c.Param("id")
-	if sessionID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "session id is required")
-	}
+const maxSessionIDs = 50
 
+// updateReviewHandler handles PATCH /api/v1/sessions/review.
+// Accepts one or more session IDs in the request body.
+func (s *Server) updateReviewHandler(c *echo.Context) error {
 	var req models.UpdateReviewRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if len(req.SessionIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "session_ids is required and must not be empty")
+	}
+	if len(req.SessionIDs) > maxSessionIDs {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("session_ids must not exceed %d entries", maxSessionIDs))
+	}
+	if !models.ValidReviewAction(req.Action) {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("unknown action %q", req.Action))
+	}
+	if models.ReviewAction(req.Action) == models.ReviewActionResolve && req.ResolutionReason == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "resolution_reason is required for resolve action")
+	}
 	req.Actor = extractAuthor(c)
 
-	session, err := s.sessionService.UpdateReviewStatus(c.Request().Context(), sessionID, req)
-	if err != nil {
-		return mapServiceError(err)
-	}
+	resp, updated := s.sessionService.UpdateReviewStatus(c.Request().Context(), req)
 
-	// Publish review.status event (caller-owns-publishing pattern).
-	// Use a detached context so client disconnects don't cancel the publish.
 	if s.eventPublisher != nil {
-		pubCtx, pubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		pubCtx, pubCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer pubCancel()
 
-		payload := events.ReviewStatusPayload{
-			BasePayload: events.BasePayload{
-				Type:      events.EventTypeReviewStatus,
-				SessionID: sessionID,
-				Timestamp: time.Now().Format(time.RFC3339Nano),
-			},
-			Actor:    req.Actor,
-			Assignee: session.Assignee,
-		}
-		if session.ReviewStatus != nil {
-			rs := string(*session.ReviewStatus)
-			payload.ReviewStatus = &rs
-		}
-		if session.ResolutionReason != nil {
-			reason := string(*session.ResolutionReason)
-			payload.ResolutionReason = &reason
-		}
-		if err := s.eventPublisher.PublishReviewStatus(pubCtx, sessionID, payload); err != nil {
-			slog.Warn("Failed to publish review status from handler",
-				"session_id", sessionID, "error", err)
+		for _, session := range updated {
+			payload := events.ReviewStatusPayload{
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeReviewStatus,
+					SessionID: session.ID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				Actor:    req.Actor,
+				Assignee: session.Assignee,
+			}
+			if session.ReviewStatus != nil {
+				rs := string(*session.ReviewStatus)
+				payload.ReviewStatus = &rs
+			}
+			if session.ResolutionReason != nil {
+				reason := string(*session.ResolutionReason)
+				payload.ResolutionReason = &reason
+			}
+			if err := s.eventPublisher.PublishReviewStatus(pubCtx, session.ID, payload); err != nil {
+				slog.Warn("Failed to publish review status event",
+					"session_id", session.ID, "error", err)
+			}
 		}
 	}
 
-	var reviewStatus *string
-	if session.ReviewStatus != nil {
-		statusStr := string(*session.ReviewStatus)
-		reviewStatus = &statusStr
-	}
-	var resolutionReason *string
-	if session.ResolutionReason != nil {
-		reasonStr := string(*session.ResolutionReason)
-		resolutionReason = &reasonStr
-	}
-
-	return c.JSON(http.StatusOK, map[string]any{
-		"id":                session.ID,
-		"review_status":     reviewStatus,
-		"assignee":          session.Assignee,
-		"assigned_at":       session.AssignedAt,
-		"resolved_at":       session.ResolvedAt,
-		"resolution_reason": resolutionReason,
-		"resolution_note":   session.ResolutionNote,
-	})
+	return c.JSON(http.StatusOK, resp)
 }
 
 // getReviewActivityHandler handles GET /api/v1/sessions/:id/review-activity.

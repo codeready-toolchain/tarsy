@@ -58,6 +58,7 @@ import {
 } from '../../constants/eventTypes.ts';
 import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
+import { REVIEW_ACTION } from '../../types/api.ts';
 import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
@@ -607,7 +608,7 @@ export function DashboardView() {
 
   const handleTriageClaim = async (sessionId: string) => {
     try {
-      await updateReview(sessionId, { action: 'claim' });
+      await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.CLAIM });
       fetchAllTriageGroups();
     } catch (err) {
       setTriageError(handleAPIError(err));
@@ -616,7 +617,7 @@ export function DashboardView() {
 
   const handleTriageUnclaim = async (sessionId: string) => {
     try {
-      await updateReview(sessionId, { action: 'unclaim' });
+      await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.UNCLAIM });
       fetchAllTriageGroups();
     } catch (err) {
       setTriageError(handleAPIError(err));
@@ -625,7 +626,7 @@ export function DashboardView() {
 
   const handleTriageResolve = async (sessionId: string, reason: string, note?: string) => {
     try {
-      await updateReview(sessionId, { action: 'resolve', resolution_reason: reason, note });
+      await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
       fetchAllTriageGroups();
     } catch (err) {
       setTriageError(handleAPIError(err));
@@ -634,7 +635,7 @@ export function DashboardView() {
 
   const handleTriageReopen = async (sessionId: string) => {
     try {
-      await updateReview(sessionId, { action: 'reopen' });
+      await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.REOPEN });
       fetchAllTriageGroups();
     } catch (err) {
       setTriageError(handleAPIError(err));
@@ -643,7 +644,43 @@ export function DashboardView() {
 
   const handleTriageUpdateNote = async (sessionId: string, note: string) => {
     try {
-      await updateReview(sessionId, { action: 'update_note', note: note || undefined });
+      await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.UPDATE_NOTE, note: note || undefined });
+      fetchAllTriageGroups();
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    }
+  };
+
+  const handleBulkTriageClaim = async (sessionIds: string[]) => {
+    try {
+      await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.CLAIM });
+      fetchAllTriageGroups();
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    }
+  };
+
+  const handleBulkTriageResolve = async (sessionIds: string[], reason: string, note?: string) => {
+    try {
+      await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
+      fetchAllTriageGroups();
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    }
+  };
+
+  const handleBulkTriageUnclaim = async (sessionIds: string[]) => {
+    try {
+      await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.UNCLAIM });
+      fetchAllTriageGroups();
+    } catch (err) {
+      setTriageError(handleAPIError(err));
+    }
+  };
+
+  const handleBulkTriageReopen = async (sessionIds: string[]) => {
+    try {
+      await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.REOPEN });
       fetchAllTriageGroups();
     } catch (err) {
       setTriageError(handleAPIError(err));
@@ -1021,6 +1058,10 @@ export function DashboardView() {
           onResolve={handleTriageResolve}
           onReopen={handleTriageReopen}
           onUpdateNote={handleTriageUpdateNote}
+          onBulkClaim={handleBulkTriageClaim}
+          onBulkResolve={handleBulkTriageResolve}
+          onBulkUnclaim={handleBulkTriageUnclaim}
+          onBulkReopen={handleBulkTriageReopen}
           onPageChange={handleTriagePageChange}
           onPageSizeChange={handleTriagePageSizeChange}
         />

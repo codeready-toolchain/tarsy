@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -12,6 +12,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Checkbox,
+  Button,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -20,6 +22,7 @@ import {
   RateReview,
   AssignmentTurnedIn,
   CheckCircleOutline,
+  Close,
 } from '@mui/icons-material';
 import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
@@ -34,6 +37,10 @@ interface TriageGroupedListProps {
   onEditNote: (sessionId: string, currentNote: string) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
+  onBulkClaim?: (sessionIds: string[]) => void;
+  onBulkResolve?: (sessionIds: string[]) => void;
+  onBulkUnclaim?: (sessionIds: string[]) => void;
+  onBulkReopen?: (sessionIds: string[]) => void;
   actionLoading?: boolean;
 }
 
@@ -83,6 +90,18 @@ const groups_config: GroupConfig[] = [
   },
 ];
 
+const SELECTABLE_GROUPS = new Set<TriageGroupName>(['needs_review', 'in_progress', 'resolved']);
+const MAX_BULK_SELECTION = 50;
+
+type SelectionState = Record<TriageGroupKey, Set<string>>;
+
+const emptySelection = (): SelectionState => ({
+  investigating: new Set(),
+  needs_review: new Set(),
+  in_progress: new Set(),
+  resolved: new Set(),
+});
+
 export function TriageGroupedList({
   groups,
   onClaim,
@@ -92,6 +111,10 @@ export function TriageGroupedList({
   onEditNote,
   onPageChange,
   onPageSizeChange,
+  onBulkClaim,
+  onBulkResolve,
+  onBulkUnclaim,
+  onBulkReopen,
   actionLoading,
 }: TriageGroupedListProps) {
   const STORAGE_KEY = 'triage-open-sections';
@@ -108,6 +131,13 @@ export function TriageGroupedList({
     return initial;
   });
 
+  const [selection, setSelection] = useState<SelectionState>(emptySelection);
+
+  // Clear selection when group data changes (e.g. after a bulk action refetch).
+  useEffect(() => {
+    setSelection(emptySelection());
+  }, [groups]);
+
   const toggleSection = (key: string) => {
     setOpenSections((prev) => {
       const next = { ...prev, [key]: !prev[key] };
@@ -116,6 +146,35 @@ export function TriageGroupedList({
     });
   };
 
+  const toggleSelect = useCallback((groupKey: TriageGroupKey, sessionId: string) => {
+    setSelection((prev) => {
+      const next = new Set(prev[groupKey]);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else if (next.size < MAX_BULK_SELECTION) {
+        next.add(sessionId);
+      }
+      return { ...prev, [groupKey]: next };
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback((groupKey: TriageGroupKey, sessionIds: string[]) => {
+    setSelection((prev) => {
+      const current = prev[groupKey];
+      const allSelected = sessionIds.length > 0 && sessionIds.every((id) => current.has(id));
+      return {
+        ...prev,
+        [groupKey]: allSelected
+          ? new Set<string>()
+          : new Set(sessionIds.slice(0, MAX_BULK_SELECTION)),
+      };
+    });
+  }, []);
+
+  const clearGroupSelection = useCallback((groupKey: TriageGroupKey) => {
+    setSelection((prev) => ({ ...prev, [groupKey]: new Set<string>() }));
+  }, []);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {groups_config.map((group) => {
@@ -123,8 +182,14 @@ export function TriageGroupedList({
         if (!groupData) return null;
         const isOpen = openSections[group.key];
         const isEmpty = groupData.count === 0;
+        const selectable = SELECTABLE_GROUPS.has(group.key);
+        const selectedIds = selection[group.dataKey];
+        const selectedCount = selectedIds.size;
+        const atSelectionLimit = selectedCount >= MAX_BULK_SELECTION;
+        const visibleIds = groupData.sessions.map((s) => s.id);
+        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+        const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
 
-        // Compact single-line header for empty investigating
         if (group.key === 'investigating' && isEmpty) {
           return (
             <Paper key={group.key} variant="outlined">
@@ -228,10 +293,106 @@ export function TriageGroupedList({
                 </Box>
               ) : (
                 <>
+                  {/* Bulk action toolbar */}
+                  {selectable && selectedCount > 0 && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        px: 2,
+                        py: 0.75,
+                        backgroundColor: 'action.selected',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={600} sx={{ mr: 1 }}>
+                        {selectedCount} selected{atSelectionLimit ? ` (max ${MAX_BULK_SELECTION})` : ''}
+                      </Typography>
+
+                      {group.key === 'needs_review' && (
+                        <>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={actionLoading}
+                            onClick={() => onBulkClaim?.([...selectedIds])}
+                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                          >
+                            Claim All
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            disabled={actionLoading}
+                            onClick={() => onBulkResolve?.([...selectedIds])}
+                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                          >
+                            Resolve All
+                          </Button>
+                        </>
+                      )}
+
+                      {group.key === 'in_progress' && (
+                        <>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            disabled={actionLoading}
+                            onClick={() => onBulkResolve?.([...selectedIds])}
+                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                          >
+                            Resolve All
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={actionLoading}
+                            onClick={() => onBulkUnclaim?.([...selectedIds])}
+                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                          >
+                            Unclaim All
+                          </Button>
+                        </>
+                      )}
+
+                      {group.key === 'resolved' && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={actionLoading}
+                          onClick={() => onBulkReopen?.([...selectedIds])}
+                          sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                        >
+                          Reopen All
+                        </Button>
+                      )}
+
+                      <Box sx={{ flexGrow: 1 }} />
+                      <IconButton size="small" onClick={() => clearGroupSelection(group.dataKey)}>
+                        <Close sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Box>
+                  )}
+
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
                         <TableRow>
+                          {selectable && (
+                            <TableCell padding="checkbox">
+                              <Checkbox
+                                size="small"
+                                checked={allVisibleSelected}
+                                indeterminate={someVisibleSelected && !allVisibleSelected}
+                                disabled={atSelectionLimit && !allVisibleSelected}
+                                onChange={() => toggleSelectAll(group.dataKey, visibleIds)}
+                              />
+                            </TableCell>
+                          )}
                           <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
@@ -247,6 +408,9 @@ export function TriageGroupedList({
                             key={session.id}
                             session={session}
                             group={group.key}
+                            selected={selectedIds.has(session.id)}
+                            selectionDisabled={atSelectionLimit}
+                            onToggleSelect={selectable ? (id) => toggleSelect(group.dataKey, id) : undefined}
                             onClaim={onClaim}
                             onUnclaim={onUnclaim}
                             onResolve={onResolve}

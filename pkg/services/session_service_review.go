@@ -14,10 +14,36 @@ import (
 	"github.com/google/uuid"
 )
 
-// UpdateReviewStatus performs an atomic compare-and-transition on the session's
+// UpdateReviewStatus applies a review action to one or more sessions.
+// Each session is processed independently in its own transaction; a failure
+// on one does not affect others. Returns the per-session results and the
+// list of successfully updated ent sessions (for event publishing).
+func (s *SessionService) UpdateReviewStatus(_ context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []*ent.AlertSession) {
+	results := make([]models.UpdateReviewResult, 0, len(req.SessionIDs))
+	var updated []*ent.AlertSession
+	for _, sid := range req.SessionIDs {
+		session, err := s.updateSingleReview(sid, req)
+		if err != nil {
+			results = append(results, models.UpdateReviewResult{
+				SessionID: sid,
+				Success:   false,
+				Error:     err.Error(),
+			})
+		} else {
+			results = append(results, models.UpdateReviewResult{
+				SessionID: sid,
+				Success:   true,
+			})
+			updated = append(updated, session)
+		}
+	}
+	return models.UpdateReviewResponse{Results: results}, updated
+}
+
+// updateSingleReview performs an atomic compare-and-transition on one session's
 // review_status. Returns the updated session or ErrConflict if the precondition
 // (expected current review_status) was not met.
-func (s *SessionService) UpdateReviewStatus(_ context.Context, sessionID string, req models.UpdateReviewRequest) (*ent.AlertSession, error) {
+func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateReviewRequest) (*ent.AlertSession, error) {
 	if !models.ValidReviewAction(req.Action) {
 		return nil, NewValidationError("action", fmt.Sprintf("unknown action %q", req.Action))
 	}

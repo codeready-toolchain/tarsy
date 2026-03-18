@@ -221,10 +221,12 @@ func (app *TestApp) patchJSON(t *testing.T, path string, body interface{}, expec
 	return result
 }
 
-// PatchReview calls PATCH /api/v1/sessions/:id/review.
+// PatchReview calls PATCH /api/v1/sessions/review with the given session ID
+// injected into the body as session_ids. Returns the raw response map.
 func (app *TestApp) PatchReview(t *testing.T, sessionID string, body map[string]interface{}) map[string]interface{} {
 	t.Helper()
-	return app.patchJSON(t, "/api/v1/sessions/"+sessionID+"/review", body, http.StatusOK)
+	body["session_ids"] = []string{sessionID}
+	return app.patchJSON(t, "/api/v1/sessions/review", body, http.StatusOK)
 }
 
 // GetReviewActivity calls GET /api/v1/sessions/:id/review-activity.

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
@@ -72,19 +73,41 @@ func seedReviewSession(t *testing.T, service *SessionService, reviewStatus strin
 	return sess.ID
 }
 
+// doReview is a test helper that calls UpdateReviewStatus for a single session
+// and returns the updated ent session (or fails the test on error).
+func doReview(t *testing.T, service *SessionService, id string, req models.UpdateReviewRequest) *ent.AlertSession {
+	t.Helper()
+	req.SessionIDs = []string{id}
+	resp, updated := service.UpdateReviewStatus(context.Background(), req)
+	require.Len(t, resp.Results, 1)
+	require.True(t, resp.Results[0].Success, "expected success, got error: %s", resp.Results[0].Error)
+	require.Len(t, updated, 1)
+	return updated[0]
+}
+
+// doReviewExpectError is a test helper that calls UpdateReviewStatus for a single
+// session and asserts that the per-session result reports a failure.
+func doReviewExpectError(t *testing.T, service *SessionService, id string, req models.UpdateReviewRequest) string {
+	t.Helper()
+	req.SessionIDs = []string{id}
+	resp, updated := service.UpdateReviewStatus(context.Background(), req)
+	require.Len(t, resp.Results, 1)
+	require.False(t, resp.Results[0].Success, "expected failure, but got success")
+	assert.Empty(t, updated)
+	return resp.Results[0].Error
+}
+
 func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
-	ctx := context.Background()
 
 	t.Run("claim from needs_review", func(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "claim",
 			Actor:  "john@test.com",
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusInProgress, *sess.ReviewStatus)
 		assert.NotNil(t, sess.Assignee)
@@ -95,11 +118,10 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	t.Run("claim reassignment from in_progress", func(t *testing.T) {
 		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "claim",
 			Actor:  "bob@test.com",
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusInProgress, *sess.ReviewStatus)
 		assert.Equal(t, "bob@test.com", *sess.Assignee)
@@ -108,21 +130,20 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	t.Run("claim conflict from resolved", func(t *testing.T) {
 		id := seedReviewSession(t, service, "resolved", "john@test.com")
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "claim",
 			Actor:  "bob@test.com",
 		})
-		assert.ErrorIs(t, err, ErrConflict)
+		assert.Contains(t, errMsg, "conflict")
 	})
 
 	t.Run("unclaim from in_progress", func(t *testing.T) {
 		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "unclaim",
 			Actor:  "john@test.com",
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusNeedsReview, *sess.ReviewStatus)
 		assert.Nil(t, sess.Assignee)
@@ -132,11 +153,11 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	t.Run("unclaim conflict from needs_review", func(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "unclaim",
 			Actor:  "john@test.com",
 		})
-		assert.ErrorIs(t, err, ErrConflict)
+		assert.Contains(t, errMsg, "conflict")
 	})
 
 	t.Run("resolve from in_progress", func(t *testing.T) {
@@ -144,13 +165,12 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		reason := "actioned"
 		note := "Applied fix from runbook"
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action:           "resolve",
 			Actor:            "john@test.com",
 			ResolutionReason: &reason,
 			Note:             &note,
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus)
 		assert.NotNil(t, sess.ResolvedAt)
@@ -164,18 +184,18 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 		reason := "dismissed"
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action:           "resolve",
 			Actor:            "john@test.com",
 			ResolutionReason: &reason,
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus)
 		assert.Equal(t, "john@test.com", *sess.Assignee, "direct resolve should auto-assign")
 		assert.Equal(t, alertsession.ResolutionReasonDismissed, *sess.ResolutionReason)
 
 		// Direct resolve should create 2 activity rows (claim + resolve).
+		ctx := context.Background()
 		activities, err := service.GetReviewActivity(ctx, id)
 		require.NoError(t, err)
 		require.Len(t, activities, 2)
@@ -183,36 +203,35 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Equal(t, "resolve", string(activities[1].Action))
 	})
 
-	t.Run("resolve without resolution_reason returns validation error", func(t *testing.T) {
+	t.Run("resolve without resolution_reason returns error", func(t *testing.T) {
 		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "resolve",
 			Actor:  "john@test.com",
 		})
-		assert.True(t, IsValidationError(err))
+		assert.Contains(t, errMsg, "resolution_reason")
 	})
 
 	t.Run("resolve conflict from resolved", func(t *testing.T) {
 		id := seedReviewSession(t, service, "resolved", "john@test.com")
 		reason := "actioned"
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action:           "resolve",
 			Actor:            "bob@test.com",
 			ResolutionReason: &reason,
 		})
-		assert.ErrorIs(t, err, ErrConflict)
+		assert.Contains(t, errMsg, "conflict")
 	})
 
 	t.Run("reopen from resolved", func(t *testing.T) {
 		id := seedReviewSession(t, service, "resolved", "john@test.com")
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "reopen",
 			Actor:  "bob@test.com",
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusNeedsReview, *sess.ReviewStatus)
 		assert.Nil(t, sess.Assignee)
@@ -225,27 +244,27 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 	t.Run("reopen conflict from needs_review", func(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "reopen",
 			Actor:  "john@test.com",
 		})
-		assert.ErrorIs(t, err, ErrConflict)
+		assert.Contains(t, errMsg, "conflict")
 	})
 
 	t.Run("update_note on resolved session", func(t *testing.T) {
 		id := seedReviewSession(t, service, "resolved", "john@test.com")
 		note := "Updated fix details"
 
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "update_note",
 			Actor:  "john@test.com",
 			Note:   &note,
 		})
-		require.NoError(t, err)
 		require.NotNil(t, sess.ResolutionNote)
 		assert.Equal(t, "Updated fix details", *sess.ResolutionNote)
 		assert.Equal(t, alertsession.ReviewStatusResolved, *sess.ReviewStatus, "status should not change")
 
+		ctx := context.Background()
 		activities, err := service.GetReviewActivity(ctx, id)
 		require.NoError(t, err)
 		last := activities[len(activities)-1]
@@ -260,16 +279,14 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 
 		// Set a note first.
 		note := "Some note"
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "update_note", Actor: "john@test.com", Note: &note,
 		})
-		require.NoError(t, err)
 
 		// Clear it.
-		sess, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "update_note", Actor: "john@test.com",
 		})
-		require.NoError(t, err)
 		assert.Nil(t, sess.ResolutionNote)
 	})
 
@@ -277,22 +294,64 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		id := seedReviewSession(t, service, "in_progress", "john@test.com")
 		note := "Should fail"
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "update_note",
 			Actor:  "john@test.com",
 			Note:   &note,
 		})
-		assert.ErrorIs(t, err, ErrConflict)
+		assert.Contains(t, errMsg, "conflict")
 	})
 
-	t.Run("unknown action returns validation error", func(t *testing.T) {
+	t.Run("unknown action returns error", func(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
 			Action: "bogus",
 			Actor:  "john@test.com",
 		})
-		assert.True(t, IsValidationError(err))
+		assert.Contains(t, errMsg, "unknown action")
+	})
+
+	t.Run("multiple sessions in one call", func(t *testing.T) {
+		id1 := seedReviewSession(t, service, "needs_review", "")
+		id2 := seedReviewSession(t, service, "needs_review", "")
+
+		resp, updated := service.UpdateReviewStatus(context.Background(), models.UpdateReviewRequest{
+			SessionIDs: []string{id1, id2},
+			Action:     "claim",
+			Actor:      "john@test.com",
+		})
+		require.Len(t, resp.Results, 2)
+		assert.True(t, resp.Results[0].Success)
+		assert.True(t, resp.Results[1].Success)
+		assert.Len(t, updated, 2)
+	})
+
+	t.Run("partial failure when some sessions conflict", func(t *testing.T) {
+		goodID := seedReviewSession(t, service, "needs_review", "")
+		conflictID := seedReviewSession(t, service, "resolved", "john@test.com")
+
+		resp, updated := service.UpdateReviewStatus(context.Background(), models.UpdateReviewRequest{
+			SessionIDs: []string{goodID, conflictID},
+			Action:     "claim",
+			Actor:      "bob@test.com",
+		})
+		require.Len(t, resp.Results, 2)
+		assert.True(t, resp.Results[0].Success)
+		assert.False(t, resp.Results[1].Success)
+		assert.NotEmpty(t, resp.Results[1].Error)
+		assert.Len(t, updated, 1)
+		assert.Equal(t, goodID, updated[0].ID)
+	})
+
+	t.Run("empty session IDs returns empty results", func(t *testing.T) {
+		resp, updated := service.UpdateReviewStatus(context.Background(), models.UpdateReviewRequest{
+			SessionIDs: []string{},
+			Action:     "claim",
+			Actor:      "john@test.com",
+		})
+		assert.Empty(t, resp.Results)
+		assert.Empty(t, updated)
 	})
 }
 
@@ -305,16 +364,14 @@ func TestSessionService_GetReviewActivity(t *testing.T) {
 		id := seedReviewSession(t, service, "needs_review", "")
 
 		// Perform claim then resolve — creates 2 activity rows.
-		_, err := service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "claim", Actor: "john@test.com",
 		})
-		require.NoError(t, err)
 
 		reason := "actioned"
-		_, err = service.UpdateReviewStatus(ctx, id, models.UpdateReviewRequest{
+		doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "resolve", Actor: "john@test.com", ResolutionReason: &reason,
 		})
-		require.NoError(t, err)
 
 		activities, err := service.GetReviewActivity(ctx, id)
 		require.NoError(t, err)

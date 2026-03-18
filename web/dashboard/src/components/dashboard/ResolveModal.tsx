@@ -22,9 +22,10 @@ export interface ResolveModalProps {
   onClose: () => void;
   onResolve: (reason: string, note?: string) => void;
   loading?: boolean;
+  title?: string;
 }
 
-export function ResolveModal({ open, onClose, onResolve, loading }: ResolveModalProps) {
+export function ResolveModal({ open, onClose, onResolve, loading, title }: ResolveModalProps) {
   const [reason, setReason] = useState<string>('');
   const [note, setNote] = useState('');
 
@@ -45,7 +46,7 @@ export function ResolveModal({ open, onClose, onResolve, loading }: ResolveModal
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CheckCircleOutline color="success" />
-          <Typography variant="h6">Resolve Session</Typography>
+          <Typography variant="h6">{title ?? 'Resolve Session'}</Typography>
         </Box>
         <IconButton onClick={onClose} size="small">
           <Close />

@@ -251,6 +251,7 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/active", s.activeSessionsHandler)
 	v1.GET("/sessions/filter-options", s.filterOptionsHandler)
 	v1.GET("/sessions/triage/:group", s.getTriageGroupHandler)
+	v1.PATCH("/sessions/review", s.updateReviewHandler)
 
 	// Session detail and actions.
 	v1.GET("/sessions/:id", s.getSessionHandler)
@@ -260,7 +261,6 @@ func (s *Server) setupRoutes() {
 	v1.POST("/sessions/:id/chat/messages", s.sendChatMessageHandler)
 	v1.POST("/sessions/:id/score", s.scoreSessionHandler)
 	v1.GET("/sessions/:id/score", s.getScoreHandler)
-	v1.PATCH("/sessions/:id/review", s.updateReviewHandler)
 	v1.GET("/sessions/:id/review-activity", s.getReviewActivityHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 

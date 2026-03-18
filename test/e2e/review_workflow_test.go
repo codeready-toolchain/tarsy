@@ -73,7 +73,9 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	claimResp := app.PatchReview(t, sessionID, map[string]interface{}{
 		"action": "claim",
 	})
-	assert.Equal(t, "in_progress", claimResp["review_status"])
+	claimResults := claimResp["results"].([]interface{})
+	require.Len(t, claimResults, 1)
+	assert.Equal(t, true, claimResults[0].(map[string]interface{})["success"])
 
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "review.status" && e.Parsed["review_status"] == "in_progress"
@@ -85,8 +87,9 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 		"resolution_reason": "actioned",
 		"note":              "Verified and closed.",
 	})
-	assert.Equal(t, "resolved", resolveResp["review_status"])
-	assert.Equal(t, "actioned", resolveResp["resolution_reason"])
+	resolveResults := resolveResp["results"].([]interface{})
+	require.Len(t, resolveResults, 1)
+	assert.Equal(t, true, resolveResults[0].(map[string]interface{})["success"])
 
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "review.status" && e.Parsed["review_status"] == "resolved"
