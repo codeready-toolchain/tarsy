@@ -71,6 +71,22 @@ func TestSkillToolExecutor_ListTools_NoInnerTools(t *testing.T) {
 	assert.Equal(t, "load_skill", tools[0].Name)
 }
 
+func TestSkillToolExecutor_ListTools_DeduplicatesLoadSkill(t *testing.T) {
+	inner := agent.NewStubToolExecutor([]agent.ToolDefinition{
+		{Name: "load_skill", Description: "duplicate from inner"},
+		{Name: "server1.read_file", Description: "Reads a file"},
+	})
+	s := NewSkillToolExecutor(inner, testRegistry(), allSkillNames())
+
+	tools, err := s.ListTools(t.Context())
+	require.NoError(t, err)
+
+	assert.Len(t, tools, 2)
+	assert.Equal(t, "load_skill", tools[0].Name)
+	assert.Equal(t, loadSkillTool.Description, tools[0].Description)
+	assert.Equal(t, "server1.read_file", tools[1].Name)
+}
+
 func TestSkillToolExecutor_Execute_LoadSkill(t *testing.T) {
 	tests := []struct {
 		name         string

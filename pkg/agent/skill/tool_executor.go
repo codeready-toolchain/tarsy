@@ -50,14 +50,20 @@ func NewSkillToolExecutor(
 	registry *config.SkillRegistry,
 	allowedNames map[string]struct{},
 ) *SkillToolExecutor {
+	owned := make(map[string]struct{}, len(allowedNames))
+	for k, v := range allowedNames {
+		owned[k] = v
+	}
 	return &SkillToolExecutor{
 		inner:        inner,
 		registry:     registry,
-		allowedNames: allowedNames,
+		allowedNames: owned,
 	}
 }
 
 // ListTools returns the combined tool set: load_skill + inner tools.
+// If the inner executor already provides a load_skill tool it is filtered out
+// so the canonical definition is always the one from this executor.
 func (s *SkillToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefinition, error) {
 	tools := []agent.ToolDefinition{loadSkillTool}
 
@@ -66,7 +72,12 @@ func (s *SkillToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefiniti
 		if err != nil {
 			return nil, fmt.Errorf("failed to list inner tools: %w", err)
 		}
-		tools = append(tools, innerTools...)
+		for _, t := range innerTools {
+			if t.Name == toolLoadSkill {
+				continue
+			}
+			tools = append(tools, t)
+		}
 	}
 
 	return tools, nil
