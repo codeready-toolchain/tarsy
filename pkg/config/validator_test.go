@@ -3242,6 +3242,24 @@ func TestValidateSkills(t *testing.T) {
 			},
 			skills: map[string]*SkillConfig{},
 		},
+		{
+			name: "duplicate in skills allowlist fails",
+			agents: map[string]*AgentConfig{
+				"agent1": {Skills: &[]string{"k8s-basics", "networking", "k8s-basics"}},
+			},
+			skills:  baseSkills,
+			wantErr: true,
+			errMsg:  `duplicate skill "k8s-basics"`,
+		},
+		{
+			name: "duplicate in required_skills fails",
+			agents: map[string]*AgentConfig{
+				"agent1": {RequiredSkills: []string{"k8s-basics", "k8s-basics"}},
+			},
+			skills:  baseSkills,
+			wantErr: true,
+			errMsg:  `duplicate skill "k8s-basics"`,
+		},
 	}
 
 	for _, tt := range tests {

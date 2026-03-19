@@ -805,7 +805,13 @@ func (v *Validator) validateSkills() error {
 	for name, agent := range agents {
 		// Validate Skills allowlist references
 		if agent.Skills != nil {
+			seen := make(map[string]struct{}, len(*agent.Skills))
 			for _, skillName := range *agent.Skills {
+				if _, dup := seen[skillName]; dup {
+					return NewValidationError("agent", name, "skills",
+						fmt.Errorf("duplicate skill %q", skillName))
+				}
+				seen[skillName] = struct{}{}
 				if !registry.Has(skillName) {
 					return NewValidationError("agent", name, "skills",
 						fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
@@ -814,7 +820,14 @@ func (v *Validator) validateSkills() error {
 		}
 
 		// Validate RequiredSkills references
+		seenRequired := make(map[string]struct{}, len(agent.RequiredSkills))
 		for _, skillName := range agent.RequiredSkills {
+			if _, dup := seenRequired[skillName]; dup {
+				return NewValidationError("agent", name, "required_skills",
+					fmt.Errorf("duplicate skill %q", skillName))
+			}
+			seenRequired[skillName] = struct{}{}
+
 			if !registry.Has(skillName) {
 				return NewValidationError("agent", name, "required_skills",
 					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
