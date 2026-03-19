@@ -175,6 +175,7 @@ graph TB
     ENV[".env file<br/>API keys, secrets"] --> Loader
     YAML["tarsy.yaml<br/>Main config"] --> Loader[Config Loader]
     LLMYaml["llm-providers.yaml<br/>Optional"] --> Loader
+    SkillFiles["skills/*/SKILL.md<br/>Domain knowledge"] --> Loader
     BuiltIn["Built-in Defaults<br/>builtin.go"] --> Registries
 
     Loader --> Validation[Validation]
@@ -184,6 +185,7 @@ graph TB
     Registries --> ChainReg[ChainRegistry]
     Registries --> MCPReg[MCPServerRegistry]
     Registries --> LLMReg[LLMProviderRegistry]
+    Registries --> SkillReg[SkillRegistry]
 ```
 
 #### Key Configuration Types
@@ -194,9 +196,10 @@ graph TB
 
 **YAML Configuration**: `deploy/config/tarsy.yaml` (see `tarsy.yaml.example`)
 - **Go template variables**: `{{.VARIABLE_NAME}}` resolved from environment
-- **Agent definitions**: Custom agents with MCP servers and instructions
+- **Agent definitions**: Custom agents with MCP servers, instructions, and skill scoping
 - **Chain definitions**: Multi-stage workflows with alert type mappings
 - **MCP server configurations**: Custom tool servers with transport, masking, summarization
+- **Skill definitions**: `skills/*/SKILL.md` files with YAML frontmatter (name, description) and Markdown body — loaded at startup, available on-demand via `load_skill` tool
 - **Override support**: YAML definitions override built-in components with same name/ID
 
 **LLM Provider Configuration**: `deploy/config/llm-providers.yaml` (optional)
@@ -208,10 +211,11 @@ graph TB
 
 | Registry | Package | Lookup | Key Fields |
 |----------|---------|--------|------------|
-| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, Type, LLMBackend, MaxIterations, Orchestrator |
+| `AgentRegistry` | `pkg/config/` | `Get(name)` | MCPServers, CustomInstructions, Type, LLMBackend, MaxIterations, Orchestrator, Skills, RequiredSkills |
 | `ChainRegistry` | `pkg/config/` | `Get(id)`, `GetByAlertType(type)` | AlertTypes, Stages[], Chat, LLMProvider, MCPServers, SubAgents |
 | `MCPServerRegistry` | `pkg/config/` | `Get(id)` | Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `pkg/config/` | `Get(name)`, `GetAll()` | Type, Model, APIKeyEnv, BaseURL, NativeTools |
+| `SkillRegistry` | `pkg/config/` | `Get(name)`, `GetAll()`, `Has(name)`, `Names()` | Name, Description, Body — loaded from `skills/*/SKILL.md` at startup |
 | `SubAgentRegistry` | `pkg/config/` | `GetAll()`, `Get(name)` | Available sub-agents (agents with description), filtered by `sub_agents` override |
 
 #### Configuration Loading Process
@@ -225,6 +229,7 @@ graph TB
 **Config Validator**: `pkg/config/validator.go`
 - Validates chain stage references, MCP server existence, runbook domains
 - Validates fallback provider entries: provider exists, backend valid, credentials set (fail-fast at startup)
+- Validates skill references: agent `skills` allowlist entries exist in SkillRegistry, `required_skills` exist and are within the agent's effective scope
 - Startup-time validation prevents runtime failures
 
 **Key Implementation Files**:
@@ -233,6 +238,8 @@ graph TB
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
 - `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`, `action`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
+- `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
 
 ---
@@ -513,14 +520,18 @@ The orchestrator agent (`type: orchestrator`) uses the same `IteratingController
 
 #### Instruction Composition
 
-**Three-tier system** (`pkg/agent/prompt/builder.go`):
+**Tiered system** (`pkg/agent/prompt/builder.go`, `pkg/agent/prompt/instructions.go`, `pkg/agent/prompt/skills.go`):
 ```
-System prompt = General SRE instructions
-              + MCP server instructions (per configured server)
-              + Agent custom instructions
+Tier 1:   General SRE Instructions        (hardcoded)
+Tier 2:   MCP Server Instructions          (per configured server)
+Tier 2.5: Required Skill Content           (from required_skills — injected bodies)
+Tier 2.6: On-Demand Skill Catalog          (names + descriptions, with load_skill tool)
+Tier 3:   Agent Custom Instructions        (from custom_instructions)
 ```
 
-For **orchestrator agents**, the prompt builder auto-injects additional layers after the three tiers:
+**Agent Skills** (`pkg/agent/skill/tool_executor.go`) provide reusable domain knowledge. Required skills are injected as content (Tier 2.5); on-demand skills appear as a catalog with a `load_skill` tool (Tier 2.6). Skill resolution happens in `config_resolver.go` — the prompt builder only formats pre-resolved data from `ResolvedAgentConfig.RequiredSkillContent` and `ResolvedAgentConfig.OnDemandSkills`. `SkillToolExecutor` wraps the inner tool executor and intercepts `load_skill` calls, reading from the in-memory `SkillRegistry`. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
+
+For **orchestrator agents**, the prompt builder auto-injects additional layers after the tiers:
 ```
 System prompt = Tier 1-3 (above)
               + Orchestrator behavioral strategy (auto-injected)
@@ -577,7 +588,9 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/controller/summarize.go` -- Tool result summarization
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
+- `pkg/agent/skill/tool_executor.go` -- SkillToolExecutor (intercepts `load_skill`, delegates rest to inner executor)
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
+- `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
 - `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow orchestration, stage/execution lifecycle)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition

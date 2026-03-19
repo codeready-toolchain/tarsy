@@ -1,12 +1,11 @@
-# Agent Skills — Design Document
+# ADR-0012: Agent Skills
 
-**Status:** All questions decided (Q1–Q5) — see [agent-skills-design-questions.md](agent-skills-design-questions.md)
-
-**Prior art:** [Sketch](agent-skills-sketch.md) and [sketch questions (Q1–Q7)](agent-skills-questions.md) — all conceptual decisions are finalized there.
+**Status:** Implemented
+**Date:** 2026-03-18
 
 ## Overview
 
-Agent Skills add modular, reusable knowledge blocks to TARSy agents. The [sketch document](agent-skills-sketch.md) established the conceptual design: skills follow the industry-standard `SKILL.md` format, are discovered from the filesystem at startup, presented as a catalog in the system prompt, and loaded on-demand via a `load_skill` tool. This document specifies the implementation: new types, modified components, data flow, and phased delivery.
+Agent Skills add modular, reusable knowledge blocks to TARSy agents. Skills follow the industry-standard `SKILL.md` format, are discovered from the filesystem at startup, presented as a catalog in the system prompt, and loaded on-demand via a `load_skill` tool. This document specifies the implementation: new types, modified components, data flow, and phased delivery.
 
 ## Design Principles
 
@@ -14,6 +13,30 @@ Agent Skills add modular, reusable knowledge blocks to TARSy agents. The [sketch
 2. **Zero config for the common case** — Drop a `SKILL.md` file, all agents see it. No YAML changes required.
 3. **Startup-only I/O** — Skills are loaded from disk into memory at config initialization. Runtime `load_skill` reads from the in-memory registry (no filesystem access).
 4. **Minimal blast radius** — New fields on AgentConfig are optional. Existing configs work unchanged.
+
+## Key Decisions
+
+### Conceptual Decisions (from sketch)
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| S1 | How are skills defined? | Industry-standard `skills/<name>/SKILL.md` directories | Aligns with Claude Code, Cursor, OpenAI Codex, Spring AI. Markdown is easy to edit, preview, lint. Supports future Level 3 resources. |
+| S2 | How are skills scoped to agents? | All skills available by default, optional per-agent `skills` allowlist | Zero config for common case. LLM filters by description. Follows OpenClaw pattern. |
+| S3 | How does the LLM load skills at runtime? | Dedicated `load_skill` tool + per-agent `required_skills` | Progressive disclosure for most skills; safety net for critical domain knowledge via prompt injection. |
+| S4 | Where does the skill catalog appear in the prompt? | System prompt Tier 2.5 (required content) and Tier 2.6 (on-demand catalog) | Clean placement between MCP instructions and custom instructions. Consistent with existing tier style. |
+| S5 | How do skills work with orchestrators and sub-agents? | Each agent resolves skills independently | Simple, consistent resolution. Sub-agents can have different skill scoping. Matches OpenClaw. |
+| S6 | Should `load_skill` support multiple skills per call? | Yes, batch loading via `names` array | Reduces expensive LLM round-trips. Each turn is an API call to the provider. |
+| S7 | How is the skill catalog communicated? | Catalog with behavioral guidance | Explicit nudge to load skills early. Adapted from OpenClaw's prescriptive pattern. |
+
+### Implementation Decisions (from design)
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| D1 | Where do `skills`/`required_skills` live in config hierarchy? | Agent-level only (no chain/stage overrides) | Skills are knowledge scoping, not infrastructure wiring. Start simple; stage-level overrides can be added later without breaking changes. |
+| D2 | How does resolved skill data flow to the prompt builder? | Pre-resolved in `config_resolver.go`, carried on `ResolvedAgentConfig` | Follows existing pattern: config_resolver does all resolution, ResolvedAgentConfig carries the result, PromptBuilder formats it. |
+| D3 | Which agent types get skill support? | Investigation + orchestrator + sub-agents + action + chat | All types that interact with the environment or answer user questions. Scoring/synthesis/exec-summary are meta-agents excluded. |
+| D4 | How should required skill content appear in the system prompt? | Wrapped with a `## Skill: {name}` provenance header | Clear provenance for operators inspecting prompts. Consistent with `## {name} Instructions` pattern. |
+| D5 | How should `load_skill` calls be tracked? | Full interaction records, identical to MCP tool calls | Full observability. Zero special-case code — existing controller loop handles it. |
 
 ## Architecture
 
@@ -105,7 +128,7 @@ type AgentConfig struct {
 }
 ```
 
-`skills` and `required_skills` are agent-level only (Q1 decision). No chain/stage overrides.
+`skills` and `required_skills` are agent-level only (D1). No chain/stage overrides.
 
 **Built-in agents:** `BuiltinAgentConfig` (in `builtin.go`) also needs `Skills` and `RequiredSkills` fields, and `mergeAgents()` (in `merge.go`) must copy them when converting built-in agents to `AgentConfig`. Built-in agents default to nil (all skills available), so no changes to existing built-in definitions are needed.
 
@@ -133,7 +156,7 @@ New `validateSkills()` method:
 
 #### 5. `ResolvedAgentConfig` — resolved skill data
 
-Skills are pre-resolved in `config_resolver.go` and carried on `ResolvedAgentConfig` (Q2 decision). PromptBuilder only formats the data.
+Skills are pre-resolved in `config_resolver.go` and carried on `ResolvedAgentConfig` (D2). PromptBuilder only formats the data.
 
 ```go
 type ResolvedAgentConfig struct {
@@ -169,7 +192,7 @@ New `resolveSkills()` function called within `ResolveAgentConfig`:
 
 Same logic applies to `ResolveChatAgentConfig`. `resolveSkills()` accesses the `SkillRegistry` via the `cfg *config.Config` parameter already passed to all `Resolve*` functions, and reads `Skills`/`RequiredSkills` from the agent definition obtained via `cfg.GetAgent()`.
 
-Skill support covers investigation (default), orchestrator, sub-agent, action, and chat agents (Q3 decision). These all call `ComposeInstructions()`, so skills appear in their prompts automatically. Scoring, synthesis, and exec-summary agents are excluded — they are meta-agents that don't investigate alerts.
+Skill support covers investigation (default), orchestrator, sub-agent, action, and chat agents (D3). These all call `ComposeInstructions()`, so skills appear in their prompts automatically. Scoring, synthesis, and exec-summary agents are excluded — they are meta-agents that don't investigate alerts.
 
 #### 7. `prompt/instructions.go` — Tier 2.5 and 2.6
 
@@ -231,7 +254,7 @@ The same wrapping applies in three places:
 
 The wrapping order is: MCP → Orchestrator → Skill (outermost). This means `load_skill` is intercepted before reaching the orchestrator or MCP layers.
 
-`load_skill` calls are tracked identically to MCP tool calls (Q5 decision): interaction records, timeline events, the full pipeline. The existing controller loop handles this with zero special-case code.
+`load_skill` calls are tracked identically to MCP tool calls (D5): interaction records, timeline events, the full pipeline. The existing controller loop handles this with zero special-case code.
 
 ### Data Flow
 
@@ -272,7 +295,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 ## Implementation Plan
 
-### Phase 1: Foundation — SkillRegistry + Config Loading - DONE
+### Phase 1: Foundation — SkillRegistry + Config Loading ✓
 
 **New files:**
 - `pkg/config/skill.go` — SkillConfig, SkillRegistry
@@ -292,7 +315,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 **Verification:** Config loads with and without `skills/` directory. Skills are discoverable via registry. Validation catches invalid references and edge cases (required skill outside allowlist, referencing nonexistent skills).
 
-### Phase 2: Prompt Integration — Tiers 2.5 and 2.6 - DONE
+### Phase 2: Prompt Integration — Tiers 2.5 and 2.6 ✓
 
 **New files:**
 - `pkg/agent/prompt/skills.go` — formatRequiredSkill(), formatSkillCatalog()
@@ -306,7 +329,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 **Verification:** System prompts contain required skill content and on-demand catalog in correct order. Catalog respects agent skill allowlists.
 
-### Phase 3: load_skill Tool + Executor Wiring - DONE
+### Phase 3: load_skill Tool + Executor Wiring ✓
 
 **New files:**
 - `pkg/agent/skill/tool_executor.go` — SkillToolExecutor

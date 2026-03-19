@@ -208,15 +208,20 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 
-	// B1. Find load_skill timeline event.
-	loadSkillEvent := findTimelineEvent(t, timeline, "load_skill")
-	require.NotNil(t, loadSkillEvent, "should have a load_skill timeline event")
-	assert.Equal(t, timelineevent.EventTypeLlmToolCall, loadSkillEvent.EventType)
-	assert.Equal(t, timelineevent.StatusCompleted, loadSkillEvent.Status)
-	assert.Contains(t, loadSkillEvent.Content, "DNS Resolution",
-		"load_skill event content should contain skill body")
-	toolName, _ := loadSkillEvent.Metadata["tool_name"].(string)
-	assert.Equal(t, "load_skill", toolName)
+	// B1. Find both load_skill timeline events (investigation + chat).
+	loadSkillEvents := findAllTimelineEvents(timeline, "load_skill")
+	require.Len(t, loadSkillEvents, 2, "should have two load_skill timeline events (investigation + chat)")
+
+	investigationEvent := loadSkillEvents[0]
+	assert.Equal(t, timelineevent.EventTypeLlmToolCall, investigationEvent.EventType)
+	assert.Equal(t, timelineevent.StatusCompleted, investigationEvent.Status)
+	assert.Contains(t, investigationEvent.Content, "DNS Resolution",
+		"investigation load_skill event should contain networking skill body")
+
+	chatEvent := loadSkillEvents[1]
+	assert.Equal(t, timelineevent.StatusCompleted, chatEvent.Status)
+	assert.Contains(t, chatEvent.Content, "A pod is the smallest deployable unit",
+		"chat load_skill event should contain kubernetes-basics skill body")
 
 	// B2. Find MCP tool call timeline event.
 	mcpToolEvent := findTimelineEvent(t, timeline, "get_pods")
@@ -759,6 +764,17 @@ func findToolResultMessage(input *agent.GenerateInput, toolName string) *agent.C
 // findTimelineEvent finds the first completed llm_tool_call event with the given tool_name in metadata.
 func findTimelineEvent(t *testing.T, events []*ent.TimelineEvent, toolName string) *ent.TimelineEvent {
 	t.Helper()
+	matches := findAllTimelineEvents(events, toolName)
+	if len(matches) == 0 {
+		return nil
+	}
+	return matches[0]
+}
+
+// findAllTimelineEvents returns all completed llm_tool_call events matching tool_name,
+// preserving the original sequence order.
+func findAllTimelineEvents(events []*ent.TimelineEvent, toolName string) []*ent.TimelineEvent {
+	var out []*ent.TimelineEvent
 	for _, e := range events {
 		if e.EventType != timelineevent.EventTypeLlmToolCall {
 			continue
@@ -767,10 +783,10 @@ func findTimelineEvent(t *testing.T, events []*ent.TimelineEvent, toolName strin
 			continue
 		}
 		if tn, ok := e.Metadata["tool_name"].(string); ok && tn == toolName {
-			return e
+			out = append(out, e)
 		}
 	}
-	return nil
+	return out
 }
 
 // hasAgentInPrompt checks if any system message contains the agent name.

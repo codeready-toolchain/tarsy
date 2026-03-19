@@ -24,6 +24,7 @@ cp .env.example .env
    - Define custom chains
    - Override built-in configurations
    - Add custom MCP servers
+   - Add agent skills (see [Agent Skills](#agent-skills) below)
 
 4. **Customize `llm-providers.yaml`** (optional):
    - Add additional LLM providers
@@ -45,6 +46,7 @@ These files are **gitignored** and contain your actual configuration:
 
 - **`tarsy.yaml`** - Main configuration (agents, chains, MCP servers, defaults)
 - **`llm-providers.yaml`** - LLM provider configurations
+- **`skills/`** - Agent skill definitions (see [Agent Skills](#agent-skills))
 - **`.env`** - Environment variables and secrets
 - **`oauth2-proxy.cfg`** - Generated OAuth2 proxy configuration (if using auth)
 
@@ -66,7 +68,7 @@ Main configuration file containing:
 
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
-- **`agents:`** - Custom agent definitions (or overrides)
+- **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
 - **`agent_chains:`** - Multi-stage agent chain definitions
 
 ```yaml
@@ -170,6 +172,74 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 You can override any built-in configuration by defining the same name/ID in your YAML files.
 
+## Agent Skills
+
+Agent Skills provide modular, reusable domain knowledge that agents can load on-demand during investigations. Skills follow the industry-standard `SKILL.md` format.
+
+### Directory Structure
+
+```
+deploy/config/
+├── tarsy.yaml
+├── llm-providers.yaml
+└── skills/
+    ├── pod-troubleshooting/
+    │   └── SKILL.md
+    ├── resource-management/
+    │   └── SKILL.md
+    └── networking-diagnostics/
+        └── SKILL.md
+```
+
+### SKILL.md Format
+
+Each `SKILL.md` has YAML frontmatter (name, description) and a Markdown body:
+
+```markdown
+---
+name: pod-troubleshooting
+description: >
+  Kubernetes pod troubleshooting procedures: crash loops, OOMKills,
+  image pull errors, and readiness probe failures.
+---
+
+## Pod Troubleshooting Guide
+- Check pod events for crash reasons
+- Inspect container logs for error patterns
+...
+```
+
+### Agent Skill Configuration
+
+By default, **all discovered skills are available to all agents**. Use optional fields to customize:
+
+```yaml
+agents:
+  # No skill fields → sees all skills (default)
+  KubernetesAgent:
+    mcp_servers: [kubernetes-server]
+
+  # Explicit allowlist → sees only these skills
+  NetworkAgent:
+    skills: [networking-diagnostics, pod-troubleshooting]
+    mcp_servers: [kubernetes-server]
+
+  # Required skills → injected into system prompt (always present)
+  InfraAgent:
+    required_skills: [pod-troubleshooting]
+    skills: [pod-troubleshooting, resource-management, networking-diagnostics]
+    mcp_servers: [kubernetes-server]
+
+  # Empty list → no skills (disables skill loading)
+  SimpleAgent:
+    skills: []
+```
+
+- **`skills`** — Optional allowlist. `nil` (omitted) = all skills available. `[]` = no skills. `[a, b]` = only these.
+- **`required_skills`** — Skills injected directly into the system prompt. Excluded from the on-demand catalog.
+
+Skills are loaded at startup from `<configDir>/skills/*/SKILL.md`. If no `skills/` directory exists, the skill system is inactive. For detailed design, see [ADR-0012: Agent Skills](../../docs/adr/0012-agent-skills.md).
+
 ## Configuration Override Priority
 
 Configuration values are resolved in this order (highest priority first):
@@ -217,6 +287,7 @@ chain validation failed: chain 'my-chain' stage 1: agent 'invalid-agent' not fou
 Validation checks:
 - Required fields present
 - Cross-references valid (chains → agents, agents → MCP servers, etc.)
+- Skill references valid (agent `skills` and `required_skills` exist in SkillRegistry)
 - Fallback providers valid (provider exists, backend valid, credentials set)
 - Value ranges correct
 - Environment variables set

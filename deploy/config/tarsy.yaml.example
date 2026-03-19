@@ -247,6 +247,18 @@ mcp_servers:
 # =============================================================================
 # Define custom agents or override built-in agents
 # Built-in agents: KubernetesAgent, ChatAgent, SynthesisAgent, ScoringAgent
+#
+# Agent Skills:
+# Skills are reusable domain knowledge blocks loaded from <configDir>/skills/*/SKILL.md.
+# By default, all discovered skills are available to all agents.
+# Use 'skills' to restrict which skills an agent sees (allowlist).
+# Use 'required_skills' to inject skill content directly into the system prompt.
+#
+# Skills directory structure:
+#   deploy/config/skills/
+#   ├── pod-troubleshooting/SKILL.md
+#   ├── resource-management/SKILL.md
+#   └── networking-diagnostics/SKILL.md
 
 agents:
   # Example: Security-focused agent
@@ -256,6 +268,8 @@ agents:
       - "argocd-server"
     llm_backend: "langchain"
     max_iterations: 25
+    # required_skills: [security-classification-criteria]  # Always in system prompt
+    # skills: [security-classification-criteria, platform-environment-context]  # Allowlist
     custom_instructions: |
       You are a security-focused SRE agent specializing in cybersecurity incidents.
       
@@ -287,6 +301,7 @@ agents:
     mcp_servers:
       - "kubernetes-server"
       - "argocd-server"  # Add ArgoCD support
+    # required_skills: [pod-troubleshooting]  # Always injected into prompt
     custom_instructions: |
       You are a Kubernetes expert with deep knowledge of container orchestration.
       
