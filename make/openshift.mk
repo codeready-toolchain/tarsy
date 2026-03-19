@@ -187,6 +187,9 @@ openshift-check-config-files: ## Sync config files to overlay directory
 		fi; \
 		found=1; \
 		key=$$(basename "$$f"); \
+		if ! echo "$$key" | grep -qE '^[-._A-Za-z0-9]+$$'; then \
+			echo -e "$(RED)Invalid ConfigMap key '$$key' (must match [-._A-Za-z0-9]+)$(NC)"; exit 1; \
+		fi; \
 		printf '  %s: |\n' "$$key" >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
 		sed 's/^/    /' "$$f" >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
 		printf '\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
