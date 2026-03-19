@@ -1,6 +1,6 @@
 {
   "created_at": "{TIMESTAMP}",
-  "id": "{INTERACTION_ID_8}",
+  "id": "{INTERACTION_ID_15}",
   "interaction_type": "tool_list",
   "server_name": "test-mcp"
 }

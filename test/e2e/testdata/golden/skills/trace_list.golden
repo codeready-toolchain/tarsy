@@ -43,12 +43,18 @@
               "created_at": "{TIMESTAMP}",
               "id": "{INTERACTION_ID_4}",
               "interaction_type": "tool_list",
+              "server_name": ""
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_5}",
+              "interaction_type": "tool_list",
               "server_name": "test-mcp"
             },
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_5}",
+              "id": "{INTERACTION_ID_6}",
               "interaction_type": "tool_call",
               "server_name": "",
               "tool_name": "load_skill"
@@ -56,7 +62,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_6}",
+              "id": "{INTERACTION_ID_7}",
               "interaction_type": "tool_call",
               "server_name": "test-mcp",
               "tool_name": "get_pods"
@@ -77,7 +83,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_7}",
+              "id": "{INTERACTION_ID_8}",
               "input_tokens": 100,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -88,7 +94,13 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
-              "id": "{INTERACTION_ID_8}",
+              "id": "{INTERACTION_ID_9}",
+              "interaction_type": "tool_list",
+              "server_name": ""
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_10}",
               "interaction_type": "tool_list",
               "server_name": "test-mcp"
             }
@@ -108,7 +120,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_9}",
+              "id": "{INTERACTION_ID_11}",
               "input_tokens": 10,
               "interaction_type": "executive_summary",
               "model_name": "test-model",
@@ -132,7 +144,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_10}",
+              "id": "{INTERACTION_ID_12}",
               "input_tokens": 200,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -142,7 +154,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_11}",
+              "id": "{INTERACTION_ID_13}",
               "input_tokens": 250,
               "interaction_type": "iteration",
               "model_name": "test-model",
@@ -153,14 +165,20 @@
           "mcp_interactions": [
             {
               "created_at": "{TIMESTAMP}",
-              "id": "{INTERACTION_ID_12}",
+              "id": "{INTERACTION_ID_14}",
+              "interaction_type": "tool_list",
+              "server_name": ""
+            },
+            {
+              "created_at": "{TIMESTAMP}",
+              "id": "{INTERACTION_ID_15}",
               "interaction_type": "tool_list",
               "server_name": "test-mcp"
             },
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_13}",
+              "id": "{INTERACTION_ID_16}",
               "interaction_type": "tool_call",
               "server_name": "",
               "tool_name": "load_skill"

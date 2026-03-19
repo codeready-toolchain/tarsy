@@ -1,7 +1,7 @@
 {
   "created_at": "{TIMESTAMP}",
   "duration_ms": {DURATION_MS},
-  "id": "{INTERACTION_ID_8}",
+  "id": "{INTERACTION_ID_9}",
   "interaction_type": "tool_call",
   "server_name": "test-mcp",
   "tool_name": "search_logs"

@@ -1,0 +1,22 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_4}",
+  "interaction_type": "tool_list",
+  "server_name": "orchestrator"
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  {
+    "description": "Cancel a running sub-agent.",
+    "name": "cancel_agent"
+  },
+  {
+    "description": "Dispatch a sub-agent to execute a task. Returns immediately. Results are automatically delivered when the sub-agent finishes — do not poll.",
+    "name": "dispatch_agent"
+  },
+  {
+    "description": "List all dispatched sub-agents and their current status. Use for status overview before deciding to cancel or dispatch more.",
+    "name": "list_agents"
+  }
+]

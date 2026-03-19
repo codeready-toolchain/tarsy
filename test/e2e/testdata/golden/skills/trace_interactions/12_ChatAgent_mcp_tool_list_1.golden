@@ -1,6 +1,6 @@
 {
   "created_at": "{TIMESTAMP}",
-  "id": "{INTERACTION_ID_4}",
+  "id": "{INTERACTION_ID_14}",
   "interaction_type": "tool_list",
   "server_name": ""
 }

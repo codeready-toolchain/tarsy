@@ -135,11 +135,18 @@ func recordToolListInteractions(
 	}
 
 	// Group tools by server, preserving name + description.
+	// Mirrors the classification logic in executeToolCall:
+	//   - MCP tools (server__tool format) → server name from split
+	//   - Orchestration tools (dispatch_agent, etc.) → OrchestrationServerName
+	//   - Other built-in tools (load_skill, etc.) → empty-string server
 	byServer := make(map[string][]toolListEntry)
 	for _, t := range tools {
 		serverID, toolName, err := mcp.SplitToolName(t.Name)
 		if err != nil {
-			continue
+			toolName = t.Name
+			if orchestrator.IsOrchestrationTool(toolName) {
+				serverID = orchestrator.OrchestrationServerName
+			}
 		}
 		byServer[serverID] = append(byServer[serverID], toolListEntry{
 			Name:        toolName,
