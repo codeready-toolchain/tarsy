@@ -109,6 +109,28 @@ type ResolvedAgentConfig struct {
 	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
 	// Set by the session executor when the alert provides an MCP selection with native_tools.
 	NativeToolsOverride *models.NativeToolsConfig
+
+	// RequiredSkillContent: skill bodies injected into the system prompt at Tier 2.5.
+	// Pre-resolved at config resolution time.
+	RequiredSkillContent []ResolvedSkill
+
+	// OnDemandSkills: skills available via load_skill tool.
+	// Names + descriptions for the catalog prompt (Tier 2.6). Bodies loaded on tool call.
+	OnDemandSkills []SkillCatalogEntry
+}
+
+// ResolvedSkill is a skill whose full body has been resolved from the registry.
+// Used for required skills that are injected directly into the system prompt.
+type ResolvedSkill struct {
+	Name string
+	Body string
+}
+
+// SkillCatalogEntry is a lightweight skill reference for the on-demand catalog.
+// Only name and description are included; the body is loaded via load_skill.
+type SkillCatalogEntry struct {
+	Name        string
+	Description string
 }
 
 // PromptBuilder builds all prompt text for agent controllers.

@@ -189,3 +189,165 @@ func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 	assert.Greater(t, idxWarn, idxT2, "Unavailable warnings should come after Tier 2")
 	assert.Greater(t, idxT3, idxWarn, "Tier 3 should come after unavailable warnings")
 }
+
+func TestComposeInstructions_SkillTierOrdering(t *testing.T) {
+	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
+		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
+	})
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			MCPServers:         []string{"kubernetes-server"},
+			CustomInstructions: "CUSTOM_TIER3_MARKER",
+			RequiredSkillContent: []agent.ResolvedSkill{
+				{Name: "k8s-basics", Body: "REQUIRED_SKILL_MARKER"},
+			},
+			OnDemandSkills: []agent.SkillCatalogEntry{
+				{Name: "networking", Description: "ONDEMAND_SKILL_MARKER"},
+			},
+		},
+		FailedServers: map[string]string{
+			"broken-server": "FAILED_SERVER_MARKER",
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	// Tier 1 < Tier 2 < Warnings < Tier 2.5 < Tier 2.6 < Tier 3
+	idxT1 := strings.Index(result, "General SRE Agent Instructions")
+	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
+	idxWarn := strings.Index(result, "FAILED_SERVER_MARKER")
+	idxT25 := strings.Index(result, "REQUIRED_SKILL_MARKER")
+	idxT26 := strings.Index(result, "ONDEMAND_SKILL_MARKER")
+	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
+
+	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
+	assert.Greater(t, idxWarn, idxT2, "Warnings should come after Tier 2")
+	assert.Greater(t, idxT25, idxWarn, "Tier 2.5 (required skills) should come after warnings")
+	assert.Greater(t, idxT26, idxT25, "Tier 2.6 (on-demand catalog) should come after Tier 2.5")
+	assert.Greater(t, idxT3, idxT26, "Tier 3 should come after Tier 2.6")
+
+	assert.Contains(t, result, "## Skill: k8s-basics")
+	assert.Contains(t, result, "Available Domain Knowledge")
+}
+
+func TestComposeChatInstructions_SkillTierOrdering(t *testing.T) {
+	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
+		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
+	})
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			MCPServers:         []string{"kubernetes-server"},
+			CustomInstructions: "CUSTOM_TIER3_MARKER",
+			RequiredSkillContent: []agent.ResolvedSkill{
+				{Name: "k8s-basics", Body: "REQUIRED_SKILL_MARKER"},
+			},
+			OnDemandSkills: []agent.SkillCatalogEntry{
+				{Name: "networking", Description: "ONDEMAND_SKILL_MARKER"},
+			},
+		},
+	}
+
+	result := builder.ComposeChatInstructions(execCtx)
+
+	// Tier 1 < Tier 2 < Tier 2.5 < Tier 2.6 < Tier 3 < Chat guidelines
+	idxT1 := strings.Index(result, "Chat Assistant Instructions")
+	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
+	idxT25 := strings.Index(result, "REQUIRED_SKILL_MARKER")
+	idxT26 := strings.Index(result, "ONDEMAND_SKILL_MARKER")
+	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
+	idxChat := strings.Index(result, "Response Guidelines")
+
+	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
+	assert.Greater(t, idxT25, idxT2, "Tier 2.5 should come after Tier 2")
+	assert.Greater(t, idxT26, idxT25, "Tier 2.6 should come after Tier 2.5")
+	assert.Greater(t, idxT3, idxT26, "Tier 3 should come after Tier 2.6")
+	assert.Greater(t, idxChat, idxT3, "Chat guidelines should come after Tier 3")
+}
+
+func TestComposeInstructions_NoSkills(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.NotContains(t, result, "Skill:")
+	assert.NotContains(t, result, "Available Domain Knowledge")
+}
+
+func TestComposeChatInstructions_NoSkills(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+	}
+
+	result := builder.ComposeChatInstructions(execCtx)
+
+	assert.NotContains(t, result, "Skill:")
+	assert.NotContains(t, result, "Available Domain Knowledge")
+}
+
+func TestComposeInstructions_OnlyRequiredSkills(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			RequiredSkillContent: []agent.ResolvedSkill{
+				{Name: "k8s-basics", Body: "Pod troubleshooting guide."},
+			},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.Contains(t, result, "## Skill: k8s-basics")
+	assert.Contains(t, result, "Pod troubleshooting guide.")
+	assert.NotContains(t, result, "Available Domain Knowledge")
+}
+
+func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			RequiredSkillContent: []agent.ResolvedSkill{
+				{Name: "k8s-basics", Body: "Pod troubleshooting guide."},
+				{Name: "networking", Body: "DNS resolution steps."},
+			},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.Contains(t, result, "## Skill: k8s-basics")
+	assert.Contains(t, result, "Pod troubleshooting guide.")
+	assert.Contains(t, result, "## Skill: networking")
+	assert.Contains(t, result, "DNS resolution steps.")
+
+	idxFirst := strings.Index(result, "## Skill: k8s-basics")
+	idxSecond := strings.Index(result, "## Skill: networking")
+	assert.Less(t, idxFirst, idxSecond, "skills should appear in order")
+}
+
+func TestComposeInstructions_OnlyOnDemandSkills(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			OnDemandSkills: []agent.SkillCatalogEntry{
+				{Name: "networking", Description: "Network debugging patterns"},
+			},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.NotContains(t, result, "Skill:")
+	assert.Contains(t, result, "Available Domain Knowledge")
+	assert.Contains(t, result, "- **networking**: Network debugging patterns")
+}
