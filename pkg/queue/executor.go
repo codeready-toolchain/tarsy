@@ -647,7 +647,7 @@ func (e *RealSessionExecutor) executeAgent(
 	}
 
 	// Wrap with skill tool executor (outermost layer, after orchestrator)
-	if len(resolvedConfig.OnDemandSkills) > 0 {
+	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
 		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 

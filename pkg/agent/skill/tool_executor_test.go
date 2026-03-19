@@ -221,6 +221,19 @@ func TestSkillToolExecutor_Close_NilInner(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestSkillToolExecutor_Execute_NilRegistry(t *testing.T) {
+	s := NewSkillToolExecutor(nil, nil, allSkillNames())
+
+	result, err := s.Execute(context.Background(), agent.ToolCall{
+		ID:        "call-nil-reg",
+		Name:      "load_skill",
+		Arguments: loadSkillArgs("kubernetes-debugging"),
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "no valid skills found")
+}
+
 func TestSkillToolExecutor_Execute_UnknownToolNilInner(t *testing.T) {
 	s := NewSkillToolExecutor(nil, testRegistry(), allSkillNames())
 

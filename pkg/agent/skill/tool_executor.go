@@ -42,7 +42,8 @@ type SkillToolExecutor struct {
 	allowedNames map[string]struct{}
 }
 
-// NewSkillToolExecutor creates a skill executor. inner must not be nil.
+// NewSkillToolExecutor creates a skill executor. inner may be nil and is
+// safely handled by ListTools, Execute, and Close.
 // allowedNames restricts which skills from the registry are available.
 func NewSkillToolExecutor(
 	inner agent.ToolExecutor,
@@ -121,6 +122,10 @@ func (s *SkillToolExecutor) executeLoadSkill(call agent.ToolCall) (*agent.ToolRe
 
 	for _, name := range args.Names {
 		if _, allowed := s.allowedNames[name]; !allowed {
+			invalidNames = append(invalidNames, name)
+			continue
+		}
+		if s.registry == nil {
 			invalidNames = append(invalidNames, name)
 			continue
 		}

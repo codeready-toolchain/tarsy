@@ -332,7 +332,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	defer func() { _ = toolExecutor.Close() }()
 
 	// Wrap with skill tool executor if on-demand skills are configured
-	if len(resolvedConfig.OnDemandSkills) > 0 {
+	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
 		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
