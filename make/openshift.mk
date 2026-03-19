@@ -167,12 +167,15 @@ openshift-check-config-files: ## Sync config files to overlay directory
 	rm -rf "$$OVERLAY_DIR/skills"; \
 	mkdir -p "$$OVERLAY_DIR/skills"; \
 	if [ -d "$$SKILLS_DIR" ]; then \
-		for skill_dir in "$$SKILLS_DIR"/*/; do \
-			[ -d "$$skill_dir" ] || continue; \
-			skill_file="$${skill_dir}SKILL.md"; \
-			[ -f "$$skill_file" ] || continue; \
-			skill_name=$$(basename "$$skill_dir"); \
-			cp "$$skill_file" "$$OVERLAY_DIR/skills/$$skill_name"; \
+		for entry in "$$SKILLS_DIR"/*; do \
+			[ -e "$$entry" ] || continue; \
+			name=$$(basename "$$entry"); \
+			case "$$name" in .*) continue;; esac; \
+			if [ -d "$$entry" ] && [ -f "$$entry/SKILL.md" ]; then \
+				cp "$$entry/SKILL.md" "$$OVERLAY_DIR/skills/$$name"; \
+			elif [ -f "$$entry" ]; then \
+				cp "$$entry" "$$OVERLAY_DIR/skills/$$name"; \
+			fi; \
 		done; \
 	fi; \
 	printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: tarsy-skills\ndata:\n' > "$$OVERLAY_DIR/skills-configmap.yaml"; \
