@@ -1,0 +1,21 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_16}",
+  "interaction_type": "tool_call",
+  "server_name": "",
+  "tool_name": "load_skill"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "names": [
+    "kubernetes-basics"
+  ]
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "## Skill: kubernetes-basics\n\n\n# Kubernetes Basics\n\n## Pods\nA pod is the smallest deployable unit in Kubernetes.\n\n## Deployments\nDeployments manage ReplicaSets and provide declarative updates.\n\n## Services\nServices expose pods to network traffic via stable endpoints.\n",
+  "is_error": false
+}

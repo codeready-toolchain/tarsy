@@ -7,26 +7,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFormatRequiredSkill(t *testing.T) {
-	skill := agent.ResolvedSkill{
-		Name: "kubernetes-basics",
-		Body: "Always check pod status before node status.\n\nUse `kubectl get pods` first.",
+func TestFormatRequiredSkillsSection_Single(t *testing.T) {
+	skills := []agent.ResolvedSkill{
+		{Name: "kubernetes-basics", Body: "Always check pod status before node status.\n\nUse `kubectl get pods` first."},
 	}
 
-	result := formatRequiredSkill(skill)
+	result := formatRequiredSkillsSection(skills)
 
-	assert.Equal(t, "## Skill: kubernetes-basics\n\nAlways check pod status before node status.\n\nUse `kubectl get pods` first.", result)
+	expected := "## Pre-loaded Skills\n\n" +
+		"Skills provide domain-specific knowledge for your task.\n" +
+		"The following have been loaded automatically — use them as reference.\n\n" +
+		"### kubernetes-basics\n\n" +
+		"Always check pod status before node status.\n\nUse `kubectl get pods` first."
+	assert.Equal(t, expected, result)
+}
+
+func TestFormatRequiredSkillsSection_Multiple(t *testing.T) {
+	skills := []agent.ResolvedSkill{
+		{Name: "k8s-basics", Body: "Pod troubleshooting guide."},
+		{Name: "networking", Body: "DNS resolution steps."},
+	}
+
+	result := formatRequiredSkillsSection(skills)
+
+	assert.Contains(t, result, "## Pre-loaded Skills")
+	assert.Contains(t, result, "### k8s-basics\n\nPod troubleshooting guide.")
+	assert.Contains(t, result, "### networking\n\nDNS resolution steps.")
+
+	// Verify ordering preserved
+	assert.Less(t,
+		indexOf(result, "### k8s-basics"),
+		indexOf(result, "### networking"),
+		"skills should appear in order",
+	)
 }
 
 func TestFormatSkillCatalog(t *testing.T) {
-	catalogSuffix := "\nUse the `load_skill` tool to load relevant skills by name before proceeding.\n" +
-		"You can load multiple skills in one call. If no skill description matches\n" +
-		"your current task, do not load any."
+	catalogHeader := "## Available Skills\n\n" +
+		"Skills provide domain-specific knowledge that may help with your task.\n" +
+		"The following additional skills can be loaded on demand using the `load_skill` tool.\n" +
+		"Scan the descriptions and decide:\n" +
+		"- If one or more match your task: load them before proceeding.\n" +
+		"- If none match: skip and proceed without them.\n\n" +
+		"<available_skills>\n"
 
-	catalogHeader := "## Available Domain Knowledge\n\n" +
-		"Before starting your task, scan the skill descriptions below and load any\n" +
-		"that match the current context (alert type, environment, workload type).\n" +
-		"These contain domain-specific knowledge that may not be in your training data.\n\n"
+	catalogFooter := "</available_skills>"
 
 	t.Run("multiple entries", func(t *testing.T) {
 		skills := []agent.SkillCatalogEntry{
@@ -39,7 +64,7 @@ func TestFormatSkillCatalog(t *testing.T) {
 		expected := catalogHeader +
 			"- **kubernetes-basics**: Core K8s troubleshooting patterns\n" +
 			"- **networking**: Network debugging and DNS resolution\n" +
-			catalogSuffix
+			catalogFooter
 		assert.Equal(t, expected, result)
 	})
 
@@ -52,7 +77,7 @@ func TestFormatSkillCatalog(t *testing.T) {
 
 		expected := catalogHeader +
 			"- **networking**: Network debugging\n" +
-			catalogSuffix
+			catalogFooter
 		assert.Equal(t, expected, result)
 	})
 
@@ -67,7 +92,16 @@ func TestFormatSkillCatalog(t *testing.T) {
 		expected := catalogHeader +
 			"- **z-skill**: Last alphabetically\n" +
 			"- **a-skill**: First alphabetically\n" +
-			catalogSuffix
+			catalogFooter
 		assert.Equal(t, expected, result)
 	})
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }

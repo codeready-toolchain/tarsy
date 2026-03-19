@@ -1,6 +1,6 @@
 {
   "created_at": "{TIMESTAMP}",
-  "id": "{INTERACTION_ID_7}",
+  "id": "{INTERACTION_ID_5}",
   "interaction_type": "tool_list",
   "server_name": "test-mcp"
 }
@@ -8,7 +8,7 @@
 === AVAILABLE_TOOLS ===
 [
   {
-    "description": "test tool: search_logs",
-    "name": "search_logs"
+    "description": "test tool: get_pods",
+    "name": "get_pods"
   }
 ]

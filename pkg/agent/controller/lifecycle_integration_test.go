@@ -59,9 +59,11 @@ func TestIteratingController_ToolCallLifecycleEvents(t *testing.T) {
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status,
 				"tool call event should be completed")
 
-			// Verify metadata has server_name, tool_name, arguments, and is_error
+			// Verify metadata has server_name, tool_name, tool_type, arguments, and is_error
 			assert.Contains(t, ev.Metadata, "tool_name")
+			assert.Contains(t, ev.Metadata, "tool_type")
 			assert.Contains(t, ev.Metadata, "is_error")
+			assert.Equal(t, string(ToolTypeMCP), ev.Metadata["tool_type"], "MCP tool should have tool_type=mcp")
 
 			// Verify content is the tool result
 			assert.Contains(t, ev.Content, "pod-1 Running")
@@ -164,7 +166,9 @@ func TestGoogleNativeController_ToolCallLifecycleEvents(t *testing.T) {
 			toolCallEvents++
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status)
 			assert.Contains(t, ev.Metadata, "tool_name")
+			assert.Contains(t, ev.Metadata, "tool_type")
 			assert.Contains(t, ev.Metadata, "is_error")
+			assert.Equal(t, string(ToolTypeMCP), ev.Metadata["tool_type"])
 			assert.Contains(t, ev.Content, "pod-1 Running")
 		}
 	}

@@ -208,8 +208,8 @@ func (b *PromptBuilder) appendUnavailableServerWarnings(sections []string, faile
 // appendSkillSections adds Tier 2.5 (required skill content) and Tier 2.6
 // (on-demand skill catalog) to a sections slice.
 func appendSkillSections(sections []string, execCtx *agent.ExecutionContext) []string {
-	for _, skill := range execCtx.Config.RequiredSkillContent {
-		sections = append(sections, formatRequiredSkill(skill))
+	if len(execCtx.Config.RequiredSkillContent) > 0 {
+		sections = append(sections, formatRequiredSkillsSection(execCtx.Config.RequiredSkillContent))
 	}
 	if len(execCtx.Config.OnDemandSkills) > 0 {
 		sections = append(sections, formatSkillCatalog(execCtx.Config.OnDemandSkills))

@@ -19,6 +19,7 @@ import (
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
@@ -329,6 +330,11 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	// 7. Create MCP ToolExecutor (shared helper, same as investigation)
 	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
+
+	// Wrap with skill tool executor if on-demand skills are configured
+	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
+		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
+	}
 
 	// 8. Build ExecutionContext (with ChatContext populated)
 	agentExecCtx := &agent.ExecutionContext{

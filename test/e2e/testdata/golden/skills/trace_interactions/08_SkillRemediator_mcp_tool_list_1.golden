@@ -1,0 +1,14 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_9}",
+  "interaction_type": "tool_list",
+  "server_name": ""
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  {
+    "description": "Load skills by name. Returns the full skill content for each requested skill.",
+    "name": "load_skill"
+  }
+]

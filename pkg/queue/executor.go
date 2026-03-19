@@ -14,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
@@ -643,6 +644,11 @@ func (e *RealSessionExecutor) executeAgent(
 		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
 		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
 		execCtx.SubAgentCatalog = registry.Entries()
+	}
+
+	// Wrap with skill tool executor (outermost layer, after orchestrator)
+	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
+		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
 	execCtx.ToolExecutor = toolExecutor

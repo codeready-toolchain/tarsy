@@ -1,21 +1,21 @@
 {
   "created_at": "{TIMESTAMP}",
   "duration_ms": {DURATION_MS},
-  "id": "{INTERACTION_ID_5}",
-  "input_tokens": 100,
+  "id": "{INTERACTION_ID_7}",
+  "input_tokens": 200,
   "interaction_type": "iteration",
   "llm_request": {
-    "iteration": 1,
-    "messages_count": 2
+    "iteration": 2,
+    "messages_count": 4
   },
   "llm_response": {
-    "text_length": 0,
-    "tool_calls_count": 1
+    "text_length": 82,
+    "tool_calls_count": 0
   },
   "model_name": "test-model",
-  "output_tokens": 20,
-  "thinking_content": "Let me search the logs for error patterns.",
-  "total_tokens": 120
+  "output_tokens": 40,
+  "thinking_content": "Found significant error patterns in the logs.",
+  "total_tokens": 240
 }
 
 === MESSAGE: system ===
@@ -67,4 +67,10 @@ Find all error patterns in the last 30 minutes
 (tool calls only)
 --- TOOL_CALLS ---
 [la-call-1] test-mcp__search_logs({"query":"error OR 5xx","timerange":"30m"})
+
+=== MESSAGE: tool (la-call-1, test-mcp__search_logs) ===
+[{"timestamp":"{TIMESTAMP}","level":"error","service":"payment","message":"OOM killed"},{"timestamp":"{TIMESTAMP}","level":"error","service":"payment","message":"connection refused"}]
+
+=== MESSAGE: assistant ===
+Found 2,847 5xx errors in the last 30 minutes, primarily from the payment service.
 

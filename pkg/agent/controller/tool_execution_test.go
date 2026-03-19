@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -247,6 +248,50 @@ func TestRecordToolListInteractions(t *testing.T) {
 
 		// Verify argocd has 1 tool.
 		assert.Len(t, byServer["argocd"].AvailableTools, 1)
+	})
+
+	t.Run("classifies non-MCP tools by category", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		ctx := context.Background()
+
+		tools := []agent.ToolDefinition{
+			{Name: "kubernetes.get_pods", Description: "Get pods"},
+			{Name: "dispatch_agent", Description: "Dispatch a sub-agent"},
+			{Name: "cancel_agent", Description: "Cancel a running sub-agent"},
+			{Name: "list_agents", Description: "List dispatched sub-agents"},
+			{Name: "load_skill", Description: "Load skills by name"},
+		}
+
+		recordToolListInteractions(ctx, execCtx, tools)
+
+		interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 3, "expect one record per server: kubernetes, orchestrator, empty")
+
+		byServer := make(map[string]*ent.MCPInteraction)
+		for _, rec := range interactions {
+			byServer[rec.ServerName] = rec
+		}
+
+		require.Contains(t, byServer, "kubernetes")
+		require.Contains(t, byServer, orchestrator.OrchestrationServerName)
+		require.Contains(t, byServer, "", "built-in tools recorded under empty server")
+
+		orchTools := byServer[orchestrator.OrchestrationServerName].AvailableTools
+		require.Len(t, orchTools, 3)
+		names := make([]string, len(orchTools))
+		for i, raw := range orchTools {
+			entry, ok := raw.(map[string]interface{})
+			require.True(t, ok)
+			names[i] = entry["name"].(string)
+		}
+		assert.Equal(t, []string{"cancel_agent", "dispatch_agent", "list_agents"}, names)
+
+		builtinTools := byServer[""].AvailableTools
+		require.Len(t, builtinTools, 1)
+		tool0, ok := builtinTools[0].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "load_skill", tool0["name"])
 	})
 
 	t.Run("no-op when tools is nil", func(t *testing.T) {

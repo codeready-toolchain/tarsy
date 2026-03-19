@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
+import { TOOL_TYPE } from '../../constants/toolTypes';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /**
@@ -229,6 +230,8 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
   // In-progress tool call
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_TOOL_CALL) {
     const toolName = (item.metadata?.tool_name as string) || 'unknown';
+    const isSkill = (item.metadata?.tool_type as string) === TOOL_TYPE.SKILL;
+    const paletteKey = isSkill ? 'info' : 'primary';
     return (
       <Box sx={{ ml: 4, my: 1, mr: 1 }}>
         <Box
@@ -239,17 +242,17 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             px: 1.5,
             py: 0.75,
             border: '2px dashed',
-            borderColor: alpha(theme.palette.primary.main, 0.4),
+            borderColor: alpha(theme.palette[paletteKey].main, 0.4),
             borderRadius: 1.5,
-            bgcolor: alpha(theme.palette.primary.main, 0.05),
+            bgcolor: alpha(theme.palette[paletteKey].main, 0.05),
           })}
         >
           <Box
-            sx={{
+            sx={(theme) => ({
               width: 18,
               height: 18,
               border: '2px solid',
-              borderColor: 'primary.main',
+              borderColor: theme.palette[paletteKey].main,
               borderTopColor: 'transparent',
               borderRadius: '50%',
               flexShrink: 0,
@@ -258,21 +261,21 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
                 '0%': { transform: 'rotate(0deg)' },
                 '100%': { transform: 'rotate(360deg)' },
               },
-            }}
+            })}
           />
           <Typography
             variant="body2"
-            sx={{
+            sx={(theme) => ({
               fontFamily: 'monospace',
               fontWeight: 600,
               fontSize: '0.9rem',
-              color: 'primary.main',
-            }}
+              color: theme.palette[paletteKey].main,
+            })}
           >
             {toolName}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
-            Executing...
+            {isSkill ? 'Loading skill...' : 'Executing...'}
           </Typography>
         </Box>
       </Box>

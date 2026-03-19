@@ -23,7 +23,7 @@
   "input_tokens": 1310,
   "latest_score": null,
   "llm_interaction_count": 6,
-  "mcp_interaction_count": 3,
+  "mcp_interaction_count": 4,
   "output_tokens": 195,
   "runbook_url": null,
   "score_id": null,

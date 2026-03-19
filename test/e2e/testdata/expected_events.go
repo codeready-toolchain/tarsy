@@ -866,3 +866,106 @@ var ScoringExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "Scoring", Status: "completed"},
 }
+
+// ────────────────────────────────────────────────────────────
+// Scenario: Skills
+// Two stages + executive summary + chat follow-up:
+//  1. investigation (SkillInvestigator) — load_skill + MCP tool call + final answer
+//  2. remediation   (SkillRemediator)   — final answer only (no load_skill call)
+//  + Executive summary
+//  + Chat: load_skill + final answer
+// ────────────────────────────────────────────────────────────
+
+var SkillsExpectedEvents = []ExpectedEvent{
+	{Type: "session.status", Status: "in_progress"},
+
+	// ── Stage 1: investigation (SkillInvestigator, google-native) ──
+	{Type: "stage.status", StageName: "investigation", Status: "started"},
+
+	// Iteration 1: thinking + response + load_skill tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Let me load the networking skill for this investigation.", Group: 1},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Loading networking knowledge.", Group: 1},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"tool_name": "load_skill",
+		"arguments": `{"names":["networking"]}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// Iteration 2: thinking + response + MCP tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Now let me check the pod status.", Group: 2},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Checking pods.", Group: 2},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"server_name": "test-mcp",
+		"tool_name":   "get_pods",
+		"arguments":   `{"namespace":"default"}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// Iteration 3: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Pod is OOMKilled. The networking skill confirms connectivity is fine.", Group: 3},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Investigation complete: pod-1 is OOMKilled. Network connectivity verified.", Group: 3},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Investigation complete: pod-1 is OOMKilled. Network connectivity verified."},
+
+	{Type: "stage.status", StageName: "investigation", Status: "completed"},
+
+	// ── Stage 2: remediation (SkillRemediator, google-native) ──
+	{Type: "stage.status", StageName: "remediation", Status: "started"},
+
+	// Single iteration: thinking + final answer (no tool calls).
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "The investigation found OOM issues. Recommending memory increase.", Group: 4},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Remediation: increase memory limit for pod-1 to 1Gi.", Group: 4},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "Remediation: increase memory limit for pod-1 to 1Gi."},
+
+	{Type: "stage.status", StageName: "remediation", Status: "completed"},
+
+	// ── Executive summary ── (DB-only, no WS timeline events)
+	{Type: "session.status", Status: "completed"},
+
+	// ── Chat: load_skill for kubernetes-basics + final answer ──
+	{Type: "chat.created"},
+	{Type: "timeline_event.created", EventType: "user_question", Status: "completed",
+		Content: "What is a Kubernetes pod?"},
+
+	{Type: "stage.status", StageName: "Chat", Status: "started"},
+
+	// Iteration 1: thinking + response + load_skill tool call.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Let me load the kubernetes-basics skill to answer this question.", Group: 5},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "Loading Kubernetes knowledge.", Group: 5},
+	{Type: "timeline_event.created", EventType: "llm_tool_call", Status: "streaming", Metadata: map[string]string{
+		"tool_name": "load_skill",
+		"arguments": `{"names":["kubernetes-basics"]}`,
+	}},
+	{Type: "timeline_event.completed", EventType: "llm_tool_call"},
+
+	// Iteration 2: thinking + final answer.
+	{Type: "timeline_event.created", EventType: "llm_thinking", Status: "streaming"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_thinking",
+		Content: "Based on the skill content, pods are the smallest unit.", Group: 6},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "A pod is the smallest deployable unit in Kubernetes. The OOMKilled pod needs its memory limit increased.", Group: 6},
+
+	{Type: "stage.status", StageName: "Chat", Status: "completed"},
+}
