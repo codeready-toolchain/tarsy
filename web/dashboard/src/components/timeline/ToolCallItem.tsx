@@ -4,7 +4,7 @@ import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, 
 import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
-import { formatDurationMs } from '../../utils/format';
+import { formatDurationMs, getSkillNamesLabel } from '../../utils/format';
 import { highlightSearchTermNodes } from '../../utils/search';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
@@ -16,16 +16,6 @@ interface ToolCallItemProps {
   item: FlowItem;
   expandAll?: boolean;
   searchTerm?: string;
-}
-
-/**
- * Extract skill names from load_skill arguments into a friendly label.
- * Returns null when the arguments don't match the expected shape.
- */
-function getSkillNamesLabel(args: Record<string, unknown>): string | null {
-  const names = args?.names;
-  if (!Array.isArray(names) || names.length === 0) return null;
-  return (names as string[]).join(', ');
 }
 
 /**

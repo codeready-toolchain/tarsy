@@ -5,6 +5,7 @@ import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { TOOL_TYPE } from '../../constants/toolTypes';
+import { getSkillNamesLabel } from '../../utils/format';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /**
@@ -237,15 +238,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     let statusLabel = 'Executing...';
     if (isSkill) {
       displayName = 'Loading Skills';
-      const rawArgs = item.metadata?.arguments;
-      let names: string[] = [];
-      if (typeof rawArgs === 'string') {
-        try { names = (JSON.parse(rawArgs) as { names?: string[] }).names || []; } catch { /* ignore */ }
-      } else if (rawArgs && typeof rawArgs === 'object') {
-        const parsed = rawArgs as { names?: string[] };
-        if (Array.isArray(parsed.names)) names = parsed.names;
-      }
-      statusLabel = names.length > 0 ? names.join(', ') : 'Loading...';
+      statusLabel = getSkillNamesLabel(item.metadata?.arguments) ?? 'Loading...';
     }
 
     return (
