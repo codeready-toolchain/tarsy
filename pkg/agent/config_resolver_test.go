@@ -1826,7 +1826,7 @@ func TestMetaAgents_DoNotGetSkills(t *testing.T) {
 	cfg := &config.Config{
 		Defaults: &config.Defaults{LLMProvider: "default-provider"},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			config.AgentNameScoring:    {Type: config.AgentTypeScoring},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
 			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -1848,4 +1848,41 @@ func TestMetaAgents_DoNotGetSkills(t *testing.T) {
 		assert.Empty(t, resolved.RequiredSkillContent)
 		assert.Empty(t, resolved.OnDemandSkills)
 	})
+}
+
+func TestResolvedAgentConfig_OnDemandSkillNameSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		skills   []SkillCatalogEntry
+		expected map[string]struct{}
+	}{
+		{
+			name:     "nil skills",
+			skills:   nil,
+			expected: map[string]struct{}{},
+		},
+		{
+			name:     "empty skills",
+			skills:   []SkillCatalogEntry{},
+			expected: map[string]struct{}{},
+		},
+		{
+			name: "multiple skills",
+			skills: []SkillCatalogEntry{
+				{Name: "kubernetes-debugging", Description: "K8s debugging"},
+				{Name: "aws-rds", Description: "RDS troubleshooting"},
+			},
+			expected: map[string]struct{}{
+				"kubernetes-debugging": {},
+				"aws-rds":              {},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ResolvedAgentConfig{OnDemandSkills: tt.skills}
+			assert.Equal(t, tt.expected, cfg.OnDemandSkillNameSet())
+		})
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
@@ -574,6 +575,11 @@ func (e *RealSessionExecutor) executeAgent(
 	// Create MCP tool executor
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
+
+	// Wrap with skill tool executor if on-demand skills are configured
+	if len(resolvedConfig.OnDemandSkills) > 0 {
+		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
+	}
 
 	// Build execution context
 	execCtx := &agent.ExecutionContext{

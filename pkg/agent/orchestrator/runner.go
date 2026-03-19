@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -373,12 +374,14 @@ func (r *SubAgentRunner) publishSubAgentStatus(ctx context.Context, executionID 
 	}
 }
 
-// createSubAgentToolExecutor builds a ToolExecutor for the sub-agent's MCP servers.
+// createSubAgentToolExecutor builds a ToolExecutor for the sub-agent's MCP servers,
+// optionally wrapped with a SkillToolExecutor for on-demand skills.
 func (r *SubAgentRunner) createSubAgentToolExecutor(
 	ctx context.Context,
 	resolvedConfig *agent.ResolvedAgentConfig,
 	logger *slog.Logger,
 ) agent.ToolExecutor {
+	var executor agent.ToolExecutor
 	if r.deps.MCPFactory != nil && len(resolvedConfig.MCPServers) > 0 {
 		mcpExecutor, _, mcpErr := r.deps.MCPFactory.CreateToolExecutor(
 			ctx, resolvedConfig.MCPServers, nil,
@@ -386,11 +389,19 @@ func (r *SubAgentRunner) createSubAgentToolExecutor(
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor for sub-agent, using stub",
 				"error", mcpErr)
-			return agent.NewStubToolExecutor(nil)
+			executor = agent.NewStubToolExecutor(nil)
+		} else {
+			executor = mcpExecutor
 		}
-		return mcpExecutor
+	} else {
+		executor = agent.NewStubToolExecutor(nil)
 	}
-	return agent.NewStubToolExecutor(nil)
+
+	if len(resolvedConfig.OnDemandSkills) > 0 && r.deps.Config.SkillRegistry != nil {
+		executor = skill.NewSkillToolExecutor(executor, r.deps.Config.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
+	}
+
+	return executor
 }
 
 // TryGetNext returns a completed sub-agent result without blocking.

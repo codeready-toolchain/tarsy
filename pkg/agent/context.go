@@ -133,6 +133,16 @@ type SkillCatalogEntry struct {
 	Description string
 }
 
+// OnDemandSkillNameSet returns the set of on-demand skill names for use as
+// the allowedNames parameter when constructing a SkillToolExecutor.
+func (r *ResolvedAgentConfig) OnDemandSkillNameSet() map[string]struct{} {
+	names := make(map[string]struct{}, len(r.OnDemandSkills))
+	for _, s := range r.OnDemandSkills {
+		names[s.Name] = struct{}{}
+	}
+	return names
+}
+
 // PromptBuilder builds all prompt text for agent controllers.
 // Implemented by prompt.PromptBuilder; defined as interface here to
 // avoid a circular import between pkg/agent and pkg/agent/prompt.

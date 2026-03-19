@@ -306,7 +306,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 **Verification:** System prompts contain required skill content and on-demand catalog in correct order. Catalog respects agent skill allowlists.
 
-### Phase 3: load_skill Tool + Executor Wiring
+### Phase 3: load_skill Tool + Executor Wiring - DONE
 
 **New files:**
 - `pkg/agent/skill/tool_executor.go` — SkillToolExecutor
