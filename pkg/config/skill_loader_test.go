@@ -83,6 +83,7 @@ func TestLoadSkills(t *testing.T) {
 		_, err := LoadSkills(dir)
 		var loadErr *LoadError
 		require.ErrorAs(t, err, &loadErr)
+		assert.Equal(t, filepath.Join(skillsDir, "not-a-skill"), loadErr.File)
 	})
 
 	t.Run("dotfiles in skills/ are skipped", func(t *testing.T) {
