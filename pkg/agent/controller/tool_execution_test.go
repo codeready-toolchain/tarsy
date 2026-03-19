@@ -339,3 +339,69 @@ func TestExecuteToolCall_ToolError(t *testing.T) {
 	assert.NotNil(t, interactions[0].ErrorMessage)
 	assert.Contains(t, *interactions[0].ErrorMessage, "server unavailable")
 }
+
+func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
+	tests := []struct {
+		name         string
+		toolCallName string
+		wantToolType string
+	}{
+		{
+			name:         "MCP tool with server prefix",
+			toolCallName: "kubernetes.get_pods",
+			wantToolType: string(ToolTypeMCP),
+		},
+		{
+			name:         "MCP tool with double-underscore format",
+			toolCallName: "kubernetes__get_pods",
+			wantToolType: string(ToolTypeMCP),
+		},
+		{
+			name:         "load_skill classified as skill",
+			toolCallName: "load_skill",
+			wantToolType: string(ToolTypeSkill),
+		},
+		{
+			name:         "dispatch_agent classified as orchestrator",
+			toolCallName: "dispatch_agent",
+			wantToolType: string(ToolTypeOrchestrator),
+		},
+		{
+			name:         "malformed MCP name without server prefix stays MCP",
+			toolCallName: "resources_get",
+			wantToolType: string(ToolTypeMCP),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toolExec := &mockToolExecutorFunc{
+				tools: []agent.ToolDefinition{{Name: tt.toolCallName}},
+				executeFn: func(_ context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+					return &agent.ToolResult{
+						CallID:  call.ID,
+						Name:    call.Name,
+						Content: "ok",
+					}, nil
+				},
+			}
+			execCtx := newTestExecCtx(t, &mockLLMClient{}, toolExec)
+			ctx := context.Background()
+			eventSeq := 0
+
+			executeToolCall(ctx, execCtx, agent.ToolCall{
+				ID:        "tc-classify",
+				Name:      tt.toolCallName,
+				Arguments: `{}`,
+			}, nil, &eventSeq)
+
+			events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+			require.NoError(t, err)
+			require.NotEmpty(t, events)
+
+			lastEvent := events[len(events)-1]
+			assert.Equal(t, tt.wantToolType, lastEvent.Metadata["tool_type"],
+				"tool_type metadata mismatch for %q", tt.toolCallName)
+		})
+	}
+}

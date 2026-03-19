@@ -10,6 +10,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
@@ -69,8 +70,10 @@ func executeToolCall(
 		if orchestrator.IsOrchestrationTool(toolName) {
 			serverID = orchestrator.OrchestrationServerName
 			toolType = ToolTypeOrchestrator
-		} else {
+		} else if skill.IsSkillTool(toolName) {
 			toolType = ToolTypeSkill
+		} else {
+			toolType = ToolTypeMCP
 		}
 	} else {
 		toolType = ToolTypeMCP

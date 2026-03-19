@@ -14,11 +14,17 @@ import (
 // Compile-time check that SkillToolExecutor implements agent.ToolExecutor.
 var _ agent.ToolExecutor = (*SkillToolExecutor)(nil)
 
-const toolLoadSkill = "load_skill"
+// ToolLoadSkill is the tool name used by the LLM to load skills.
+const ToolLoadSkill = "load_skill"
+
+// IsSkillTool reports whether name is a known skill tool.
+func IsSkillTool(name string) bool {
+	return name == ToolLoadSkill
+}
 
 // loadSkillTool is the tool definition exposed to the LLM.
 var loadSkillTool = agent.ToolDefinition{
-	Name:        toolLoadSkill,
+	Name:        ToolLoadSkill,
 	Description: "Load skills by name. Returns the full skill content for each requested skill.",
 	ParametersSchema: `{
   "type": "object",
@@ -73,7 +79,7 @@ func (s *SkillToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefiniti
 			return nil, fmt.Errorf("failed to list inner tools: %w", err)
 		}
 		for _, t := range innerTools {
-			if t.Name == toolLoadSkill {
+			if t.Name == ToolLoadSkill {
 				continue
 			}
 			tools = append(tools, t)
@@ -85,7 +91,7 @@ func (s *SkillToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefiniti
 
 // Execute routes the tool call to load_skill or the inner executor.
 func (s *SkillToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
-	if call.Name == toolLoadSkill {
+	if call.Name == ToolLoadSkill {
 		return s.executeLoadSkill(call)
 	}
 	if s.inner != nil {

@@ -44,6 +44,24 @@ func loadSkillArgs(names ...string) string {
 	return string(args)
 }
 
+func TestIsSkillTool(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"load_skill", true},
+		{"dispatch_agent", false},
+		{"kubernetes.get_pods", false},
+		{"resources_get", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsSkillTool(tt.name))
+		})
+	}
+}
+
 func TestSkillToolExecutor_ListTools_PrependToInner(t *testing.T) {
 	inner := agent.NewStubToolExecutor([]agent.ToolDefinition{
 		{Name: "server1.read_file", Description: "Reads a file"},
