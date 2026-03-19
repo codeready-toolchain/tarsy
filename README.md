@@ -76,6 +76,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
 - **Automated Actions**: Action agents (`type: action`) evaluate investigation findings and execute remediation via MCP tools with auto-injected safety guardrails -- no custom safety prompt required
 - **Automatic Provider Fallback**: When a primary LLM provider fails, automatically switches to the next configured fallback provider with error-code-aware triggers and adaptive streaming timeouts
+- **Agent Skills**: Modular, reusable domain knowledge (SKILL.md files) that agents discover at startup and load on-demand via a `load_skill` tool -- or inject directly into the system prompt via `required_skills`. Zero config by default; all skills are available to all agents
 - **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
 
 ### Investigation & Analysis
@@ -120,15 +121,16 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 1. **Alert arrives** from monitoring systems with flexible text payload
 2. **Chain selected** based on alert type -- static parallel chains or dynamic orchestrator
 3. **Runbook injected** (optional) -- if configured, fetches supplemental guidance from GitHub to steer agent behavior
-4. **Agents investigate** -- static chains launch parallel agents per stage; orchestrator agents dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
-5. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrators synthesize within the same execution as results arrive
-6. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
-7. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
-8. **Comprehensive analysis** provided to engineers with actionable recommendations
-9. **Session scored** (if enabled) -- async quality evaluation with score, analysis, and missing tools report
-10. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, resolve, dismiss)
-11. **Follow-up chat available** after investigation completes
-12. **Full audit trail** captured with stage-level detail and sub-agent trace trees
+4. **Skills loaded** -- required skills are injected into the system prompt; on-demand skills are presented as a catalog and loaded via `load_skill` during the investigation
+5. **Agents investigate** -- static chains launch parallel agents per stage; orchestrator agents dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
+6. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrators synthesize within the same execution as results arrive
+7. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
+8. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
+9. **Comprehensive analysis** provided to engineers with actionable recommendations
+10. **Session scored** (if enabled) -- async quality evaluation with score, analysis, and missing tools report
+11. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, resolve, dismiss)
+12. **Follow-up chat available** after investigation completes
+13. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
 ### Components
 
@@ -207,6 +209,7 @@ Browser → OAuth2-Proxy (8080) → Go Backend (8080) → LLM Service (gRPC)
 - **MCP Servers**: Add to `tarsy.yaml` with stdio, HTTP, or SSE transport
 - **Agents**: Create Go agent classes extending BaseAgent, or define configuration-based agents in YAML
 - **Chains**: Define multi-stage workflows in YAML with parallel execution support
+- **Skills**: Drop a `SKILL.md` file into `deploy/config/skills/<name>/` -- all agents see it automatically. Scope with `skills` (on-demand allowlist) and/or `required_skills` (always prompt-injected). The two fields are independent: required skills are auto-excluded from the on-demand catalog. See [deploy/config/README.md](deploy/config/README.md#agent-skills)
 - **LLM Providers**: Built-in providers work out-of-the-box. Add custom providers via `deploy/config/llm-providers.yaml`
 
 ### Running Tests
