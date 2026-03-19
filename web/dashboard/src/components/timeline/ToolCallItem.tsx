@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
-import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined } from '@mui/icons-material';
+import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, AutoStoriesOutlined } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
 import { formatDurationMs } from '../../utils/format';
 import { highlightSearchTermNodes } from '../../utils/search';
+import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
+import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
+import { TOOL_TYPE } from '../../constants/toolTypes';
 
 interface ToolCallItemProps {
   item: FlowItem;
@@ -57,8 +61,18 @@ const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
 );
 
 /**
+ * Strip the `## Skill: <name>` header that the backend prepends to each skill body.
+ * The header is redundant since the skill name is already shown in the tool call header.
+ */
+function stripSkillHeaders(content: string): string {
+  return content.replace(/^## Skill: .+\n\n/gm, '');
+}
+
+/**
  * ToolCallItem - renders llm_tool_call timeline events.
  * Expandable box showing tool name, arguments preview, duration, and result.
+ * Skill tool calls (tool_type === TOOL_TYPE.SKILL) get a distinct info-palette treatment
+ * with markdown-rendered content.
  */
 function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false);
@@ -69,7 +83,9 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
 
   // Extract data from FlowItem metadata
   const toolName = (item.metadata?.tool_name as string) || 'unknown';
-  const serverName = (item.metadata?.server_name as string) || 'unknown';
+  const serverName = (item.metadata?.server_name as string) || '';
+  const toolType = (item.metadata?.tool_type as string) || TOOL_TYPE.MCP;
+  const isSkill = toolType === TOOL_TYPE.SKILL;
   // Arguments may be stored as a parsed object or as a JSON string in metadata.
   // Parse strings into objects so isSimpleArguments / SimpleArgumentsList work correctly.
   const toolArguments: Record<string, unknown> = (() => {
@@ -91,6 +107,11 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   // Tool result is in item.content (after completion)
   const toolResult = item.content || null;
 
+  const rehypePlugins = useMemo(
+    () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
+    [searchTerm],
+  );
+
   const getArgumentsPreview = (): string => {
     if (!toolArguments || typeof toolArguments !== 'object') return '';
     const keys = Object.keys(toolArguments);
@@ -105,9 +126,15 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
     return keys.length > 2 ? `${preview}, ...` : preview;
   };
 
-  // Three-tier visual: green (success), amber (tool returned error result), red (MCP failure)
-  const StatusIcon = isMcpFailure ? ErrorIcon : isToolResultError ? InfoOutlined : CheckCircle;
-  const accentKey: 'error' | 'warning' | 'primary' = isMcpFailure ? 'error' : isToolResultError ? 'warning' : 'primary';
+  // Skill calls use info palette; others use three-tier: green/amber/red.
+  const StatusIcon = isMcpFailure ? ErrorIcon
+    : isToolResultError ? InfoOutlined
+    : isSkill ? AutoStoriesOutlined
+    : CheckCircle;
+  const accentKey: 'error' | 'warning' | 'info' | 'primary' = isMcpFailure ? 'error'
+    : isToolResultError ? 'warning'
+    : isSkill ? 'info'
+    : 'primary';
 
   return (
     <Box
@@ -151,9 +178,15 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
 
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Server: {serverName}
-          </Typography>
+          {isSkill ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Skill
+            </Typography>
+          ) : serverName ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Server: {serverName}
+            </Typography>
+          ) : null}
 
           {isMcpFailure && errorMessage && (
             <Box sx={(theme) => ({ mb: 1, p: 1, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1, border: `1px solid ${alpha(theme.palette.error.main, 0.3)}` })}>
@@ -180,7 +213,46 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
               <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Result</Typography>
               <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
             </Box>
-            {toolResult ? <JsonDisplay data={toolResult} maxHeight={300} /> : (
+            {toolResult ? (
+              isSkill && typeof toolResult === 'string' ? (
+                <Box sx={(theme) => ({
+                  maxHeight: 400, overflow: 'auto',
+                  p: 1.5, borderRadius: 1,
+                  bgcolor: theme.palette.grey[50],
+                  border: `1px solid ${theme.palette.divider}`,
+                  fontSize: '0.85rem',
+                  '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
+                  '& h2': { fontSize: '1rem', mt: 1.5, mb: 0.75 },
+                  '& h3': { fontSize: '0.9rem', mt: 1, mb: 0.5 },
+                  '& p': { my: 0.5, lineHeight: 1.6 },
+                  '& ul, & ol': { pl: 2.5, my: 0.5 },
+                  '& li': { my: 0.25 },
+                  '& code': {
+                    fontFamily: 'monospace', fontSize: '0.8rem',
+                    bgcolor: alpha(theme.palette.info.main, 0.08),
+                    px: 0.5, py: 0.25, borderRadius: 0.5,
+                  },
+                  '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.grey[100], overflow: 'auto' },
+                  '& pre code': { bgcolor: 'transparent', px: 0, py: 0 },
+                  '& table': { borderCollapse: 'collapse', width: '100%', my: 1, fontSize: '0.8rem' },
+                  '& th, & td': { border: `1px solid ${theme.palette.divider}`, px: 1, py: 0.5, textAlign: 'left' },
+                  '& th': { bgcolor: theme.palette.grey[100], fontWeight: 600 },
+                  '& hr': { my: 1.5, borderColor: theme.palette.divider },
+                  '& strong': { fontWeight: 600 },
+                })}>
+                  <ReactMarkdown
+                    components={thoughtMarkdownComponents}
+                    remarkPlugins={remarkPlugins}
+                    rehypePlugins={rehypePlugins}
+                    skipHtml
+                  >
+                    {stripSkillHeaders(toolResult)}
+                  </ReactMarkdown>
+                </Box>
+              ) : (
+                <JsonDisplay data={toolResult} maxHeight={300} />
+              )
+            ) : (
               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
             )}
           </Box>

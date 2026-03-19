@@ -257,6 +257,7 @@ func createToolCallEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	serverID, toolName string,
+	toolType ToolType,
 	arguments string,
 	eventSeq *int,
 ) (*ent.TimelineEvent, error) {
@@ -265,6 +266,7 @@ func createToolCallEvent(
 	metadata := map[string]interface{}{
 		"server_name": serverID,
 		"tool_name":   toolName,
+		"tool_type":   string(toolType),
 		"arguments":   arguments,
 	}
 

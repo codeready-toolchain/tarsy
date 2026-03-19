@@ -226,21 +226,25 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
         </Box>
 
         {/* Tool metadata */}
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            Tool Information
-          </Typography>
-          <Stack direction="row" spacing={2} flexWrap="wrap">
-            <Typography variant="body2" color="text.secondary">
-              <strong>Server:</strong> {detail.server_name}
+        {(detail.server_name || detail.tool_name) && (
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+              Tool Information
             </Typography>
-            {detail.tool_name && (
-              <Typography variant="body2" color="text.secondary">
-                <strong>Tool:</strong> {detail.tool_name}
-              </Typography>
-            )}
-          </Stack>
-        </Box>
+            <Stack direction="row" spacing={2} flexWrap="wrap">
+              {detail.server_name && (
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Server:</strong> {detail.server_name}
+                </Typography>
+              )}
+              {detail.tool_name && (
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Tool:</strong> {detail.tool_name}
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+        )}
 
         {/* Copy buttons */}
         <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'flex-start' }}>

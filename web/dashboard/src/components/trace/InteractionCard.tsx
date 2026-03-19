@@ -144,12 +144,14 @@ export default function InteractionCard({ interaction, sessionId }: InteractionC
             <Typography variant="body2" color="text.secondary">
               {formatTimestamp(interaction.created_at, 'short')}
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{ color: `${colorKey}.main`, fontWeight: 500 }}
-            >
-              &bull; {interaction.kind.toUpperCase()}
-            </Typography>
+            {(interaction.kind !== 'mcp' || interaction.server_name) && (
+              <Typography
+                variant="body2"
+                sx={{ color: `${colorKey}.main`, fontWeight: 500 }}
+              >
+                &bull; {interaction.kind.toUpperCase()}
+              </Typography>
+            )}
           </Box>
         }
         action={null}

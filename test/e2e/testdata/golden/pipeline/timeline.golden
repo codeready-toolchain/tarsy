@@ -31,7 +31,8 @@
       "arguments": "{\"namespace\":\"default\"}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "get_pods"
+      "tool_name": "get_pods",
+      "tool_type": "mcp"
     },
     "sequence": 15,
     "status": "completed"
@@ -105,7 +106,8 @@
       "arguments": "{\"pod\":\"pod-1\"}",
       "is_error": false,
       "server_name": "prometheus-mcp",
-      "tool_name": "query_slo"
+      "tool_name": "query_slo",
+      "tool_type": "mcp"
     },
     "sequence": 23,
     "status": "completed"
@@ -152,7 +154,8 @@
       "arguments": "{\"pod\":\"pod-1\",\"namespace\":\"default\"}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "get_resource_config"
+      "tool_name": "get_resource_config",
+      "tool_type": "mcp"
     },
     "sequence": 2,
     "status": "completed"
@@ -206,7 +209,8 @@
       "arguments": "{}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "get_nodes"
+      "tool_name": "get_nodes",
+      "tool_type": "mcp"
     },
     "sequence": 3,
     "status": "completed"
@@ -219,7 +223,8 @@
       "arguments": "{\"namespace\":\"default\"}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "get_pods"
+      "tool_name": "get_pods",
+      "tool_type": "mcp"
     },
     "sequence": 4,
     "status": "completed"
@@ -262,7 +267,8 @@
       "arguments": "{\"query\":\"container_memory_usage_bytes{pod=\\\"pod-1\\\"}\"}",
       "is_error": false,
       "server_name": "prometheus-mcp",
-      "tool_name": "query_metrics"
+      "tool_name": "query_metrics",
+      "tool_type": "mcp"
     },
     "sequence": 8,
     "status": "completed"
@@ -330,7 +336,8 @@
       "arguments": "{\"pod\":\"pod-1\"}",
       "is_error": false,
       "server_name": "prometheus-mcp",
-      "tool_name": "query_slo"
+      "tool_name": "query_slo",
+      "tool_type": "mcp"
     },
     "sequence": 3,
     "status": "completed"
@@ -390,7 +397,8 @@
       "arguments": "{\"pod\":\"pod-1\",\"namespace\":\"default\"}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "get_pod_logs"
+      "tool_name": "get_pod_logs",
+      "tool_type": "mcp"
     },
     "sequence": 2,
     "status": "completed"
@@ -413,7 +421,8 @@
       "arguments": "{\"query\":\"ALERTS{alertname=\\\"OOMKilled\\\",pod=\\\"pod-1\\\"}\"}",
       "is_error": false,
       "server_name": "prometheus-mcp",
-      "tool_name": "query_alerts"
+      "tool_name": "query_alerts",
+      "tool_type": "mcp"
     },
     "sequence": 4,
     "status": "completed"

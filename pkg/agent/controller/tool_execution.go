@@ -16,6 +16,15 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
+// ToolType classifies a tool call for dashboard rendering and trace metadata.
+type ToolType string
+
+const (
+	ToolTypeMCP          ToolType = "mcp"
+	ToolTypeOrchestrator ToolType = "orchestrator"
+	ToolTypeSkill        ToolType = "skill"
+)
+
 // toolCallResult holds the outcome of executeToolCall for the caller to
 // integrate into its conversation format (IteratingController
 // tool message).
@@ -54,11 +63,17 @@ func executeToolCall(
 	// Step 1: Normalize and split tool name
 	normalizedName := mcp.NormalizeToolName(call.Name)
 	serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+	var toolType ToolType
 	if splitErr != nil {
 		toolName = call.Name
 		if orchestrator.IsOrchestrationTool(toolName) {
 			serverID = orchestrator.OrchestrationServerName
+			toolType = ToolTypeOrchestrator
+		} else {
+			toolType = ToolTypeSkill
 		}
+	} else {
+		toolType = ToolTypeMCP
 	}
 
 	// Publish execution progress: gathering_info
@@ -66,7 +81,7 @@ func executeToolCall(
 		fmt.Sprintf("Calling %s.%s", serverID, toolName))
 
 	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner)
-	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, call.Arguments, eventSeq)
+	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, toolType, call.Arguments, eventSeq)
 	if createErr != nil {
 		slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
 	}

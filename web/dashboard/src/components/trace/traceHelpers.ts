@@ -190,13 +190,14 @@ export function computeLLMStepDescription(interaction: LLMInteractionListItem): 
 
 /** Build a human-readable step description for an MCP interaction. */
 export function computeMCPStepDescription(interaction: MCPInteractionListItem): string {
+  const server = interaction.server_name || '';
   if (interaction.interaction_type === MCP_INTERACTION_TYPE.TOOL_LIST) {
-    return `Tool List — ${interaction.server_name}`;
+    return server ? `Tool List — ${server}` : 'Tool List';
   }
   if (interaction.tool_name) {
-    return `${interaction.server_name}.${interaction.tool_name}`;
+    return server ? `${server}.${interaction.tool_name}` : interaction.tool_name;
   }
-  return `MCP — ${interaction.server_name}`;
+  return server ? `MCP — ${server}` : 'Tool';
 }
 
 // ────────────────────────────────────────────────────────────
@@ -549,7 +550,7 @@ export function formatMCPDetailForCopy(detail: MCPInteractionDetailResponse): st
 
   let content = isToolList ? '=== MCP TOOL LIST ===\n\n' : '=== MCP TOOL CALL ===\n\n';
 
-  content += `SERVER: ${detail.server_name}\n`;
+  if (detail.server_name) content += `SERVER: ${detail.server_name}\n`;
 
   if (!isToolList) {
     content += `TOOL: ${detail.tool_name || 'unknown'}\n`;

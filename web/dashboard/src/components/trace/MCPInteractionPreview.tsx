@@ -25,13 +25,15 @@ export default function MCPInteractionPreview({ interaction }: MCPInteractionPre
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {/* Server and tool */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Chip
-          label={interaction.server_name}
-          size="small"
-          color={interaction.error_message ? 'error' : 'secondary'}
-          variant="outlined"
-          sx={{ fontSize: '0.75rem', fontWeight: 600 }}
-        />
+        {interaction.server_name && (
+          <Chip
+            label={interaction.server_name}
+            size="small"
+            color={interaction.error_message ? 'error' : 'secondary'}
+            variant="outlined"
+            sx={{ fontSize: '0.75rem', fontWeight: 600 }}
+          />
+        )}
         {interaction.tool_name && !isToolList && (
           <Typography
             variant="body2"

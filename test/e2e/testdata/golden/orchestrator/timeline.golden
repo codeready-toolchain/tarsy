@@ -38,7 +38,8 @@
       "arguments": "{\"query\":\"error OR 5xx\",\"timerange\":\"30m\"}",
       "is_error": false,
       "server_name": "test-mcp",
-      "tool_name": "search_logs"
+      "tool_name": "search_logs",
+      "tool_type": "mcp"
     },
     "sequence": 3,
     "status": "completed"
@@ -85,7 +86,8 @@
       "arguments": "{\"name\":\"LogAnalyzer\",\"task\":\"Find all error patterns in the last 30 minutes\"}",
       "is_error": false,
       "server_name": "orchestrator",
-      "tool_name": "dispatch_agent"
+      "tool_name": "dispatch_agent",
+      "tool_type": "orchestrator"
     },
     "sequence": 2,
     "status": "completed"
