@@ -191,7 +191,7 @@ Required skills are wrapped under a `## Pre-loaded Skills` container with `### {
 
 `formatSkillCatalog` generates the on-demand catalog with decision-tree instructions. The template:
 
-```
+```text
 ## Available Skills
 
 Skills provide domain-specific knowledge that may help with your task.

@@ -34,11 +34,6 @@ func TestFormatRequiredSkillsSection_Multiple(t *testing.T) {
 	assert.Contains(t, result, "### k8s-basics\n\nPod troubleshooting guide.")
 	assert.Contains(t, result, "### networking\n\nDNS resolution steps.")
 
-	idxFirst := len("### k8s-basics")
-	idxSecond := len("### networking")
-	_ = idxFirst
-	_ = idxSecond
-
 	// Verify ordering preserved
 	assert.Less(t,
 		indexOf(result, "### k8s-basics"),

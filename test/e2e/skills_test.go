@@ -321,7 +321,7 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 					ServerName: sn,
 				})
 			}
-			sort.Slice(execInteractions, func(i, j int) bool {
+			sort.SliceStable(execInteractions, func(i, j int) bool {
 				a, b := execInteractions[i], execInteractions[j]
 				if a.CreatedAt != b.CreatedAt {
 					return a.CreatedAt < b.CreatedAt

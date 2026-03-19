@@ -141,7 +141,8 @@ func recordToolListInteractions(
 	//   - Other built-in tools (load_skill, etc.) → empty-string server
 	byServer := make(map[string][]toolListEntry)
 	for _, t := range tools {
-		serverID, toolName, err := mcp.SplitToolName(t.Name)
+		normalized := mcp.NormalizeToolName(t.Name)
+		serverID, toolName, err := mcp.SplitToolName(normalized)
 		if err != nil {
 			toolName = t.Name
 			if orchestrator.IsOrchestrationTool(toolName) {
