@@ -227,8 +227,9 @@ func TestComposeInstructions_SkillTierOrdering(t *testing.T) {
 	assert.Greater(t, idxT26, idxT25, "Tier 2.6 (on-demand catalog) should come after Tier 2.5")
 	assert.Greater(t, idxT3, idxT26, "Tier 3 should come after Tier 2.6")
 
-	assert.Contains(t, result, "## Skill: k8s-basics")
-	assert.Contains(t, result, "Available Domain Knowledge")
+	assert.Contains(t, result, "## Pre-loaded Skills")
+	assert.Contains(t, result, "### k8s-basics")
+	assert.Contains(t, result, "## Available Skills")
 }
 
 func TestComposeChatInstructions_SkillTierOrdering(t *testing.T) {
@@ -275,8 +276,8 @@ func TestComposeInstructions_NoSkills(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
-	assert.NotContains(t, result, "Skill:")
-	assert.NotContains(t, result, "Available Domain Knowledge")
+	assert.NotContains(t, result, "Pre-loaded Skills")
+	assert.NotContains(t, result, "Available Skills")
 }
 
 func TestComposeChatInstructions_NoSkills(t *testing.T) {
@@ -288,8 +289,8 @@ func TestComposeChatInstructions_NoSkills(t *testing.T) {
 
 	result := builder.ComposeChatInstructions(execCtx)
 
-	assert.NotContains(t, result, "Skill:")
-	assert.NotContains(t, result, "Available Domain Knowledge")
+	assert.NotContains(t, result, "Pre-loaded Skills")
+	assert.NotContains(t, result, "Available Skills")
 }
 
 func TestComposeInstructions_OnlyRequiredSkills(t *testing.T) {
@@ -305,9 +306,10 @@ func TestComposeInstructions_OnlyRequiredSkills(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
-	assert.Contains(t, result, "## Skill: k8s-basics")
+	assert.Contains(t, result, "## Pre-loaded Skills")
+	assert.Contains(t, result, "### k8s-basics")
 	assert.Contains(t, result, "Pod troubleshooting guide.")
-	assert.NotContains(t, result, "Available Domain Knowledge")
+	assert.NotContains(t, result, "Available Skills")
 }
 
 func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
@@ -324,13 +326,14 @@ func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
-	assert.Contains(t, result, "## Skill: k8s-basics")
+	assert.Contains(t, result, "## Pre-loaded Skills")
+	assert.Contains(t, result, "### k8s-basics")
 	assert.Contains(t, result, "Pod troubleshooting guide.")
-	assert.Contains(t, result, "## Skill: networking")
+	assert.Contains(t, result, "### networking")
 	assert.Contains(t, result, "DNS resolution steps.")
 
-	idxFirst := strings.Index(result, "## Skill: k8s-basics")
-	idxSecond := strings.Index(result, "## Skill: networking")
+	idxFirst := strings.Index(result, "### k8s-basics")
+	idxSecond := strings.Index(result, "### networking")
 	assert.Less(t, idxFirst, idxSecond, "skills should appear in order")
 }
 
@@ -347,7 +350,7 @@ func TestComposeInstructions_OnlyOnDemandSkills(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
-	assert.NotContains(t, result, "Skill:")
-	assert.Contains(t, result, "Available Domain Knowledge")
+	assert.NotContains(t, result, "Pre-loaded Skills")
+	assert.Contains(t, result, "## Available Skills")
 	assert.Contains(t, result, "- **networking**: Network debugging patterns")
 }

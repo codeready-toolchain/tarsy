@@ -8,7 +8,7 @@
 === AVAILABLE_TOOLS ===
 [
   {
-    "description": "Load domain knowledge skills by name. Returns the full skill content.",
+    "description": "Load skills by name. Returns the full skill content for each requested skill.",
     "name": "load_skill"
   }
 ]

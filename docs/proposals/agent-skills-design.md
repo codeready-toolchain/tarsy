@@ -58,7 +58,7 @@ The `load_skill` tool definition (shown as JSON Schema for clarity; implementati
 ```json
 {
   "name": "load_skill",
-  "description": "Load domain knowledge skills by name. Returns the full skill content.",
+  "description": "Load skills by name. Returns the full skill content for each requested skill.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -187,26 +187,26 @@ if len(execCtx.Config.OnDemandSkills) > 0 {
 }
 ```
 
-Required skills are wrapped with a `## Skill: {name}` header (Q4 decision), consistent with MCP's `## {serverID} Instructions` pattern.
+Required skills are wrapped under a `## Pre-loaded Skills` container with `### {name}` headings, giving the LLM a clear frame that these are pre-loaded reference materials.
 
-`formatSkillCatalog` generates the behavioral nudge + catalog. The template (from [sketch Q7](agent-skills-questions.md#q7)):
+`formatSkillCatalog` generates the on-demand catalog with decision-tree instructions. The template:
 
 ```
-## Available Domain Knowledge
+## Available Skills
 
-Before starting your task, scan the skill descriptions below and load any
-that match the current context (alert type, environment, workload type).
-These contain domain-specific knowledge that may not be in your training data.
+Skills provide domain-specific knowledge that may help with your task.
+The following additional skills can be loaded on demand using the `load_skill` tool.
+Scan the descriptions and decide:
+- If one or more match your task: load them before proceeding.
+- If none match: skip and proceed without them.
 
+<available_skills>
 - **{name}**: {description}
 - ...
-
-Use the `load_skill` tool to load relevant skills by name before proceeding.
-You can load multiple skills in one call. If no skill description matches
-your current task, do not load any.
+</available_skills>
 ```
 
-The same catalog and nudge is used by `ComposeInstructions` (investigation, orchestrator, action, sub-agent) and `ComposeChatInstructions` (chat). The wording "Before starting your task" is intentionally generic — it applies equally to investigating an alert, executing a remediation action, or answering a follow-up question.
+The same catalog is used by `ComposeInstructions` (investigation, orchestrator, action, sub-agent) and `ComposeChatInstructions` (chat). The `<available_skills>` XML tags provide a clear data boundary for LLM parsing.
 
 #### 8. `executor_helpers.go` / `executor.go` — tool executor wrapping
 

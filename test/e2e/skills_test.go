@@ -155,13 +155,15 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 
 	// A1. SkillInvestigator's first call: required skill in prompt.
 	investigatorInput := captured[0]
-	assertSystemPromptContains(t, investigatorInput, "## Skill: kubernetes-basics",
-		"required skill header should be in system prompt")
+	assertSystemPromptContains(t, investigatorInput, "## Pre-loaded Skills",
+		"required skills section header should be in system prompt")
+	assertSystemPromptContains(t, investigatorInput, "### kubernetes-basics",
+		"required skill heading should be in system prompt")
 	assertSystemPromptContains(t, investigatorInput, "A pod is the smallest deployable unit",
 		"required skill body should be in system prompt")
 
 	// A2. On-demand catalog in prompt.
-	assertSystemPromptContains(t, investigatorInput, "## Available Domain Knowledge",
+	assertSystemPromptContains(t, investigatorInput, "## Available Skills",
 		"on-demand catalog header should be in system prompt")
 	assertSystemPromptContains(t, investigatorInput, "networking",
 		"networking skill should appear in on-demand catalog")
@@ -180,7 +182,7 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 
 	// A5. SkillRemediator's first call: nil-allowlist → both skills in catalog.
 	remediatorInput := captured[3]
-	assertSystemPromptContains(t, remediatorInput, "## Available Domain Knowledge",
+	assertSystemPromptContains(t, remediatorInput, "## Available Skills",
 		"SkillRemediator should have on-demand catalog")
 	assertSystemPromptContains(t, remediatorInput, "kubernetes-basics",
 		"kubernetes-basics should be in SkillRemediator catalog (nil allowlist)")
@@ -190,7 +192,7 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 
 	// A6. Chat agent's first call: skills in prompt + tool list.
 	chatInput := captured[5]
-	assertSystemPromptContains(t, chatInput, "## Available Domain Knowledge",
+	assertSystemPromptContains(t, chatInput, "## Available Skills",
 		"chat agent should have on-demand catalog")
 	assertHasTool(t, chatInput, "load_skill")
 
@@ -648,7 +650,7 @@ func TestE2E_SkillsOrchestratorSubAgent(t *testing.T) {
 		}
 	}
 	require.NotNil(t, skillWorkerInput, "should find SkillWorker's LLM input")
-	assertSystemPromptContains(t, skillWorkerInput, "## Available Domain Knowledge",
+	assertSystemPromptContains(t, skillWorkerInput, "## Available Skills",
 		"sub-agent should have skill catalog")
 	assertSystemPromptContains(t, skillWorkerInput, "networking",
 		"networking should appear in sub-agent catalog")

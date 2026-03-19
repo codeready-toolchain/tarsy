@@ -259,7 +259,7 @@ func TestRecordToolListInteractions(t *testing.T) {
 			{Name: "dispatch_agent", Description: "Dispatch a sub-agent"},
 			{Name: "cancel_agent", Description: "Cancel a running sub-agent"},
 			{Name: "list_agents", Description: "List dispatched sub-agents"},
-			{Name: "load_skill", Description: "Load domain knowledge skills by name"},
+			{Name: "load_skill", Description: "Load skills by name"},
 		}
 
 		recordToolListInteractions(ctx, execCtx, tools)

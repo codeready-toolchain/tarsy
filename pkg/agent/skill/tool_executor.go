@@ -19,7 +19,7 @@ const toolLoadSkill = "load_skill"
 // loadSkillTool is the tool definition exposed to the LLM.
 var loadSkillTool = agent.ToolDefinition{
 	Name:        toolLoadSkill,
-	Description: "Load domain knowledge skills by name. Returns the full skill content.",
+	Description: "Load skills by name. Returns the full skill content for each requested skill.",
 	ParametersSchema: `{
   "type": "object",
   "properties": {

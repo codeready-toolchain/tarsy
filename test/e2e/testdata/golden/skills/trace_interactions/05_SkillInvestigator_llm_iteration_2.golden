@@ -46,7 +46,12 @@ Your conclusions MUST be grounded in evidence you actually gathered, not assumpt
 - **Flag investigation gaps**: When you could not gather critical data, explicitly state what you were unable to verify and why (e.g., "Tool X returned an error, so I could not confirm Y").
 - **Never fabricate evidence**: Do not invent details, metrics, or observations that did not appear in tool results or the alert data.
 
-## Skill: kubernetes-basics
+## Pre-loaded Skills
+
+Skills provide domain-specific knowledge for your task.
+The following have been loaded automatically — use them as reference.
+
+### kubernetes-basics
 
 
 # Kubernetes Basics
@@ -60,18 +65,17 @@ Deployments manage ReplicaSets and provide declarative updates.
 ## Services
 Services expose pods to network traffic via stable endpoints.
 
+## Available Skills
 
-## Available Domain Knowledge
+Skills provide domain-specific knowledge that may help with your task.
+The following additional skills can be loaded on demand using the `load_skill` tool.
+Scan the descriptions and decide:
+- If one or more match your task: load them before proceeding.
+- If none match: skip and proceed without them.
 
-Before starting your task, scan the skill descriptions below and load any
-that match the current context (alert type, environment, workload type).
-These contain domain-specific knowledge that may not be in your training data.
-
+<available_skills>
 - **networking**: Network troubleshooting skills including DNS resolution, TCP connectivity, and packet analysis.
-
-Use the `load_skill` tool to load relevant skills by name before proceeding.
-You can load multiple skills in one call. If no skill description matches
-your current task, do not load any.
+</available_skills>
 
 ## Agent-Specific Instructions
 
