@@ -19,6 +19,16 @@ interface ToolCallItemProps {
 }
 
 /**
+ * Extract skill names from load_skill arguments into a friendly label.
+ * Returns null when the arguments don't match the expected shape.
+ */
+function getSkillNamesLabel(args: Record<string, unknown>): string | null {
+  const names = args?.names;
+  if (!Array.isArray(names) || names.length === 0) return null;
+  return (names as string[]).join(', ');
+}
+
+/**
  * Check if arguments are simple (flat key-value pairs with primitive values)
  */
 const isSimpleArguments = (args: Record<string, unknown> | null): boolean => {
@@ -112,7 +122,11 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
     [searchTerm],
   );
 
+  const skillNamesLabel = isSkill ? getSkillNamesLabel(toolArguments) : null;
+  const displayName = isSkill ? 'Loaded Skills' : toolName;
+
   const getArgumentsPreview = (): string => {
+    if (skillNamesLabel) return skillNamesLabel;
     if (!toolArguments || typeof toolArguments !== 'object') return '';
     const keys = Object.keys(toolArguments);
     if (keys.length === 0) return '(no arguments)';
@@ -161,7 +175,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
       >
         <StatusIcon sx={(theme) => ({ fontSize: 18, color: theme.palette[accentKey].main })} />
         <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette[accentKey].main })}>
-          {searchTerm ? highlightSearchTermNodes(toolName, searchTerm) : toolName}
+          {searchTerm ? highlightSearchTermNodes(displayName, searchTerm) : displayName}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
           {getArgumentsPreview()}

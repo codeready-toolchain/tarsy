@@ -232,6 +232,22 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     const toolName = (item.metadata?.tool_name as string) || 'unknown';
     const isSkill = (item.metadata?.tool_type as string) === TOOL_TYPE.SKILL;
     const paletteKey = isSkill ? 'info' : 'primary';
+
+    let displayName = toolName;
+    let statusLabel = 'Executing...';
+    if (isSkill) {
+      displayName = 'Loading Skills';
+      const rawArgs = item.metadata?.arguments;
+      let names: string[] = [];
+      if (typeof rawArgs === 'string') {
+        try { names = (JSON.parse(rawArgs) as { names?: string[] }).names || []; } catch { /* ignore */ }
+      } else if (rawArgs && typeof rawArgs === 'object') {
+        const parsed = rawArgs as { names?: string[] };
+        if (Array.isArray(parsed.names)) names = parsed.names;
+      }
+      statusLabel = names.length > 0 ? names.join(', ') : 'Loading...';
+    }
+
     return (
       <Box sx={{ ml: 4, my: 1, mr: 1 }}>
         <Box
@@ -272,10 +288,10 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
               color: theme.palette[paletteKey].main,
             })}
           >
-            {toolName}
+            {displayName}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
-            {isSkill ? 'Loading skill...' : 'Executing...'}
+            {statusLabel}
           </Typography>
         </Box>
       </Box>
