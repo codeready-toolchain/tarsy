@@ -178,10 +178,13 @@ openshift-check-config-files: ## Sync config files to overlay directory
 			fi; \
 		done; \
 	fi; \
-	printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: tarsy-skills\ndata:\n' > "$$OVERLAY_DIR/skills-configmap.yaml"; \
+	printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: tarsy-skills\n' > "$$OVERLAY_DIR/skills-configmap.yaml"; \
 	found=0; \
 	for f in "$$OVERLAY_DIR/skills"/*; do \
 		[ -f "$$f" ] || continue; \
+		if [ "$$found" -eq 0 ]; then \
+			printf 'data:\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+		fi; \
 		found=1; \
 		key=$$(basename "$$f"); \
 		printf '  %s: |\n' "$$key" >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
@@ -189,7 +192,7 @@ openshift-check-config-files: ## Sync config files to overlay directory
 		printf '\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
 	done; \
 	if [ "$$found" -eq 0 ]; then \
-		printf '  {}\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+		printf 'data: {}\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
 	fi; \
 	skill_count=$$(ls "$$OVERLAY_DIR/skills"/ 2>/dev/null | wc -l | tr -d ' '); \
 	echo -e "$(GREEN)✅ $$skill_count skill(s) synced$(NC)"

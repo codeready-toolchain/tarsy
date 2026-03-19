@@ -820,7 +820,7 @@ func (v *Validator) validateSkills() error {
 			}
 		}
 
-		// Validate RequiredSkills references
+		// Validate RequiredSkills references (independent of Skills allowlist)
 		seenRequired := make(map[string]struct{}, len(agent.RequiredSkills))
 		for _, skillName := range agent.RequiredSkills {
 			if _, dup := seenRequired[skillName]; dup {
@@ -832,13 +832,6 @@ func (v *Validator) validateSkills() error {
 			if !registry.Has(skillName) {
 				return NewValidationError("agent", name, "required_skills",
 					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
-			}
-
-			if allowedSkills != nil {
-				if _, found := allowedSkills[skillName]; !found {
-					return NewValidationError("agent", name, "required_skills",
-						fmt.Errorf("required skill %q is not in the skills allowlist", skillName))
-				}
 			}
 		}
 	}
