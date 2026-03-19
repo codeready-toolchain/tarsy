@@ -90,7 +90,7 @@ const chatResponseGuidelines = `## Response Guidelines
 4. **Specificity**: Always reference actual data and observations, not assumptions
 5. **Brevity**: Be concise but complete - users have already read the full investigation`
 
-// ComposeInstructions builds the three-tier instruction set for an investigation agent.
+// ComposeInstructions builds the tiered instruction set for an investigation agent.
 func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) string {
 	var sections []string
 
@@ -102,6 +102,9 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 
 	// Unavailable server warnings (from per-session MCP initialization failures)
 	sections = b.appendUnavailableServerWarnings(sections, execCtx.FailedServers)
+
+	// Tier 2.5: Required skill content (injected directly into prompt)
+	sections = appendSkillSections(sections, execCtx)
 
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -123,6 +126,9 @@ func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext)
 
 	// Unavailable server warnings
 	sections = b.appendUnavailableServerWarnings(sections, execCtx.FailedServers)
+
+	// Tier 2.5: Required skill content (injected directly into prompt)
+	sections = appendSkillSections(sections, execCtx)
 
 	// Tier 3: Custom agent instructions
 	if execCtx.Config.CustomInstructions != "" {
@@ -197,6 +203,18 @@ func (b *PromptBuilder) appendUnavailableServerWarnings(sections []string, faile
 	}
 	sb.WriteString("\nDo not attempt to use tools from these servers.")
 	return append(sections, sb.String())
+}
+
+// appendSkillSections adds Tier 2.5 (required skill content) and Tier 2.6
+// (on-demand skill catalog) to a sections slice.
+func appendSkillSections(sections []string, execCtx *agent.ExecutionContext) []string {
+	for _, skill := range execCtx.Config.RequiredSkillContent {
+		sections = append(sections, formatRequiredSkill(skill))
+	}
+	if len(execCtx.Config.OnDemandSkills) > 0 {
+		sections = append(sections, formatSkillCatalog(execCtx.Config.OnDemandSkills))
+	}
+	return sections
 }
 
 // appendMCPInstructions adds Tier 2 MCP server instructions to a sections slice.

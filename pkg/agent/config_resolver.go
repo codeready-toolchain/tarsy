@@ -110,6 +110,8 @@ func ResolveAgentConfig(
 
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
+	requiredSkills, onDemandSkills := resolveSkills(cfg, agentDef)
+
 	return &ResolvedAgentConfig{
 		AgentName:                 agentConfig.Name,
 		Type:                      agentType,
@@ -126,6 +128,8 @@ func ResolveAgentConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiredSkillContent:      requiredSkills,
+		OnDemandSkills:            onDemandSkills,
 	}, nil
 }
 
@@ -235,6 +239,8 @@ func ResolveChatAgentConfig(
 
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
+	requiredSkills, onDemandSkills := resolveSkills(cfg, agentDef)
+
 	return &ResolvedAgentConfig{
 		AgentName: agentName,
 		// Chat always uses the iterating function-calling controller,
@@ -253,6 +259,8 @@ func ResolveChatAgentConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiredSkillContent:      requiredSkills,
+		OnDemandSkills:            onDemandSkills,
 	}, nil
 }
 
@@ -548,6 +556,61 @@ func resolveMaxIterations(overrides ...*int) int {
 		}
 	}
 	return maxIter
+}
+
+// resolveSkills determines which skills an agent gets, split into required
+// (injected into prompt) and on-demand (available via load_skill tool).
+//
+// Logic:
+//   - Skills allowlist nil → all skills from registry are available
+//   - Skills allowlist empty → no skills
+//   - Skills allowlist non-nil → only those skills
+//   - RequiredSkills are resolved with full body content and excluded from on-demand
+func resolveSkills(cfg *config.Config, agentDef *config.AgentConfig) ([]ResolvedSkill, []SkillCatalogEntry) {
+	registry := cfg.SkillRegistry
+	if registry == nil || registry.Len() == 0 {
+		return nil, nil
+	}
+
+	// Determine effective skill names based on allowlist
+	var effectiveNames []string
+	if agentDef.Skills == nil {
+		effectiveNames = registry.Names()
+	} else if len(*agentDef.Skills) == 0 {
+		return nil, nil
+	} else {
+		effectiveNames = make([]string, len(*agentDef.Skills))
+		copy(effectiveNames, *agentDef.Skills)
+	}
+
+	// Build required skills set for O(1) lookup
+	requiredSet := make(map[string]struct{}, len(agentDef.RequiredSkills))
+	for _, name := range agentDef.RequiredSkills {
+		requiredSet[name] = struct{}{}
+	}
+
+	// Split into required (full body) and on-demand (name + description)
+	var required []ResolvedSkill
+	var onDemand []SkillCatalogEntry
+	for _, name := range effectiveNames {
+		skill, err := registry.Get(name)
+		if err != nil {
+			continue
+		}
+		if _, isRequired := requiredSet[name]; isRequired {
+			required = append(required, ResolvedSkill{
+				Name: skill.Name,
+				Body: skill.Body,
+			})
+		} else {
+			onDemand = append(onDemand, SkillCatalogEntry{
+				Name:        skill.Name,
+				Description: skill.Description,
+			})
+		}
+	}
+
+	return required, onDemand
 }
 
 // AggregateChainMCPServers collects the union of all MCP servers used by the

@@ -1562,3 +1562,290 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestResolveSkills(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"kubernetes-basics": {
+			Name:        "kubernetes-basics",
+			Description: "Core K8s troubleshooting",
+			Body:        "Check pod status first.",
+		},
+		"networking": {
+			Name:        "networking",
+			Description: "Network debugging patterns",
+			Body:        "Use dig and traceroute.",
+		},
+		"storage": {
+			Name:        "storage",
+			Description: "PV/PVC troubleshooting",
+			Body:        "Check storage class.",
+		},
+	})
+
+	t.Run("nil allowlist gives all skills", func(t *testing.T) {
+		agentDef := &config.AgentConfig{Skills: nil}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Empty(t, required)
+		assert.Len(t, onDemand, 3)
+		names := make([]string, len(onDemand))
+		for i, s := range onDemand {
+			names[i] = s.Name
+		}
+		assert.Contains(t, names, "kubernetes-basics")
+		assert.Contains(t, names, "networking")
+		assert.Contains(t, names, "storage")
+	})
+
+	t.Run("empty allowlist gives no skills", func(t *testing.T) {
+		empty := []string{}
+		agentDef := &config.AgentConfig{Skills: &empty}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Empty(t, required)
+		assert.Empty(t, onDemand)
+	})
+
+	t.Run("explicit allowlist filters skills", func(t *testing.T) {
+		allowed := []string{"kubernetes-basics", "networking"}
+		agentDef := &config.AgentConfig{Skills: &allowed}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Empty(t, required)
+		assert.Len(t, onDemand, 2)
+		names := make([]string, len(onDemand))
+		for i, s := range onDemand {
+			names[i] = s.Name
+		}
+		assert.Contains(t, names, "kubernetes-basics")
+		assert.Contains(t, names, "networking")
+	})
+
+	t.Run("required skills split from on-demand", func(t *testing.T) {
+		agentDef := &config.AgentConfig{
+			Skills:         nil,
+			RequiredSkills: []string{"kubernetes-basics"},
+		}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		require.Len(t, required, 1)
+		assert.Equal(t, "kubernetes-basics", required[0].Name)
+		assert.Equal(t, "Check pod status first.", required[0].Body)
+
+		assert.Len(t, onDemand, 2)
+		for _, s := range onDemand {
+			assert.NotEqual(t, "kubernetes-basics", s.Name, "required skill should not appear in on-demand")
+		}
+	})
+
+	t.Run("required skills with allowlist", func(t *testing.T) {
+		allowed := []string{"kubernetes-basics", "networking"}
+		agentDef := &config.AgentConfig{
+			Skills:         &allowed,
+			RequiredSkills: []string{"kubernetes-basics"},
+		}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		require.Len(t, required, 1)
+		assert.Equal(t, "kubernetes-basics", required[0].Name)
+		require.Len(t, onDemand, 1)
+		assert.Equal(t, "networking", onDemand[0].Name)
+	})
+
+	t.Run("nil registry returns nil", func(t *testing.T) {
+		agentDef := &config.AgentConfig{Skills: nil}
+		cfg := &config.Config{SkillRegistry: nil}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Nil(t, required)
+		assert.Nil(t, onDemand)
+	})
+
+	t.Run("empty registry returns nil", func(t *testing.T) {
+		agentDef := &config.AgentConfig{Skills: nil}
+		cfg := &config.Config{SkillRegistry: config.NewSkillRegistry(nil)}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Nil(t, required)
+		assert.Nil(t, onDemand)
+	})
+
+	t.Run("unknown skill in allowlist is skipped", func(t *testing.T) {
+		allowed := []string{"kubernetes-basics", "nonexistent"}
+		agentDef := &config.AgentConfig{Skills: &allowed}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Empty(t, required)
+		require.Len(t, onDemand, 1)
+		assert.Equal(t, "kubernetes-basics", onDemand[0].Name)
+	})
+
+	t.Run("all effective skills required leaves on-demand empty", func(t *testing.T) {
+		allowed := []string{"kubernetes-basics", "networking"}
+		agentDef := &config.AgentConfig{
+			Skills:         &allowed,
+			RequiredSkills: []string{"kubernetes-basics", "networking"},
+		}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		assert.Len(t, required, 2)
+		assert.Empty(t, onDemand)
+	})
+
+	t.Run("on-demand entries have description populated", func(t *testing.T) {
+		agentDef := &config.AgentConfig{Skills: nil}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		_, onDemand := resolveSkills(cfg, agentDef)
+
+		for _, entry := range onDemand {
+			assert.NotEmpty(t, entry.Description, "skill %q should have description", entry.Name)
+		}
+		descriptions := make(map[string]string, len(onDemand))
+		for _, entry := range onDemand {
+			descriptions[entry.Name] = entry.Description
+		}
+		assert.Equal(t, "Core K8s troubleshooting", descriptions["kubernetes-basics"])
+		assert.Equal(t, "Network debugging patterns", descriptions["networking"])
+		assert.Equal(t, "PV/PVC troubleshooting", descriptions["storage"])
+	})
+}
+
+func TestResolveAgentConfig_PopulatesSkills(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"kubernetes-basics": {
+			Name:        "kubernetes-basics",
+			Description: "Core K8s troubleshooting",
+			Body:        "Check pod status first.",
+		},
+		"networking": {
+			Name:        "networking",
+			Description: "Network debugging",
+			Body:        "Use dig.",
+		},
+	})
+
+	provider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "default-provider"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"test-agent": {
+				RequiredSkills: []string{"kubernetes-basics"},
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"default-provider": provider,
+		}),
+		SkillRegistry: registry,
+	}
+
+	resolved, err := ResolveAgentConfig(
+		cfg,
+		&config.ChainConfig{},
+		config.StageConfig{},
+		config.StageAgentConfig{Name: "test-agent"},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, resolved.RequiredSkillContent, 1)
+	assert.Equal(t, "kubernetes-basics", resolved.RequiredSkillContent[0].Name)
+	assert.Equal(t, "Check pod status first.", resolved.RequiredSkillContent[0].Body)
+
+	require.Len(t, resolved.OnDemandSkills, 1)
+	assert.Equal(t, "networking", resolved.OnDemandSkills[0].Name)
+}
+
+func TestResolveChatAgentConfig_PopulatesSkills(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"kubernetes-basics": {
+			Name:        "kubernetes-basics",
+			Description: "Core K8s troubleshooting",
+			Body:        "Check pod status first.",
+		},
+	})
+
+	provider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "default-provider"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			config.AgentNameChat: {},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"default-provider": provider,
+		}),
+		SkillRegistry: registry,
+	}
+
+	resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{}, nil)
+	require.NoError(t, err)
+
+	assert.Len(t, resolved.OnDemandSkills, 1)
+	assert.Equal(t, "kubernetes-basics", resolved.OnDemandSkills[0].Name)
+}
+
+func TestMetaAgents_DoNotGetSkills(t *testing.T) {
+	provider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"kubernetes-basics": {
+			Name:        "kubernetes-basics",
+			Description: "Core K8s troubleshooting",
+			Body:        "Check pod status first.",
+		},
+	})
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "default-provider"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			config.AgentNameScoring:    {Type: config.AgentTypeScoring},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"default-provider": provider,
+		}),
+		SkillRegistry: registry,
+	}
+
+	t.Run("scoring agent excluded from skills", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Empty(t, resolved.RequiredSkillContent)
+		assert.Empty(t, resolved.OnDemandSkills)
+	})
+
+	t.Run("exec summary agent excluded from skills", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Empty(t, resolved.RequiredSkillContent)
+		assert.Empty(t, resolved.OnDemandSkills)
+	})
+}

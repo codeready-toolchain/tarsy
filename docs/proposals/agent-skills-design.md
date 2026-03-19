@@ -292,7 +292,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 **Verification:** Config loads with and without `skills/` directory. Skills are discoverable via registry. Validation catches invalid references and edge cases (required skill outside allowlist, referencing nonexistent skills).
 
-### Phase 2: Prompt Integration — Tiers 2.5 and 2.6
+### Phase 2: Prompt Integration — Tiers 2.5 and 2.6 - DONE
 
 **New files:**
 - `pkg/agent/prompt/skills.go` — formatRequiredSkill(), formatSkillCatalog()
