@@ -122,15 +122,14 @@ export function liveDuration(startIso: string | null | undefined): string {
  * Returns a comma-separated label, or null when the arguments don't contain skill names.
  */
 export function getSkillNamesLabel(rawArgs: unknown): string | null {
-  let parsed: Record<string, unknown>;
+  let parsed: unknown;
   if (typeof rawArgs === 'string') {
-    try { parsed = JSON.parse(rawArgs) as Record<string, unknown>; } catch { return null; }
-  } else if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
-    parsed = rawArgs as Record<string, unknown>;
+    try { parsed = JSON.parse(rawArgs); } catch { return null; }
   } else {
-    return null;
+    parsed = rawArgs;
   }
-  const names = parsed.names;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const names = (parsed as Record<string, unknown>).names;
   if (!Array.isArray(names) || names.length === 0) return null;
   return (names as string[]).join(', ');
 }
