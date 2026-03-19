@@ -209,7 +209,7 @@ Browser → OAuth2-Proxy (8080) → Go Backend (8080) → LLM Service (gRPC)
 - **MCP Servers**: Add to `tarsy.yaml` with stdio, HTTP, or SSE transport
 - **Agents**: Create Go agent classes extending BaseAgent, or define configuration-based agents in YAML
 - **Chains**: Define multi-stage workflows in YAML with parallel execution support
-- **Skills**: Drop a `SKILL.md` file into `deploy/config/skills/<name>/` -- all agents see it automatically. Scope with `skills` (allowlist) or `required_skills` (prompt-injected). See [deploy/config/README.md](deploy/config/README.md#agent-skills)
+- **Skills**: Drop a `SKILL.md` file into `deploy/config/skills/<name>/` -- all agents see it automatically. Scope with `skills` (on-demand allowlist) and/or `required_skills` (always prompt-injected). The two fields are independent: required skills are auto-excluded from the on-demand catalog. See [deploy/config/README.md](deploy/config/README.md#agent-skills)
 - **LLM Providers**: Built-in providers work out-of-the-box. Add custom providers via `deploy/config/llm-providers.yaml`
 
 ### Running Tests
