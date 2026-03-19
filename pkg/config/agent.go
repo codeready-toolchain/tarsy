@@ -36,11 +36,15 @@ type AgentConfig struct {
 	// Orchestrator-specific configuration (only valid when Type == orchestrator)
 	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
 
-	// Skills allowlist. nil = all skills available (default).
-	// Empty slice = no skills. Non-nil = only these skills.
+	// Skills controls the on-demand skill catalog (available via load_skill).
+	// nil = all registry skills on-demand (default).
+	// Empty slice = no on-demand skills.
+	// Non-nil = only these skills on-demand.
+	// Does not affect required_skills, which are resolved independently.
 	Skills *[]string `yaml:"skills,omitempty"`
 
 	// RequiredSkills are injected into the system prompt (Tier 2.5).
+	// Validated against the skill registry only (no dependency on Skills allowlist).
 	// These are excluded from the on-demand catalog.
 	RequiredSkills []string `yaml:"required_skills,omitempty"`
 }

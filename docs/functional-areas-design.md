@@ -229,7 +229,7 @@ graph TB
 **Config Validator**: `pkg/config/validator.go`
 - Validates chain stage references, MCP server existence, runbook domains
 - Validates fallback provider entries: provider exists, backend valid, credentials set (fail-fast at startup)
-- Validates skill references: agent `skills` allowlist entries exist in SkillRegistry, `required_skills` exist and are within the agent's effective scope
+- Validates skill references: agent `skills` allowlist entries exist in SkillRegistry, `required_skills` exist in SkillRegistry (validated independently of `skills` allowlist)
 - Startup-time validation prevents runtime failures
 
 **Key Implementation Files**:

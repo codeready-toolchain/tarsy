@@ -1599,7 +1599,7 @@ func TestResolveSkills(t *testing.T) {
 		assert.Contains(t, names, "storage")
 	})
 
-	t.Run("empty allowlist gives no skills", func(t *testing.T) {
+	t.Run("empty allowlist gives no on-demand skills", func(t *testing.T) {
 		empty := []string{}
 		agentDef := &config.AgentConfig{Skills: &empty}
 		cfg := &config.Config{SkillRegistry: registry}
@@ -1608,6 +1608,38 @@ func TestResolveSkills(t *testing.T) {
 
 		assert.Empty(t, required)
 		assert.Empty(t, onDemand)
+	})
+
+	t.Run("empty allowlist with required_skills still resolves required", func(t *testing.T) {
+		empty := []string{}
+		agentDef := &config.AgentConfig{
+			Skills:         &empty,
+			RequiredSkills: []string{"kubernetes-basics"},
+		}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		require.Len(t, required, 1)
+		assert.Equal(t, "kubernetes-basics", required[0].Name)
+		assert.Equal(t, "Check pod status first.", required[0].Body)
+		assert.Empty(t, onDemand)
+	})
+
+	t.Run("required_skills independent of on-demand allowlist", func(t *testing.T) {
+		allowed := []string{"networking"}
+		agentDef := &config.AgentConfig{
+			Skills:         &allowed,
+			RequiredSkills: []string{"kubernetes-basics"},
+		}
+		cfg := &config.Config{SkillRegistry: registry}
+
+		required, onDemand := resolveSkills(cfg, agentDef)
+
+		require.Len(t, required, 1)
+		assert.Equal(t, "kubernetes-basics", required[0].Name)
+		require.Len(t, onDemand, 1)
+		assert.Equal(t, "networking", onDemand[0].Name)
 	})
 
 	t.Run("explicit allowlist filters skills", func(t *testing.T) {

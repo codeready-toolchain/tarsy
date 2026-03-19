@@ -3199,16 +3199,24 @@ func TestValidateSkills(t *testing.T) {
 			skills: baseSkills,
 		},
 		{
-			name: "required skill outside allowlist fails",
+			name: "required skill outside on-demand allowlist passes (independent validation)",
 			agents: map[string]*AgentConfig{
 				"agent1": {
 					Skills:         &[]string{"k8s-basics"},
 					RequiredSkills: []string{"networking"},
 				},
 			},
-			skills:  baseSkills,
-			wantErr: true,
-			errMsg:  "not in the skills allowlist",
+			skills: baseSkills,
+		},
+		{
+			name: "required skill with empty on-demand allowlist passes",
+			agents: map[string]*AgentConfig{
+				"agent1": {
+					Skills:         &[]string{},
+					RequiredSkills: []string{"k8s-basics"},
+				},
+			},
+			skills: baseSkills,
 		},
 		{
 			name: "nil skill registry with no refs passes",

@@ -21,7 +21,7 @@ Agent Skills add modular, reusable knowledge blocks to TARSy agents. Skills foll
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
 | S1 | How are skills defined? | Industry-standard `skills/<name>/SKILL.md` directories | Aligns with Claude Code, Cursor, OpenAI Codex, Spring AI. Markdown is easy to edit, preview, lint. Supports future Level 3 resources. |
-| S2 | How are skills scoped to agents? | All skills available by default, optional per-agent `skills` allowlist | Zero config for common case. LLM filters by description. Follows OpenClaw pattern. |
+| S2 | How are skills scoped to agents? | `skills` controls on-demand catalog, `required_skills` controls prompt injection — independent fields | Zero config for common case. Decoupled fields avoid confusing subset requirements. `skills: []` disables on-demand without affecting required. |
 | S3 | How does the LLM load skills at runtime? | Dedicated `load_skill` tool + per-agent `required_skills` | Progressive disclosure for most skills; safety net for critical domain knowledge via prompt injection. |
 | S4 | Where does the skill catalog appear in the prompt? | System prompt Tier 2.5 (required content) and Tier 2.6 (on-demand catalog) | Clean placement between MCP instructions and custom instructions. Consistent with existing tier style. |
 | S5 | How do skills work with orchestrators and sub-agents? | Each agent resolves skills independently | Simple, consistent resolution. Sub-agents can have different skill scoping. Matches OpenClaw. |
@@ -122,11 +122,15 @@ If the `skills/` directory doesn't exist, return an empty registry (skills are o
 type AgentConfig struct {
     // ... existing fields ...
 
-    // Skills allowlist. nil = all skills available (default).
-    // Empty slice = no skills. Non-nil = only these skills.
+    // Skills controls the on-demand skill catalog (available via load_skill).
+    // nil = all registry skills on-demand (default).
+    // Empty slice = no on-demand skills.
+    // Non-nil = only these skills on-demand.
+    // Does not affect required_skills, which are resolved independently.
     Skills *[]string `yaml:"skills,omitempty"`
 
     // RequiredSkills are injected into the system prompt (Tier 2.5).
+    // Validated against the skill registry only (no dependency on Skills allowlist).
     // These are excluded from the on-demand catalog.
     RequiredSkills []string `yaml:"required_skills,omitempty"`
 }
@@ -155,7 +159,7 @@ After loading YAML files and building other registries, call `LoadSkills(configD
 
 New `validateSkills()` method:
 - For each agent with `Skills` allowlist: verify every name exists in SkillRegistry.
-- For each agent with `RequiredSkills`: verify every name exists in SkillRegistry and is within the agent's effective skill scope.
+- For each agent with `RequiredSkills`: verify every name exists in SkillRegistry (independent of `Skills` allowlist).
 - Warn if SkillRegistry is empty but agents reference skills.
 
 #### 5. `ResolvedAgentConfig` — resolved skill data
@@ -190,8 +194,8 @@ type SkillCatalogEntry struct {
 
 New `resolveSkills()` function called within `ResolveAgentConfig`:
 
-1. Determine effective skill set: agent's `Skills` allowlist (nil → all, empty → none, list → filter).
-2. Split into required (agent's `RequiredSkills`) and on-demand (everything else).
+1. Resolve required skills from `RequiredSkills` against registry (independent of `Skills` allowlist).
+2. Determine on-demand set from `Skills` allowlist (nil → all, empty → none, list → filter), excluding required skills.
 3. Populate `RequiredSkillContent` and `OnDemandSkills` on `ResolvedAgentConfig`.
 
 Same logic applies to `ResolveChatAgentConfig`. `resolveSkills()` accesses the `SkillRegistry` via the `cfg *config.Config` parameter already passed to all `Resolve*` functions, and reads `Skills`/`RequiredSkills` from the agent definition obtained via `cfg.GetAgent()`.
@@ -317,7 +321,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 - `pkg/config/validator.go` — add validateSkills() (required skill not in allowlist, empty registry, etc.)
 - `pkg/config/errors.go` — add ErrSkillNotFound sentinel error
 
-**Verification:** Config loads with and without `skills/` directory. Skills are discoverable via registry. Validation catches invalid references and edge cases (required skill outside allowlist, referencing nonexistent skills).
+**Verification:** Config loads with and without `skills/` directory. Skills are discoverable via registry. Validation catches invalid references (nonexistent skills in registry). `required_skills` validates independently of `skills` allowlist.
 
 ### Phase 2: Prompt Integration — Tiers 2.5 and 2.6 ✓
 
@@ -350,7 +354,7 @@ Tier 3:   Agent Custom Instructions        (from AgentConfig.CustomInstructions)
 
 ## Testing Strategy
 
-- **Unit tests:** SkillRegistry CRUD, SKILL.md parsing (valid, missing frontmatter, empty body, no skills dir), skill resolution (all skills, allowlist, empty, required), prompt tier ordering, SkillToolExecutor (valid call, invalid name, partial failure with mix of valid/invalid, multi-skill, no skills)
+- **Unit tests:** SkillRegistry CRUD, SKILL.md parsing (valid, missing frontmatter, empty body, no skills dir), skill resolution (all skills, allowlist, empty on-demand with required, required independent of allowlist), prompt tier ordering, SkillToolExecutor (valid call, invalid name, partial failure with mix of valid/invalid, multi-skill, no skills)
 - **Integration tests:** Full config → prompt → tool flow with test SKILL.md files in test fixtures
 - **Existing test compatibility:** All existing tests pass unchanged (skills are optional; empty registry is the default)
 

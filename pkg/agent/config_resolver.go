@@ -562,52 +562,53 @@ func resolveMaxIterations(overrides ...*int) int {
 // (injected into prompt) and on-demand (available via load_skill tool).
 //
 // Logic:
-//   - Skills allowlist nil → all skills from registry are available
-//   - Skills allowlist empty → no skills
-//   - Skills allowlist non-nil → only those skills
-//   - RequiredSkills are resolved with full body content and excluded from on-demand
+//   - RequiredSkills are resolved independently (always from registry, regardless of Skills allowlist)
+//   - Skills allowlist nil → all registry skills on-demand (minus required)
+//   - Skills allowlist empty → no on-demand skills (required still resolve)
+//   - Skills allowlist non-nil → only those skills on-demand (minus required)
 func resolveSkills(cfg *config.Config, agentDef *config.AgentConfig) ([]ResolvedSkill, []SkillCatalogEntry) {
 	registry := cfg.SkillRegistry
 	if registry == nil || registry.Len() == 0 {
 		return nil, nil
 	}
 
-	// Determine effective skill names based on allowlist
-	var effectiveNames []string
-	if agentDef.Skills == nil {
-		effectiveNames = registry.Names()
-	} else if len(*agentDef.Skills) == 0 {
-		return nil, nil
-	} else {
-		effectiveNames = make([]string, len(*agentDef.Skills))
-		copy(effectiveNames, *agentDef.Skills)
-	}
-
-	// Build required skills set for O(1) lookup
+	// Resolve required skills (independent of on-demand allowlist)
 	requiredSet := make(map[string]struct{}, len(agentDef.RequiredSkills))
+	var required []ResolvedSkill
 	for _, name := range agentDef.RequiredSkills {
 		requiredSet[name] = struct{}{}
-	}
-
-	// Split into required (full body) and on-demand (name + description)
-	var required []ResolvedSkill
-	var onDemand []SkillCatalogEntry
-	for _, name := range effectiveNames {
 		skill, err := registry.Get(name)
 		if err != nil {
 			continue
 		}
+		required = append(required, ResolvedSkill{
+			Name: skill.Name,
+			Body: skill.Body,
+		})
+	}
+
+	// Determine on-demand names from allowlist
+	var onDemandNames []string
+	if agentDef.Skills == nil {
+		onDemandNames = registry.Names()
+	} else {
+		onDemandNames = *agentDef.Skills
+	}
+
+	// Build on-demand catalog (excluding required skills)
+	var onDemand []SkillCatalogEntry
+	for _, name := range onDemandNames {
 		if _, isRequired := requiredSet[name]; isRequired {
-			required = append(required, ResolvedSkill{
-				Name: skill.Name,
-				Body: skill.Body,
-			})
-		} else {
-			onDemand = append(onDemand, SkillCatalogEntry{
-				Name:        skill.Name,
-				Description: skill.Description,
-			})
+			continue
 		}
+		skill, err := registry.Get(name)
+		if err != nil {
+			continue
+		}
+		onDemand = append(onDemand, SkillCatalogEntry{
+			Name:        skill.Name,
+			Description: skill.Description,
+		})
 	}
 
 	return required, onDemand
