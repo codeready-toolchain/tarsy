@@ -1,0 +1,19 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_6}",
+  "interaction_type": "tool_call",
+  "server_name": "test-mcp",
+  "tool_name": "get_pods"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "namespace": "default"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "[{\"name\":\"pod-1\",\"namespace\":\"default\",\"status\":\"OOMKilled\",\"restarts\":5}]",
+  "is_error": false
+}

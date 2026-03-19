@@ -1,0 +1,40 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Built-in KubernetesAgent requires this server for validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  SREOrchestrator:
+    type: orchestrator
+    description: "SRE investigation orchestrator"
+    custom_instructions: "You are SREOrchestrator, you investigate alerts by dispatching specialized sub-agents."
+    orchestrator:
+      max_concurrent_agents: 5
+      agent_timeout: 300s
+  SkillWorker:
+    description: "Worker with skill-based knowledge"
+    mcp_servers: [test-mcp]
+    max_iterations: 3
+    custom_instructions: "You are SkillWorker, you use domain knowledge skills to investigate."
+    skills: [networking]
+
+agent_chains:
+  skills-orchestrator-chain:
+    alert_types: [test-skills-orchestrator]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: orchestrate
+        agents:
+          - name: SREOrchestrator
+            sub_agents:
+              - name: SkillWorker

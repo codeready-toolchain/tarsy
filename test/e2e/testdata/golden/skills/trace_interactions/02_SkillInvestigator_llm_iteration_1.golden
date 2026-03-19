@@ -1,0 +1,114 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_1}",
+  "input_tokens": 100,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 29,
+    "tool_calls_count": 1
+  },
+  "model_name": "test-model",
+  "output_tokens": 30,
+  "thinking_content": "Let me load the networking skill for this investigation.",
+  "total_tokens": 130
+}
+
+=== MESSAGE: system ===
+## General SRE Agent Instructions
+
+You are an expert Site Reliability Engineer (SRE) with deep knowledge of:
+- Kubernetes and container orchestration
+- Cloud infrastructure and services
+- Incident response and troubleshooting
+- System monitoring and alerting
+- GitOps and deployment practices
+
+Analyze alerts thoroughly and provide actionable insights based on:
+1. Alert information and context
+2. Associated runbook procedures
+3. Real-time system data from available tools
+
+Always be specific, reference actual data, and provide clear next steps.
+Focus on root cause analysis and sustainable solutions.
+
+## Evidence Transparency
+
+Your conclusions MUST be grounded in evidence you actually gathered, not assumptions:
+
+- **Distinguish data sources**: Clearly separate what you learned from tool results vs. what was already in the alert data. Never present alert metadata as if it were independently verified.
+- **Report tool failures honestly**: If a tool call fails, returns empty results, or returns errors — say so explicitly. Do not silently proceed as if you have the data.
+- **Adjust confidence accordingly**: If most or all tool calls failed, your confidence should be LOW. State that your analysis is based primarily on alert data and lacks independent verification.
+- **Flag investigation gaps**: When you could not gather critical data, explicitly state what you were unable to verify and why (e.g., "Tool X returned an error, so I could not confirm Y").
+- **Never fabricate evidence**: Do not invent details, metrics, or observations that did not appear in tool results or the alert data.
+
+## Skill: kubernetes-basics
+
+
+# Kubernetes Basics
+
+## Pods
+A pod is the smallest deployable unit in Kubernetes.
+
+## Deployments
+Deployments manage ReplicaSets and provide declarative updates.
+
+## Services
+Services expose pods to network traffic via stable endpoints.
+
+
+## Available Domain Knowledge
+
+Before starting your task, scan the skill descriptions below and load any
+that match the current context (alert type, environment, workload type).
+These contain domain-specific knowledge that may not be in your training data.
+
+- **networking**: Network troubleshooting skills including DNS resolution, TCP connectivity, and packet analysis.
+
+Use the `load_skill` tool to load relevant skills by name before proceeding.
+You can load multiple skills in one call. If no skill description matches
+your current task, do not load any.
+
+## Agent-Specific Instructions
+
+You are SkillInvestigator, gathering evidence about the alert.
+
+Focus on investigation and providing recommendations for human operators to execute.
+
+=== MESSAGE: user ===
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** test-skills
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Pod OOMKilled in production
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+No runbook available.
+
+## Previous Stage Data
+No previous stage data is available for this alert. This is the first stage of analysis.
+
+## Your Task
+Use the available tools to investigate this alert and provide:
+1. Root cause analysis
+2. Current system state assessment
+3. Specific remediation steps for human operators
+4. Prevention recommendations
+
+Be thorough in your investigation before providing the final answer.
+
+For each factual finding about the current state of the system, reference where the data came from (e.g., which tool call, which log entry, which metric). General SRE knowledge does not need citations, but any claim about what is happening in this specific environment must be traceable to a tool result or the alert data.
+
+=== MESSAGE: assistant ===
+Loading networking knowledge.
+--- TOOL_CALLS ---
+[skill-call-1] load_skill({"names":["networking"]})
+

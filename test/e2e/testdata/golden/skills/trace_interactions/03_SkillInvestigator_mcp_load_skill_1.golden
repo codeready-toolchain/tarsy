@@ -1,0 +1,21 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_5}",
+  "interaction_type": "tool_call",
+  "server_name": "",
+  "tool_name": "load_skill"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "names": [
+    "networking"
+  ]
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "## Skill: networking\n\n\n# Networking\n\n## DNS Resolution\nUse dig and nslookup to diagnose DNS issues.\n\n## TCP Connectivity\nUse netcat and telnet to test port connectivity.\n",
+  "is_error": false
+}

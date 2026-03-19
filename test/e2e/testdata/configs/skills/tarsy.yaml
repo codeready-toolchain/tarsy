@@ -1,0 +1,37 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Built-in KubernetesAgent requires this server for validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  SkillInvestigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are SkillInvestigator, gathering evidence about the alert."
+    required_skills: [kubernetes-basics]
+    skills: [kubernetes-basics, networking]
+  SkillRemediator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are SkillRemediator, executing remediation actions."
+    # No skills field → nil → all registry skills available as on-demand
+
+agent_chains:
+  skills-chain:
+    alert_types: [test-skills]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: SkillInvestigator
+      - name: remediation
+        agents:
+          - name: SkillRemediator
