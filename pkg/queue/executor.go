@@ -576,11 +576,6 @@ func (e *RealSessionExecutor) executeAgent(
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
-	// Wrap with skill tool executor if on-demand skills are configured
-	if len(resolvedConfig.OnDemandSkills) > 0 {
-		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
-	}
-
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      input.session.ID,
@@ -649,6 +644,11 @@ func (e *RealSessionExecutor) executeAgent(
 		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
 		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
 		execCtx.SubAgentCatalog = registry.Entries()
+	}
+
+	// Wrap with skill tool executor (outermost layer, after orchestrator)
+	if len(resolvedConfig.OnDemandSkills) > 0 {
+		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
 	execCtx.ToolExecutor = toolExecutor
