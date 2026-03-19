@@ -175,7 +175,7 @@ graph TB
     ENV[".env file<br/>API keys, secrets"] --> Loader
     YAML["tarsy.yaml<br/>Main config"] --> Loader[Config Loader]
     LLMYaml["llm-providers.yaml<br/>Optional"] --> Loader
-    SkillFiles["skills/*/SKILL.md<br/>Domain knowledge"] --> Loader
+    SkillFiles["skills/*<br/>Domain knowledge"] --> Loader
     BuiltIn["Built-in Defaults<br/>builtin.go"] --> Registries
 
     Loader --> Validation[Validation]
@@ -199,7 +199,7 @@ graph TB
 - **Agent definitions**: Custom agents with MCP servers, instructions, and skill scoping
 - **Chain definitions**: Multi-stage workflows with alert type mappings
 - **MCP server configurations**: Custom tool servers with transport, masking, summarization
-- **Skill definitions**: `skills/*/SKILL.md` files with YAML frontmatter (name, description) and Markdown body — loaded at startup, available on-demand via `load_skill` tool
+- **Skill definitions**: `skills/*/SKILL.md` (directory layout) or `skills/*` (flat file layout for Kubernetes ConfigMap mounts) with YAML frontmatter (name, description) and Markdown body — loaded at startup, available on-demand via `load_skill` tool
 - **Override support**: YAML definitions override built-in components with same name/ID
 
 **LLM Provider Configuration**: `deploy/config/llm-providers.yaml` (optional)
@@ -215,7 +215,7 @@ graph TB
 | `ChainRegistry` | `pkg/config/` | `Get(id)`, `GetByAlertType(type)` | AlertTypes, Stages[], Chat, LLMProvider, MCPServers, SubAgents |
 | `MCPServerRegistry` | `pkg/config/` | `Get(id)` | Transport, Instructions, DataMasking, Summarization |
 | `LLMProviderRegistry` | `pkg/config/` | `Get(name)`, `GetAll()` | Type, Model, APIKeyEnv, BaseURL, NativeTools |
-| `SkillRegistry` | `pkg/config/` | `Get(name)`, `GetAll()`, `Has(name)`, `Names()` | Name, Description, Body — loaded from `skills/*/SKILL.md` at startup |
+| `SkillRegistry` | `pkg/config/` | `Get(name)`, `GetAll()`, `Has(name)`, `Names()` | Name, Description, Body — loaded from `skills/` at startup (directory or flat file layout) |
 | `SubAgentRegistry` | `pkg/config/` | `GetAll()`, `Get(name)` | Available sub-agents (agents with description), filtered by `sub_agents` override |
 
 #### Configuration Loading Process
@@ -239,7 +239,7 @@ graph TB
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
 - `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`, `action`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
-- `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing
+- `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
 
 ---

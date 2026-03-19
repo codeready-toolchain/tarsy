@@ -101,14 +101,18 @@ The `load_skill` tool definition (shown as JSON Schema for clarity; implementati
 #### 3. `pkg/config/skill_loader.go` — SKILL.md parsing
 
 ```go
-// LoadSkills scans configDir/skills/*/SKILL.md, parses each file,
-// and returns a SkillRegistry.
+// LoadSkills scans configDir/skills/ for skill definitions and returns
+// a SkillRegistry. Supports two layouts:
+//   - Directory layout: skills/<name>/SKILL.md (local dev, Podman)
+//   - Flat file layout: skills/<name> (Kubernetes ConfigMap mounts)
 func LoadSkills(configDir string) (*SkillRegistry, error)
 ```
 
 Parsing: split file content on `---` delimiters, `yaml.Unmarshal` the frontmatter block into a struct, keep the remainder as `Body`. No external library needed — the frontmatter format is trivial (`---\n<yaml>\n---\n<markdown>`).
 
 If the `skills/` directory doesn't exist, return an empty registry (skills are optional).
+
+**Two layouts:** The loader iterates over entries in the `skills/` directory. Directories are handled as `<name>/SKILL.md`. Regular files (non-dotfiles) are treated as flat SKILL.md files — this is the layout produced when a Kubernetes ConfigMap is mounted as a volume (each key becomes a flat file). Dotfiles (`.` prefix) are skipped to ignore Kubernetes-internal ConfigMap symlinks (`..data`, `..2024_...`).
 
 ### Modified Components
 

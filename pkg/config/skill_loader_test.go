@@ -58,15 +58,55 @@ func TestLoadSkills(t *testing.T) {
 		assert.Equal(t, 0, registry.Len())
 	})
 
-	t.Run("non-directory entries in skills/ are skipped", func(t *testing.T) {
+	t.Run("flat file layout loads valid skills", func(t *testing.T) {
 		dir := t.TempDir()
 		skillsDir := filepath.Join(dir, "skills")
 		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(skillsDir, "not-a-dir.txt"), []byte("hello"), 0o644))
+		writeTestFlatSkill(t, dir, "pod-debug", "---\nname: pod-debug\ndescription: Debug pods\n---\n# Pod Debugging")
+
+		registry, err := LoadSkills(dir)
+		require.NoError(t, err)
+		require.Equal(t, 1, registry.Len())
+
+		skill, err := registry.Get("pod-debug")
+		require.NoError(t, err)
+		assert.Equal(t, "Debug pods", skill.Description)
+		assert.Equal(t, "# Pod Debugging", skill.Body)
+	})
+
+	t.Run("flat file without valid frontmatter returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		skillsDir := filepath.Join(dir, "skills")
+		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillsDir, "not-a-skill"), []byte("hello"), 0o644))
+
+		_, err := LoadSkills(dir)
+		var loadErr *LoadError
+		require.ErrorAs(t, err, &loadErr)
+	})
+
+	t.Run("dotfiles in skills/ are skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		skillsDir := filepath.Join(dir, "skills")
+		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillsDir, "..data"), []byte("k8s-internal"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(skillsDir, ".hidden"), []byte("hidden"), 0o644))
 
 		registry, err := LoadSkills(dir)
 		require.NoError(t, err)
 		assert.Equal(t, 0, registry.Len())
+	})
+
+	t.Run("mixed directory and flat file layout", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTestSkill(t, dir, "dir-skill", "---\nname: from-dir\ndescription: Directory skill\n---\n# Dir")
+		writeTestFlatSkill(t, dir, "flat-skill", "---\nname: from-flat\ndescription: Flat skill\n---\n# Flat")
+
+		registry, err := LoadSkills(dir)
+		require.NoError(t, err)
+		assert.Equal(t, 2, registry.Len())
+		assert.True(t, registry.Has("from-dir"))
+		assert.True(t, registry.Has("from-flat"))
 	})
 
 	t.Run("missing frontmatter returns error", func(t *testing.T) {
@@ -268,4 +308,12 @@ func writeTestSkill(t *testing.T, dir, name, content string) {
 	skillDir := filepath.Join(dir, "skills", name)
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644))
+}
+
+// writeTestFlatSkill creates a flat skill file at dir/skills/name.
+func writeTestFlatSkill(t *testing.T, dir, name, content string) {
+	t.Helper()
+	skillsDir := filepath.Join(dir, "skills")
+	require.NoError(t, os.MkdirAll(skillsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillsDir, name), []byte(content), 0o644))
 }

@@ -75,6 +75,8 @@ spec:
             - name: tarsy-app-config
               mountPath: /app/config/llm-providers.yaml
               subPath: llm-providers.yaml
+            - name: tarsy-skills
+              mountPath: /app/config/skills
           livenessProbe:
             httpGet:
               path: /health
@@ -282,6 +284,10 @@ spec:
         - name: oauth2-templates
           configMap:
             name: oauth2-templates
+        - name: tarsy-skills
+          configMap:
+            name: tarsy-skills
+            optional: true
         - name: gcp-service-account
           secret:
             secretName: gcp-service-account-secret

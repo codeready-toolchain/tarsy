@@ -17,9 +17,24 @@ type skillFrontmatter struct {
 	Description string `yaml:"description"`
 }
 
-// LoadSkills scans configDir/skills/*/SKILL.md, parses each file,
-// and returns a SkillRegistry. Returns an empty registry if the skills/
-// directory doesn't exist.
+// LoadSkills scans configDir/skills/ for skill definitions and returns a
+// SkillRegistry. Returns an empty registry if the skills/ directory doesn't
+// exist.
+//
+// Two directory layouts are supported:
+//
+//   - Directory layout: skills/<name>/SKILL.md — each skill lives in its own
+//     subdirectory. This is the standard layout for local development and
+//     Podman volume mounts.
+//
+//   - Flat file layout: skills/<name> — each skill is a regular file whose
+//     content is a complete SKILL.md (frontmatter + body). This layout is
+//     designed for Kubernetes/OpenShift ConfigMap volume mounts, where each
+//     ConfigMap key becomes a flat file.
+//
+// Both layouts can coexist in the same directory. Entries starting with "."
+// are ignored (Kubernetes ConfigMap mounts create internal dotfile symlinks
+// like ..data and ..2024_...).
 func LoadSkills(configDir string) (*SkillRegistry, error) {
 	skillsDir := filepath.Join(configDir, "skills")
 
@@ -34,11 +49,15 @@ func LoadSkills(configDir string) (*SkillRegistry, error) {
 	skills := make(map[string]*SkillConfig)
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		var skillPath string
+		if entry.IsDir() {
+			skillPath = filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+		} else if !strings.HasPrefix(entry.Name(), ".") {
+			skillPath = filepath.Join(skillsDir, entry.Name())
+		} else {
 			continue
 		}
 
-		skillPath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
 		skill, err := parseSkillFile(skillPath)
 		if err != nil {
 			return nil, NewLoadError(skillPath, err)

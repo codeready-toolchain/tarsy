@@ -161,6 +161,35 @@ openshift-check-config-files: ## Sync config files to overlay directory
 		{ echo -e "$(RED)deploy/config/llm-providers.yaml not found$(NC)"; exit 1; }
 	@[ -d deploy/config/templates ] && cp -r deploy/config/templates/* deploy/kustomize/overlays/development/templates/ || \
 		{ echo -e "$(RED)deploy/config/templates/ not found$(NC)"; exit 1; }
+	@echo -e "$(BLUE)Syncing skills...$(NC)"
+	@OVERLAY_DIR=deploy/kustomize/overlays/development; \
+	SKILLS_DIR=deploy/config/skills; \
+	rm -rf "$$OVERLAY_DIR/skills"; \
+	mkdir -p "$$OVERLAY_DIR/skills"; \
+	if [ -d "$$SKILLS_DIR" ]; then \
+		for skill_dir in "$$SKILLS_DIR"/*/; do \
+			[ -d "$$skill_dir" ] || continue; \
+			skill_file="$${skill_dir}SKILL.md"; \
+			[ -f "$$skill_file" ] || continue; \
+			skill_name=$$(basename "$$skill_dir"); \
+			cp "$$skill_file" "$$OVERLAY_DIR/skills/$$skill_name"; \
+		done; \
+	fi; \
+	printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: tarsy-skills\ndata:\n' > "$$OVERLAY_DIR/skills-configmap.yaml"; \
+	found=0; \
+	for f in "$$OVERLAY_DIR/skills"/*; do \
+		[ -f "$$f" ] || continue; \
+		found=1; \
+		key=$$(basename "$$f"); \
+		printf '  %s: |\n' "$$key" >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+		sed 's/^/    /' "$$f" >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+		printf '\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+	done; \
+	if [ "$$found" -eq 0 ]; then \
+		printf '  {}\n' >> "$$OVERLAY_DIR/skills-configmap.yaml"; \
+	fi; \
+	skill_count=$$(ls "$$OVERLAY_DIR/skills"/ 2>/dev/null | wc -l | tr -d ' '); \
+	echo -e "$(GREEN)✅ $$skill_count skill(s) synced$(NC)"
 	@echo -e "$(BLUE)Generating overlay oauth2-proxy.cfg from template...$(NC)"
 	@sed -e 's|http://tarsy:8080/|http://localhost:8080/|g' \
 		-e 's|{{ROUTE_HOST}}|$(ROUTE_HOST)|g' \

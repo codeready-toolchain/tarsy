@@ -5,6 +5,7 @@ namespace: tarsy
 
 resources:
   - ../../base
+  - skills-configmap.yaml
 
 commonLabels:
   environment: development

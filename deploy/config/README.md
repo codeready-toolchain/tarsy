@@ -176,20 +176,32 @@ You can override any built-in configuration by defining the same name/ID in your
 
 Agent Skills provide modular, reusable domain knowledge that agents can load on-demand during investigations. Skills follow the industry-standard `SKILL.md` format.
 
-### Directory Structure
+### Directory Layouts
+
+Two skill directory layouts are supported. Both use the same SKILL.md format (YAML frontmatter + Markdown body).
+
+**Directory layout** (default — local dev, Podman):
 
 ```
-deploy/config/
-├── tarsy.yaml
-├── llm-providers.yaml
-└── skills/
-    ├── pod-troubleshooting/
-    │   └── SKILL.md
-    ├── resource-management/
-    │   └── SKILL.md
-    └── networking-diagnostics/
-        └── SKILL.md
+deploy/config/skills/
+├── pod-troubleshooting/
+│   └── SKILL.md
+├── resource-management/
+│   └── SKILL.md
+└── networking-diagnostics/
+    └── SKILL.md
 ```
+
+**Flat file layout** (Kubernetes/OpenShift ConfigMap mounts):
+
+```
+/app/config/skills/
+├── pod-troubleshooting      (regular file containing SKILL.md content)
+├── resource-management
+└── networking-diagnostics
+```
+
+When a Kubernetes ConfigMap is mounted as a volume, each key becomes a flat file rather than a subdirectory. The skill loader supports both layouts, so skills work identically across local dev, Podman, and OpenShift deployments. Dotfiles (e.g. `..data`) created by Kubernetes ConfigMap mounts are ignored.
 
 ### SKILL.md Format
 
@@ -238,7 +250,7 @@ agents:
 - **`skills`** — Optional allowlist. `nil` (omitted) = all skills available. `[]` = no skills. `[a, b]` = only these.
 - **`required_skills`** — Skills injected directly into the system prompt. Excluded from the on-demand catalog.
 
-Skills are loaded at startup from `<configDir>/skills/*/SKILL.md`. If no `skills/` directory exists, the skill system is inactive. For detailed design, see [ADR-0012: Agent Skills](../../docs/adr/0012-agent-skills.md).
+Skills are loaded at startup from `<configDir>/skills/` (both directory and flat file layouts). If no `skills/` directory exists, the skill system is inactive. For detailed design, see [ADR-0012: Agent Skills](../../docs/adr/0012-agent-skills.md).
 
 ## Configuration Override Priority
 
