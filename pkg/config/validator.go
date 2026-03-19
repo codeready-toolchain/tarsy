@@ -804,14 +804,15 @@ func (v *Validator) validateSkills() error {
 	agents := v.cfg.AgentRegistry.GetAll()
 	for name, agent := range agents {
 		// Validate Skills allowlist references
+		var allowedSkills map[string]struct{}
 		if agent.Skills != nil {
-			seen := make(map[string]struct{}, len(*agent.Skills))
+			allowedSkills = make(map[string]struct{}, len(*agent.Skills))
 			for _, skillName := range *agent.Skills {
-				if _, dup := seen[skillName]; dup {
+				if _, dup := allowedSkills[skillName]; dup {
 					return NewValidationError("agent", name, "skills",
 						fmt.Errorf("duplicate skill %q", skillName))
 				}
-				seen[skillName] = struct{}{}
+				allowedSkills[skillName] = struct{}{}
 				if !registry.Has(skillName) {
 					return NewValidationError("agent", name, "skills",
 						fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
@@ -833,16 +834,8 @@ func (v *Validator) validateSkills() error {
 					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
 			}
 
-			// If Skills allowlist is set, required skills must be within it
-			if agent.Skills != nil {
-				found := false
-				for _, allowed := range *agent.Skills {
-					if allowed == skillName {
-						found = true
-						break
-					}
-				}
-				if !found {
+			if allowedSkills != nil {
+				if _, found := allowedSkills[skillName]; !found {
 					return NewValidationError("agent", name, "required_skills",
 						fmt.Errorf("required skill %q is not in the skills allowlist", skillName))
 				}
