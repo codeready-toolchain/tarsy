@@ -1,0 +1,28 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  DirLayoutAgent:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are DirLayoutAgent."
+    skills: [simple-skill]
+
+agent_chains:
+  dir-layout-chain:
+    alert_types: [test-dir-layout]
+    executive_summary_provider: "test-provider"
+    stages:
+      - name: investigation
+        agents:
+          - name: DirLayoutAgent

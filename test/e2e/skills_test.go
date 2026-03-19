@@ -715,6 +715,69 @@ func TestE2E_SkillsOrchestratorSubAgent(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// TestE2E_SkillsDirectoryLayout — verifies that skills stored
+// in the traditional directory layout (skills/<name>/SKILL.md)
+// are loaded and wired correctly into the agent prompt.
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_SkillsDirectoryLayout(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// Single iteration: load_skill + final answer.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Loading simple-skill."},
+			&agent.ToolCallChunk{CallID: "skill-1", Name: "load_skill", Arguments: `{"names":["simple-skill"]}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Directory layout skill loaded successfully."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 20, TotalTokens: 170},
+		},
+	})
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{Text: "Directory layout test complete."})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "skills-dir-layout")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {"get_pods": StaticToolHandler(`[]`)},
+		}),
+	)
+
+	resp := app.SubmitAlert(t, "test-dir-layout", "Directory layout test")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Skill catalog should appear in prompt.
+	captured := llm.CapturedInputs()
+	require.GreaterOrEqual(t, len(captured), 2)
+	assertSystemPromptContains(t, captured[0], "## Available Skills",
+		"directory-layout skill catalog should be in prompt")
+	assertSystemPromptContains(t, captured[0], "simple-skill",
+		"simple-skill should be in catalog")
+	assertHasTool(t, captured[0], "load_skill")
+
+	// Tool result should contain the skill body.
+	assertToolResultContains(t, captured[1], "load_skill",
+		"directory layout loading works correctly",
+		"load_skill result should contain simple-skill body")
+
+	// Timeline event.
+	timeline := app.QueryTimeline(t, sessionID)
+	loadSkillEvent := findTimelineEvent(t, timeline, "load_skill")
+	require.NotNil(t, loadSkillEvent, "should have load_skill timeline event")
+	assert.Contains(t, loadSkillEvent.Content, "directory layout loading works correctly")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+}
+
+// ────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────
 
