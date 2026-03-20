@@ -7,8 +7,9 @@ import {
   IconButton,
   Box,
   Checkbox,
+  Divider,
 } from '@mui/material';
-import { Undo, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { PersonRemove, Replay, EditNote, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -163,25 +164,26 @@ export function TriageSessionRow({
             <>
               <Button
                 size="small"
-                variant="contained"
+                variant="outlined"
                 disabled={actionLoading}
                 onClick={() => onClaim?.(session.id)}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0.125, px: 1, minWidth: 'auto', lineHeight: 1.5 }}
               >
                 Claim
               </Button>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
               <Tooltip title="Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main', p: 0.5 }}>
                   <ThumbUp sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Partially Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main', p: 0.5 }}>
                   <ThumbsUpDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Inaccurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main', p: 0.5 }}>
                   <ThumbDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
@@ -191,27 +193,29 @@ export function TriageSessionRow({
           {group === 'in_progress' && (
             <>
               <Tooltip title="Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main', p: 0.5 }}>
                   <ThumbUp sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Partially Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main', p: 0.5 }}>
                   <ThumbsUpDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Inaccurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main' }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main', p: 0.5 }}>
                   <ThumbDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
               <Tooltip title="Unclaim">
                 <IconButton
                   size="small"
                   disabled={actionLoading}
                   onClick={() => onUnclaim?.(session.id)}
+                  sx={{ p: 0.5 }}
                 >
-                  <Undo sx={{ fontSize: 16 }} />
+                  <PersonRemove sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             </>
@@ -229,10 +233,11 @@ export function TriageSessionRow({
                     session.investigation_feedback ?? '',
                   )}
                   sx={{
+                    p: 0.5,
                     color: (session.action_taken || session.investigation_feedback) ? 'primary.main' : 'text.disabled',
                   }}
                 >
-                  <RateReview sx={{ fontSize: 16 }} />
+                  <EditNote sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Reopen">
@@ -240,8 +245,9 @@ export function TriageSessionRow({
                   size="small"
                   disabled={actionLoading}
                   onClick={() => onReopen?.(session.id)}
+                  sx={{ p: 0.5 }}
                 >
-                  <Undo sx={{ fontSize: 16 }} />
+                  <Replay sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             </>

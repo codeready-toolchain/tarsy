@@ -6,7 +6,7 @@ import {
   CircularProgress,
   Snackbar,
 } from '@mui/material';
-import { ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { ThumbUp, ThumbsUpDown, ThumbDown, RateReview } from '@mui/icons-material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
@@ -283,12 +283,19 @@ export function TriageView({
             sx={{ width: '100%' }}
             icon={snackbar.completedRating ? RATING_CONFIG[snackbar.completedRating]?.icon : undefined}
             action={hasSnackbarActions ? (
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <Button color="inherit" size="small" onClick={handleSnackbarAddFeedback}>
-                  ADD FEEDBACK
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Button
+                  color="inherit"
+                  size="small"
+                  variant="outlined"
+                  startIcon={<RateReview sx={{ fontSize: 16 }} />}
+                  onClick={handleSnackbarAddFeedback}
+                  sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
+                >
+                  Add note
                 </Button>
                 <Button color="inherit" size="small" onClick={handleSnackbarUndo}>
-                  UNDO
+                  Undo
                 </Button>
               </Box>
             ) : undefined}
