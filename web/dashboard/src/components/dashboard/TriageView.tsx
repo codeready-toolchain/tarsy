@@ -2,9 +2,11 @@ import { useState } from 'react';
 import {
   Box,
   Alert,
+  Button,
   CircularProgress,
   Snackbar,
 } from '@mui/material';
+import { ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
@@ -39,6 +41,23 @@ interface EditFeedbackState {
   investigationFeedback: string;
 }
 
+interface SnackbarState {
+  message: string;
+  severity: 'success' | 'warning' | 'error';
+  completedSessionId?: string;
+  completedRating?: string;
+}
+
+const RATING_CONFIG: Record<string, {
+  label: string;
+  severity: 'success' | 'warning' | 'error';
+  icon: React.ReactElement;
+}> = {
+  accurate: { label: 'Accurate', severity: 'success', icon: <ThumbUp fontSize="inherit" /> },
+  partially_accurate: { label: 'Partially Accurate', severity: 'warning', icon: <ThumbsUpDown fontSize="inherit" /> },
+  inaccurate: { label: 'Inaccurate', severity: 'error', icon: <ThumbDown fontSize="inherit" /> },
+};
+
 export function TriageView({
   groups,
   loading,
@@ -61,7 +80,7 @@ export function TriageView({
   const [completeSessionIds, setCompleteSessionIds] = useState<string[] | null>(null);
   const [editFeedbackState, setEditFeedbackState] = useState<EditFeedbackState | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
 
   const withAction = async (fn: () => Promise<void>) => {
     setActionLoading(true);
@@ -83,19 +102,30 @@ export function TriageView({
     withAction(() => onUnclaim(sessionId));
   };
 
-  const handleCompleteClick = (sessionId: string) => {
-    setCompleteSessionIds([sessionId]);
+  const handleComplete = async (sessionId: string, qualityRating: string) => {
+    setActionLoading(true);
+    try {
+      await onComplete(sessionId, qualityRating);
+      const cfg = RATING_CONFIG[qualityRating];
+      setSnackbar({
+        message: `Marked as ${cfg?.label ?? qualityRating}`,
+        severity: cfg?.severity ?? 'success',
+        completedSessionId: sessionId,
+        completedRating: qualityRating,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Action failed';
+      setSnackbar({ message, severity: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleBulkCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     if (!completeSessionIds) return;
     const ids = completeSessionIds;
     setCompleteSessionIds(null);
-    if (ids.length === 1) {
-      withAction(() => onComplete(ids[0], qualityRating, actionTaken, investigationFeedback));
-    } else {
-      withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
-    }
+    withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
   };
 
   const handleReopen = (sessionId: string) => {
@@ -129,6 +159,25 @@ export function TriageView({
     withAction(() => onBulkReopen(sessionIds));
   };
 
+  // --- Snackbar actions (snackbar mode only) ---
+  const handleSnackbarAddFeedback = () => {
+    if (!snackbar?.completedSessionId) return;
+    setEditFeedbackState({
+      sessionId: snackbar.completedSessionId,
+      qualityRating: snackbar.completedRating ?? '',
+      actionTaken: '',
+      investigationFeedback: '',
+    });
+    setSnackbar(null);
+  };
+
+  const handleSnackbarUndo = () => {
+    if (!snackbar?.completedSessionId) return;
+    const sessionId = snackbar.completedSessionId;
+    setSnackbar(null);
+    withAction(() => onReopen(sessionId));
+  };
+
   const hasAnyData = Object.values(groups).some(g => g !== null);
   const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
     investigating: null, needs_review: null, in_progress: null, reviewed: null,
@@ -137,6 +186,8 @@ export function TriageView({
   const completeModalTitle = completeSessionIds && completeSessionIds.length > 1
     ? `Complete Review for ${completeSessionIds.length} Sessions`
     : undefined;
+
+  const hasSnackbarActions = snackbar?.completedSessionId !== undefined;
 
   if (error) {
     return (
@@ -188,7 +239,7 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
-        onComplete={handleCompleteClick}
+        onComplete={handleComplete}
         onReopen={handleReopen}
         onEditFeedback={handleEditFeedback}
         onBulkClaim={handleBulkClaim}
@@ -203,7 +254,7 @@ export function TriageView({
       <CompleteReviewModal
         open={completeSessionIds !== null}
         onClose={() => setCompleteSessionIds(null)}
-        onComplete={handleCompleteConfirm}
+        onComplete={handleBulkCompleteConfirm}
         loading={actionLoading}
         title={completeModalTitle}
       />
@@ -220,7 +271,7 @@ export function TriageView({
 
       <Snackbar
         open={snackbar !== null}
-        autoHideDuration={4000}
+        autoHideDuration={hasSnackbarActions ? 8000 : 4000}
         onClose={() => setSnackbar(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -230,6 +281,17 @@ export function TriageView({
             severity={snackbar.severity}
             variant="filled"
             sx={{ width: '100%' }}
+            icon={snackbar.completedRating ? RATING_CONFIG[snackbar.completedRating]?.icon : undefined}
+            action={hasSnackbarActions ? (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Button color="inherit" size="small" onClick={handleSnackbarAddFeedback}>
+                  ADD FEEDBACK
+                </Button>
+                <Button color="inherit" size="small" onClick={handleSnackbarUndo}>
+                  UNDO
+                </Button>
+              </Box>
+            ) : undefined}
           >
             {snackbar.message}
           </Alert>

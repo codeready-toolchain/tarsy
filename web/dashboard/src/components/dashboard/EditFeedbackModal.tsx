@@ -15,7 +15,7 @@ import {
   FormLabel,
   IconButton,
 } from '@mui/material';
-import { Close, RateReview } from '@mui/icons-material';
+import { Close, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 
 export interface EditFeedbackModalProps {
   open: boolean;
@@ -78,26 +78,41 @@ export function EditFeedbackModal({
             <FormControlLabel
               value="accurate"
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
-              label={<Typography variant="body2" fontWeight={500}>Accurate</Typography>}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
+                  <Typography variant="body2" fontWeight={500}>Accurate</Typography>
+                </Box>
+              }
               sx={{ mb: 0.5 }}
             />
             <FormControlLabel
               value="partially_accurate"
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
-              label={<Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
+                  <Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>
+                </Box>
+              }
               sx={{ mb: 0.5 }}
             />
             <FormControlLabel
               value="inaccurate"
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
-              label={<Typography variant="body2" fontWeight={500}>Inaccurate</Typography>}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
+                  <Typography variant="body2" fontWeight={500}>Inaccurate</Typography>
+                </Box>
+              }
             />
           </RadioGroup>
         </FormControl>
 
         <TextField
           label="Action taken"
-          placeholder="e.g., Applied fix from runbook, ticket INFRA-1234"
+          placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
           value={actionTaken}
           onChange={(e) => setActionTaken(e.target.value)}
           multiline

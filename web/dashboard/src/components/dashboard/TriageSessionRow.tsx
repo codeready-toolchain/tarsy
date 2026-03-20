@@ -8,7 +8,7 @@ import {
   Box,
   Checkbox,
 } from '@mui/material';
-import { Undo, RateReview, Check, Warning, Close as CloseIcon } from '@mui/icons-material';
+import { Undo, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -28,16 +28,16 @@ interface TriageSessionRowProps {
   onToggleSelect?: (sessionId: string) => void;
   onClaim?: (sessionId: string) => void;
   onUnclaim?: (sessionId: string) => void;
-  onComplete?: (sessionId: string) => void;
+  onComplete?: (sessionId: string, qualityRating: string) => void;
   onReopen?: (sessionId: string) => void;
   onEditFeedback?: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   actionLoading?: boolean;
 }
 
 const qualityRatingConfig: Record<string, { label: string; color: string; icon: React.ReactElement }> = {
-  accurate: { label: 'Accurate', color: 'success.main', icon: <Check sx={{ fontSize: 14 }} /> },
-  partially_accurate: { label: 'Partially Accurate', color: 'warning.main', icon: <Warning sx={{ fontSize: 14 }} /> },
-  inaccurate: { label: 'Inaccurate', color: 'error.main', icon: <CloseIcon sx={{ fontSize: 14 }} /> },
+  accurate: { label: 'Accurate', color: 'success.main', icon: <ThumbUp sx={{ fontSize: 14 }} /> },
+  partially_accurate: { label: 'Partially Accurate', color: 'warning.main', icon: <ThumbsUpDown sx={{ fontSize: 14 }} /> },
+  inaccurate: { label: 'Inaccurate', color: 'error.main', icon: <ThumbDown sx={{ fontSize: 14 }} /> },
 };
 
 export function TriageSessionRow({
@@ -146,7 +146,7 @@ export function TriageSessionRow({
       </TableCell>
 
       {/* Actions */}
-      <TableCell sx={{ width: 140, textAlign: 'right' }}>
+      <TableCell sx={{ width: 180, textAlign: 'right' }}>
         <Box
           className="triage-actions"
           sx={{
@@ -170,31 +170,41 @@ export function TriageSessionRow({
               >
                 Claim
               </Button>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                disabled={actionLoading}
-                onClick={() => onComplete?.(session.id)}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-              >
-                Complete
-              </Button>
+              <Tooltip title="Accurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main' }}>
+                  <ThumbUp sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Partially Accurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main' }}>
+                  <ThumbsUpDown sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Inaccurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main' }}>
+                  <ThumbDown sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
             </>
           )}
 
           {group === 'in_progress' && (
             <>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                disabled={actionLoading}
-                onClick={() => onComplete?.(session.id)}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-              >
-                Complete
-              </Button>
+              <Tooltip title="Accurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main' }}>
+                  <ThumbUp sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Partially Accurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main' }}>
+                  <ThumbsUpDown sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Inaccurate">
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main' }}>
+                  <ThumbDown sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Unclaim">
                 <IconButton
                   size="small"

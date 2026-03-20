@@ -265,7 +265,6 @@ All files regenerated automatically — no manual edits:
 
 | File | Changes |
 |------|---------|
-| `docs/adr/0009-session-workflow.md` | Status values, action names, field names, API examples, payloads |
 | `docs/functional-areas-design.md` | Schema table, workflow description |
 | `docs/architecture-overview.md` | Triage workflow description |
 | `README.md` | API action list (`resolve`→`complete`, `update_note`→`update_feedback`) |

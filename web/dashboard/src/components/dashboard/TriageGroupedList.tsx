@@ -32,7 +32,7 @@ interface TriageGroupedListProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
   onClaim: (sessionId: string) => void;
   onUnclaim: (sessionId: string) => void;
-  onComplete: (sessionId: string) => void;
+  onComplete: (sessionId: string, qualityRating: string) => void;
   onReopen: (sessionId: string) => void;
   onEditFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
@@ -399,7 +399,7 @@ export function TriageGroupedList({
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Eval Score</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
-                          <TableCell sx={{ fontWeight: 600, width: 140, textAlign: 'right' }} />
+                          <TableCell sx={{ fontWeight: 600, width: 180, textAlign: 'right' }} />
                         </TableRow>
                       </TableHead>
                       <TableBody>

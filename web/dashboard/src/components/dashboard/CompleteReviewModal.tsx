@@ -15,7 +15,7 @@ import {
   FormLabel,
   IconButton,
 } from '@mui/material';
-import { Close, CheckCircleOutline } from '@mui/icons-material';
+import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 
 export interface CompleteReviewModalProps {
   open: boolean;
@@ -70,7 +70,10 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
               label={
                 <Box>
-                  <Typography variant="body1" fontWeight={500}>Accurate</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
+                    <Typography variant="body1" fontWeight={500}>Accurate</Typography>
+                  </Box>
                   <Typography variant="body2" color="text.secondary">
                     The investigation correctly identified the issue and root cause
                   </Typography>
@@ -83,7 +86,10 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
               label={
                 <Box>
-                  <Typography variant="body1" fontWeight={500}>Partially Accurate</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
+                    <Typography variant="body1" fontWeight={500}>Partially Accurate</Typography>
+                  </Box>
                   <Typography variant="body2" color="text.secondary">
                     Some findings were correct but the investigation missed key aspects
                   </Typography>
@@ -96,7 +102,10 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
               label={
                 <Box>
-                  <Typography variant="body1" fontWeight={500}>Inaccurate</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
+                    <Typography variant="body1" fontWeight={500}>Inaccurate</Typography>
+                  </Box>
                   <Typography variant="body2" color="text.secondary">
                     The investigation was wrong or misleading
                   </Typography>
@@ -109,7 +118,7 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
 
         <TextField
           label="Action taken (optional)"
-          placeholder="e.g., Applied fix from runbook, ticket INFRA-1234"
+          placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
           value={actionTaken}
           onChange={(e) => setActionTaken(e.target.value)}
           multiline
