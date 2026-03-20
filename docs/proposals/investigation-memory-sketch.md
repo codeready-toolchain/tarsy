@@ -40,7 +40,7 @@ Enable TARSy to accumulate and apply institutional knowledge from past investiga
 
 Memory injection fits naturally into the existing prompt hierarchy:
 
-```
+```text
 Tier 1:  General SRE instructions (generalInstructions)
 Tier 2:  MCP server instructions (per-server from registry)
 Tier 2.5: Required skill content (from SkillRegistry)
@@ -54,7 +54,7 @@ The user message already contains: alert data → runbook → chain context → 
 
 Memory is injected via a **hybrid approach** (see [Q3 decision](investigation-memory-questions.md)):
 
-1. **Auto-inject** the top 3-5 most semantically similar memories into the system prompt as a new Tier 4 section ("Lessons from Past Investigations"). Retrieved by pgvector cosine similarity against the current alert context — no rigid scope filtering, just "which past learnings are most relevant to what I'm looking at?" (see [Q6 decision](investigation-memory-questions.md)). This solves the cold-start problem — the agent always has critical context without needing to search.
+1. **Auto-inject** the top 3-5 most semantically similar memories into the system prompt as a new Tier 4 section ("Lessons from Past Investigations"). Retrieved by pgvector cosine similarity within the current project boundary — no rigid investigation-scope filtering, just "which past learnings in this project are most relevant to what I'm looking at?" (see [Q6 decision](investigation-memory-questions.md)). This solves the cold-start problem — the agent always has critical context without needing to search.
 2. **Provide a `recall_past_investigations` tool** (pseudo-MCP, similar to `load_skill`) for the agent to search for deeper context when the auto-injected briefing triggers further questions.
 
 The auto-injected set is the briefing; the tool is the library. Memories are framed as hints to consider, not rules to follow — preserving the LLM's investigative creativity.
@@ -185,7 +185,7 @@ This separation is important: `action_taken` is about the **alert** ("I scaled t
 
 ## Rough Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                   Investigation Flow                     │
 │                                                          │
