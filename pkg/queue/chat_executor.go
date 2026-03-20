@@ -281,6 +281,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		maxSeq = 0 // fallback to 1
 	}
 	userQuestionSeq := maxSeq + 1
+	userQuestionMeta := map[string]any{"author": input.Message.Author}
 	userQuestionEvent, err := e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
 		SessionID:      input.Session.ID,
 		StageID:        &stageID,
@@ -289,6 +290,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		EventType:      timelineevent.EventTypeUserQuestion,
 		Status:         timelineevent.StatusCompleted, // fire-and-forget: full content known at creation
 		Content:        input.Message.Content,
+		Metadata:       userQuestionMeta,
 	})
 	if err != nil {
 		logger.Warn("Failed to create user_question timeline event", "error", err)
@@ -307,6 +309,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 			EventType:      timelineevent.EventTypeUserQuestion,
 			Status:         timelineevent.StatusCompleted,
 			Content:        input.Message.Content,
+			Metadata:       userQuestionMeta,
 			SequenceNumber: userQuestionSeq,
 		}); pubErr != nil {
 			logger.Warn("Failed to publish user_question timeline event", "error", pubErr)

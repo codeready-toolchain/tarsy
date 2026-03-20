@@ -376,7 +376,7 @@ func (s *SessionService) insertActivity(
 		SetToStatus(toStatus).
 		SetCreatedAt(createdAt).
 		SetNillableFromStatus(fromStatus).
-		SetNillableNote(actionTaken).
+		SetNillableNote(actionTaken). // note column stores the action_taken snapshot
 		SetNillableInvestigationFeedback(investigationFeedback)
 
 	if qualityRating != nil {

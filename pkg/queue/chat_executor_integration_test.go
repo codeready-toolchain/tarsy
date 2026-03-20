@@ -186,6 +186,8 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 			assert.Equal(t, "What caused the OOM?", ev.Content)
 			assert.Equal(t, timelineevent.StatusCompleted, ev.Status,
 				"user_question must be persisted as completed (fire-and-forget) so the API returns the same status as the WS event")
+			assert.Equal(t, "test@example.com", ev.Metadata["author"],
+				"user_question metadata must include the chat message author for dashboard display")
 		}
 		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
 			hasFinalAnalysis = true
@@ -213,6 +215,8 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 			foundUserQuestionWS = true
 			assert.Equal(t, "What caused the OOM?", evt.Content)
 			assert.Equal(t, session.ID, evt.SessionID)
+			assert.Equal(t, "test@example.com", evt.Metadata["author"],
+				"WS payload must include author metadata for real-time dashboard rendering")
 			break
 		}
 	}

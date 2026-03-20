@@ -179,10 +179,10 @@ func TestE2E_ReviewWorkflow_DirectComplete(t *testing.T) {
 
 	// ── PATCH complete directly (no prior claim) ──
 	completeResp := app.PatchReview(t, sessionID, map[string]interface{}{
-		"action":                  "complete",
-		"quality_rating":          "partially_accurate",
-		"action_taken":            "Acknowledged but needs follow-up.",
-		"investigation_feedback":  "Good initial response, missed edge case.",
+		"action":                 "complete",
+		"quality_rating":         "partially_accurate",
+		"action_taken":           "Acknowledged but needs follow-up.",
+		"investigation_feedback": "Good initial response, missed edge case.",
 	})
 	completeResults := completeResp["results"].([]interface{})
 	require.Len(t, completeResults, 1)
@@ -300,9 +300,9 @@ func TestE2E_ReviewWorkflow_UpdateFeedback(t *testing.T) {
 
 	// ── PATCH update_feedback: partial update changes only quality_rating ──
 	updateResp := app.PatchReview(t, sessionID, map[string]interface{}{
-		"action":                  "update_feedback",
-		"quality_rating":          "partially_accurate",
-		"investigation_feedback":  "Actually missed a key finding.",
+		"action":                 "update_feedback",
+		"quality_rating":         "partially_accurate",
+		"investigation_feedback": "Actually missed a key finding.",
 	})
 	updateResults := updateResp["results"].([]interface{})
 	require.Len(t, updateResults, 1)
