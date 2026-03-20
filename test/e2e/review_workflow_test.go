@@ -91,9 +91,27 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	require.Len(t, completeResults, 1)
 	assert.Equal(t, true, completeResults[0].(map[string]interface{})["success"])
 
+	var completeEvent WSEvent
 	ws.WaitForEvent(t, func(e WSEvent) bool {
-		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+		if e.Type == "review.status" && e.Parsed["review_status"] == "reviewed" {
+			completeEvent = e
+			return true
+		}
+		return false
 	}, 5*time.Second, "expected review.status reviewed WS event after complete")
+
+	assert.Equal(t, "accurate", completeEvent.Parsed["quality_rating"])
+	assert.Equal(t, "Verified and closed.", completeEvent.Parsed["action_taken"])
+
+	// ── DB assertion after complete ──
+	session, err = app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	require.NotNil(t, session.QualityRating)
+	assert.Equal(t, alertsession.QualityRatingAccurate, *session.QualityRating)
+	require.NotNil(t, session.ActionTaken)
+	assert.Equal(t, "Verified and closed.", *session.ActionTaken)
+	assert.NotNil(t, session.ReviewedAt)
 
 	// ── Review activity ──
 	activityResp := app.GetReviewActivity(t, sessionID)
@@ -109,6 +127,7 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	assert.Equal(t, "complete", act1["action"])
 	assert.Equal(t, "reviewed", act1["to_status"])
 	assert.Equal(t, "accurate", act1["quality_rating"])
+	assert.Equal(t, "Verified and closed.", act1["note"])
 
 	// ── Triage ──
 	reviewedGroup := app.GetTriageGroup(t, "reviewed", "")
