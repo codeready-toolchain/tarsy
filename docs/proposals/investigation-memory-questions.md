@@ -73,13 +73,13 @@ _Considered and rejected: Option A (system prompt injection only — no agency f
 
 The Reflector needs to know whether an investigation was "good" (extract positive patterns to repeat) or "bad" (extract anti-patterns to avoid). TARSy has automated scoring and human review, but they arrive at different times.
 
-**Prerequisite: review workflow redesign.** The current `actioned`/`dismissed` resolution reasons are ambiguous — they describe what the human did about the alert, not whether the investigation was good. A `dismissed` investigation that correctly identifies a false positive is actually high-quality. This sketch assumes the review workflow is redesigned with three orthogonal fields:
+**Prerequisite: review workflow redesign** — see [review-feedback-redesign-design.md](review-feedback-redesign-design.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. A `dismissed` investigation that correctly identifies a false positive is actually high-quality. The redesigned workflow replaces them with three orthogonal fields:
 
-- **`quality_rating`** (enum: `accurate` / `partially_accurate` / `inaccurate`) — explicit, unambiguous investigation quality signal
-- **`resolution_summary`** (optional text) — what the human did about the alert/event (historical record, not about investigation quality)
+- **`quality_rating`** (enum: `accurate` / `partially_accurate` / `inaccurate`) — explicit, unambiguous investigation quality signal (required at review completion)
+- **`action_taken`** (optional text) — what the human did about the alert/event (historical record, not about investigation quality)
 - **`investigation_feedback`** (optional text) — why the investigation was good or bad (the richest signal for memory refinement)
 
-This replaces the current `resolution_reason` (`actioned`/`dismissed`) and `resolution_note` fields.
+This replaces the old `resolution_reason` (`actioned`/`dismissed`) and `resolution_note` fields. The review status `resolved` is renamed to `reviewed`, and the action `resolve` to `complete`.
 
 ### Option C: Score-triggered extraction with human review as refinement
 
@@ -97,7 +97,7 @@ Run the Reflector immediately after scoring. Score (0-100) + failure tags + tool
 - **Con:** Two-phase memory quality assessment is more complex than single-phase.
 - **Con:** Human review may contradict the Reflector's initial assessment, requiring memory updates.
 
-**Decision:** Option C — score-triggered extraction with human review refinement. The automated score drives initial memory extraction (no human bottleneck). The redesigned review workflow with `quality_rating` provides an unambiguous refinement signal when humans review. `investigation_feedback` is the richest signal — it explains *why* the investigation was right or wrong, which can feed into targeted memory updates.
+**Decision:** Option C — score-triggered extraction with human review refinement. The automated score drives initial memory extraction (no human bottleneck). The redesigned review workflow (see [review-feedback-redesign-design.md](review-feedback-redesign-design.md)) with `quality_rating` provides an unambiguous refinement signal when humans complete their review. `investigation_feedback` is the richest signal — it explains *why* the investigation was right or wrong, which can feed into targeted memory updates.
 
 _Considered and rejected: Option A (score-only — misses human judgment, scoring LLM can misjudge), Option B (wait for human review — creates bottleneck, many sessions never reviewed, memory store stays empty), Option D (per-memory human feedback — too granular for v1, can be added later if session-level signals prove too coarse)._
 
@@ -193,7 +193,7 @@ _Considered and rejected: Option B (score-based filtering — arbitrary threshol
 
 ## Q9: Should memory management be exposed in the dashboard from day one?
 
-Users need some way to see what TARSy has learned and potentially curate it. The dashboard already needs changes for the redesigned review workflow (Q4: `quality_rating`, `resolution_summary`, `investigation_feedback`), so there's an opportunity to add memory visibility alongside those changes.
+Users need some way to see what TARSy has learned and potentially curate it. The dashboard already needs changes for the redesigned review workflow (Q4: `quality_rating`, `action_taken`, `investigation_feedback`), so there's an opportunity to add memory visibility alongside those changes.
 
 ### Option B: Memory visible in session detail + API only
 
@@ -201,10 +201,10 @@ Show extracted memories on the session detail page (what was learned from this i
 
 - **Pro:** Lower frontend effort — leverages existing session detail page.
 - **Pro:** Memories are shown in context (alongside the investigation that produced them).
-- **Pro:** Can co-ship with the review workflow redesign (Q4) — the session detail page is already being updated to show `quality_rating` and `investigation_feedback`.
+- **Pro:** Can co-ship with the review workflow redesign — the session detail page is already being updated to show `quality_rating` and `investigation_feedback`.
 - **Con:** No aggregate view — hard to see all memories across investigations.
 - **Con:** API-only management requires curl or scripts for bulk operations.
 
-**Decision:** Option B — memory visible in session detail + API only. The session detail page is already being updated for the redesigned review workflow (Q4), so adding memory visibility there is incremental. Showing "what was injected" and "what was learned" per session gives concrete context. API endpoints enable power users and automation. A dedicated Memory page (Option A) can be added when the feature matures and there's demand for aggregate views.
+**Decision:** Option B — memory visible in session detail + API only. The session detail page is already being updated for the redesigned review workflow, so adding memory visibility there is incremental. Showing "what was injected" and "what was learned" per session gives concrete context. API endpoints enable power users and automation. A dedicated Memory page (Option A) can be added when the feature matures and there's demand for aggregate views.
 
 _Considered and rejected: Option A (full memory management UI — significant frontend effort for v1, can be added later), Option C (minimal read-only list — misses the "in context" value of showing memories alongside the investigation that produced them)._

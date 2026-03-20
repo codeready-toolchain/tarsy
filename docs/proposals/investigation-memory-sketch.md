@@ -13,7 +13,7 @@ This manifests as:
 - **Lost baselines** — "200 errors/hr during batch processing is normal for this service" is discovered and forgotten
 - **No learning from quality feedback** — investigations scored poorly (or reviewed by humans) don't improve future investigations
 
-TARSy already has the raw material: full investigation timelines in the database, automated quality scoring (0-100 with failure tags and tool improvement reports), and a human review workflow (claim → resolve with notes). None of this feeds back into future investigations.
+TARSy already has the raw material: full investigation timelines in the database, automated quality scoring (0-100 with failure tags and tool improvement reports), and a human review workflow (claim → complete with quality rating and feedback). None of this feeds back into future investigations.
 
 ## Goal
 
@@ -29,8 +29,8 @@ Enable TARSy to accumulate and apply institutional knowledge from past investiga
 | **Score analysis** | `SessionScore.score_analysis` | Detailed critique of what went well/poorly |
 | **Failure tags** | `SessionScore.failure_tags` | Standardized failure patterns (`premature_conclusion`, `missed_available_tool`, etc.) |
 | **Tool improvement report** | `SessionScore.tool_improvement_report` | What tools were misused, missed, or need improvement |
-| **Human quality rating** | `SessionReviewActivity.quality_rating` | `accurate` / `partially_accurate` / `inaccurate` — explicit investigation quality (see Q4 prerequisite) |
-| **Investigation feedback** | `SessionReviewActivity.investigation_feedback` | Free-text explaining why the investigation was good or bad |
+| **Human quality rating** | `AlertSession.quality_rating` | `accurate` / `partially_accurate` / `inaccurate` — explicit investigation quality (see [review feedback redesign](review-feedback-redesign-design.md)) |
+| **Investigation feedback** | `AlertSession.investigation_feedback` | Free-text explaining why the investigation was good or bad |
 | **Final analysis** | `AlertSession.final_analysis` | The investigation's conclusion |
 | **Executive summary** | `AlertSession.executive_summary` | Brief summary |
 | **Investigation timeline** | `TimelineEvent` rows | Full tool calls, reasoning, findings |
@@ -67,7 +67,7 @@ Currently, after a session reaches terminal status:
 
 1. **Executive summary stage** — single-shot LLM summarization
 2. **Scoring stage** — multi-turn LLM evaluation producing score, analysis, failure tags, tool improvement report
-3. **Review workflow** — human claims and resolves (asynchronous, may happen hours/days later)
+3. **Review workflow** — human claims and completes review (asynchronous, may happen hours/days later)
 
 Memory extraction is **embedded in the scoring stage** as a third LLM turn — see [Q5 decision](investigation-memory-questions.md). It runs for every scored investigation (see [Q8 decision](investigation-memory-questions.md)).
 
@@ -110,9 +110,9 @@ This is the core challenge. A memory must not just capture what happened — it 
 
 Memory quality is determined in two phases (see [Q4 decision](investigation-memory-questions.md)):
 1. **Immediate**: Reflector runs after scoring, using score + failure tags to set initial valence and confidence
-2. **Refinement**: When a human reviews, their `quality_rating` adjusts confidence (`accurate` boosts, `inaccurate` reduces/flips valence), and `investigation_feedback` can trigger targeted memory updates
+2. **Refinement**: When a human completes their review, their `quality_rating` adjusts confidence (`accurate` boosts, `inaccurate` reduces/flips valence), and `investigation_feedback` can trigger targeted memory updates
 
-**Prerequisite: review workflow redesign.** The current `actioned`/`dismissed` resolution reasons are ambiguous — they describe what the human did about the alert, not whether the investigation was good. This sketch assumes they are replaced with `quality_rating` (investigation accuracy) + `resolution_summary` (what the human did about the alert) + `investigation_feedback` (why the investigation was good/bad).
+**Prerequisite: review workflow redesign** — see [review-feedback-redesign-design.md](review-feedback-redesign-design.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. The redesigned workflow replaces them with `quality_rating` (investigation accuracy) + `action_taken` (what the human did about the alert) + `investigation_feedback` (why the investigation was good/bad). The terminal review status is renamed from `resolved` to `reviewed`, and the action from `resolve` to `complete`.
 
 ### Memory scoping and retrieval
 
@@ -164,15 +164,15 @@ Memory extraction is **embedded in the scoring stage** as a third LLM turn (see 
 
 ### Human feedback integration
 
-The redesigned review workflow provides three fields at resolve time:
+The redesigned review workflow (see [review-feedback-redesign-design.md](review-feedback-redesign-design.md)) provides three fields when a reviewer completes their review:
 
 | Field | Purpose | Memory relevance |
 |-------|---------|-----------------|
 | `quality_rating` | `accurate` / `partially_accurate` / `inaccurate` | **Primary signal** — directly maps to memory confidence adjustment |
-| `resolution_summary` | What the human did about the alert (free text) | Not used for memory — historical record only |
+| `action_taken` | What the human did about the alert (free text) | Not used for memory — historical record only |
 | `investigation_feedback` | Why the investigation was good/bad (free text) | **Richest signal** — can trigger targeted memory updates |
 
-This separation is important: `resolution_summary` is about the **alert** ("I scaled the pod", "It's a false positive, I did nothing"), while `investigation_feedback` is about the **investigation** ("TARSy mistook X for Y", "Great root cause analysis").
+This separation is important: `action_taken` is about the **alert** ("I scaled the pod", "It's a false positive, I did nothing"), while `investigation_feedback` is about the **investigation** ("TARSy mistook X for Y", "Great root cause analysis").
 
 ## Rough Architecture
 
