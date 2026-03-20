@@ -116,6 +116,15 @@ export const REVIEW_ACTION = {
 
 export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
 
+/** Allowed quality rating values for review feedback. */
+export const QUALITY_RATING = {
+  ACCURATE: 'accurate',
+  PARTIALLY_ACCURATE: 'partially_accurate',
+  INACCURATE: 'inaccurate',
+} as const;
+
+export type QualityRating = (typeof QUALITY_RATING)[keyof typeof QUALITY_RATING];
+
 /** Request body for PATCH /api/v1/sessions/review. */
 export interface UpdateReviewRequest {
   session_ids: string[];

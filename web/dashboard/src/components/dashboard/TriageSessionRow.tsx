@@ -17,6 +17,7 @@ import { ScoreCell } from './ScoreCell.tsx';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { formatTimestamp } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
+import { QUALITY_RATING } from '../../types/api.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
@@ -173,17 +174,17 @@ export function TriageSessionRow({
               </Button>
               <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
               <Tooltip title="Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.ACCURATE)} sx={{ color: 'success.main', p: 0.5 }}>
                   <ThumbUp sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Partially Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.PARTIALLY_ACCURATE)} sx={{ color: 'warning.main', p: 0.5 }}>
                   <ThumbsUpDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Inaccurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.5 }}>
                   <ThumbDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
@@ -193,17 +194,17 @@ export function TriageSessionRow({
           {group === 'in_progress' && (
             <>
               <Tooltip title="Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'accurate')} sx={{ color: 'success.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.ACCURATE)} sx={{ color: 'success.main', p: 0.5 }}>
                   <ThumbUp sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Partially Accurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'partially_accurate')} sx={{ color: 'warning.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.PARTIALLY_ACCURATE)} sx={{ color: 'warning.main', p: 0.5 }}>
                   <ThumbsUpDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Inaccurate">
-                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, 'inaccurate')} sx={{ color: 'error.main', p: 0.5 }}>
+                <IconButton size="small" disabled={actionLoading} onClick={() => onComplete?.(session.id, QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.5 }}>
                   <ThumbDown sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>

@@ -842,9 +842,11 @@ type dashboardRow struct {
 	MatchedInContent int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
 	LatestScore      *int    `sql:"latest_score"`
 	ScoringStatus    *string `sql:"scoring_status"`
-	ReviewStatus     *string `sql:"review_status"`
-	Assignee         *string `sql:"assignee"`
-	QualityRating    *string `sql:"quality_rating"`
+	ReviewStatus          *string `sql:"review_status"`
+	Assignee              *string `sql:"assignee"`
+	QualityRating         *string `sql:"quality_rating"`
+	ActionTaken           *string `sql:"action_taken"`
+	InvestigationFeedback *string `sql:"investigation_feedback"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1012,6 +1014,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
 				sel.C(alertsession.FieldQualityRating),
+				sel.C(alertsession.FieldActionTaken),
+				sel.C(alertsession.FieldInvestigationFeedback),
 			)
 
 			// LLM interaction aggregates.
@@ -1159,6 +1163,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ReviewStatus:          row.ReviewStatus,
 			Assignee:              row.Assignee,
 			QualityRating:         row.QualityRating,
+			ActionTaken:           row.ActionTaken,
+			InvestigationFeedback: row.InvestigationFeedback,
 		})
 	}
 

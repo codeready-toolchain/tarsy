@@ -1818,6 +1818,8 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 		SetAssignedAt(time.Now()).
 		SetReviewedAt(time.Now()).
 		SetQualityRating(alertsession.QualityRatingAccurate).
+		SetActionTaken("applied runbook fix").
+		SetInvestigationFeedback("root cause was correct").
 		ExecX(ctx)
 
 	t.Run("single review_status filter", func(t *testing.T) {
@@ -1863,9 +1865,14 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Sessions, 1)
-		assert.Equal(t, idC, result.Sessions[0].ID)
-		require.NotNil(t, result.Sessions[0].QualityRating)
-		assert.Equal(t, "accurate", *result.Sessions[0].QualityRating)
+		s := result.Sessions[0]
+		assert.Equal(t, idC, s.ID)
+		require.NotNil(t, s.QualityRating)
+		assert.Equal(t, "accurate", *s.QualityRating)
+		require.NotNil(t, s.ActionTaken)
+		assert.Equal(t, "applied runbook fix", *s.ActionTaken)
+		require.NotNil(t, s.InvestigationFeedback)
+		assert.Equal(t, "root cause was correct", *s.InvestigationFeedback)
 	})
 
 	t.Run("no match returns empty", func(t *testing.T) {

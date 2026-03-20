@@ -16,6 +16,7 @@ import {
   IconButton,
 } from '@mui/material';
 import { Close, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { QUALITY_RATING } from '../../types/api.ts';
 
 export interface EditFeedbackModalProps {
   open: boolean;
@@ -76,7 +77,7 @@ export function EditFeedbackModal({
           </FormLabel>
           <RadioGroup value={qualityRating} onChange={(e) => setQualityRating(e.target.value)}>
             <FormControlLabel
-              value="accurate"
+              value={QUALITY_RATING.ACCURATE}
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -87,7 +88,7 @@ export function EditFeedbackModal({
               sx={{ mb: 0.5 }}
             />
             <FormControlLabel
-              value="partially_accurate"
+              value={QUALITY_RATING.PARTIALLY_ACCURATE}
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -98,7 +99,7 @@ export function EditFeedbackModal({
               sx={{ mb: 0.5 }}
             />
             <FormControlLabel
-              value="inaccurate"
+              value={QUALITY_RATING.INACCURATE}
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

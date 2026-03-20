@@ -30,10 +30,10 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Tokens | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Review | Tokens | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
-const TOTAL_COLUMNS = 9;
+const TOTAL_COLUMNS = 10;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -47,6 +47,7 @@ interface HistoricalAlertsListProps {
   onSortChange: (field: string) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
+  onReviewClick?: (session: DashboardSessionItem) => void;
 }
 
 export function HistoricalAlertsList({
@@ -61,6 +62,7 @@ export function HistoricalAlertsList({
   onSortChange,
   onPageChange,
   onPageSizeChange,
+  onReviewClick,
 }: HistoricalAlertsListProps) {
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
@@ -244,6 +246,9 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
+                  {/* Review — not sortable */}
+                  <TableCell sx={{ fontWeight: 600, width: 70, textAlign: 'center' }}>Review</TableCell>
+
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
 
@@ -286,6 +291,7 @@ export function HistoricalAlertsList({
                       key={session.id}
                       session={session}
                       searchTerm={filters.search}
+                      onReviewClick={onReviewClick}
                     />
                   ))
                 )}

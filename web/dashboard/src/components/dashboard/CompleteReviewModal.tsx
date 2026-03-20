@@ -16,6 +16,7 @@ import {
   IconButton,
 } from '@mui/material';
 import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { QUALITY_RATING } from '../../types/api.ts';
 
 export interface CompleteReviewModalProps {
   open: boolean;
@@ -26,13 +27,13 @@ export interface CompleteReviewModalProps {
 }
 
 export function CompleteReviewModal({ open, onClose, onComplete, loading, title }: CompleteReviewModalProps) {
-  const [qualityRating, setQualityRating] = useState<string>('');
+  const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
 
   useEffect(() => {
     if (open) {
-      setQualityRating('');
+      setQualityRating(QUALITY_RATING.ACCURATE);
       setActionTaken('');
       setInvestigationFeedback('');
     }
@@ -66,7 +67,7 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
           </FormLabel>
           <RadioGroup value={qualityRating} onChange={(e) => setQualityRating(e.target.value)}>
             <FormControlLabel
-              value="accurate"
+              value={QUALITY_RATING.ACCURATE}
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
               label={
                 <Box>
@@ -82,7 +83,7 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
               sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
-              value="partially_accurate"
+              value={QUALITY_RATING.PARTIALLY_ACCURATE}
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
               label={
                 <Box>
@@ -98,7 +99,7 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
               sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
-              value="inaccurate"
+              value={QUALITY_RATING.INACCURATE}
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
               label={
                 <Box>

@@ -36,6 +36,8 @@ import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
 import { TriageView } from './TriageView.tsx';
+import { CompleteReviewModal } from './CompleteReviewModal.tsx';
+import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
@@ -492,10 +494,12 @@ export function DashboardView() {
         return;
       }
 
-      // review.status → triage refresh only (if tab active)
+      // review.status → refresh relevant tab data
       if (type === EVENT_REVIEW_STATUS) {
         if (activeTabRef.current === 'triage') {
           fetchAllTriageGroupsRef.current();
+        } else {
+          fetchHistoricalRetryRef.current();
         }
         return;
       }
@@ -705,6 +709,61 @@ export function DashboardView() {
   const handleTriagePageSizeChange = useCallback((group: TriageGroupKey, pageSize: number) => {
     fetchSingleTriageGroup(group, { page: 1, page_size: pageSize });
   }, [fetchSingleTriageGroup]);
+
+  // ── Session-level review (from historical list) ──
+
+  const [reviewTarget, setReviewTarget] = useState<{
+    session: DashboardSessionItem;
+    mode: 'complete' | 'edit';
+  } | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  const handleSessionReviewClick = useCallback((session: DashboardSessionItem) => {
+    const mode = session.quality_rating ? 'edit' : 'complete';
+    setReviewTarget({ session, mode });
+  }, []);
+
+  const handleSessionReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!reviewTarget) return;
+    try {
+      setReviewLoading(true);
+      const resp = await updateReview({
+        session_ids: [reviewTarget.session.id],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
+      checkReviewResults(resp);
+      setReviewTarget(null);
+      fetchHistoricalAlerts();
+    } catch (err) {
+      setHistoricalError(handleAPIError(err));
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewTarget, fetchHistoricalAlerts]);
+
+  const handleSessionReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!reviewTarget) return;
+    try {
+      setReviewLoading(true);
+      const resp = await updateReview({
+        session_ids: [reviewTarget.session.id],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
+      checkReviewResults(resp);
+      setReviewTarget(null);
+      fetchHistoricalAlerts();
+    } catch (err) {
+      setHistoricalError(handleAPIError(err));
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewTarget, fetchHistoricalAlerts]);
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -1050,8 +1109,27 @@ export function DashboardView() {
               onSortChange={handleSortChange}
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
+              onReviewClick={handleSessionReviewClick}
             />
           </Box>
+
+          {/* Review modals for session-level review */}
+          <CompleteReviewModal
+            open={reviewTarget?.mode === 'complete'}
+            onClose={() => setReviewTarget(null)}
+            onComplete={handleSessionReviewComplete}
+            loading={reviewLoading}
+            title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+          />
+          <EditFeedbackModal
+            open={reviewTarget?.mode === 'edit'}
+            onClose={() => setReviewTarget(null)}
+            onSave={handleSessionReviewSave}
+            loading={reviewLoading}
+            initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+            initialActionTaken={reviewTarget?.session.action_taken ?? ''}
+            initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+          />
         </>
       )}
 
