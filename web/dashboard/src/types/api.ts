@@ -87,7 +87,7 @@ export interface ScoreSessionResponse {
 
 // --- Triage / Review ---
 
-export type TriageGroupKey = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
+export type TriageGroupKey = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
 
 /** Paginated response for a single triage group. */
 export interface TriageGroup {
@@ -109,9 +109,9 @@ export interface TriageGroupParams {
 export const REVIEW_ACTION = {
   CLAIM: 'claim',
   UNCLAIM: 'unclaim',
-  RESOLVE: 'resolve',
+  COMPLETE: 'complete',
   REOPEN: 'reopen',
-  UPDATE_NOTE: 'update_note',
+  UPDATE_FEEDBACK: 'update_feedback',
 } as const;
 
 export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
@@ -120,8 +120,9 @@ export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
 export interface UpdateReviewRequest {
   session_ids: string[];
   action: ReviewAction;
-  resolution_reason?: string;
-  note?: string;
+  quality_rating?: string;
+  action_taken?: string;
+  investigation_feedback?: string;
 }
 
 /** Per-session result from a review action. */
@@ -143,8 +144,9 @@ export interface ReviewActivityItem {
   action: string;
   from_status: string | null;
   to_status: string;
-  resolution_reason?: string | null;
+  quality_rating?: string | null;
   note?: string | null;
+  investigation_feedback?: string | null;
   created_at: string;
 }
 

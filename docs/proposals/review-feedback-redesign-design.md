@@ -286,7 +286,7 @@ All files regenerated automatically — no manual edits:
 10. Update all backend tests (service, handler, worker, e2e, event)
 11. Update documentation (ADR, functional areas, architecture, README)
 
-### Phase 2: Frontend
+### Phase 2: Frontend - DONE
 
 1. Update TypeScript types (`types/api.ts`, `types/session.ts`, `types/events.ts`)
 2. Rename `ResolveModal` → `CompleteReviewModal` with new three-field layout

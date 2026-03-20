@@ -1,0 +1,136 @@
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Typography,
+  TextField,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
+  IconButton,
+} from '@mui/material';
+import { Close, RateReview } from '@mui/icons-material';
+
+export interface EditFeedbackModalProps {
+  open: boolean;
+  initialQualityRating: string;
+  initialActionTaken: string;
+  initialInvestigationFeedback: string;
+  onClose: () => void;
+  onSave: (qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
+  loading?: boolean;
+}
+
+export function EditFeedbackModal({
+  open,
+  initialQualityRating,
+  initialActionTaken,
+  initialInvestigationFeedback,
+  onClose,
+  onSave,
+  loading,
+}: EditFeedbackModalProps) {
+  const [qualityRating, setQualityRating] = useState('');
+  const [actionTaken, setActionTaken] = useState('');
+  const [investigationFeedback, setInvestigationFeedback] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setQualityRating(initialQualityRating);
+      setActionTaken(initialActionTaken);
+      setInvestigationFeedback(initialInvestigationFeedback);
+    }
+  }, [open, initialQualityRating, initialActionTaken, initialInvestigationFeedback]);
+
+  const handleSave = () => {
+    onSave(qualityRating, actionTaken.trim(), investigationFeedback.trim());
+  };
+
+  const changed =
+    qualityRating !== initialQualityRating ||
+    actionTaken.trim() !== initialActionTaken.trim() ||
+    investigationFeedback.trim() !== initialInvestigationFeedback.trim();
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <RateReview color="primary" />
+          <Typography variant="h6">Edit Review Feedback</Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <Close />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ pb: 1 }}>
+        <FormControl component="fieldset" sx={{ mb: 2, mt: 1 }}>
+          <FormLabel component="legend" sx={{ mb: 1, fontWeight: 600 }}>
+            Investigation quality
+          </FormLabel>
+          <RadioGroup value={qualityRating} onChange={(e) => setQualityRating(e.target.value)}>
+            <FormControlLabel
+              value="accurate"
+              control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
+              label={<Typography variant="body2" fontWeight={500}>Accurate</Typography>}
+              sx={{ mb: 0.5 }}
+            />
+            <FormControlLabel
+              value="partially_accurate"
+              control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
+              label={<Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>}
+              sx={{ mb: 0.5 }}
+            />
+            <FormControlLabel
+              value="inaccurate"
+              control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
+              label={<Typography variant="body2" fontWeight={500}>Inaccurate</Typography>}
+            />
+          </RadioGroup>
+        </FormControl>
+
+        <TextField
+          label="Action taken"
+          placeholder="e.g., Applied fix from runbook, ticket INFRA-1234"
+          value={actionTaken}
+          onChange={(e) => setActionTaken(e.target.value)}
+          multiline
+          minRows={2}
+          maxRows={4}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+
+        <TextField
+          label="Investigation feedback"
+          placeholder="e.g., Missed the root cause, focused on wrong service"
+          value={investigationFeedback}
+          onChange={(e) => setInvestigationFeedback(e.target.value)}
+          multiline
+          minRows={2}
+          maxRows={4}
+          fullWidth
+        />
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" disabled={loading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSave}
+          variant="contained"
+          disabled={!changed || !qualityRating || loading}
+        >
+          {loading ? 'Saving...' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}

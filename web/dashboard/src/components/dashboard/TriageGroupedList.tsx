@@ -32,13 +32,13 @@ interface TriageGroupedListProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
   onClaim: (sessionId: string) => void;
   onUnclaim: (sessionId: string) => void;
-  onResolve: (sessionId: string) => void;
+  onComplete: (sessionId: string) => void;
   onReopen: (sessionId: string) => void;
-  onEditNote: (sessionId: string, currentNote: string) => void;
+  onEditFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
   onBulkClaim?: (sessionIds: string[]) => void;
-  onBulkResolve?: (sessionIds: string[]) => void;
+  onBulkComplete?: (sessionIds: string[]) => void;
   onBulkUnclaim?: (sessionIds: string[]) => void;
   onBulkReopen?: (sessionIds: string[]) => void;
   actionLoading?: boolean;
@@ -81,16 +81,16 @@ const groups_config: GroupConfig[] = [
     color: '#0288d1',
   },
   {
-    key: 'resolved',
-    label: 'Resolved',
-    dataKey: 'resolved',
+    key: 'reviewed',
+    label: 'Reviewed',
+    dataKey: 'reviewed',
     icon: <CheckCircleOutline sx={{ fontSize: 18 }} />,
     defaultOpen: false,
     color: '#2e7d32',
   },
 ];
 
-const SELECTABLE_GROUPS = new Set<TriageGroupName>(['needs_review', 'in_progress', 'resolved']);
+const SELECTABLE_GROUPS = new Set<TriageGroupName>(['needs_review', 'in_progress', 'reviewed']);
 const MAX_BULK_SELECTION = 50;
 
 type SelectionState = Record<TriageGroupKey, Set<string>>;
@@ -99,20 +99,20 @@ const emptySelection = (): SelectionState => ({
   investigating: new Set(),
   needs_review: new Set(),
   in_progress: new Set(),
-  resolved: new Set(),
+  reviewed: new Set(),
 });
 
 export function TriageGroupedList({
   groups,
   onClaim,
   onUnclaim,
-  onResolve,
+  onComplete,
   onReopen,
-  onEditNote,
+  onEditFeedback,
   onPageChange,
   onPageSizeChange,
   onBulkClaim,
-  onBulkResolve,
+  onBulkComplete,
   onBulkUnclaim,
   onBulkReopen,
   actionLoading,
@@ -327,10 +327,10 @@ export function TriageGroupedList({
                             variant="contained"
                             color="success"
                             disabled={actionLoading}
-                            onClick={() => onBulkResolve?.([...selectedIds])}
+                            onClick={() => onBulkComplete?.([...selectedIds])}
                             sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
                           >
-                            Resolve All
+                            Complete All
                           </Button>
                         </>
                       )}
@@ -342,10 +342,10 @@ export function TriageGroupedList({
                             variant="contained"
                             color="success"
                             disabled={actionLoading}
-                            onClick={() => onBulkResolve?.([...selectedIds])}
+                            onClick={() => onBulkComplete?.([...selectedIds])}
                             sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
                           >
-                            Resolve All
+                            Complete All
                           </Button>
                           <Button
                             size="small"
@@ -359,7 +359,7 @@ export function TriageGroupedList({
                         </>
                       )}
 
-                      {group.key === 'resolved' && (
+                      {group.key === 'reviewed' && (
                         <Button
                           size="small"
                           variant="outlined"
@@ -413,9 +413,9 @@ export function TriageGroupedList({
                             onToggleSelect={selectable ? (id) => toggleSelect(group.dataKey, id) : undefined}
                             onClaim={onClaim}
                             onUnclaim={onUnclaim}
-                            onResolve={onResolve}
+                            onComplete={onComplete}
                             onReopen={onReopen}
-                            onEditNote={onEditNote}
+                            onEditFeedback={onEditFeedback}
                             actionLoading={actionLoading}
                           />
                         ))}

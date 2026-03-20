@@ -7,8 +7,8 @@ import {
 } from '@mui/material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
-import { ResolveModal } from './ResolveModal.tsx';
-import { EditNoteModal } from './EditNoteModal.tsx';
+import { CompleteReviewModal } from './CompleteReviewModal.tsx';
+import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 
@@ -21,15 +21,22 @@ interface TriageViewProps {
   onRefresh: () => void;
   onClaim: (sessionId: string) => Promise<void>;
   onUnclaim: (sessionId: string) => Promise<void>;
-  onResolve: (sessionId: string, reason: string, note?: string) => Promise<void>;
+  onComplete: (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
-  onUpdateNote: (sessionId: string, note: string) => Promise<void>;
+  onUpdateFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => Promise<void>;
   onBulkClaim: (sessionIds: string[]) => Promise<void>;
-  onBulkResolve: (sessionIds: string[], reason: string, note?: string) => Promise<void>;
+  onBulkComplete: (sessionIds: string[], qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
   onBulkUnclaim: (sessionIds: string[]) => Promise<void>;
   onBulkReopen: (sessionIds: string[]) => Promise<void>;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
+}
+
+interface EditFeedbackState {
+  sessionId: string;
+  qualityRating: string;
+  actionTaken: string;
+  investigationFeedback: string;
 }
 
 export function TriageView({
@@ -41,18 +48,18 @@ export function TriageView({
   onRefresh,
   onClaim,
   onUnclaim,
-  onResolve,
+  onComplete,
   onReopen,
-  onUpdateNote,
+  onUpdateFeedback,
   onBulkClaim,
-  onBulkResolve,
+  onBulkComplete,
   onBulkUnclaim,
   onBulkReopen,
   onPageChange,
   onPageSizeChange,
 }: TriageViewProps) {
-  const [resolveSessionIds, setResolveSessionIds] = useState<string[] | null>(null);
-  const [editNoteState, setEditNoteState] = useState<{ sessionId: string; note: string } | null>(null);
+  const [completeSessionIds, setCompleteSessionIds] = useState<string[] | null>(null);
+  const [editFeedbackState, setEditFeedbackState] = useState<EditFeedbackState | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
 
@@ -76,18 +83,18 @@ export function TriageView({
     withAction(() => onUnclaim(sessionId));
   };
 
-  const handleResolveClick = (sessionId: string) => {
-    setResolveSessionIds([sessionId]);
+  const handleCompleteClick = (sessionId: string) => {
+    setCompleteSessionIds([sessionId]);
   };
 
-  const handleResolveConfirm = (reason: string, note?: string) => {
-    if (!resolveSessionIds) return;
-    const ids = resolveSessionIds;
-    setResolveSessionIds(null);
+  const handleCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!completeSessionIds) return;
+    const ids = completeSessionIds;
+    setCompleteSessionIds(null);
     if (ids.length === 1) {
-      withAction(() => onResolve(ids[0], reason, note));
+      withAction(() => onComplete(ids[0], qualityRating, actionTaken, investigationFeedback));
     } else {
-      withAction(() => onBulkResolve(ids, reason, note));
+      withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
     }
   };
 
@@ -95,23 +102,23 @@ export function TriageView({
     withAction(() => onReopen(sessionId));
   };
 
-  const handleEditNote = (sessionId: string, currentNote: string) => {
-    setEditNoteState({ sessionId, note: currentNote });
+  const handleEditFeedback = (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    setEditFeedbackState({ sessionId, qualityRating, actionTaken, investigationFeedback });
   };
 
-  const handleEditNoteSave = (note: string) => {
-    if (!editNoteState) return;
-    const sessionId = editNoteState.sessionId;
-    setEditNoteState(null);
-    withAction(() => onUpdateNote(sessionId, note));
+  const handleEditFeedbackSave = (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!editFeedbackState) return;
+    const sessionId = editFeedbackState.sessionId;
+    setEditFeedbackState(null);
+    withAction(() => onUpdateFeedback(sessionId, qualityRating, actionTaken, investigationFeedback));
   };
 
   const handleBulkClaim = (sessionIds: string[]) => {
     withAction(() => onBulkClaim(sessionIds));
   };
 
-  const handleBulkResolve = (sessionIds: string[]) => {
-    setResolveSessionIds(sessionIds);
+  const handleBulkComplete = (sessionIds: string[]) => {
+    setCompleteSessionIds(sessionIds);
   };
 
   const handleBulkUnclaim = (sessionIds: string[]) => {
@@ -124,11 +131,11 @@ export function TriageView({
 
   const hasAnyData = Object.values(groups).some(g => g !== null);
   const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
-    investigating: null, needs_review: null, in_progress: null, resolved: null,
+    investigating: null, needs_review: null, in_progress: null, reviewed: null,
   };
 
-  const resolveModalTitle = resolveSessionIds && resolveSessionIds.length > 1
-    ? `Resolve ${resolveSessionIds.length} Sessions`
+  const completeModalTitle = completeSessionIds && completeSessionIds.length > 1
+    ? `Complete Review for ${completeSessionIds.length} Sessions`
     : undefined;
 
   if (error) {
@@ -181,11 +188,11 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
-        onResolve={handleResolveClick}
+        onComplete={handleCompleteClick}
         onReopen={handleReopen}
-        onEditNote={handleEditNote}
+        onEditFeedback={handleEditFeedback}
         onBulkClaim={handleBulkClaim}
-        onBulkResolve={handleBulkResolve}
+        onBulkComplete={handleBulkComplete}
         onBulkUnclaim={handleBulkUnclaim}
         onBulkReopen={handleBulkReopen}
         onPageChange={onPageChange}
@@ -193,19 +200,21 @@ export function TriageView({
         actionLoading={actionLoading}
       />
 
-      <ResolveModal
-        open={resolveSessionIds !== null}
-        onClose={() => setResolveSessionIds(null)}
-        onResolve={handleResolveConfirm}
+      <CompleteReviewModal
+        open={completeSessionIds !== null}
+        onClose={() => setCompleteSessionIds(null)}
+        onComplete={handleCompleteConfirm}
         loading={actionLoading}
-        title={resolveModalTitle}
+        title={completeModalTitle}
       />
 
-      <EditNoteModal
-        open={editNoteState !== null}
-        initialNote={editNoteState?.note ?? ''}
-        onClose={() => setEditNoteState(null)}
-        onSave={handleEditNoteSave}
+      <EditFeedbackModal
+        open={editFeedbackState !== null}
+        initialQualityRating={editFeedbackState?.qualityRating ?? ''}
+        initialActionTaken={editFeedbackState?.actionTaken ?? ''}
+        initialInvestigationFeedback={editFeedbackState?.investigationFeedback ?? ''}
+        onClose={() => setEditFeedbackState(null)}
+        onSave={handleEditFeedbackSave}
         loading={actionLoading}
       />
 

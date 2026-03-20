@@ -81,10 +81,10 @@ import {
 } from '../../utils/filterPersistence.ts';
 const REFRESH_THROTTLE_MS = 1000;
 const FILTER_DEBOUNCE_MS = 300;
-const TRIAGE_GROUPS: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'resolved'];
+const TRIAGE_GROUPS: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'reviewed'];
 
 const EMPTY_TRIAGE: Record<TriageGroupKey, TriageGroup | null> = {
-  investigating: null, needs_review: null, in_progress: null, resolved: null,
+  investigating: null, needs_review: null, in_progress: null, reviewed: null,
 };
 
 /**
@@ -360,7 +360,7 @@ export function DashboardView() {
         investigating: results[0],
         needs_review: results[1],
         in_progress: results[2],
-        resolved: results[3],
+        reviewed: results[3],
       });
     } catch (err) {
       if (requestId !== triageRequestIdRef.current) return;
@@ -636,9 +636,15 @@ export function DashboardView() {
     }
   };
 
-  const handleBulkTriageResolve = async (sessionIds: string[], reason: string, note?: string) => {
+  const handleBulkTriageComplete = async (sessionIds: string[], qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     try {
-      const resp = await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
+      const resp = await updateReview({
+        session_ids: sessionIds,
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
@@ -660,9 +666,15 @@ export function DashboardView() {
   const handleTriageUnclaim = (sessionId: string) => handleBulkTriageUnclaim([sessionId]);
   const handleTriageReopen = (sessionId: string) => handleBulkTriageReopen([sessionId]);
 
-  const handleTriageResolve = async (sessionId: string, reason: string, note?: string) => {
+  const handleTriageComplete = async (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     try {
-      const resp = await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
+      const resp = await updateReview({
+        session_ids: [sessionId],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
@@ -670,9 +682,15 @@ export function DashboardView() {
     }
   };
 
-  const handleTriageUpdateNote = async (sessionId: string, note: string) => {
+  const handleTriageUpdateFeedback = async (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => {
     try {
-      const resp = await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.UPDATE_NOTE, note: note || undefined });
+      const resp = await updateReview({
+        session_ids: [sessionId],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
@@ -1048,11 +1066,11 @@ export function DashboardView() {
           onRefresh={fetchAllTriageGroups}
           onClaim={handleTriageClaim}
           onUnclaim={handleTriageUnclaim}
-          onResolve={handleTriageResolve}
+          onComplete={handleTriageComplete}
           onReopen={handleTriageReopen}
-          onUpdateNote={handleTriageUpdateNote}
+          onUpdateFeedback={handleTriageUpdateFeedback}
           onBulkClaim={handleBulkTriageClaim}
-          onBulkResolve={handleBulkTriageResolve}
+          onBulkComplete={handleBulkTriageComplete}
           onBulkUnclaim={handleBulkTriageUnclaim}
           onBulkReopen={handleBulkTriageReopen}
           onPageChange={handleTriagePageChange}

@@ -8,7 +8,7 @@ import {
   Box,
   Checkbox,
 } from '@mui/material';
-import { Undo, StickyNote2Outlined, Check, NotInterested } from '@mui/icons-material';
+import { Undo, RateReview, Check, Warning, Close as CloseIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -18,7 +18,7 @@ import { formatTimestamp } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
-export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
+export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
 
 interface TriageSessionRowProps {
   session: DashboardSessionItem;
@@ -28,15 +28,16 @@ interface TriageSessionRowProps {
   onToggleSelect?: (sessionId: string) => void;
   onClaim?: (sessionId: string) => void;
   onUnclaim?: (sessionId: string) => void;
-  onResolve?: (sessionId: string) => void;
+  onComplete?: (sessionId: string) => void;
   onReopen?: (sessionId: string) => void;
-  onEditNote?: (sessionId: string, currentNote: string) => void;
+  onEditFeedback?: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   actionLoading?: boolean;
 }
 
-const resolutionReasonConfig: Record<string, { label: string }> = {
-  actioned: { label: 'Actioned' },
-  dismissed: { label: 'Dismissed' },
+const qualityRatingConfig: Record<string, { label: string; color: string; icon: React.ReactElement }> = {
+  accurate: { label: 'Accurate', color: 'success.main', icon: <Check sx={{ fontSize: 14 }} /> },
+  partially_accurate: { label: 'Partially Accurate', color: 'warning.main', icon: <Warning sx={{ fontSize: 14 }} /> },
+  inaccurate: { label: 'Inaccurate', color: 'error.main', icon: <CloseIcon sx={{ fontSize: 14 }} /> },
 };
 
 export function TriageSessionRow({
@@ -47,9 +48,9 @@ export function TriageSessionRow({
   onToggleSelect,
   onClaim,
   onUnclaim,
-  onResolve,
+  onComplete,
   onReopen,
-  onEditNote,
+  onEditFeedback,
   actionLoading,
 }: TriageSessionRowProps) {
   const navigate = useNavigate();
@@ -84,27 +85,29 @@ export function TriageSessionRow({
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} size="small" />
-          {group === 'resolved' && session.resolution_reason && (
-            <Tooltip title={resolutionReasonConfig[session.resolution_reason]?.label ?? session.resolution_reason}>
-              <Box
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  border: '1px solid',
-                  borderColor: session.resolution_reason === 'actioned' ? 'success.main' : 'warning.main',
-                  color: session.resolution_reason === 'actioned' ? 'success.main' : 'warning.main',
-                }}
-              >
-                {session.resolution_reason === 'actioned'
-                  ? <Check sx={{ fontSize: 14 }} />
-                  : <NotInterested sx={{ fontSize: 14 }} />}
-              </Box>
-            </Tooltip>
-          )}
+          {group === 'reviewed' && session.quality_rating && (() => {
+            const cfg = qualityRatingConfig[session.quality_rating];
+            if (!cfg) return null;
+            return (
+              <Tooltip title={cfg.label}>
+                <Box
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    border: '1px solid',
+                    borderColor: cfg.color,
+                    color: cfg.color,
+                  }}
+                >
+                  {cfg.icon}
+                </Box>
+              </Tooltip>
+            );
+          })()}
           <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>
@@ -172,10 +175,10 @@ export function TriageSessionRow({
                 variant="contained"
                 color="success"
                 disabled={actionLoading}
-                onClick={() => onResolve?.(session.id)}
+                onClick={() => onComplete?.(session.id)}
                 sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
               >
-                Resolve
+                Complete
               </Button>
             </>
           )}
@@ -187,10 +190,10 @@ export function TriageSessionRow({
                 variant="contained"
                 color="success"
                 disabled={actionLoading}
-                onClick={() => onResolve?.(session.id)}
+                onClick={() => onComplete?.(session.id)}
                 sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
               >
-                Resolve
+                Complete
               </Button>
               <Tooltip title="Unclaim">
                 <IconButton
@@ -204,17 +207,22 @@ export function TriageSessionRow({
             </>
           )}
 
-          {group === 'resolved' && (
+          {group === 'reviewed' && (
             <>
-              <Tooltip title={session.resolution_note || 'Add note'}>
+              <Tooltip title="Edit feedback">
                 <IconButton
                   size="small"
-                  onClick={() => onEditNote?.(session.id, session.resolution_note ?? '')}
+                  onClick={() => onEditFeedback?.(
+                    session.id,
+                    session.quality_rating ?? '',
+                    session.action_taken ?? '',
+                    session.investigation_feedback ?? '',
+                  )}
                   sx={{
-                    color: session.resolution_note ? 'primary.main' : 'text.disabled',
+                    color: (session.action_taken || session.investigation_feedback) ? 'primary.main' : 'text.disabled',
                   }}
                 >
-                  <StickyNote2Outlined sx={{ fontSize: 16 }} />
+                  <RateReview sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Reopen">
