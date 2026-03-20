@@ -170,6 +170,15 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		}
 
 	case models.ReviewActionUpdateFeedback:
+		// Read current session to build a full post-update snapshot for the activity log.
+		current, err := tx.AlertSession.Get(writeCtx, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read session for feedback update: %w", err)
+		}
+		if current.ReviewStatus == nil || *current.ReviewStatus != alertsession.ReviewStatusReviewed {
+			return nil, ErrConflict
+		}
+
 		update := tx.AlertSession.Update().
 			Where(
 				alertsession.IDEQ(sessionID),
@@ -191,11 +200,27 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		if affected == 0 {
 			return nil, ErrConflict
 		}
+
+		// Merge request values with existing session values for a complete snapshot.
+		snapshotRating := req.QualityRating
+		if snapshotRating == nil && current.QualityRating != nil {
+			qr := string(*current.QualityRating)
+			snapshotRating = &qr
+		}
+		snapshotActionTaken := req.ActionTaken
+		if snapshotActionTaken == nil {
+			snapshotActionTaken = current.ActionTaken
+		}
+		snapshotFeedback := req.InvestigationFeedback
+		if snapshotFeedback == nil {
+			snapshotFeedback = current.InvestigationFeedback
+		}
+
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
 			sessionreviewactivity.ActionUpdateFeedback,
 			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
 			sessionreviewactivity.ToStatusReviewed,
-			req.QualityRating, req.ActionTaken, req.InvestigationFeedback, now); err != nil {
+			snapshotRating, snapshotActionTaken, snapshotFeedback, now); err != nil {
 			return nil, err
 		}
 	}
@@ -313,18 +338,22 @@ func (s *SessionService) doComplete(ctx context.Context, tx *ent.Tx, sessionID, 
 	}
 
 	// Two activity rows: implicit claim + completion.
+	// Use distinct timestamps so ORDER BY created_at is deterministic.
+	// PostgreSQL timestamptz has microsecond precision, so delta must be >= 1µs.
+	claimTime := now
+	completeTime := now.Add(time.Microsecond)
 	if err := s.insertActivity(ctx, tx, sessionID, actor,
 		sessionreviewactivity.ActionClaim,
 		ptrFromStatus(sessionreviewactivity.FromStatusNeedsReview),
 		sessionreviewactivity.ToStatusInProgress,
-		nil, nil, nil, now); err != nil {
+		nil, nil, nil, claimTime); err != nil {
 		return err
 	}
 	return s.insertActivity(ctx, tx, sessionID, actor,
 		sessionreviewactivity.ActionComplete,
 		ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
 		sessionreviewactivity.ToStatusReviewed,
-		&rating, actionTaken, feedback, now)
+		&rating, actionTaken, feedback, completeTime)
 }
 
 // insertActivity creates a SessionReviewActivity record within the transaction.

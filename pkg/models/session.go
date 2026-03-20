@@ -63,7 +63,7 @@ type DashboardListParams struct {
 	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
 	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
 	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
-	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, resolved
+	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, reviewed
 	Assignee      string     `json:"assignee"`       // exact match filter
 	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
 }

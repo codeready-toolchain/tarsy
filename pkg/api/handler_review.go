@@ -102,7 +102,7 @@ func (s *Server) getReviewActivityHandler(c *echo.Context) error {
 			Actor:     a.Actor,
 			Action:    string(a.Action),
 			ToStatus:  string(a.ToStatus),
-			CreatedAt: a.CreatedAt.Format(time.RFC3339),
+			CreatedAt: a.CreatedAt.Format(time.RFC3339Nano),
 		}
 		if a.FromStatus != nil {
 			statusStr := string(*a.FromStatus)

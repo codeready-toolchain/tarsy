@@ -272,7 +272,7 @@ All files regenerated automatically — no manual edits:
 
 ## Implementation Plan
 
-### Phase 1: Backend schema + migration
+### Phase 1: Backend schema + migration - DONE
 
 1. Update Ent schemas (`alertsession.go`, `sessionreviewactivity.go`) — all field/enum changes per schema tables above
 2. Generate Ent code (`go generate`)

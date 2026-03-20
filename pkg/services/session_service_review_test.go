@@ -333,17 +333,36 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Equal(t, "Missed some context", *last.InvestigationFeedback)
 	})
 
-	t.Run("update_feedback partial update", func(t *testing.T) {
+	t.Run("update_feedback partial update snapshots full state", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "john@test.com")
-		rating := "inaccurate"
 
+		// Seed action_taken and investigation_feedback so the partial update has
+		// existing values to snapshot.
+		ctx := context.Background()
+		require.NoError(t, service.client.AlertSession.UpdateOneID(id).
+			SetActionTaken("Original action").
+			SetInvestigationFeedback("Original feedback").
+			Exec(ctx))
+
+		newRating := "inaccurate"
 		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action:        "update_feedback",
 			Actor:         "john@test.com",
-			QualityRating: &rating,
+			QualityRating: &newRating,
 		})
 		require.NotNil(t, sess.QualityRating)
 		assert.Equal(t, alertsession.QualityRatingInaccurate, *sess.QualityRating)
+
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		last := activities[len(activities)-1]
+		assert.Equal(t, sessionreviewactivity.ActionUpdateFeedback, last.Action)
+		require.NotNil(t, last.QualityRating)
+		assert.Equal(t, sessionreviewactivity.QualityRatingInaccurate, *last.QualityRating)
+		require.NotNil(t, last.Note, "activity should snapshot existing action_taken")
+		assert.Equal(t, "Original action", *last.Note)
+		require.NotNil(t, last.InvestigationFeedback, "activity should snapshot existing investigation_feedback")
+		assert.Equal(t, "Original feedback", *last.InvestigationFeedback)
 	})
 
 	t.Run("update_feedback with invalid quality_rating returns error", func(t *testing.T) {
