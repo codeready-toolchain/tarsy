@@ -28,6 +28,7 @@ import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
+import { qualityEvalScoreHeaderSx, qualityReviewHeaderSx } from './qualityGroupSx.ts';
 
 /**
  * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Review | Tokens | Actions
@@ -235,8 +236,8 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Eval Score — sortable */}
-                  <TableCell sx={{ fontWeight: 600 }}>
+                  {/* Eval Score — sortable (left edge of quality group) */}
+                  <TableCell sx={{ fontWeight: 600, ...qualityEvalScoreHeaderSx }}>
                     <TableSortLabel
                       active={sortState.field === 'score'}
                       direction={sortState.field === 'score' ? sortState.direction : 'desc'}
@@ -246,8 +247,8 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Review — not sortable */}
-                  <TableCell sx={{ fontWeight: 600, width: 70, textAlign: 'center' }}>Review</TableCell>
+                  {/* Review — not sortable (right edge of quality group) */}
+                  <TableCell sx={{ fontWeight: 600, ...qualityReviewHeaderSx }}>Review</TableCell>
 
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>

@@ -13,7 +13,6 @@ import {
   Tooltip,
   Chip,
   Box,
-  IconButton,
 } from '@mui/material';
 import {
   SmsOutlined as ChatIcon,
@@ -30,6 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
+import { qualityEvalScoreBodySx, qualityReviewBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
@@ -53,10 +53,14 @@ const iconOnlyChipSx = {
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
-const RATING_ICON_MAP: Record<string, { icon: React.ReactElement; color: string; label: string }> = {
-  [QUALITY_RATING.ACCURATE]: { icon: <ThumbUp fontSize="small" />, color: 'success.main', label: 'Accurate' },
-  [QUALITY_RATING.PARTIALLY_ACCURATE]: { icon: <ThumbsUpDown fontSize="small" />, color: 'warning.main', label: 'Partially Accurate' },
-  [QUALITY_RATING.INACCURATE]: { icon: <ThumbDown fontSize="small" />, color: 'error.main', label: 'Inaccurate' },
+const RATING_CHIP_MAP: Record<string, {
+  icon: React.ReactElement;
+  chipColor: 'success' | 'warning' | 'error';
+  label: string;
+}> = {
+  [QUALITY_RATING.ACCURATE]: { icon: <ThumbUp sx={{ fontSize: '0.875rem' }} />, chipColor: 'success', label: 'Accurate' },
+  [QUALITY_RATING.PARTIALLY_ACCURATE]: { icon: <ThumbsUpDown sx={{ fontSize: '0.875rem' }} />, chipColor: 'warning', label: 'Partially Accurate' },
+  [QUALITY_RATING.INACCURATE]: { icon: <ThumbDown sx={{ fontSize: '0.875rem' }} />, chipColor: 'error', label: 'Inaccurate' },
 };
 
 export function SessionListItem({ session, searchTerm, onReviewClick }: SessionListItemProps) {
@@ -192,52 +196,58 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
         </Typography>
       </TableCell>
 
-      {/* Score — click navigates to scoring page when scoring was triggered */}
-      <ScoreCell sessionId={session.id} score={session.latest_score} scoringStatus={session.scoring_status} />
+      {/* Eval Score */}
+      <ScoreCell
+        sessionId={session.id}
+        score={session.latest_score}
+        scoringStatus={session.scoring_status}
+        sx={qualityEvalScoreBodySx}
+      />
 
       {/* Review */}
-      <TableCell sx={{ width: 70, textAlign: 'center' }}>
+      <TableCell sx={qualityReviewBodySx}>
         {(() => {
           const isTerminal = TERMINAL_STATUSES.has(session.status);
           if (!isTerminal) return null;
 
-          const rating = session.quality_rating ? RATING_ICON_MAP[session.quality_rating] : null;
+          const rating = session.quality_rating ? RATING_CHIP_MAP[session.quality_rating] : null;
 
           if (rating) {
             return (
               <Tooltip title={`Reviewed: ${rating.label}`}>
-                <IconButton
+                <Chip
+                  icon={rating.icon}
                   size="small"
+                  color={rating.chipColor}
+                  variant="outlined"
                   onClick={(e) => {
                     e.stopPropagation();
                     onReviewClick?.(session);
                   }}
-                  sx={{ color: rating.color, p: 0.5 }}
-                >
-                  {rating.icon}
-                </IconButton>
+                  sx={{ ...iconOnlyChipSx, cursor: 'pointer' }}
+                />
               </Tooltip>
             );
           }
 
           return (
             <Tooltip title="Click to review">
-              <IconButton
+              <Chip
+                icon={<ThumbsUpDown sx={{ fontSize: '0.875rem' }} />}
                 size="small"
+                variant="outlined"
                 className="review-hover-icon"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReviewClick?.(session);
                 }}
                 sx={{
-                  color: 'text.disabled',
-                  p: 0.5,
+                  ...iconOnlyChipSx,
+                  cursor: 'pointer',
                   opacity: 0,
                   transition: 'opacity 0.15s ease-in-out',
                 }}
-              >
-                <ThumbsUpDown fontSize="small" />
-              </IconButton>
+              />
             </Tooltip>
           );
         })()}
