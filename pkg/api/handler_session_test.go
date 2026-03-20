@@ -63,10 +63,10 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			errMsg:  "invalid review_status",
 		},
 		{
-			name:    "invalid resolution_reason",
-			query:   "resolution_reason=invalid",
+			name:    "invalid quality_rating",
+			query:   "quality_rating=invalid",
 			wantErr: http.StatusBadRequest,
-			errMsg:  "invalid resolution_reason",
+			errMsg:  "invalid quality_rating",
 		},
 	}
 

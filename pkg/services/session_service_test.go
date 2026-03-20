@@ -1803,7 +1803,7 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	idC := seedDashboardSession(t, client.Client, "Charlie", "pod-crash", "k8s-analysis", 30, 15, 45, 0)
 
-	// A = needs_review, B = in_progress (alice), C = resolved (bob).
+	// A = needs_review, B = in_progress (alice), C = reviewed (bob).
 	client.AlertSession.UpdateOneID(idA).
 		SetReviewStatus(alertsession.ReviewStatusNeedsReview).
 		ExecX(ctx)
@@ -1813,11 +1813,11 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 		SetAssignedAt(time.Now()).
 		ExecX(ctx)
 	client.AlertSession.UpdateOneID(idC).
-		SetReviewStatus(alertsession.ReviewStatusResolved).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
 		SetAssignee("bob@test.com").
 		SetAssignedAt(time.Now()).
-		SetResolvedAt(time.Now()).
-		SetResolutionReason(alertsession.ResolutionReasonActioned).
+		SetReviewedAt(time.Now()).
+		SetQualityRating(alertsession.QualityRatingAccurate).
 		ExecX(ctx)
 
 	t.Run("single review_status filter", func(t *testing.T) {
@@ -1858,14 +1858,14 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 	t.Run("combined review_status and assignee filter", func(t *testing.T) {
 		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
 			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
-			ReviewStatus: "resolved",
+			ReviewStatus: "reviewed",
 			Assignee:     "bob@test.com",
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Sessions, 1)
 		assert.Equal(t, idC, result.Sessions[0].ID)
-		require.NotNil(t, result.Sessions[0].ResolutionReason)
-		assert.Equal(t, "actioned", *result.Sessions[0].ResolutionReason)
+		require.NotNil(t, result.Sessions[0].QualityRating)
+		assert.Equal(t, "accurate", *result.Sessions[0].QualityRating)
 	})
 
 	t.Run("no match returns empty", func(t *testing.T) {

@@ -65,12 +65,14 @@ const (
 	FieldAssignee = "assignee"
 	// FieldAssignedAt holds the string denoting the assigned_at field in the database.
 	FieldAssignedAt = "assigned_at"
-	// FieldResolvedAt holds the string denoting the resolved_at field in the database.
-	FieldResolvedAt = "resolved_at"
-	// FieldResolutionReason holds the string denoting the resolution_reason field in the database.
-	FieldResolutionReason = "resolution_reason"
-	// FieldResolutionNote holds the string denoting the resolution_note field in the database.
-	FieldResolutionNote = "resolution_note"
+	// FieldReviewedAt holds the string denoting the reviewed_at field in the database.
+	FieldReviewedAt = "reviewed_at"
+	// FieldQualityRating holds the string denoting the quality_rating field in the database.
+	FieldQualityRating = "quality_rating"
+	// FieldActionTaken holds the string denoting the action_taken field in the database.
+	FieldActionTaken = "action_taken"
+	// FieldInvestigationFeedback holds the string denoting the investigation_feedback field in the database.
+	FieldInvestigationFeedback = "investigation_feedback"
 	// EdgeStages holds the string denoting the stages edge name in mutations.
 	EdgeStages = "stages"
 	// EdgeAgentExecutions holds the string denoting the agent_executions edge name in mutations.
@@ -213,9 +215,10 @@ var Columns = []string{
 	FieldReviewStatus,
 	FieldAssignee,
 	FieldAssignedAt,
-	FieldResolvedAt,
-	FieldResolutionReason,
-	FieldResolutionNote,
+	FieldReviewedAt,
+	FieldQualityRating,
+	FieldActionTaken,
+	FieldInvestigationFeedback,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -271,7 +274,7 @@ type ReviewStatus string
 const (
 	ReviewStatusNeedsReview ReviewStatus = "needs_review"
 	ReviewStatusInProgress  ReviewStatus = "in_progress"
-	ReviewStatusResolved    ReviewStatus = "resolved"
+	ReviewStatusReviewed    ReviewStatus = "reviewed"
 )
 
 func (rs ReviewStatus) String() string {
@@ -281,33 +284,34 @@ func (rs ReviewStatus) String() string {
 // ReviewStatusValidator is a validator for the "review_status" field enum values. It is called by the builders before save.
 func ReviewStatusValidator(rs ReviewStatus) error {
 	switch rs {
-	case ReviewStatusNeedsReview, ReviewStatusInProgress, ReviewStatusResolved:
+	case ReviewStatusNeedsReview, ReviewStatusInProgress, ReviewStatusReviewed:
 		return nil
 	default:
 		return fmt.Errorf("alertsession: invalid enum value for review_status field: %q", rs)
 	}
 }
 
-// ResolutionReason defines the type for the "resolution_reason" enum field.
-type ResolutionReason string
+// QualityRating defines the type for the "quality_rating" enum field.
+type QualityRating string
 
-// ResolutionReason values.
+// QualityRating values.
 const (
-	ResolutionReasonActioned  ResolutionReason = "actioned"
-	ResolutionReasonDismissed ResolutionReason = "dismissed"
+	QualityRatingAccurate          QualityRating = "accurate"
+	QualityRatingPartiallyAccurate QualityRating = "partially_accurate"
+	QualityRatingInaccurate        QualityRating = "inaccurate"
 )
 
-func (rr ResolutionReason) String() string {
-	return string(rr)
+func (qr QualityRating) String() string {
+	return string(qr)
 }
 
-// ResolutionReasonValidator is a validator for the "resolution_reason" field enum values. It is called by the builders before save.
-func ResolutionReasonValidator(rr ResolutionReason) error {
-	switch rr {
-	case ResolutionReasonActioned, ResolutionReasonDismissed:
+// QualityRatingValidator is a validator for the "quality_rating" field enum values. It is called by the builders before save.
+func QualityRatingValidator(qr QualityRating) error {
+	switch qr {
+	case QualityRatingAccurate, QualityRatingPartiallyAccurate, QualityRatingInaccurate:
 		return nil
 	default:
-		return fmt.Errorf("alertsession: invalid enum value for resolution_reason field: %q", rr)
+		return fmt.Errorf("alertsession: invalid enum value for quality_rating field: %q", qr)
 	}
 }
 
@@ -434,19 +438,24 @@ func ByAssignedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAssignedAt, opts...).ToFunc()
 }
 
-// ByResolvedAt orders the results by the resolved_at field.
-func ByResolvedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResolvedAt, opts...).ToFunc()
+// ByReviewedAt orders the results by the reviewed_at field.
+func ByReviewedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReviewedAt, opts...).ToFunc()
 }
 
-// ByResolutionReason orders the results by the resolution_reason field.
-func ByResolutionReason(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResolutionReason, opts...).ToFunc()
+// ByQualityRating orders the results by the quality_rating field.
+func ByQualityRating(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQualityRating, opts...).ToFunc()
 }
 
-// ByResolutionNote orders the results by the resolution_note field.
-func ByResolutionNote(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResolutionNote, opts...).ToFunc()
+// ByActionTaken orders the results by the action_taken field.
+func ByActionTaken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActionTaken, opts...).ToFunc()
+}
+
+// ByInvestigationFeedback orders the results by the investigation_feedback field.
+func ByInvestigationFeedback(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInvestigationFeedback, opts...).ToFunc()
 }
 
 // ByStagesCount orders the results by stages count.

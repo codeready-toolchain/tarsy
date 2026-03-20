@@ -69,12 +69,14 @@ type AlertSession struct {
 	Assignee *string `json:"assignee,omitempty"`
 	// When the session was claimed
 	AssignedAt *time.Time `json:"assigned_at,omitempty"`
-	// When review_status transitioned to resolved
-	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
-	// Why the session was resolved
-	ResolutionReason *alertsession.ResolutionReason `json:"resolution_reason,omitempty"`
-	// Free-text context on resolution
-	ResolutionNote *string `json:"resolution_note,omitempty"`
+	// When review_status transitioned to reviewed
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
+	// Investigation quality assessment
+	QualityRating *alertsession.QualityRating `json:"quality_rating,omitempty"`
+	// What the human did about the alert
+	ActionTaken *string `json:"action_taken,omitempty"`
+	// Why the investigation was good or bad
+	InvestigationFeedback *string `json:"investigation_feedback,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AlertSessionQuery when eager-loading is set.
 	Edges        AlertSessionEdges `json:"edges"`
@@ -209,9 +211,9 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case alertsession.FieldCurrentStageIndex:
 			values[i] = new(sql.NullInt64)
-		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint, alertsession.FieldReviewStatus, alertsession.FieldAssignee, alertsession.FieldResolutionReason, alertsession.FieldResolutionNote:
+		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint, alertsession.FieldReviewStatus, alertsession.FieldAssignee, alertsession.FieldQualityRating, alertsession.FieldActionTaken, alertsession.FieldInvestigationFeedback:
 			values[i] = new(sql.NullString)
-		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt, alertsession.FieldAssignedAt, alertsession.FieldResolvedAt:
+		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt, alertsession.FieldAssignedAt, alertsession.FieldReviewedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -405,26 +407,33 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 				_m.AssignedAt = new(time.Time)
 				*_m.AssignedAt = value.Time
 			}
-		case alertsession.FieldResolvedAt:
+		case alertsession.FieldReviewedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field resolved_at", values[i])
+				return fmt.Errorf("unexpected type %T for field reviewed_at", values[i])
 			} else if value.Valid {
-				_m.ResolvedAt = new(time.Time)
-				*_m.ResolvedAt = value.Time
+				_m.ReviewedAt = new(time.Time)
+				*_m.ReviewedAt = value.Time
 			}
-		case alertsession.FieldResolutionReason:
+		case alertsession.FieldQualityRating:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resolution_reason", values[i])
+				return fmt.Errorf("unexpected type %T for field quality_rating", values[i])
 			} else if value.Valid {
-				_m.ResolutionReason = new(alertsession.ResolutionReason)
-				*_m.ResolutionReason = alertsession.ResolutionReason(value.String)
+				_m.QualityRating = new(alertsession.QualityRating)
+				*_m.QualityRating = alertsession.QualityRating(value.String)
 			}
-		case alertsession.FieldResolutionNote:
+		case alertsession.FieldActionTaken:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resolution_note", values[i])
+				return fmt.Errorf("unexpected type %T for field action_taken", values[i])
 			} else if value.Valid {
-				_m.ResolutionNote = new(string)
-				*_m.ResolutionNote = value.String
+				_m.ActionTaken = new(string)
+				*_m.ActionTaken = value.String
+			}
+		case alertsession.FieldInvestigationFeedback:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field investigation_feedback", values[i])
+			} else if value.Valid {
+				_m.InvestigationFeedback = new(string)
+				*_m.InvestigationFeedback = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -621,18 +630,23 @@ func (_m *AlertSession) String() string {
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
-	if v := _m.ResolvedAt; v != nil {
-		builder.WriteString("resolved_at=")
+	if v := _m.ReviewedAt; v != nil {
+		builder.WriteString("reviewed_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
-	if v := _m.ResolutionReason; v != nil {
-		builder.WriteString("resolution_reason=")
+	if v := _m.QualityRating; v != nil {
+		builder.WriteString("quality_rating=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	if v := _m.ResolutionNote; v != nil {
-		builder.WriteString("resolution_note=")
+	if v := _m.ActionTaken; v != nil {
+		builder.WriteString("action_taken=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.InvestigationFeedback; v != nil {
+		builder.WriteString("investigation_feedback=")
 		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')

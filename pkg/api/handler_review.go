@@ -38,8 +38,8 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 	if !models.ValidReviewAction(req.Action) {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("unknown action %q", req.Action))
 	}
-	if models.ReviewAction(req.Action) == models.ReviewActionResolve && req.ResolutionReason == nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "resolution_reason is required for resolve action")
+	if models.ReviewAction(req.Action) == models.ReviewActionComplete && req.QualityRating == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "quality_rating is required for complete action")
 	}
 	req.Actor = extractAuthor(c)
 
@@ -63,9 +63,15 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 				rs := string(*session.ReviewStatus)
 				payload.ReviewStatus = &rs
 			}
-			if session.ResolutionReason != nil {
-				reason := string(*session.ResolutionReason)
-				payload.ResolutionReason = &reason
+			if session.QualityRating != nil {
+				qr := string(*session.QualityRating)
+				payload.QualityRating = &qr
+			}
+			if session.ActionTaken != nil {
+				payload.ActionTaken = session.ActionTaken
+			}
+			if session.InvestigationFeedback != nil {
+				payload.InvestigationFeedback = session.InvestigationFeedback
 			}
 			if err := s.eventPublisher.PublishReviewStatus(pubCtx, session.ID, payload); err != nil {
 				slog.Warn("Failed to publish review status event",
@@ -102,12 +108,15 @@ func (s *Server) getReviewActivityHandler(c *echo.Context) error {
 			statusStr := string(*a.FromStatus)
 			item.FromStatus = &statusStr
 		}
-		if a.ResolutionReason != nil {
-			reasonStr := string(*a.ResolutionReason)
-			item.ResolutionReason = &reasonStr
+		if a.QualityRating != nil {
+			qr := string(*a.QualityRating)
+			item.QualityRating = &qr
 		}
 		if a.Note != nil {
 			item.Note = a.Note
+		}
+		if a.InvestigationFeedback != nil {
+			item.InvestigationFeedback = a.InvestigationFeedback
 		}
 		items = append(items, item)
 	}

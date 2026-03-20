@@ -69,7 +69,7 @@ func init() {
 	sessionreviewactivityFields := schema.SessionReviewActivity{}.Fields()
 	_ = sessionreviewactivityFields
 	// sessionreviewactivityDescCreatedAt is the schema descriptor for created_at field.
-	sessionreviewactivityDescCreatedAt := sessionreviewactivityFields[8].Descriptor()
+	sessionreviewactivityDescCreatedAt := sessionreviewactivityFields[9].Descriptor()
 	// sessionreviewactivity.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sessionreviewactivity.DefaultCreatedAt = sessionreviewactivityDescCreatedAt.Default.(func() time.Time)
 	sessionscoreFields := schema.SessionScore{}.Fields()

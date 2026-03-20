@@ -644,10 +644,10 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		assert.Equal(t, alertsession.StatusCompleted, updated.Status)
 		require.NotNil(t, updated.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusNeedsReview, *updated.ReviewStatus)
-		assert.Nil(t, updated.ResolvedAt)
+		assert.Nil(t, updated.ReviewedAt)
 	})
 
-	t.Run("cancelled sets review_status to resolved/dismissed", func(t *testing.T) {
+	t.Run("cancelled sets review_status to reviewed with nil quality_rating", func(t *testing.T) {
 		session := createTestSession(ctx, t, client)
 		client.AlertSession.UpdateOneID(session.ID).
 			SetStatus(alertsession.StatusCancelling).
@@ -666,10 +666,9 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		updated := client.AlertSession.GetX(ctx, session.ID)
 		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
 		require.NotNil(t, updated.ReviewStatus)
-		assert.Equal(t, alertsession.ReviewStatusResolved, *updated.ReviewStatus)
-		assert.NotNil(t, updated.ResolvedAt)
-		assert.NotNil(t, updated.ResolutionReason)
-		assert.Equal(t, alertsession.ResolutionReasonDismissed, *updated.ResolutionReason)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *updated.ReviewStatus)
+		assert.NotNil(t, updated.ReviewedAt)
+		assert.Nil(t, updated.QualityRating)
 	})
 
 	t.Run("idempotent: skips if review_status already set", func(t *testing.T) {

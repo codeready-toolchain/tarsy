@@ -28,10 +28,12 @@ type SessionReviewActivity struct {
 	FromStatus *sessionreviewactivity.FromStatus `json:"from_status,omitempty"`
 	// Review status after transition
 	ToStatus sessionreviewactivity.ToStatus `json:"to_status,omitempty"`
-	// Set when action is resolve
-	ResolutionReason *sessionreviewactivity.ResolutionReason `json:"resolution_reason,omitempty"`
-	// Free-text context
+	// Set when action is complete or update_feedback
+	QualityRating *sessionreviewactivity.QualityRating `json:"quality_rating,omitempty"`
+	// Free-text context (action_taken snapshot)
 	Note *string `json:"note,omitempty"`
+	// Investigation feedback snapshot
+	InvestigationFeedback *string `json:"investigation_feedback,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -65,7 +67,7 @@ func (*SessionReviewActivity) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case sessionreviewactivity.FieldID, sessionreviewactivity.FieldSessionID, sessionreviewactivity.FieldActor, sessionreviewactivity.FieldAction, sessionreviewactivity.FieldFromStatus, sessionreviewactivity.FieldToStatus, sessionreviewactivity.FieldResolutionReason, sessionreviewactivity.FieldNote:
+		case sessionreviewactivity.FieldID, sessionreviewactivity.FieldSessionID, sessionreviewactivity.FieldActor, sessionreviewactivity.FieldAction, sessionreviewactivity.FieldFromStatus, sessionreviewactivity.FieldToStatus, sessionreviewactivity.FieldQualityRating, sessionreviewactivity.FieldNote, sessionreviewactivity.FieldInvestigationFeedback:
 			values[i] = new(sql.NullString)
 		case sessionreviewactivity.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -121,12 +123,12 @@ func (_m *SessionReviewActivity) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.ToStatus = sessionreviewactivity.ToStatus(value.String)
 			}
-		case sessionreviewactivity.FieldResolutionReason:
+		case sessionreviewactivity.FieldQualityRating:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resolution_reason", values[i])
+				return fmt.Errorf("unexpected type %T for field quality_rating", values[i])
 			} else if value.Valid {
-				_m.ResolutionReason = new(sessionreviewactivity.ResolutionReason)
-				*_m.ResolutionReason = sessionreviewactivity.ResolutionReason(value.String)
+				_m.QualityRating = new(sessionreviewactivity.QualityRating)
+				*_m.QualityRating = sessionreviewactivity.QualityRating(value.String)
 			}
 		case sessionreviewactivity.FieldNote:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -134,6 +136,13 @@ func (_m *SessionReviewActivity) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.Note = new(string)
 				*_m.Note = value.String
+			}
+		case sessionreviewactivity.FieldInvestigationFeedback:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field investigation_feedback", values[i])
+			} else if value.Valid {
+				_m.InvestigationFeedback = new(string)
+				*_m.InvestigationFeedback = value.String
 			}
 		case sessionreviewactivity.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -199,13 +208,18 @@ func (_m *SessionReviewActivity) String() string {
 	builder.WriteString("to_status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ToStatus))
 	builder.WriteString(", ")
-	if v := _m.ResolutionReason; v != nil {
-		builder.WriteString("resolution_reason=")
+	if v := _m.QualityRating; v != nil {
+		builder.WriteString("quality_rating=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	if v := _m.Note; v != nil {
 		builder.WriteString("note=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.InvestigationFeedback; v != nil {
+		builder.WriteString("investigation_feedback=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

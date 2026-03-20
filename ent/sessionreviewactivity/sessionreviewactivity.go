@@ -25,10 +25,12 @@ const (
 	FieldFromStatus = "from_status"
 	// FieldToStatus holds the string denoting the to_status field in the database.
 	FieldToStatus = "to_status"
-	// FieldResolutionReason holds the string denoting the resolution_reason field in the database.
-	FieldResolutionReason = "resolution_reason"
+	// FieldQualityRating holds the string denoting the quality_rating field in the database.
+	FieldQualityRating = "quality_rating"
 	// FieldNote holds the string denoting the note field in the database.
 	FieldNote = "note"
+	// FieldInvestigationFeedback holds the string denoting the investigation_feedback field in the database.
+	FieldInvestigationFeedback = "investigation_feedback"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// EdgeSession holds the string denoting the session edge name in mutations.
@@ -54,8 +56,9 @@ var Columns = []string{
 	FieldAction,
 	FieldFromStatus,
 	FieldToStatus,
-	FieldResolutionReason,
+	FieldQualityRating,
 	FieldNote,
+	FieldInvestigationFeedback,
 	FieldCreatedAt,
 }
 
@@ -79,11 +82,11 @@ type Action string
 
 // Action values.
 const (
-	ActionClaim      Action = "claim"
-	ActionUnclaim    Action = "unclaim"
-	ActionResolve    Action = "resolve"
-	ActionReopen     Action = "reopen"
-	ActionUpdateNote Action = "update_note"
+	ActionClaim          Action = "claim"
+	ActionUnclaim        Action = "unclaim"
+	ActionComplete       Action = "complete"
+	ActionReopen         Action = "reopen"
+	ActionUpdateFeedback Action = "update_feedback"
 )
 
 func (a Action) String() string {
@@ -93,7 +96,7 @@ func (a Action) String() string {
 // ActionValidator is a validator for the "action" field enum values. It is called by the builders before save.
 func ActionValidator(a Action) error {
 	switch a {
-	case ActionClaim, ActionUnclaim, ActionResolve, ActionReopen, ActionUpdateNote:
+	case ActionClaim, ActionUnclaim, ActionComplete, ActionReopen, ActionUpdateFeedback:
 		return nil
 	default:
 		return fmt.Errorf("sessionreviewactivity: invalid enum value for action field: %q", a)
@@ -107,7 +110,7 @@ type FromStatus string
 const (
 	FromStatusNeedsReview FromStatus = "needs_review"
 	FromStatusInProgress  FromStatus = "in_progress"
-	FromStatusResolved    FromStatus = "resolved"
+	FromStatusReviewed    FromStatus = "reviewed"
 )
 
 func (fs FromStatus) String() string {
@@ -117,7 +120,7 @@ func (fs FromStatus) String() string {
 // FromStatusValidator is a validator for the "from_status" field enum values. It is called by the builders before save.
 func FromStatusValidator(fs FromStatus) error {
 	switch fs {
-	case FromStatusNeedsReview, FromStatusInProgress, FromStatusResolved:
+	case FromStatusNeedsReview, FromStatusInProgress, FromStatusReviewed:
 		return nil
 	default:
 		return fmt.Errorf("sessionreviewactivity: invalid enum value for from_status field: %q", fs)
@@ -131,7 +134,7 @@ type ToStatus string
 const (
 	ToStatusNeedsReview ToStatus = "needs_review"
 	ToStatusInProgress  ToStatus = "in_progress"
-	ToStatusResolved    ToStatus = "resolved"
+	ToStatusReviewed    ToStatus = "reviewed"
 )
 
 func (ts ToStatus) String() string {
@@ -141,33 +144,34 @@ func (ts ToStatus) String() string {
 // ToStatusValidator is a validator for the "to_status" field enum values. It is called by the builders before save.
 func ToStatusValidator(ts ToStatus) error {
 	switch ts {
-	case ToStatusNeedsReview, ToStatusInProgress, ToStatusResolved:
+	case ToStatusNeedsReview, ToStatusInProgress, ToStatusReviewed:
 		return nil
 	default:
 		return fmt.Errorf("sessionreviewactivity: invalid enum value for to_status field: %q", ts)
 	}
 }
 
-// ResolutionReason defines the type for the "resolution_reason" enum field.
-type ResolutionReason string
+// QualityRating defines the type for the "quality_rating" enum field.
+type QualityRating string
 
-// ResolutionReason values.
+// QualityRating values.
 const (
-	ResolutionReasonActioned  ResolutionReason = "actioned"
-	ResolutionReasonDismissed ResolutionReason = "dismissed"
+	QualityRatingAccurate          QualityRating = "accurate"
+	QualityRatingPartiallyAccurate QualityRating = "partially_accurate"
+	QualityRatingInaccurate        QualityRating = "inaccurate"
 )
 
-func (rr ResolutionReason) String() string {
-	return string(rr)
+func (qr QualityRating) String() string {
+	return string(qr)
 }
 
-// ResolutionReasonValidator is a validator for the "resolution_reason" field enum values. It is called by the builders before save.
-func ResolutionReasonValidator(rr ResolutionReason) error {
-	switch rr {
-	case ResolutionReasonActioned, ResolutionReasonDismissed:
+// QualityRatingValidator is a validator for the "quality_rating" field enum values. It is called by the builders before save.
+func QualityRatingValidator(qr QualityRating) error {
+	switch qr {
+	case QualityRatingAccurate, QualityRatingPartiallyAccurate, QualityRatingInaccurate:
 		return nil
 	default:
-		return fmt.Errorf("sessionreviewactivity: invalid enum value for resolution_reason field: %q", rr)
+		return fmt.Errorf("sessionreviewactivity: invalid enum value for quality_rating field: %q", qr)
 	}
 }
 
@@ -204,14 +208,19 @@ func ByToStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldToStatus, opts...).ToFunc()
 }
 
-// ByResolutionReason orders the results by the resolution_reason field.
-func ByResolutionReason(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResolutionReason, opts...).ToFunc()
+// ByQualityRating orders the results by the quality_rating field.
+func ByQualityRating(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQualityRating, opts...).ToFunc()
 }
 
 // ByNote orders the results by the note field.
 func ByNote(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNote, opts...).ToFunc()
+}
+
+// ByInvestigationFeedback orders the results by the investigation_feedback field.
+func ByInvestigationFeedback(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInvestigationFeedback, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

@@ -120,11 +120,11 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		params.ReviewStatus = v
 	}
 	params.Assignee = c.QueryParam("assignee")
-	if v := c.QueryParam("resolution_reason"); v != "" {
-		if err := alertsession.ResolutionReasonValidator(alertsession.ResolutionReason(v)); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid resolution_reason: "+v)
+	if v := c.QueryParam("quality_rating"); v != "" {
+		if err := alertsession.QualityRatingValidator(alertsession.QualityRating(v)); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid quality_rating: "+v)
 		}
-		params.ResolutionReason = v
+		params.QualityRating = v
 	}
 
 	result, err := s.sessionService.ListSessionsForDashboard(c.Request().Context(), params)

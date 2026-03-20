@@ -844,7 +844,7 @@ type dashboardRow struct {
 	ScoringStatus    *string `sql:"scoring_status"`
 	ReviewStatus     *string `sql:"review_status"`
 	Assignee         *string `sql:"assignee"`
-	ResolutionReason *string `sql:"resolution_reason"`
+	QualityRating    *string `sql:"quality_rating"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -930,8 +930,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.Assignee != "" {
 		query = query.Where(alertsession.AssigneeEQ(params.Assignee))
 	}
-	if params.ResolutionReason != "" {
-		query = query.Where(alertsession.ResolutionReasonEQ(alertsession.ResolutionReason(params.ResolutionReason)))
+	if params.QualityRating != "" {
+		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
 
 	// Count total (before pagination).
@@ -1011,7 +1011,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldCurrentStageID),
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
-				sel.C(alertsession.FieldResolutionReason),
+				sel.C(alertsession.FieldQualityRating),
 			)
 
 			// LLM interaction aggregates.
@@ -1158,7 +1158,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ScoringStatus:         row.ScoringStatus,
 			ReviewStatus:          row.ReviewStatus,
 			Assignee:              row.Assignee,
-			ResolutionReason:      row.ResolutionReason,
+			QualityRating:         row.QualityRating,
 		})
 	}
 

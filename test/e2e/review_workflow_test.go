@@ -18,12 +18,12 @@ import (
 //
 // Test 1 — Completed session lifecycle:
 //   Single-stage chain completes → review_status auto-inits to needs_review
-//   → PATCH claim → in_progress → PATCH resolve → resolved.
+//   → PATCH claim → in_progress → PATCH complete → reviewed.
 //   Verifies: DB state, API responses, WS events, review-activity, triage.
 //
-// Test 2 — Cancelled session auto-resolve:
+// Test 2 — Cancelled session auto-reviewed:
 //   Single-stage chain with BlockUntilCancelled agent → cancel → review_status
-//   auto-inits to resolved/dismissed.
+//   auto-inits to reviewed (no quality_rating).
 //   Verifies: DB state, WS event, triage.
 // ────────────────────────────────────────────────────────────
 
@@ -81,19 +81,19 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 		return e.Type == "review.status" && e.Parsed["review_status"] == "in_progress"
 	}, 5*time.Second, "expected review.status in_progress WS event after claim")
 
-	// ── PATCH resolve ──
-	resolveResp := app.PatchReview(t, sessionID, map[string]interface{}{
-		"action":            "resolve",
-		"resolution_reason": "actioned",
-		"note":              "Verified and closed.",
+	// ── PATCH complete ──
+	completeResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action":         "complete",
+		"quality_rating": "accurate",
+		"action_taken":   "Verified and closed.",
 	})
-	resolveResults := resolveResp["results"].([]interface{})
-	require.Len(t, resolveResults, 1)
-	assert.Equal(t, true, resolveResults[0].(map[string]interface{})["success"])
+	completeResults := completeResp["results"].([]interface{})
+	require.Len(t, completeResults, 1)
+	assert.Equal(t, true, completeResults[0].(map[string]interface{})["success"])
 
 	ws.WaitForEvent(t, func(e WSEvent) bool {
-		return e.Type == "review.status" && e.Parsed["review_status"] == "resolved"
-	}, 5*time.Second, "expected review.status resolved WS event after resolve")
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+	}, 5*time.Second, "expected review.status reviewed WS event after complete")
 
 	// ── Review activity ──
 	activityResp := app.GetReviewActivity(t, sessionID)
@@ -106,27 +106,27 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	assert.Equal(t, "in_progress", act0["to_status"])
 
 	act1 := activities[1].(map[string]interface{})
-	assert.Equal(t, "resolve", act1["action"])
-	assert.Equal(t, "resolved", act1["to_status"])
-	assert.Equal(t, "actioned", act1["resolution_reason"])
+	assert.Equal(t, "complete", act1["action"])
+	assert.Equal(t, "reviewed", act1["to_status"])
+	assert.Equal(t, "accurate", act1["quality_rating"])
 
 	// ── Triage ──
-	resolvedGroup := app.GetTriageGroup(t, "resolved", "")
-	resolvedSessions, ok := resolvedGroup["sessions"].([]interface{})
-	require.True(t, ok, "expected sessions array in resolved group")
+	reviewedGroup := app.GetTriageGroup(t, "reviewed", "")
+	reviewedSessions, ok := reviewedGroup["sessions"].([]interface{})
+	require.True(t, ok, "expected sessions array in reviewed group")
 
 	found := false
-	for _, item := range resolvedSessions {
+	for _, item := range reviewedSessions {
 		m := item.(map[string]interface{})
 		if m["id"] == sessionID {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "session should appear in triage resolved group")
+	assert.True(t, found, "session should appear in triage reviewed group")
 }
 
-func TestE2E_ReviewWorkflow_CancelledAutoResolved(t *testing.T) {
+func TestE2E_ReviewWorkflow_CancelledAutoReviewed(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
 	// Agent blocks until context is cancelled.
@@ -162,33 +162,32 @@ func TestE2E_ReviewWorkflow_CancelledAutoResolved(t *testing.T) {
 	app.CancelSession(t, sessionID)
 	app.WaitForSessionStatus(t, sessionID, "cancelled")
 
-	// Wait for review.status WS event (auto-resolved as dismissed).
+	// Wait for review.status WS event (auto-reviewed, no quality_rating).
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "review.status" &&
-			e.Parsed["review_status"] == "resolved" &&
+			e.Parsed["review_status"] == "reviewed" &&
 			e.Parsed["actor"] == "system"
-	}, 5*time.Second, "expected review.status resolved WS event after cancellation")
+	}, 5*time.Second, "expected review.status reviewed WS event after cancellation")
 
-	// DB assertion: review_status=resolved, resolution_reason=dismissed.
+	// DB assertion: review_status=reviewed, quality_rating=nil.
 	session, err := app.EntClient.AlertSession.Get(ctx, sessionID)
 	require.NoError(t, err)
 	require.NotNil(t, session.ReviewStatus)
-	assert.Equal(t, alertsession.ReviewStatusResolved, *session.ReviewStatus)
-	require.NotNil(t, session.ResolutionReason)
-	assert.Equal(t, alertsession.ResolutionReasonDismissed, *session.ResolutionReason)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	assert.Nil(t, session.QualityRating)
 
 	// ── Triage ──
-	resolvedGroup := app.GetTriageGroup(t, "resolved", "")
-	resolvedSessions, ok := resolvedGroup["sessions"].([]interface{})
-	require.True(t, ok, "expected sessions array in resolved group")
+	reviewedGroup := app.GetTriageGroup(t, "reviewed", "")
+	reviewedSessions, ok := reviewedGroup["sessions"].([]interface{})
+	require.True(t, ok, "expected sessions array in reviewed group")
 
 	found := false
-	for _, item := range resolvedSessions {
+	for _, item := range reviewedSessions {
 		m := item.(map[string]interface{})
 		if m["id"] == sessionID {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "cancelled session should appear in triage resolved group")
+	assert.True(t, found, "cancelled session should appear in triage reviewed group")
 }

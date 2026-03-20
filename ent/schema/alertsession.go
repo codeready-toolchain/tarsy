@@ -101,7 +101,7 @@ func (AlertSession) Fields() []ent.Field {
 
 		// Review workflow fields
 		field.Enum("review_status").
-			Values("needs_review", "in_progress", "resolved").
+			Values("needs_review", "in_progress", "reviewed").
 			Optional().
 			Nillable().
 			Comment("Human review workflow state — NULL while investigation is active"),
@@ -113,19 +113,23 @@ func (AlertSession) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("When the session was claimed"),
-		field.Time("resolved_at").
+		field.Time("reviewed_at").
 			Optional().
 			Nillable().
-			Comment("When review_status transitioned to resolved"),
-		field.Enum("resolution_reason").
-			Values("actioned", "dismissed").
+			Comment("When review_status transitioned to reviewed"),
+		field.Enum("quality_rating").
+			Values("accurate", "partially_accurate", "inaccurate").
 			Optional().
 			Nillable().
-			Comment("Why the session was resolved"),
-		field.Text("resolution_note").
+			Comment("Investigation quality assessment"),
+		field.Text("action_taken").
 			Optional().
 			Nillable().
-			Comment("Free-text context on resolution"),
+			Comment("What the human did about the alert"),
+		field.Text("investigation_feedback").
+			Optional().
+			Nillable().
+			Comment("Why the investigation was good or bad"),
 	}
 }
 
