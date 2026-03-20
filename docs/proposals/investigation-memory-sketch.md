@@ -116,16 +116,24 @@ Memory quality is determined in two phases (see [Q4 decision](investigation-memo
 
 ### Memory scoping and retrieval
 
-Memories are stored with scope metadata for context, but retrieval is **semantic-first** — driven by pgvector cosine similarity, not rigid scope filtering (see [Q6 decision](investigation-memory-questions.md)).
+Memory scoping has two distinct layers:
 
-Stored scoping dimensions (metadata, not hard filters):
+**Security scope (hard filter — always enforced):**
+
+- **Project** — inherited from the source session's project. Every memory query includes `WHERE project = $current_project`. This is a security boundary for tenant isolation, not an investigation-level filter. Pre-authorization, all memories use a default project (`"default"`). When [session authorization](session-authorization-sketch.md) lands, memories inherit the real project from their source session. Designed this way from the start to avoid schema migration and query audit later.
+
+**Investigation scope (soft boost — never hard-filters):**
+
+Memories are stored with investigation metadata for context, but retrieval within a project is **semantic-first** — driven by pgvector cosine similarity, not rigid scope filtering (see [Q6 decision](investigation-memory-questions.md)).
+
+Stored investigation dimensions (metadata, soft signal only):
 
 - **Alert type** — from `AlertSession.alert_type` (e.g., "Kubernetes - Multiple agents")
 - **Chain ID** — from `AlertSession.chain_id` (which investigation pipeline was used)
 - **Service / component** — extracted from alert data (the specific service under investigation)
 - **Cluster / environment** — extracted from alert data or MCP server context
 
-At retrieval time, the current alert context is embedded and the most semantically similar memories are returned, regardless of scope. Scope metadata provides a minor soft boost (same-service memories rank slightly higher) but never hard-filters. This lets cross-cutting knowledge ("Prometheus metrics lag 5 min on Mondays") surface for any alert where it's relevant, not just the service it was learned from.
+At retrieval time, the query is: `WHERE project = $current_project ORDER BY cosine_similarity + soft_boosts DESC LIMIT N`. Within the project boundary, the most semantically similar memories are returned regardless of investigation scope. Scope metadata provides a minor soft boost (same-service memories rank slightly higher) but never hard-filters. This lets cross-cutting knowledge ("Prometheus metrics lag 5 min on Mondays") surface for any alert where it's relevant, not just the service it was learned from.
 
 The design philosophy: **memory is a light touch** — complementary hints for specific and repeating situations, not a playbook that constrains the LLM's natural investigative ability. Noise is controlled by the auto-inject cap (3-5 memories, Q3), not by complex filtering logic.
 
@@ -144,7 +152,8 @@ The Reflector produces structured memory entries, each with:
 - **Content** — the actual knowledge (a sentence or short paragraph)
 - **Category** — semantic / episodic / procedural
 - **Valence** — positive (repeat this) / negative (avoid this) / neutral (informational)
-- **Scope** — alert type, chain, service, environment
+- **Project** — inherited from the source session (security boundary, not LLM-assigned)
+- **Scope** — alert type, chain, service, environment (investigation metadata)
 - **Confidence** — derived from investigation score and evidence quality
 - **Source** — session ID and stage that produced this memory
 
@@ -198,6 +207,7 @@ This separation is important: `action_taken` is about the **alert** ("I scaled t
                                     │   Memory Store      │
                                     │   (PostgreSQL)      │
                                     │                     │
+                                    │  - project (hard)   │
                                     │  - content          │
                                     │  - category         │
                                     │  - valence          │

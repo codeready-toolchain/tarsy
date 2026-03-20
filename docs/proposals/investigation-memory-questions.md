@@ -126,9 +126,16 @@ _Considered and rejected: Option A (new stage type — adds latency, extraction 
 
 ## Q6: How should memory retrieval work?
 
-Memory retrieval serves two purposes: auto-injecting the top 3-5 memories into the system prompt (Q3 hybrid approach), and serving the `recall_past_investigations` tool for deeper search. The central design tension is: **memories should be complementary hints that help in specific or repeating situations — not a rigid playbook that constrains the LLM's natural investigative ability.** LLMs are already good investigators; memory adds value when it surfaces a relevant past lesson at the right moment, not when it floods the context with marginally related knowledge.
+Memory retrieval serves two purposes: auto-injecting the top 3-5 memories into the system prompt (Q3 hybrid approach), and serving the `recall_past_investigations` tool for deeper search.
+
+**Important distinction — two types of scope:**
+- **Security scope** (`project`): a hard WHERE clause, always enforced. Memories never cross project boundaries. This is a data isolation concern, not an investigation concern. Designed from the start so [session authorization](session-authorization-sketch.md) doesn't require schema migration later. Pre-authorization, all memories use a default project.
+- **Investigation scope** (alert_type, service, chain_id): the subject of this question — how to rank and filter memories *within* a project.
+
+The central design tension for investigation scope is: **memories should be complementary hints that help in specific or repeating situations — not a rigid playbook that constrains the LLM's natural investigative ability.** LLMs are already good investigators; memory adds value when it surfaces a relevant past lesson at the right moment, not when it floods the context with marginally related knowledge.
 
 This means the retrieval approach must:
+- Always enforce project isolation (hard filter, non-negotiable)
 - Avoid injecting so much that it reduces creativity or biases the investigation
 - Avoid injecting irrelevant noise that distracts from the current alert
 - Require minimal manual tuning — the more automated, the better
@@ -136,7 +143,7 @@ This means the retrieval approach must:
 
 ### Option A: Semantic-first retrieval (pgvector-driven)
 
-Embed the current alert context (alert type, description, service, environment) into a query vector. Retrieve by cosine similarity against all memory embeddings. Scope metadata (chain_id, service) provides a soft boost (e.g., same-service memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
+Embed the current alert context (alert type, description, service, environment) into a query vector. Hard-filter by project (security boundary), then retrieve by cosine similarity within that set. Investigation scope metadata (chain_id, service) provides a soft boost (e.g., same-service memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
 
 - **Pro:** Zero manual tuning — cosine similarity is the only ranking function. No thresholds, no fallback levels, no scope hierarchy to configure.
 - **Pro:** Cross-cutting knowledge surfaces naturally — a memory about "Prometheus metrics lag 5 min on Mondays" appears for any alert where it's semantically relevant, regardless of which service it was learned from.
@@ -146,7 +153,7 @@ Embed the current alert context (alert type, description, service, environment) 
 - **Con:** Requires quality embeddings — if embedding quality is poor (e.g., overly generic memory content), retrieval quality degrades.
 - **Con:** May occasionally surface a memory that is textually similar but contextually irrelevant. Mitigated by the small injection count and prompt framing ("consider if relevant").
 
-**Decision:** Option A — semantic-first retrieval. Let pgvector do the heavy lifting. Memory is a light touch — complementary hints for specific and repeating situations, not a comprehensive briefing. Semantic similarity naturally surfaces the most relevant memories without requiring scope hierarchies or tunable weights. The 3-5 auto-inject cap (Q3) is the noise control, not complex filtering logic. Same-service memories can get a minor boost via a simple `ORDER BY cosine_similarity + CASE WHEN service = $1 THEN 0.05 ELSE 0 END DESC` without requiring a full scoring framework. The `recall_past_investigations` tool provides depth when the agent wants it.
+**Decision:** Option A — semantic-first retrieval within a project boundary. Let pgvector do the heavy lifting. Memory is a light touch — complementary hints for specific and repeating situations, not a comprehensive briefing. Semantic similarity naturally surfaces the most relevant memories without requiring scope hierarchies or tunable weights. The 3-5 auto-inject cap (Q3) is the noise control, not complex filtering logic. The query shape is `WHERE project = $current_project ORDER BY cosine_similarity + CASE WHEN service = $1 THEN 0.05 ELSE 0 END DESC LIMIT N` — project is the security boundary, everything after is semantic ranking. The `recall_past_investigations` tool uses the same query with the same project constraint.
 
 _Considered and rejected: Option B (metadata-scoped with semantic ranking — hard-filtering by alert_type blocks cross-cutting knowledge, fallback thresholds are manual tuning), Option C (composite scoring with tunable weights — four weights to calibrate is exactly the tuning treadmill to avoid, over-engineered when the auto-inject cap already bounds noise)._
 
