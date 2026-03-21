@@ -28,6 +28,9 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
+// MetadataKeyAuthor is the metadata key for the message author.
+const MetadataKeyAuthor = "author"
+
 // ────────────────────────────────────────────────────────────
 // Input and config types
 // ────────────────────────────────────────────────────────────
@@ -281,7 +284,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		maxSeq = 0 // fallback to 1
 	}
 	userQuestionSeq := maxSeq + 1
-	userQuestionMeta := map[string]any{"author": input.Message.Author}
+	userQuestionMeta := map[string]any{MetadataKeyAuthor: input.Message.Author}
 	userQuestionEvent, err := e.timelineService.CreateTimelineEvent(execCtx, models.CreateTimelineEventRequest{
 		SessionID:      input.Session.ID,
 		StageID:        &stageID,

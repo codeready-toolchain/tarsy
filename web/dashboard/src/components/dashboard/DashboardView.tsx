@@ -618,7 +618,7 @@ export function DashboardView() {
       const msg = failures.length === 1
         ? `Failed for session ${failures[0].session_id}: ${failures[0].error}`
         : `Failed for ${failures.length} sessions: ${failures.map((f) => f.error).join('; ')}`;
-      setTriageError(msg);
+      throw new Error(msg);
     }
   };
 
@@ -628,7 +628,8 @@ export function DashboardView() {
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -638,7 +639,8 @@ export function DashboardView() {
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -655,7 +657,8 @@ export function DashboardView() {
       fetchAllTriageGroups();
       fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -666,7 +669,8 @@ export function DashboardView() {
       fetchAllTriageGroups();
       fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -687,7 +691,8 @@ export function DashboardView() {
       fetchAllTriageGroups();
       fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -704,7 +709,8 @@ export function DashboardView() {
       fetchAllTriageGroups();
       fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 

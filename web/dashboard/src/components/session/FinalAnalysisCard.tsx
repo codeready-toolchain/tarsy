@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
-import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
@@ -10,17 +10,7 @@ import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
-import { QUALITY_RATING } from '../../types/api';
-
-const RATING_ICON_MAP: Record<string, {
-  icon: typeof ThumbUp;
-  color: 'success.main' | 'warning.main' | 'error.main';
-  label: string;
-}> = {
-  [QUALITY_RATING.ACCURATE]: { icon: ThumbUp, color: 'success.main', label: 'Accurate' },
-  [QUALITY_RATING.PARTIALLY_ACCURATE]: { icon: ThumbsUpDown, color: 'warning.main', label: 'Partially Accurate' },
-  [QUALITY_RATING.INACCURATE]: { icon: ThumbDown, color: 'error.main', label: 'Inaccurate' },
-};
+import { RATING_CONFIG } from '../../constants/ratingConfig';
 
 /** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
 function copyToClipboard(text: string, onSuccess: () => void) {
@@ -146,12 +136,12 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 </Box>
               )}
               {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
-                const rating = qualityRating ? RATING_ICON_MAP[qualityRating] : null;
+                const rating = qualityRating ? RATING_CONFIG[qualityRating] : null;
                 if (rating) {
                   const Icon = rating.icon;
                   return (
                     <Tooltip title={`Reviewed: ${rating.label} — click to edit`}>
-                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: rating.color }}>
+                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: `${rating.color}.main` }}>
                         <Icon sx={{ fontSize: 20 }} />
                       </IconButton>
                     </Tooltip>

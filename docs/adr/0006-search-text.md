@@ -1,38 +1,38 @@
 # ADR-0006: Search Text Feature
 
-**Status:** Implemented
+**Status:** Implemented  
 **Date:** 2026-03-05
 
 ## Overview
 
-TARSy sessions produce rich text content: LLM thinking, responses, tool call results, summaries, final analyses, executive summaries, and chat messages. Currently, the dashboard search only filters the *session list* using ILIKE on `alert_data` and `final_analysis` — two fields on the `alert_sessions` table. There is no way to search *within* the detailed content of sessions: the timeline event text, tool results, thinking content, or chat messages.
+TARSy sessions produce rich text content: LLM thinking, responses, tool call results, summaries, final analyses, executive summaries, and chat messages. The dashboard search only filters the *session list* using case-insensitive matching on a few session-level fields. There is no way to search *within* the detailed content of sessions: timeline event text, tool results, thinking content, or chat messages.
 
 The search text feature adds:
 
 1. **Dashboard search extension** (Phase 1): The existing session list search also searches `timeline_events.content` via PostgreSQL full-text search, finding sessions that mention specific resources, errors, or recommendations anywhere in their investigation content.
-2. **In-session search** (Phase 2): A client-side search bar on `SessionDetailPage` (terminated sessions only) that highlights and navigates to matching content within a session's timeline.
+2. **In-session search** (Phase 2): A client-side search bar on the session detail view (terminated sessions only) that highlights and navigates to matching content within a session's timeline.
 
 ## Design Principles
 
-1. **Progressive enhancement**: Extend the existing dashboard search rather than building a parallel search system.
-2. **Server-side for cross-session, client-side for in-session**: FTS with GIN index for dashboard queries (performance at scale). Exact substring matching client-side for in-session search (all data already loaded).
-3. **Minimal schema changes**: One new GIN index on `timeline_events.content`. No new tables or columns (aside from a `matched_in_content` boolean in the API response).
-4. **Search everything**: All timeline event types are searchable. No artificial restrictions on which content is indexed.
+1. **Progressive enhancement:** Extend the existing dashboard search rather than building a parallel search system.
+2. **Server-side for cross-session, client-side for in-session:** FTS with a GIN index for dashboard queries (performance at scale). Exact substring matching client-side for in-session search (all data already loaded).
+3. **Minimal schema changes:** One new GIN index on `timeline_events.content`. No new tables or columns aside from a `matched_in_content` boolean in the API response.
+4. **Search everything:** All timeline event types are searchable. No artificial restrictions on which content is indexed.
 
 ## Key Decisions
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
 | Q1 | Search scope | Dashboard list search + in-session search (two phases) | Full search workflow: find the session, then find content within it. In-session search is client-side (no extra backend work). Rejected: dashboard-only (can't pinpoint where match is), in-session-only (can't find which session). |
-| Q2 | Backend search approach | Hybrid — FTS for dashboard, client-side for in-session | Fast cross-session search via GIN index + exact substring matching within a session. Two behaviors serve different purposes. Rejected: ILIKE (no GIN, sequential scan at scale), FTS everywhere (in-session already client-side). |
-| Q3 | Index strategy | GIN full-text search index on `timeline_events.content` | Follows existing `CreateGINIndexes()` pattern. Fast FTS queries. Rejected: no index (too slow at scale), GIN + event type filter (unnecessarily restricts searchable content). |
-| Q4 | In-session search | Client-side filter/highlight, terminated sessions only | No backend changes needed; all data already loaded; instant results with debounce. Integrates with collapse/expand state. Rejected: defer (Ctrl+F doesn't work with collapsed sections), server-side (breaks load-all-events model). |
-| Q5 | Match context in session list | Match indicator only (`matched_in_content` boolean) | Simple backend/frontend; avoids `ts_headline()` complexity. Users open session to see details. Rejected: match snippet (too complex for Phase 1), no indicator (confusing results). |
-| Q6 | Event type filtering | Search all event types | Comprehensive — won't miss matches. FTS handles noise via stemming/stop words. Type filtering can be layered on later. Rejected: high-value types only (misses tool output), optional type filter param (unnecessary API complexity). |
+| Q2 | Backend search approach | Hybrid — FTS for dashboard, client-side for in-session | Fast cross-session search via GIN index + exact substring matching within a session. Two behaviors serve different purposes. Rejected: ILIKE without a suitable index (sequential scan at scale), FTS everywhere for in-session (data model already loads events on the client). |
+| Q3 | Index strategy | GIN full-text search index on `timeline_events.content` | Matches existing GIN index patterns elsewhere. Fast FTS queries. Rejected: no index (too slow at scale), GIN scoped by event type (unnecessarily restricts searchable content). |
+| Q4 | In-session search | Client-side filter/highlight, terminated sessions only | No backend changes; instant results with debounce; works with collapse/expand. Rejected: defer (browser find doesn't work with collapsed sections), server-side in-session search (conflicts with load-all-events UX). |
+| Q5 | Match context in session list | Match indicator only (`matched_in_content` boolean) | Simple backend and UI; avoids headline/snippet complexity. Users open the session for detail. Rejected: match snippet (too complex for Phase 1), no indicator (confusing results). |
+| Q6 | Event type filtering | Search all event types | Comprehensive — won't miss matches. FTS handles noise via stemming/stop words. Type filtering can be layered on later. Rejected: high-value types only (misses tool output), optional type filter parameter (unnecessary API complexity). |
 
 ## Architecture
 
-### Phase 1: Dashboard Search Extension - DONE
+### Phase 1: Dashboard search extension
 
 ```
 Dashboard Search Input ("memory leak pod-xyz")
@@ -44,112 +44,27 @@ Dashboard Search Input ("memory leak pod-xyz")
     → Return matching sessions with matched_in_content flag
 ```
 
-### Phase 2: In-Session Search
+### Phase 2: In-session search
 
 ```
-SessionDetailPage search bar ("pod-xyz")
-    → Client-side filter on loaded FlowItem[] content
-    → Highlight matches using highlightSearchTermNodes()
+Session detail search bar ("pod-xyz")
+    → Client-side filter on loaded timeline/flow item content
+    → Highlight matches (shared highlight utility)
     → Auto-expand collapsed stages with matches
     → Scroll to first match
     (Only available for terminated sessions)
 ```
 
-### Database Changes
+### Database
 
-New GIN index on `timeline_events.content`, added via `CreateGINIndexes()` in `pkg/database/migrations.go`:
+Add a GIN index on `timeline_events.content` using `to_tsvector('english', content)`, following the same approach as existing full-text indexes on session-level fields.
 
-```sql
-CREATE INDEX IF NOT EXISTS idx_timeline_events_content_gin
-ON timeline_events USING gin(to_tsvector('english', content));
-```
+### Backend (dashboard)
 
-This follows the existing pattern for `alert_sessions` GIN indexes.
+Extend the session list search predicate so matches can come from existing session-field ILIKE conditions **or** an `EXISTS` subquery over `timeline_events` for the same session, comparing `plainto_tsquery` / `to_tsvector` on event `content`. Compute `matched_in_content` when the hit came from timeline content (alone or in addition to session fields).
 
-### Backend Changes
+### Frontend
 
-**`pkg/database/migrations.go`** — Add GIN index creation:
+**Phase 1:** Extend session list types with `matched_in_content` and show a small indicator when content matched inside the timeline.
 
-```go
-// In CreateGINIndexes():
-_, err = db.ExecContext(ctx,
-    `CREATE INDEX IF NOT EXISTS idx_timeline_events_content_gin
-    ON timeline_events USING gin(to_tsvector('english', content))`)
-```
-
-**`pkg/services/session_service.go`** — Modify `ListSessionsForDashboard()`:
-
-Current search filter (ILIKE on session fields):
-```go
-sql.Or(
-    sql.ContainsFold(alertsession.FieldAlertData, params.Search),
-    sql.ContainsFold(alertsession.FieldFinalAnalysis, params.Search),
-)
-```
-
-Extended to include timeline event FTS:
-```go
-sql.Or(
-    sql.ContainsFold(alertsession.FieldAlertData, params.Search),
-    sql.ContainsFold(alertsession.FieldFinalAnalysis, params.Search),
-    sql.ExprP(
-        `EXISTS (SELECT 1 FROM timeline_events te
-         WHERE te.session_id = "alert_sessions"."session_id"
-         AND to_tsvector('english', te.content) @@ plainto_tsquery('english', $1))`,
-        params.Search,
-    ),
-)
-```
-
-**`pkg/models/session.go`** — Add `MatchedInContent` to `DashboardSessionItem`:
-
-```go
-MatchedInContent bool `json:"matched_in_content"`
-```
-
-This flag is `true` when the session matched via timeline event content rather than (or in addition to) session-level fields. Computed in the query or in post-processing.
-
-**`pkg/api/handler_session.go`** — No changes needed (search param already parsed).
-
-### Frontend Changes
-
-**Phase 1 (dashboard):**
-
-- `types/session.ts` — Add `matched_in_content: boolean` to `DashboardSessionItem`
-- `SessionListItem` — Show a small indicator (icon/chip) when `matched_in_content` is true, e.g., "Matched in content" chip
-- No changes to `FilterPanel` or search behavior — the same input now finds more results
-
-**Phase 2 (in-session search):**
-
-- `SessionDetailPage` — Add a search bar (only visible for terminated sessions: completed, failed, cancelled, timed_out)
-- Search bar with debounced input filters `FlowItem[]` by substring match on `content`
-- Matching items are highlighted using `highlightSearchTermNodes()` (existing utility)
-- Collapsed stages containing matches are auto-expanded
-- Navigation controls: next/previous match, match count indicator
-- Scroll to first match on search
-
-## Implementation Plan
-
-### Phase 1: Dashboard search extension
-
-1. Add GIN index on `timeline_events.content` in `CreateGINIndexes()`
-   → Verify: index exists after startup, `EXPLAIN` shows index scan for FTS queries
-2. Modify `ListSessionsForDashboard()` to include `EXISTS` subquery on timeline events
-   → Verify: search for text only in timeline events returns the correct session
-3. Add `matched_in_content` field to `DashboardSessionItem` and compute it
-   → Verify: field is true when match is from timeline, false when from session fields
-4. Add `matched_in_content` to frontend types and show indicator in `SessionListItem`
-   → Verify: indicator visible for content-matched sessions, hidden for direct matches
-5. Add backend tests for extended search
-   → Verify: existing search tests pass, new tests cover timeline content search
-
-### Phase 2: In-session search
-
-6. Add search bar to `SessionDetailPage` (terminated sessions only)
-   → Verify: bar visible on completed/failed sessions, hidden on active sessions
-7. Implement client-side `FlowItem` filtering and highlight
-   → Verify: typing a term highlights matching content, clears on empty input
-8. Implement auto-expand for collapsed stages with matches
-   → Verify: collapsed stage expands when it contains a match
-9. Add match navigation (next/previous, count)
-   → Verify: navigation scrolls to each match in order
+**Phase 2:** Debounced search over in-memory flow items; substring match, highlight, expand stages containing hits, next/previous navigation and match count.

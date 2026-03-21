@@ -10,10 +10,10 @@ This ADR documents the redesign of the judge evaluation prompts to be outcome-fi
 
 The scoring infrastructure (ScoringExecutor, ScoringController, 2-turn flow, auto-trigger, re-score API, dashboard) is unchanged. The changes are:
 
-1. **New prompts** in `pkg/agent/prompt/judges.go`
-2. **Failure vocabulary + tag extraction** in `pkg/agent/prompt/vocabulary.go` (new) and `pkg/agent/controller/scoring.go`
-3. **Schema changes** on `session_scores`: rename `missing_tools_analysis` → `tool_improvement_report`, add `failure_tags` column
-4. **Plumbing** to pass tags through ScoringResult → completeScore → DB
+1. **New prompts** — judge prompts rewritten for outcome-first evaluation, structured dimensions, and expanded Turn 2.
+2. **Failure vocabulary + tag extraction** — a shared vocabulary drives both what the judge is told to watch for and deterministic scanning of the analysis text for structured tags.
+3. **Schema changes** on session scores — rename the Turn 2 analysis column to reflect both missing and improved tools; add a nullable JSON column for extracted failure tags.
+4. **End-to-end wiring** — tags and the renamed field flow from the controller result through persistence and API responses.
 
 ## Problem
 
@@ -21,7 +21,7 @@ TARSy's session scoring exists to drive a continuous improvement loop: identify 
 
 The problem was with **what the judge evaluates and how it reports findings**:
 
-1. **Outcome and process were conflated, with process over-weighted.** The 4 categories (Logical Flow, Consistency, Tool Relevance, Synthesis Quality) were all primarily process-focused. The prompt stated "Process > Outcome." An investigation that reaches the wrong conclusion via methodical steps could outscore one that nails the root cause through a messy path.
+1. **Outcome and process were conflated, with process over-weighted.** The four legacy categories were primarily process-focused. The prompt emphasized process over outcome. An investigation that reaches the wrong conclusion via methodical steps could outscore one that nails the root cause through a messy path.
 
 2. **No structured failure signals for aggregation.** The analysis was a narrative. Finding systemic patterns across many sessions required reading every report manually.
 
@@ -31,11 +31,11 @@ The problem was with **what the judge evaluates and how it reports findings**:
 
 1. **Outcome > Process** — a wrong conclusion can never produce a high score, regardless of process quality. A flawed conclusion indicates a flawed process.
 2. **Structured analysis, holistic judgment** — the judge evaluates five broad dimensions before scoring, grounding its thinking. The score itself remains holistic — dimensions interact in ways that fixed-weight formulas cannot capture. Based on EvalPlanner (ICML 2025) showing structured-then-holistic outperforms both pure decomposition and pure holistic evaluation.
-3. **Don't constrain the judge** — dimensions are broad and universally applicable; the failure vocabulary is guidance, not a hard requirement; evaluation quality always takes priority over structural compliance
-4. **Evidence-anchored** — every claim in a dimension assessment must cite specific timeline events, making evaluations verifiable and actionable
-5. **Single source of truth** — the failure vocabulary Go slice drives both prompt generation and tag scanning
-6. **Minimal infrastructure changes** — same single score, same extraction method, same 2-turn flow
-7. **Backward compatible** — the `failure_tags` column is nullable; old scores with NULL tags work fine
+3. **Don't constrain the judge** — dimensions are broad and universally applicable; the failure vocabulary is guidance, not a hard requirement; evaluation quality always takes priority over structural compliance.
+4. **Evidence-anchored** — every claim in a dimension assessment must cite specific timeline events, making evaluations verifiable and actionable.
+5. **Single source of truth** — one in-code vocabulary list drives both prompt generation and tag scanning.
+6. **Minimal infrastructure changes** — same single score, same extraction method, same 2-turn flow.
+7. **Backward compatible** — the failure-tags field is nullable; old scores with NULL tags work fine.
 
 ### Why not Decomposed Atomic Evaluation (DeCE)?
 
@@ -61,11 +61,11 @@ Keep a single 0-100 score. The judge evaluates in two phases — first outcome (
 
 A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong. This natural correlation between process and outcome eliminates the need for overlapping ranges or edge case caveats.
 
-**Rationale:** The score directly answers "was this investigation good?" with outcome as the dominant factor. Two-phase evaluation structures the judge's thinking without requiring structured sub-score extraction. Zero infrastructure changes — the change is purely in the prompt. Rejected: 5 sub-scores (extraction complexity), 2 stored scores (schema/API/UI changes), overlapping ranges (unnecessary given the correlation).
+**Rationale:** The score directly answers "was this investigation good?" with outcome as the dominant factor. Two-phase evaluation structures the judge's thinking without requiring structured sub-score extraction. Zero infrastructure changes — the change is purely in the prompt. Rejected: five sub-scores (extraction complexity), two stored scores (schema/API/UI changes), overlapping ranges (unnecessary given the correlation).
 
-### D2: Start small with ~6 failure tags, dynamic injection from Go slice
+### D2: Start small with ~6 failure tags, dynamic injection from vocabulary list
 
-A Go slice of `{term, description}` structs is the single source of truth for both prompt injection and post-analysis tag scanning. Adding a tag is a one-line Go change with no prompt template edits.
+A single list of `{term, description}` entries is the source of truth for both prompt injection and post-analysis tag scanning. Adding a tag is a one-line change with no separate prompt template edits.
 
 Starting vocabulary: `premature_conclusion`, `missed_available_tool`, `unsupported_confidence`, `incomplete_evidence`, `hallucinated_evidence`, `wrong_conclusion`.
 
@@ -79,29 +79,15 @@ Turn 2 has two explicit sections: Part 1 (Missing Tools) and Part 2 (Existing To
 
 ### D4: Nillable failure_tags column (NULL for pre-redesign scores)
 
-`failure_tags` is `Optional().Nillable()` — NULL means "pre-redesign, not scanned", empty array means "scanned, no failures found".
+`failure_tags` is optional and nillable — NULL means "pre-redesign, not scanned", empty array means "scanned, no failures found".
 
-**Rationale:** Cleanly distinguishes pre-redesign scores from clean scans without backfilling old rows. Rejected: Optional only with empty array default (can't distinguish pre-redesign from clean scores).
+**Rationale:** Cleanly distinguishes pre-redesign scores from clean scans without backfilling old rows. Rejected: optional only with empty array default (can't distinguish pre-redesign from clean scores).
 
 ## Architecture
 
-### What changes where
+**What changes conceptually:** Judge prompts are rewritten and augmented with a dynamically built failure-vocabulary section. After Turn 1, the server scans the judge's analysis text for vocabulary terms and attaches matched tags to the scoring result. The session score row stores both the renamed Turn 2 report field and the optional tag list. API and dashboard consumers expose the renamed field and tags alongside the existing score and analysis.
 
-```
-pkg/agent/prompt/judges.go          ← Rewrite all 4 prompt constants
-pkg/agent/prompt/vocabulary.go      ← NEW: FailureTag type, FailureVocabulary slice (single source of truth)
-pkg/agent/prompt/builder.go         ← BuildScoringInitialPrompt injects vocabulary dynamically
-pkg/agent/controller/scoring.go     ← Add scanFailureTags() (imports vocabulary from prompt/)
-                                       Update ScoringResult struct (add FailureTags, rename field)
-ent/schema/sessionscore.go          ← Add failure_tags, rename missing_tools_analysis → tool_improvement_report
-pkg/queue/scoring_executor.go       ← Pass failure tags in completeScore
-pkg/models/scoring.go               ← Add FailureTags, rename field to ToolImprovementReport
-pkg/api/handler_scoring.go          ← Map failure tags + renamed field in response
-web/dashboard/src/types/api.ts      ← Rename field to tool_improvement_report
-web/dashboard/src/pages/ScoringPage.tsx ← Update field reference
-test/e2e/scoring_test.go            ← Update scripted responses + assertions
-test/e2e/testdata/golden/scoring/   ← Regenerate golden files
-```
+The overall pipeline is unchanged except for tag extraction and persistence: build scoring context, run the two-turn controller, extract the numeric score from the last line of Turn 1 output, scan the analysis for tags, persist the full result including Turn 2 text and tags.
 
 ### Data flow (unchanged except failure tags)
 
@@ -111,37 +97,22 @@ ScoringExecutor.executeScoring()
   → ScoringController.Run()
     → Turn 1: score evaluation
       → extractScore(resp.Text)     (unchanged — number on last line)
-      → scanFailureTags(analysis)   (NEW — strings.Contains scan)
+      → scanFailureTags(analysis)   (NEW — substring match against vocabulary)
     → Turn 2: tool improvement report
   → ScoringResult{TotalScore, ScoreAnalysis, ToolImprovementReport, FailureTags}
-  → completeScore()                 (adds SetFailureTags)
+  → completeScore()                 (persists tags + renamed Turn 2 field)
   → DB: session_scores row
 ```
 
 ## Prompt Design
 
-### System prompt (`judgeSystemPrompt`)
+### System prompt
 
-The system prompt shifts from process evaluation ("how well the agents gathered evidence, used available tools, reasoned through the problem") to outcome-first evaluation:
+The system shifts from process evaluation ("how well the agents gathered evidence, used available tools, reasoned through the problem") to outcome-first evaluation: the evaluator's role is to judge investigation quality with **did the investigation reach the right conclusion?** first, then whether the path was efficient and thorough. Outcome quality is the dominant factor.
 
-```
-You are an expert investigation quality evaluator for TARSy, an automated
-incident investigation platform.
+### Turn 1
 
-TARSy uses agent chains — multi-stage pipelines where AI agents investigate
-incidents by calling external tools (MCP tools), analyzing evidence, and
-producing findings. Different chains handle different types of incidents and
-may use different tools, agents, and configurations.
-
-Your role is to critically evaluate investigation quality. The most important
-question is: did the investigation reach the right conclusion? Then: was the
-path there efficient and thorough? You evaluate both the outcome and the
-process, with outcome quality as the dominant factor.
-```
-
-### Turn 1 prompt (`judgePromptScore`)
-
-The new Turn 1 prompt replaces the 4-category framework with structured dimension assessments followed by holistic scoring. This approach is grounded in EvalPlanner (ICML 2025) research showing that LLMs produce more consistent and accurate evaluations when they explicitly analyze along defined dimensions before committing to a score.
+Turn 1 replaces the four-category framework with structured dimension assessments followed by holistic scoring. This approach is grounded in EvalPlanner (ICML 2025) research showing that LLMs produce more consistent and accurate evaluations when they explicitly analyze along defined dimensions before committing to a score.
 
 The dimensions are deliberately broad — they apply universally to any investigation regardless of alert type. The LLM is never forced into narrow yes/no questions that might be irrelevant; instead, it writes free-form assessments per dimension, naturally using failure vocabulary terms where applicable.
 
@@ -185,9 +156,9 @@ The judge synthesizes the five dimension assessments into an overall narrative a
 
 The remaining four dimensions (Evidence Gathering, Tool Utilization, Analytical Reasoning, Investigation Completeness) determine where the score falls within that range. A flawed conclusion indicates flaws in the process — even if individual steps looked methodical, something went wrong.
 
-**Failure vocabulary section (dynamically injected)**
+**Failure vocabulary (dynamically injected)**
 
-The prompt includes a reference list of common failure patterns, generated dynamically from the `FailureVocabulary` Go slice at prompt build time. The judge uses these terms when applicable but freely describes any problem it identifies:
+The prompt includes a reference list of common failure patterns, built from the same vocabulary list used for scanning. The judge uses these terms when applicable but freely describes any problem it identifies:
 
 ```
 Common failure patterns to watch for (use these terms when applicable, but
@@ -201,18 +172,6 @@ describe any problems you identify even if they don't match these patterns):
 - wrong_conclusion — the final diagnosis is incorrect or contradicted by gathered evidence
 ```
 
-This section is NOT hardcoded in the prompt template. It is generated from `FailureVocabulary` and injected by `BuildScoringInitialPrompt()`. Adding a tag = adding one entry to the slice.
-
-**Prompt template structure** — the `judgePromptScore` constant uses three format parameters:
-
-```
-%[1]s  — session investigation context (alert, runbook, tools, timeline)
-%[2]s  — output schema (scoringOutputSchema constant)
-%[3]s  — failure vocabulary section (dynamically generated from FailureVocabulary)
-```
-
-`BuildScoringInitialPrompt()` builds the vocabulary string and calls `fmt.Sprintf(judgePromptScore, sessionCtx, outputSchema, vocabularySection)`.
-
 **Scoring calibration**
 
 Same bands as before, re-anchored to the outcome-first philosophy:
@@ -224,7 +183,7 @@ Same bands as before, re-anchored to the outcome-first philosophy:
 
 **Output format** — unchanged: narrative analysis followed by total score on the last line.
 
-### Turn 2 prompt (`judgePromptFollowupToolReport`)
+### Turn 2
 
 Turn 2 has two clearly separated sections:
 
@@ -237,12 +196,9 @@ Turn 2 has two clearly separated sections:
 - **Tool description** — Was there a relevant tool the agent didn't use, possibly because its name or description didn't indicate its relevance?
 - **Missing discoverability** — Did the tool require argument values the agent had no way to discover from the available context?
 
-For each improvement:
-- Tool name (as it appears in the AVAILABLE TOOLS section)
-- What to improve (argument names, response format, description, etc.)
-- Why (what was observed in the investigation that suggests this improvement)
+For each improvement: tool name (as in the available-tools section), what to improve, and why (what was observed).
 
-### Score reminder prompt (`judgePromptScoreReminder`)
+### Score reminder prompt
 
 Unchanged in structure — still asks for the total score on the last line. Wording updated to reference the new evaluation framework.
 
@@ -250,254 +206,28 @@ Unchanged in structure — still asks for the total score on the last line. Word
 
 ### Vocabulary (single source of truth)
 
-Defined in `pkg/agent/prompt/vocabulary.go` — a new file in the prompt package. This location is chosen because both consumers need access:
+The failure vocabulary lives alongside other judge prompt material so the prompt builder can inject it and the scoring controller can import the same list without circular dependencies. Both prompt injection and tag scanning iterate the same ordered list of terms and descriptions.
 
-- `BuildScoringInitialPrompt()` in `prompt/builder.go` — same package, direct access
-- `scanFailureTags()` in `controller/scoring.go` — imports from `prompt/` (the controller did not previously import `prompt`, but `prompt` does not import `controller`, so adding `controller → prompt` introduces no cycle)
-
-```go
-// pkg/agent/prompt/vocabulary.go
-
-type FailureTag struct {
-    Term        string
-    Description string
-}
-
-var FailureVocabulary = []FailureTag{
-    {"premature_conclusion", "reached a diagnosis without gathering sufficient evidence"},
-    {"missed_available_tool", "a relevant tool was available but not used"},
-    {"unsupported_confidence", "stated high confidence without comprehensive evidence"},
-    {"incomplete_evidence", "stopped gathering evidence before covering all relevant dimensions"},
-    {"hallucinated_evidence", "cited or assumed evidence not present in the investigation data"},
-    {"wrong_conclusion", "the final diagnosis is incorrect or contradicted by gathered evidence"},
-}
-```
-
-The type and slice are exported (`FailureTag`, `FailureVocabulary`) so `controller/scoring.go` can import them.
-
-**Prompt injection**: `BuildScoringInitialPrompt()` iterates `FailureVocabulary` to generate the vocabulary section dynamically and injects it into the prompt template via a format parameter.
-
-**Tag scanning**: `scanFailureTags()` in `controller/scoring.go` iterates `prompt.FailureVocabulary` for `strings.Contains` matching.
-
-Adding a new tag = add one entry to this slice. The prompt updates automatically and the prompt hash changes (see Prompt Hash section).
+Adding a new tag is a single change to that list; the rendered prompt and scanning behavior stay aligned.
 
 ### Scanning
 
-After `extractScore()` returns the analysis text, scan it for vocabulary terms:
+After the numeric score is extracted from Turn 1 output, the analysis text is scanned for each vocabulary term (substring match). Matched terms are collected in vocabulary order; no deduplication beyond one hit per term is needed.
 
-```go
-// In pkg/agent/controller/scoring.go
-
-func scanFailureTags(analysis string) []string {
-    tags := make([]string, 0)
-    for _, ft := range prompt.FailureVocabulary {
-        if strings.Contains(analysis, ft.Term) {
-            tags = append(tags, ft.Term)
-        }
-    }
-    return tags
-}
-```
-
-`tags` is initialized as an empty slice (not nil) so that JSON marshaling produces `[]` instead of `null` — preserving the distinction between "scanned, no matches" (`[]`) and "pre-redesign, not scanned" (`NULL`).
-
-No deduplication needed — `strings.Contains` returns true once per term regardless of how many times it appears. The result is a `[]string` of matched terms in vocabulary order.
-
-### ScoringResult update
-
-```go
-type ScoringResult struct {
-    TotalScore            int      `json:"total_score"`
-    ScoreAnalysis         string   `json:"score_analysis"`
-    ToolImprovementReport string   `json:"tool_improvement_report"`
-    FailureTags           []string `json:"failure_tags"`
-}
-```
-
-The `FailureTags` field is populated by `scanFailureTags()` in `ScoringController.Run()` right after score extraction succeeds, before building the result.
+The result uses an empty slice (not absent/null) when scanning ran but found no matches, so serialized results distinguish "scanned, clean" from "never scanned" (NULL in the database for legacy rows).
 
 ## Schema Changes
 
-### `ent/schema/sessionscore.go`
+**Rename** the Turn 2 analysis column from a "missing tools only" name to **tool improvement report** — Turn 2 now covers both missing tools and existing-tool improvements.
 
-**Rename** `missing_tools_analysis` → `tool_improvement_report` (field and DB column). Turn 2 now covers both missing tools and existing tool improvements, making the old name misleading.
+**Add** `failure_tags` as optional, nillable JSON (array of strings):
 
-**Add** one new field:
+- **NULL** — pre-redesign score, not scanned
+- **`[]`** — scanned, no failures matched
+- **`["tag1", "tag2"]`** — scanned, these failures matched
 
-```go
-field.JSON("failure_tags", []string{}).
-    Optional().
-    Nillable().
-    Comment("Failure vocabulary terms found in score_analysis, NULL for pre-redesign scores"),
-```
+No new indexes are required initially; JSONB supports containment queries if aggregation needs grow later.
 
-- **NULL** = pre-redesign score, not scanned
-- **`[]`** (empty array) = scanned, no failures matched
-- **`["tag1", "tag2"]`** = scanned, these failures matched
+### Migration (high level)
 
-No new indexes needed — the JSONB column supports `@>` containment queries natively. A GIN index can be added later if aggregation query performance requires it.
-
-### Migration
-
-A single `make migrate-create` + review. The migration contains:
-
-1. `ALTER TABLE session_scores RENAME COLUMN missing_tools_analysis TO tool_improvement_report` — rename existing column
-2. `ALTER TABLE session_scores ADD COLUMN failure_tags jsonb` — add new nullable column (existing rows get NULL, no backfill needed)
-
-## Plumbing Changes
-
-### `pkg/agent/prompt/builder.go`
-
-`BuildScoringInitialPrompt()` gains vocabulary injection. The function signature stays the same (two string parameters), but internally it builds the vocabulary section from `FailureVocabulary` before formatting:
-
-```go
-func (b *PromptBuilder) BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string {
-    var vocabSection strings.Builder
-    for _, ft := range FailureVocabulary {
-        fmt.Fprintf(&vocabSection, "- %s — %s\n", ft.Term, ft.Description)
-    }
-    return fmt.Sprintf(judgePromptScore, sessionInvestigationContext, outputSchema, vocabSection.String())
-}
-```
-
-The `PromptBuilder` interface in `pkg/agent/context.go` is unchanged — the vocabulary injection is an internal implementation detail.
-
-### `pkg/agent/controller/scoring.go`
-
-In `Run()`, after successful score extraction and before building the result:
-
-```go
-failureTags := scanFailureTags(analysis)
-
-result := ScoringResult{
-    TotalScore:            score,
-    ScoreAnalysis:         analysis,
-    ToolImprovementReport: toolImprovementResp.Text,
-    FailureTags:           failureTags,
-}
-```
-
-### `pkg/queue/scoring_executor.go`
-
-In `completeScore()`, add `SetFailureTags`:
-
-```go
-func (e *ScoringExecutor) completeScore(scoreID, finalAnalysisJSON, promptHash string) error {
-    var result controller.ScoringResult
-    if err := json.Unmarshal([]byte(finalAnalysisJSON), &result); err != nil {
-        return fmt.Errorf("failed to parse scoring result: %w", err)
-    }
-
-    now := time.Now()
-    return e.dbClient.SessionScore.UpdateOneID(scoreID).
-        SetTotalScore(result.TotalScore).
-        SetScoreAnalysis(result.ScoreAnalysis).
-        SetToolImprovementReport(result.ToolImprovementReport).
-        SetFailureTags(result.FailureTags).
-        SetPromptHash(promptHash).
-        SetStatus(sessionscore.StatusCompleted).
-        SetCompletedAt(now).
-        Exec(context.Background())
-}
-```
-
-No nil check needed — `scanFailureTags` always returns a non-nil slice (`make([]string, 0)`), so `FailureTags` is always safe to pass to `SetFailureTags`. The DB gets `[]` (empty JSON array) when no tags match, preserving the distinction from `NULL` (pre-redesign scores).
-
-### `pkg/models/scoring.go`
-
-Add `FailureTags`, rename `MissingToolsAnalysis` → `ToolImprovementReport`:
-
-```go
-type SessionScoreResponse struct {
-    ScoreID               string     `json:"score_id"`
-    TotalScore            *int       `json:"total_score"`
-    ScoreAnalysis         *string    `json:"score_analysis"`
-    ToolImprovementReport *string    `json:"tool_improvement_report"`
-    FailureTags           []string   `json:"failure_tags,omitempty"`
-    PromptHash            *string    `json:"prompt_hash"`
-    ScoreTriggeredBy      string     `json:"score_triggered_by"`
-    Status                string     `json:"status"`
-    StageID               *string    `json:"stage_id"`
-    StartedAt             time.Time  `json:"started_at"`
-    CompletedAt           *time.Time `json:"completed_at"`
-    ErrorMessage          *string    `json:"error_message"`
-}
-```
-
-### `pkg/api/handler_scoring.go`
-
-Map `FailureTags` and renamed field in `getScoreHandler`. The ent `Nillable()` JSON field generates `*[]string`, which requires nil-safe dereferencing to the response struct's `[]string`:
-
-```go
-var failureTags []string
-if score.FailureTags != nil {
-    failureTags = *score.FailureTags
-}
-
-return c.JSON(http.StatusOK, &models.SessionScoreResponse{
-    // ... existing fields ...
-    ToolImprovementReport: score.ToolImprovementReport,
-    FailureTags:           failureTags,
-})
-```
-
-## Prompt Hash
-
-The `combinedPromptsHash` in `judges.go` hashes all prompt constants together. Since the vocabulary is now injected dynamically (not part of the static prompt constants), the hash computation includes the vocabulary — otherwise adding or removing a vocabulary term would change the rendered prompt but leave the hash unchanged, silently preventing automatic re-scoring detection.
-
-The `init()` function in `judges.go` includes the formatted vocabulary string:
-
-```go
-func init() {
-    vocabStr := FormatVocabularyForHash(FailureVocabulary)
-    combinedPromptsHash = sha256.Sum256([]byte(
-        judgeSystemPrompt + judgePromptScore + judgePromptScoreReminder +
-        judgePromptFollowupToolReport + vocabStr,
-    ))
-}
-```
-
-`FormatVocabularyForHash` produces a deterministic string from the vocabulary slice (concatenating all terms and descriptions). Any change to `FailureVocabulary` — adding, removing, or editing a term — changes the hash.
-
-## Implementation
-
-Delivered in two PRs, each independently deployable and green on CI.
-
-### PR 1: Prompt rewrite + vocabulary infrastructure
-
-Purely prompt-side changes. No schema changes, no plumbing, no renames. The existing extraction/storage pipeline handles the new prompt output unchanged — `extractScore()` still finds the number on the last line, `score_analysis` stores the new dimension-based narrative, `missing_tools_analysis` stores the broader tool report (naming is stale but functional). The prompt hash changes, so old and new scores are distinguishable.
-
-1. Create `pkg/agent/prompt/vocabulary.go` with `FailureTag` type and `FailureVocabulary` slice
-2. Rewrite all 4 prompt constants in `judges.go` (dimensions, ceiling mechanic, `%[3]s` vocabulary placeholder, expanded Turn 2)
-3. Update `init()` in `judges.go` to include vocabulary in hash computation
-4. Update `BuildScoringInitialPrompt()` in `builder.go` to inject vocabulary dynamically
-5. Regenerate prompt golden files (`prompt_turn1.golden`, `prompt_turn2.golden`)
-
-### PR 2: Schema + failure tags + rename + plumbing
-
-All tightly coupled changes that must land together: the column rename, new column, extraction logic, API contract change, frontend, and all test updates.
-
-**Schema + migration:**
-1. Rename `missing_tools_analysis` → `tool_improvement_report` in `ent/schema/sessionscore.go`
-2. Add `failure_tags` field to `ent/schema/sessionscore.go`
-3. `make migrate-create` + review migration (should contain RENAME COLUMN + ADD COLUMN)
-4. `make generate` to regenerate ent code
-
-**Controller + plumbing:**
-5. Add `scanFailureTags()` in `controller/scoring.go` (imports `prompt.FailureVocabulary`)
-6. Update `ScoringResult` struct: add `FailureTags`, rename `MissingToolsAnalysis` → `ToolImprovementReport`
-7. Wire tag scanning into `Run()`, update variable names for Turn 2
-8. Update `completeScore()` in `scoring_executor.go` (renamed field + failure tags)
-
-**API + frontend:**
-9. Update `SessionScoreResponse` in `models/scoring.go` (renamed field + failure tags)
-10. Update `getScoreHandler` in `handler_scoring.go` (renamed field + nil-safe `*[]string` → `[]string`)
-11. Update frontend: `web/dashboard/src/types/api.ts` and `web/dashboard/src/pages/ScoringPage.tsx`
-12. Update dashboard score badge colors to reflect the new outcome-first score ranges
-
-**Tests:**
-13. Unit tests for `scanFailureTags()`
-14. Update `scriptScoringSuccess()` and assertions in `scoring_test.go`
-15. Update unit tests in `scoring_test.go` for renamed field
-16. Regenerate golden files
-17. Run full e2e test suite
+A single migration: rename the existing Turn 2 column, then add the new nullable `failure_tags` column (existing rows remain NULL).

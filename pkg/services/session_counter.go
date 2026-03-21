@@ -25,9 +25,13 @@ func (c *SessionCounter) PendingCount(ctx context.Context) (int, error) {
 }
 
 // ActiveCount returns the number of sessions currently being processed.
+// Both in_progress and cancelling sessions are counted as active.
 func (c *SessionCounter) ActiveCount(ctx context.Context) (int, error) {
 	return c.client.AlertSession.Query().
-		Where(alertsession.StatusEQ(alertsession.StatusInProgress), alertsession.DeletedAtIsNil()).
+		Where(
+			alertsession.StatusIn(alertsession.StatusInProgress, alertsession.StatusCancelling),
+			alertsession.DeletedAtIsNil(),
+		).
 		Count(ctx)
 }
 

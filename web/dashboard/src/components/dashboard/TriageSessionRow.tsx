@@ -124,8 +124,12 @@ export function TriageSessionRow({
         sx={qualityEvalScoreBodySx}
       />
 
-      {/* Review */}
-      <ReviewCell session={session} onReviewClick={onReviewClick} />
+      {/* Review — only for actionable (non-investigating) sessions */}
+      {hasActions ? (
+        <ReviewCell session={session} onReviewClick={onReviewClick} />
+      ) : (
+        <TableCell />
+      )}
 
       {/* Actions — only Claim/Unclaim/Reopen + open-in-tab; reviewing is via Review column */}
       <TableCell sx={{ width: 100, textAlign: 'right' }}>

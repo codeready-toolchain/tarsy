@@ -261,6 +261,13 @@ export function SessionDetailPage() {
   const [chatExpandCounter, setChatExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
+  // --- Stale-fetch guard: tracks current route id so in-flight getSession
+  //     calls from a previous route don't overwrite state after navigation ---
+  const currentIdRef = useRef(id);
+  useEffect(() => {
+    currentIdRef.current = id;
+  }, [id]);
+
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
 
@@ -877,6 +884,7 @@ export function SessionDetailPage() {
               getSession(id),
               getTimeline(id),
             ]).then(([freshSession, freshTimeline]) => {
+              if (currentIdRef.current !== id) return;
               setSession(freshSession);
               // skipStreaming=true: treat all events as completed so abandoned
               // streaming events (tool calls, thoughts) don't get re-added.
@@ -891,6 +899,7 @@ export function SessionDetailPage() {
         // --- review.status ---
         if (eventType === EVENT_REVIEW_STATUS) {
           getSession(id).then((freshSession) => {
+            if (currentIdRef.current !== id) return;
             setSession(freshSession);
           }).catch((err) => {
             console.warn('Failed to re-fetch session after review status:', err);
@@ -948,7 +957,10 @@ export function SessionDetailPage() {
 
           // Scoring stage completion: re-fetch session and scroll to final analysis
           if (payload.stage_type === STAGE_TYPE.SCORING && TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+            getSession(id).then((fresh) => {
+              if (currentIdRef.current !== id) return;
+              setSession(fresh);
+            }).catch((err) => {
               console.warn('Failed to re-fetch session after scoring stage completion:', err);
             });
             setExpandCounter((prev) => prev + 1);
@@ -976,7 +988,10 @@ export function SessionDetailPage() {
 
             // Re-fetch session detail to get execution overviews (agent names,
             // LLM providers, iteration strategies) for parallel agents.
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+            getSession(id).then((fresh) => {
+              if (currentIdRef.current !== id) return;
+              setSession(fresh);
+            }).catch((err) => {
               console.warn('Failed to re-fetch session on stage start:', err);
             });
           }

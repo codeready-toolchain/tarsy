@@ -85,6 +85,7 @@ func TestSessionCounter_PendingAndActiveCounts(t *testing.T) {
 	seedActiveSession(t, service, alertsession.StatusPending)
 	seedActiveSession(t, service, alertsession.StatusPending)
 	seedActiveSession(t, service, alertsession.StatusInProgress)
+	seedActiveSession(t, service, alertsession.StatusCancelling)
 
 	pending, err := counter.PendingCount(ctx)
 	require.NoError(t, err)
@@ -92,5 +93,5 @@ func TestSessionCounter_PendingAndActiveCounts(t *testing.T) {
 
 	active, err := counter.ActiveCount(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, active)
+	assert.Equal(t, 2, active, "ActiveCount should include both in_progress and cancelling sessions")
 }

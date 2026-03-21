@@ -6,11 +6,12 @@ import {
   CircularProgress,
   Snackbar,
 } from '@mui/material';
-import { ThumbUp, ThumbsUpDown, ThumbDown, RateReview } from '@mui/icons-material';
+import { RateReview } from '@mui/icons-material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
+import { RATING_CONFIG } from '../../constants/ratingConfig.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
@@ -41,16 +42,6 @@ interface SnackbarState {
   completedSession?: DashboardSessionItem;
   completedRating?: string;
 }
-
-const RATING_CONFIG: Record<string, {
-  label: string;
-  severity: 'success' | 'warning' | 'error';
-  icon: React.ReactElement;
-}> = {
-  accurate: { label: 'Accurate', severity: 'success', icon: <ThumbUp fontSize="inherit" /> },
-  partially_accurate: { label: 'Partially Accurate', severity: 'warning', icon: <ThumbsUpDown fontSize="inherit" /> },
-  inaccurate: { label: 'Inaccurate', severity: 'error', icon: <ThumbDown fontSize="inherit" /> },
-};
 
 export function TriageView({
   groups,
@@ -112,8 +103,13 @@ export function TriageView({
       const cfg = RATING_CONFIG[qualityRating];
       setSnackbar({
         message: `Marked as ${cfg?.label ?? qualityRating}`,
-        severity: cfg?.severity ?? 'success',
-        completedSession: { ...reviewTarget.session, quality_rating: qualityRating },
+        severity: cfg?.color ?? 'success',
+        completedSession: {
+          ...reviewTarget.session,
+          quality_rating: qualityRating,
+          action_taken: actionTaken ?? reviewTarget.session.action_taken ?? null,
+          investigation_feedback: investigationFeedback ?? reviewTarget.session.investigation_feedback ?? null,
+        },
         completedRating: qualityRating,
       });
       setReviewTarget(null);
@@ -293,7 +289,12 @@ export function TriageView({
             severity={snackbar.severity}
             variant="filled"
             sx={{ width: '100%' }}
-            icon={snackbar.completedRating ? RATING_CONFIG[snackbar.completedRating]?.icon : undefined}
+            icon={(() => {
+              const cfg = snackbar.completedRating ? RATING_CONFIG[snackbar.completedRating] : null;
+              if (!cfg) return undefined;
+              const Icon = cfg.icon;
+              return <Icon fontSize="inherit" />;
+            })()}
             action={hasSnackbarActions ? (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Button

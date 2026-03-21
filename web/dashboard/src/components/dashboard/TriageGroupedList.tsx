@@ -312,58 +312,66 @@ export function TriageGroupedList({
 
                       {group.key === 'needs_review' && (
                         <>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            disabled={actionLoading}
-                            onClick={() => onBulkClaim?.([...selectedIds])}
-                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-                          >
-                            Claim All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="success"
-                            disabled={actionLoading}
-                            onClick={() => onBulkComplete?.([...selectedIds])}
-                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-                          >
-                            Complete All
-                          </Button>
+                          {onBulkClaim && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={actionLoading}
+                              onClick={() => onBulkClaim([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Claim All
+                            </Button>
+                          )}
+                          {onBulkComplete && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              disabled={actionLoading}
+                              onClick={() => onBulkComplete([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Complete All
+                            </Button>
+                          )}
                         </>
                       )}
 
                       {group.key === 'in_progress' && (
                         <>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="success"
-                            disabled={actionLoading}
-                            onClick={() => onBulkComplete?.([...selectedIds])}
-                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-                          >
-                            Complete All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={actionLoading}
-                            onClick={() => onBulkUnclaim?.([...selectedIds])}
-                            sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
-                          >
-                            Unclaim All
-                          </Button>
+                          {onBulkComplete && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              disabled={actionLoading}
+                              onClick={() => onBulkComplete([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Complete All
+                            </Button>
+                          )}
+                          {onBulkUnclaim && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={actionLoading}
+                              onClick={() => onBulkUnclaim([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Unclaim All
+                            </Button>
+                          )}
                         </>
                       )}
 
-                      {group.key === 'reviewed' && (
+                      {group.key === 'reviewed' && onBulkReopen && (
                         <Button
                           size="small"
                           variant="outlined"
                           disabled={actionLoading}
-                          onClick={() => onBulkReopen?.([...selectedIds])}
+                          onClick={() => onBulkReopen([...selectedIds])}
                           sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
                         >
                           Reopen All
