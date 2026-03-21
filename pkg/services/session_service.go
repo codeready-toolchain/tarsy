@@ -827,21 +827,21 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount         int     `sql:"llm_count"`
-	LLMInputTokens   int64   `sql:"llm_input_tokens"`
-	LLMOutputTokens  int64   `sql:"llm_output_tokens"`
-	LLMTotalTokens   int64   `sql:"llm_total_tokens"`
-	MCPCount         int     `sql:"mcp_count"`
-	TotalStages      int     `sql:"total_stages"`
-	CompletedStages  int     `sql:"completed_stages"`
-	HasParallel      int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
-	HasSubAgents     int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages  int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ChatMsgCount     int     `sql:"chat_msg_count"`
-	FallbackCount    int     `sql:"fallback_count"`
-	MatchedInContent int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
-	LatestScore      *int    `sql:"latest_score"`
-	ScoringStatus    *string `sql:"scoring_status"`
+	LLMCount              int     `sql:"llm_count"`
+	LLMInputTokens        int64   `sql:"llm_input_tokens"`
+	LLMOutputTokens       int64   `sql:"llm_output_tokens"`
+	LLMTotalTokens        int64   `sql:"llm_total_tokens"`
+	MCPCount              int     `sql:"mcp_count"`
+	TotalStages           int     `sql:"total_stages"`
+	CompletedStages       int     `sql:"completed_stages"`
+	HasParallel           int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents          int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages       int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ChatMsgCount          int     `sql:"chat_msg_count"`
+	FallbackCount         int     `sql:"fallback_count"`
+	MatchedInContent      int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LatestScore           *int    `sql:"latest_score"`
+	ScoringStatus         *string `sql:"scoring_status"`
 	ReviewStatus          *string `sql:"review_status"`
 	Assignee              *string `sql:"assignee"`
 	QualityRating         *string `sql:"quality_rating"`
@@ -970,6 +970,12 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				orderFunc = ent.Asc(alertsession.FieldAuthor)
 			} else {
 				orderFunc = ent.Desc(alertsession.FieldAuthor)
+			}
+		case "quality_rating":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldQualityRating)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldQualityRating)
 			}
 		}
 		query = query.Order(orderFunc)

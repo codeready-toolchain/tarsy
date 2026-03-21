@@ -196,6 +196,26 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
         </Typography>
       </TableCell>
 
+      {/* Tokens */}
+      <TableCell>
+        {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
+          <TokenUsageDisplay
+            tokenData={{
+              input_tokens: session.input_tokens,
+              output_tokens: session.output_tokens,
+              total_tokens: session.total_tokens,
+            }}
+            variant="inline"
+            size="small"
+            showBreakdown={false}
+          />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            —
+          </Typography>
+        )}
+      </TableCell>
+
       {/* Eval Score */}
       <ScoreCell
         sessionId={session.id}
@@ -251,26 +271,6 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
             </Tooltip>
           );
         })()}
-      </TableCell>
-
-      {/* Tokens */}
-      <TableCell>
-        {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
-          <TokenUsageDisplay
-            tokenData={{
-              input_tokens: session.input_tokens,
-              output_tokens: session.output_tokens,
-              total_tokens: session.total_tokens,
-            }}
-            variant="inline"
-            size="small"
-            showBreakdown={false}
-          />
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            —
-          </Typography>
-        )}
       </TableCell>
 
       {/* Actions */}

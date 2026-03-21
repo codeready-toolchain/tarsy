@@ -52,10 +52,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 	// Parse sorting.
 	if v := c.QueryParam("sort_by"); v != "" {
 		switch v {
-		case "created_at", "status", "alert_type", "author", "duration", "score":
+		case "created_at", "status", "alert_type", "author", "duration", "score", "quality_rating":
 			params.SortBy = v
 		default:
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, or score")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, score, or quality_rating")
 		}
 	}
 	if v := c.QueryParam("sort_order"); v != "" {

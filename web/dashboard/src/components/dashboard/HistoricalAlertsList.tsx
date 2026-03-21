@@ -31,7 +31,7 @@ import type { SessionFilter, PaginationState, SortState } from '../../types/dash
 import { qualityEvalScoreHeaderSx, qualityReviewHeaderSx } from './qualityGroupSx.ts';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Review | Tokens | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Eval Score | Review | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
 const TOTAL_COLUMNS = 10;
@@ -236,6 +236,9 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
+                  {/* Tokens — not sortable */}
+                  <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
+
                   {/* Eval Score — sortable (left edge of quality group) */}
                   <TableCell sx={{ fontWeight: 600, ...qualityEvalScoreHeaderSx }}>
                     <TableSortLabel
@@ -247,11 +250,16 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Review — not sortable (right edge of quality group) */}
-                  <TableCell sx={{ fontWeight: 600, ...qualityReviewHeaderSx }}>Review</TableCell>
-
-                  {/* Tokens — not sortable */}
-                  <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
+                  {/* Review — sortable (right edge of quality group) */}
+                  <TableCell sx={{ fontWeight: 600, ...qualityReviewHeaderSx }}>
+                    <TableSortLabel
+                      active={sortState.field === 'quality_rating'}
+                      direction={sortState.field === 'quality_rating' ? sortState.direction : 'desc'}
+                      onClick={() => onSortChange('quality_rating')}
+                    >
+                      Review
+                    </TableSortLabel>
+                  </TableCell>
 
                   {/* Actions */}
                   <TableCell sx={{ fontWeight: 600, width: 60, textAlign: 'center' }} />
