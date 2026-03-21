@@ -73,6 +73,7 @@ import {
   EVENT_EXECUTION_STATUS,
   EVENT_CATCHUP_OVERFLOW,
   EVENT_CHAT_CREATED,
+  EVENT_REVIEW_STATUS,
   TIMELINE_STATUS,
   TIMELINE_EVENT_TYPES,
   PHASE_STATUS_MESSAGE,
@@ -884,6 +885,16 @@ export function SessionDetailPage() {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
           }
+          return;
+        }
+
+        // --- review.status ---
+        if (eventType === EVENT_REVIEW_STATUS) {
+          getSession(id).then((freshSession) => {
+            setSession(freshSession);
+          }).catch((err) => {
+            console.warn('Failed to re-fetch session after review status:', err);
+          });
           return;
         }
 
