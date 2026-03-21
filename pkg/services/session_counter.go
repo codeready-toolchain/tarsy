@@ -17,18 +17,21 @@ func NewSessionCounter(client *ent.Client) *SessionCounter {
 	return &SessionCounter{client: client}
 }
 
+// PendingCount returns the number of sessions waiting to be claimed.
 func (c *SessionCounter) PendingCount(ctx context.Context) (int, error) {
 	return c.client.AlertSession.Query().
 		Where(alertsession.StatusEQ(alertsession.StatusPending), alertsession.DeletedAtIsNil()).
 		Count(ctx)
 }
 
+// ActiveCount returns the number of sessions currently being processed.
 func (c *SessionCounter) ActiveCount(ctx context.Context) (int, error) {
 	return c.client.AlertSession.Query().
 		Where(alertsession.StatusEQ(alertsession.StatusInProgress), alertsession.DeletedAtIsNil()).
 		Count(ctx)
 }
 
+// ReviewCountsByRating returns session counts grouped by quality rating.
 func (c *SessionCounter) ReviewCountsByRating(ctx context.Context) (metrics.ReviewCounts, error) {
 	var rows []struct {
 		QualityRating string `json:"quality_rating"`
