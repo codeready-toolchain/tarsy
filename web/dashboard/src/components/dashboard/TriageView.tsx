@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Alert,
@@ -13,6 +13,7 @@ import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
+import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface TriageViewProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
@@ -34,17 +35,10 @@ interface TriageViewProps {
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
 }
 
-interface EditFeedbackState {
-  sessionId: string;
-  qualityRating: string;
-  actionTaken: string;
-  investigationFeedback: string;
-}
-
 interface SnackbarState {
   message: string;
   severity: 'success' | 'warning' | 'error';
-  completedSessionId?: string;
+  completedSession?: DashboardSessionItem;
   completedRating?: string;
 }
 
@@ -78,7 +72,10 @@ export function TriageView({
   onPageSizeChange,
 }: TriageViewProps) {
   const [completeSessionIds, setCompleteSessionIds] = useState<string[] | null>(null);
-  const [editFeedbackState, setEditFeedbackState] = useState<EditFeedbackState | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    session: DashboardSessionItem;
+    mode: 'complete' | 'edit';
+  } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
 
@@ -102,17 +99,38 @@ export function TriageView({
     withAction(() => onUnclaim(sessionId));
   };
 
-  const handleComplete = async (sessionId: string, qualityRating: string) => {
+  const handleReviewClick = useCallback((session: DashboardSessionItem) => {
+    const mode = session.quality_rating ? 'edit' : 'complete';
+    setReviewTarget({ session, mode });
+  }, []);
+
+  const handleReviewComplete = async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!reviewTarget) return;
     setActionLoading(true);
     try {
-      await onComplete(sessionId, qualityRating);
+      await onComplete(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
       const cfg = RATING_CONFIG[qualityRating];
       setSnackbar({
         message: `Marked as ${cfg?.label ?? qualityRating}`,
         severity: cfg?.severity ?? 'success',
-        completedSessionId: sessionId,
+        completedSession: { ...reviewTarget.session, quality_rating: qualityRating },
         completedRating: qualityRating,
       });
+      setReviewTarget(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Action failed';
+      setSnackbar({ message, severity: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReviewSave = async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!reviewTarget) return;
+    setActionLoading(true);
+    try {
+      await onUpdateFeedback(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+      setReviewTarget(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Action failed';
       setSnackbar({ message, severity: 'error' });
@@ -130,17 +148,6 @@ export function TriageView({
 
   const handleReopen = (sessionId: string) => {
     withAction(() => onReopen(sessionId));
-  };
-
-  const handleEditFeedback = (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => {
-    setEditFeedbackState({ sessionId, qualityRating, actionTaken, investigationFeedback });
-  };
-
-  const handleEditFeedbackSave = (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
-    if (!editFeedbackState) return;
-    const sessionId = editFeedbackState.sessionId;
-    setEditFeedbackState(null);
-    withAction(() => onUpdateFeedback(sessionId, qualityRating, actionTaken, investigationFeedback));
   };
 
   const handleBulkClaim = (sessionIds: string[]) => {
@@ -161,19 +168,14 @@ export function TriageView({
 
   // --- Snackbar actions (snackbar mode only) ---
   const handleSnackbarAddFeedback = () => {
-    if (!snackbar?.completedSessionId) return;
-    setEditFeedbackState({
-      sessionId: snackbar.completedSessionId,
-      qualityRating: snackbar.completedRating ?? '',
-      actionTaken: '',
-      investigationFeedback: '',
-    });
+    if (!snackbar?.completedSession) return;
+    setReviewTarget({ session: snackbar.completedSession, mode: 'edit' });
     setSnackbar(null);
   };
 
   const handleSnackbarUndo = () => {
-    if (!snackbar?.completedSessionId) return;
-    const sessionId = snackbar.completedSessionId;
+    if (!snackbar?.completedSession) return;
+    const sessionId = snackbar.completedSession.id;
     setSnackbar(null);
     withAction(() => onReopen(sessionId));
   };
@@ -187,7 +189,7 @@ export function TriageView({
     ? `Complete Review for ${completeSessionIds.length} Sessions`
     : undefined;
 
-  const hasSnackbarActions = snackbar?.completedSessionId !== undefined;
+  const hasSnackbarActions = snackbar?.completedSession !== undefined;
 
   if (error) {
     return (
@@ -239,9 +241,8 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
-        onComplete={handleComplete}
         onReopen={handleReopen}
-        onEditFeedback={handleEditFeedback}
+        onReviewClick={handleReviewClick}
         onBulkClaim={handleBulkClaim}
         onBulkComplete={handleBulkComplete}
         onBulkUnclaim={handleBulkUnclaim}
@@ -251,22 +252,31 @@ export function TriageView({
         actionLoading={actionLoading}
       />
 
+      {/* Single-session review modals (from Review column click) */}
+      <CompleteReviewModal
+        open={reviewTarget?.mode === 'complete'}
+        onClose={() => setReviewTarget(null)}
+        onComplete={handleReviewComplete}
+        loading={actionLoading}
+        title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+      />
+      <EditFeedbackModal
+        open={reviewTarget?.mode === 'edit'}
+        onClose={() => setReviewTarget(null)}
+        onSave={handleReviewSave}
+        loading={actionLoading}
+        initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+        initialActionTaken={reviewTarget?.session.action_taken ?? ''}
+        initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+      />
+
+      {/* Bulk complete modal */}
       <CompleteReviewModal
         open={completeSessionIds !== null}
         onClose={() => setCompleteSessionIds(null)}
         onComplete={handleBulkCompleteConfirm}
         loading={actionLoading}
         title={completeModalTitle}
-      />
-
-      <EditFeedbackModal
-        open={editFeedbackState !== null}
-        initialQualityRating={editFeedbackState?.qualityRating ?? ''}
-        initialActionTaken={editFeedbackState?.actionTaken ?? ''}
-        initialInvestigationFeedback={editFeedbackState?.investigationFeedback ?? ''}
-        onClose={() => setEditFeedbackState(null)}
-        onSave={handleEditFeedbackSave}
-        loading={actionLoading}
       />
 
       <Snackbar

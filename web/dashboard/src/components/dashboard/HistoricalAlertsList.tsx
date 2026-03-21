@@ -28,7 +28,7 @@ import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
-import { qualityEvalScoreHeaderSx, qualityReviewHeaderSx } from './qualityGroupSx.ts';
+import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 
 /**
  * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Eval Score | Review | Actions
@@ -239,27 +239,11 @@ export function HistoricalAlertsList({
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
 
-                  {/* Eval Score — sortable (left edge of quality group) */}
-                  <TableCell sx={{ fontWeight: 600, ...qualityEvalScoreHeaderSx }}>
-                    <TableSortLabel
-                      active={sortState.field === 'score'}
-                      direction={sortState.field === 'score' ? sortState.direction : 'desc'}
-                      onClick={() => onSortChange('score')}
-                    >
-                      Eval Score
-                    </TableSortLabel>
-                  </TableCell>
-
-                  {/* Review — sortable (right edge of quality group) */}
-                  <TableCell sx={{ fontWeight: 600, ...qualityReviewHeaderSx }}>
-                    <TableSortLabel
-                      active={sortState.field === 'quality_rating'}
-                      direction={sortState.field === 'quality_rating' ? sortState.direction : 'desc'}
-                      onClick={() => onSortChange('quality_rating')}
-                    >
-                      Review
-                    </TableSortLabel>
-                  </TableCell>
+                  <QualityGroupHeaders
+                    sortField={sortState.field}
+                    sortDirection={sortState.direction}
+                    onSortChange={onSortChange}
+                  />
 
                   {/* Actions */}
                   <TableCell sx={{ fontWeight: 600, width: 60, textAlign: 'center' }} />

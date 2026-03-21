@@ -21,21 +21,18 @@ import {
   Hub,
   SwapHoriz,
   BuildOutlined,
-  ThumbUp,
-  ThumbsUpDown,
-  ThumbDown,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
-import { qualityEvalScoreBodySx, qualityReviewBodySx } from './qualityGroupSx.ts';
+import { ReviewCell } from './ReviewCell.tsx';
+import { qualityEvalScoreBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
-import { QUALITY_RATING } from '../../types/api.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface SessionListItemProps {
@@ -50,18 +47,6 @@ const iconOnlyChipSx = {
   '& .MuiChip-label': { px: 0, display: 'none' },
   '& .MuiChip-icon': { mx: 0 },
 } as const;
-
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
-
-const RATING_CHIP_MAP: Record<string, {
-  icon: React.ReactElement;
-  chipColor: 'success' | 'warning' | 'error';
-  label: string;
-}> = {
-  [QUALITY_RATING.ACCURATE]: { icon: <ThumbUp sx={{ fontSize: '0.875rem' }} />, chipColor: 'success', label: 'Accurate' },
-  [QUALITY_RATING.PARTIALLY_ACCURATE]: { icon: <ThumbsUpDown sx={{ fontSize: '0.875rem' }} />, chipColor: 'warning', label: 'Partially Accurate' },
-  [QUALITY_RATING.INACCURATE]: { icon: <ThumbDown sx={{ fontSize: '0.875rem' }} />, chipColor: 'error', label: 'Inaccurate' },
-};
 
 export function SessionListItem({ session, searchTerm, onReviewClick }: SessionListItemProps) {
   const navigate = useNavigate();
@@ -225,53 +210,7 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
       />
 
       {/* Review */}
-      <TableCell sx={qualityReviewBodySx}>
-        {(() => {
-          const isTerminal = TERMINAL_STATUSES.has(session.status);
-          if (!isTerminal) return null;
-
-          const rating = session.quality_rating ? RATING_CHIP_MAP[session.quality_rating] : null;
-
-          if (rating) {
-            return (
-              <Tooltip title={`Reviewed: ${rating.label}`}>
-                <Chip
-                  icon={rating.icon}
-                  size="small"
-                  color={rating.chipColor}
-                  variant="outlined"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReviewClick?.(session);
-                  }}
-                  sx={{ ...iconOnlyChipSx, cursor: 'pointer' }}
-                />
-              </Tooltip>
-            );
-          }
-
-          return (
-            <Tooltip title="Click to review">
-              <Chip
-                icon={<ThumbsUpDown sx={{ fontSize: '0.875rem' }} />}
-                size="small"
-                variant="outlined"
-                className="review-hover-icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReviewClick?.(session);
-                }}
-                sx={{
-                  ...iconOnlyChipSx,
-                  cursor: 'pointer',
-                  opacity: 0,
-                  transition: 'opacity 0.15s ease-in-out',
-                }}
-              />
-            </Tooltip>
-          );
-        })()}
-      </TableCell>
+      <ReviewCell session={session} onReviewClick={onReviewClick} />
 
       {/* Actions */}
       <TableCell sx={{ width: 60, textAlign: 'center' }}>

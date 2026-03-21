@@ -26,15 +26,15 @@ import {
 } from '@mui/icons-material';
 import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
+import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
 interface TriageGroupedListProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
   onClaim: (sessionId: string) => void;
   onUnclaim: (sessionId: string) => void;
-  onComplete: (sessionId: string, qualityRating: string) => void;
   onReopen: (sessionId: string) => void;
-  onEditFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
+  onReviewClick: (session: import('../../types/session.ts').DashboardSessionItem) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
   onBulkClaim?: (sessionIds: string[]) => void;
@@ -106,9 +106,8 @@ export function TriageGroupedList({
   groups,
   onClaim,
   onUnclaim,
-  onComplete,
   onReopen,
-  onEditFeedback,
+  onReviewClick,
   onPageChange,
   onPageSizeChange,
   onBulkClaim,
@@ -397,9 +396,9 @@ export function TriageGroupedList({
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Eval Score</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
-                          <TableCell sx={{ fontWeight: 600, width: 180, textAlign: 'right' }} />
+                          <QualityGroupHeaders />
+                          <TableCell sx={{ fontWeight: 600, width: 100, textAlign: 'right' }} />
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -413,9 +412,8 @@ export function TriageGroupedList({
                             onToggleSelect={selectable ? (id) => toggleSelect(group.dataKey, id) : undefined}
                             onClaim={onClaim}
                             onUnclaim={onUnclaim}
-                            onComplete={onComplete}
                             onReopen={onReopen}
-                            onEditFeedback={onEditFeedback}
+                            onReviewClick={onReviewClick}
                             actionLoading={actionLoading}
                           />
                         ))}
