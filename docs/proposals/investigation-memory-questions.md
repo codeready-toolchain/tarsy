@@ -73,7 +73,7 @@ _Considered and rejected: Option A (system prompt injection only — no agency f
 
 The Reflector needs to know whether an investigation was "good" (extract positive patterns to repeat) or "bad" (extract anti-patterns to avoid). TARSy has automated scoring and human review, but they arrive at different times.
 
-**Prerequisite: review workflow redesign** — see [review-feedback-redesign-design.md](review-feedback-redesign-design.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. A `dismissed` investigation that correctly identifies a false positive is actually high-quality. The redesigned workflow replaces them with three orthogonal fields:
+**Prerequisite: review workflow redesign** — see [ADR-0013: Review Feedback Redesign](../adr/0013-review-feedback-redesign.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. A `dismissed` investigation that correctly identifies a false positive is actually high-quality. The redesigned workflow replaces them with three orthogonal fields:
 
 - **`quality_rating`** (enum: `accurate` / `partially_accurate` / `inaccurate`) — explicit, unambiguous investigation quality signal (required at review completion)
 - **`action_taken`** (optional text) — what the human did about the alert/event (historical record, not about investigation quality)
@@ -97,7 +97,7 @@ Run the Reflector immediately after scoring. Score (0-100) + failure tags + tool
 - **Con:** Two-phase memory quality assessment is more complex than single-phase.
 - **Con:** Human review may contradict the Reflector's initial assessment, requiring memory updates.
 
-**Decision:** Option C — score-triggered extraction with human review refinement. The automated score drives initial memory extraction (no human bottleneck). The redesigned review workflow (see [review-feedback-redesign-design.md](review-feedback-redesign-design.md)) with `quality_rating` provides an unambiguous refinement signal when humans complete their review. `investigation_feedback` is the richest signal — it explains *why* the investigation was right or wrong, which can feed into targeted memory updates.
+**Decision:** Option C — score-triggered extraction with human review refinement. The automated score drives initial memory extraction (no human bottleneck). The redesigned review workflow (see [ADR-0013: Review Feedback Redesign](../adr/0013-review-feedback-redesign.md)) with `quality_rating` provides an unambiguous refinement signal when humans complete their review. `investigation_feedback` is the richest signal — it explains *why* the investigation was right or wrong, which can feed into targeted memory updates.
 
 _Considered and rejected: Option A (score-only — misses human judgment, scoring LLM can misjudge), Option B (wait for human review — creates bottleneck, many sessions never reviewed, memory store stays empty), Option D (per-memory human feedback — too granular for v1, can be added later if session-level signals prove too coarse)._
 

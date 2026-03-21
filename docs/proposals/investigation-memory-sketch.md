@@ -29,7 +29,7 @@ Enable TARSy to accumulate and apply institutional knowledge from past investiga
 | **Score analysis** | `SessionScore.score_analysis` | Detailed critique of what went well/poorly |
 | **Failure tags** | `SessionScore.failure_tags` | Standardized failure patterns (`premature_conclusion`, `missed_available_tool`, etc.) |
 | **Tool improvement report** | `SessionScore.tool_improvement_report` | What tools were misused, missed, or need improvement |
-| **Human quality rating** | `AlertSession.quality_rating` | `accurate` / `partially_accurate` / `inaccurate` — explicit investigation quality (see [review feedback redesign](review-feedback-redesign-design.md)) |
+| **Human quality rating** | `AlertSession.quality_rating` | `accurate` / `partially_accurate` / `inaccurate` — explicit investigation quality (see [review feedback redesign](../adr/0013-review-feedback-redesign.md)) |
 | **Investigation feedback** | `AlertSession.investigation_feedback` | Free-text explaining why the investigation was good or bad |
 | **Final analysis** | `AlertSession.final_analysis` | The investigation's conclusion |
 | **Executive summary** | `AlertSession.executive_summary` | Brief summary |
@@ -112,7 +112,7 @@ Memory quality is determined in two phases (see [Q4 decision](investigation-memo
 1. **Immediate**: Reflector runs after scoring, using score + failure tags to set initial valence and confidence
 2. **Refinement**: When a human completes their review, their `quality_rating` adjusts confidence (`accurate` boosts, `inaccurate` reduces/flips valence), and `investigation_feedback` can trigger targeted memory updates
 
-**Prerequisite: review workflow redesign** — see [review-feedback-redesign-design.md](review-feedback-redesign-design.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. The redesigned workflow replaces them with `quality_rating` (investigation accuracy) + `action_taken` (what the human did about the alert) + `investigation_feedback` (why the investigation was good/bad). The terminal review status is renamed from `resolved` to `reviewed`, and the action from `resolve` to `complete`.
+**Prerequisite: review workflow redesign** — see [ADR-0013: Review Feedback Redesign](../adr/0013-review-feedback-redesign.md). The old `actioned`/`dismissed` resolution reasons were ambiguous — they described what the human did about the alert, not whether the investigation was good. The redesigned workflow replaces them with `quality_rating` (investigation accuracy) + `action_taken` (what the human did about the alert) + `investigation_feedback` (why the investigation was good/bad). The terminal review status is renamed from `resolved` to `reviewed`, and the action from `resolve` to `complete`.
 
 ### Memory scoping and retrieval
 
@@ -173,7 +173,7 @@ Memory extraction is **embedded in the scoring stage** as a third LLM turn (see 
 
 ### Human feedback integration
 
-The redesigned review workflow (see [review-feedback-redesign-design.md](review-feedback-redesign-design.md)) provides three fields when a reviewer completes their review:
+The redesigned review workflow (see [ADR-0013: Review Feedback Redesign](../adr/0013-review-feedback-redesign.md)) provides three fields when a reviewer completes their review:
 
 | Field | Purpose | Memory relevance |
 |-------|---------|-----------------|

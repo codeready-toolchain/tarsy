@@ -1,6 +1,7 @@
-# Review Workflow Feedback Redesign
+# ADR-0013: Review Workflow Feedback Redesign
 
-**Status:** Final — all decisions made, see [review-feedback-redesign-questions.md](review-feedback-redesign-questions.md)
+**Status:** Implemented
+**Date:** 2026-03-20
 
 ## Overview
 
@@ -16,7 +17,7 @@ This redesign replaces those fields with three orthogonal signals:
 
 Additionally, the terminal review status is renamed from `resolved` to `reviewed` to reflect the shifted purpose — the reviewer is assessing investigation quality, not resolving an incident.
 
-This is a prerequisite for the [Investigation Memory](investigation-memory-sketch.md) feature, which needs an unambiguous signal of investigation quality to determine whether extracted memories represent patterns to repeat or patterns to avoid.
+This is a prerequisite for the [Investigation Memory](../proposals/investigation-memory-sketch.md) feature, which needs an unambiguous signal of investigation quality to determine whether extracted memories represent patterns to repeat or patterns to avoid.
 
 ## Design Principles
 
@@ -297,12 +298,12 @@ All files regenerated automatically — no manual edits:
 
 ## Decisions Summary
 
-| # | Question | Decision |
-|---|----------|----------|
-| Q1 | Keep `resolution_reason`? | **Drop entirely** — `quality_rating` + `action_taken` cover both signals |
-| Q2 | Migration strategy | **Data-preserving** — copy `resolution_note` → `action_taken`, set `quality_rating=accurate` for human-reviewed sessions (`assignee IS NOT NULL`), drop old columns |
-| Q3 | `quality_rating` required? | **Yes** — same friction as today, far more useful signal |
-| Q4 | Post-resolve editing | **Rename `update_note` → `update_feedback`** — single action for all three fields |
-| Q5 | Frontend field requirements | **Only `quality_rating` required** — optional text fields with guiding placeholders |
-| — | Status rename | **`resolved` → `reviewed`** — terminology matches the shifted purpose |
-| — | Action rename | **`resolve` → `complete`** — "complete the review" produces `reviewed` status |
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| Q1 | Keep `resolution_reason`? | **Drop entirely** — `quality_rating` + `action_taken` cover both signals | `action_taken` free text is more expressive than a binary enum; `quality_rating` replaces it as the structured filter |
+| Q2 | Migration strategy | **Data-preserving** — copy `resolution_note` → `action_taken`, set `quality_rating=accurate` for human-reviewed sessions (`assignee IS NOT NULL`), drop old columns | Preserves human-written notes; reasonable default for existing reviews; system-auto-completed and unreviewed sessions stay NULL |
+| Q3 | `quality_rating` required? | **Yes** — same friction as today, far more useful signal | Guarantees every human-reviewed session has a quality signal for the memory feature; `not_assessed` escape hatch can be added later if needed |
+| Q4 | Post-resolve editing | **Rename `update_note` → `update_feedback`** — single action for all three fields | Already a breaking API change, so rename is free; single action keeps the API simple |
+| Q5 | Frontend field requirements | **Only `quality_rating` required** — optional text fields with guiding placeholders | Low friction (one mandatory click); voluntary text is higher quality than forced text |
+| — | Status rename | **`resolved` → `reviewed`** — terminology matches the shifted purpose | |
+| — | Action rename | **`resolve` → `complete`** — "complete the review" produces `reviewed` status | |
