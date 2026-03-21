@@ -225,7 +225,6 @@ export function DashboardView() {
 
   const fetchActiveAlerts = useCallback(async () => {
     try {
-      setActiveLoading(true);
       setActiveError(null);
       const data = await getActiveSessions();
       setActiveSessions(data.active);
@@ -245,7 +244,6 @@ export function DashboardView() {
     const reqSort = { ...sortRef.current };
 
     try {
-      setHistoricalLoading(true);
       setHistoricalError(null);
 
       const params = buildQueryParams(
