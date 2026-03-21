@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton } from '@mui/material';
-import { Psychology, ContentCopy, ExpandMore, AutoAwesome } from '@mui/icons-material';
+import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
+import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
@@ -10,6 +10,17 @@ import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
+import { QUALITY_RATING } from '../../types/api';
+
+const RATING_ICON_MAP: Record<string, {
+  icon: typeof ThumbUp;
+  color: 'success.main' | 'warning.main' | 'error.main';
+  label: string;
+}> = {
+  [QUALITY_RATING.ACCURATE]: { icon: ThumbUp, color: 'success.main', label: 'Accurate' },
+  [QUALITY_RATING.PARTIALLY_ACCURATE]: { icon: ThumbsUpDown, color: 'warning.main', label: 'Partially Accurate' },
+  [QUALITY_RATING.INACCURATE]: { icon: ThumbDown, color: 'error.main', label: 'Inaccurate' },
+};
 
 /** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
 function copyToClipboard(text: string, onSuccess: () => void) {
@@ -33,6 +44,10 @@ interface FinalAnalysisCardProps {
   latestScore?: number | null;
   /** Scoring status */
   scoringStatus?: string | null;
+  /** Current quality rating (if reviewed) */
+  qualityRating?: string | null;
+  /** Callback when user clicks the review chip */
+  onReviewClick?: () => void;
 }
 
 /**
@@ -57,7 +72,7 @@ function generateFakeAnalysis(status: string, errorMessage?: string | null): str
  * Supports counter-based expand/collapse from parent.
  */
 const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
-  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus }, ref) => {
+  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, onReviewClick }, ref) => {
     const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
@@ -130,6 +145,26 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                   <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
                 </Box>
               )}
+              {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
+                const rating = qualityRating ? RATING_ICON_MAP[qualityRating] : null;
+                if (rating) {
+                  const Icon = rating.icon;
+                  return (
+                    <Tooltip title={`Reviewed: ${rating.label} — click to edit`}>
+                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: rating.color }}>
+                        <Icon sx={{ fontSize: 20 }} />
+                      </IconButton>
+                    </Tooltip>
+                  );
+                }
+                return (
+                  <Tooltip title="Add review">
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: 'text.disabled' }}>
+                      <ThumbsUpDown sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </Tooltip>
+                );
+              })()}
               {isNewlyUpdated && (
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'white', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
                   ✨ Updated

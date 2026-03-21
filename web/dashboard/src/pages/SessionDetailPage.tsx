@@ -42,8 +42,9 @@ import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
 import { useChatState } from '../hooks/useChatState.ts';
 
-import { getSession, getTimeline, handleAPIError } from '../services/api.ts';
+import { getSession, getTimeline, updateReview, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
+import { REVIEW_ACTION } from '../types/api.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
@@ -96,6 +97,9 @@ const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlert
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
+
+import { CompleteReviewModal } from '../components/dashboard/CompleteReviewModal.tsx';
+import { EditFeedbackModal } from '../components/dashboard/EditFeedbackModal.tsx';
 
 // ────────────────────────────────────────────────────────────
 // Skeleton placeholders
@@ -241,6 +245,10 @@ export function SessionDetailPage() {
       });
     }
   }, [chatState.chatStageId]);
+
+  // --- Review state ---
+  const [reviewModalMode, setReviewModalMode] = useState<'complete' | 'edit' | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -1316,6 +1324,57 @@ export function SessionDetailPage() {
     setChatExpandCounter((prev) => prev + 1);
   }, []);
 
+  const handleReviewClick = useCallback(() => {
+    if (!session) return;
+    setReviewModalMode(session.quality_rating ? 'edit' : 'complete');
+  }, [session]);
+
+  const handleReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!id) return;
+    try {
+      setReviewLoading(true);
+      const resp = await updateReview({
+        session_ids: [id],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
+      if (resp.results[0]?.success) {
+        setReviewModalMode(null);
+        const freshSession = await getSession(id);
+        setSession(freshSession);
+      }
+    } catch (err) {
+      console.error('Failed to complete review:', err);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [id]);
+
+  const handleReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!id) return;
+    try {
+      setReviewLoading(true);
+      const resp = await updateReview({
+        session_ids: [id],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
+      if (resp.results[0]?.success) {
+        setReviewModalMode(null);
+        const freshSession = await getSession(id);
+        setSession(freshSession);
+      }
+    } catch (err) {
+      console.error('Failed to update review:', err);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [id]);
+
   // Auto-scroll for chat: enable when chat stage starts, disable after completion
   useEffect(() => {
     if (chatStageInProgress) {
@@ -1609,8 +1668,30 @@ export function SessionDetailPage() {
                 sessionId={session.id}
                 latestScore={session.latest_score}
                 scoringStatus={session.scoring_status}
+                qualityRating={session.quality_rating}
+                onReviewClick={handleReviewClick}
               />
             </Suspense>
+
+            {/* Review modals */}
+            <CompleteReviewModal
+              open={reviewModalMode === 'complete'}
+              onClose={() => setReviewModalMode(null)}
+              onComplete={handleReviewComplete}
+              loading={reviewLoading}
+              title={session.alert_type ? `Review: ${session.alert_type}` : undefined}
+              executiveSummary={session.executive_summary}
+            />
+            <EditFeedbackModal
+              open={reviewModalMode === 'edit'}
+              onClose={() => setReviewModalMode(null)}
+              onSave={handleReviewSave}
+              loading={reviewLoading}
+              initialQualityRating={session.quality_rating ?? ''}
+              initialActionTaken={session.action_taken ?? ''}
+              initialInvestigationFeedback={session.investigation_feedback ?? ''}
+              executiveSummary={session.executive_summary}
+            />
 
             {/* Jump to Chat button — after Final Analysis, at the bottom */}
             {isChatAvailable && (

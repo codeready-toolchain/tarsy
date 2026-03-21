@@ -637,6 +637,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		LatestScore:             latestScore,
 		ScoringStatus:           scoringStatus,
 		ScoreID:                 scoreID,
+		ReviewStatus:            ptrStringFromReviewStatus(session.ReviewStatus),
+		Assignee:                session.Assignee,
+		QualityRating:           ptrStringFromQualityRating(session.QualityRating),
+		ActionTaken:             session.ActionTaken,
+		InvestigationFeedback:   session.InvestigationFeedback,
 		Stages:                  stages,
 	}, nil
 }
@@ -1402,6 +1407,22 @@ func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]exec
 	}
 
 	return overview
+}
+
+func ptrStringFromReviewStatus(v *alertsession.ReviewStatus) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
+}
+
+func ptrStringFromQualityRating(v *alertsession.QualityRating) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
 }
 
 // validateMCPOverride validates MCP server selection override

@@ -796,6 +796,13 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		require.NotNil(t, detail.DurationMs)
 		assert.Greater(t, *detail.DurationMs, int64(0))
 
+		// Review fields nil when not set.
+		assert.Nil(t, detail.ReviewStatus)
+		assert.Nil(t, detail.Assignee)
+		assert.Nil(t, detail.QualityRating)
+		assert.Nil(t, detail.ActionTaken)
+		assert.Nil(t, detail.InvestigationFeedback)
+
 		// Stages.
 		require.Len(t, detail.Stages, 1)
 		assert.Equal(t, "analysis", detail.Stages[0].StageName)
@@ -1353,6 +1360,34 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.False(t, detail.HasActionStages)
+	})
+
+	t.Run("includes review fields when session has review data", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"reviewed session", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		client.AlertSession.UpdateOneID(sessionID).
+			SetReviewStatus(alertsession.ReviewStatusReviewed).
+			SetAssignee("reviewer@test.com").
+			SetQualityRating(alertsession.QualityRatingPartiallyAccurate).
+			SetActionTaken("escalated to platform team").
+			SetInvestigationFeedback("missed the root cause").
+			ExecX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.NotNil(t, detail.ReviewStatus)
+		assert.Equal(t, "reviewed", *detail.ReviewStatus)
+		require.NotNil(t, detail.Assignee)
+		assert.Equal(t, "reviewer@test.com", *detail.Assignee)
+		require.NotNil(t, detail.QualityRating)
+		assert.Equal(t, "partially_accurate", *detail.QualityRating)
+		require.NotNil(t, detail.ActionTaken)
+		assert.Equal(t, "escalated to platform team", *detail.ActionTaken)
+		require.NotNil(t, detail.InvestigationFeedback)
+		assert.Equal(t, "missed the root cause", *detail.InvestigationFeedback)
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

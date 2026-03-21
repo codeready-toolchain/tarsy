@@ -196,6 +196,13 @@ type SessionDetailResponse struct {
 	ScoringStatus *string `json:"scoring_status"`
 	ScoreID       *string `json:"score_id"`
 
+	// Review fields
+	ReviewStatus          *string `json:"review_status"`
+	Assignee              *string `json:"assignee"`
+	QualityRating         *string `json:"quality_rating"`
+	ActionTaken           *string `json:"action_taken"`
+	InvestigationFeedback *string `json:"investigation_feedback"`
+
 	// Stage list
 	Stages []StageOverview `json:"stages"`
 }

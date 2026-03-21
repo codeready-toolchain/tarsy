@@ -108,6 +108,13 @@ export interface SessionDetailResponse {
   scoring_status?: string | null;
   score_id?: string | null;
 
+  // Review fields
+  review_status?: string | null;
+  assignee?: string | null;
+  quality_rating?: string | null;
+  action_taken?: string | null;
+  investigation_feedback?: string | null;
+
   // Stage list
   stages: StageOverview[];
 }
