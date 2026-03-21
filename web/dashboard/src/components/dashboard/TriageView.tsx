@@ -1,16 +1,20 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Alert,
+  Button,
   CircularProgress,
   Snackbar,
 } from '@mui/material';
+import { RateReview } from '@mui/icons-material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
-import { ResolveModal } from './ResolveModal.tsx';
-import { EditNoteModal } from './EditNoteModal.tsx';
+import { CompleteReviewModal } from './CompleteReviewModal.tsx';
+import { EditFeedbackModal } from './EditFeedbackModal.tsx';
+import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
+import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface TriageViewProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
@@ -21,15 +25,22 @@ interface TriageViewProps {
   onRefresh: () => void;
   onClaim: (sessionId: string) => Promise<void>;
   onUnclaim: (sessionId: string) => Promise<void>;
-  onResolve: (sessionId: string, reason: string, note?: string) => Promise<void>;
+  onComplete: (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
-  onUpdateNote: (sessionId: string, note: string) => Promise<void>;
+  onUpdateFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => Promise<void>;
   onBulkClaim: (sessionIds: string[]) => Promise<void>;
-  onBulkResolve: (sessionIds: string[], reason: string, note?: string) => Promise<void>;
+  onBulkComplete: (sessionIds: string[], qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
   onBulkUnclaim: (sessionIds: string[]) => Promise<void>;
   onBulkReopen: (sessionIds: string[]) => Promise<void>;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
+}
+
+interface SnackbarState {
+  message: string;
+  severity: 'success' | 'warning' | 'error';
+  completedSession?: DashboardSessionItem;
+  completedRating?: string;
 }
 
 export function TriageView({
@@ -41,20 +52,23 @@ export function TriageView({
   onRefresh,
   onClaim,
   onUnclaim,
-  onResolve,
+  onComplete,
   onReopen,
-  onUpdateNote,
+  onUpdateFeedback,
   onBulkClaim,
-  onBulkResolve,
+  onBulkComplete,
   onBulkUnclaim,
   onBulkReopen,
   onPageChange,
   onPageSizeChange,
 }: TriageViewProps) {
-  const [resolveSessionIds, setResolveSessionIds] = useState<string[] | null>(null);
-  const [editNoteState, setEditNoteState] = useState<{ sessionId: string; note: string } | null>(null);
+  const [completeSessionIds, setCompleteSessionIds] = useState<string[] | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    session: DashboardSessionItem;
+    mode: 'complete' | 'edit';
+  } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
 
   const withAction = async (fn: () => Promise<void>) => {
     setActionLoading(true);
@@ -76,42 +90,68 @@ export function TriageView({
     withAction(() => onUnclaim(sessionId));
   };
 
-  const handleResolveClick = (sessionId: string) => {
-    setResolveSessionIds([sessionId]);
+  const handleReviewClick = useCallback((session: DashboardSessionItem) => {
+    const mode = session.quality_rating ? 'edit' : 'complete';
+    setReviewTarget({ session, mode });
+  }, []);
+
+  const handleReviewComplete = async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!reviewTarget) return;
+    setActionLoading(true);
+    try {
+      await onComplete(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+      const cfg = getRatingConfig(qualityRating);
+      setSnackbar({
+        message: `Marked as ${cfg?.label ?? qualityRating}`,
+        severity: cfg?.color ?? 'success',
+        completedSession: {
+          ...reviewTarget.session,
+          quality_rating: qualityRating,
+          action_taken: actionTaken ?? reviewTarget.session.action_taken ?? null,
+          investigation_feedback: investigationFeedback ?? reviewTarget.session.investigation_feedback ?? null,
+        },
+        completedRating: qualityRating,
+      });
+      setReviewTarget(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Action failed';
+      setSnackbar({ message, severity: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleResolveConfirm = (reason: string, note?: string) => {
-    if (!resolveSessionIds) return;
-    const ids = resolveSessionIds;
-    setResolveSessionIds(null);
-    if (ids.length === 1) {
-      withAction(() => onResolve(ids[0], reason, note));
-    } else {
-      withAction(() => onBulkResolve(ids, reason, note));
+  const handleReviewSave = async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!reviewTarget) return;
+    setActionLoading(true);
+    try {
+      await onUpdateFeedback(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+      setReviewTarget(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Action failed';
+      setSnackbar({ message, severity: 'error' });
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  const handleBulkCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!completeSessionIds) return;
+    const ids = completeSessionIds;
+    setCompleteSessionIds(null);
+    withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
   };
 
   const handleReopen = (sessionId: string) => {
     withAction(() => onReopen(sessionId));
   };
 
-  const handleEditNote = (sessionId: string, currentNote: string) => {
-    setEditNoteState({ sessionId, note: currentNote });
-  };
-
-  const handleEditNoteSave = (note: string) => {
-    if (!editNoteState) return;
-    const sessionId = editNoteState.sessionId;
-    setEditNoteState(null);
-    withAction(() => onUpdateNote(sessionId, note));
-  };
-
   const handleBulkClaim = (sessionIds: string[]) => {
     withAction(() => onBulkClaim(sessionIds));
   };
 
-  const handleBulkResolve = (sessionIds: string[]) => {
-    setResolveSessionIds(sessionIds);
+  const handleBulkComplete = (sessionIds: string[]) => {
+    setCompleteSessionIds(sessionIds);
   };
 
   const handleBulkUnclaim = (sessionIds: string[]) => {
@@ -122,14 +162,30 @@ export function TriageView({
     withAction(() => onBulkReopen(sessionIds));
   };
 
-  const hasAnyData = Object.values(groups).some(g => g !== null);
-  const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
-    investigating: null, needs_review: null, in_progress: null, resolved: null,
+  // --- Snackbar actions (snackbar mode only) ---
+  const handleSnackbarAddFeedback = () => {
+    if (!snackbar?.completedSession) return;
+    setReviewTarget({ session: snackbar.completedSession, mode: 'edit' });
+    setSnackbar(null);
   };
 
-  const resolveModalTitle = resolveSessionIds && resolveSessionIds.length > 1
-    ? `Resolve ${resolveSessionIds.length} Sessions`
+  const handleSnackbarUndo = () => {
+    if (!snackbar?.completedSession) return;
+    const sessionId = snackbar.completedSession.id;
+    setSnackbar(null);
+    withAction(() => onReopen(sessionId));
+  };
+
+  const hasAnyData = Object.values(groups).some(g => g !== null);
+  const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
+    investigating: null, needs_review: null, in_progress: null, reviewed: null,
+  };
+
+  const completeModalTitle = completeSessionIds && completeSessionIds.length > 1
+    ? `Complete Review for ${completeSessionIds.length} Sessions`
     : undefined;
+
+  const hasSnackbarActions = snackbar?.completedSession !== undefined;
 
   if (error) {
     return (
@@ -181,11 +237,10 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
-        onResolve={handleResolveClick}
         onReopen={handleReopen}
-        onEditNote={handleEditNote}
+        onReviewClick={handleReviewClick}
         onBulkClaim={handleBulkClaim}
-        onBulkResolve={handleBulkResolve}
+        onBulkComplete={handleBulkComplete}
         onBulkUnclaim={handleBulkUnclaim}
         onBulkReopen={handleBulkReopen}
         onPageChange={onPageChange}
@@ -193,25 +248,38 @@ export function TriageView({
         actionLoading={actionLoading}
       />
 
-      <ResolveModal
-        open={resolveSessionIds !== null}
-        onClose={() => setResolveSessionIds(null)}
-        onResolve={handleResolveConfirm}
+      {/* Single-session review modals (from Review column click) */}
+      <CompleteReviewModal
+        open={reviewTarget?.mode === 'complete'}
+        onClose={() => setReviewTarget(null)}
+        onComplete={handleReviewComplete}
         loading={actionLoading}
-        title={resolveModalTitle}
+        title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+        executiveSummary={reviewTarget?.session.executive_summary}
+      />
+      <EditFeedbackModal
+        open={reviewTarget?.mode === 'edit'}
+        onClose={() => setReviewTarget(null)}
+        onSave={handleReviewSave}
+        loading={actionLoading}
+        initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+        initialActionTaken={reviewTarget?.session.action_taken ?? ''}
+        initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+        executiveSummary={reviewTarget?.session.executive_summary}
       />
 
-      <EditNoteModal
-        open={editNoteState !== null}
-        initialNote={editNoteState?.note ?? ''}
-        onClose={() => setEditNoteState(null)}
-        onSave={handleEditNoteSave}
+      {/* Bulk complete modal */}
+      <CompleteReviewModal
+        open={completeSessionIds !== null}
+        onClose={() => setCompleteSessionIds(null)}
+        onComplete={handleBulkCompleteConfirm}
         loading={actionLoading}
+        title={completeModalTitle}
       />
 
       <Snackbar
         open={snackbar !== null}
-        autoHideDuration={4000}
+        autoHideDuration={hasSnackbarActions ? 8000 : 4000}
         onClose={() => setSnackbar(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -221,6 +289,29 @@ export function TriageView({
             severity={snackbar.severity}
             variant="filled"
             sx={{ width: '100%' }}
+            icon={(() => {
+              const cfg = getRatingConfig(snackbar.completedRating);
+              if (!cfg) return undefined;
+              const Icon = cfg.icon;
+              return <Icon fontSize="inherit" />;
+            })()}
+            action={hasSnackbarActions ? (
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Button
+                  color="inherit"
+                  size="small"
+                  variant="outlined"
+                  startIcon={<RateReview sx={{ fontSize: 16 }} />}
+                  onClick={handleSnackbarAddFeedback}
+                  sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
+                >
+                  Add note
+                </Button>
+                <Button color="inherit" size="small" onClick={handleSnackbarUndo}>
+                  Undo
+                </Button>
+              </Box>
+            ) : undefined}
           >
             {snackbar.message}
           </Alert>

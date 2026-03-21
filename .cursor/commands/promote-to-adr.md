@@ -14,14 +14,38 @@ The user will specify which proposal to promote (by name or file path). If uncle
 
 3. **Check for a companion questions document** (`docs/proposals/{name}-questions.md`). If it exists, read it and extract any decision rationale not already present in the design doc.
 
-4. **Create the ADR** at `docs/adr/{NNNN}-{name}.md`:
-   - Copy the design document content
-   - Update the title to `# ADR-{NNNN}: {Title}` (use the existing title, drop suffixes like "— Design Document")
-   - Update the header:
-     - **Status:** `Implemented`
-     - **Date:** today's date
-     - Remove any references to the questions document
-   - If the design doc has a Decisions table, add a **Rationale** column with compact reasoning from the questions doc (if available)
+4. **Create the ADR** at `docs/adr/{NNNN}-{name}.md`.
+
+   **Do NOT copy the proposal verbatim.** Distill it into an architectural decision record. The ADR should capture *what was decided and why*, not *how it was implemented file-by-file*.
+
+   **Header:**
+   - Title: `# ADR-{NNNN}: {Title}` (use the existing title, drop suffixes like "— Design Document")
+   - **Status:** `Implemented`
+   - **Date:** today's date
+   - Remove any references to the questions document
+
+   **What to KEEP (the decision record):**
+   - Overview / problem statement
+   - Design principles
+   - Decisions tables with rationale — this is the core of the ADR. If the design doc has a Decisions table, add a **Rationale** column with compact reasoning from the questions doc (if available)
+   - Architecture: conceptual descriptions, ASCII diagrams, behavioral contracts, data flow
+   - Configuration YAML examples (user-facing contract)
+   - Conceptual tables (e.g., type mappings, enum values, API endpoints)
+   - High-level migration strategy (e.g., "data-preserving migration with enum renames")
+   - Future considerations
+   - References to other ADRs
+
+   **What to REMOVE (implementation detail):**
+   - "Affected Files" tables and file-level change lists
+   - "Implementation Plan" / "Implementation Phases" step-by-step checklists
+   - Go/SQL/TypeScript/Python code snippets (struct definitions, function bodies, ent schemas)
+   - File path references (e.g., `pkg/agent/controller/factory.go`) — use component names instead
+   - Line number references
+   - PR-level breakdowns
+   - Risk assessments
+   - Testing strategy sections
+
+   **Other:**
    - Fix any relative links that break due to the directory change (e.g., links to files still in `proposals/` need a `../proposals/` prefix)
    - Drop the `-design` suffix from the filename — inside `adr/`, it's redundant
 

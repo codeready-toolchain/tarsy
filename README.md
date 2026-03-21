@@ -90,7 +90,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
-- **Triage Workflow**: Post-investigation review lifecycle with self-claim assignment, resolve with reason/notes, and a grouped Triage view alongside the session list — real-time updates via WebSocket
+- **Triage Workflow**: Post-investigation review lifecycle with self-claim assignment, complete with `quality_rating` and `action_taken`, and a grouped Triage view alongside the session list — real-time updates via WebSocket
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
 - **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
 - **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views
@@ -128,7 +128,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 8. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
 9. **Comprehensive analysis** provided to engineers with actionable recommendations
 10. **Session scored** (if enabled) -- async quality evaluation with score, analysis, and missing tools report
-11. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, resolve, dismiss)
+11. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, complete, dismiss)
 12. **Follow-up chat available** after investigation completes
 13. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
@@ -170,7 +170,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `POST /api/v1/sessions/:id/score` -- Trigger (re-)scoring (202 Accepted, 409 if already in progress)
 
 ### Review & Triage
-- `PATCH /api/v1/sessions/review` -- Review workflow transition for one or more sessions (claim, unclaim, resolve, reopen, update_note)
+- `PATCH /api/v1/sessions/review` -- Review workflow transition for one or more sessions (claim, unclaim, complete, reopen, update_feedback)
 - `GET /api/v1/sessions/:id/review-activity` -- Review activity audit log
 - `GET /api/v1/sessions/triage/:group` -- Per-group paginated triage view
 

@@ -28,12 +28,13 @@ import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import type { SessionFilter, PaginationState, SortState } from '../../types/dashboard.ts';
+import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Eval Score | Tokens | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Eval Score | Review | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  */
-const TOTAL_COLUMNS = 9;
+const TOTAL_COLUMNS = 10;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -47,6 +48,7 @@ interface HistoricalAlertsListProps {
   onSortChange: (field: string) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
+  onReviewClick?: (session: DashboardSessionItem) => void;
 }
 
 export function HistoricalAlertsList({
@@ -61,6 +63,7 @@ export function HistoricalAlertsList({
   onSortChange,
   onPageChange,
   onPageSizeChange,
+  onReviewClick,
 }: HistoricalAlertsListProps) {
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
@@ -233,19 +236,14 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Eval Score — sortable */}
-                  <TableCell sx={{ fontWeight: 600 }}>
-                    <TableSortLabel
-                      active={sortState.field === 'score'}
-                      direction={sortState.field === 'score' ? sortState.direction : 'desc'}
-                      onClick={() => onSortChange('score')}
-                    >
-                      Eval Score
-                    </TableSortLabel>
-                  </TableCell>
-
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
+
+                  <QualityGroupHeaders
+                    sortField={sortState.field}
+                    sortDirection={sortState.direction}
+                    onSortChange={onSortChange}
+                  />
 
                   {/* Actions */}
                   <TableCell sx={{ fontWeight: 600, width: 60, textAlign: 'center' }} />
@@ -286,6 +284,7 @@ export function HistoricalAlertsList({
                       key={session.id}
                       session={session}
                       searchTerm={filters.search}
+                      onReviewClick={onReviewClick}
                     />
                   ))
                 )}

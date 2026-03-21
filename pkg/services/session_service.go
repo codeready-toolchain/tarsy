@@ -637,6 +637,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		LatestScore:             latestScore,
 		ScoringStatus:           scoringStatus,
 		ScoreID:                 scoreID,
+		ReviewStatus:            ptrStringFromReviewStatus(session.ReviewStatus),
+		Assignee:                session.Assignee,
+		QualityRating:           ptrStringFromQualityRating(session.QualityRating),
+		ActionTaken:             session.ActionTaken,
+		InvestigationFeedback:   session.InvestigationFeedback,
 		Stages:                  stages,
 	}, nil
 }
@@ -827,24 +832,26 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount         int     `sql:"llm_count"`
-	LLMInputTokens   int64   `sql:"llm_input_tokens"`
-	LLMOutputTokens  int64   `sql:"llm_output_tokens"`
-	LLMTotalTokens   int64   `sql:"llm_total_tokens"`
-	MCPCount         int     `sql:"mcp_count"`
-	TotalStages      int     `sql:"total_stages"`
-	CompletedStages  int     `sql:"completed_stages"`
-	HasParallel      int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
-	HasSubAgents     int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages  int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ChatMsgCount     int     `sql:"chat_msg_count"`
-	FallbackCount    int     `sql:"fallback_count"`
-	MatchedInContent int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
-	LatestScore      *int    `sql:"latest_score"`
-	ScoringStatus    *string `sql:"scoring_status"`
-	ReviewStatus     *string `sql:"review_status"`
-	Assignee         *string `sql:"assignee"`
-	ResolutionReason *string `sql:"resolution_reason"`
+	LLMCount              int     `sql:"llm_count"`
+	LLMInputTokens        int64   `sql:"llm_input_tokens"`
+	LLMOutputTokens       int64   `sql:"llm_output_tokens"`
+	LLMTotalTokens        int64   `sql:"llm_total_tokens"`
+	MCPCount              int     `sql:"mcp_count"`
+	TotalStages           int     `sql:"total_stages"`
+	CompletedStages       int     `sql:"completed_stages"`
+	HasParallel           int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents          int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages       int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ChatMsgCount          int     `sql:"chat_msg_count"`
+	FallbackCount         int     `sql:"fallback_count"`
+	MatchedInContent      int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LatestScore           *int    `sql:"latest_score"`
+	ScoringStatus         *string `sql:"scoring_status"`
+	ReviewStatus          *string `sql:"review_status"`
+	Assignee              *string `sql:"assignee"`
+	QualityRating         *string `sql:"quality_rating"`
+	ActionTaken           *string `sql:"action_taken"`
+	InvestigationFeedback *string `sql:"investigation_feedback"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -930,8 +937,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.Assignee != "" {
 		query = query.Where(alertsession.AssigneeEQ(params.Assignee))
 	}
-	if params.ResolutionReason != "" {
-		query = query.Where(alertsession.ResolutionReasonEQ(alertsession.ResolutionReason(params.ResolutionReason)))
+	if params.QualityRating != "" {
+		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
 
 	// Count total (before pagination).
@@ -968,6 +975,12 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				orderFunc = ent.Asc(alertsession.FieldAuthor)
 			} else {
 				orderFunc = ent.Desc(alertsession.FieldAuthor)
+			}
+		case "quality_rating":
+			if params.SortOrder == "asc" {
+				orderFunc = ent.Asc(alertsession.FieldQualityRating)
+			} else {
+				orderFunc = ent.Desc(alertsession.FieldQualityRating)
 			}
 		}
 		query = query.Order(orderFunc)
@@ -1011,7 +1024,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldCurrentStageID),
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
-				sel.C(alertsession.FieldResolutionReason),
+				sel.C(alertsession.FieldQualityRating),
+				sel.C(alertsession.FieldActionTaken),
+				sel.C(alertsession.FieldInvestigationFeedback),
 			)
 
 			// LLM interaction aggregates.
@@ -1158,7 +1173,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ScoringStatus:         row.ScoringStatus,
 			ReviewStatus:          row.ReviewStatus,
 			Assignee:              row.Assignee,
-			ResolutionReason:      row.ResolutionReason,
+			QualityRating:         row.QualityRating,
+			ActionTaken:           row.ActionTaken,
+			InvestigationFeedback: row.InvestigationFeedback,
 		})
 	}
 
@@ -1390,6 +1407,22 @@ func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]exec
 	}
 
 	return overview
+}
+
+func ptrStringFromReviewStatus(v *alertsession.ReviewStatus) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
+}
+
+func ptrStringFromQualityRating(v *alertsession.QualityRating) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
 }
 
 // validateMCPOverride validates MCP server selection override

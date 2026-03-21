@@ -796,6 +796,13 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		require.NotNil(t, detail.DurationMs)
 		assert.Greater(t, *detail.DurationMs, int64(0))
 
+		// Review fields nil when not set.
+		assert.Nil(t, detail.ReviewStatus)
+		assert.Nil(t, detail.Assignee)
+		assert.Nil(t, detail.QualityRating)
+		assert.Nil(t, detail.ActionTaken)
+		assert.Nil(t, detail.InvestigationFeedback)
+
 		// Stages.
 		require.Len(t, detail.Stages, 1)
 		assert.Equal(t, "analysis", detail.Stages[0].StageName)
@@ -1355,6 +1362,34 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.False(t, detail.HasActionStages)
 	})
 
+	t.Run("includes review fields when session has review data", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"reviewed session", "pod-crash", "k8s-analysis",
+			100, 50, 150, 0)
+
+		client.AlertSession.UpdateOneID(sessionID).
+			SetReviewStatus(alertsession.ReviewStatusReviewed).
+			SetAssignee("reviewer@test.com").
+			SetQualityRating(alertsession.QualityRatingPartiallyAccurate).
+			SetActionTaken("escalated to platform team").
+			SetInvestigationFeedback("missed the root cause").
+			ExecX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+
+		require.NotNil(t, detail.ReviewStatus)
+		assert.Equal(t, "reviewed", *detail.ReviewStatus)
+		require.NotNil(t, detail.Assignee)
+		assert.Equal(t, "reviewer@test.com", *detail.Assignee)
+		require.NotNil(t, detail.QualityRating)
+		assert.Equal(t, "partially_accurate", *detail.QualityRating)
+		require.NotNil(t, detail.ActionTaken)
+		assert.Equal(t, "escalated to platform team", *detail.ActionTaken)
+		require.NotNil(t, detail.InvestigationFeedback)
+		assert.Equal(t, "missed the root cause", *detail.InvestigationFeedback)
+	})
+
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {
 		_, err := service.GetSessionDetail(ctx, "nonexistent-id")
 		assert.ErrorIs(t, err, ErrNotFound)
@@ -1803,7 +1838,7 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	idC := seedDashboardSession(t, client.Client, "Charlie", "pod-crash", "k8s-analysis", 30, 15, 45, 0)
 
-	// A = needs_review, B = in_progress (alice), C = resolved (bob).
+	// A = needs_review, B = in_progress (alice), C = reviewed (bob).
 	client.AlertSession.UpdateOneID(idA).
 		SetReviewStatus(alertsession.ReviewStatusNeedsReview).
 		ExecX(ctx)
@@ -1813,11 +1848,13 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 		SetAssignedAt(time.Now()).
 		ExecX(ctx)
 	client.AlertSession.UpdateOneID(idC).
-		SetReviewStatus(alertsession.ReviewStatusResolved).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
 		SetAssignee("bob@test.com").
 		SetAssignedAt(time.Now()).
-		SetResolvedAt(time.Now()).
-		SetResolutionReason(alertsession.ResolutionReasonActioned).
+		SetReviewedAt(time.Now()).
+		SetQualityRating(alertsession.QualityRatingAccurate).
+		SetActionTaken("applied runbook fix").
+		SetInvestigationFeedback("root cause was correct").
 		ExecX(ctx)
 
 	t.Run("single review_status filter", func(t *testing.T) {
@@ -1858,14 +1895,19 @@ func TestSessionService_ListSessionsForDashboard_ReviewFilters(t *testing.T) {
 	t.Run("combined review_status and assignee filter", func(t *testing.T) {
 		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
 			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
-			ReviewStatus: "resolved",
+			ReviewStatus: "reviewed",
 			Assignee:     "bob@test.com",
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Sessions, 1)
-		assert.Equal(t, idC, result.Sessions[0].ID)
-		require.NotNil(t, result.Sessions[0].ResolutionReason)
-		assert.Equal(t, "actioned", *result.Sessions[0].ResolutionReason)
+		s := result.Sessions[0]
+		assert.Equal(t, idC, s.ID)
+		require.NotNil(t, s.QualityRating)
+		assert.Equal(t, "accurate", *s.QualityRating)
+		require.NotNil(t, s.ActionTaken)
+		assert.Equal(t, "applied runbook fix", *s.ActionTaken)
+		require.NotNil(t, s.InvestigationFeedback)
+		assert.Equal(t, "root cause was correct", *s.InvestigationFeedback)
 	})
 
 	t.Run("no match returns empty", func(t *testing.T) {

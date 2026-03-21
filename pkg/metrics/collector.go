@@ -12,10 +12,16 @@ const (
 	pollTimeout  = 10 * time.Second
 )
 
+// ReviewCounts holds per-rating session totals.
+type ReviewCounts struct {
+	Accurate, Partial, Inaccurate int
+}
+
 // SessionCounter abstracts the DB queries needed for gauge polling.
 type SessionCounter interface {
 	PendingCount(ctx context.Context) (int, error)
 	ActiveCount(ctx context.Context) (int, error)
+	ReviewCountsByRating(ctx context.Context) (ReviewCounts, error)
 }
 
 // GaugeCollector periodically polls the database to update global session
@@ -79,5 +85,13 @@ func (g *GaugeCollector) poll(ctx context.Context) {
 		slog.Warn("metrics: failed to poll pending session count", "error", err)
 	} else {
 		SessionsQueued.Set(float64(n))
+	}
+
+	if rc, err := g.counter.ReviewCountsByRating(ctx); err != nil {
+		slog.Warn("metrics: failed to poll review counts", "error", err)
+	} else {
+		SessionsReviewedTotal.WithLabelValues("accurate").Set(float64(rc.Accurate))
+		SessionsReviewedTotal.WithLabelValues("partially_accurate").Set(float64(rc.Partial))
+		SessionsReviewedTotal.WithLabelValues("inaccurate").Set(float64(rc.Inaccurate))
 	}
 }

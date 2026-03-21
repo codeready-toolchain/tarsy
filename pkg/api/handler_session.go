@@ -52,10 +52,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 	// Parse sorting.
 	if v := c.QueryParam("sort_by"); v != "" {
 		switch v {
-		case "created_at", "status", "alert_type", "author", "duration", "score":
+		case "created_at", "status", "alert_type", "author", "duration", "score", "quality_rating":
 			params.SortBy = v
 		default:
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, or score")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, score, or quality_rating")
 		}
 	}
 	if v := c.QueryParam("sort_order"); v != "" {
@@ -120,11 +120,11 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		params.ReviewStatus = v
 	}
 	params.Assignee = c.QueryParam("assignee")
-	if v := c.QueryParam("resolution_reason"); v != "" {
-		if err := alertsession.ResolutionReasonValidator(alertsession.ResolutionReason(v)); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid resolution_reason: "+v)
+	if v := c.QueryParam("quality_rating"); v != "" {
+		if err := alertsession.QualityRatingValidator(alertsession.QualityRating(v)); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid quality_rating: "+v)
 		}
-		params.ResolutionReason = v
+		params.QualityRating = v
 	}
 
 	result, err := s.sessionService.ListSessionsForDashboard(c.Request().Context(), params)

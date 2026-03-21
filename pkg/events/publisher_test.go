@@ -313,19 +313,23 @@ func TestInteractionCreatedPayload_JSON(t *testing.T) {
 }
 
 func TestReviewStatusPayload_JSON(t *testing.T) {
-	reason := "actioned"
+	qr := "accurate"
 	assignee := "jsmith@company.com"
-	rs := "resolved"
+	rs := "reviewed"
+	actionTaken := "Deployed fix"
+	feedback := "Investigation was thorough"
 	payload := ReviewStatusPayload{
 		BasePayload: BasePayload{
 			Type:      EventTypeReviewStatus,
 			SessionID: "sess-400",
 			Timestamp: "2026-03-05T11:30:00Z",
 		},
-		ReviewStatus:     &rs,
-		Assignee:         &assignee,
-		ResolutionReason: &reason,
-		Actor:            "jsmith@company.com",
+		ReviewStatus:          &rs,
+		Assignee:              &assignee,
+		QualityRating:         &qr,
+		ActionTaken:           &actionTaken,
+		InvestigationFeedback: &feedback,
+		Actor:                 "jsmith@company.com",
 	}
 
 	data, err := json.Marshal(payload)
@@ -337,11 +341,15 @@ func TestReviewStatusPayload_JSON(t *testing.T) {
 	assert.Equal(t, EventTypeReviewStatus, decoded.Type)
 	assert.Equal(t, "sess-400", decoded.SessionID)
 	require.NotNil(t, decoded.ReviewStatus)
-	assert.Equal(t, "resolved", *decoded.ReviewStatus)
+	assert.Equal(t, "reviewed", *decoded.ReviewStatus)
 	require.NotNil(t, decoded.Assignee)
 	assert.Equal(t, "jsmith@company.com", *decoded.Assignee)
-	require.NotNil(t, decoded.ResolutionReason)
-	assert.Equal(t, "actioned", *decoded.ResolutionReason)
+	require.NotNil(t, decoded.QualityRating)
+	assert.Equal(t, "accurate", *decoded.QualityRating)
+	require.NotNil(t, decoded.ActionTaken)
+	assert.Equal(t, "Deployed fix", *decoded.ActionTaken)
+	require.NotNil(t, decoded.InvestigationFeedback)
+	assert.Equal(t, "Investigation was thorough", *decoded.InvestigationFeedback)
 	assert.Equal(t, "jsmith@company.com", decoded.Actor)
 }
 
@@ -385,5 +393,7 @@ func TestReviewStatusPayload_OmitsNilFields(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotContains(t, string(data), "assignee")
-	assert.NotContains(t, string(data), "resolution_reason")
+	assert.NotContains(t, string(data), "quality_rating")
+	assert.NotContains(t, string(data), "action_taken")
+	assert.NotContains(t, string(data), "investigation_feedback")
 }

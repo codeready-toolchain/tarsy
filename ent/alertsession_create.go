@@ -340,44 +340,58 @@ func (_c *AlertSessionCreate) SetNillableAssignedAt(v *time.Time) *AlertSessionC
 	return _c
 }
 
-// SetResolvedAt sets the "resolved_at" field.
-func (_c *AlertSessionCreate) SetResolvedAt(v time.Time) *AlertSessionCreate {
-	_c.mutation.SetResolvedAt(v)
+// SetReviewedAt sets the "reviewed_at" field.
+func (_c *AlertSessionCreate) SetReviewedAt(v time.Time) *AlertSessionCreate {
+	_c.mutation.SetReviewedAt(v)
 	return _c
 }
 
-// SetNillableResolvedAt sets the "resolved_at" field if the given value is not nil.
-func (_c *AlertSessionCreate) SetNillableResolvedAt(v *time.Time) *AlertSessionCreate {
+// SetNillableReviewedAt sets the "reviewed_at" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableReviewedAt(v *time.Time) *AlertSessionCreate {
 	if v != nil {
-		_c.SetResolvedAt(*v)
+		_c.SetReviewedAt(*v)
 	}
 	return _c
 }
 
-// SetResolutionReason sets the "resolution_reason" field.
-func (_c *AlertSessionCreate) SetResolutionReason(v alertsession.ResolutionReason) *AlertSessionCreate {
-	_c.mutation.SetResolutionReason(v)
+// SetQualityRating sets the "quality_rating" field.
+func (_c *AlertSessionCreate) SetQualityRating(v alertsession.QualityRating) *AlertSessionCreate {
+	_c.mutation.SetQualityRating(v)
 	return _c
 }
 
-// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
-func (_c *AlertSessionCreate) SetNillableResolutionReason(v *alertsession.ResolutionReason) *AlertSessionCreate {
+// SetNillableQualityRating sets the "quality_rating" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableQualityRating(v *alertsession.QualityRating) *AlertSessionCreate {
 	if v != nil {
-		_c.SetResolutionReason(*v)
+		_c.SetQualityRating(*v)
 	}
 	return _c
 }
 
-// SetResolutionNote sets the "resolution_note" field.
-func (_c *AlertSessionCreate) SetResolutionNote(v string) *AlertSessionCreate {
-	_c.mutation.SetResolutionNote(v)
+// SetActionTaken sets the "action_taken" field.
+func (_c *AlertSessionCreate) SetActionTaken(v string) *AlertSessionCreate {
+	_c.mutation.SetActionTaken(v)
 	return _c
 }
 
-// SetNillableResolutionNote sets the "resolution_note" field if the given value is not nil.
-func (_c *AlertSessionCreate) SetNillableResolutionNote(v *string) *AlertSessionCreate {
+// SetNillableActionTaken sets the "action_taken" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableActionTaken(v *string) *AlertSessionCreate {
 	if v != nil {
-		_c.SetResolutionNote(*v)
+		_c.SetActionTaken(*v)
+	}
+	return _c
+}
+
+// SetInvestigationFeedback sets the "investigation_feedback" field.
+func (_c *AlertSessionCreate) SetInvestigationFeedback(v string) *AlertSessionCreate {
+	_c.mutation.SetInvestigationFeedback(v)
+	return _c
+}
+
+// SetNillableInvestigationFeedback sets the "investigation_feedback" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableInvestigationFeedback(v *string) *AlertSessionCreate {
+	if v != nil {
+		_c.SetInvestigationFeedback(*v)
 	}
 	return _c
 }
@@ -614,9 +628,9 @@ func (_c *AlertSessionCreate) check() error {
 			return &ValidationError{Name: "review_status", err: fmt.Errorf(`ent: validator failed for field "AlertSession.review_status": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.ResolutionReason(); ok {
-		if err := alertsession.ResolutionReasonValidator(v); err != nil {
-			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "AlertSession.resolution_reason": %w`, err)}
+	if v, ok := _c.mutation.QualityRating(); ok {
+		if err := alertsession.QualityRatingValidator(v); err != nil {
+			return &ValidationError{Name: "quality_rating", err: fmt.Errorf(`ent: validator failed for field "AlertSession.quality_rating": %w`, err)}
 		}
 	}
 	return nil
@@ -754,17 +768,21 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 		_spec.SetField(alertsession.FieldAssignedAt, field.TypeTime, value)
 		_node.AssignedAt = &value
 	}
-	if value, ok := _c.mutation.ResolvedAt(); ok {
-		_spec.SetField(alertsession.FieldResolvedAt, field.TypeTime, value)
-		_node.ResolvedAt = &value
+	if value, ok := _c.mutation.ReviewedAt(); ok {
+		_spec.SetField(alertsession.FieldReviewedAt, field.TypeTime, value)
+		_node.ReviewedAt = &value
 	}
-	if value, ok := _c.mutation.ResolutionReason(); ok {
-		_spec.SetField(alertsession.FieldResolutionReason, field.TypeEnum, value)
-		_node.ResolutionReason = &value
+	if value, ok := _c.mutation.QualityRating(); ok {
+		_spec.SetField(alertsession.FieldQualityRating, field.TypeEnum, value)
+		_node.QualityRating = &value
 	}
-	if value, ok := _c.mutation.ResolutionNote(); ok {
-		_spec.SetField(alertsession.FieldResolutionNote, field.TypeString, value)
-		_node.ResolutionNote = &value
+	if value, ok := _c.mutation.ActionTaken(); ok {
+		_spec.SetField(alertsession.FieldActionTaken, field.TypeString, value)
+		_node.ActionTaken = &value
+	}
+	if value, ok := _c.mutation.InvestigationFeedback(); ok {
+		_spec.SetField(alertsession.FieldInvestigationFeedback, field.TypeString, value)
+		_node.InvestigationFeedback = &value
 	}
 	if nodes := _c.mutation.StagesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

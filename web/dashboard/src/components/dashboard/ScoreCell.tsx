@@ -1,4 +1,5 @@
 import { TableCell, ButtonBase } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { sessionScoringPath } from '../../constants/routes.ts';
@@ -7,14 +8,15 @@ interface ScoreCellProps {
   sessionId: string;
   score?: number | null;
   scoringStatus?: string | null;
+  sx?: SxProps<Theme>;
 }
 
-export function ScoreCell({ sessionId, score, scoringStatus }: ScoreCellProps) {
+export function ScoreCell({ sessionId, score, scoringStatus, sx }: ScoreCellProps) {
   const navigate = useNavigate();
   const hasScoring = scoringStatus || score != null;
 
   return (
-    <TableCell>
+    <TableCell sx={sx}>
       {hasScoring ? (
         <ButtonBase
           onClick={(e) => {

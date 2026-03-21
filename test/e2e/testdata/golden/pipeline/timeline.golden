@@ -3,6 +3,9 @@
     "agent": "ChatAgent",
     "content": "What caused the OOM kill for pod-1?",
     "event_type": "user_question",
+    "metadata": {
+      "author": "api-client"
+    },
     "sequence": 12,
     "status": "completed"
   },
@@ -78,6 +81,9 @@
     "agent": "ChatAgent",
     "content": "What are the current SLO metrics for pod-1?",
     "event_type": "user_question",
+    "metadata": {
+      "author": "api-client"
+    },
     "sequence": 20,
     "status": "completed"
   },

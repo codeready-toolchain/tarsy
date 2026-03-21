@@ -125,7 +125,9 @@ export interface ReviewStatusPayload {
   session_id: string;
   review_status?: string | null;
   assignee?: string | null;
-  resolution_reason?: string | null;
+  quality_rating?: string | null;
+  action_taken?: string | null;
+  investigation_feedback?: string | null;
   actor: string;
   timestamp: string;
 }

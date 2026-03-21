@@ -193,7 +193,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **System status page** showing MCP server health and system warnings
-- **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `resolved`), self-claim assignment, resolve with reason/notes, and real-time updates via `review.status` WebSocket events
+- **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `reviewed`), self-claim assignment, complete with `quality_rating` and `action_taken`, and real-time updates via `review.status` WebSocket events
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
 ### 10. Follow-up Chat

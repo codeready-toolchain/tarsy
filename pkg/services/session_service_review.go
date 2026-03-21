@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -53,17 +54,40 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 				Success:   true,
 			})
 			updated = append(updated, session)
+
+			if req.QualityRating != nil {
+				metrics.ReviewsCompletedTotal.WithLabelValues(*req.QualityRating).Inc()
+			}
 		}
 	}
 	return models.UpdateReviewResponse{Results: results}, updated
+}
+
+var validQualityRatings = map[string]bool{
+	string(alertsession.QualityRatingAccurate):          true,
+	string(alertsession.QualityRatingPartiallyAccurate): true,
+	string(alertsession.QualityRatingInaccurate):        true,
 }
 
 func validateReviewRequest(req models.UpdateReviewRequest) error {
 	if !models.ValidReviewAction(req.Action) {
 		return NewValidationError("action", fmt.Sprintf("unknown action %q", req.Action))
 	}
-	if models.ReviewAction(req.Action) == models.ReviewActionResolve && req.ResolutionReason == nil {
-		return NewValidationError("resolution_reason", "required for resolve action")
+	switch models.ReviewAction(req.Action) {
+	case models.ReviewActionComplete:
+		if req.QualityRating == nil {
+			return NewValidationError("quality_rating", "required for complete action")
+		}
+		if !validQualityRatings[*req.QualityRating] {
+			return NewValidationError("quality_rating", fmt.Sprintf("invalid value %q", *req.QualityRating))
+		}
+	case models.ReviewActionUpdateFeedback:
+		if req.QualityRating == nil && req.ActionTaken == nil && req.InvestigationFeedback == nil {
+			return NewValidationError("update_feedback", "at least one field must be provided")
+		}
+		if req.QualityRating != nil && !validQualityRatings[*req.QualityRating] {
+			return NewValidationError("quality_rating", fmt.Sprintf("invalid value %q", *req.QualityRating))
+		}
 	}
 	return nil
 }
@@ -113,12 +137,12 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			sessionreviewactivity.ActionUnclaim,
 			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
 			sessionreviewactivity.ToStatusNeedsReview,
-			nil, req.Note, now); err != nil {
+			nil, nil, nil, now); err != nil {
 			return nil, err
 		}
 
-	case models.ReviewActionResolve:
-		if err := s.doResolve(writeCtx, tx, sessionID, req.Actor, *req.ResolutionReason, req.Note, now); err != nil {
+	case models.ReviewActionComplete:
+		if err := s.doComplete(writeCtx, tx, sessionID, req.Actor, *req.QualityRating, req.ActionTaken, req.InvestigationFeedback, now); err != nil {
 			return nil, err
 		}
 
@@ -126,14 +150,15 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		affected, err := tx.AlertSession.Update().
 			Where(
 				alertsession.IDEQ(sessionID),
-				alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+				alertsession.ReviewStatusEQ(alertsession.ReviewStatusReviewed),
 			).
 			SetReviewStatus(alertsession.ReviewStatusNeedsReview).
 			ClearAssignee().
 			ClearAssignedAt().
-			ClearResolvedAt().
-			ClearResolutionReason().
-			ClearResolutionNote().
+			ClearReviewedAt().
+			ClearQualityRating().
+			ClearActionTaken().
+			ClearInvestigationFeedback().
 			Save(writeCtx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to reopen session: %w", err)
@@ -143,35 +168,64 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		}
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
 			sessionreviewactivity.ActionReopen,
-			ptrFromStatus(sessionreviewactivity.FromStatusResolved),
+			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
 			sessionreviewactivity.ToStatusNeedsReview,
-			nil, req.Note, now); err != nil {
+			nil, nil, nil, now); err != nil {
 			return nil, err
 		}
 
-	case models.ReviewActionUpdateNote:
+	case models.ReviewActionUpdateFeedback:
+		// Read current session to build a full post-update snapshot for the activity log.
+		current, err := tx.AlertSession.Get(writeCtx, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read session for feedback update: %w", err)
+		}
+		if current.ReviewStatus == nil || *current.ReviewStatus != alertsession.ReviewStatusReviewed {
+			return nil, ErrConflict
+		}
+
 		update := tx.AlertSession.Update().
 			Where(
 				alertsession.IDEQ(sessionID),
-				alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+				alertsession.ReviewStatusEQ(alertsession.ReviewStatusReviewed),
 			)
-		if req.Note != nil {
-			update = update.SetResolutionNote(*req.Note)
-		} else {
-			update = update.ClearResolutionNote()
+		if req.QualityRating != nil {
+			update = update.SetQualityRating(alertsession.QualityRating(*req.QualityRating))
+		}
+		if req.ActionTaken != nil {
+			update = update.SetActionTaken(*req.ActionTaken)
+		}
+		if req.InvestigationFeedback != nil {
+			update = update.SetInvestigationFeedback(*req.InvestigationFeedback)
 		}
 		affected, err := update.Save(writeCtx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update note: %w", err)
+			return nil, fmt.Errorf("failed to update feedback: %w", err)
 		}
 		if affected == 0 {
 			return nil, ErrConflict
 		}
+
+		// Merge request values with existing session values for a complete snapshot.
+		snapshotRating := req.QualityRating
+		if snapshotRating == nil && current.QualityRating != nil {
+			qr := string(*current.QualityRating)
+			snapshotRating = &qr
+		}
+		snapshotActionTaken := req.ActionTaken
+		if snapshotActionTaken == nil {
+			snapshotActionTaken = current.ActionTaken
+		}
+		snapshotFeedback := req.InvestigationFeedback
+		if snapshotFeedback == nil {
+			snapshotFeedback = current.InvestigationFeedback
+		}
+
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
-			sessionreviewactivity.ActionUpdateNote,
-			ptrFromStatus(sessionreviewactivity.FromStatusResolved),
-			sessionreviewactivity.ToStatusResolved,
-			nil, req.Note, now); err != nil {
+			sessionreviewactivity.ActionUpdateFeedback,
+			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
+			sessionreviewactivity.ToStatusReviewed,
+			snapshotRating, snapshotActionTaken, snapshotFeedback, now); err != nil {
 			return nil, err
 		}
 	}
@@ -210,7 +264,7 @@ func (s *SessionService) doClaim(ctx context.Context, tx *ent.Tx, sessionID, act
 			sessionreviewactivity.ActionClaim,
 			ptrFromStatus(sessionreviewactivity.FromStatusNeedsReview),
 			sessionreviewactivity.ToStatusInProgress,
-			nil, nil, now)
+			nil, nil, nil, now)
 	}
 
 	// Try reassignment from in_progress.
@@ -232,77 +286,79 @@ func (s *SessionService) doClaim(ctx context.Context, tx *ent.Tx, sessionID, act
 		sessionreviewactivity.ActionClaim,
 		ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
 		sessionreviewactivity.ToStatusInProgress,
-		nil, nil, now)
+		nil, nil, nil, now)
 }
 
-// doResolve handles both direct resolve (needs_review -> resolved) and
-// standard resolve (in_progress -> resolved).
-func (s *SessionService) doResolve(ctx context.Context, tx *ent.Tx, sessionID, actor, reason string, note *string, now time.Time) error {
-	resReason := alertsession.ResolutionReason(reason)
+// doComplete handles both direct complete (needs_review -> reviewed) and
+// standard complete (in_progress -> reviewed).
+func (s *SessionService) doComplete(ctx context.Context, tx *ent.Tx, sessionID, actor, rating string, actionTaken, feedback *string, now time.Time) error {
+	qr := alertsession.QualityRating(rating)
 
-	// Try resolve from in_progress first.
-	update := tx.AlertSession.Update().
-		Where(
-			alertsession.IDEQ(sessionID),
-			alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
-		).
-		SetReviewStatus(alertsession.ReviewStatusResolved).
-		SetResolvedAt(now).
-		SetResolutionReason(resReason)
-	if note != nil {
-		update = update.SetResolutionNote(*note)
+	buildUpdate := func(base *ent.AlertSessionUpdate) *ent.AlertSessionUpdate {
+		u := base.
+			SetReviewStatus(alertsession.ReviewStatusReviewed).
+			SetReviewedAt(now).
+			SetQualityRating(qr)
+		if actionTaken != nil {
+			u = u.SetActionTaken(*actionTaken)
+		}
+		if feedback != nil {
+			u = u.SetInvestigationFeedback(*feedback)
+		}
+		return u
 	}
+
+	// Try complete from in_progress first.
+	update := buildUpdate(tx.AlertSession.Update().Where(
+		alertsession.IDEQ(sessionID),
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
+	))
 
 	affected, err := update.Save(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to resolve session: %w", err)
+		return fmt.Errorf("failed to complete review: %w", err)
 	}
 	if affected > 0 {
-		activityReason := sessionreviewactivity.ResolutionReason(reason)
 		return s.insertActivity(ctx, tx, sessionID, actor,
-			sessionreviewactivity.ActionResolve,
+			sessionreviewactivity.ActionComplete,
 			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
-			sessionreviewactivity.ToStatusResolved,
-			&activityReason, note, now)
+			sessionreviewactivity.ToStatusReviewed,
+			&rating, actionTaken, feedback, now)
 	}
 
-	// Try direct resolve from needs_review (auto-claims first).
-	update = tx.AlertSession.Update().
-		Where(
-			alertsession.IDEQ(sessionID),
-			alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
-		).
-		SetReviewStatus(alertsession.ReviewStatusResolved).
+	// Try direct complete from needs_review (auto-claims first).
+	update = buildUpdate(tx.AlertSession.Update().Where(
+		alertsession.IDEQ(sessionID),
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
+	)).
 		SetAssignee(actor).
-		SetAssignedAt(now).
-		SetResolvedAt(now).
-		SetResolutionReason(resReason)
-	if note != nil {
-		update = update.SetResolutionNote(*note)
-	}
+		SetAssignedAt(now)
 
 	affected, err = update.Save(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to direct-resolve session: %w", err)
+		return fmt.Errorf("failed to direct-complete review: %w", err)
 	}
 	if affected == 0 {
 		return ErrConflict
 	}
 
-	// Two activity rows: implicit claim + resolution.
+	// Two activity rows: implicit claim + completion.
+	// Use distinct timestamps so ORDER BY created_at is deterministic.
+	// PostgreSQL timestamptz has microsecond precision, so delta must be >= 1µs.
+	claimTime := now
+	completeTime := now.Add(time.Microsecond)
 	if err := s.insertActivity(ctx, tx, sessionID, actor,
 		sessionreviewactivity.ActionClaim,
 		ptrFromStatus(sessionreviewactivity.FromStatusNeedsReview),
 		sessionreviewactivity.ToStatusInProgress,
-		nil, nil, now); err != nil {
+		nil, nil, nil, claimTime); err != nil {
 		return err
 	}
-	activityReason := sessionreviewactivity.ResolutionReason(reason)
 	return s.insertActivity(ctx, tx, sessionID, actor,
-		sessionreviewactivity.ActionResolve,
+		sessionreviewactivity.ActionComplete,
 		ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
-		sessionreviewactivity.ToStatusResolved,
-		&activityReason, note, now)
+		sessionreviewactivity.ToStatusReviewed,
+		&rating, actionTaken, feedback, completeTime)
 }
 
 // insertActivity creates a SessionReviewActivity record within the transaction.
@@ -312,8 +368,9 @@ func (s *SessionService) insertActivity(
 	action sessionreviewactivity.Action,
 	fromStatus *sessionreviewactivity.FromStatus,
 	toStatus sessionreviewactivity.ToStatus,
-	resolutionReason *sessionreviewactivity.ResolutionReason,
-	note *string,
+	qualityRating *string,
+	actionTaken *string,
+	investigationFeedback *string,
 	createdAt time.Time,
 ) error {
 	create := tx.SessionReviewActivity.Create().
@@ -324,8 +381,12 @@ func (s *SessionService) insertActivity(
 		SetToStatus(toStatus).
 		SetCreatedAt(createdAt).
 		SetNillableFromStatus(fromStatus).
-		SetNillableResolutionReason(resolutionReason).
-		SetNillableNote(note)
+		SetNillableNote(actionTaken). // note column stores the action_taken snapshot
+		SetNillableInvestigationFeedback(investigationFeedback)
+
+	if qualityRating != nil {
+		create = create.SetQualityRating(sessionreviewactivity.QualityRating(*qualityRating))
+	}
 
 	if err := create.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to insert review activity: %w", err)
@@ -387,9 +448,9 @@ func triageGroupPredicates(group models.TriageGroupKey) []predicate.AlertSession
 		return []predicate.AlertSession{
 			alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
 		}
-	case models.TriageGroupResolved:
+	case models.TriageGroupReviewed:
 		return []predicate.AlertSession{
-			alertsession.ReviewStatusEQ(alertsession.ReviewStatusResolved),
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusReviewed),
 		}
 	default:
 		return nil
@@ -398,22 +459,23 @@ func triageGroupPredicates(group models.TriageGroupKey) []predicate.AlertSession
 
 // triageRow is the scan target for the triage group query.
 type triageRow struct {
-	ID               string     `sql:"session_id"`
-	AlertType        *string    `sql:"alert_type"`
-	ChainID          string     `sql:"chain_id"`
-	Status           string     `sql:"status"`
-	Author           *string    `sql:"author"`
-	CreatedAt        time.Time  `sql:"created_at"`
-	StartedAt        *time.Time `sql:"started_at"`
-	CompletedAt      *time.Time `sql:"completed_at"`
-	ErrorMessage     *string    `sql:"error_message"`
-	ExecutiveSummary *string    `sql:"executive_summary"`
-	ReviewStatus     *string    `sql:"review_status"`
-	Assignee         *string    `sql:"assignee"`
-	ResolutionReason *string    `sql:"resolution_reason"`
-	ResolutionNote   *string    `sql:"resolution_note"`
-	LatestScore      *int       `sql:"latest_score"`
-	ScoringStatus    *string    `sql:"scoring_status"`
+	ID                    string     `sql:"session_id"`
+	AlertType             *string    `sql:"alert_type"`
+	ChainID               string     `sql:"chain_id"`
+	Status                string     `sql:"status"`
+	Author                *string    `sql:"author"`
+	CreatedAt             time.Time  `sql:"created_at"`
+	StartedAt             *time.Time `sql:"started_at"`
+	CompletedAt           *time.Time `sql:"completed_at"`
+	ErrorMessage          *string    `sql:"error_message"`
+	ExecutiveSummary      *string    `sql:"executive_summary"`
+	ReviewStatus          *string    `sql:"review_status"`
+	Assignee              *string    `sql:"assignee"`
+	QualityRating         *string    `sql:"quality_rating"`
+	ActionTaken           *string    `sql:"action_taken"`
+	InvestigationFeedback *string    `sql:"investigation_feedback"`
+	LatestScore           *int       `sql:"latest_score"`
+	ScoringStatus         *string    `sql:"scoring_status"`
 }
 
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
@@ -474,8 +536,9 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				sel.C(alertsession.FieldExecutiveSummary),
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
-				sel.C(alertsession.FieldResolutionReason),
-				sel.C(alertsession.FieldResolutionNote),
+				sel.C(alertsession.FieldQualityRating),
+				sel.C(alertsession.FieldActionTaken),
+				sel.C(alertsession.FieldInvestigationFeedback),
 			)
 
 			sel.AppendSelectAs(
@@ -500,23 +563,24 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			durationMs = &ms
 		}
 		items = append(items, models.DashboardSessionItem{
-			ID:               row.ID,
-			AlertType:        row.AlertType,
-			ChainID:          row.ChainID,
-			Status:           row.Status,
-			Author:           row.Author,
-			CreatedAt:        row.CreatedAt,
-			StartedAt:        row.StartedAt,
-			CompletedAt:      row.CompletedAt,
-			DurationMs:       durationMs,
-			ErrorMessage:     row.ErrorMessage,
-			ExecutiveSummary: row.ExecutiveSummary,
-			ReviewStatus:     row.ReviewStatus,
-			Assignee:         row.Assignee,
-			ResolutionReason: row.ResolutionReason,
-			ResolutionNote:   row.ResolutionNote,
-			LatestScore:      row.LatestScore,
-			ScoringStatus:    row.ScoringStatus,
+			ID:                    row.ID,
+			AlertType:             row.AlertType,
+			ChainID:               row.ChainID,
+			Status:                row.Status,
+			Author:                row.Author,
+			CreatedAt:             row.CreatedAt,
+			StartedAt:             row.StartedAt,
+			CompletedAt:           row.CompletedAt,
+			DurationMs:            durationMs,
+			ErrorMessage:          row.ErrorMessage,
+			ExecutiveSummary:      row.ExecutiveSummary,
+			ReviewStatus:          row.ReviewStatus,
+			Assignee:              row.Assignee,
+			QualityRating:         row.QualityRating,
+			ActionTaken:           row.ActionTaken,
+			InvestigationFeedback: row.InvestigationFeedback,
+			LatestScore:           row.LatestScore,
+			ScoringStatus:         row.ScoringStatus,
 		})
 	}
 

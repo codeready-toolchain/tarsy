@@ -42,8 +42,9 @@ import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
 import { useChatState } from '../hooks/useChatState.ts';
 
-import { getSession, getTimeline, handleAPIError } from '../services/api.ts';
+import { getSession, getTimeline, updateReview, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
+import { REVIEW_ACTION } from '../types/api.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
@@ -72,6 +73,7 @@ import {
   EVENT_EXECUTION_STATUS,
   EVENT_CATCHUP_OVERFLOW,
   EVENT_CHAT_CREATED,
+  EVENT_REVIEW_STATUS,
   TIMELINE_STATUS,
   TIMELINE_EVENT_TYPES,
   PHASE_STATUS_MESSAGE,
@@ -96,6 +98,9 @@ const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlert
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
+
+import { CompleteReviewModal } from '../components/dashboard/CompleteReviewModal.tsx';
+import { EditFeedbackModal } from '../components/dashboard/EditFeedbackModal.tsx';
 
 // ────────────────────────────────────────────────────────────
 // Skeleton placeholders
@@ -242,6 +247,11 @@ export function SessionDetailPage() {
     }
   }, [chatState.chatStageId]);
 
+  // --- Review state ---
+  const [reviewModalMode, setReviewModalMode] = useState<'complete' | 'edit' | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -251,6 +261,13 @@ export function SessionDetailPage() {
   const [collapseCounter, setCollapseCounter] = useState(0);
   const [chatExpandCounter, setChatExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
+
+  // --- Stale-fetch guard: tracks current route id so in-flight getSession
+  //     calls from a previous route don't overwrite state after navigation ---
+  const currentIdRef = useRef(id);
+  useEffect(() => {
+    currentIdRef.current = id;
+  }, [id]);
 
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
@@ -868,6 +885,7 @@ export function SessionDetailPage() {
               getSession(id),
               getTimeline(id),
             ]).then(([freshSession, freshTimeline]) => {
+              if (currentIdRef.current !== id) return;
               setSession(freshSession);
               // skipStreaming=true: treat all events as completed so abandoned
               // streaming events (tool calls, thoughts) don't get re-added.
@@ -876,6 +894,17 @@ export function SessionDetailPage() {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
           }
+          return;
+        }
+
+        // --- review.status ---
+        if (eventType === EVENT_REVIEW_STATUS) {
+          getSession(id).then((freshSession) => {
+            if (currentIdRef.current !== id) return;
+            setSession(freshSession);
+          }).catch((err) => {
+            console.warn('Failed to re-fetch session after review status:', err);
+          });
           return;
         }
 
@@ -929,7 +958,10 @@ export function SessionDetailPage() {
 
           // Scoring stage completion: re-fetch session and scroll to final analysis
           if (payload.stage_type === STAGE_TYPE.SCORING && TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+            getSession(id).then((fresh) => {
+              if (currentIdRef.current !== id) return;
+              setSession(fresh);
+            }).catch((err) => {
               console.warn('Failed to re-fetch session after scoring stage completion:', err);
             });
             setExpandCounter((prev) => prev + 1);
@@ -957,7 +989,10 @@ export function SessionDetailPage() {
 
             // Re-fetch session detail to get execution overviews (agent names,
             // LLM providers, iteration strategies) for parallel agents.
-            getSession(id).then((fresh) => setSession(fresh)).catch((err) => {
+            getSession(id).then((fresh) => {
+              if (currentIdRef.current !== id) return;
+              setSession(fresh);
+            }).catch((err) => {
               console.warn('Failed to re-fetch session on stage start:', err);
             });
           }
@@ -1316,6 +1351,67 @@ export function SessionDetailPage() {
     setChatExpandCounter((prev) => prev + 1);
   }, []);
 
+  const handleReviewClick = useCallback(() => {
+    if (!session) return;
+    setReviewModalMode(session.quality_rating ? 'edit' : 'complete');
+  }, [session]);
+
+  const handleReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!id) return;
+    try {
+      setReviewLoading(true);
+      setReviewError(null);
+      const resp = await updateReview({
+        session_ids: [id],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
+      if (resp.results[0]?.success) {
+        setReviewModalMode(null);
+        const freshSession = await getSession(id);
+        if (currentIdRef.current === id) {
+          setSession(freshSession);
+        }
+      } else {
+        setReviewError(resp.results[0]?.error ?? 'Review failed');
+      }
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'An unexpected error occurred');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [id]);
+
+  const handleReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!id) return;
+    try {
+      setReviewLoading(true);
+      setReviewError(null);
+      const resp = await updateReview({
+        session_ids: [id],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
+      if (resp.results[0]?.success) {
+        setReviewModalMode(null);
+        const freshSession = await getSession(id);
+        if (currentIdRef.current === id) {
+          setSession(freshSession);
+        }
+      } else {
+        setReviewError(resp.results[0]?.error ?? 'Failed to save feedback');
+      }
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'An unexpected error occurred');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [id]);
+
   // Auto-scroll for chat: enable when chat stage starts, disable after completion
   useEffect(() => {
     if (chatStageInProgress) {
@@ -1609,8 +1705,32 @@ export function SessionDetailPage() {
                 sessionId={session.id}
                 latestScore={session.latest_score}
                 scoringStatus={session.scoring_status}
+                qualityRating={session.quality_rating}
+                onReviewClick={handleReviewClick}
               />
             </Suspense>
+
+            {/* Review modals */}
+            <CompleteReviewModal
+              open={reviewModalMode === 'complete'}
+              onClose={() => { setReviewModalMode(null); setReviewError(null); }}
+              onComplete={handleReviewComplete}
+              loading={reviewLoading}
+              error={reviewError}
+              title={session.alert_type ? `Review: ${session.alert_type}` : undefined}
+              executiveSummary={session.executive_summary}
+            />
+            <EditFeedbackModal
+              open={reviewModalMode === 'edit'}
+              onClose={() => { setReviewModalMode(null); setReviewError(null); }}
+              onSave={handleReviewSave}
+              loading={reviewLoading}
+              error={reviewError}
+              initialQualityRating={session.quality_rating ?? ''}
+              initialActionTaken={session.action_taken ?? ''}
+              initialInvestigationFeedback={session.investigation_feedback ?? ''}
+              executiveSummary={session.executive_summary}
+            />
 
             {/* Jump to Chat button — after Final Analysis, at the bottom */}
             {isChatAvailable && (

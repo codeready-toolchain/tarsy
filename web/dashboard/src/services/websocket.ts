@@ -244,7 +244,7 @@ class WebSocketService {
         sessionChannel.lastEventId = eventId;
       }
     }
-    if (eventId && eventType?.startsWith('session.')) {
+    if (eventId && (eventType?.startsWith('session.') || eventType?.startsWith('review.'))) {
       const globalChannel = this.channels.get('sessions');
       if (globalChannel) {
         globalChannel.lastEventId = eventId;
@@ -260,7 +260,7 @@ class WebSocketService {
     }
 
     // Route to global `sessions` channel handlers for session-level events
-    if (eventType?.startsWith('session.')) {
+    if (eventType?.startsWith('session.') || eventType?.startsWith('review.')) {
       const globalChannel = this.channels.get('sessions');
       if (globalChannel) {
         globalChannel.handlers.forEach((h) => h(data));

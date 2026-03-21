@@ -406,9 +406,8 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 				alertsession.IDEQ(session.ID),
 				alertsession.ReviewStatusIsNil(),
 			).
-			SetReviewStatus(alertsession.ReviewStatusResolved).
-			SetResolvedAt(now).
-			SetResolutionReason(alertsession.ResolutionReasonDismissed).
+			SetReviewStatus(alertsession.ReviewStatusReviewed).
+			SetReviewedAt(now).
 			Save(ctx)
 	} else {
 		reviewAffected, err = tx.AlertSession.Update().
@@ -466,10 +465,8 @@ func (w *Worker) publishReviewStatus(ctx context.Context, sessionID string, term
 	}
 
 	if terminalStatus == alertsession.StatusCancelled {
-		rs := string(alertsession.ReviewStatusResolved)
+		rs := string(alertsession.ReviewStatusReviewed)
 		payload.ReviewStatus = &rs
-		reason := string(alertsession.ResolutionReasonDismissed)
-		payload.ResolutionReason = &reason
 	} else {
 		rs := string(alertsession.ReviewStatusNeedsReview)
 		payload.ReviewStatus = &rs

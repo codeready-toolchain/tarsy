@@ -80,6 +80,11 @@ func Note(v string) predicate.SessionReviewActivity {
 	return predicate.SessionReviewActivity(sql.FieldEQ(FieldNote, v))
 }
 
+// InvestigationFeedback applies equality check predicate on the "investigation_feedback" field. It's identical to InvestigationFeedbackEQ.
+func InvestigationFeedback(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldEQ(FieldInvestigationFeedback, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.SessionReviewActivity {
 	return predicate.SessionReviewActivity(sql.FieldEQ(FieldCreatedAt, v))
@@ -285,34 +290,34 @@ func ToStatusNotIn(vs ...ToStatus) predicate.SessionReviewActivity {
 	return predicate.SessionReviewActivity(sql.FieldNotIn(FieldToStatus, vs...))
 }
 
-// ResolutionReasonEQ applies the EQ predicate on the "resolution_reason" field.
-func ResolutionReasonEQ(v ResolutionReason) predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldEQ(FieldResolutionReason, v))
+// QualityRatingEQ applies the EQ predicate on the "quality_rating" field.
+func QualityRatingEQ(v QualityRating) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldEQ(FieldQualityRating, v))
 }
 
-// ResolutionReasonNEQ applies the NEQ predicate on the "resolution_reason" field.
-func ResolutionReasonNEQ(v ResolutionReason) predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldNEQ(FieldResolutionReason, v))
+// QualityRatingNEQ applies the NEQ predicate on the "quality_rating" field.
+func QualityRatingNEQ(v QualityRating) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNEQ(FieldQualityRating, v))
 }
 
-// ResolutionReasonIn applies the In predicate on the "resolution_reason" field.
-func ResolutionReasonIn(vs ...ResolutionReason) predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldIn(FieldResolutionReason, vs...))
+// QualityRatingIn applies the In predicate on the "quality_rating" field.
+func QualityRatingIn(vs ...QualityRating) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldIn(FieldQualityRating, vs...))
 }
 
-// ResolutionReasonNotIn applies the NotIn predicate on the "resolution_reason" field.
-func ResolutionReasonNotIn(vs ...ResolutionReason) predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldNotIn(FieldResolutionReason, vs...))
+// QualityRatingNotIn applies the NotIn predicate on the "quality_rating" field.
+func QualityRatingNotIn(vs ...QualityRating) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNotIn(FieldQualityRating, vs...))
 }
 
-// ResolutionReasonIsNil applies the IsNil predicate on the "resolution_reason" field.
-func ResolutionReasonIsNil() predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldIsNull(FieldResolutionReason))
+// QualityRatingIsNil applies the IsNil predicate on the "quality_rating" field.
+func QualityRatingIsNil() predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldIsNull(FieldQualityRating))
 }
 
-// ResolutionReasonNotNil applies the NotNil predicate on the "resolution_reason" field.
-func ResolutionReasonNotNil() predicate.SessionReviewActivity {
-	return predicate.SessionReviewActivity(sql.FieldNotNull(FieldResolutionReason))
+// QualityRatingNotNil applies the NotNil predicate on the "quality_rating" field.
+func QualityRatingNotNil() predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNotNull(FieldQualityRating))
 }
 
 // NoteEQ applies the EQ predicate on the "note" field.
@@ -388,6 +393,81 @@ func NoteEqualFold(v string) predicate.SessionReviewActivity {
 // NoteContainsFold applies the ContainsFold predicate on the "note" field.
 func NoteContainsFold(v string) predicate.SessionReviewActivity {
 	return predicate.SessionReviewActivity(sql.FieldContainsFold(FieldNote, v))
+}
+
+// InvestigationFeedbackEQ applies the EQ predicate on the "investigation_feedback" field.
+func InvestigationFeedbackEQ(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldEQ(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackNEQ applies the NEQ predicate on the "investigation_feedback" field.
+func InvestigationFeedbackNEQ(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNEQ(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackIn applies the In predicate on the "investigation_feedback" field.
+func InvestigationFeedbackIn(vs ...string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldIn(FieldInvestigationFeedback, vs...))
+}
+
+// InvestigationFeedbackNotIn applies the NotIn predicate on the "investigation_feedback" field.
+func InvestigationFeedbackNotIn(vs ...string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNotIn(FieldInvestigationFeedback, vs...))
+}
+
+// InvestigationFeedbackGT applies the GT predicate on the "investigation_feedback" field.
+func InvestigationFeedbackGT(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldGT(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackGTE applies the GTE predicate on the "investigation_feedback" field.
+func InvestigationFeedbackGTE(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldGTE(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackLT applies the LT predicate on the "investigation_feedback" field.
+func InvestigationFeedbackLT(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldLT(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackLTE applies the LTE predicate on the "investigation_feedback" field.
+func InvestigationFeedbackLTE(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldLTE(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackContains applies the Contains predicate on the "investigation_feedback" field.
+func InvestigationFeedbackContains(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldContains(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackHasPrefix applies the HasPrefix predicate on the "investigation_feedback" field.
+func InvestigationFeedbackHasPrefix(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldHasPrefix(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackHasSuffix applies the HasSuffix predicate on the "investigation_feedback" field.
+func InvestigationFeedbackHasSuffix(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldHasSuffix(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackIsNil applies the IsNil predicate on the "investigation_feedback" field.
+func InvestigationFeedbackIsNil() predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldIsNull(FieldInvestigationFeedback))
+}
+
+// InvestigationFeedbackNotNil applies the NotNil predicate on the "investigation_feedback" field.
+func InvestigationFeedbackNotNil() predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldNotNull(FieldInvestigationFeedback))
+}
+
+// InvestigationFeedbackEqualFold applies the EqualFold predicate on the "investigation_feedback" field.
+func InvestigationFeedbackEqualFold(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldEqualFold(FieldInvestigationFeedback, v))
+}
+
+// InvestigationFeedbackContainsFold applies the ContainsFold predicate on the "investigation_feedback" field.
+func InvestigationFeedbackContainsFold(v string) predicate.SessionReviewActivity {
+	return predicate.SessionReviewActivity(sql.FieldContainsFold(FieldInvestigationFeedback, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

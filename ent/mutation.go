@@ -2073,9 +2073,10 @@ type AlertSessionMutation struct {
 	review_status             *alertsession.ReviewStatus
 	assignee                  *string
 	assigned_at               *time.Time
-	resolved_at               *time.Time
-	resolution_reason         *alertsession.ResolutionReason
-	resolution_note           *string
+	reviewed_at               *time.Time
+	quality_rating            *alertsession.QualityRating
+	action_taken              *string
+	investigation_feedback    *string
 	clearedFields             map[string]struct{}
 	stages                    map[string]struct{}
 	removedstages             map[string]struct{}
@@ -3396,151 +3397,200 @@ func (m *AlertSessionMutation) ResetAssignedAt() {
 	delete(m.clearedFields, alertsession.FieldAssignedAt)
 }
 
-// SetResolvedAt sets the "resolved_at" field.
-func (m *AlertSessionMutation) SetResolvedAt(t time.Time) {
-	m.resolved_at = &t
+// SetReviewedAt sets the "reviewed_at" field.
+func (m *AlertSessionMutation) SetReviewedAt(t time.Time) {
+	m.reviewed_at = &t
 }
 
-// ResolvedAt returns the value of the "resolved_at" field in the mutation.
-func (m *AlertSessionMutation) ResolvedAt() (r time.Time, exists bool) {
-	v := m.resolved_at
+// ReviewedAt returns the value of the "reviewed_at" field in the mutation.
+func (m *AlertSessionMutation) ReviewedAt() (r time.Time, exists bool) {
+	v := m.reviewed_at
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldResolvedAt returns the old "resolved_at" field's value of the AlertSession entity.
+// OldReviewedAt returns the old "reviewed_at" field's value of the AlertSession entity.
 // If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AlertSessionMutation) OldResolvedAt(ctx context.Context) (v *time.Time, err error) {
+func (m *AlertSessionMutation) OldReviewedAt(ctx context.Context) (v *time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResolvedAt is only allowed on UpdateOne operations")
+		return v, errors.New("OldReviewedAt is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResolvedAt requires an ID field in the mutation")
+		return v, errors.New("OldReviewedAt requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResolvedAt: %w", err)
+		return v, fmt.Errorf("querying old value for OldReviewedAt: %w", err)
 	}
-	return oldValue.ResolvedAt, nil
+	return oldValue.ReviewedAt, nil
 }
 
-// ClearResolvedAt clears the value of the "resolved_at" field.
-func (m *AlertSessionMutation) ClearResolvedAt() {
-	m.resolved_at = nil
-	m.clearedFields[alertsession.FieldResolvedAt] = struct{}{}
+// ClearReviewedAt clears the value of the "reviewed_at" field.
+func (m *AlertSessionMutation) ClearReviewedAt() {
+	m.reviewed_at = nil
+	m.clearedFields[alertsession.FieldReviewedAt] = struct{}{}
 }
 
-// ResolvedAtCleared returns if the "resolved_at" field was cleared in this mutation.
-func (m *AlertSessionMutation) ResolvedAtCleared() bool {
-	_, ok := m.clearedFields[alertsession.FieldResolvedAt]
+// ReviewedAtCleared returns if the "reviewed_at" field was cleared in this mutation.
+func (m *AlertSessionMutation) ReviewedAtCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldReviewedAt]
 	return ok
 }
 
-// ResetResolvedAt resets all changes to the "resolved_at" field.
-func (m *AlertSessionMutation) ResetResolvedAt() {
-	m.resolved_at = nil
-	delete(m.clearedFields, alertsession.FieldResolvedAt)
+// ResetReviewedAt resets all changes to the "reviewed_at" field.
+func (m *AlertSessionMutation) ResetReviewedAt() {
+	m.reviewed_at = nil
+	delete(m.clearedFields, alertsession.FieldReviewedAt)
 }
 
-// SetResolutionReason sets the "resolution_reason" field.
-func (m *AlertSessionMutation) SetResolutionReason(ar alertsession.ResolutionReason) {
-	m.resolution_reason = &ar
+// SetQualityRating sets the "quality_rating" field.
+func (m *AlertSessionMutation) SetQualityRating(ar alertsession.QualityRating) {
+	m.quality_rating = &ar
 }
 
-// ResolutionReason returns the value of the "resolution_reason" field in the mutation.
-func (m *AlertSessionMutation) ResolutionReason() (r alertsession.ResolutionReason, exists bool) {
-	v := m.resolution_reason
+// QualityRating returns the value of the "quality_rating" field in the mutation.
+func (m *AlertSessionMutation) QualityRating() (r alertsession.QualityRating, exists bool) {
+	v := m.quality_rating
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldResolutionReason returns the old "resolution_reason" field's value of the AlertSession entity.
+// OldQualityRating returns the old "quality_rating" field's value of the AlertSession entity.
 // If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AlertSessionMutation) OldResolutionReason(ctx context.Context) (v *alertsession.ResolutionReason, err error) {
+func (m *AlertSessionMutation) OldQualityRating(ctx context.Context) (v *alertsession.QualityRating, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResolutionReason is only allowed on UpdateOne operations")
+		return v, errors.New("OldQualityRating is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResolutionReason requires an ID field in the mutation")
+		return v, errors.New("OldQualityRating requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResolutionReason: %w", err)
+		return v, fmt.Errorf("querying old value for OldQualityRating: %w", err)
 	}
-	return oldValue.ResolutionReason, nil
+	return oldValue.QualityRating, nil
 }
 
-// ClearResolutionReason clears the value of the "resolution_reason" field.
-func (m *AlertSessionMutation) ClearResolutionReason() {
-	m.resolution_reason = nil
-	m.clearedFields[alertsession.FieldResolutionReason] = struct{}{}
+// ClearQualityRating clears the value of the "quality_rating" field.
+func (m *AlertSessionMutation) ClearQualityRating() {
+	m.quality_rating = nil
+	m.clearedFields[alertsession.FieldQualityRating] = struct{}{}
 }
 
-// ResolutionReasonCleared returns if the "resolution_reason" field was cleared in this mutation.
-func (m *AlertSessionMutation) ResolutionReasonCleared() bool {
-	_, ok := m.clearedFields[alertsession.FieldResolutionReason]
+// QualityRatingCleared returns if the "quality_rating" field was cleared in this mutation.
+func (m *AlertSessionMutation) QualityRatingCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldQualityRating]
 	return ok
 }
 
-// ResetResolutionReason resets all changes to the "resolution_reason" field.
-func (m *AlertSessionMutation) ResetResolutionReason() {
-	m.resolution_reason = nil
-	delete(m.clearedFields, alertsession.FieldResolutionReason)
+// ResetQualityRating resets all changes to the "quality_rating" field.
+func (m *AlertSessionMutation) ResetQualityRating() {
+	m.quality_rating = nil
+	delete(m.clearedFields, alertsession.FieldQualityRating)
 }
 
-// SetResolutionNote sets the "resolution_note" field.
-func (m *AlertSessionMutation) SetResolutionNote(s string) {
-	m.resolution_note = &s
+// SetActionTaken sets the "action_taken" field.
+func (m *AlertSessionMutation) SetActionTaken(s string) {
+	m.action_taken = &s
 }
 
-// ResolutionNote returns the value of the "resolution_note" field in the mutation.
-func (m *AlertSessionMutation) ResolutionNote() (r string, exists bool) {
-	v := m.resolution_note
+// ActionTaken returns the value of the "action_taken" field in the mutation.
+func (m *AlertSessionMutation) ActionTaken() (r string, exists bool) {
+	v := m.action_taken
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldResolutionNote returns the old "resolution_note" field's value of the AlertSession entity.
+// OldActionTaken returns the old "action_taken" field's value of the AlertSession entity.
 // If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AlertSessionMutation) OldResolutionNote(ctx context.Context) (v *string, err error) {
+func (m *AlertSessionMutation) OldActionTaken(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResolutionNote is only allowed on UpdateOne operations")
+		return v, errors.New("OldActionTaken is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResolutionNote requires an ID field in the mutation")
+		return v, errors.New("OldActionTaken requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResolutionNote: %w", err)
+		return v, fmt.Errorf("querying old value for OldActionTaken: %w", err)
 	}
-	return oldValue.ResolutionNote, nil
+	return oldValue.ActionTaken, nil
 }
 
-// ClearResolutionNote clears the value of the "resolution_note" field.
-func (m *AlertSessionMutation) ClearResolutionNote() {
-	m.resolution_note = nil
-	m.clearedFields[alertsession.FieldResolutionNote] = struct{}{}
+// ClearActionTaken clears the value of the "action_taken" field.
+func (m *AlertSessionMutation) ClearActionTaken() {
+	m.action_taken = nil
+	m.clearedFields[alertsession.FieldActionTaken] = struct{}{}
 }
 
-// ResolutionNoteCleared returns if the "resolution_note" field was cleared in this mutation.
-func (m *AlertSessionMutation) ResolutionNoteCleared() bool {
-	_, ok := m.clearedFields[alertsession.FieldResolutionNote]
+// ActionTakenCleared returns if the "action_taken" field was cleared in this mutation.
+func (m *AlertSessionMutation) ActionTakenCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldActionTaken]
 	return ok
 }
 
-// ResetResolutionNote resets all changes to the "resolution_note" field.
-func (m *AlertSessionMutation) ResetResolutionNote() {
-	m.resolution_note = nil
-	delete(m.clearedFields, alertsession.FieldResolutionNote)
+// ResetActionTaken resets all changes to the "action_taken" field.
+func (m *AlertSessionMutation) ResetActionTaken() {
+	m.action_taken = nil
+	delete(m.clearedFields, alertsession.FieldActionTaken)
+}
+
+// SetInvestigationFeedback sets the "investigation_feedback" field.
+func (m *AlertSessionMutation) SetInvestigationFeedback(s string) {
+	m.investigation_feedback = &s
+}
+
+// InvestigationFeedback returns the value of the "investigation_feedback" field in the mutation.
+func (m *AlertSessionMutation) InvestigationFeedback() (r string, exists bool) {
+	v := m.investigation_feedback
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInvestigationFeedback returns the old "investigation_feedback" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldInvestigationFeedback(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInvestigationFeedback is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInvestigationFeedback requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInvestigationFeedback: %w", err)
+	}
+	return oldValue.InvestigationFeedback, nil
+}
+
+// ClearInvestigationFeedback clears the value of the "investigation_feedback" field.
+func (m *AlertSessionMutation) ClearInvestigationFeedback() {
+	m.investigation_feedback = nil
+	m.clearedFields[alertsession.FieldInvestigationFeedback] = struct{}{}
+}
+
+// InvestigationFeedbackCleared returns if the "investigation_feedback" field was cleared in this mutation.
+func (m *AlertSessionMutation) InvestigationFeedbackCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldInvestigationFeedback]
+	return ok
+}
+
+// ResetInvestigationFeedback resets all changes to the "investigation_feedback" field.
+func (m *AlertSessionMutation) ResetInvestigationFeedback() {
+	m.investigation_feedback = nil
+	delete(m.clearedFields, alertsession.FieldInvestigationFeedback)
 }
 
 // AddStageIDs adds the "stages" edge to the Stage entity by ids.
@@ -4102,7 +4152,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 29)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -4178,14 +4228,17 @@ func (m *AlertSessionMutation) Fields() []string {
 	if m.assigned_at != nil {
 		fields = append(fields, alertsession.FieldAssignedAt)
 	}
-	if m.resolved_at != nil {
-		fields = append(fields, alertsession.FieldResolvedAt)
+	if m.reviewed_at != nil {
+		fields = append(fields, alertsession.FieldReviewedAt)
 	}
-	if m.resolution_reason != nil {
-		fields = append(fields, alertsession.FieldResolutionReason)
+	if m.quality_rating != nil {
+		fields = append(fields, alertsession.FieldQualityRating)
 	}
-	if m.resolution_note != nil {
-		fields = append(fields, alertsession.FieldResolutionNote)
+	if m.action_taken != nil {
+		fields = append(fields, alertsession.FieldActionTaken)
+	}
+	if m.investigation_feedback != nil {
+		fields = append(fields, alertsession.FieldInvestigationFeedback)
 	}
 	return fields
 }
@@ -4245,12 +4298,14 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.Assignee()
 	case alertsession.FieldAssignedAt:
 		return m.AssignedAt()
-	case alertsession.FieldResolvedAt:
-		return m.ResolvedAt()
-	case alertsession.FieldResolutionReason:
-		return m.ResolutionReason()
-	case alertsession.FieldResolutionNote:
-		return m.ResolutionNote()
+	case alertsession.FieldReviewedAt:
+		return m.ReviewedAt()
+	case alertsession.FieldQualityRating:
+		return m.QualityRating()
+	case alertsession.FieldActionTaken:
+		return m.ActionTaken()
+	case alertsession.FieldInvestigationFeedback:
+		return m.InvestigationFeedback()
 	}
 	return nil, false
 }
@@ -4310,12 +4365,14 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldAssignee(ctx)
 	case alertsession.FieldAssignedAt:
 		return m.OldAssignedAt(ctx)
-	case alertsession.FieldResolvedAt:
-		return m.OldResolvedAt(ctx)
-	case alertsession.FieldResolutionReason:
-		return m.OldResolutionReason(ctx)
-	case alertsession.FieldResolutionNote:
-		return m.OldResolutionNote(ctx)
+	case alertsession.FieldReviewedAt:
+		return m.OldReviewedAt(ctx)
+	case alertsession.FieldQualityRating:
+		return m.OldQualityRating(ctx)
+	case alertsession.FieldActionTaken:
+		return m.OldActionTaken(ctx)
+	case alertsession.FieldInvestigationFeedback:
+		return m.OldInvestigationFeedback(ctx)
 	}
 	return nil, fmt.Errorf("unknown AlertSession field %s", name)
 }
@@ -4500,26 +4557,33 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAssignedAt(v)
 		return nil
-	case alertsession.FieldResolvedAt:
+	case alertsession.FieldReviewedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetResolvedAt(v)
+		m.SetReviewedAt(v)
 		return nil
-	case alertsession.FieldResolutionReason:
-		v, ok := value.(alertsession.ResolutionReason)
+	case alertsession.FieldQualityRating:
+		v, ok := value.(alertsession.QualityRating)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetResolutionReason(v)
+		m.SetQualityRating(v)
 		return nil
-	case alertsession.FieldResolutionNote:
+	case alertsession.FieldActionTaken:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetResolutionNote(v)
+		m.SetActionTaken(v)
+		return nil
+	case alertsession.FieldInvestigationFeedback:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInvestigationFeedback(v)
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession field %s", name)
@@ -4626,14 +4690,17 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldAssignedAt) {
 		fields = append(fields, alertsession.FieldAssignedAt)
 	}
-	if m.FieldCleared(alertsession.FieldResolvedAt) {
-		fields = append(fields, alertsession.FieldResolvedAt)
+	if m.FieldCleared(alertsession.FieldReviewedAt) {
+		fields = append(fields, alertsession.FieldReviewedAt)
 	}
-	if m.FieldCleared(alertsession.FieldResolutionReason) {
-		fields = append(fields, alertsession.FieldResolutionReason)
+	if m.FieldCleared(alertsession.FieldQualityRating) {
+		fields = append(fields, alertsession.FieldQualityRating)
 	}
-	if m.FieldCleared(alertsession.FieldResolutionNote) {
-		fields = append(fields, alertsession.FieldResolutionNote)
+	if m.FieldCleared(alertsession.FieldActionTaken) {
+		fields = append(fields, alertsession.FieldActionTaken)
+	}
+	if m.FieldCleared(alertsession.FieldInvestigationFeedback) {
+		fields = append(fields, alertsession.FieldInvestigationFeedback)
 	}
 	return fields
 }
@@ -4709,14 +4776,17 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 	case alertsession.FieldAssignedAt:
 		m.ClearAssignedAt()
 		return nil
-	case alertsession.FieldResolvedAt:
-		m.ClearResolvedAt()
+	case alertsession.FieldReviewedAt:
+		m.ClearReviewedAt()
 		return nil
-	case alertsession.FieldResolutionReason:
-		m.ClearResolutionReason()
+	case alertsession.FieldQualityRating:
+		m.ClearQualityRating()
 		return nil
-	case alertsession.FieldResolutionNote:
-		m.ClearResolutionNote()
+	case alertsession.FieldActionTaken:
+		m.ClearActionTaken()
+		return nil
+	case alertsession.FieldInvestigationFeedback:
+		m.ClearInvestigationFeedback()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession nullable field %s", name)
@@ -4801,14 +4871,17 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 	case alertsession.FieldAssignedAt:
 		m.ResetAssignedAt()
 		return nil
-	case alertsession.FieldResolvedAt:
-		m.ResetResolvedAt()
+	case alertsession.FieldReviewedAt:
+		m.ResetReviewedAt()
 		return nil
-	case alertsession.FieldResolutionReason:
-		m.ResetResolutionReason()
+	case alertsession.FieldQualityRating:
+		m.ResetQualityRating()
 		return nil
-	case alertsession.FieldResolutionNote:
-		m.ResetResolutionNote()
+	case alertsession.FieldActionTaken:
+		m.ResetActionTaken()
+		return nil
+	case alertsession.FieldInvestigationFeedback:
+		m.ResetInvestigationFeedback()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession field %s", name)
@@ -11440,22 +11513,23 @@ func (m *MessageMutation) ResetEdge(name string) error {
 // SessionReviewActivityMutation represents an operation that mutates the SessionReviewActivity nodes in the graph.
 type SessionReviewActivityMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *string
-	actor             *string
-	action            *sessionreviewactivity.Action
-	from_status       *sessionreviewactivity.FromStatus
-	to_status         *sessionreviewactivity.ToStatus
-	resolution_reason *sessionreviewactivity.ResolutionReason
-	note              *string
-	created_at        *time.Time
-	clearedFields     map[string]struct{}
-	session           *string
-	clearedsession    bool
-	done              bool
-	oldValue          func(context.Context) (*SessionReviewActivity, error)
-	predicates        []predicate.SessionReviewActivity
+	op                     Op
+	typ                    string
+	id                     *string
+	actor                  *string
+	action                 *sessionreviewactivity.Action
+	from_status            *sessionreviewactivity.FromStatus
+	to_status              *sessionreviewactivity.ToStatus
+	quality_rating         *sessionreviewactivity.QualityRating
+	note                   *string
+	investigation_feedback *string
+	created_at             *time.Time
+	clearedFields          map[string]struct{}
+	session                *string
+	clearedsession         bool
+	done                   bool
+	oldValue               func(context.Context) (*SessionReviewActivity, error)
+	predicates             []predicate.SessionReviewActivity
 }
 
 var _ ent.Mutation = (*SessionReviewActivityMutation)(nil)
@@ -11755,53 +11829,53 @@ func (m *SessionReviewActivityMutation) ResetToStatus() {
 	m.to_status = nil
 }
 
-// SetResolutionReason sets the "resolution_reason" field.
-func (m *SessionReviewActivityMutation) SetResolutionReason(sr sessionreviewactivity.ResolutionReason) {
-	m.resolution_reason = &sr
+// SetQualityRating sets the "quality_rating" field.
+func (m *SessionReviewActivityMutation) SetQualityRating(sr sessionreviewactivity.QualityRating) {
+	m.quality_rating = &sr
 }
 
-// ResolutionReason returns the value of the "resolution_reason" field in the mutation.
-func (m *SessionReviewActivityMutation) ResolutionReason() (r sessionreviewactivity.ResolutionReason, exists bool) {
-	v := m.resolution_reason
+// QualityRating returns the value of the "quality_rating" field in the mutation.
+func (m *SessionReviewActivityMutation) QualityRating() (r sessionreviewactivity.QualityRating, exists bool) {
+	v := m.quality_rating
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldResolutionReason returns the old "resolution_reason" field's value of the SessionReviewActivity entity.
+// OldQualityRating returns the old "quality_rating" field's value of the SessionReviewActivity entity.
 // If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SessionReviewActivityMutation) OldResolutionReason(ctx context.Context) (v *sessionreviewactivity.ResolutionReason, err error) {
+func (m *SessionReviewActivityMutation) OldQualityRating(ctx context.Context) (v *sessionreviewactivity.QualityRating, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResolutionReason is only allowed on UpdateOne operations")
+		return v, errors.New("OldQualityRating is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResolutionReason requires an ID field in the mutation")
+		return v, errors.New("OldQualityRating requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResolutionReason: %w", err)
+		return v, fmt.Errorf("querying old value for OldQualityRating: %w", err)
 	}
-	return oldValue.ResolutionReason, nil
+	return oldValue.QualityRating, nil
 }
 
-// ClearResolutionReason clears the value of the "resolution_reason" field.
-func (m *SessionReviewActivityMutation) ClearResolutionReason() {
-	m.resolution_reason = nil
-	m.clearedFields[sessionreviewactivity.FieldResolutionReason] = struct{}{}
+// ClearQualityRating clears the value of the "quality_rating" field.
+func (m *SessionReviewActivityMutation) ClearQualityRating() {
+	m.quality_rating = nil
+	m.clearedFields[sessionreviewactivity.FieldQualityRating] = struct{}{}
 }
 
-// ResolutionReasonCleared returns if the "resolution_reason" field was cleared in this mutation.
-func (m *SessionReviewActivityMutation) ResolutionReasonCleared() bool {
-	_, ok := m.clearedFields[sessionreviewactivity.FieldResolutionReason]
+// QualityRatingCleared returns if the "quality_rating" field was cleared in this mutation.
+func (m *SessionReviewActivityMutation) QualityRatingCleared() bool {
+	_, ok := m.clearedFields[sessionreviewactivity.FieldQualityRating]
 	return ok
 }
 
-// ResetResolutionReason resets all changes to the "resolution_reason" field.
-func (m *SessionReviewActivityMutation) ResetResolutionReason() {
-	m.resolution_reason = nil
-	delete(m.clearedFields, sessionreviewactivity.FieldResolutionReason)
+// ResetQualityRating resets all changes to the "quality_rating" field.
+func (m *SessionReviewActivityMutation) ResetQualityRating() {
+	m.quality_rating = nil
+	delete(m.clearedFields, sessionreviewactivity.FieldQualityRating)
 }
 
 // SetNote sets the "note" field.
@@ -11851,6 +11925,55 @@ func (m *SessionReviewActivityMutation) NoteCleared() bool {
 func (m *SessionReviewActivityMutation) ResetNote() {
 	m.note = nil
 	delete(m.clearedFields, sessionreviewactivity.FieldNote)
+}
+
+// SetInvestigationFeedback sets the "investigation_feedback" field.
+func (m *SessionReviewActivityMutation) SetInvestigationFeedback(s string) {
+	m.investigation_feedback = &s
+}
+
+// InvestigationFeedback returns the value of the "investigation_feedback" field in the mutation.
+func (m *SessionReviewActivityMutation) InvestigationFeedback() (r string, exists bool) {
+	v := m.investigation_feedback
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInvestigationFeedback returns the old "investigation_feedback" field's value of the SessionReviewActivity entity.
+// If the SessionReviewActivity object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionReviewActivityMutation) OldInvestigationFeedback(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInvestigationFeedback is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInvestigationFeedback requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInvestigationFeedback: %w", err)
+	}
+	return oldValue.InvestigationFeedback, nil
+}
+
+// ClearInvestigationFeedback clears the value of the "investigation_feedback" field.
+func (m *SessionReviewActivityMutation) ClearInvestigationFeedback() {
+	m.investigation_feedback = nil
+	m.clearedFields[sessionreviewactivity.FieldInvestigationFeedback] = struct{}{}
+}
+
+// InvestigationFeedbackCleared returns if the "investigation_feedback" field was cleared in this mutation.
+func (m *SessionReviewActivityMutation) InvestigationFeedbackCleared() bool {
+	_, ok := m.clearedFields[sessionreviewactivity.FieldInvestigationFeedback]
+	return ok
+}
+
+// ResetInvestigationFeedback resets all changes to the "investigation_feedback" field.
+func (m *SessionReviewActivityMutation) ResetInvestigationFeedback() {
+	m.investigation_feedback = nil
+	delete(m.clearedFields, sessionreviewactivity.FieldInvestigationFeedback)
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -11950,7 +12073,7 @@ func (m *SessionReviewActivityMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionReviewActivityMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.session != nil {
 		fields = append(fields, sessionreviewactivity.FieldSessionID)
 	}
@@ -11966,11 +12089,14 @@ func (m *SessionReviewActivityMutation) Fields() []string {
 	if m.to_status != nil {
 		fields = append(fields, sessionreviewactivity.FieldToStatus)
 	}
-	if m.resolution_reason != nil {
-		fields = append(fields, sessionreviewactivity.FieldResolutionReason)
+	if m.quality_rating != nil {
+		fields = append(fields, sessionreviewactivity.FieldQualityRating)
 	}
 	if m.note != nil {
 		fields = append(fields, sessionreviewactivity.FieldNote)
+	}
+	if m.investigation_feedback != nil {
+		fields = append(fields, sessionreviewactivity.FieldInvestigationFeedback)
 	}
 	if m.created_at != nil {
 		fields = append(fields, sessionreviewactivity.FieldCreatedAt)
@@ -11993,10 +12119,12 @@ func (m *SessionReviewActivityMutation) Field(name string) (ent.Value, bool) {
 		return m.FromStatus()
 	case sessionreviewactivity.FieldToStatus:
 		return m.ToStatus()
-	case sessionreviewactivity.FieldResolutionReason:
-		return m.ResolutionReason()
+	case sessionreviewactivity.FieldQualityRating:
+		return m.QualityRating()
 	case sessionreviewactivity.FieldNote:
 		return m.Note()
+	case sessionreviewactivity.FieldInvestigationFeedback:
+		return m.InvestigationFeedback()
 	case sessionreviewactivity.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -12018,10 +12146,12 @@ func (m *SessionReviewActivityMutation) OldField(ctx context.Context, name strin
 		return m.OldFromStatus(ctx)
 	case sessionreviewactivity.FieldToStatus:
 		return m.OldToStatus(ctx)
-	case sessionreviewactivity.FieldResolutionReason:
-		return m.OldResolutionReason(ctx)
+	case sessionreviewactivity.FieldQualityRating:
+		return m.OldQualityRating(ctx)
 	case sessionreviewactivity.FieldNote:
 		return m.OldNote(ctx)
+	case sessionreviewactivity.FieldInvestigationFeedback:
+		return m.OldInvestigationFeedback(ctx)
 	case sessionreviewactivity.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -12068,12 +12198,12 @@ func (m *SessionReviewActivityMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetToStatus(v)
 		return nil
-	case sessionreviewactivity.FieldResolutionReason:
-		v, ok := value.(sessionreviewactivity.ResolutionReason)
+	case sessionreviewactivity.FieldQualityRating:
+		v, ok := value.(sessionreviewactivity.QualityRating)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetResolutionReason(v)
+		m.SetQualityRating(v)
 		return nil
 	case sessionreviewactivity.FieldNote:
 		v, ok := value.(string)
@@ -12081,6 +12211,13 @@ func (m *SessionReviewActivityMutation) SetField(name string, value ent.Value) e
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNote(v)
+		return nil
+	case sessionreviewactivity.FieldInvestigationFeedback:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInvestigationFeedback(v)
 		return nil
 	case sessionreviewactivity.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -12122,11 +12259,14 @@ func (m *SessionReviewActivityMutation) ClearedFields() []string {
 	if m.FieldCleared(sessionreviewactivity.FieldFromStatus) {
 		fields = append(fields, sessionreviewactivity.FieldFromStatus)
 	}
-	if m.FieldCleared(sessionreviewactivity.FieldResolutionReason) {
-		fields = append(fields, sessionreviewactivity.FieldResolutionReason)
+	if m.FieldCleared(sessionreviewactivity.FieldQualityRating) {
+		fields = append(fields, sessionreviewactivity.FieldQualityRating)
 	}
 	if m.FieldCleared(sessionreviewactivity.FieldNote) {
 		fields = append(fields, sessionreviewactivity.FieldNote)
+	}
+	if m.FieldCleared(sessionreviewactivity.FieldInvestigationFeedback) {
+		fields = append(fields, sessionreviewactivity.FieldInvestigationFeedback)
 	}
 	return fields
 }
@@ -12145,11 +12285,14 @@ func (m *SessionReviewActivityMutation) ClearField(name string) error {
 	case sessionreviewactivity.FieldFromStatus:
 		m.ClearFromStatus()
 		return nil
-	case sessionreviewactivity.FieldResolutionReason:
-		m.ClearResolutionReason()
+	case sessionreviewactivity.FieldQualityRating:
+		m.ClearQualityRating()
 		return nil
 	case sessionreviewactivity.FieldNote:
 		m.ClearNote()
+		return nil
+	case sessionreviewactivity.FieldInvestigationFeedback:
+		m.ClearInvestigationFeedback()
 		return nil
 	}
 	return fmt.Errorf("unknown SessionReviewActivity nullable field %s", name)
@@ -12174,11 +12317,14 @@ func (m *SessionReviewActivityMutation) ResetField(name string) error {
 	case sessionreviewactivity.FieldToStatus:
 		m.ResetToStatus()
 		return nil
-	case sessionreviewactivity.FieldResolutionReason:
-		m.ResetResolutionReason()
+	case sessionreviewactivity.FieldQualityRating:
+		m.ResetQualityRating()
 		return nil
 	case sessionreviewactivity.FieldNote:
 		m.ResetNote()
+		return nil
+	case sessionreviewactivity.FieldInvestigationFeedback:
+		m.ResetInvestigationFeedback()
 		return nil
 	case sessionreviewactivity.FieldCreatedAt:
 		m.ResetCreatedAt()

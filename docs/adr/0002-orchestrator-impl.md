@@ -1,6 +1,6 @@
 # ADR-0002: Orchestrator Agent
 
-**Status:** Implemented
+**Status:** Implemented  
 **Date:** 2026-02-26
 
 ## Overview
@@ -33,7 +33,7 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 
 3. **ToolExecutor is the seam.** The existing `ToolExecutor` interface is the integration point. A `CompositeToolExecutor` wraps MCP tools + orchestration tools into a single tool set.
 
-4. **Sub-agents are regular executions.** Sub-agents run through the same `ResolveAgentConfig → CreateToolExecutor → AgentFactory.CreateAgent → Execute` path as any agent.
+4. **Sub-agents are regular executions.** Sub-agents run through the same resolve-config → tool executor → agent factory → execute path as any agent.
 
 5. **DB records follow the existing model.** Sub-agent runs create real `AgentExecution` records with timeline events, linked to the orchestrator via a `parent_execution_id` column.
 
@@ -80,42 +80,42 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 ### Components
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│  Session Executor                                                    │
-│                                                                      │
-│  executeStage → executeAgent → AgentFactory.CreateAgent              │
-│                                      │                               │
-│                             ┌────────┴───────────────────┐           │
+┌───────────────────────────────────────────────────────────────────────┐
+│  Session Executor                                                     │
+│                                                                       │
+│  executeStage → executeAgent → AgentFactory.CreateAgent               │
+│                                      │                                │
+│                             ┌────────┴────────────────────┐           │
 │                             │  Agent (type=orchestrator)  │           │
-│                             └────────┬───────────────────┘           │
-│                                      │                               │
-│                             ┌────────┴───────────────────┐           │
-│                             │  IteratingController       │           │
-│                             │  (+ push-based drain/wait) │           │
-│                             └────────┬───────────────────┘           │
-│                                      │                               │
-│                             ┌────────┴───────────────────┐           │
-│                             │  CompositeToolExecutor     │           │
-│                             │  ├─ MCP tools (Loki, etc.) │           │
-│                             │  └─ Orchestration tools    │           │
-│                             │     ├─ dispatch_agent      │           │
-│                             │     ├─ cancel_agent        │           │
-│                             │     └─ list_agents         │           │
-│                             └────────┬───────────────────┘           │
-│                                      │                               │
-│                             ┌────────┴───────────────────┐           │
-│                             │  SubAgentRunner            │           │
-│                             │  (spawns/tracks sub-agents)│           │
-│                             │  goroutine per sub-agent   │           │
-│                             └────────────────────────────┘           │
-└──────────────────────────────────────────────────────────────────────┘
+│                             └────────┬────────────────────┘           │
+│                                      │                                │
+│                             ┌────────┴───────────────────┐            │
+│                             │  IteratingController       │            │
+│                             │  (+ push-based drain/wait) │            │
+│                             └────────┬───────────────────┘            │
+│                                      │                                │
+│                             ┌────────┴───────────────────┐            │
+│                             │  CompositeToolExecutor     │            │
+│                             │  ├─ MCP tools (Loki, etc.) │            │
+│                             │  └─ Orchestration tools    │            │
+│                             │     ├─ dispatch_agent      │            │
+│                             │     ├─ cancel_agent        │            │
+│                             │     └─ list_agents         │            │
+│                             └────────┬───────────────────┘            │
+│                                      │                                │
+│                             ┌────────┴───────────────────┐            │
+│                             │  SubAgentRunner            │            │
+│                             │  (spawns/tracks sub-agents)│            │
+│                             │  goroutine per sub-agent   │            │
+│                             └────────────────────────────┘            │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-**CompositeToolExecutor** wraps the existing MCP `ToolExecutor` and adds orchestration tools. Implements the same `ToolExecutor` interface. On `Execute`, routes by name: orchestration tools go to the `SubAgentRunner`, everything else delegates to MCP. On `Close`, cancels all running sub-agents and waits for them to finish (with a 30s timeout using `context.Background()` since the parent context may already be cancelled).
+**CompositeToolExecutor** wraps the existing MCP `ToolExecutor` and adds orchestration tools. Implements the same `ToolExecutor` interface. On execute, routes by name: orchestration tools go to the `SubAgentRunner`, everything else delegates to MCP. On close, cancels all running sub-agents and waits for them to finish (with a timeout using a background context when the parent context may already be cancelled).
 
-**SubAgentRunner** manages the lifecycle of sub-agent goroutines. Provides push-based result delivery via a buffered results channel and lifecycle management (dispatch, cancel, list, cancel-all). Sub-agent contexts derive from the session-level context (not the per-iteration context) so they survive across orchestrator iterations. A `closeCh` mechanism ensures individual sub-agent cancellations still deliver results while bulk shutdown drops them cleanly.
+**SubAgentRunner** manages the lifecycle of sub-agent goroutines. Provides push-based result delivery via a buffered results channel and lifecycle management (dispatch, cancel, list, cancel-all). Sub-agent contexts derive from the session-level context (not the per-iteration context) so they survive across orchestrator iterations. A close channel ensures individual sub-agent cancellations still deliver results while bulk shutdown drops them cleanly.
 
-**ExecutionContext** gains three optional fields: `SubAgent *SubAgentContext` (set for sub-agents, triggers sub-agent prompt), `SubAgentCollector SubAgentResultCollector` (interface for drain/wait, avoids `agent↔orchestrator` import cycle), and `SubAgentCatalog` (available agents for the system prompt). All `nil` for non-orchestrator agents — zero impact on existing agents.
+**ExecutionContext** gains optional orchestration-related fields: sub-agent context (for sub-agents), a result collector interface for drain/wait (avoids import cycles), and a catalog of available agents for the system prompt. All are unset for non-orchestrator agents — zero impact on existing agents.
 
 ### Data Flow
 
@@ -203,7 +203,7 @@ Alert data + prior agent results
 
 Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tarsy.yaml) and built-in agents (KubernetesAgent, ChatAgent, etc.). No new concept needed.
 
-**Discovery:** Agents with a `description` field form the global sub-agent registry (`SubAgentRegistry`, built at config load time). Agents without `description` are excluded. Orchestrator agents themselves are also excluded. The registry can be further restricted via `sub_agents` override at chain/stage/agent level.
+**Discovery:** Agents with a `description` field form the global sub-agent registry (built at config load time). Agents without `description` are excluded. Orchestrator agents themselves are also excluded. The registry can be further restricted via `sub_agents` override at chain/stage/agent level.
 
 **Execution model:**
 - **Dispatch and forget:** `dispatch_agent` returns immediately. Results are pushed back automatically.
@@ -211,17 +211,17 @@ Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tar
 - **Idle wait:** When the LLM has no more tool calls but sub-agents are running, the controller pauses until at least one result arrives.
 - **Depth 1 only:** Sub-agents cannot spawn their own sub-agents.
 - **Failure handling:** Sub-agent failures are reported to the orchestrator with full context. The LLM decides what to do. No auto-retry at orchestration level.
-- **Final response (not synthesis):** The orchestrator is typically a single agent in a stage. Its final response is just the LLM's last output — no separate synthesis step. If `max_iterations` is hit, the existing forced-conclusion path produces the final analysis. Remaining sub-agents are cancelled by `CompositeToolExecutor.Close()`.
+- **Final response (not synthesis):** The orchestrator is typically a single agent in a stage. Its final response is just the LLM's last output — no separate synthesis step. If `max_iterations` is hit, the existing forced-conclusion path produces the final analysis. Remaining sub-agents are cancelled when the composite executor closes.
 
 ## Configuration
 
 ### Orchestrator Config
 
-Per [ADR-0001](0001-agent-type-refactor.md), `AgentConfig` already has `Type`, `Description`, and `LLMBackend` fields. The orchestrator adds `AgentTypeOrchestrator = "orchestrator"` and a nested `orchestrator` section for guardrails:
+Per [ADR-0001](0001-agent-type-refactor.md), `AgentConfig` already has `Type`, `Description`, and `LLMBackend` fields. The orchestrator adds `orchestrator` as an agent type and a nested `orchestrator` section for guardrails:
 
 ```yaml
 defaults:
-  orchestrator:                     # Global orchestrator defaults
+  orchestrator:
     max_concurrent_agents: 5
     agent_timeout: 300s
     max_budget: 600s
@@ -232,7 +232,7 @@ agents:
     description: "Dynamic SRE investigation orchestrator"
     custom_instructions: |
       You investigate alerts by dispatching specialized sub-agents...
-    orchestrator:                    # Per-agent override (optional)
+    orchestrator:
       max_concurrent_agents: 3
 ```
 
@@ -243,12 +243,11 @@ Follows the same override pattern as `mcp_servers`, `llm_provider`, `max_iterati
 ```yaml
 agent_chains:
   focused-investigation:
-    # sub_agents: [...]                         # Chain-level (optional)
     stages:
       - name: investigate
         agents:
           - name: MyOrchestrator
-            sub_agents: [LogAnalyzer, MetricChecker]  # Stage-agent level (recommended)
+            sub_agents: [LogAnalyzer, MetricChecker]
 ```
 
 Supports both short-form (list of strings) and long-form (list of objects with per-reference overrides like `llm_provider`, `max_iterations`, `mcp_servers`), and can be mixed. If omitted at all levels, the orchestrator sees the full global registry.
@@ -264,7 +263,7 @@ Four new built-in agents ship with the orchestrator feature:
 | CodeExecutor | default | code_execution | none | Python computation and analysis |
 | GeneralWorker | default | none | none | Reasoning, summarization, drafting |
 
-These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible. `BuiltinAgentConfig` was extended with `LLMBackend` and `NativeTools` fields to support WebResearcher and CodeExecutor.
+These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible. Built-in agent definitions were extended with backend and native-tools fields where needed for WebResearcher and CodeExecutor.
 
 A `native_tools` field on `AgentConfig` enables per-agent override of provider-level native tools (three-level resolution: LLM provider → agent-level → per-alert override).
 
@@ -318,20 +317,20 @@ The override hierarchy (`defaults → agentDef → chain → stage → stage-age
 
 ## Orchestration Tools
 
-Three tools registered via `CompositeToolExecutor.ListTools`. There is no `get_result` tool — results are pushed automatically.
+Three tools registered via the composite executor. There is no `get_result` tool — results are pushed automatically.
 
 - **`dispatch_agent(name, task)`** — fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately. Results are delivered automatically when the sub-agent finishes.
 - **`cancel_agent(execution_id)`** — cancel a running sub-agent. Returns `cancelled`, `already_completed`, or `not_found`.
 - **`list_agents()`** — list all dispatched sub-agents and their current status.
 
-MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. When recorded as `MCPInteraction` records, they use `server_name: "orchestrator"` to let dashboards distinguish them from real MCP calls.
+MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. When recorded as MCP interaction records, they use a dedicated server name so dashboards can distinguish them from real MCP calls.
 
 ## Controller Approach
 
-The orchestrator reuses `IteratingController` with two additions to the iteration loop (zero impact on non-orchestrator agents since `SubAgentCollector` is `nil`):
+The orchestrator reuses `IteratingController` with two additions to the iteration loop (zero impact on non-orchestrator agents when the sub-agent collector is unset):
 
-1. **Before each LLM call**: non-blocking drain of available sub-agent results via `TryDrainResult()`
-2. **At loop exit** (no tool calls): if `HasPending()` is true, blocking `WaitForResult()` instead of terminating — then continue the loop with the new result
+1. **Before each LLM call**: non-blocking drain of available sub-agent results
+2. **At loop exit** (no tool calls): if sub-agents are still pending, blocking wait for a result instead of terminating — then continue the loop with the new result
 
 This enables multi-phase orchestration: dispatch → wait → react → dispatch more → wait → final response.
 
@@ -353,19 +352,20 @@ The orchestrator's final response requires no special code — it uses the exist
 ## Database Schema
 
 Two new nullable columns on `AgentExecution`:
-- **`parent_execution_id`** — links sub-agents to their parent orchestrator execution (`NULL` for regular agents and orchestrators themselves)
-- **`task`** — task description from orchestrator dispatch (shown in dashboard tree view + `task_assigned` timeline event)
 
-Sub-agent executions live under the **same Stage** as the orchestrator. The `UNIQUE(stage_id, agent_index)` constraint was replaced with two partial indexes: one for top-level agents (`WHERE parent_execution_id IS NULL`) and one for sub-agents (`WHERE parent_execution_id IS NOT NULL`). `UpdateStageStatus` filters to top-level executions only — sub-agent failures don't incorrectly mark the stage as failed.
+- **`parent_execution_id`** — links sub-agents to their parent orchestrator execution (`NULL` for regular agents and orchestrators themselves)
+- **`task`** — task description from orchestrator dispatch (dashboard tree view and timeline)
+
+Sub-agent executions live under the **same stage** as the orchestrator. The uniqueness rule for stage placement was adjusted with partial indexes: one for top-level agents and one for sub-agents. Stage status updates consider top-level executions only — sub-agent failures don't incorrectly mark the stage as failed.
 
 ## Prompt Construction
 
 ### Orchestrator System Prompt
 
-Detected via `execCtx.Config.Type == AgentTypeOrchestrator` inside `BuildFunctionCallingMessages` (same detection pattern as chat mode). The system prompt includes:
+When the execution is an orchestrator agent, the system prompt is assembled in tiers:
 
 1. General SRE instructions (Tier 1)
-2. MCP server instructions for orchestrator's own MCP servers (Tier 2)
+2. MCP server instructions for the orchestrator's own MCP servers (Tier 2)
 3. Custom instructions (Tier 3)
 4. **Agent catalog** — available sub-agents with name, description, and tools
 5. **Result delivery instructions** — explains that results appear automatically, no polling needed
@@ -388,7 +388,7 @@ Results are delivered automatically when each sub-agent finishes — do not poll
 
 ### Sub-Agent Prompt
 
-Detected via `execCtx.SubAgent != nil`. Sub-agents get a clean task-focused user message (`## Task\n\n{task text}`) instead of the investigation template. The system message includes the agent's own `custom_instructions` + MCP instructions + an auto-injected `subAgentFocus` block:
+Sub-agents receive a clean task-focused user message (`## Task\n\n{task text}`) instead of the investigation template. The system message includes the agent's own `custom_instructions`, MCP instructions, and an auto-injected focus block:
 
 ```text
 You are a sub-agent dispatched by an orchestrator for a specific task.
@@ -409,10 +409,10 @@ When the orchestrator is cancelled (session cancel via API):
 1. Session context cancelled → orchestrator's LLM call fails
 2. `SubAgentRunner` cancels all sub-agent contexts
 3. Sub-agents receive cancelled context → status set to `cancelled`
-4. `SubAgentRunner.WaitAll()` waits for all goroutines to exit
+4. Sub-agent runner waits for all goroutines to exit
 5. Orchestrator returns `ExecutionStatusCancelled`
 
-Sub-agent goroutines derive their contexts from `parentCtx` (session-level, with `agent_timeout` deadline), **not** from the per-iteration context — this is critical so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled.
+Sub-agent goroutines derive their contexts from the parent session context (with `agent_timeout` deadline), **not** from the per-iteration context — this is critical so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled.
 
 ## Guardrails
 
@@ -426,9 +426,9 @@ Sub-agent goroutines derive their contexts from `parentCtx` (session-level, with
 
 ## Dashboard
 
-The dashboard surfaces orchestrator sub-agents in both the Reasoning view and Trace view, with real-time streaming. The backend API nests sub-agents correctly (`ExecutionOverview.sub_agents`, `TraceExecutionGroup.sub_agents`) — no new API endpoints.
+The dashboard surfaces orchestrator sub-agents in both the Reasoning view and Trace view, with real-time streaming. The backend API nests sub-agents in session and trace payloads — no new API endpoints.
 
-A nullable `parent_execution_id` column on `TimelineEvent` and the same field on all WS payloads makes both REST and WS responses self-describing — the dashboard partitions events without cross-referencing.
+A nullable `parent_execution_id` on timeline events and the same field on WebSocket payloads makes both REST and WS responses self-describing — the dashboard partitions events without cross-referencing.
 
 ```text
 SessionDetailPage
@@ -440,8 +440,8 @@ SessionDetailPage
                              Expanded: sub-agent's own timeline items + streaming
 
 TracePage
-  └─ StageAccordion ── Detects orchestrator (sub_agents.length > 0)
-      └─ SubAgentTabs ─ Reused ParallelExecutionTabs pattern
+  └─ StageAccordion ── Detects orchestrator (sub_agents present)
+      └─ SubAgentTabs ─ Reused parallel-execution tabs pattern
 ```
 
 **Reasoning view:** Sub-agent cards appear inline in the orchestrator's flow, anchored to `dispatch_agent` tool call results. Collapsed by default, expandable for full sub-agent timeline.
@@ -500,17 +500,17 @@ Execution: exec-001 (Orchestrator)
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| I1 | Orchestrator identification in config? | Existing `type` field — `AgentTypeOrchestrator` (ADR-0001) | Resolved by ADR-0001 |
+| I1 | Orchestrator identification in config? | Existing `type` field — orchestrator type ([ADR-0001](0001-agent-type-refactor.md)) | Resolved by ADR-0001 |
 | I2 | Tool combination approach? | CompositeToolExecutor (wrapper pattern) | Clean separation; controller/tool boundary preserved |
 | I3 | Orchestration tool naming? | Plain names (`dispatch_agent`, etc.) | MCP uses dots — natural namespace separation |
-| I4 | Controller approach? | Reuse IteratingController + push-based injection | ~15 lines change, loop structure intact |
+| I4 | Controller approach? | Reuse IteratingController + push-based injection | Small, localized change; loop structure intact |
 | I5 | Guardrail config? | Nested `orchestrator` section + `defaults:` | Follows existing patterns |
 | I6 | `sub_agents` hierarchy? | Full hierarchy (chain + stage + stage-agent) | Consistent with `mcp_servers`/`llm_provider` |
 | I7 | Sub-agent DB model? | `parent_execution_id` on `AgentExecution` | Minimal schema change |
 | I8 | Task injection? | Custom sub-agent template (`## Task`) | Clean separation from investigation template |
 | I9 | Dashboard? | Tree view from the start | Essential for debugging |
-| I10 | Dependency injection? | Bundle struct (`SubAgentDeps`) | Explicit, testable |
-| I11 | Phasing? | Horizontal layers (7 PRs) | Small reviewable PRs |
+| I10 | Dependency injection? | Explicit dependency bundle for sub-agent wiring | Explicit, testable |
+| I11 | Phasing? | Layered delivery | Keeps changes reviewable without prescribing a fixed PR count |
 
 ### Dashboard
 
@@ -518,21 +518,6 @@ Execution: exec-001 (Orchestrator)
 |---|----------|----------|-----------|
 | D1 | Sub-agent event association? | DB column + WS payload `parent_execution_id` | No lookup needed, deterministic |
 | D2 | Reasoning view display? | Collapsible inline cards | Natural reading order, progressive disclosure |
-| D3 | Trace view display? | Nested tabs within orchestrator's panel | Reuses `ParallelExecutionTabs` pattern |
+| D3 | Trace view display? | Nested tabs within orchestrator's panel | Reuses parallel execution tabs pattern |
 | D4 | Interaction counting? | Recursive total + "N sub-agents" chip | Operators see scope AND know sub-agents exist |
-| D5 | One PR or split? | Single PR | Backend changes exist solely to serve dashboard |
-
-## Implementation Phases
-
-All phases completed. 7 PRs, horizontal layers:
-
-| PR | Scope | Key Changes |
-|----|-------|-------------|
-| PR0 | `native_tools` on AgentConfig | Per-agent override of provider's native tools. Independent prerequisite. |
-| PR1 | Config foundation | `sub_agents` override hierarchy, `orchestrator` config section, `SubAgentRegistry`, new built-in agents (WebResearcher, CodeExecutor, GeneralWorker, Orchestrator) |
-| PR2 | DB schema | `parent_execution_id` + `task` on AgentExecution, partial indexes, `UpdateStageStatus` filter, DTOs, `GetSessionDetail` nesting |
-| PR3 | SubAgentRunner + CompositeToolExecutor | Core orchestration types, dispatch/cancel/list, results channel, `closeCh` mechanism |
-| PR4 | Controller + prompts | Push-based drain/wait in IteratingController, `SubAgentResultCollector` interface, orchestrator + sub-agent prompt templates |
-| PR5 | Session executor wiring | Detect orchestrator → create runner + composite executor, wire `SubAgentDeps` |
-| PR6 | E2E tests | 7 tests: golden files, multi-agent, multi-phase, failure, list/cancel tools, cascading cancellation |
-| PR7 | Dashboard | `parent_execution_id` on TimelineEvent + WS payloads, SubAgentCard component, trace view nesting, real-time streaming |
+| D5 | One PR or split? | Backend and dashboard shipped together for this feature | Backend changes exist to serve the operator experience |

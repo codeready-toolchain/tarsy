@@ -52,20 +52,20 @@ type SessionListResponse struct {
 
 // DashboardListParams holds query parameters for the dashboard session list.
 type DashboardListParams struct {
-	Page             int        `json:"page"`       // 1-based
-	PageSize         int        `json:"page_size"`  // max 100
-	SortBy           string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
-	SortOrder        string     `json:"sort_order"` // asc or desc
-	Status           string     `json:"status"`     // comma-separated status filter
-	AlertType        string     `json:"alert_type"`
-	ChainID          string     `json:"chain_id"`
-	Search           string     `json:"search"`            // ILIKE on alert_data, final_analysis
-	StartDate        *time.Time `json:"start_date"`        // created_at >= start_date
-	EndDate          *time.Time `json:"end_date"`          // created_at < end_date
-	ScoringStatus    string     `json:"scoring_status"`    // scored, not_scored, scoring_in_progress, scoring_failed
-	ReviewStatus     string     `json:"review_status"`     // comma-separated: needs_review, in_progress, resolved
-	Assignee         string     `json:"assignee"`          // exact match filter
-	ResolutionReason string     `json:"resolution_reason"` // actioned, dismissed
+	Page          int        `json:"page"`       // 1-based
+	PageSize      int        `json:"page_size"`  // max 100
+	SortBy        string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
+	SortOrder     string     `json:"sort_order"` // asc or desc
+	Status        string     `json:"status"`     // comma-separated status filter
+	AlertType     string     `json:"alert_type"`
+	ChainID       string     `json:"chain_id"`
+	Search        string     `json:"search"`         // ILIKE on alert_data, final_analysis
+	StartDate     *time.Time `json:"start_date"`     // created_at >= start_date
+	EndDate       *time.Time `json:"end_date"`       // created_at < end_date
+	ScoringStatus string     `json:"scoring_status"` // scored, not_scored, scoring_in_progress, scoring_failed
+	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, reviewed
+	Assignee      string     `json:"assignee"`       // exact match filter
+	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
@@ -100,8 +100,9 @@ type DashboardSessionItem struct {
 	ScoringStatus         *string    `json:"scoring_status"`
 	ReviewStatus          *string    `json:"review_status"`
 	Assignee              *string    `json:"assignee"`
-	ResolutionReason      *string    `json:"resolution_reason"`
-	ResolutionNote        *string    `json:"resolution_note"`
+	QualityRating         *string    `json:"quality_rating"`
+	ActionTaken           *string    `json:"action_taken"`
+	InvestigationFeedback *string    `json:"investigation_feedback"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -195,6 +196,13 @@ type SessionDetailResponse struct {
 	ScoringStatus *string `json:"scoring_status"`
 	ScoreID       *string `json:"score_id"`
 
+	// Review fields
+	ReviewStatus          *string `json:"review_status"`
+	Assignee              *string `json:"assignee"`
+	QualityRating         *string `json:"quality_rating"`
+	ActionTaken           *string `json:"action_taken"`
+	InvestigationFeedback *string `json:"investigation_feedback"`
+
 	// Stage list
 	Stages []StageOverview `json:"stages"`
 }
@@ -280,17 +288,17 @@ type ReviewAction string
 
 // Review workflow actions.
 const (
-	ReviewActionClaim      ReviewAction = "claim"
-	ReviewActionUnclaim    ReviewAction = "unclaim"
-	ReviewActionResolve    ReviewAction = "resolve"
-	ReviewActionReopen     ReviewAction = "reopen"
-	ReviewActionUpdateNote ReviewAction = "update_note"
+	ReviewActionClaim          ReviewAction = "claim"
+	ReviewActionUnclaim        ReviewAction = "unclaim"
+	ReviewActionComplete       ReviewAction = "complete"
+	ReviewActionReopen         ReviewAction = "reopen"
+	ReviewActionUpdateFeedback ReviewAction = "update_feedback"
 )
 
 // ValidReviewAction returns true if the action is a known value.
 func ValidReviewAction(s string) bool {
 	switch ReviewAction(s) {
-	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionResolve, ReviewActionReopen, ReviewActionUpdateNote:
+	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionComplete, ReviewActionReopen, ReviewActionUpdateFeedback:
 		return true
 	default:
 		return false
@@ -300,11 +308,12 @@ func ValidReviewAction(s string) bool {
 // UpdateReviewRequest is the request body for PATCH /api/v1/sessions/review.
 // SessionIDs contains one or more session IDs to apply the action to.
 type UpdateReviewRequest struct {
-	SessionIDs       []string `json:"session_ids"`
-	Action           string   `json:"action"`
-	Actor            string   `json:"-"`
-	ResolutionReason *string  `json:"resolution_reason,omitempty"`
-	Note             *string  `json:"note,omitempty"`
+	SessionIDs            []string `json:"session_ids"`
+	Action                string   `json:"action"`
+	Actor                 string   `json:"-"`
+	QualityRating         *string  `json:"quality_rating,omitempty"`
+	ActionTaken           *string  `json:"action_taken,omitempty"`
+	InvestigationFeedback *string  `json:"investigation_feedback,omitempty"`
 }
 
 // UpdateReviewResponse reports per-session results from a review action.
@@ -321,14 +330,15 @@ type UpdateReviewResult struct {
 
 // ReviewActivityItem is a single entry in the review activity log.
 type ReviewActivityItem struct {
-	ID               string  `json:"id"`
-	Actor            string  `json:"actor"`
-	Action           string  `json:"action"`
-	FromStatus       *string `json:"from_status"`
-	ToStatus         string  `json:"to_status"`
-	ResolutionReason *string `json:"resolution_reason,omitempty"`
-	Note             *string `json:"note,omitempty"`
-	CreatedAt        string  `json:"created_at"`
+	ID                    string  `json:"id"`
+	Actor                 string  `json:"actor"`
+	Action                string  `json:"action"`
+	FromStatus            *string `json:"from_status"`
+	ToStatus              string  `json:"to_status"`
+	QualityRating         *string `json:"quality_rating,omitempty"`
+	Note                  *string `json:"note,omitempty"`
+	InvestigationFeedback *string `json:"investigation_feedback,omitempty"`
+	CreatedAt             string  `json:"created_at"`
 }
 
 // ReviewActivityResponse wraps the activity list for GET /sessions/:id/review-activity.
@@ -346,13 +356,13 @@ const (
 	TriageGroupInvestigating TriageGroupKey = "investigating"
 	TriageGroupNeedsReview   TriageGroupKey = "needs_review"
 	TriageGroupInProgress    TriageGroupKey = "in_progress"
-	TriageGroupResolved      TriageGroupKey = "resolved"
+	TriageGroupReviewed      TriageGroupKey = "reviewed"
 )
 
 // ParseTriageGroupKey validates a raw string from the URL path.
 func ParseTriageGroupKey(s string) (TriageGroupKey, error) {
 	switch TriageGroupKey(s) {
-	case TriageGroupInvestigating, TriageGroupNeedsReview, TriageGroupInProgress, TriageGroupResolved:
+	case TriageGroupInvestigating, TriageGroupNeedsReview, TriageGroupInProgress, TriageGroupReviewed:
 		return TriageGroupKey(s), nil
 	default:
 		return "", fmt.Errorf("unknown triage group %q", s)

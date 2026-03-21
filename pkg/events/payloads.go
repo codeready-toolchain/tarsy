@@ -118,10 +118,12 @@ type ExecutionProgressPayload struct {
 // or manual transition by SRE via API).
 type ReviewStatusPayload struct {
 	BasePayload
-	ReviewStatus     *string `json:"review_status,omitempty"`     // needs_review, in_progress, resolved; nil when unset
-	Assignee         *string `json:"assignee,omitempty"`          // null when unassigned
-	ResolutionReason *string `json:"resolution_reason,omitempty"` // actioned, dismissed
-	Actor            string  `json:"actor"`                       // who triggered the change ("system" for worker transitions)
+	ReviewStatus          *string `json:"review_status,omitempty"`          // needs_review, in_progress, reviewed; nil when unset
+	Assignee              *string `json:"assignee,omitempty"`               // null when unassigned
+	QualityRating         *string `json:"quality_rating,omitempty"`         // accurate, partially_accurate, inaccurate
+	ActionTaken           *string `json:"action_taken,omitempty"`           // what the human did about the alert
+	InvestigationFeedback *string `json:"investigation_feedback,omitempty"` // why the investigation was good or bad
+	Actor                 string  `json:"actor"`                            // who triggered the change ("system" for worker transitions)
 }
 
 // SessionScoreUpdatedPayload is the payload for session.score_updated transient events.

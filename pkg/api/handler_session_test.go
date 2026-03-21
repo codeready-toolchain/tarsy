@@ -63,10 +63,10 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			errMsg:  "invalid review_status",
 		},
 		{
-			name:    "invalid resolution_reason",
-			query:   "resolution_reason=invalid",
+			name:    "invalid quality_rating",
+			query:   "quality_rating=invalid",
 			wantErr: http.StatusBadRequest,
-			errMsg:  "invalid resolution_reason",
+			errMsg:  "invalid quality_rating",
 		},
 	}
 
@@ -87,6 +87,31 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("valid sort_by values pass validation", func(t *testing.T) {
+		validValues := []string{"created_at", "status", "alert_type", "author", "duration", "score", "quality_rating"}
+		for _, v := range validValues {
+			t.Run(v, func(t *testing.T) {
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?sort_by="+v, nil)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+
+				err := func() (retErr error) {
+					defer func() { recover() }()
+					return s.listSessionsHandler(c)
+				}()
+
+				if err != nil {
+					he, ok := err.(*echo.HTTPError)
+					if ok {
+						assert.NotContains(t, he.Message, "invalid sort_by",
+							"sort_by=%s should be accepted", v)
+					}
+				}
+			})
+		}
+	})
 
 	t.Run("comma-separated statuses with one invalid", func(t *testing.T) {
 		e := echo.New()

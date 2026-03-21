@@ -15,6 +15,8 @@ type stubCounter struct {
 	active, pending int
 	activeErr       error
 	pendingErr      error
+	review          ReviewCounts
+	reviewErr       error
 }
 
 func (s *stubCounter) ActiveCount(context.Context) (int, error) {
@@ -25,15 +27,26 @@ func (s *stubCounter) PendingCount(context.Context) (int, error) {
 	return s.pending, s.pendingErr
 }
 
+func (s *stubCounter) ReviewCountsByRating(context.Context) (ReviewCounts, error) {
+	return s.review, s.reviewErr
+}
+
 func TestGaugeCollector_Poll(t *testing.T) {
 	t.Run("sets gauges from counter", func(t *testing.T) {
-		sc := &stubCounter{active: 3, pending: 7}
+		sc := &stubCounter{
+			active:  3,
+			pending: 7,
+			review:  ReviewCounts{Accurate: 10, Partial: 5, Inaccurate: 2},
+		}
 		gc := NewGaugeCollector(sc)
 
 		gc.poll(t.Context())
 
 		assert.Equal(t, float64(3), testutil.ToFloat64(SessionsActive))
 		assert.Equal(t, float64(7), testutil.ToFloat64(SessionsQueued))
+		assert.Equal(t, float64(10), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("accurate")))
+		assert.Equal(t, float64(5), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("partially_accurate")))
+		assert.Equal(t, float64(2), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("inaccurate")))
 	})
 
 	t.Run("active error leaves gauge unchanged", func(t *testing.T) {
@@ -56,6 +69,16 @@ func TestGaugeCollector_Poll(t *testing.T) {
 
 		assert.Equal(t, float64(2), testutil.ToFloat64(SessionsActive))
 		assert.Equal(t, float64(42), testutil.ToFloat64(SessionsQueued))
+	})
+
+	t.Run("review error leaves gauges unchanged", func(t *testing.T) {
+		SessionsReviewedTotal.WithLabelValues("accurate").Set(88)
+		sc := &stubCounter{active: 1, pending: 1, reviewErr: fmt.Errorf("db down")}
+		gc := NewGaugeCollector(sc)
+
+		gc.poll(t.Context())
+
+		assert.Equal(t, float64(88), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("accurate")))
 	})
 }
 

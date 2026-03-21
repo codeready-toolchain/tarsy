@@ -89,11 +89,14 @@ func (_u *SessionReviewActivityUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.FromStatusCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldFromStatus, field.TypeEnum)
 	}
-	if _u.mutation.ResolutionReasonCleared() {
-		_spec.ClearField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum)
+	if _u.mutation.QualityRatingCleared() {
+		_spec.ClearField(sessionreviewactivity.FieldQualityRating, field.TypeEnum)
 	}
 	if _u.mutation.NoteCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldNote, field.TypeString)
+	}
+	if _u.mutation.InvestigationFeedbackCleared() {
+		_spec.ClearField(sessionreviewactivity.FieldInvestigationFeedback, field.TypeString)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -208,11 +211,14 @@ func (_u *SessionReviewActivityUpdateOne) sqlSave(ctx context.Context) (_node *S
 	if _u.mutation.FromStatusCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldFromStatus, field.TypeEnum)
 	}
-	if _u.mutation.ResolutionReasonCleared() {
-		_spec.ClearField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum)
+	if _u.mutation.QualityRatingCleared() {
+		_spec.ClearField(sessionreviewactivity.FieldQualityRating, field.TypeEnum)
 	}
 	if _u.mutation.NoteCleared() {
 		_spec.ClearField(sessionreviewactivity.FieldNote, field.TypeString)
+	}
+	if _u.mutation.InvestigationFeedbackCleared() {
+		_spec.ClearField(sessionreviewactivity.FieldInvestigationFeedback, field.TypeString)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	_node = &SessionReviewActivity{config: _u.config}

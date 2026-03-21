@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
+import { ReviewCell } from './ReviewCell.tsx';
+import { qualityEvalScoreBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
@@ -36,6 +38,7 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 interface SessionListItemProps {
   session: DashboardSessionItem;
   searchTerm: string;
+  onReviewClick?: (session: DashboardSessionItem) => void;
 }
 
 const iconOnlyChipSx = {
@@ -45,7 +48,7 @@ const iconOnlyChipSx = {
   '& .MuiChip-icon': { mx: 0 },
 } as const;
 
-export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
+export function SessionListItem({ session, searchTerm, onReviewClick }: SessionListItemProps) {
   const navigate = useNavigate();
 
   const handleRowClick = () => {
@@ -56,7 +59,13 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
     <TableRow
       hover
       onClick={handleRowClick}
-      sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
+      sx={{
+        cursor: 'pointer',
+        '&:hover, &:focus-within': {
+          backgroundColor: 'action.hover',
+          '& .review-hover-icon': { opacity: 1 },
+        },
+      }}
     >
       {/* Status + Summary hover */}
       <TableCell>
@@ -172,9 +181,6 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
         </Typography>
       </TableCell>
 
-      {/* Score — click navigates to scoring page when scoring was triggered */}
-      <ScoreCell sessionId={session.id} score={session.latest_score} scoringStatus={session.scoring_status} />
-
       {/* Tokens */}
       <TableCell>
         {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
@@ -194,6 +200,17 @@ export function SessionListItem({ session, searchTerm }: SessionListItemProps) {
           </Typography>
         )}
       </TableCell>
+
+      {/* Eval Score */}
+      <ScoreCell
+        sessionId={session.id}
+        score={session.latest_score}
+        scoringStatus={session.scoring_status}
+        sx={qualityEvalScoreBodySx}
+      />
+
+      {/* Review */}
+      <ReviewCell session={session} onReviewClick={onReviewClick} />
 
       {/* Actions */}
       <TableCell sx={{ width: 60, textAlign: 'center' }}>

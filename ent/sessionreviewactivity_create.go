@@ -59,16 +59,16 @@ func (_c *SessionReviewActivityCreate) SetToStatus(v sessionreviewactivity.ToSta
 	return _c
 }
 
-// SetResolutionReason sets the "resolution_reason" field.
-func (_c *SessionReviewActivityCreate) SetResolutionReason(v sessionreviewactivity.ResolutionReason) *SessionReviewActivityCreate {
-	_c.mutation.SetResolutionReason(v)
+// SetQualityRating sets the "quality_rating" field.
+func (_c *SessionReviewActivityCreate) SetQualityRating(v sessionreviewactivity.QualityRating) *SessionReviewActivityCreate {
+	_c.mutation.SetQualityRating(v)
 	return _c
 }
 
-// SetNillableResolutionReason sets the "resolution_reason" field if the given value is not nil.
-func (_c *SessionReviewActivityCreate) SetNillableResolutionReason(v *sessionreviewactivity.ResolutionReason) *SessionReviewActivityCreate {
+// SetNillableQualityRating sets the "quality_rating" field if the given value is not nil.
+func (_c *SessionReviewActivityCreate) SetNillableQualityRating(v *sessionreviewactivity.QualityRating) *SessionReviewActivityCreate {
 	if v != nil {
-		_c.SetResolutionReason(*v)
+		_c.SetQualityRating(*v)
 	}
 	return _c
 }
@@ -83,6 +83,20 @@ func (_c *SessionReviewActivityCreate) SetNote(v string) *SessionReviewActivityC
 func (_c *SessionReviewActivityCreate) SetNillableNote(v *string) *SessionReviewActivityCreate {
 	if v != nil {
 		_c.SetNote(*v)
+	}
+	return _c
+}
+
+// SetInvestigationFeedback sets the "investigation_feedback" field.
+func (_c *SessionReviewActivityCreate) SetInvestigationFeedback(v string) *SessionReviewActivityCreate {
+	_c.mutation.SetInvestigationFeedback(v)
+	return _c
+}
+
+// SetNillableInvestigationFeedback sets the "investigation_feedback" field if the given value is not nil.
+func (_c *SessionReviewActivityCreate) SetNillableInvestigationFeedback(v *string) *SessionReviewActivityCreate {
+	if v != nil {
+		_c.SetInvestigationFeedback(*v)
 	}
 	return _c
 }
@@ -182,9 +196,9 @@ func (_c *SessionReviewActivityCreate) check() error {
 			return &ValidationError{Name: "to_status", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.to_status": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.ResolutionReason(); ok {
-		if err := sessionreviewactivity.ResolutionReasonValidator(v); err != nil {
-			return &ValidationError{Name: "resolution_reason", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.resolution_reason": %w`, err)}
+	if v, ok := _c.mutation.QualityRating(); ok {
+		if err := sessionreviewactivity.QualityRatingValidator(v); err != nil {
+			return &ValidationError{Name: "quality_rating", err: fmt.Errorf(`ent: validator failed for field "SessionReviewActivity.quality_rating": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
@@ -244,13 +258,17 @@ func (_c *SessionReviewActivityCreate) createSpec() (*SessionReviewActivity, *sq
 		_spec.SetField(sessionreviewactivity.FieldToStatus, field.TypeEnum, value)
 		_node.ToStatus = value
 	}
-	if value, ok := _c.mutation.ResolutionReason(); ok {
-		_spec.SetField(sessionreviewactivity.FieldResolutionReason, field.TypeEnum, value)
-		_node.ResolutionReason = &value
+	if value, ok := _c.mutation.QualityRating(); ok {
+		_spec.SetField(sessionreviewactivity.FieldQualityRating, field.TypeEnum, value)
+		_node.QualityRating = &value
 	}
 	if value, ok := _c.mutation.Note(); ok {
 		_spec.SetField(sessionreviewactivity.FieldNote, field.TypeString, value)
 		_node.Note = &value
+	}
+	if value, ok := _c.mutation.InvestigationFeedback(); ok {
+		_spec.SetField(sessionreviewactivity.FieldInvestigationFeedback, field.TypeString, value)
+		_node.InvestigationFeedback = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(sessionreviewactivity.FieldCreatedAt, field.TypeTime, value)

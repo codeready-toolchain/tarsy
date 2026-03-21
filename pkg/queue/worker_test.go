@@ -191,11 +191,11 @@ func TestWorker_PublishReviewStatusWithPublisher(t *testing.T) {
 		require.NotNil(t, pub.lastReviewStatus.ReviewStatus)
 		assert.Equal(t, "needs_review", *pub.lastReviewStatus.ReviewStatus)
 		assert.Equal(t, "system", pub.lastReviewStatus.Actor)
-		assert.Nil(t, pub.lastReviewStatus.ResolutionReason)
+		assert.Nil(t, pub.lastReviewStatus.QualityRating)
 		assert.NotEmpty(t, pub.lastReviewStatus.Timestamp)
 	})
 
-	t.Run("cancelled session publishes resolved with dismissed", func(t *testing.T) {
+	t.Run("cancelled session publishes reviewed without quality_rating", func(t *testing.T) {
 		pub := &mockEventPublisher{}
 		w := NewWorker("worker-1", "pod-1", nil, cfg, nil, nil, nil, pub, nil)
 
@@ -206,10 +206,9 @@ func TestWorker_PublishReviewStatusWithPublisher(t *testing.T) {
 		assert.Equal(t, events.EventTypeReviewStatus, pub.lastReviewStatus.Type)
 		assert.Equal(t, "session-def", pub.lastReviewStatus.SessionID)
 		require.NotNil(t, pub.lastReviewStatus.ReviewStatus)
-		assert.Equal(t, "resolved", *pub.lastReviewStatus.ReviewStatus)
+		assert.Equal(t, "reviewed", *pub.lastReviewStatus.ReviewStatus)
 		assert.Equal(t, "system", pub.lastReviewStatus.Actor)
-		require.NotNil(t, pub.lastReviewStatus.ResolutionReason)
-		assert.Equal(t, "dismissed", *pub.lastReviewStatus.ResolutionReason)
+		assert.Nil(t, pub.lastReviewStatus.QualityRating)
 	})
 }
 

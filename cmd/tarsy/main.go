@@ -15,8 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/codeready-toolchain/tarsy/ent"
-	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/cleanup"
@@ -76,21 +74,6 @@ func parseLogLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-// entSessionCounter implements metrics.SessionCounter using Ent queries.
-type entSessionCounter struct{ client *ent.Client }
-
-func (c *entSessionCounter) PendingCount(ctx context.Context) (int, error) {
-	return c.client.AlertSession.Query().
-		Where(alertsession.StatusEQ(alertsession.StatusPending), alertsession.DeletedAtIsNil()).
-		Count(ctx)
-}
-
-func (c *entSessionCounter) ActiveCount(ctx context.Context) (int, error) {
-	return c.client.AlertSession.Query().
-		Where(alertsession.StatusEQ(alertsession.StatusInProgress), alertsession.DeletedAtIsNil()).
-		Count(ctx)
 }
 
 func main() {
@@ -296,7 +279,7 @@ func main() {
 
 	// 6. Metrics: set worker gauge and start DB-polled session gauges
 	metrics.WorkersTotal.Set(float64(cfg.Queue.WorkerCount))
-	gaugeCollector := metrics.NewGaugeCollector(&entSessionCounter{client: dbClient.Client})
+	gaugeCollector := metrics.NewGaugeCollector(services.NewSessionCounter(dbClient.Client))
 	gaugeCollector.Start(ctx)
 	defer gaugeCollector.Stop()
 

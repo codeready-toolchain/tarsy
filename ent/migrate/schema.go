@@ -91,12 +91,13 @@ var (
 		{Name: "last_interaction_at", Type: field.TypeTime, Nullable: true},
 		{Name: "slack_message_fingerprint", Type: field.TypeString, Nullable: true},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
-		{Name: "review_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "resolved"}},
+		{Name: "review_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "reviewed"}},
 		{Name: "assignee", Type: field.TypeString, Nullable: true},
 		{Name: "assigned_at", Type: field.TypeTime, Nullable: true},
-		{Name: "resolved_at", Type: field.TypeTime, Nullable: true},
-		{Name: "resolution_reason", Type: field.TypeEnum, Nullable: true, Enums: []string{"actioned", "dismissed"}},
-		{Name: "resolution_note", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "reviewed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "quality_rating", Type: field.TypeEnum, Nullable: true, Enums: []string{"accurate", "partially_accurate", "inaccurate"}},
+		{Name: "action_taken", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "investigation_feedback", Type: field.TypeString, Nullable: true, Size: 2147483647},
 	}
 	// AlertSessionsTable holds the schema information for the "alert_sessions" table.
 	AlertSessionsTable = &schema.Table{
@@ -467,11 +468,12 @@ var (
 	SessionReviewActivitiesColumns = []*schema.Column{
 		{Name: "activity_id", Type: field.TypeString, Unique: true},
 		{Name: "actor", Type: field.TypeString},
-		{Name: "action", Type: field.TypeEnum, Enums: []string{"claim", "unclaim", "resolve", "reopen", "update_note"}},
-		{Name: "from_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "resolved"}},
-		{Name: "to_status", Type: field.TypeEnum, Enums: []string{"needs_review", "in_progress", "resolved"}},
-		{Name: "resolution_reason", Type: field.TypeEnum, Nullable: true, Enums: []string{"actioned", "dismissed"}},
+		{Name: "action", Type: field.TypeEnum, Enums: []string{"claim", "unclaim", "complete", "reopen", "update_feedback"}},
+		{Name: "from_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "reviewed"}},
+		{Name: "to_status", Type: field.TypeEnum, Enums: []string{"needs_review", "in_progress", "reviewed"}},
+		{Name: "quality_rating", Type: field.TypeEnum, Nullable: true, Enums: []string{"accurate", "partially_accurate", "inaccurate"}},
 		{Name: "note", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "investigation_feedback", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "session_id", Type: field.TypeString},
 	}
@@ -483,7 +485,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "session_review_activities_alert_sessions_review_activities",
-				Columns:    []*schema.Column{SessionReviewActivitiesColumns[8]},
+				Columns:    []*schema.Column{SessionReviewActivitiesColumns[9]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -492,7 +494,7 @@ var (
 			{
 				Name:    "sessionreviewactivity_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionReviewActivitiesColumns[8], SessionReviewActivitiesColumns[7]},
+				Columns: []*schema.Column{SessionReviewActivitiesColumns[9], SessionReviewActivitiesColumns[8]},
 			},
 		},
 	}

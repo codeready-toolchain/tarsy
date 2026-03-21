@@ -36,6 +36,8 @@ import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
 import { TriageView } from './TriageView.tsx';
+import { CompleteReviewModal } from './CompleteReviewModal.tsx';
+import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
@@ -81,10 +83,10 @@ import {
 } from '../../utils/filterPersistence.ts';
 const REFRESH_THROTTLE_MS = 1000;
 const FILTER_DEBOUNCE_MS = 300;
-const TRIAGE_GROUPS: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'resolved'];
+const TRIAGE_GROUPS: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'reviewed'];
 
 const EMPTY_TRIAGE: Record<TriageGroupKey, TriageGroup | null> = {
-  investigating: null, needs_review: null, in_progress: null, resolved: null,
+  investigating: null, needs_review: null, in_progress: null, reviewed: null,
 };
 
 /**
@@ -223,7 +225,6 @@ export function DashboardView() {
 
   const fetchActiveAlerts = useCallback(async () => {
     try {
-      setActiveLoading(true);
       setActiveError(null);
       const data = await getActiveSessions();
       setActiveSessions(data.active);
@@ -243,7 +244,6 @@ export function DashboardView() {
     const reqSort = { ...sortRef.current };
 
     try {
-      setHistoricalLoading(true);
       setHistoricalError(null);
 
       const params = buildQueryParams(
@@ -290,13 +290,22 @@ export function DashboardView() {
     }
   }, [fetchActiveAlerts]);
 
+  const historicalPendingRef = useRef(false);
   const fetchHistoricalWithRetry = useCallback(async () => {
-    if (historicalReconnRef.current) return;
+    if (historicalReconnRef.current) {
+      historicalPendingRef.current = true;
+      return;
+    }
     historicalReconnRef.current = true;
     try {
       await fetchHistoricalAlerts();
+      if (historicalPendingRef.current) {
+        historicalPendingRef.current = false;
+        await fetchHistoricalAlerts();
+      }
     } finally {
       historicalReconnRef.current = false;
+      historicalPendingRef.current = false;
     }
   }, [fetchHistoricalAlerts]);
 
@@ -360,7 +369,7 @@ export function DashboardView() {
         investigating: results[0],
         needs_review: results[1],
         in_progress: results[2],
-        resolved: results[3],
+        reviewed: results[3],
       });
     } catch (err) {
       if (requestId !== triageRequestIdRef.current) return;
@@ -492,11 +501,10 @@ export function DashboardView() {
         return;
       }
 
-      // review.status → triage refresh only (if tab active)
+      // review.status → refresh both tabs so cross-tab data stays in sync
       if (type === EVENT_REVIEW_STATUS) {
-        if (activeTabRef.current === 'triage') {
-          fetchAllTriageGroupsRef.current();
-        }
+        fetchHistoricalRetryRef.current();
+        fetchAllTriageGroupsRef.current();
         return;
       }
     };
@@ -506,9 +514,7 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
-        if (activeTabRef.current === 'triage') {
-          fetchAllTriageGroupsRef.current();
-        }
+        fetchAllTriageGroupsRef.current();
       }
     };
 
@@ -612,7 +618,7 @@ export function DashboardView() {
       const msg = failures.length === 1
         ? `Failed for session ${failures[0].session_id}: ${failures[0].error}`
         : `Failed for ${failures.length} sessions: ${failures.map((f) => f.error).join('; ')}`;
-      setTriageError(msg);
+      throw new Error(msg);
     }
   };
 
@@ -622,7 +628,8 @@ export function DashboardView() {
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -632,17 +639,26 @@ export function DashboardView() {
       checkReviewResults(resp);
       fetchAllTriageGroups();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
-  const handleBulkTriageResolve = async (sessionIds: string[], reason: string, note?: string) => {
+  const handleBulkTriageComplete = async (sessionIds: string[], qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     try {
-      const resp = await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
+      const resp = await updateReview({
+        session_ids: sessionIds,
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -651,8 +667,10 @@ export function DashboardView() {
       const resp = await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.REOPEN });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -660,23 +678,39 @@ export function DashboardView() {
   const handleTriageUnclaim = (sessionId: string) => handleBulkTriageUnclaim([sessionId]);
   const handleTriageReopen = (sessionId: string) => handleBulkTriageReopen([sessionId]);
 
-  const handleTriageResolve = async (sessionId: string, reason: string, note?: string) => {
+  const handleTriageComplete = async (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     try {
-      const resp = await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.RESOLVE, resolution_reason: reason, note });
+      const resp = await updateReview({
+        session_ids: [sessionId],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
-  const handleTriageUpdateNote = async (sessionId: string, note: string) => {
+  const handleTriageUpdateFeedback = async (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => {
     try {
-      const resp = await updateReview({ session_ids: [sessionId], action: REVIEW_ACTION.UPDATE_NOTE, note: note || undefined });
+      const resp = await updateReview({
+        session_ids: [sessionId],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
-      setTriageError(handleAPIError(err));
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
     }
   };
 
@@ -687,6 +721,71 @@ export function DashboardView() {
   const handleTriagePageSizeChange = useCallback((group: TriageGroupKey, pageSize: number) => {
     fetchSingleTriageGroup(group, { page: 1, page_size: pageSize });
   }, [fetchSingleTriageGroup]);
+
+  // ── Session-level review (from historical list) ──
+
+  const [reviewTarget, setReviewTarget] = useState<{
+    session: DashboardSessionItem;
+    mode: 'complete' | 'edit';
+  } | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const handleSessionReviewClick = useCallback((session: DashboardSessionItem) => {
+    const mode = session.quality_rating ? 'edit' : 'complete';
+    setReviewTarget({ session, mode });
+    setReviewError(null);
+  }, []);
+
+  const handleSessionReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+    if (!reviewTarget) return;
+    const targetSessionId = reviewTarget.session.id;
+    try {
+      setReviewLoading(true);
+      setReviewError(null);
+      const resp = await updateReview({
+        session_ids: [targetSessionId],
+        action: REVIEW_ACTION.COMPLETE,
+        quality_rating: qualityRating,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
+      });
+      checkReviewResults(resp);
+      setReviewTarget(null);
+      fetchHistoricalAlerts();
+      fetchAllTriageGroups();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : handleAPIError(err);
+      setReviewError(msg);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewTarget, fetchHistoricalAlerts, fetchAllTriageGroups]);
+
+  const handleSessionReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+    if (!reviewTarget) return;
+    const targetSessionId = reviewTarget.session.id;
+    try {
+      setReviewLoading(true);
+      setReviewError(null);
+      const resp = await updateReview({
+        session_ids: [targetSessionId],
+        action: REVIEW_ACTION.UPDATE_FEEDBACK,
+        quality_rating: qualityRating || undefined,
+        action_taken: actionTaken || undefined,
+        investigation_feedback: investigationFeedback || undefined,
+      });
+      checkReviewResults(resp);
+      setReviewTarget(null);
+      fetchHistoricalAlerts();
+      fetchAllTriageGroups();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : handleAPIError(err);
+      setReviewError(msg);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewTarget, fetchHistoricalAlerts, fetchAllTriageGroups]);
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -1032,8 +1131,31 @@ export function DashboardView() {
               onSortChange={handleSortChange}
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
+              onReviewClick={handleSessionReviewClick}
             />
           </Box>
+
+          {/* Review modals for session-level review */}
+          <CompleteReviewModal
+            open={reviewTarget?.mode === 'complete'}
+            onClose={() => { setReviewTarget(null); setReviewError(null); }}
+            onComplete={handleSessionReviewComplete}
+            loading={reviewLoading}
+            error={reviewError}
+            title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+            executiveSummary={reviewTarget?.session.executive_summary}
+          />
+          <EditFeedbackModal
+            open={reviewTarget?.mode === 'edit'}
+            onClose={() => { setReviewTarget(null); setReviewError(null); }}
+            onSave={handleSessionReviewSave}
+            loading={reviewLoading}
+            error={reviewError}
+            initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+            initialActionTaken={reviewTarget?.session.action_taken ?? ''}
+            initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+            executiveSummary={reviewTarget?.session.executive_summary}
+          />
         </>
       )}
 
@@ -1048,11 +1170,11 @@ export function DashboardView() {
           onRefresh={fetchAllTriageGroups}
           onClaim={handleTriageClaim}
           onUnclaim={handleTriageUnclaim}
-          onResolve={handleTriageResolve}
+          onComplete={handleTriageComplete}
           onReopen={handleTriageReopen}
-          onUpdateNote={handleTriageUpdateNote}
+          onUpdateFeedback={handleTriageUpdateFeedback}
           onBulkClaim={handleBulkTriageClaim}
-          onBulkResolve={handleBulkTriageResolve}
+          onBulkComplete={handleBulkTriageComplete}
           onBulkUnclaim={handleBulkTriageUnclaim}
           onBulkReopen={handleBulkTriageReopen}
           onPageChange={handleTriagePageChange}

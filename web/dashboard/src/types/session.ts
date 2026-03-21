@@ -34,8 +34,9 @@ export interface DashboardSessionItem {
   scoring_status?: string | null;
   review_status?: string | null;
   assignee?: string | null;
-  resolution_reason?: string | null;
-  resolution_note?: string | null;
+  quality_rating?: string | null;
+  action_taken?: string | null;
+  investigation_feedback?: string | null;
 }
 
 /** Active (in-progress / cancelling) session. */
@@ -106,6 +107,13 @@ export interface SessionDetailResponse {
   latest_score?: number | null;
   scoring_status?: string | null;
   score_id?: string | null;
+
+  // Review fields
+  review_status?: string | null;
+  assignee?: string | null;
+  quality_rating?: string | null;
+  action_taken?: string | null;
+  investigation_feedback?: string | null;
 
   // Stage list
   stages: StageOverview[];
