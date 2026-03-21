@@ -10,7 +10,7 @@ import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
-import { RATING_CONFIG } from '../../constants/ratingConfig';
+import { getRatingConfig } from '../../constants/ratingConfig';
 
 /** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
 function copyToClipboard(text: string, onSuccess: () => void) {
@@ -136,7 +136,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 </Box>
               )}
               {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
-                const rating = qualityRating ? RATING_CONFIG[qualityRating] : null;
+                const rating = getRatingConfig(qualityRating);
                 if (rating) {
                   const Icon = rating.icon;
                   return (

@@ -15,6 +15,7 @@ import {
   FormLabel,
   IconButton,
   Divider,
+  Alert,
 } from '@mui/material';
 import { Close, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
@@ -30,6 +31,7 @@ export interface EditFeedbackModalProps {
   onSave: (qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   loading?: boolean;
   executiveSummary?: string | null;
+  error?: string | null;
 }
 
 export function EditFeedbackModal({
@@ -41,6 +43,7 @@ export function EditFeedbackModal({
   onSave,
   loading,
   executiveSummary,
+  error,
 }: EditFeedbackModalProps) {
   const [qualityRating, setQualityRating] = useState('');
   const [actionTaken, setActionTaken] = useState('');
@@ -159,6 +162,10 @@ export function EditFeedbackModal({
           fullWidth
         />
       </DialogContent>
+
+      {error && (
+        <Alert severity="error" sx={{ mx: 3, mb: 1 }}>{error}</Alert>
+      )}
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} color="inherit" disabled={loading}>

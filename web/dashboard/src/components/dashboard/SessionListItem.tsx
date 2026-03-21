@@ -61,7 +61,7 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
       onClick={handleRowClick}
       sx={{
         cursor: 'pointer',
-        '&:hover': {
+        '&:hover, &:focus-within': {
           backgroundColor: 'action.hover',
           '& .review-hover-icon': { opacity: 1 },
         },

@@ -55,6 +55,7 @@ export function TriageSessionRow({
 
   const hasActions = group !== 'investigating';
   const selectable = hasActions && onToggleSelect;
+  const effectiveOnReview = actionLoading ? undefined : onReviewClick;
 
   return (
     <TableRow
@@ -63,7 +64,7 @@ export function TriageSessionRow({
       onClick={handleRowClick}
       sx={{
         cursor: 'pointer',
-        '&:hover': {
+        '&:hover, &:focus-within': {
           '& .triage-actions': { opacity: 1 },
           '& .review-hover-icon': { opacity: 1 },
         },
@@ -126,7 +127,7 @@ export function TriageSessionRow({
 
       {/* Review — only for actionable (non-investigating) sessions */}
       {hasActions ? (
-        <ReviewCell session={session} onReviewClick={onReviewClick} />
+        <ReviewCell session={session} onReviewClick={effectiveOnReview} />
       ) : (
         <TableCell />
       )}

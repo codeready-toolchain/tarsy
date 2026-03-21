@@ -729,18 +729,22 @@ export function DashboardView() {
     mode: 'complete' | 'edit';
   } | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const handleSessionReviewClick = useCallback((session: DashboardSessionItem) => {
     const mode = session.quality_rating ? 'edit' : 'complete';
     setReviewTarget({ session, mode });
+    setReviewError(null);
   }, []);
 
   const handleSessionReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
     if (!reviewTarget) return;
+    const targetSessionId = reviewTarget.session.id;
     try {
       setReviewLoading(true);
+      setReviewError(null);
       const resp = await updateReview({
-        session_ids: [reviewTarget.session.id],
+        session_ids: [targetSessionId],
         action: REVIEW_ACTION.COMPLETE,
         quality_rating: qualityRating,
         action_taken: actionTaken,
@@ -751,7 +755,8 @@ export function DashboardView() {
       fetchHistoricalAlerts();
       fetchAllTriageGroups();
     } catch (err) {
-      setHistoricalError(handleAPIError(err));
+      const msg = err instanceof Error ? err.message : handleAPIError(err);
+      setReviewError(msg);
     } finally {
       setReviewLoading(false);
     }
@@ -759,10 +764,12 @@ export function DashboardView() {
 
   const handleSessionReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
     if (!reviewTarget) return;
+    const targetSessionId = reviewTarget.session.id;
     try {
       setReviewLoading(true);
+      setReviewError(null);
       const resp = await updateReview({
-        session_ids: [reviewTarget.session.id],
+        session_ids: [targetSessionId],
         action: REVIEW_ACTION.UPDATE_FEEDBACK,
         quality_rating: qualityRating || undefined,
         action_taken: actionTaken || undefined,
@@ -773,7 +780,8 @@ export function DashboardView() {
       fetchHistoricalAlerts();
       fetchAllTriageGroups();
     } catch (err) {
-      setHistoricalError(handleAPIError(err));
+      const msg = err instanceof Error ? err.message : handleAPIError(err);
+      setReviewError(msg);
     } finally {
       setReviewLoading(false);
     }
@@ -1130,17 +1138,19 @@ export function DashboardView() {
           {/* Review modals for session-level review */}
           <CompleteReviewModal
             open={reviewTarget?.mode === 'complete'}
-            onClose={() => setReviewTarget(null)}
+            onClose={() => { setReviewTarget(null); setReviewError(null); }}
             onComplete={handleSessionReviewComplete}
             loading={reviewLoading}
+            error={reviewError}
             title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
             executiveSummary={reviewTarget?.session.executive_summary}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === 'edit'}
-            onClose={() => setReviewTarget(null)}
+            onClose={() => { setReviewTarget(null); setReviewError(null); }}
             onSave={handleSessionReviewSave}
             loading={reviewLoading}
+            error={reviewError}
             initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
             initialActionTaken={reviewTarget?.session.action_taken ?? ''}
             initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}

@@ -11,7 +11,7 @@ import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
-import { RATING_CONFIG } from '../../constants/ratingConfig.ts';
+import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
@@ -100,7 +100,7 @@ export function TriageView({
     setActionLoading(true);
     try {
       await onComplete(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
-      const cfg = RATING_CONFIG[qualityRating];
+      const cfg = getRatingConfig(qualityRating);
       setSnackbar({
         message: `Marked as ${cfg?.label ?? qualityRating}`,
         severity: cfg?.color ?? 'success',
@@ -290,7 +290,7 @@ export function TriageView({
             variant="filled"
             sx={{ width: '100%' }}
             icon={(() => {
-              const cfg = snackbar.completedRating ? RATING_CONFIG[snackbar.completedRating] : null;
+              const cfg = getRatingConfig(snackbar.completedRating);
               if (!cfg) return undefined;
               const Icon = cfg.icon;
               return <Icon fontSize="inherit" />;

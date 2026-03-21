@@ -15,6 +15,7 @@ import {
   FormLabel,
   IconButton,
   Divider,
+  Alert,
 } from '@mui/material';
 import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
@@ -28,9 +29,10 @@ export interface CompleteReviewModalProps {
   loading?: boolean;
   title?: string;
   executiveSummary?: string | null;
+  error?: string | null;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary }: CompleteReviewModalProps) {
+export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, error }: CompleteReviewModalProps) {
   const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
@@ -164,6 +166,10 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
           fullWidth
         />
       </DialogContent>
+
+      {error && (
+        <Alert severity="error" sx={{ mx: 3, mb: 1 }}>{error}</Alert>
+      )}
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} color="inherit" disabled={loading}>

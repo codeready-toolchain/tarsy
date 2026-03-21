@@ -250,6 +250,7 @@ export function SessionDetailPage() {
   // --- Review state ---
   const [reviewModalMode, setReviewModalMode] = useState<'complete' | 'edit' | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -1359,6 +1360,7 @@ export function SessionDetailPage() {
     if (!id) return;
     try {
       setReviewLoading(true);
+      setReviewError(null);
       const resp = await updateReview({
         session_ids: [id],
         action: REVIEW_ACTION.COMPLETE,
@@ -1369,10 +1371,14 @@ export function SessionDetailPage() {
       if (resp.results[0]?.success) {
         setReviewModalMode(null);
         const freshSession = await getSession(id);
-        setSession(freshSession);
+        if (currentIdRef.current === id) {
+          setSession(freshSession);
+        }
+      } else {
+        setReviewError(resp.results[0]?.error ?? 'Review failed');
       }
     } catch (err) {
-      console.error('Failed to complete review:', err);
+      setReviewError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setReviewLoading(false);
     }
@@ -1382,6 +1388,7 @@ export function SessionDetailPage() {
     if (!id) return;
     try {
       setReviewLoading(true);
+      setReviewError(null);
       const resp = await updateReview({
         session_ids: [id],
         action: REVIEW_ACTION.UPDATE_FEEDBACK,
@@ -1392,10 +1399,14 @@ export function SessionDetailPage() {
       if (resp.results[0]?.success) {
         setReviewModalMode(null);
         const freshSession = await getSession(id);
-        setSession(freshSession);
+        if (currentIdRef.current === id) {
+          setSession(freshSession);
+        }
+      } else {
+        setReviewError(resp.results[0]?.error ?? 'Failed to save feedback');
       }
     } catch (err) {
-      console.error('Failed to update review:', err);
+      setReviewError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setReviewLoading(false);
     }
@@ -1702,17 +1713,19 @@ export function SessionDetailPage() {
             {/* Review modals */}
             <CompleteReviewModal
               open={reviewModalMode === 'complete'}
-              onClose={() => setReviewModalMode(null)}
+              onClose={() => { setReviewModalMode(null); setReviewError(null); }}
               onComplete={handleReviewComplete}
               loading={reviewLoading}
+              error={reviewError}
               title={session.alert_type ? `Review: ${session.alert_type}` : undefined}
               executiveSummary={session.executive_summary}
             />
             <EditFeedbackModal
               open={reviewModalMode === 'edit'}
-              onClose={() => setReviewModalMode(null)}
+              onClose={() => { setReviewModalMode(null); setReviewError(null); }}
               onSave={handleReviewSave}
               loading={reviewLoading}
+              error={reviewError}
               initialQualityRating={session.quality_rating ?? ''}
               initialActionTaken={session.action_taken ?? ''}
               initialInvestigationFeedback={session.investigation_feedback ?? ''}
