@@ -14,8 +14,11 @@ import {
   FormControl,
   FormLabel,
   IconButton,
+  Divider,
 } from '@mui/material';
 import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
+import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import { QUALITY_RATING } from '../../types/api.ts';
 
 export interface CompleteReviewModalProps {
@@ -24,9 +27,10 @@ export interface CompleteReviewModalProps {
   onComplete: (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => void;
   loading?: boolean;
   title?: string;
+  executiveSummary?: string | null;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title }: CompleteReviewModalProps) {
+export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary }: CompleteReviewModalProps) {
   const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
@@ -61,6 +65,26 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title 
       </DialogTitle>
 
       <DialogContent sx={{ pb: 1 }}>
+        {executiveSummary && (
+          <>
+            <Box
+              sx={(theme) => ({
+                mt: 1,
+                mb: 2,
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                ...executiveSummaryMarkdownStyles(theme),
+              })}
+            >
+              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                Executive Summary
+              </Typography>
+              <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{executiveSummary}</ReactMarkdown>
+            </Box>
+            <Divider sx={{ mb: 1 }} />
+          </>
+        )}
         <FormControl component="fieldset" sx={{ mb: 2, mt: 1 }}>
           <FormLabel component="legend" sx={{ mb: 1, fontWeight: 600 }}>
             Investigation quality

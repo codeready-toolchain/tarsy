@@ -14,8 +14,11 @@ import {
   FormControl,
   FormLabel,
   IconButton,
+  Divider,
 } from '@mui/material';
 import { Close, RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
+import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import { QUALITY_RATING } from '../../types/api.ts';
 
 export interface EditFeedbackModalProps {
@@ -26,6 +29,7 @@ export interface EditFeedbackModalProps {
   onClose: () => void;
   onSave: (qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   loading?: boolean;
+  executiveSummary?: string | null;
 }
 
 export function EditFeedbackModal({
@@ -36,6 +40,7 @@ export function EditFeedbackModal({
   onClose,
   onSave,
   loading,
+  executiveSummary,
 }: EditFeedbackModalProps) {
   const [qualityRating, setQualityRating] = useState('');
   const [actionTaken, setActionTaken] = useState('');
@@ -71,6 +76,26 @@ export function EditFeedbackModal({
       </DialogTitle>
 
       <DialogContent sx={{ pb: 1 }}>
+        {executiveSummary && (
+          <>
+            <Box
+              sx={(theme) => ({
+                mt: 1,
+                mb: 2,
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                ...executiveSummaryMarkdownStyles(theme),
+              })}
+            >
+              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                Executive Summary
+              </Typography>
+              <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{executiveSummary}</ReactMarkdown>
+            </Box>
+            <Divider sx={{ mb: 1 }} />
+          </>
+        )}
         <FormControl component="fieldset" sx={{ mb: 2, mt: 1 }}>
           <FormLabel component="legend" sx={{ mb: 1, fontWeight: 600 }}>
             Investigation quality

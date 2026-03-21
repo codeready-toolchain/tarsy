@@ -259,6 +259,7 @@ export function TriageView({
         onComplete={handleReviewComplete}
         loading={actionLoading}
         title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+        executiveSummary={reviewTarget?.session.executive_summary}
       />
       <EditFeedbackModal
         open={reviewTarget?.mode === 'edit'}
@@ -268,6 +269,7 @@ export function TriageView({
         initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
         initialActionTaken={reviewTarget?.session.action_taken ?? ''}
         initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+        executiveSummary={reviewTarget?.session.executive_summary}
       />
 
       {/* Bulk complete modal */}

@@ -292,13 +292,22 @@ export function DashboardView() {
     }
   }, [fetchActiveAlerts]);
 
+  const historicalPendingRef = useRef(false);
   const fetchHistoricalWithRetry = useCallback(async () => {
-    if (historicalReconnRef.current) return;
+    if (historicalReconnRef.current) {
+      historicalPendingRef.current = true;
+      return;
+    }
     historicalReconnRef.current = true;
     try {
       await fetchHistoricalAlerts();
+      if (historicalPendingRef.current) {
+        historicalPendingRef.current = false;
+        await fetchHistoricalAlerts();
+      }
     } finally {
       historicalReconnRef.current = false;
+      historicalPendingRef.current = false;
     }
   }, [fetchHistoricalAlerts]);
 
@@ -494,13 +503,10 @@ export function DashboardView() {
         return;
       }
 
-      // review.status → refresh relevant tab data
+      // review.status → refresh both tabs so cross-tab data stays in sync
       if (type === EVENT_REVIEW_STATUS) {
-        if (activeTabRef.current === 'triage') {
-          fetchAllTriageGroupsRef.current();
-        } else {
-          fetchHistoricalRetryRef.current();
-        }
+        fetchHistoricalRetryRef.current();
+        fetchAllTriageGroupsRef.current();
         return;
       }
     };
@@ -510,9 +516,7 @@ export function DashboardView() {
       if (connected) {
         fetchActiveRetryRef.current();
         fetchHistoricalRetryRef.current();
-        if (activeTabRef.current === 'triage') {
-          fetchAllTriageGroupsRef.current();
-        }
+        fetchAllTriageGroupsRef.current();
       }
     };
 
@@ -651,6 +655,7 @@ export function DashboardView() {
       });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
       setTriageError(handleAPIError(err));
     }
@@ -661,6 +666,7 @@ export function DashboardView() {
       const resp = await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.REOPEN });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
       setTriageError(handleAPIError(err));
     }
@@ -681,6 +687,7 @@ export function DashboardView() {
       });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
       setTriageError(handleAPIError(err));
     }
@@ -697,6 +704,7 @@ export function DashboardView() {
       });
       checkReviewResults(resp);
       fetchAllTriageGroups();
+      fetchHistoricalAlerts();
     } catch (err) {
       setTriageError(handleAPIError(err));
     }
@@ -737,12 +745,13 @@ export function DashboardView() {
       checkReviewResults(resp);
       setReviewTarget(null);
       fetchHistoricalAlerts();
+      fetchAllTriageGroups();
     } catch (err) {
       setHistoricalError(handleAPIError(err));
     } finally {
       setReviewLoading(false);
     }
-  }, [reviewTarget, fetchHistoricalAlerts]);
+  }, [reviewTarget, fetchHistoricalAlerts, fetchAllTriageGroups]);
 
   const handleSessionReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
     if (!reviewTarget) return;
@@ -758,12 +767,13 @@ export function DashboardView() {
       checkReviewResults(resp);
       setReviewTarget(null);
       fetchHistoricalAlerts();
+      fetchAllTriageGroups();
     } catch (err) {
       setHistoricalError(handleAPIError(err));
     } finally {
       setReviewLoading(false);
     }
-  }, [reviewTarget, fetchHistoricalAlerts]);
+  }, [reviewTarget, fetchHistoricalAlerts, fetchAllTriageGroups]);
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -1120,6 +1130,7 @@ export function DashboardView() {
             onComplete={handleSessionReviewComplete}
             loading={reviewLoading}
             title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
+            executiveSummary={reviewTarget?.session.executive_summary}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === 'edit'}
@@ -1129,6 +1140,7 @@ export function DashboardView() {
             initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
             initialActionTaken={reviewTarget?.session.action_taken ?? ''}
             initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
+            executiveSummary={reviewTarget?.session.executive_summary}
           />
         </>
       )}
