@@ -123,6 +123,19 @@ var (
 	}, []string{"server"})
 )
 
+// Review quality metrics.
+var (
+	SessionsReviewedTotal = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "tarsy_sessions_reviewed_total",
+		Help: "Sessions by quality rating (DB-polled).",
+	}, []string{"quality_rating"})
+
+	ReviewsCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "tarsy_reviews_completed_total",
+		Help: "Reviews completed (event-driven).",
+	}, []string{"quality_rating"})
+)
+
 // HTTP API metrics.
 var (
 	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{

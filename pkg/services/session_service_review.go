@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -53,6 +54,10 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 				Success:   true,
 			})
 			updated = append(updated, session)
+
+			if req.QualityRating != nil {
+				metrics.ReviewsCompletedTotal.WithLabelValues(*req.QualityRating).Inc()
+			}
 		}
 	}
 	return models.UpdateReviewResponse{Results: results}, updated
