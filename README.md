@@ -44,10 +44,13 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 # 1. Install all dependencies (Go + Python + Dashboard)
 make setup
 
-# 2. Configure environment (REQUIRED)
+# 2. Configure (quickstart uses built-in agents, chains, and LLM providers)
+cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml
 cp deploy/config/.env.example deploy/config/.env
-# Edit deploy/config/.env and set:
-#   - At least one LLM API key (e.g. GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY)
+# Edit deploy/config/.env and set at minimum:
+#   - GOOGLE_API_KEY   (required — used by built-in Gemini providers)
+#   - KUBECONFIG       (path to your kubeconfig, for Kubernetes investigation)
 
 # 3. Start everything (database, backend, LLM service, dashboard)
 make dev

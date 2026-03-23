@@ -1,0 +1,9 @@
+# TARSy LLM Provider Configuration — Quickstart
+#
+# Built-in providers (google-default, gemini-2.5-flash, gemini-2.5-pro, etc.)
+# are available without any configuration here. They all use GOOGLE_API_KEY.
+#
+# Add custom providers below to override built-ins or add new ones.
+# See llm-providers.yaml for examples of OpenAI, Vertex AI, and other providers.
+
+llm_providers: {}

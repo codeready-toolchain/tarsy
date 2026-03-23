@@ -1,7 +1,12 @@
-# TARSy Main Configuration File
-# Copy this file to tarsy.yaml and customize for your environment
+# TARSy Main Configuration File — Full Reference
+# This file documents ALL available options with examples.
+# Copy and customize for your environment:
 #
-# cp tarsy.yaml.example tarsy.yaml
+#   cp tarsy.yaml.example tarsy.yaml
+#
+# For a minimal quickstart (recommended for first-time setup), use instead:
+#
+#   cp tarsy.yaml.quickstart tarsy.yaml
 #
 # IMPORTANT: This file uses environment variable interpolation.
 # - Use {{.VAR_NAME}} syntax to reference environment variables (Go template syntax)

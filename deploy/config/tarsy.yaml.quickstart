@@ -1,0 +1,24 @@
+# TARSy Quickstart Configuration
+#
+# Minimal config to get started with `make dev`. Uses built-in defaults for
+# everything: agents, MCP servers, LLM providers, and chain definitions.
+#
+# Setup:
+#   cp tarsy.yaml.quickstart tarsy.yaml
+#   cp llm-providers.yaml.quickstart llm-providers.yaml
+#   cp .env.example .env   # then set GOOGLE_API_KEY and KUBECONFIG
+#   make dev
+#
+# What you get out of the box (built-in):
+#   - KubernetesAgent with kubernetes-server MCP (uses your KUBECONFIG)
+#   - "kubernetes" chain (single-stage investigation)
+#   - google-default LLM provider (Gemini, uses GOOGLE_API_KEY)
+#   - ChatAgent for follow-up conversations
+#   - Orchestrator with WebResearcher, CodeExecutor, GeneralWorker sub-agents
+#
+# For the full reference with all options, see tarsy.yaml.example
+
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+  llm_backend: "langchain"

@@ -51,6 +51,19 @@ doctor: ## Check if dev prerequisites are installed
 	check_port 8080  "Go backend"; \
 	check_port 5173  "Dashboard"; \
 	echo ""; \
+	echo -e "$(YELLOW)Configuration files (make dev):$(NC)"; \
+	check_file() { \
+		if [ -f "$$1" ]; then \
+			echo -e "  $(GREEN)✓$(NC) $$1"; \
+		else \
+			echo -e "  $(RED)✗$(NC) $$1  -- not found ($$2)"; \
+			ok=false; \
+		fi; \
+	}; \
+	check_file deploy/config/tarsy.yaml          "cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml"; \
+	check_file deploy/config/llm-providers.yaml   "cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml"; \
+	check_file deploy/config/.env                 "cp deploy/config/.env.example deploy/config/.env"; \
+	echo ""; \
 	if $$ok; then \
 		echo -e "$(GREEN)✅ All checks passed$(NC)"; \
 	else \
