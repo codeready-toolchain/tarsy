@@ -1,9 +1,45 @@
 # =============================================================================
+# Environment Check
+# =============================================================================
+
+.PHONY: doctor
+doctor: ## Check if dev prerequisites are installed
+	@echo -e "$(YELLOW)Checking development prerequisites...$(NC)"
+	@ok=true; \
+	check_cmd() { \
+		if command -v "$$1" >/dev/null 2>&1; then \
+			ver=$$($$2 2>&1 | head -1); \
+			echo -e "  $(GREEN)✓$(NC) $$1  $$ver"; \
+		else \
+			echo -e "  $(RED)✗$(NC) $$1  -- not found ($$3)"; \
+			ok=false; \
+		fi; \
+	}; \
+	check_cmd go       "go version"          "https://go.dev/dl/"; \
+	check_cmd python3  "python3 --version"   "https://www.python.org/downloads/"; \
+	check_cmd node     "node --version"      "https://nodejs.org/"; \
+	check_cmd npm      "npm --version"       "https://nodejs.org/"; \
+	check_cmd uv       "uv --version"        "curl -LsSf https://astral.sh/uv/install.sh | sh"; \
+	check_cmd protoc   "protoc --version"    "https://grpc.io/docs/protoc-installation/"; \
+	check_cmd golangci-lint "golangci-lint --version" "https://golangci-lint.run/welcome/install/"; \
+	echo ""; \
+	echo -e "$(YELLOW)Container tools (optional, for container deployment):$(NC)"; \
+	check_cmd podman         "podman --version"         "https://podman.io/docs/installation" || true; \
+	check_cmd podman-compose "podman-compose --version"  "pip install podman-compose" || true; \
+	echo ""; \
+	if $$ok; then \
+		echo -e "$(GREEN)✅ All required tools are installed$(NC)"; \
+	else \
+		echo -e "$(RED)❌ Some required tools are missing -- see above$(NC)"; \
+		exit 1; \
+	fi
+
+# =============================================================================
 # Development Workflow
 # =============================================================================
 
-.PHONY: check
-check: fmt build lint-fix test ## Format, build, lint, and run all tests
+.PHONY: check-all
+check-all: fmt build lint-fix test ## Format, build, lint, and run all tests
 	@echo ""
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 

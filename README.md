@@ -36,7 +36,7 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 - **podman-compose** -- Multi-container application management
   - Install: `pip install podman-compose`
 
-> **Quick Check**: Run `make check` to verify your development environment.
+> **Quick Check**: Run `make doctor` to verify all prerequisites are installed.
 
 ## Quick Start
 
@@ -226,6 +226,8 @@ make test-dashboard     # Dashboard tests
 ### Useful Commands
 
 ```bash
+make doctor             # Check if dev prerequisites are installed
+make check-all          # Format, build, lint, and run all tests
 make help               # Show all available commands
 make fmt                # Format code (Go + Python)
 make lint               # Run linters (Go)
