@@ -298,7 +298,7 @@ proto-clean: ## Clean generated proto files
 # =============================================================================
 
 .PHONY: setup
-setup: ## Install all dependencies (Go + Python + Dashboard)
+setup: ## Install all dependencies (Go + Python + Dashboard) and bootstrap config
 	@echo -e "$(YELLOW)Installing Go dependencies...$(NC)"
 	@go mod download
 	@go mod tidy
@@ -307,6 +307,26 @@ setup: ## Install all dependencies (Go + Python + Dashboard)
 	@echo -e "$(YELLOW)Installing dashboard dependencies...$(NC)"
 	@cd web/dashboard && npm ci
 	@echo -e "$(GREEN)✅ All dependencies installed$(NC)"
+	@echo ""
+	@echo -e "$(YELLOW)Bootstrapping configuration...$(NC)"
+	@if [ ! -f deploy/config/tarsy.yaml ]; then \
+		cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml; \
+		echo -e "  $(GREEN)✓$(NC) Created deploy/config/tarsy.yaml (from quickstart)"; \
+	else \
+		echo -e "  $(YELLOW)-$(NC) deploy/config/tarsy.yaml already exists, skipping"; \
+	fi
+	@if [ ! -f deploy/config/llm-providers.yaml ]; then \
+		cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml; \
+		echo -e "  $(GREEN)✓$(NC) Created deploy/config/llm-providers.yaml (from quickstart)"; \
+	else \
+		echo -e "  $(YELLOW)-$(NC) deploy/config/llm-providers.yaml already exists, skipping"; \
+	fi
+	@if [ ! -f deploy/config/.env ]; then \
+		echo -e "  $(RED)!$(NC) deploy/config/.env not found — copy and edit before running make dev:"; \
+		echo -e "      cp deploy/config/.env.example deploy/config/.env"; \
+	else \
+		echo -e "  $(YELLOW)-$(NC) deploy/config/.env already exists, skipping"; \
+	fi
 
 .PHONY: deps-update
 deps-update: ## Update Go dependencies

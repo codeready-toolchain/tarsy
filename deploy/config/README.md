@@ -6,11 +6,11 @@ This directory contains configuration files for TARSy's configuration system.
 
 ### Quickstart (recommended for first-time setup)
 
-Uses built-in agents, chains, and LLM providers — just add your API key:
+`make setup` automatically creates `tarsy.yaml` and `llm-providers.yaml` from quickstart
+templates if they don't exist yet. Just add your API key:
 
 ```bash
-cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml
-cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml
+make setup
 cp deploy/config/.env.example deploy/config/.env
 # Edit .env: set GOOGLE_API_KEY and KUBECONFIG
 make dev
@@ -18,14 +18,13 @@ make dev
 
 ### Full configuration
 
-For advanced setups with custom agents, chains, MCP servers, and LLM providers:
+For advanced setups with custom agents, chains, MCP servers, and LLM providers,
+replace the quickstart configs with the full examples:
 
 ```bash
 cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
 cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
-cp deploy/config/.env.example deploy/config/.env
-# Edit all three files for your environment
-make dev
+# Edit both files for your environment
 ```
 
 ## File Descriptions

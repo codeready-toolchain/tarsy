@@ -41,12 +41,10 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 ### Development Mode
 
 ```bash
-# 1. Install all dependencies (Go + Python + Dashboard)
+# 1. Install dependencies and bootstrap config
 make setup
 
-# 2. Configure (quickstart uses built-in agents, chains, and LLM providers)
-cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml
-cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml
+# 2. Configure environment variables
 cp deploy/config/.env.example deploy/config/.env
 # Edit deploy/config/.env and set at minimum:
 #   - GOOGLE_API_KEY   (required — used by built-in Gemini providers)
