@@ -1,9 +1,69 @@
 # =============================================================================
+# Environment Check
+# =============================================================================
+
+.PHONY: doctor
+doctor: ## Check if dev prerequisites are installed
+	@echo -e "$(YELLOW)Checking development prerequisites...$(NC)"
+	@ok=true; \
+	check_cmd() { \
+		required=$${4:-required}; \
+		if command -v "$$1" >/dev/null 2>&1; then \
+			ver=$$($$2 2>&1 | head -1); \
+			echo -e "  $(GREEN)✓$(NC) $$1  $$ver"; \
+		else \
+			if [ "$$required" = "required" ]; then \
+				echo -e "  $(RED)✗$(NC) $$1  -- not found ($$3)"; \
+				ok=false; \
+			else \
+				echo -e "  $(YELLOW)-$(NC) $$1  -- not found (optional: $$3)"; \
+			fi; \
+		fi; \
+	}; \
+	check_cmd go             "go version"               "https://go.dev/dl/"; \
+	check_cmd python3        "python3 --version"        "https://www.python.org/downloads/"; \
+	check_cmd node           "node --version"           "https://nodejs.org/"; \
+	check_cmd npm            "npm --version"            "https://nodejs.org/"; \
+	check_cmd uv             "uv --version"             "curl -LsSf https://astral.sh/uv/install.sh | sh"; \
+	check_cmd podman         "podman --version"         "https://podman.io/docs/installation"; \
+	echo ""; \
+	echo -e "$(YELLOW)Optional tools:$(NC)"; \
+	check_cmd protoc         "protoc --version"         "https://grpc.io/docs/protoc-installation/" optional; \
+	check_cmd golangci-lint  "golangci-lint --version"  "https://golangci-lint.run/welcome/install/" optional; \
+	check_cmd atlas          "atlas version"            "https://atlasgo.io/getting-started#installation" optional; \
+	check_cmd goimports      "go version -m $$(which goimports)" "go install golang.org/x/tools/cmd/goimports@latest" optional; \
+	echo ""; \
+	echo -e "$(YELLOW)Port availability (make dev):$(NC)"; \
+	check_port() { \
+		if (echo >/dev/tcp/127.0.0.1/$$1) 2>/dev/null; then \
+			if [ "$$3" = "warn" ]; then \
+				echo -e "  $(YELLOW)⚠  :$$1  -- already in use ($$2, ok if from previous make dev)$(NC)"; \
+			else \
+				echo -e "  $(RED)✗$(NC) :$$1  -- already in use ($$2)"; \
+				ok=false; \
+			fi; \
+		else \
+			echo -e "  $(GREEN)✓$(NC) :$$1  available ($$2)"; \
+		fi; \
+	}; \
+	check_port 5432  "PostgreSQL" warn; \
+	check_port 50051 "LLM service"; \
+	check_port 8080  "Go backend"; \
+	check_port 5173  "Dashboard"; \
+	echo ""; \
+	if $$ok; then \
+		echo -e "$(GREEN)✅ All checks passed$(NC)"; \
+	else \
+		echo -e "$(RED)❌ Some checks failed -- see above$(NC)"; \
+		exit 1; \
+	fi
+
+# =============================================================================
 # Development Workflow
 # =============================================================================
 
-.PHONY: check
-check: fmt build lint-fix test ## Format, build, lint, and run all tests
+.PHONY: check-all
+check-all: fmt build lint-fix test ## Format, build, lint, and run all tests
 	@echo ""
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 

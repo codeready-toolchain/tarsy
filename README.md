@@ -22,21 +22,19 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 
 ## Prerequisites
 
-### For Development Mode
 - **Go 1.25+** -- Backend orchestrator
 - **Python 3.13+** -- LLM service runtime
 - **Node.js 24+** -- Dashboard development and build tools
 - **uv** -- Modern Python package manager
   - Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **PostgreSQL 17+** -- Or Podman/Docker for local development
-- **protoc** -- Protocol Buffers compiler (for gRPC code generation)
+- **Podman** (or Docker) -- Container runtime (used for PostgreSQL)
 
-### For Container Deployment (Additional)
-- **Podman** (or Docker) -- Container runtime
-- **podman-compose** -- Multi-container application management
-  - Install: `pip install podman-compose`
+**Optional** (not needed for `make dev`):
+- **protoc** -- Protocol Buffers compiler (`make proto-generate`)
+- **golangci-lint** -- Go linter (`make lint`, `make check-all`)
+- **Atlas** -- Migration authoring (`make migrate-create`)
 
-> **Quick Check**: Run `make check` to verify your development environment.
+> **Quick Check**: Run `make doctor` to verify all prerequisites are installed.
 
 ## Quick Start
 
@@ -226,6 +224,8 @@ make test-dashboard     # Dashboard tests
 ### Useful Commands
 
 ```bash
+make doctor             # Check if dev prerequisites are installed
+make check-all          # Format, build, lint, and run all tests
 make help               # Show all available commands
 make fmt                # Format code (Go + Python)
 make lint               # Run linters (Go)
