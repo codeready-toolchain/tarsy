@@ -33,10 +33,28 @@ doctor: ## Check if dev prerequisites are installed
 	check_cmd atlas          "atlas version"            "https://atlasgo.io/getting-started#installation" optional; \
 	check_cmd goimports      "go version -m $$(which goimports)" "go install golang.org/x/tools/cmd/goimports@latest" optional; \
 	echo ""; \
+	echo -e "$(YELLOW)Port availability (make dev):$(NC)"; \
+	check_port() { \
+		if (echo >/dev/tcp/127.0.0.1/$$1) 2>/dev/null; then \
+			if [ "$$3" = "warn" ]; then \
+				echo -e "  $(YELLOW)⚠  :$$1  -- already in use ($$2, ok if from previous make dev)$(NC)"; \
+			else \
+				echo -e "  $(RED)✗$(NC) :$$1  -- already in use ($$2)"; \
+				ok=false; \
+			fi; \
+		else \
+			echo -e "  $(GREEN)✓$(NC) :$$1  available ($$2)"; \
+		fi; \
+	}; \
+	check_port 5432  "PostgreSQL" warn; \
+	check_port 50051 "LLM service"; \
+	check_port 8080  "Go backend"; \
+	check_port 5173  "Dashboard"; \
+	echo ""; \
 	if $$ok; then \
-		echo -e "$(GREEN)✅ All required tools are installed$(NC)"; \
+		echo -e "$(GREEN)✅ All checks passed$(NC)"; \
 	else \
-		echo -e "$(RED)❌ Some required tools are missing -- see above$(NC)"; \
+		echo -e "$(RED)❌ Some checks failed -- see above$(NC)"; \
 		exit 1; \
 	fi
 
