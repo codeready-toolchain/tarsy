@@ -4,38 +4,28 @@ This directory contains configuration files for TARSy's configuration system.
 
 ## Quick Start
 
-1. **Copy example files** to create your configuration:
+### Quickstart (recommended for first-time setup)
+
+Uses built-in agents, chains, and LLM providers — just add your API key:
 
 ```bash
-cd deploy/config
-cp tarsy.yaml.example tarsy.yaml
-cp llm-providers.yaml.example llm-providers.yaml
-cp .env.example .env
+cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.quickstart deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
+# Edit .env: set GOOGLE_API_KEY and KUBECONFIG
+make dev
 ```
 
-2. **Edit `.env`** with your actual values:
-   - API keys (Google, OpenAI, Anthropic, xAI)
-   - Database credentials
-   - Service ports
-   - Kubeconfig path
+### Full configuration
 
-3. **Customize `tarsy.yaml`** (optional):
-   - Add custom agents
-   - Define custom chains
-   - Override built-in configurations
-   - Add custom MCP servers
-   - Add agent skills (see [Agent Skills](#agent-skills) below)
-
-4. **Customize `llm-providers.yaml`** (optional):
-   - Add additional LLM providers
-   - Override built-in providers
-   - Configure custom endpoints
-
-5. **Start TARSy**:
+For advanced setups with custom agents, chains, MCP servers, and LLM providers:
 
 ```bash
-cd ../..  # Back to project root
-go run cmd/tarsy/main.go
+cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+cp deploy/config/llm-providers.yaml.example deploy/config/llm-providers.yaml
+cp deploy/config/.env.example deploy/config/.env
+# Edit all three files for your environment
+make dev
 ```
 
 ## File Descriptions
@@ -50,12 +40,14 @@ These files are **gitignored** and contain your actual configuration:
 - **`.env`** - Environment variables and secrets
 - **`oauth2-proxy.cfg`** - Generated OAuth2 proxy configuration (if using auth)
 
-### Example Files (Tracked in Git)
+### Template Files (Tracked in Git)
 
 These files are **tracked in git** and serve as templates:
 
-- **`tarsy.yaml.example`** - Example main configuration with comments
-- **`llm-providers.yaml.example`** - Example LLM provider configurations
+- **`tarsy.yaml.quickstart`** - Minimal config using built-in defaults (recommended for first-time setup)
+- **`tarsy.yaml.example`** - Full reference with all options documented
+- **`llm-providers.yaml.quickstart`** - Empty providers (built-in Gemini providers are sufficient)
+- **`llm-providers.yaml.example`** - Full reference with OpenAI, Vertex AI, and other providers
 - **`.env.example`** - Example environment variables
 - **`oauth2-proxy.cfg.template`** - OAuth2 proxy template (uses `{{VAR}}` placeholders)
 - **`README.md`** - This file
@@ -312,7 +304,11 @@ Validation checks:
 Error: failed to load tarsy.yaml: configuration file not found
 ```
 
-**Solution**: Copy `tarsy.yaml.example` to `tarsy.yaml`
+**Solution**: Copy the quickstart template or the full example:
+```bash
+cp deploy/config/tarsy.yaml.quickstart deploy/config/tarsy.yaml
+# or for full reference: cp deploy/config/tarsy.yaml.example deploy/config/tarsy.yaml
+```
 
 ### Missing environment variable
 
