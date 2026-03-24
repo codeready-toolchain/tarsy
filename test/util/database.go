@@ -171,11 +171,12 @@ func GenerateSchemaName(t *testing.T) string {
 
 // AddSearchPathToConnString appends search_path parameter to a PostgreSQL connection string.
 // This ensures all connections in the pool use the specified schema.
+// Includes "public" so that extension types (e.g. pgvector's "vector") installed
+// in the public schema remain visible.
 func AddSearchPathToConnString(connStr, schemaName string) string {
-	// Add search_path as a connection parameter
 	separator := "?"
 	if strings.Contains(connStr, "?") {
 		separator = "&"
 	}
-	return fmt.Sprintf("%s%ssearch_path=%s", connStr, separator, schemaName)
+	return fmt.Sprintf("%s%ssearch_path=%s,public", connStr, separator, schemaName)
 }
