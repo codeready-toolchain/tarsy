@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/masking"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
@@ -268,7 +269,26 @@ func main() {
 	}
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
-	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService)
+
+	// Initialize memory service if memory extraction is enabled
+	var memoryService *memory.Service
+	if memCfg := config.ResolvedMemoryConfig(cfg.Defaults); memCfg != nil {
+		embedder, embErr := memory.NewEmbedder(memCfg.Embedding)
+		if embErr != nil {
+			slog.Error("Failed to create embedder — memory extraction disabled", "error", embErr)
+		} else {
+			memoryService = memory.NewService(dbClient.Client, dbClient.DB(), embedder, memCfg)
+			if valErr := memoryService.ValidateDimensions(ctx); valErr != nil {
+				slog.Error("Embedding dimension validation failed", "error", valErr)
+				os.Exit(1)
+			}
+			slog.Info("Investigation memory enabled",
+				"provider", memCfg.Embedding.Provider, "model", memCfg.Embedding.Model,
+				"dimensions", memCfg.Embedding.Dimensions)
+		}
+	}
+
+	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService, memoryService)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, scoringExecutor, eventPublisher, slackService)

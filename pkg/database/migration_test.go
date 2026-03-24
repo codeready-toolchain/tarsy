@@ -34,6 +34,8 @@ func TestMigrations_ApplyAll(t *testing.T) {
 		"timeline_events",
 		"stages",
 		"llm_interactions",
+		"investigation_memories",
+		"alert_session_injected_memories",
 	} {
 		assert.Contains(t, tables, expected, "table %q should exist after migrations", expected)
 	}
@@ -87,11 +89,18 @@ func TestMigrations_EntParity(t *testing.T) {
 	sort.Strings(entTables)
 	assert.Equal(t, entTables, migTables, "migration and Ent should produce the same tables")
 
-	// Compare columns for each shared table
+	// Compare columns for each shared table.
+	// The investigation_memories.embedding column is raw SQL (pgvector type),
+	// not managed by Ent, so we exclude it from the parity comparison.
 	sharedTables := intersect(migTables, entTables)
 	for _, table := range sharedTables {
 		migCols := queryColumnTypes(t, dbMig, "public", table)
 		entCols := queryColumnTypes(t, dbEnt, schemaEnt, table)
+
+		if table == "investigation_memories" {
+			migCols = filterColumns(migCols, "embedding")
+		}
+
 		assert.Equal(t, entCols, migCols,
 			"column mismatch in table %q between migration and Ent schemas", table)
 	}
@@ -251,6 +260,20 @@ func queryColumnTypes(t *testing.T, db *stdsql.DB, schema, table string) []colum
 	}
 	require.NoError(t, rows.Err())
 	return cols
+}
+
+func filterColumns(cols []columnInfo, exclude ...string) []columnInfo {
+	excludeSet := make(map[string]bool, len(exclude))
+	for _, name := range exclude {
+		excludeSet[name] = true
+	}
+	var result []columnInfo
+	for _, c := range cols {
+		if !excludeSet[c.Name] {
+			result = append(result, c)
+		}
+	}
+	return result
 }
 
 func intersect(a, b []string) []string {

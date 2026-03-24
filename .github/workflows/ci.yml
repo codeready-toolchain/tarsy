@@ -58,7 +58,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
@@ -91,6 +91,7 @@ jobs:
         run: |
           PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
           PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"pg_trgm\";"
+          PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS \"vector\";"
 
       - name: Run Go tests
         env:

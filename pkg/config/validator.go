@@ -157,6 +157,41 @@ func (v *Validator) validateDefaults() error {
 		}
 	}
 
+	if defaults.Memory != nil && defaults.Memory.Enabled {
+		if err := v.validateMemoryConfig(defaults.Memory); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateMemoryConfig(mc *MemoryConfig) error {
+	resolved := ResolvedMemoryConfig(&Defaults{Memory: mc})
+	if resolved == nil {
+		return nil
+	}
+
+	if !resolved.Embedding.Provider.IsValid() {
+		return NewValidationError("defaults", "", "memory.embedding.provider",
+			fmt.Errorf("invalid embedding provider: %s", resolved.Embedding.Provider))
+	}
+	if resolved.Embedding.Dimensions <= 0 {
+		return NewValidationError("defaults", "", "memory.embedding.dimensions",
+			fmt.Errorf("must be positive, got %d", resolved.Embedding.Dimensions))
+	}
+	if resolved.Embedding.Model == "" {
+		return NewValidationError("defaults", "", "memory.embedding.model",
+			fmt.Errorf("embedding model is required"))
+	}
+	if resolved.Embedding.APIKeyEnv == "" {
+		return NewValidationError("defaults", "", "memory.embedding.api_key_env",
+			fmt.Errorf("api_key_env is required"))
+	}
+	if os.Getenv(resolved.Embedding.APIKeyEnv) == "" {
+		slog.Warn("Memory embedding API key env var is not set — embedding calls will fail at runtime",
+			"env_var", resolved.Embedding.APIKeyEnv)
+	}
 	return nil
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/chatusermessage"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -89,6 +90,7 @@ func checkColumn(t, c string) error {
 			chat.Table:                  chat.ValidColumn,
 			chatusermessage.Table:       chatusermessage.ValidColumn,
 			event.Table:                 event.ValidColumn,
+			investigationmemory.Table:   investigationmemory.ValidColumn,
 			llminteraction.Table:        llminteraction.ValidColumn,
 			mcpinteraction.Table:        mcpinteraction.ValidColumn,
 			message.Table:               message.ValidColumn,

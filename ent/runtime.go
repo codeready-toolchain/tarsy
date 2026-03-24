@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/chatusermessage"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -48,6 +49,66 @@ func init() {
 	eventDescCreatedAt := eventFields[3].Descriptor()
 	// event.DefaultCreatedAt holds the default value on creation for the created_at field.
 	event.DefaultCreatedAt = eventDescCreatedAt.Default.(func() time.Time)
+	investigationmemoryFields := schema.InvestigationMemory{}.Fields()
+	_ = investigationmemoryFields
+	// investigationmemoryDescProject is the schema descriptor for project field.
+	investigationmemoryDescProject := investigationmemoryFields[1].Descriptor()
+	// investigationmemory.DefaultProject holds the default value on creation for the project field.
+	investigationmemory.DefaultProject = investigationmemoryDescProject.Default.(string)
+	// investigationmemory.ProjectValidator is a validator for the "project" field. It is called by the builders before save.
+	investigationmemory.ProjectValidator = investigationmemoryDescProject.Validators[0].(func(string) error)
+	// investigationmemoryDescContent is the schema descriptor for content field.
+	investigationmemoryDescContent := investigationmemoryFields[2].Descriptor()
+	// investigationmemory.ContentValidator is a validator for the "content" field. It is called by the builders before save.
+	investigationmemory.ContentValidator = investigationmemoryDescContent.Validators[0].(func(string) error)
+	// investigationmemoryDescConfidence is the schema descriptor for confidence field.
+	investigationmemoryDescConfidence := investigationmemoryFields[5].Descriptor()
+	// investigationmemory.DefaultConfidence holds the default value on creation for the confidence field.
+	investigationmemory.DefaultConfidence = investigationmemoryDescConfidence.Default.(float64)
+	// investigationmemory.ConfidenceValidator is a validator for the "confidence" field. It is called by the builders before save.
+	investigationmemory.ConfidenceValidator = func() func(float64) error {
+		validators := investigationmemoryDescConfidence.Validators
+		fns := [...]func(float64) error{
+			validators[0].(func(float64) error),
+			validators[1].(func(float64) error),
+		}
+		return func(confidence float64) error {
+			for _, fn := range fns {
+				if err := fn(confidence); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// investigationmemoryDescSeenCount is the schema descriptor for seen_count field.
+	investigationmemoryDescSeenCount := investigationmemoryFields[6].Descriptor()
+	// investigationmemory.DefaultSeenCount holds the default value on creation for the seen_count field.
+	investigationmemory.DefaultSeenCount = investigationmemoryDescSeenCount.Default.(int)
+	// investigationmemory.SeenCountValidator is a validator for the "seen_count" field. It is called by the builders before save.
+	investigationmemory.SeenCountValidator = investigationmemoryDescSeenCount.Validators[0].(func(int) error)
+	// investigationmemoryDescSourceSessionID is the schema descriptor for source_session_id field.
+	investigationmemoryDescSourceSessionID := investigationmemoryFields[7].Descriptor()
+	// investigationmemory.SourceSessionIDValidator is a validator for the "source_session_id" field. It is called by the builders before save.
+	investigationmemory.SourceSessionIDValidator = investigationmemoryDescSourceSessionID.Validators[0].(func(string) error)
+	// investigationmemoryDescCreatedAt is the schema descriptor for created_at field.
+	investigationmemoryDescCreatedAt := investigationmemoryFields[10].Descriptor()
+	// investigationmemory.DefaultCreatedAt holds the default value on creation for the created_at field.
+	investigationmemory.DefaultCreatedAt = investigationmemoryDescCreatedAt.Default.(func() time.Time)
+	// investigationmemoryDescUpdatedAt is the schema descriptor for updated_at field.
+	investigationmemoryDescUpdatedAt := investigationmemoryFields[11].Descriptor()
+	// investigationmemory.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	investigationmemory.DefaultUpdatedAt = investigationmemoryDescUpdatedAt.Default.(func() time.Time)
+	// investigationmemory.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	investigationmemory.UpdateDefaultUpdatedAt = investigationmemoryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// investigationmemoryDescLastSeenAt is the schema descriptor for last_seen_at field.
+	investigationmemoryDescLastSeenAt := investigationmemoryFields[12].Descriptor()
+	// investigationmemory.DefaultLastSeenAt holds the default value on creation for the last_seen_at field.
+	investigationmemory.DefaultLastSeenAt = investigationmemoryDescLastSeenAt.Default.(func() time.Time)
+	// investigationmemoryDescDeprecated is the schema descriptor for deprecated field.
+	investigationmemoryDescDeprecated := investigationmemoryFields[13].Descriptor()
+	// investigationmemory.DefaultDeprecated holds the default value on creation for the deprecated field.
+	investigationmemory.DefaultDeprecated = investigationmemoryDescDeprecated.Default.(bool)
 	llminteractionFields := schema.LLMInteraction{}.Fields()
 	_ = llminteractionFields
 	// llminteractionDescCreatedAt is the schema descriptor for created_at field.

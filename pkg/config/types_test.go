@@ -143,3 +143,86 @@ func TestSubAgentRefs_Names(t *testing.T) {
 		assert.Equal(t, []string{}, refs.Names())
 	})
 }
+
+func TestEmbeddingProviderType_IsValid(t *testing.T) {
+	tests := []struct {
+		provider EmbeddingProviderType
+		valid    bool
+	}{
+		{EmbeddingProviderGoogle, true},
+		{EmbeddingProviderOpenAI, true},
+		{"unknown", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.valid, tt.provider.IsValid(), "provider=%q", tt.provider)
+	}
+}
+
+func TestResolvedMemoryConfig(t *testing.T) {
+	t.Run("nil defaults returns nil", func(t *testing.T) {
+		assert.Nil(t, ResolvedMemoryConfig(nil))
+	})
+
+	t.Run("nil memory returns nil", func(t *testing.T) {
+		assert.Nil(t, ResolvedMemoryConfig(&Defaults{}))
+	})
+
+	t.Run("disabled returns nil", func(t *testing.T) {
+		assert.Nil(t, ResolvedMemoryConfig(&Defaults{
+			Memory: &MemoryConfig{Enabled: false},
+		}))
+	})
+
+	t.Run("minimal enabled fills all defaults", func(t *testing.T) {
+		mc := ResolvedMemoryConfig(&Defaults{
+			Memory: &MemoryConfig{Enabled: true},
+		})
+		require.NotNil(t, mc)
+		assert.Equal(t, 5, mc.MaxInject)
+		assert.Equal(t, 20, mc.ReflectorMemoryLimit)
+		assert.Equal(t, EmbeddingProviderGoogle, mc.Embedding.Provider)
+		assert.Equal(t, "gemini-embedding-2-preview", mc.Embedding.Model)
+		assert.Equal(t, "GOOGLE_API_KEY", mc.Embedding.APIKeyEnv)
+		assert.Equal(t, 768, mc.Embedding.Dimensions)
+	})
+
+	t.Run("user overrides preserved", func(t *testing.T) {
+		mc := ResolvedMemoryConfig(&Defaults{
+			Memory: &MemoryConfig{
+				Enabled:              true,
+				MaxInject:            10,
+				ReflectorMemoryLimit: 50,
+				Embedding: EmbeddingConfig{
+					Provider:   EmbeddingProviderOpenAI,
+					Model:      "text-embedding-3-large",
+					APIKeyEnv:  "OPENAI_API_KEY",
+					Dimensions: 3072,
+				},
+			},
+		})
+		require.NotNil(t, mc)
+		assert.Equal(t, 10, mc.MaxInject)
+		assert.Equal(t, 50, mc.ReflectorMemoryLimit)
+		assert.Equal(t, EmbeddingProviderOpenAI, mc.Embedding.Provider)
+		assert.Equal(t, "text-embedding-3-large", mc.Embedding.Model)
+		assert.Equal(t, "OPENAI_API_KEY", mc.Embedding.APIKeyEnv)
+		assert.Equal(t, 3072, mc.Embedding.Dimensions)
+	})
+
+	t.Run("partial overrides get remaining defaults", func(t *testing.T) {
+		mc := ResolvedMemoryConfig(&Defaults{
+			Memory: &MemoryConfig{
+				Enabled: true,
+				Embedding: EmbeddingConfig{
+					Model: "custom-model",
+				},
+			},
+		})
+		require.NotNil(t, mc)
+		assert.Equal(t, EmbeddingProviderGoogle, mc.Embedding.Provider)
+		assert.Equal(t, "custom-model", mc.Embedding.Model)
+		assert.Equal(t, "GOOGLE_API_KEY", mc.Embedding.APIKeyEnv)
+		assert.Equal(t, 768, mc.Embedding.Dimensions)
+	})
+}

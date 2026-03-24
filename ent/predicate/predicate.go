@@ -21,6 +21,9 @@ type ChatUserMessage func(*sql.Selector)
 // Event is the predicate function for event builders.
 type Event func(*sql.Selector)
 
+// InvestigationMemory is the predicate function for investigationmemory builders.
+type InvestigationMemory func(*sql.Selector)
+
 // LLMInteraction is the predicate function for llminteraction builders.
 type LLMInteraction func(*sql.Selector)
 

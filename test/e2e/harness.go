@@ -212,7 +212,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	// 8a. Scoring executor — created when any chain has scoring enabled.
 	var scoringExecutor *queue.ScoringExecutor
 	if hasScoringEnabled(tc.cfg) {
-		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, nil)
+		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, nil, nil)
 	}
 
 	// 9. Worker pool.

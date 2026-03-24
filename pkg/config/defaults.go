@@ -34,6 +34,9 @@ type Defaults struct {
 
 	// Global orchestrator defaults (applied to all orchestrator agents unless overridden)
 	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
+
+	// Investigation memory configuration
+	Memory *MemoryConfig `yaml:"memory,omitempty"`
 }
 
 // AlertMaskingDefaults holds alert payload masking settings.
@@ -41,4 +44,46 @@ type Defaults struct {
 type AlertMaskingDefaults struct {
 	Enabled      bool   `yaml:"enabled"`
 	PatternGroup string `yaml:"pattern_group"`
+}
+
+// DefaultEmbeddingConfig returns the built-in embedding configuration.
+func DefaultEmbeddingConfig() EmbeddingConfig {
+	return EmbeddingConfig{
+		Provider:   EmbeddingProviderGoogle,
+		Model:      "gemini-embedding-2-preview",
+		APIKeyEnv:  "GOOGLE_API_KEY",
+		Dimensions: 768,
+	}
+}
+
+// ResolvedMemoryConfig returns the memory config with defaults applied.
+// Returns nil if memory is not configured or disabled.
+func ResolvedMemoryConfig(defaults *Defaults) *MemoryConfig {
+	if defaults == nil || defaults.Memory == nil || !defaults.Memory.Enabled {
+		return nil
+	}
+	mc := *defaults.Memory
+
+	if mc.MaxInject == 0 {
+		mc.MaxInject = 5
+	}
+	if mc.ReflectorMemoryLimit == 0 {
+		mc.ReflectorMemoryLimit = 20
+	}
+
+	defaultEmb := DefaultEmbeddingConfig()
+	if mc.Embedding.Provider == "" {
+		mc.Embedding.Provider = defaultEmb.Provider
+	}
+	if mc.Embedding.Model == "" {
+		mc.Embedding.Model = defaultEmb.Model
+	}
+	if mc.Embedding.APIKeyEnv == "" {
+		mc.Embedding.APIKeyEnv = defaultEmb.APIKeyEnv
+	}
+	if mc.Embedding.Dimensions == 0 {
+		mc.Embedding.Dimensions = defaultEmb.Dimensions
+	}
+
+	return &mc
 }

@@ -69,6 +69,18 @@ func (f EventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EventMutation", m)
 }
 
+// The InvestigationMemoryFunc type is an adapter to allow the use of ordinary
+// function as InvestigationMemory mutator.
+type InvestigationMemoryFunc func(context.Context, *ent.InvestigationMemoryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f InvestigationMemoryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.InvestigationMemoryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InvestigationMemoryMutation", m)
+}
+
 // The LLMInteractionFunc type is an adapter to allow the use of ordinary
 // function as LLMInteraction mutator.
 type LLMInteractionFunc func(context.Context, *ent.LLMInteractionMutation) (ent.Value, error)

@@ -22,6 +22,8 @@ type Tx struct {
 	ChatUserMessage *ChatUserMessageClient
 	// Event is the client for interacting with the Event builders.
 	Event *EventClient
+	// InvestigationMemory is the client for interacting with the InvestigationMemory builders.
+	InvestigationMemory *InvestigationMemoryClient
 	// LLMInteraction is the client for interacting with the LLMInteraction builders.
 	LLMInteraction *LLMInteractionClient
 	// MCPInteraction is the client for interacting with the MCPInteraction builders.
@@ -172,6 +174,7 @@ func (tx *Tx) init() {
 	tx.Chat = NewChatClient(tx.config)
 	tx.ChatUserMessage = NewChatUserMessageClient(tx.config)
 	tx.Event = NewEventClient(tx.config)
+	tx.InvestigationMemory = NewInvestigationMemoryClient(tx.config)
 	tx.LLMInteraction = NewLLMInteractionClient(tx.config)
 	tx.MCPInteraction = NewMCPInteractionClient(tx.config)
 	tx.Message = NewMessageClient(tx.config)

@@ -157,6 +157,9 @@ func (AlertSession) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("review_activities", SessionReviewActivity.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("memories", InvestigationMemory.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("injected_memories", InvestigationMemory.Type),
 	}
 }
 

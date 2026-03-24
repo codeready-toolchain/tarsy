@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -44,6 +45,8 @@ type AlertSessionQuery struct {
 	withChat             *ChatQuery
 	withSessionScores    *SessionScoreQuery
 	withReviewActivities *SessionReviewActivityQuery
+	withMemories         *InvestigationMemoryQuery
+	withInjectedMemories *InvestigationMemoryQuery
 	modifiers            []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -301,6 +304,50 @@ func (_q *AlertSessionQuery) QueryReviewActivities() *SessionReviewActivityQuery
 	return query
 }
 
+// QueryMemories chains the current query on the "memories" edge.
+func (_q *AlertSessionQuery) QueryMemories() *InvestigationMemoryQuery {
+	query := (&InvestigationMemoryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, selector),
+			sqlgraph.To(investigationmemory.Table, investigationmemory.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.MemoriesTable, alertsession.MemoriesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryInjectedMemories chains the current query on the "injected_memories" edge.
+func (_q *AlertSessionQuery) QueryInjectedMemories() *InvestigationMemoryQuery {
+	query := (&InvestigationMemoryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, selector),
+			sqlgraph.To(investigationmemory.Table, investigationmemory.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, alertsession.InjectedMemoriesTable, alertsession.InjectedMemoriesPrimaryKey...),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first AlertSession entity from the query.
 // Returns a *NotFoundError when no AlertSession was found.
 func (_q *AlertSessionQuery) First(ctx context.Context) (*AlertSession, error) {
@@ -503,6 +550,8 @@ func (_q *AlertSessionQuery) Clone() *AlertSessionQuery {
 		withChat:             _q.withChat.Clone(),
 		withSessionScores:    _q.withSessionScores.Clone(),
 		withReviewActivities: _q.withReviewActivities.Clone(),
+		withMemories:         _q.withMemories.Clone(),
+		withInjectedMemories: _q.withInjectedMemories.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -620,6 +669,28 @@ func (_q *AlertSessionQuery) WithReviewActivities(opts ...func(*SessionReviewAct
 	return _q
 }
 
+// WithMemories tells the query-builder to eager-load the nodes that are connected to
+// the "memories" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AlertSessionQuery) WithMemories(opts ...func(*InvestigationMemoryQuery)) *AlertSessionQuery {
+	query := (&InvestigationMemoryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withMemories = query
+	return _q
+}
+
+// WithInjectedMemories tells the query-builder to eager-load the nodes that are connected to
+// the "injected_memories" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AlertSessionQuery) WithInjectedMemories(opts ...func(*InvestigationMemoryQuery)) *AlertSessionQuery {
+	query := (&InvestigationMemoryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withInjectedMemories = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -698,7 +769,7 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*AlertSession{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [12]bool{
 			_q.withStages != nil,
 			_q.withAgentExecutions != nil,
 			_q.withTimelineEvents != nil,
@@ -709,6 +780,8 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withChat != nil,
 			_q.withSessionScores != nil,
 			_q.withReviewActivities != nil,
+			_q.withMemories != nil,
+			_q.withInjectedMemories != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -799,6 +872,22 @@ func (_q *AlertSessionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			func(n *AlertSession) { n.Edges.ReviewActivities = []*SessionReviewActivity{} },
 			func(n *AlertSession, e *SessionReviewActivity) {
 				n.Edges.ReviewActivities = append(n.Edges.ReviewActivities, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withMemories; query != nil {
+		if err := _q.loadMemories(ctx, query, nodes,
+			func(n *AlertSession) { n.Edges.Memories = []*InvestigationMemory{} },
+			func(n *AlertSession, e *InvestigationMemory) { n.Edges.Memories = append(n.Edges.Memories, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withInjectedMemories; query != nil {
+		if err := _q.loadInjectedMemories(ctx, query, nodes,
+			func(n *AlertSession) { n.Edges.InjectedMemories = []*InvestigationMemory{} },
+			func(n *AlertSession, e *InvestigationMemory) {
+				n.Edges.InjectedMemories = append(n.Edges.InjectedMemories, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -1100,6 +1189,97 @@ func (_q *AlertSessionQuery) loadReviewActivities(ctx context.Context, query *Se
 			return fmt.Errorf(`unexpected referenced foreign-key "session_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
+	}
+	return nil
+}
+func (_q *AlertSessionQuery) loadMemories(ctx context.Context, query *InvestigationMemoryQuery, nodes []*AlertSession, init func(*AlertSession), assign func(*AlertSession, *InvestigationMemory)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AlertSession)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(investigationmemory.FieldSourceSessionID)
+	}
+	query.Where(predicate.InvestigationMemory(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(alertsession.MemoriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.SourceSessionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "source_session_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AlertSessionQuery) loadInjectedMemories(ctx context.Context, query *InvestigationMemoryQuery, nodes []*AlertSession, init func(*AlertSession), assign func(*AlertSession, *InvestigationMemory)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[string]*AlertSession)
+	nids := make(map[string]map[*AlertSession]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(alertsession.InjectedMemoriesTable)
+		s.Join(joinT).On(s.C(investigationmemory.FieldID), joinT.C(alertsession.InjectedMemoriesPrimaryKey[1]))
+		s.Where(sql.InValues(joinT.C(alertsession.InjectedMemoriesPrimaryKey[0]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(alertsession.InjectedMemoriesPrimaryKey[0]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullString)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := values[0].(*sql.NullString).String
+				inValue := values[1].(*sql.NullString).String
+				if nids[inValue] == nil {
+					nids[inValue] = map[*AlertSession]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*InvestigationMemory](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "injected_memories" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
+		}
 	}
 	return nil
 }

@@ -111,7 +111,7 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 		t.Log("Starting shared PostgreSQL testcontainer for all tests")
 
 		pgContainer, err := postgres.Run(ctx,
-			"postgres:17-alpine",
+			"pgvector/pgvector:pg17",
 			postgres.WithDatabase("test"),
 			postgres.WithUsername("test"),
 			postgres.WithPassword("test"),

@@ -2075,6 +2075,52 @@ func HasReviewActivitiesWith(preds ...predicate.SessionReviewActivity) predicate
 	})
 }
 
+// HasMemories applies the HasEdge predicate on the "memories" edge.
+func HasMemories() predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, MemoriesTable, MemoriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasMemoriesWith applies the HasEdge predicate on the "memories" edge with a given conditions (other predicates).
+func HasMemoriesWith(preds ...predicate.InvestigationMemory) predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := newMemoriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasInjectedMemories applies the HasEdge predicate on the "injected_memories" edge.
+func HasInjectedMemories() predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, InjectedMemoriesTable, InjectedMemoriesPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasInjectedMemoriesWith applies the HasEdge predicate on the "injected_memories" edge with a given conditions (other predicates).
+func HasInjectedMemoriesWith(preds ...predicate.InvestigationMemory) predicate.AlertSession {
+	return predicate.AlertSession(func(s *sql.Selector) {
+		step := newInjectedMemoriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.AlertSession) predicate.AlertSession {
 	return predicate.AlertSession(sql.AndPredicates(predicates...))

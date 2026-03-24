@@ -93,6 +93,10 @@ const (
 	EdgeSessionScores = "session_scores"
 	// EdgeReviewActivities holds the string denoting the review_activities edge name in mutations.
 	EdgeReviewActivities = "review_activities"
+	// EdgeMemories holds the string denoting the memories edge name in mutations.
+	EdgeMemories = "memories"
+	// EdgeInjectedMemories holds the string denoting the injected_memories edge name in mutations.
+	EdgeInjectedMemories = "injected_memories"
 	// StageFieldID holds the string denoting the ID field of the Stage.
 	StageFieldID = "stage_id"
 	// AgentExecutionFieldID holds the string denoting the ID field of the AgentExecution.
@@ -113,6 +117,8 @@ const (
 	SessionScoreFieldID = "score_id"
 	// SessionReviewActivityFieldID holds the string denoting the ID field of the SessionReviewActivity.
 	SessionReviewActivityFieldID = "activity_id"
+	// InvestigationMemoryFieldID holds the string denoting the ID field of the InvestigationMemory.
+	InvestigationMemoryFieldID = "memory_id"
 	// Table holds the table name of the alertsession in the database.
 	Table = "alert_sessions"
 	// StagesTable is the table that holds the stages relation/edge.
@@ -185,6 +191,18 @@ const (
 	ReviewActivitiesInverseTable = "session_review_activities"
 	// ReviewActivitiesColumn is the table column denoting the review_activities relation/edge.
 	ReviewActivitiesColumn = "session_id"
+	// MemoriesTable is the table that holds the memories relation/edge.
+	MemoriesTable = "investigation_memories"
+	// MemoriesInverseTable is the table name for the InvestigationMemory entity.
+	// It exists in this package in order to avoid circular dependency with the "investigationmemory" package.
+	MemoriesInverseTable = "investigation_memories"
+	// MemoriesColumn is the table column denoting the memories relation/edge.
+	MemoriesColumn = "source_session_id"
+	// InjectedMemoriesTable is the table that holds the injected_memories relation/edge. The primary key declared below.
+	InjectedMemoriesTable = "alert_session_injected_memories"
+	// InjectedMemoriesInverseTable is the table name for the InvestigationMemory entity.
+	// It exists in this package in order to avoid circular dependency with the "investigationmemory" package.
+	InjectedMemoriesInverseTable = "investigation_memories"
 )
 
 // Columns holds all SQL columns for alertsession fields.
@@ -220,6 +238,12 @@ var Columns = []string{
 	FieldActionTaken,
 	FieldInvestigationFeedback,
 }
+
+var (
+	// InjectedMemoriesPrimaryKey and InjectedMemoriesColumn2 are the table columns denoting the
+	// primary key for the injected_memories relation (M2M).
+	InjectedMemoriesPrimaryKey = []string{"alert_session_id", "investigation_memory_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -590,6 +614,34 @@ func ByReviewActivities(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption 
 		sqlgraph.OrderByNeighborTerms(s, newReviewActivitiesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByMemoriesCount orders the results by memories count.
+func ByMemoriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newMemoriesStep(), opts...)
+	}
+}
+
+// ByMemories orders the results by memories terms.
+func ByMemories(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newMemoriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByInjectedMemoriesCount orders the results by injected_memories count.
+func ByInjectedMemoriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newInjectedMemoriesStep(), opts...)
+	}
+}
+
+// ByInjectedMemories orders the results by injected_memories terms.
+func ByInjectedMemories(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newInjectedMemoriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newStagesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -658,5 +710,19 @@ func newReviewActivitiesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ReviewActivitiesInverseTable, SessionReviewActivityFieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ReviewActivitiesTable, ReviewActivitiesColumn),
+	)
+}
+func newMemoriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(MemoriesInverseTable, InvestigationMemoryFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, MemoriesTable, MemoriesColumn),
+	)
+}
+func newInjectedMemoriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(InjectedMemoriesInverseTable, InvestigationMemoryFieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, InjectedMemoriesTable, InjectedMemoriesPrimaryKey...),
 	)
 }

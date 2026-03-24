@@ -20,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/chatusermessage"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -44,6 +45,8 @@ type Client struct {
 	ChatUserMessage *ChatUserMessageClient
 	// Event is the client for interacting with the Event builders.
 	Event *EventClient
+	// InvestigationMemory is the client for interacting with the InvestigationMemory builders.
+	InvestigationMemory *InvestigationMemoryClient
 	// LLMInteraction is the client for interacting with the LLMInteraction builders.
 	LLMInteraction *LLMInteractionClient
 	// MCPInteraction is the client for interacting with the MCPInteraction builders.
@@ -74,6 +77,7 @@ func (c *Client) init() {
 	c.Chat = NewChatClient(c.config)
 	c.ChatUserMessage = NewChatUserMessageClient(c.config)
 	c.Event = NewEventClient(c.config)
+	c.InvestigationMemory = NewInvestigationMemoryClient(c.config)
 	c.LLMInteraction = NewLLMInteractionClient(c.config)
 	c.MCPInteraction = NewMCPInteractionClient(c.config)
 	c.Message = NewMessageClient(c.config)
@@ -178,6 +182,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Chat:                  NewChatClient(cfg),
 		ChatUserMessage:       NewChatUserMessageClient(cfg),
 		Event:                 NewEventClient(cfg),
+		InvestigationMemory:   NewInvestigationMemoryClient(cfg),
 		LLMInteraction:        NewLLMInteractionClient(cfg),
 		MCPInteraction:        NewMCPInteractionClient(cfg),
 		Message:               NewMessageClient(cfg),
@@ -209,6 +214,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Chat:                  NewChatClient(cfg),
 		ChatUserMessage:       NewChatUserMessageClient(cfg),
 		Event:                 NewEventClient(cfg),
+		InvestigationMemory:   NewInvestigationMemoryClient(cfg),
 		LLMInteraction:        NewLLMInteractionClient(cfg),
 		MCPInteraction:        NewMCPInteractionClient(cfg),
 		Message:               NewMessageClient(cfg),
@@ -246,8 +252,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionReviewActivity,
-		c.SessionScore, c.Stage, c.TimelineEvent,
+		c.InvestigationMemory, c.LLMInteraction, c.MCPInteraction, c.Message,
+		c.SessionReviewActivity, c.SessionScore, c.Stage, c.TimelineEvent,
 	} {
 		n.Use(hooks...)
 	}
@@ -258,8 +264,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentExecution, c.AlertSession, c.Chat, c.ChatUserMessage, c.Event,
-		c.LLMInteraction, c.MCPInteraction, c.Message, c.SessionReviewActivity,
-		c.SessionScore, c.Stage, c.TimelineEvent,
+		c.InvestigationMemory, c.LLMInteraction, c.MCPInteraction, c.Message,
+		c.SessionReviewActivity, c.SessionScore, c.Stage, c.TimelineEvent,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -278,6 +284,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ChatUserMessage.mutate(ctx, m)
 	case *EventMutation:
 		return c.Event.mutate(ctx, m)
+	case *InvestigationMemoryMutation:
+		return c.InvestigationMemory.mutate(ctx, m)
 	case *LLMInteractionMutation:
 		return c.LLMInteraction.mutate(ctx, m)
 	case *MCPInteractionMutation:
@@ -842,6 +850,38 @@ func (c *AlertSessionClient) QueryReviewActivities(_m *AlertSession) *SessionRev
 	return query
 }
 
+// QueryMemories queries the memories edge of a AlertSession.
+func (c *AlertSessionClient) QueryMemories(_m *AlertSession) *InvestigationMemoryQuery {
+	query := (&InvestigationMemoryClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
+			sqlgraph.To(investigationmemory.Table, investigationmemory.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, alertsession.MemoriesTable, alertsession.MemoriesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryInjectedMemories queries the injected_memories edge of a AlertSession.
+func (c *AlertSessionClient) QueryInjectedMemories(_m *AlertSession) *InvestigationMemoryQuery {
+	query := (&InvestigationMemoryClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(alertsession.Table, alertsession.FieldID, id),
+			sqlgraph.To(investigationmemory.Table, investigationmemory.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, alertsession.InjectedMemoriesTable, alertsession.InjectedMemoriesPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *AlertSessionClient) Hooks() []Hook {
 	return c.hooks.AlertSession
@@ -1359,6 +1399,171 @@ func (c *EventClient) mutate(ctx context.Context, m *EventMutation) (Value, erro
 		return (&EventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Event mutation op: %q", m.Op())
+	}
+}
+
+// InvestigationMemoryClient is a client for the InvestigationMemory schema.
+type InvestigationMemoryClient struct {
+	config
+}
+
+// NewInvestigationMemoryClient returns a client for the InvestigationMemory from the given config.
+func NewInvestigationMemoryClient(c config) *InvestigationMemoryClient {
+	return &InvestigationMemoryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `investigationmemory.Hooks(f(g(h())))`.
+func (c *InvestigationMemoryClient) Use(hooks ...Hook) {
+	c.hooks.InvestigationMemory = append(c.hooks.InvestigationMemory, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `investigationmemory.Intercept(f(g(h())))`.
+func (c *InvestigationMemoryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.InvestigationMemory = append(c.inters.InvestigationMemory, interceptors...)
+}
+
+// Create returns a builder for creating a InvestigationMemory entity.
+func (c *InvestigationMemoryClient) Create() *InvestigationMemoryCreate {
+	mutation := newInvestigationMemoryMutation(c.config, OpCreate)
+	return &InvestigationMemoryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of InvestigationMemory entities.
+func (c *InvestigationMemoryClient) CreateBulk(builders ...*InvestigationMemoryCreate) *InvestigationMemoryCreateBulk {
+	return &InvestigationMemoryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *InvestigationMemoryClient) MapCreateBulk(slice any, setFunc func(*InvestigationMemoryCreate, int)) *InvestigationMemoryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &InvestigationMemoryCreateBulk{err: fmt.Errorf("calling to InvestigationMemoryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*InvestigationMemoryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &InvestigationMemoryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for InvestigationMemory.
+func (c *InvestigationMemoryClient) Update() *InvestigationMemoryUpdate {
+	mutation := newInvestigationMemoryMutation(c.config, OpUpdate)
+	return &InvestigationMemoryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *InvestigationMemoryClient) UpdateOne(_m *InvestigationMemory) *InvestigationMemoryUpdateOne {
+	mutation := newInvestigationMemoryMutation(c.config, OpUpdateOne, withInvestigationMemory(_m))
+	return &InvestigationMemoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *InvestigationMemoryClient) UpdateOneID(id string) *InvestigationMemoryUpdateOne {
+	mutation := newInvestigationMemoryMutation(c.config, OpUpdateOne, withInvestigationMemoryID(id))
+	return &InvestigationMemoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for InvestigationMemory.
+func (c *InvestigationMemoryClient) Delete() *InvestigationMemoryDelete {
+	mutation := newInvestigationMemoryMutation(c.config, OpDelete)
+	return &InvestigationMemoryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *InvestigationMemoryClient) DeleteOne(_m *InvestigationMemory) *InvestigationMemoryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *InvestigationMemoryClient) DeleteOneID(id string) *InvestigationMemoryDeleteOne {
+	builder := c.Delete().Where(investigationmemory.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &InvestigationMemoryDeleteOne{builder}
+}
+
+// Query returns a query builder for InvestigationMemory.
+func (c *InvestigationMemoryClient) Query() *InvestigationMemoryQuery {
+	return &InvestigationMemoryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeInvestigationMemory},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a InvestigationMemory entity by its id.
+func (c *InvestigationMemoryClient) Get(ctx context.Context, id string) (*InvestigationMemory, error) {
+	return c.Query().Where(investigationmemory.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *InvestigationMemoryClient) GetX(ctx context.Context, id string) *InvestigationMemory {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySourceSession queries the source_session edge of a InvestigationMemory.
+func (c *InvestigationMemoryClient) QuerySourceSession(_m *InvestigationMemory) *AlertSessionQuery {
+	query := (&AlertSessionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(investigationmemory.Table, investigationmemory.FieldID, id),
+			sqlgraph.To(alertsession.Table, alertsession.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, investigationmemory.SourceSessionTable, investigationmemory.SourceSessionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryInjectedIntoSessions queries the injected_into_sessions edge of a InvestigationMemory.
+func (c *InvestigationMemoryClient) QueryInjectedIntoSessions(_m *InvestigationMemory) *AlertSessionQuery {
+	query := (&AlertSessionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(investigationmemory.Table, investigationmemory.FieldID, id),
+			sqlgraph.To(alertsession.Table, alertsession.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, investigationmemory.InjectedIntoSessionsTable, investigationmemory.InjectedIntoSessionsPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *InvestigationMemoryClient) Hooks() []Hook {
+	return c.hooks.InvestigationMemory
+}
+
+// Interceptors returns the client interceptors.
+func (c *InvestigationMemoryClient) Interceptors() []Interceptor {
+	return c.inters.InvestigationMemory
+}
+
+func (c *InvestigationMemoryClient) mutate(ctx context.Context, m *InvestigationMemoryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&InvestigationMemoryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&InvestigationMemoryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&InvestigationMemoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&InvestigationMemoryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown InvestigationMemory mutation op: %q", m.Op())
 	}
 }
 
@@ -2824,13 +3029,13 @@ func (c *TimelineEventClient) mutate(ctx context.Context, m *TimelineEventMutati
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, SessionReviewActivity, SessionScore, Stage,
-		TimelineEvent []ent.Hook
+		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, InvestigationMemory,
+		LLMInteraction, MCPInteraction, Message, SessionReviewActivity, SessionScore,
+		Stage, TimelineEvent []ent.Hook
 	}
 	inters struct {
-		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, LLMInteraction,
-		MCPInteraction, Message, SessionReviewActivity, SessionScore, Stage,
-		TimelineEvent []ent.Interceptor
+		AgentExecution, AlertSession, Chat, ChatUserMessage, Event, InvestigationMemory,
+		LLMInteraction, MCPInteraction, Message, SessionReviewActivity, SessionScore,
+		Stage, TimelineEvent []ent.Interceptor
 	}
 )

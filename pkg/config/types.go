@@ -188,3 +188,38 @@ type ScoringConfig struct {
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 }
+
+// EmbeddingProviderType identifies the embedding API provider.
+type EmbeddingProviderType string
+
+const (
+	EmbeddingProviderGoogle EmbeddingProviderType = "google"
+	EmbeddingProviderOpenAI EmbeddingProviderType = "openai"
+)
+
+// IsValid returns true for known embedding provider types.
+func (p EmbeddingProviderType) IsValid() bool {
+	switch p {
+	case EmbeddingProviderGoogle, EmbeddingProviderOpenAI:
+		return true
+	default:
+		return false
+	}
+}
+
+// MemoryConfig defines investigation memory configuration.
+type MemoryConfig struct {
+	Enabled              bool            `yaml:"enabled"`
+	MaxInject            int             `yaml:"max_inject,omitempty"`
+	ReflectorMemoryLimit int             `yaml:"reflector_memory_limit,omitempty"`
+	Embedding            EmbeddingConfig `yaml:"embedding,omitempty"`
+}
+
+// EmbeddingConfig defines embedding model configuration.
+type EmbeddingConfig struct {
+	Provider   EmbeddingProviderType `yaml:"provider,omitempty"`
+	Model      string                `yaml:"model,omitempty"`
+	APIKeyEnv  string                `yaml:"api_key_env,omitempty"`
+	Dimensions int                   `yaml:"dimensions,omitempty"`
+	BaseURL    string                `yaml:"base_url,omitempty"`
+}

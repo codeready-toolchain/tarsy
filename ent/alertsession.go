@@ -105,9 +105,13 @@ type AlertSessionEdges struct {
 	SessionScores []*SessionScore `json:"session_scores,omitempty"`
 	// ReviewActivities holds the value of the review_activities edge.
 	ReviewActivities []*SessionReviewActivity `json:"review_activities,omitempty"`
+	// Memories holds the value of the memories edge.
+	Memories []*InvestigationMemory `json:"memories,omitempty"`
+	// InjectedMemories holds the value of the injected_memories edge.
+	InjectedMemories []*InvestigationMemory `json:"injected_memories,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [12]bool
 }
 
 // StagesOrErr returns the Stages value or an error if the edge
@@ -200,6 +204,24 @@ func (e AlertSessionEdges) ReviewActivitiesOrErr() ([]*SessionReviewActivity, er
 		return e.ReviewActivities, nil
 	}
 	return nil, &NotLoadedError{edge: "review_activities"}
+}
+
+// MemoriesOrErr returns the Memories value or an error if the edge
+// was not loaded in eager-loading.
+func (e AlertSessionEdges) MemoriesOrErr() ([]*InvestigationMemory, error) {
+	if e.loadedTypes[10] {
+		return e.Memories, nil
+	}
+	return nil, &NotLoadedError{edge: "memories"}
+}
+
+// InjectedMemoriesOrErr returns the InjectedMemories value or an error if the edge
+// was not loaded in eager-loading.
+func (e AlertSessionEdges) InjectedMemoriesOrErr() ([]*InvestigationMemory, error) {
+	if e.loadedTypes[11] {
+		return e.InjectedMemories, nil
+	}
+	return nil, &NotLoadedError{edge: "injected_memories"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -496,6 +518,16 @@ func (_m *AlertSession) QuerySessionScores() *SessionScoreQuery {
 // QueryReviewActivities queries the "review_activities" edge of the AlertSession entity.
 func (_m *AlertSession) QueryReviewActivities() *SessionReviewActivityQuery {
 	return NewAlertSessionClient(_m.config).QueryReviewActivities(_m)
+}
+
+// QueryMemories queries the "memories" edge of the AlertSession entity.
+func (_m *AlertSession) QueryMemories() *InvestigationMemoryQuery {
+	return NewAlertSessionClient(_m.config).QueryMemories(_m)
+}
+
+// QueryInjectedMemories queries the "injected_memories" edge of the AlertSession entity.
+func (_m *AlertSession) QueryInjectedMemories() *InvestigationMemoryQuery {
+	return NewAlertSessionClient(_m.config).QueryInjectedMemories(_m)
 }
 
 // Update returns a builder for updating this AlertSession.

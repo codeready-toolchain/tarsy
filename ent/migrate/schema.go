@@ -284,11 +284,64 @@ var (
 			},
 		},
 	}
+	// InvestigationMemoriesColumns holds the columns for the "investigation_memories" table.
+	InvestigationMemoriesColumns = []*schema.Column{
+		{Name: "memory_id", Type: field.TypeString, Unique: true},
+		{Name: "project", Type: field.TypeString, Default: "default"},
+		{Name: "content", Type: field.TypeString, Size: 2147483647},
+		{Name: "category", Type: field.TypeEnum, Enums: []string{"semantic", "episodic", "procedural"}},
+		{Name: "valence", Type: field.TypeEnum, Enums: []string{"positive", "negative", "neutral"}},
+		{Name: "confidence", Type: field.TypeFloat64, Default: 0.5},
+		{Name: "seen_count", Type: field.TypeInt, Default: 1},
+		{Name: "alert_type", Type: field.TypeString, Nullable: true},
+		{Name: "chain_id", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "last_seen_at", Type: field.TypeTime},
+		{Name: "deprecated", Type: field.TypeBool, Default: false},
+		{Name: "source_session_id", Type: field.TypeString},
+	}
+	// InvestigationMemoriesTable holds the schema information for the "investigation_memories" table.
+	InvestigationMemoriesTable = &schema.Table{
+		Name:       "investigation_memories",
+		Columns:    InvestigationMemoriesColumns,
+		PrimaryKey: []*schema.Column{InvestigationMemoriesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "investigation_memories_alert_sessions_memories",
+				Columns:    []*schema.Column{InvestigationMemoriesColumns[13]},
+				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "investigationmemory_project",
+				Unique:  false,
+				Columns: []*schema.Column{InvestigationMemoriesColumns[1]},
+			},
+			{
+				Name:    "investigationmemory_project_deprecated",
+				Unique:  false,
+				Columns: []*schema.Column{InvestigationMemoriesColumns[1], InvestigationMemoriesColumns[12]},
+			},
+			{
+				Name:    "investigationmemory_source_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{InvestigationMemoriesColumns[13]},
+			},
+			{
+				Name:    "investigationmemory_category",
+				Unique:  false,
+				Columns: []*schema.Column{InvestigationMemoriesColumns[3]},
+			},
+		},
+	}
 	// LlmInteractionsColumns holds the columns for the "llm_interactions" table.
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring", "memory_extraction"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
@@ -726,6 +779,31 @@ var (
 			},
 		},
 	}
+	// AlertSessionInjectedMemoriesColumns holds the columns for the "alert_session_injected_memories" table.
+	AlertSessionInjectedMemoriesColumns = []*schema.Column{
+		{Name: "alert_session_id", Type: field.TypeString},
+		{Name: "investigation_memory_id", Type: field.TypeString},
+	}
+	// AlertSessionInjectedMemoriesTable holds the schema information for the "alert_session_injected_memories" table.
+	AlertSessionInjectedMemoriesTable = &schema.Table{
+		Name:       "alert_session_injected_memories",
+		Columns:    AlertSessionInjectedMemoriesColumns,
+		PrimaryKey: []*schema.Column{AlertSessionInjectedMemoriesColumns[0], AlertSessionInjectedMemoriesColumns[1]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "alert_session_injected_memories_alert_session_id",
+				Columns:    []*schema.Column{AlertSessionInjectedMemoriesColumns[0]},
+				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "alert_session_injected_memories_investigation_memory_id",
+				Columns:    []*schema.Column{AlertSessionInjectedMemoriesColumns[1]},
+				RefColumns: []*schema.Column{InvestigationMemoriesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AgentExecutionsTable,
@@ -733,6 +811,7 @@ var (
 		ChatsTable,
 		ChatUserMessagesTable,
 		EventsTable,
+		InvestigationMemoriesTable,
 		LlmInteractionsTable,
 		McpInteractionsTable,
 		MessagesTable,
@@ -740,6 +819,7 @@ var (
 		SessionScoresTable,
 		StagesTable,
 		TimelineEventsTable,
+		AlertSessionInjectedMemoriesTable,
 	}
 )
 
@@ -750,6 +830,7 @@ func init() {
 	ChatsTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	ChatUserMessagesTable.ForeignKeys[0].RefTable = ChatsTable
 	EventsTable.ForeignKeys[0].RefTable = AlertSessionsTable
+	InvestigationMemoriesTable.ForeignKeys[0].RefTable = AlertSessionsTable
 	LlmInteractionsTable.ForeignKeys[0].RefTable = AgentExecutionsTable
 	LlmInteractionsTable.ForeignKeys[1].RefTable = AlertSessionsTable
 	LlmInteractionsTable.ForeignKeys[2].RefTable = MessagesTable
@@ -773,4 +854,6 @@ func init() {
 	TimelineEventsTable.ForeignKeys[3].RefTable = LlmInteractionsTable
 	TimelineEventsTable.ForeignKeys[4].RefTable = McpInteractionsTable
 	TimelineEventsTable.ForeignKeys[5].RefTable = StagesTable
+	AlertSessionInjectedMemoriesTable.ForeignKeys[0].RefTable = AlertSessionsTable
+	AlertSessionInjectedMemoriesTable.ForeignKeys[1].RefTable = InvestigationMemoriesTable
 }

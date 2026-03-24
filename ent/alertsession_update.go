@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -734,6 +735,36 @@ func (_u *AlertSessionUpdate) AddReviewActivities(v ...*SessionReviewActivity) *
 	return _u.AddReviewActivityIDs(ids...)
 }
 
+// AddMemoryIDs adds the "memories" edge to the InvestigationMemory entity by IDs.
+func (_u *AlertSessionUpdate) AddMemoryIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.AddMemoryIDs(ids...)
+	return _u
+}
+
+// AddMemories adds the "memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdate) AddMemories(v ...*InvestigationMemory) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMemoryIDs(ids...)
+}
+
+// AddInjectedMemoryIDs adds the "injected_memories" edge to the InvestigationMemory entity by IDs.
+func (_u *AlertSessionUpdate) AddInjectedMemoryIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.AddInjectedMemoryIDs(ids...)
+	return _u
+}
+
+// AddInjectedMemories adds the "injected_memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdate) AddInjectedMemories(v ...*InvestigationMemory) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddInjectedMemoryIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_u *AlertSessionUpdate) Mutation() *AlertSessionMutation {
 	return _u.mutation
@@ -932,6 +963,48 @@ func (_u *AlertSessionUpdate) RemoveReviewActivities(v ...*SessionReviewActivity
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveReviewActivityIDs(ids...)
+}
+
+// ClearMemories clears all "memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdate) ClearMemories() *AlertSessionUpdate {
+	_u.mutation.ClearMemories()
+	return _u
+}
+
+// RemoveMemoryIDs removes the "memories" edge to InvestigationMemory entities by IDs.
+func (_u *AlertSessionUpdate) RemoveMemoryIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.RemoveMemoryIDs(ids...)
+	return _u
+}
+
+// RemoveMemories removes "memories" edges to InvestigationMemory entities.
+func (_u *AlertSessionUpdate) RemoveMemories(v ...*InvestigationMemory) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMemoryIDs(ids...)
+}
+
+// ClearInjectedMemories clears all "injected_memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdate) ClearInjectedMemories() *AlertSessionUpdate {
+	_u.mutation.ClearInjectedMemories()
+	return _u
+}
+
+// RemoveInjectedMemoryIDs removes the "injected_memories" edge to InvestigationMemory entities by IDs.
+func (_u *AlertSessionUpdate) RemoveInjectedMemoryIDs(ids ...string) *AlertSessionUpdate {
+	_u.mutation.RemoveInjectedMemoryIDs(ids...)
+	return _u
+}
+
+// RemoveInjectedMemories removes "injected_memories" edges to InvestigationMemory entities.
+func (_u *AlertSessionUpdate) RemoveInjectedMemories(v ...*InvestigationMemory) *AlertSessionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveInjectedMemoryIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1588,6 +1661,96 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMemoriesIDs(); len(nodes) > 0 && !_u.mutation.MemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MemoriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.InjectedMemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedInjectedMemoriesIDs(); len(nodes) > 0 && !_u.mutation.InjectedMemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.InjectedMemoriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -2312,6 +2475,36 @@ func (_u *AlertSessionUpdateOne) AddReviewActivities(v ...*SessionReviewActivity
 	return _u.AddReviewActivityIDs(ids...)
 }
 
+// AddMemoryIDs adds the "memories" edge to the InvestigationMemory entity by IDs.
+func (_u *AlertSessionUpdateOne) AddMemoryIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.AddMemoryIDs(ids...)
+	return _u
+}
+
+// AddMemories adds the "memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdateOne) AddMemories(v ...*InvestigationMemory) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMemoryIDs(ids...)
+}
+
+// AddInjectedMemoryIDs adds the "injected_memories" edge to the InvestigationMemory entity by IDs.
+func (_u *AlertSessionUpdateOne) AddInjectedMemoryIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.AddInjectedMemoryIDs(ids...)
+	return _u
+}
+
+// AddInjectedMemories adds the "injected_memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdateOne) AddInjectedMemories(v ...*InvestigationMemory) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddInjectedMemoryIDs(ids...)
+}
+
 // Mutation returns the AlertSessionMutation object of the builder.
 func (_u *AlertSessionUpdateOne) Mutation() *AlertSessionMutation {
 	return _u.mutation
@@ -2510,6 +2703,48 @@ func (_u *AlertSessionUpdateOne) RemoveReviewActivities(v ...*SessionReviewActiv
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveReviewActivityIDs(ids...)
+}
+
+// ClearMemories clears all "memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdateOne) ClearMemories() *AlertSessionUpdateOne {
+	_u.mutation.ClearMemories()
+	return _u
+}
+
+// RemoveMemoryIDs removes the "memories" edge to InvestigationMemory entities by IDs.
+func (_u *AlertSessionUpdateOne) RemoveMemoryIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.RemoveMemoryIDs(ids...)
+	return _u
+}
+
+// RemoveMemories removes "memories" edges to InvestigationMemory entities.
+func (_u *AlertSessionUpdateOne) RemoveMemories(v ...*InvestigationMemory) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMemoryIDs(ids...)
+}
+
+// ClearInjectedMemories clears all "injected_memories" edges to the InvestigationMemory entity.
+func (_u *AlertSessionUpdateOne) ClearInjectedMemories() *AlertSessionUpdateOne {
+	_u.mutation.ClearInjectedMemories()
+	return _u
+}
+
+// RemoveInjectedMemoryIDs removes the "injected_memories" edge to InvestigationMemory entities by IDs.
+func (_u *AlertSessionUpdateOne) RemoveInjectedMemoryIDs(ids ...string) *AlertSessionUpdateOne {
+	_u.mutation.RemoveInjectedMemoryIDs(ids...)
+	return _u
+}
+
+// RemoveInjectedMemories removes "injected_memories" edges to InvestigationMemory entities.
+func (_u *AlertSessionUpdateOne) RemoveInjectedMemories(v ...*InvestigationMemory) *AlertSessionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveInjectedMemoryIDs(ids...)
 }
 
 // Where appends a list predicates to the AlertSessionUpdate builder.
@@ -3196,6 +3431,96 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sessionreviewactivity.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMemoriesIDs(); len(nodes) > 0 && !_u.mutation.MemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MemoriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   alertsession.MemoriesTable,
+			Columns: []string{alertsession.MemoriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.InjectedMemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedInjectedMemoriesIDs(); len(nodes) > 0 && !_u.mutation.InjectedMemoriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.InjectedMemoriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   alertsession.InjectedMemoriesTable,
+			Columns: alertsession.InjectedMemoriesPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(investigationmemory.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

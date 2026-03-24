@@ -16,6 +16,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/chat"
 	"github.com/codeready-toolchain/tarsy/ent/chatusermessage"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -41,6 +42,7 @@ const (
 	TypeChat                  = "Chat"
 	TypeChatUserMessage       = "ChatUserMessage"
 	TypeEvent                 = "Event"
+	TypeInvestigationMemory   = "InvestigationMemory"
 	TypeLLMInteraction        = "LLMInteraction"
 	TypeMCPInteraction        = "MCPInteraction"
 	TypeMessage               = "Message"
@@ -2107,6 +2109,12 @@ type AlertSessionMutation struct {
 	review_activities         map[string]struct{}
 	removedreview_activities  map[string]struct{}
 	clearedreview_activities  bool
+	memories                  map[string]struct{}
+	removedmemories           map[string]struct{}
+	clearedmemories           bool
+	injected_memories         map[string]struct{}
+	removedinjected_memories  map[string]struct{}
+	clearedinjected_memories  bool
 	done                      bool
 	oldValue                  func(context.Context) (*AlertSession, error)
 	predicates                []predicate.AlertSession
@@ -4118,6 +4126,114 @@ func (m *AlertSessionMutation) ResetReviewActivities() {
 	m.removedreview_activities = nil
 }
 
+// AddMemoryIDs adds the "memories" edge to the InvestigationMemory entity by ids.
+func (m *AlertSessionMutation) AddMemoryIDs(ids ...string) {
+	if m.memories == nil {
+		m.memories = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.memories[ids[i]] = struct{}{}
+	}
+}
+
+// ClearMemories clears the "memories" edge to the InvestigationMemory entity.
+func (m *AlertSessionMutation) ClearMemories() {
+	m.clearedmemories = true
+}
+
+// MemoriesCleared reports if the "memories" edge to the InvestigationMemory entity was cleared.
+func (m *AlertSessionMutation) MemoriesCleared() bool {
+	return m.clearedmemories
+}
+
+// RemoveMemoryIDs removes the "memories" edge to the InvestigationMemory entity by IDs.
+func (m *AlertSessionMutation) RemoveMemoryIDs(ids ...string) {
+	if m.removedmemories == nil {
+		m.removedmemories = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.memories, ids[i])
+		m.removedmemories[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedMemories returns the removed IDs of the "memories" edge to the InvestigationMemory entity.
+func (m *AlertSessionMutation) RemovedMemoriesIDs() (ids []string) {
+	for id := range m.removedmemories {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// MemoriesIDs returns the "memories" edge IDs in the mutation.
+func (m *AlertSessionMutation) MemoriesIDs() (ids []string) {
+	for id := range m.memories {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetMemories resets all changes to the "memories" edge.
+func (m *AlertSessionMutation) ResetMemories() {
+	m.memories = nil
+	m.clearedmemories = false
+	m.removedmemories = nil
+}
+
+// AddInjectedMemoryIDs adds the "injected_memories" edge to the InvestigationMemory entity by ids.
+func (m *AlertSessionMutation) AddInjectedMemoryIDs(ids ...string) {
+	if m.injected_memories == nil {
+		m.injected_memories = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.injected_memories[ids[i]] = struct{}{}
+	}
+}
+
+// ClearInjectedMemories clears the "injected_memories" edge to the InvestigationMemory entity.
+func (m *AlertSessionMutation) ClearInjectedMemories() {
+	m.clearedinjected_memories = true
+}
+
+// InjectedMemoriesCleared reports if the "injected_memories" edge to the InvestigationMemory entity was cleared.
+func (m *AlertSessionMutation) InjectedMemoriesCleared() bool {
+	return m.clearedinjected_memories
+}
+
+// RemoveInjectedMemoryIDs removes the "injected_memories" edge to the InvestigationMemory entity by IDs.
+func (m *AlertSessionMutation) RemoveInjectedMemoryIDs(ids ...string) {
+	if m.removedinjected_memories == nil {
+		m.removedinjected_memories = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.injected_memories, ids[i])
+		m.removedinjected_memories[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedInjectedMemories returns the removed IDs of the "injected_memories" edge to the InvestigationMemory entity.
+func (m *AlertSessionMutation) RemovedInjectedMemoriesIDs() (ids []string) {
+	for id := range m.removedinjected_memories {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// InjectedMemoriesIDs returns the "injected_memories" edge IDs in the mutation.
+func (m *AlertSessionMutation) InjectedMemoriesIDs() (ids []string) {
+	for id := range m.injected_memories {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetInjectedMemories resets all changes to the "injected_memories" edge.
+func (m *AlertSessionMutation) ResetInjectedMemories() {
+	m.injected_memories = nil
+	m.clearedinjected_memories = false
+	m.removedinjected_memories = nil
+}
+
 // Where appends a list predicates to the AlertSessionMutation builder.
 func (m *AlertSessionMutation) Where(ps ...predicate.AlertSession) {
 	m.predicates = append(m.predicates, ps...)
@@ -4889,7 +5005,7 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AlertSessionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 12)
 	if m.stages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -4919,6 +5035,12 @@ func (m *AlertSessionMutation) AddedEdges() []string {
 	}
 	if m.review_activities != nil {
 		edges = append(edges, alertsession.EdgeReviewActivities)
+	}
+	if m.memories != nil {
+		edges = append(edges, alertsession.EdgeMemories)
+	}
+	if m.injected_memories != nil {
+		edges = append(edges, alertsession.EdgeInjectedMemories)
 	}
 	return edges
 }
@@ -4985,13 +5107,25 @@ func (m *AlertSessionMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case alertsession.EdgeMemories:
+		ids := make([]ent.Value, 0, len(m.memories))
+		for id := range m.memories {
+			ids = append(ids, id)
+		}
+		return ids
+	case alertsession.EdgeInjectedMemories:
+		ids := make([]ent.Value, 0, len(m.injected_memories))
+		for id := range m.injected_memories {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AlertSessionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 12)
 	if m.removedstages != nil {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -5018,6 +5152,12 @@ func (m *AlertSessionMutation) RemovedEdges() []string {
 	}
 	if m.removedreview_activities != nil {
 		edges = append(edges, alertsession.EdgeReviewActivities)
+	}
+	if m.removedmemories != nil {
+		edges = append(edges, alertsession.EdgeMemories)
+	}
+	if m.removedinjected_memories != nil {
+		edges = append(edges, alertsession.EdgeInjectedMemories)
 	}
 	return edges
 }
@@ -5080,13 +5220,25 @@ func (m *AlertSessionMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case alertsession.EdgeMemories:
+		ids := make([]ent.Value, 0, len(m.removedmemories))
+		for id := range m.removedmemories {
+			ids = append(ids, id)
+		}
+		return ids
+	case alertsession.EdgeInjectedMemories:
+		ids := make([]ent.Value, 0, len(m.removedinjected_memories))
+		for id := range m.removedinjected_memories {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AlertSessionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 12)
 	if m.clearedstages {
 		edges = append(edges, alertsession.EdgeStages)
 	}
@@ -5117,6 +5269,12 @@ func (m *AlertSessionMutation) ClearedEdges() []string {
 	if m.clearedreview_activities {
 		edges = append(edges, alertsession.EdgeReviewActivities)
 	}
+	if m.clearedmemories {
+		edges = append(edges, alertsession.EdgeMemories)
+	}
+	if m.clearedinjected_memories {
+		edges = append(edges, alertsession.EdgeInjectedMemories)
+	}
 	return edges
 }
 
@@ -5144,6 +5302,10 @@ func (m *AlertSessionMutation) EdgeCleared(name string) bool {
 		return m.clearedsession_scores
 	case alertsession.EdgeReviewActivities:
 		return m.clearedreview_activities
+	case alertsession.EdgeMemories:
+		return m.clearedmemories
+	case alertsession.EdgeInjectedMemories:
+		return m.clearedinjected_memories
 	}
 	return false
 }
@@ -5192,6 +5354,12 @@ func (m *AlertSessionMutation) ResetEdge(name string) error {
 		return nil
 	case alertsession.EdgeReviewActivities:
 		m.ResetReviewActivities()
+		return nil
+	case alertsession.EdgeMemories:
+		m.ResetMemories()
+		return nil
+	case alertsession.EdgeInjectedMemories:
+		m.ResetInjectedMemories()
 		return nil
 	}
 	return fmt.Errorf("unknown AlertSession edge %s", name)
@@ -7228,6 +7396,1235 @@ func (m *EventMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Event edge %s", name)
+}
+
+// InvestigationMemoryMutation represents an operation that mutates the InvestigationMemory nodes in the graph.
+type InvestigationMemoryMutation struct {
+	config
+	op                            Op
+	typ                           string
+	id                            *string
+	project                       *string
+	content                       *string
+	category                      *investigationmemory.Category
+	valence                       *investigationmemory.Valence
+	confidence                    *float64
+	addconfidence                 *float64
+	seen_count                    *int
+	addseen_count                 *int
+	alert_type                    *string
+	chain_id                      *string
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	last_seen_at                  *time.Time
+	deprecated                    *bool
+	clearedFields                 map[string]struct{}
+	source_session                *string
+	clearedsource_session         bool
+	injected_into_sessions        map[string]struct{}
+	removedinjected_into_sessions map[string]struct{}
+	clearedinjected_into_sessions bool
+	done                          bool
+	oldValue                      func(context.Context) (*InvestigationMemory, error)
+	predicates                    []predicate.InvestigationMemory
+}
+
+var _ ent.Mutation = (*InvestigationMemoryMutation)(nil)
+
+// investigationmemoryOption allows management of the mutation configuration using functional options.
+type investigationmemoryOption func(*InvestigationMemoryMutation)
+
+// newInvestigationMemoryMutation creates new mutation for the InvestigationMemory entity.
+func newInvestigationMemoryMutation(c config, op Op, opts ...investigationmemoryOption) *InvestigationMemoryMutation {
+	m := &InvestigationMemoryMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeInvestigationMemory,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withInvestigationMemoryID sets the ID field of the mutation.
+func withInvestigationMemoryID(id string) investigationmemoryOption {
+	return func(m *InvestigationMemoryMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *InvestigationMemory
+		)
+		m.oldValue = func(ctx context.Context) (*InvestigationMemory, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().InvestigationMemory.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withInvestigationMemory sets the old InvestigationMemory of the mutation.
+func withInvestigationMemory(node *InvestigationMemory) investigationmemoryOption {
+	return func(m *InvestigationMemoryMutation) {
+		m.oldValue = func(context.Context) (*InvestigationMemory, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m InvestigationMemoryMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m InvestigationMemoryMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of InvestigationMemory entities.
+func (m *InvestigationMemoryMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *InvestigationMemoryMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *InvestigationMemoryMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().InvestigationMemory.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProject sets the "project" field.
+func (m *InvestigationMemoryMutation) SetProject(s string) {
+	m.project = &s
+}
+
+// Project returns the value of the "project" field in the mutation.
+func (m *InvestigationMemoryMutation) Project() (r string, exists bool) {
+	v := m.project
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProject returns the old "project" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldProject(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProject is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProject requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProject: %w", err)
+	}
+	return oldValue.Project, nil
+}
+
+// ResetProject resets all changes to the "project" field.
+func (m *InvestigationMemoryMutation) ResetProject() {
+	m.project = nil
+}
+
+// SetContent sets the "content" field.
+func (m *InvestigationMemoryMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *InvestigationMemoryMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *InvestigationMemoryMutation) ResetContent() {
+	m.content = nil
+}
+
+// SetCategory sets the "category" field.
+func (m *InvestigationMemoryMutation) SetCategory(i investigationmemory.Category) {
+	m.category = &i
+}
+
+// Category returns the value of the "category" field in the mutation.
+func (m *InvestigationMemoryMutation) Category() (r investigationmemory.Category, exists bool) {
+	v := m.category
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCategory returns the old "category" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldCategory(ctx context.Context) (v investigationmemory.Category, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCategory is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCategory requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCategory: %w", err)
+	}
+	return oldValue.Category, nil
+}
+
+// ResetCategory resets all changes to the "category" field.
+func (m *InvestigationMemoryMutation) ResetCategory() {
+	m.category = nil
+}
+
+// SetValence sets the "valence" field.
+func (m *InvestigationMemoryMutation) SetValence(i investigationmemory.Valence) {
+	m.valence = &i
+}
+
+// Valence returns the value of the "valence" field in the mutation.
+func (m *InvestigationMemoryMutation) Valence() (r investigationmemory.Valence, exists bool) {
+	v := m.valence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValence returns the old "valence" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldValence(ctx context.Context) (v investigationmemory.Valence, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValence: %w", err)
+	}
+	return oldValue.Valence, nil
+}
+
+// ResetValence resets all changes to the "valence" field.
+func (m *InvestigationMemoryMutation) ResetValence() {
+	m.valence = nil
+}
+
+// SetConfidence sets the "confidence" field.
+func (m *InvestigationMemoryMutation) SetConfidence(f float64) {
+	m.confidence = &f
+	m.addconfidence = nil
+}
+
+// Confidence returns the value of the "confidence" field in the mutation.
+func (m *InvestigationMemoryMutation) Confidence() (r float64, exists bool) {
+	v := m.confidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfidence returns the old "confidence" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldConfidence(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfidence: %w", err)
+	}
+	return oldValue.Confidence, nil
+}
+
+// AddConfidence adds f to the "confidence" field.
+func (m *InvestigationMemoryMutation) AddConfidence(f float64) {
+	if m.addconfidence != nil {
+		*m.addconfidence += f
+	} else {
+		m.addconfidence = &f
+	}
+}
+
+// AddedConfidence returns the value that was added to the "confidence" field in this mutation.
+func (m *InvestigationMemoryMutation) AddedConfidence() (r float64, exists bool) {
+	v := m.addconfidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetConfidence resets all changes to the "confidence" field.
+func (m *InvestigationMemoryMutation) ResetConfidence() {
+	m.confidence = nil
+	m.addconfidence = nil
+}
+
+// SetSeenCount sets the "seen_count" field.
+func (m *InvestigationMemoryMutation) SetSeenCount(i int) {
+	m.seen_count = &i
+	m.addseen_count = nil
+}
+
+// SeenCount returns the value of the "seen_count" field in the mutation.
+func (m *InvestigationMemoryMutation) SeenCount() (r int, exists bool) {
+	v := m.seen_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSeenCount returns the old "seen_count" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldSeenCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSeenCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSeenCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSeenCount: %w", err)
+	}
+	return oldValue.SeenCount, nil
+}
+
+// AddSeenCount adds i to the "seen_count" field.
+func (m *InvestigationMemoryMutation) AddSeenCount(i int) {
+	if m.addseen_count != nil {
+		*m.addseen_count += i
+	} else {
+		m.addseen_count = &i
+	}
+}
+
+// AddedSeenCount returns the value that was added to the "seen_count" field in this mutation.
+func (m *InvestigationMemoryMutation) AddedSeenCount() (r int, exists bool) {
+	v := m.addseen_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSeenCount resets all changes to the "seen_count" field.
+func (m *InvestigationMemoryMutation) ResetSeenCount() {
+	m.seen_count = nil
+	m.addseen_count = nil
+}
+
+// SetSourceSessionID sets the "source_session_id" field.
+func (m *InvestigationMemoryMutation) SetSourceSessionID(s string) {
+	m.source_session = &s
+}
+
+// SourceSessionID returns the value of the "source_session_id" field in the mutation.
+func (m *InvestigationMemoryMutation) SourceSessionID() (r string, exists bool) {
+	v := m.source_session
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceSessionID returns the old "source_session_id" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldSourceSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceSessionID: %w", err)
+	}
+	return oldValue.SourceSessionID, nil
+}
+
+// ResetSourceSessionID resets all changes to the "source_session_id" field.
+func (m *InvestigationMemoryMutation) ResetSourceSessionID() {
+	m.source_session = nil
+}
+
+// SetAlertType sets the "alert_type" field.
+func (m *InvestigationMemoryMutation) SetAlertType(s string) {
+	m.alert_type = &s
+}
+
+// AlertType returns the value of the "alert_type" field in the mutation.
+func (m *InvestigationMemoryMutation) AlertType() (r string, exists bool) {
+	v := m.alert_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlertType returns the old "alert_type" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldAlertType(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlertType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlertType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlertType: %w", err)
+	}
+	return oldValue.AlertType, nil
+}
+
+// ClearAlertType clears the value of the "alert_type" field.
+func (m *InvestigationMemoryMutation) ClearAlertType() {
+	m.alert_type = nil
+	m.clearedFields[investigationmemory.FieldAlertType] = struct{}{}
+}
+
+// AlertTypeCleared returns if the "alert_type" field was cleared in this mutation.
+func (m *InvestigationMemoryMutation) AlertTypeCleared() bool {
+	_, ok := m.clearedFields[investigationmemory.FieldAlertType]
+	return ok
+}
+
+// ResetAlertType resets all changes to the "alert_type" field.
+func (m *InvestigationMemoryMutation) ResetAlertType() {
+	m.alert_type = nil
+	delete(m.clearedFields, investigationmemory.FieldAlertType)
+}
+
+// SetChainID sets the "chain_id" field.
+func (m *InvestigationMemoryMutation) SetChainID(s string) {
+	m.chain_id = &s
+}
+
+// ChainID returns the value of the "chain_id" field in the mutation.
+func (m *InvestigationMemoryMutation) ChainID() (r string, exists bool) {
+	v := m.chain_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChainID returns the old "chain_id" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldChainID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChainID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChainID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChainID: %w", err)
+	}
+	return oldValue.ChainID, nil
+}
+
+// ClearChainID clears the value of the "chain_id" field.
+func (m *InvestigationMemoryMutation) ClearChainID() {
+	m.chain_id = nil
+	m.clearedFields[investigationmemory.FieldChainID] = struct{}{}
+}
+
+// ChainIDCleared returns if the "chain_id" field was cleared in this mutation.
+func (m *InvestigationMemoryMutation) ChainIDCleared() bool {
+	_, ok := m.clearedFields[investigationmemory.FieldChainID]
+	return ok
+}
+
+// ResetChainID resets all changes to the "chain_id" field.
+func (m *InvestigationMemoryMutation) ResetChainID() {
+	m.chain_id = nil
+	delete(m.clearedFields, investigationmemory.FieldChainID)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *InvestigationMemoryMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *InvestigationMemoryMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *InvestigationMemoryMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *InvestigationMemoryMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *InvestigationMemoryMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *InvestigationMemoryMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetLastSeenAt sets the "last_seen_at" field.
+func (m *InvestigationMemoryMutation) SetLastSeenAt(t time.Time) {
+	m.last_seen_at = &t
+}
+
+// LastSeenAt returns the value of the "last_seen_at" field in the mutation.
+func (m *InvestigationMemoryMutation) LastSeenAt() (r time.Time, exists bool) {
+	v := m.last_seen_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastSeenAt returns the old "last_seen_at" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldLastSeenAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastSeenAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastSeenAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastSeenAt: %w", err)
+	}
+	return oldValue.LastSeenAt, nil
+}
+
+// ResetLastSeenAt resets all changes to the "last_seen_at" field.
+func (m *InvestigationMemoryMutation) ResetLastSeenAt() {
+	m.last_seen_at = nil
+}
+
+// SetDeprecated sets the "deprecated" field.
+func (m *InvestigationMemoryMutation) SetDeprecated(b bool) {
+	m.deprecated = &b
+}
+
+// Deprecated returns the value of the "deprecated" field in the mutation.
+func (m *InvestigationMemoryMutation) Deprecated() (r bool, exists bool) {
+	v := m.deprecated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeprecated returns the old "deprecated" field's value of the InvestigationMemory entity.
+// If the InvestigationMemory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvestigationMemoryMutation) OldDeprecated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeprecated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeprecated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeprecated: %w", err)
+	}
+	return oldValue.Deprecated, nil
+}
+
+// ResetDeprecated resets all changes to the "deprecated" field.
+func (m *InvestigationMemoryMutation) ResetDeprecated() {
+	m.deprecated = nil
+}
+
+// ClearSourceSession clears the "source_session" edge to the AlertSession entity.
+func (m *InvestigationMemoryMutation) ClearSourceSession() {
+	m.clearedsource_session = true
+	m.clearedFields[investigationmemory.FieldSourceSessionID] = struct{}{}
+}
+
+// SourceSessionCleared reports if the "source_session" edge to the AlertSession entity was cleared.
+func (m *InvestigationMemoryMutation) SourceSessionCleared() bool {
+	return m.clearedsource_session
+}
+
+// SourceSessionIDs returns the "source_session" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// SourceSessionID instead. It exists only for internal usage by the builders.
+func (m *InvestigationMemoryMutation) SourceSessionIDs() (ids []string) {
+	if id := m.source_session; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetSourceSession resets all changes to the "source_session" edge.
+func (m *InvestigationMemoryMutation) ResetSourceSession() {
+	m.source_session = nil
+	m.clearedsource_session = false
+}
+
+// AddInjectedIntoSessionIDs adds the "injected_into_sessions" edge to the AlertSession entity by ids.
+func (m *InvestigationMemoryMutation) AddInjectedIntoSessionIDs(ids ...string) {
+	if m.injected_into_sessions == nil {
+		m.injected_into_sessions = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.injected_into_sessions[ids[i]] = struct{}{}
+	}
+}
+
+// ClearInjectedIntoSessions clears the "injected_into_sessions" edge to the AlertSession entity.
+func (m *InvestigationMemoryMutation) ClearInjectedIntoSessions() {
+	m.clearedinjected_into_sessions = true
+}
+
+// InjectedIntoSessionsCleared reports if the "injected_into_sessions" edge to the AlertSession entity was cleared.
+func (m *InvestigationMemoryMutation) InjectedIntoSessionsCleared() bool {
+	return m.clearedinjected_into_sessions
+}
+
+// RemoveInjectedIntoSessionIDs removes the "injected_into_sessions" edge to the AlertSession entity by IDs.
+func (m *InvestigationMemoryMutation) RemoveInjectedIntoSessionIDs(ids ...string) {
+	if m.removedinjected_into_sessions == nil {
+		m.removedinjected_into_sessions = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.injected_into_sessions, ids[i])
+		m.removedinjected_into_sessions[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedInjectedIntoSessions returns the removed IDs of the "injected_into_sessions" edge to the AlertSession entity.
+func (m *InvestigationMemoryMutation) RemovedInjectedIntoSessionsIDs() (ids []string) {
+	for id := range m.removedinjected_into_sessions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// InjectedIntoSessionsIDs returns the "injected_into_sessions" edge IDs in the mutation.
+func (m *InvestigationMemoryMutation) InjectedIntoSessionsIDs() (ids []string) {
+	for id := range m.injected_into_sessions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetInjectedIntoSessions resets all changes to the "injected_into_sessions" edge.
+func (m *InvestigationMemoryMutation) ResetInjectedIntoSessions() {
+	m.injected_into_sessions = nil
+	m.clearedinjected_into_sessions = false
+	m.removedinjected_into_sessions = nil
+}
+
+// Where appends a list predicates to the InvestigationMemoryMutation builder.
+func (m *InvestigationMemoryMutation) Where(ps ...predicate.InvestigationMemory) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the InvestigationMemoryMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *InvestigationMemoryMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.InvestigationMemory, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *InvestigationMemoryMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *InvestigationMemoryMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (InvestigationMemory).
+func (m *InvestigationMemoryMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *InvestigationMemoryMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.project != nil {
+		fields = append(fields, investigationmemory.FieldProject)
+	}
+	if m.content != nil {
+		fields = append(fields, investigationmemory.FieldContent)
+	}
+	if m.category != nil {
+		fields = append(fields, investigationmemory.FieldCategory)
+	}
+	if m.valence != nil {
+		fields = append(fields, investigationmemory.FieldValence)
+	}
+	if m.confidence != nil {
+		fields = append(fields, investigationmemory.FieldConfidence)
+	}
+	if m.seen_count != nil {
+		fields = append(fields, investigationmemory.FieldSeenCount)
+	}
+	if m.source_session != nil {
+		fields = append(fields, investigationmemory.FieldSourceSessionID)
+	}
+	if m.alert_type != nil {
+		fields = append(fields, investigationmemory.FieldAlertType)
+	}
+	if m.chain_id != nil {
+		fields = append(fields, investigationmemory.FieldChainID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, investigationmemory.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, investigationmemory.FieldUpdatedAt)
+	}
+	if m.last_seen_at != nil {
+		fields = append(fields, investigationmemory.FieldLastSeenAt)
+	}
+	if m.deprecated != nil {
+		fields = append(fields, investigationmemory.FieldDeprecated)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *InvestigationMemoryMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case investigationmemory.FieldProject:
+		return m.Project()
+	case investigationmemory.FieldContent:
+		return m.Content()
+	case investigationmemory.FieldCategory:
+		return m.Category()
+	case investigationmemory.FieldValence:
+		return m.Valence()
+	case investigationmemory.FieldConfidence:
+		return m.Confidence()
+	case investigationmemory.FieldSeenCount:
+		return m.SeenCount()
+	case investigationmemory.FieldSourceSessionID:
+		return m.SourceSessionID()
+	case investigationmemory.FieldAlertType:
+		return m.AlertType()
+	case investigationmemory.FieldChainID:
+		return m.ChainID()
+	case investigationmemory.FieldCreatedAt:
+		return m.CreatedAt()
+	case investigationmemory.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case investigationmemory.FieldLastSeenAt:
+		return m.LastSeenAt()
+	case investigationmemory.FieldDeprecated:
+		return m.Deprecated()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *InvestigationMemoryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case investigationmemory.FieldProject:
+		return m.OldProject(ctx)
+	case investigationmemory.FieldContent:
+		return m.OldContent(ctx)
+	case investigationmemory.FieldCategory:
+		return m.OldCategory(ctx)
+	case investigationmemory.FieldValence:
+		return m.OldValence(ctx)
+	case investigationmemory.FieldConfidence:
+		return m.OldConfidence(ctx)
+	case investigationmemory.FieldSeenCount:
+		return m.OldSeenCount(ctx)
+	case investigationmemory.FieldSourceSessionID:
+		return m.OldSourceSessionID(ctx)
+	case investigationmemory.FieldAlertType:
+		return m.OldAlertType(ctx)
+	case investigationmemory.FieldChainID:
+		return m.OldChainID(ctx)
+	case investigationmemory.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case investigationmemory.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case investigationmemory.FieldLastSeenAt:
+		return m.OldLastSeenAt(ctx)
+	case investigationmemory.FieldDeprecated:
+		return m.OldDeprecated(ctx)
+	}
+	return nil, fmt.Errorf("unknown InvestigationMemory field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *InvestigationMemoryMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case investigationmemory.FieldProject:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProject(v)
+		return nil
+	case investigationmemory.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case investigationmemory.FieldCategory:
+		v, ok := value.(investigationmemory.Category)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCategory(v)
+		return nil
+	case investigationmemory.FieldValence:
+		v, ok := value.(investigationmemory.Valence)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValence(v)
+		return nil
+	case investigationmemory.FieldConfidence:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfidence(v)
+		return nil
+	case investigationmemory.FieldSeenCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSeenCount(v)
+		return nil
+	case investigationmemory.FieldSourceSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceSessionID(v)
+		return nil
+	case investigationmemory.FieldAlertType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlertType(v)
+		return nil
+	case investigationmemory.FieldChainID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChainID(v)
+		return nil
+	case investigationmemory.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case investigationmemory.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case investigationmemory.FieldLastSeenAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastSeenAt(v)
+		return nil
+	case investigationmemory.FieldDeprecated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeprecated(v)
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *InvestigationMemoryMutation) AddedFields() []string {
+	var fields []string
+	if m.addconfidence != nil {
+		fields = append(fields, investigationmemory.FieldConfidence)
+	}
+	if m.addseen_count != nil {
+		fields = append(fields, investigationmemory.FieldSeenCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *InvestigationMemoryMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case investigationmemory.FieldConfidence:
+		return m.AddedConfidence()
+	case investigationmemory.FieldSeenCount:
+		return m.AddedSeenCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *InvestigationMemoryMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case investigationmemory.FieldConfidence:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConfidence(v)
+		return nil
+	case investigationmemory.FieldSeenCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSeenCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *InvestigationMemoryMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(investigationmemory.FieldAlertType) {
+		fields = append(fields, investigationmemory.FieldAlertType)
+	}
+	if m.FieldCleared(investigationmemory.FieldChainID) {
+		fields = append(fields, investigationmemory.FieldChainID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *InvestigationMemoryMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *InvestigationMemoryMutation) ClearField(name string) error {
+	switch name {
+	case investigationmemory.FieldAlertType:
+		m.ClearAlertType()
+		return nil
+	case investigationmemory.FieldChainID:
+		m.ClearChainID()
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *InvestigationMemoryMutation) ResetField(name string) error {
+	switch name {
+	case investigationmemory.FieldProject:
+		m.ResetProject()
+		return nil
+	case investigationmemory.FieldContent:
+		m.ResetContent()
+		return nil
+	case investigationmemory.FieldCategory:
+		m.ResetCategory()
+		return nil
+	case investigationmemory.FieldValence:
+		m.ResetValence()
+		return nil
+	case investigationmemory.FieldConfidence:
+		m.ResetConfidence()
+		return nil
+	case investigationmemory.FieldSeenCount:
+		m.ResetSeenCount()
+		return nil
+	case investigationmemory.FieldSourceSessionID:
+		m.ResetSourceSessionID()
+		return nil
+	case investigationmemory.FieldAlertType:
+		m.ResetAlertType()
+		return nil
+	case investigationmemory.FieldChainID:
+		m.ResetChainID()
+		return nil
+	case investigationmemory.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case investigationmemory.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case investigationmemory.FieldLastSeenAt:
+		m.ResetLastSeenAt()
+		return nil
+	case investigationmemory.FieldDeprecated:
+		m.ResetDeprecated()
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *InvestigationMemoryMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.source_session != nil {
+		edges = append(edges, investigationmemory.EdgeSourceSession)
+	}
+	if m.injected_into_sessions != nil {
+		edges = append(edges, investigationmemory.EdgeInjectedIntoSessions)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *InvestigationMemoryMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case investigationmemory.EdgeSourceSession:
+		if id := m.source_session; id != nil {
+			return []ent.Value{*id}
+		}
+	case investigationmemory.EdgeInjectedIntoSessions:
+		ids := make([]ent.Value, 0, len(m.injected_into_sessions))
+		for id := range m.injected_into_sessions {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *InvestigationMemoryMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedinjected_into_sessions != nil {
+		edges = append(edges, investigationmemory.EdgeInjectedIntoSessions)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *InvestigationMemoryMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case investigationmemory.EdgeInjectedIntoSessions:
+		ids := make([]ent.Value, 0, len(m.removedinjected_into_sessions))
+		for id := range m.removedinjected_into_sessions {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *InvestigationMemoryMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedsource_session {
+		edges = append(edges, investigationmemory.EdgeSourceSession)
+	}
+	if m.clearedinjected_into_sessions {
+		edges = append(edges, investigationmemory.EdgeInjectedIntoSessions)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *InvestigationMemoryMutation) EdgeCleared(name string) bool {
+	switch name {
+	case investigationmemory.EdgeSourceSession:
+		return m.clearedsource_session
+	case investigationmemory.EdgeInjectedIntoSessions:
+		return m.clearedinjected_into_sessions
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *InvestigationMemoryMutation) ClearEdge(name string) error {
+	switch name {
+	case investigationmemory.EdgeSourceSession:
+		m.ClearSourceSession()
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *InvestigationMemoryMutation) ResetEdge(name string) error {
+	switch name {
+	case investigationmemory.EdgeSourceSession:
+		m.ResetSourceSession()
+		return nil
+	case investigationmemory.EdgeInjectedIntoSessions:
+		m.ResetInjectedIntoSessions()
+		return nil
+	}
+	return fmt.Errorf("unknown InvestigationMemory edge %s", name)
 }
 
 // LLMInteractionMutation represents an operation that mutates the LLMInteraction nodes in the graph.
