@@ -1,6 +1,6 @@
 # Investigation Memory — Detailed Design
 
-**Status:** Draft — pending decisions from [investigation-memory-design-questions.md](investigation-memory-design-questions.md)
+**Status:** All design questions decided — see [investigation-memory-design-questions.md](investigation-memory-design-questions.md)
 **Sketch:** [investigation-memory-sketch.md](investigation-memory-sketch.md) (all sketch-level decisions finalized)
 **Prerequisites:** [ADR-0013: Review Feedback Redesign](../adr/0013-review-feedback-redesign.md) (implemented)
 
@@ -26,7 +26,12 @@ pkg/memory/                     # Memory domain logic
 ├── service.go                  # MemoryService — CRUD, retrieval, refinement
 ├── embedder.go                 # Embedding generation (calls embedding API)
 ├── retriever.go                # Semantic-first retrieval (pgvector queries)
-└── reflector.go                # Reflector prompt builder + response parser
+├── reflector.go                # Reflector prompt builder + response parser (extraction + feedback variants)
+├── parser.go                   # Lenient JSON parser (shared with future structured-output parsing)
+└── tool_executor.go            # MemoryToolExecutor — recall_past_investigations tool
+
+pkg/queue/
+└── feedback_executor.go        # Background job: feedback Reflector (triggered on review with feedback text)
 
 ent/schema/
 └── investigationmemory.go      # New Ent schema
@@ -64,6 +69,8 @@ field.Bool("deprecated").Default(false)
 // Edges
 edge.From("source_session", AlertSession.Type).
     Ref("memories").Field("source_session_id").Unique().Required()
+edge.From("injected_into_sessions", AlertSession.Type).
+    Ref("injected_memories")
 
 // Indexes
 index.Fields("project")                          // Security boundary
@@ -74,13 +81,75 @@ index.Fields("category")                         // For dashboard grouping
 
 The `embedding` column is a pgvector `vector(N)` type added via a raw SQL migration (Ent doesn't support custom column types). An HNSW index on the embedding column enables approximate nearest-neighbor search.
 
-> **Open question:** Embedding model and dimensions — see [questions document](investigation-memory-design-questions.md), Q1.
+### Embedding Configuration
 
-### Embedding Pipeline
+Embedding is configurable via `defaults.memory` in `tarsy.yaml`. The built-in default uses Google `gemini-embedding-2-preview` at 768 dimensions with `GOOGLE_API_KEY` — zero additional configuration required since every TARSy deployment already has this key.
 
-Memory content needs to be converted to vector embeddings for pgvector similarity search. This requires an embedding model accessible from the Go backend.
+**Default model: `gemini-embedding-2-preview` at 768 dimensions.** This is Google's top embedding model (#1 on MTEB English leaderboard as of March 2026). At 768 dims it retains near-full quality (67.99 vs 68.32 at full 3072 dims) while keeping storage practical. The model's native 3072-dim output is reduced via the `dimensions` parameter, which is set in the built-in default. Consistent with TARSy already running preview-track LLM models.
 
-> **Open question:** How to generate embeddings — see [questions document](investigation-memory-design-questions.md), Q2.
+**Config structure:**
+
+```yaml
+# tarsy.yaml
+defaults:
+  memory:
+    enabled: true
+    embedding:
+      provider: "google"                       # google | openai
+      model: "gemini-embedding-2-preview"      # model name
+      api_key_env: "GOOGLE_API_KEY"            # env var for API key
+      dimensions: 768                          # output dimensions (must match pgvector column)
+      # base_url: ""                           # optional custom endpoint
+```
+
+**Go types:**
+
+```go
+type MemoryConfig struct {
+    Enabled   bool            `yaml:"enabled"`
+    Embedding EmbeddingConfig `yaml:"embedding,omitempty"`
+}
+
+type EmbeddingConfig struct {
+    Provider   EmbeddingProviderType `yaml:"provider,omitempty"`
+    Model      string                `yaml:"model,omitempty"`
+    APIKeyEnv  string                `yaml:"api_key_env,omitempty"`
+    Dimensions int                   `yaml:"dimensions,omitempty"`
+    BaseURL    string                `yaml:"base_url,omitempty"`
+}
+```
+
+**Built-in default** (when `defaults.memory.embedding` is not set):
+
+```go
+func defaultEmbeddingConfig() EmbeddingConfig {
+    return EmbeddingConfig{
+        Provider:   EmbeddingProviderGoogle,
+        Model:      "gemini-embedding-2-preview",
+        APIKeyEnv:  "GOOGLE_API_KEY",
+        Dimensions: 768,
+    }
+}
+```
+
+**Embedding pipeline:** The Go backend calls the provider's embedding API directly via HTTP — one POST per embedding. No Python service involvement (embedding is a simple stateless operation, unlike the multi-turn LLM calls that justify the gRPC service). The `Embedder` interface dispatches to the correct API format based on `provider`:
+
+```go
+// pkg/memory/embedder.go
+type Embedder interface {
+    Embed(ctx context.Context, text string, task EmbeddingTask) ([]float32, error)
+}
+
+type EmbeddingTask string
+const (
+    EmbeddingTaskDocument EmbeddingTask = "document" // storing a memory
+    EmbeddingTaskQuery    EmbeddingTask = "query"    // searching for memories
+)
+```
+
+Google's API maps `EmbeddingTaskDocument` → `taskType: "RETRIEVAL_DOCUMENT"` and `EmbeddingTaskQuery` → `taskType: "RETRIEVAL_QUERY"`, optimizing embeddings for storage vs. search. OpenAI's API doesn't have an equivalent parameter.
+
+**Switching models:** Change the `embedding` block in `tarsy.yaml`. Dimensions must match the existing pgvector column — changing dimensions requires re-embedding all stored memories. The system validates dimension consistency at startup (compares configured dimensions against the pgvector column size and fails with a clear error if mismatched).
 
 ### pgvector Setup
 
@@ -91,8 +160,9 @@ A migration enables the pgvector extension and creates the embedding column + in
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Add embedding column (after Ent creates the table)
+-- 768 = gemini-embedding-2-preview reduced from 3072 default
 ALTER TABLE investigation_memories
-    ADD COLUMN embedding vector(DIMENSIONS);
+    ADD COLUMN embedding vector(768);
 
 -- HNSW index for approximate nearest-neighbor search
 CREATE INDEX idx_investigation_memories_embedding
@@ -101,7 +171,7 @@ CREATE INDEX idx_investigation_memories_embedding
     WITH (m = 16, ef_construction = 64);
 ```
 
-> **Open question:** pgvector index strategy — see [questions document](investigation-memory-design-questions.md), Q3.
+**Index strategy:** HNSW with `m = 16, ef_construction = 64` using `vector_cosine_ops`. Always up-to-date on insert, best recall for TARSy's expected dataset size. See [Q2 decision](investigation-memory-design-questions.md#q2-what-pgvector-index-strategy).
 
 ### Scoring Stage: Third Turn (Reflector)
 
@@ -154,7 +224,7 @@ Respond with a JSON object:
 {
   "create": [
     {
-      "content": "string — the learning in 1-2 sentences",
+      "content": "string — the learning (a sentence to a short paragraph)",
       "category": "semantic | episodic | procedural",
       "valence": "positive | negative | neutral"
     }
@@ -173,7 +243,7 @@ Respond with a JSON object:
 }
 ```
 
-> **Open question:** How to handle Reflector parse failures — see [questions document](investigation-memory-design-questions.md), Q4.
+**Parse strategy:** Lenient parsing with silent fallback. Try strict JSON first, then strip markdown fences and extract JSON by bracket depth. If both fail, log a warning and proceed with "no memories" — extraction never blocks scoring. See [Q3 decision](investigation-memory-design-questions.md#q3-how-should-reflector-parse-failures-be-handled).
 
 ### Changes to `ScoringController`
 
@@ -277,18 +347,29 @@ A pseudo-MCP tool (like `load_skill`) that wraps `MemoryService.Search`.
 
 **Implementation:** New `MemoryToolExecutor` wrapping the inner executor (same pattern as `SkillToolExecutor`). On `recall_past_investigations` calls, it embeds the query, runs pgvector similarity search within the project boundary (excluding already-injected IDs), and returns formatted results.
 
-> **Open question:** Should the tool support structured filters (category, valence) or just free-text query? — see [questions document](investigation-memory-design-questions.md), Q5.
+**Tool parameters:** Free-text `query` only (+ optional `limit`). Semantic search handles intent; no structured filters in v1. See [Q4 decision](investigation-memory-design-questions.md#q4-should-recall_past_investigations-support-structured-filters).
+
+**Chat sessions:** The `recall_past_investigations` tool is registered for chat sessions (follow-up conversations after an investigation). Chat sessions do **not** get Tier 4 auto-injection — the user/agent explicitly decides when to recall past investigations. Memory *extraction* does not happen for chat sessions (extraction is scoring-only).
 
 ### Human Review Refinement
 
-When a human completes their review (via `PATCH /api/v1/sessions/review` with `action: complete`), the review handler triggers memory refinement based on `quality_rating`:
+When a human completes their review (via `PATCH /api/v1/sessions/review` with `action: complete`), two refinement paths trigger. See [Q5 decision](investigation-memory-design-questions.md#q5-how-should-memory-refinement-trigger-on-human-review).
 
-- **`accurate`** → boost confidence of all memories from this session by a fixed delta (e.g., +0.15, capped at 1.0)
-- **`inaccurate`** → reduce confidence by a fixed delta (e.g., -0.3). If confidence drops below a threshold (e.g., 0.1), mark as deprecated. Memories with `positive` valence may be flipped to `negative`.
-- **`partially_accurate`** → minor adjustment (e.g., +0.05)
-- **`investigation_feedback`** text → stored as context but not automatically processed in v1. Future: re-run Reflector with feedback for targeted updates.
+**Part 1 — Inline confidence adjustment** (synchronous, in review handler):
 
-> **Open question:** How to trigger refinement — inline in review handler vs background job — see [questions document](investigation-memory-design-questions.md), Q6.
+| `quality_rating` | Existing memories | Mechanism |
+|---|---|---|
+| `accurate` | `confidence = min(confidence × 1.2, 1.0)` | Multiplicative boost |
+| `partially_accurate` | `confidence = confidence × 0.6` | Proportional degradation |
+| `inaccurate` | `deprecated = true` | Kill switch |
+
+Human review has higher authority than automated score. Multiplicative adjustment ensures high-confidence memories from overscored investigations get proportionally larger corrections.
+
+**Part 2 — Background feedback Reflector** (async, when `investigation_feedback` text is non-empty):
+
+Enqueues a refinement job (same queue infrastructure as scoring). A Reflector variant sees the feedback text, `quality_rating`, existing session memories, and alert context. It can create new memories, deprecate specific existing ones, or reinforce confirmed ones. All feedback-derived memories get **0.9 initial confidence** — human-written feedback is the strongest signal.
+
+This is the primary mechanism for learning from mistakes: `inaccurate` reviews deprecate wrong memories (Part 1) while feedback text produces new `negative`/`procedural` memories (Part 2). `partially_accurate` feedback is equally valuable — the human explains what was right vs. wrong, producing nuanced corrections.
 
 ### Memory API
 
@@ -305,7 +386,7 @@ New endpoints for memory management:
 
 Responses include all memory fields except the raw embedding vector. List endpoints support filtering by `category`, `valence`, `deprecated`, `source_session_id`.
 
-> **Open question:** Whether to include a bulk management endpoint — see [questions document](investigation-memory-design-questions.md), Q7.
+**Bulk operations:** Not in v1 — per-memory CRUD suffices for expected scale. See [Q6 decision](investigation-memory-design-questions.md#q6-should-the-api-include-a-bulk-memory-management-endpoint).
 
 ### Frontend: Session Detail
 
@@ -319,7 +400,7 @@ Both are read-only in v1. Editing/deletion is API-only.
 
 ### Confidence Model
 
-Initial confidence is derived from the investigation's score:
+**Initial confidence** — derived from the investigation's score:
 
 | Score range | Initial confidence | Rationale |
 |-------------|-------------------|-----------|
@@ -328,22 +409,35 @@ Initial confidence is derived from the investigation's score:
 | 40-59 | 0.4 | Average — lower trust, may need reinforcement |
 | 0-39 | 0.3 | Poor investigation — extracted anti-patterns at low confidence |
 
-Human review adjustments (additive, clamped to [0, 1]):
-- `accurate`: +0.15
-- `partially_accurate`: +0.05
-- `inaccurate`: -0.3
+**Human review adjustments** (multiplicative, human authority > automated score):
 
-Reinforcement (when Reflector outputs `reinforce`): +0.1, capped at 1.0.
+| `quality_rating` | Action | Example: initial 0.8 |
+|---|---|---|
+| `accurate` | `min(confidence × 1.2, 1.0)` | → 0.96 |
+| `partially_accurate` | `confidence × 0.6` | → 0.48 |
+| `inaccurate` | `deprecated = true` | → excluded from retrieval |
 
-**Decay:** Not implemented in v1. Memories stay at their current confidence indefinitely. Decay can be added later as a periodic job if the memory store grows too large.
+**Feedback-derived memories:** 0.9 initial confidence (human-written text is strongest signal).
 
-> **Open question:** Whether to implement decay in v1 or defer — see [questions document](investigation-memory-design-questions.md), Q8.
+**Reinforcement** (when Reflector outputs `reinforce`): `min(confidence × 1.1, 1.0)`.
+
+**Decay:** Not in v1. Memories keep confidence indefinitely; the Reflector handles explicit deprecation. See [Q7 decision](investigation-memory-design-questions.md#q7-should-memory-decay-be-implemented-in-v1).
+
+**Future:** If the store grows large enough to need pruning, add a **query-time decay multiplier** — `score × e^(-λ × age_in_days)` with a configurable half-life (e.g., 30 days). Applied at retrieval, not stored — no data mutation, reversible via config, no periodic jobs. Pattern proven by OpenClaw (`temporal-decay.ts`).
 
 ### Tracking Injected Memories
 
-To show "which memories were injected" on the session detail page and to exclude them from tool results, we need to record which memory IDs were injected at investigation start.
+To show "which memories were injected" on the session detail page and to exclude them from tool results, injected memories are recorded via a many-to-many Ent edge. See [Q8 decision](investigation-memory-design-questions.md#q8-how-should-injected-memory-ids-be-stored-per-session).
 
-> **Open question:** How to store injected memory IDs — see [questions document](investigation-memory-design-questions.md), Q9.
+```go
+// alertsession.go
+edge.To("injected_memories", InvestigationMemory.Type)
+
+// investigationmemory.go
+edge.From("injected_into_sessions", AlertSession.Type).Ref("injected_memories")
+```
+
+Ent auto-generates the join table. Both directions are natural queries: `session.QueryInjectedMemories()` (session detail page) and `memory.QueryInjectedIntoSessions()` (memory usage analytics).
 
 ## Implementation Phases
 
@@ -352,10 +446,11 @@ To show "which memories were injected" on the session detail page and to exclude
 1. Enable pgvector extension (migration)
 2. `InvestigationMemory` Ent schema + migration (including raw SQL for embedding column + HNSW index)
 3. `pkg/memory/` package: `MemoryService` with Create, Retrieve, Update
-4. Embedding pipeline (generate embeddings for memory content)
-5. Reflector prompt + parser in `pkg/memory/reflector.go`
-6. Third turn in `ScoringController`
-7. `ScoringResult` extended with memory extraction output
+4. `Embedder` interface + Google/OpenAI provider implementations (direct HTTP)
+5. Startup validation: verify configured dimensions match pgvector column size
+6. Reflector prompt + lenient JSON parser in `pkg/memory/reflector.go` and `pkg/memory/parser.go`
+7. Third turn in `ScoringController`
+8. `ScoringResult` extended with memory extraction output
 
 **Result:** Memories are extracted and stored after every scored investigation.
 
@@ -363,33 +458,33 @@ To show "which memories were injected" on the session detail page and to exclude
 
 1. `MemoryRetriever` — pgvector similarity search within project
 2. `MemoryBriefing` on `ExecutionContext`
-3. Tier 4 section in `ComposeInstructions`
-4. `MemoryToolExecutor` wrapping inner executor
-5. `recall_past_investigations` tool registration
-6. Record injected memory IDs per session
+3. Tier 4 section in `ComposeInstructions` (investigation sessions only)
+4. `MemoryToolExecutor` wrapping inner executor (`pkg/memory/tool_executor.go`)
+5. `recall_past_investigations` tool registration (investigation + chat sessions)
+6. Record injected memory IDs via Ent edge (join table)
 
-**Result:** Investigations benefit from past learnings. Chat sessions can recall past investigations.
+**Result:** Investigations benefit from past learnings. Chat sessions can recall past investigations via tool.
 
 ### Phase 3: Human Refinement + API + Dashboard
 
-1. Memory confidence adjustment on review completion
-2. Memory CRUD API endpoints
-3. Frontend: "Injected Memories" card on session detail
-4. Frontend: "Extracted Learnings" card on session detail
-5. Memory list/detail in API (admin usage)
+1. Inline confidence adjustment on review completion (multiplicative, Q5 Part 1)
+2. Background feedback Reflector job — enqueue when `investigation_feedback` is non-empty, runs Reflector variant to create/deprecate/reinforce memories from human feedback (Q5 Part 2)
+3. Memory CRUD API endpoints
+4. Frontend: "Injected Memories" card on session detail
+5. Frontend: "Extracted Learnings" card on session detail
+6. Memory list/detail in API (admin usage)
 
-**Result:** Full feedback loop — extract → inject → refine from human review. Visible in dashboard.
+**Result:** Full feedback loop — extract → inject → refine from human review. Learning from mistakes via feedback-derived memories. Visible in dashboard.
 
 ## Open Questions Summary
 
 | # | Question | Section affected |
 |---|----------|-----------------|
-| Q1 | Embedding model and dimensions | Schema, embedding pipeline |
-| Q2 | How to generate embeddings | Embedding pipeline, architecture |
-| Q3 | pgvector index strategy | Migration, retrieval performance |
-| Q4 | Reflector parse failure handling | Scoring controller |
-| Q5 | recall_past_investigations tool parameters | Tool definition |
-| Q6 | Review refinement trigger mechanism | Review handler, memory service |
-| Q7 | Bulk memory management API | API design |
-| Q8 | Memory decay in v1 | Confidence model, memory lifecycle |
-| Q9 | Storing injected memory IDs | Schema, session detail |
+| ~~Q1~~ | ~~Embedding model, provider, and configuration~~ | **Decided:** `gemini-embedding-2-preview` at 768 dims, configurable via `defaults.memory.embedding` |
+| ~~Q2~~ | ~~pgvector index strategy~~ | **Decided:** HNSW (`m=16, ef_construction=64, vector_cosine_ops`) |
+| ~~Q3~~ | ~~Reflector parse failure handling~~ | **Decided:** Lenient parse + silent fallback (never blocks scoring) |
+| ~~Q4~~ | ~~recall_past_investigations tool parameters~~ | **Decided:** Free-text `query` only (+ optional `limit`), no structured filters in v1 |
+| ~~Q5~~ | ~~Review refinement trigger mechanism~~ | **Decided:** Inline multiplicative confidence + background Reflector for feedback text |
+| ~~Q6~~ | ~~Bulk memory management API~~ | **Decided:** No bulk endpoint in v1, per-memory CRUD only |
+| ~~Q7~~ | ~~Memory decay in v1~~ | **Decided:** No decay in v1; future: query-time multiplier (not stored data) |
+| ~~Q8~~ | ~~Storing injected memory IDs~~ | **Decided:** Many-to-many Ent edge (join table, auto-generated) |
