@@ -14,6 +14,7 @@ import {
   TableRow,
   Checkbox,
   Button,
+  Tooltip,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -23,6 +24,11 @@ import {
   AssignmentTurnedIn,
   CheckCircleOutline,
   Close,
+  CallSplit,
+  Hub,
+  BuildOutlined,
+  SwapHoriz,
+  SmsOutlined as ChatIcon,
 } from '@mui/icons-material';
 import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
@@ -402,6 +408,25 @@ export function TriageGroupedList({
                             </TableCell>
                           )}
                           <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                          <TableCell sx={{ width: 130, px: 0.5, textAlign: 'right' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                              <Tooltip title="Parallel Agents" arrow>
+                                <CallSplit sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Orchestrator / Sub-agents" arrow>
+                                <Hub sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Automated Action" arrow>
+                                <BuildOutlined sx={{ fontSize: '1.1rem', color: 'success.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Provider Fallback" arrow>
+                                <SwapHoriz sx={{ fontSize: '1.1rem', color: 'warning.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Follow-up Chats" arrow>
+                                <ChatIcon sx={{ fontSize: '1.1rem', color: 'primary.main', cursor: 'help' }} />
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
