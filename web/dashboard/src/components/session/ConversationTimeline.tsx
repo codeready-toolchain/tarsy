@@ -8,6 +8,7 @@ import {
   CardContent,
   Button,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   ExpandMore,
   ExpandLess,
@@ -354,7 +355,7 @@ export default function ConversationTimeline({
   return (
     <Card>
       {/* Card header with chain ID, expand/collapse, and copy */}
-      <CardContent sx={{ pb: 0, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
+      <CardContent sx={{ pb: 0, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
         <Box
           sx={{
             display: 'flex',
@@ -451,20 +452,20 @@ export default function ConversationTimeline({
 
       {/* Blue "AI Reasoning Flow" bar */}
       <Box
-        sx={{
-          bgcolor: '#e3f2fd',
+        sx={(theme) => ({
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
           py: 1.5,
           px: 3,
           mt: 1,
-          borderTop: '2px solid #1976d2',
-          borderBottom: '1px solid #bbdefb',
-        }}
+          borderTop: `2px solid ${theme.palette.primary.main}`,
+          borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`,
+        })}
       >
         <Typography
           variant="subtitle2"
           sx={{
             fontWeight: 600,
-            color: '#1565c0',
+            color: 'primary.main',
             fontSize: '0.9rem',
             letterSpacing: 0.3,
           }}
@@ -474,7 +475,7 @@ export default function ConversationTimeline({
       </Box>
 
       {/* Content area */}
-      <Box sx={{ px: 3, pt: 3, pb: 5, bgcolor: 'white', minHeight: 200 }} data-autoscroll-container>
+      <Box sx={{ px: 3, pt: 3, pb: 5, bgcolor: 'background.paper', minHeight: 200 }} data-autoscroll-container>
         {stageGroups.map((group) => {
           const isCollapsed = stageCollapseOverrides.has(group.stageId)
             ? stageCollapseOverrides.get(group.stageId)!

@@ -99,7 +99,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           gap: 1,
           bgcolor: isRunbook
             ? (theme: Theme) => alpha(theme.palette.info.main, 0.05)
-            : 'grey.50',
+            : 'action.hover',
           color: isRunbook ? 'info.main' : 'inherit',
           p: 1.5,
           borderRadius: 1,
@@ -110,7 +110,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           '&:hover': {
             bgcolor: isRunbook
               ? (theme: Theme) => alpha(theme.palette.info.main, 0.1)
-              : 'grey.100',
+              : 'action.selected',
             textDecoration: 'underline',
           },
         }}
@@ -131,7 +131,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           sx={{
             fontFamily: 'monospace',
             fontSize: '0.875rem',
-            bgcolor: 'grey.50',
+            bgcolor: 'action.hover',
             px: 1.5,
             py: 0.5,
             borderRadius: 1,
@@ -163,7 +163,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           <Typography
             component="pre"
             sx={{
-              bgcolor: 'grey.50',
+              bgcolor: 'action.hover',
               p: 2,
               borderRadius: 1,
               fontFamily: 'monospace',
@@ -194,7 +194,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           <Typography
             component="pre"
             sx={{
-              bgcolor: 'grey.50',
+              bgcolor: 'action.hover',
               p: 1.5,
               borderRadius: 1,
               fontFamily: 'monospace',
@@ -206,7 +206,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
               maxHeight: isTextExpanded ? 500 : undefined,
               overflowY: 'auto',
               border: '1px solid',
-              borderColor: 'grey.300',
+              borderColor: 'divider',
             }}
           >
             {value}
@@ -214,7 +214,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
         </Collapse>
         {isLong && !isTextExpanded && (
           <Box
-            sx={{
+            sx={(theme) => ({
               position: 'absolute',
               bottom: 0,
               left: 0,
@@ -225,7 +225,10 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
               alignItems: 'flex-end',
               justifyContent: 'center',
               pb: 0.5,
-            }}
+              ...theme.applyStyles('dark', {
+                background: `linear-gradient(transparent, ${theme.palette.background.paper})`,
+              }),
+            })}
           >
             <Button
               size="small"
@@ -259,7 +262,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
         fontFamily:
           fieldKey.includes('id') || fieldKey.includes('hash') ? 'monospace' : 'inherit',
         fontSize: '0.875rem',
-        bgcolor: 'grey.50',
+        bgcolor: 'action.hover',
         px: 1,
         py: 0.5,
         borderRadius: 0.5,
@@ -403,7 +406,7 @@ export default function OriginalAlertCard({ alertData }: OriginalAlertCardProps)
               <Typography
                 component="pre"
                 sx={{
-                  bgcolor: 'grey.50',
+                  bgcolor: 'action.hover',
                   p: 2,
                   borderRadius: 1,
                   fontFamily: 'monospace',

@@ -24,7 +24,7 @@ export function highlightSearchTermNodes(
 
   return parts.map((part, i) =>
     i % 2 === 1
-      ? createElement('mark', { key: i, style: { background: '#fff59d', padding: '0 1px' } }, part)
+      ? createElement('mark', { key: i, className: 'search-highlight' }, part)
       : part,
   );
 }

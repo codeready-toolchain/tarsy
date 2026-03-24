@@ -5,7 +5,8 @@
  * (no paused/canceling; uses cancelling).
  */
 
-import { Chip, type ChipProps } from '@mui/material';
+import { Chip, alpha, type ChipProps } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import {
   CheckCircle,
   Error as ErrorIcon,
@@ -71,19 +72,19 @@ export function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
       outline: '2px solid',
       outlineColor: 'primary.main',
       outlineOffset: '2px',
-      boxShadow: '0 0 0 4px rgba(25, 118, 210, 0.2)',
+      boxShadow: (theme: Theme) => `0 0 0 4px ${alpha(theme.palette.primary.main, 0.2)}`,
     },
   };
 
-  // Custom override for cancelled status
   const cancelledSx =
     status === SESSION_STATUS.CANCELLED
       ? {
           fontWeight: 600,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          color: 'white',
-          border: '1px solid rgba(0, 0, 0, 0.8)',
-          '& .MuiChip-icon': { marginLeft: '4px', color: 'white' },
+          backgroundColor: 'grey.600',
+          color: 'grey.50',
+          border: '1px solid',
+          borderColor: 'grey.600',
+          '& .MuiChip-icon': { marginLeft: '4px', color: 'grey.50' },
         }
       : {};
 

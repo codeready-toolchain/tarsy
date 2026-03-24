@@ -58,7 +58,11 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
 
   const scrollbarSx = {
     '&::-webkit-scrollbar': { width: '8px' },
-    '&::-webkit-scrollbar-track': { backgroundColor: theme.palette.grey[100], borderRadius: '4px' },
+    '&::-webkit-scrollbar-track': {
+      backgroundColor: theme.palette.grey[100],
+      borderRadius: '4px',
+      ...theme.applyStyles('dark', { backgroundColor: 'rgba(255,255,255,0.05)' }),
+    },
     '&::-webkit-scrollbar-thumb': {
       backgroundColor: theme.palette.grey[400],
       borderRadius: '4px',
@@ -67,14 +71,16 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
   };
 
   const renderCopyButton = (text: string, label: string) => (
-    <Box sx={{ 
+    <Box sx={{
       position: 'absolute', top: 8, right: 8, zIndex: 1,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 1, backdropFilter: 'blur(4px)'
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderRadius: 1, backdropFilter: 'blur(4px)',
+      ...theme.applyStyles('dark', { backgroundColor: 'rgba(30, 30, 30, 0.9)' }),
     }}>
       <IconButton
         size="small"
         onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text).catch(() => {}); }}
-        sx={{ p: 0.5, '&:hover': { backgroundColor: theme.palette.primary.main, color: 'white' } }}
+        sx={{ p: 0.5, '&:hover': { backgroundColor: theme.palette.primary.main, color: theme.palette.primary.contrastText } }}
         title={`Copy ${label}`}
       >
         <ContentCopyIcon fontSize="small" />
@@ -87,7 +93,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
       component="pre" 
       sx={{ 
         fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        m: 0, p: 2, bgcolor: theme.palette.grey[50], borderRadius: 1,
+        m: 0, p: 2, bgcolor: 'action.hover', borderRadius: 1,
         border: `1px solid ${theme.palette.divider}`, maxHeight: height || maxHeight, overflow: 'auto',
         ...scrollbarSx
       }}
@@ -106,7 +112,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
         wordBreak: 'break-word',
         m: 0,
         p: 2,
-        bgcolor: theme.palette.grey[50],
+        bgcolor: 'action.hover',
         borderRadius: 1,
         border: `1px solid ${theme.palette.divider}`,
         maxHeight: maxHeight,
@@ -131,7 +137,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
         wordBreak: 'break-word',
         m: 0,
         p: 2,
-        bgcolor: theme.palette.grey[50],
+        bgcolor: 'action.hover',
         borderRadius: 1,
         border: `1px solid ${theme.palette.divider}`,
         maxHeight: maxHeight,
@@ -226,7 +232,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
         <Box sx={{ position: 'relative' }}>
           {section.type === 'json' ? (
             <Box sx={{
-              backgroundColor: theme.palette.grey[50], padding: theme.spacing(1),
+              backgroundColor: theme.palette.action.hover, padding: theme.spacing(1),
               border: `1px solid ${theme.palette.divider}`, maxHeight: 600, overflow: 'auto',
               '& .json-view-wrapper': { wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }
             }}>
@@ -237,7 +243,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
               component="pre" 
               sx={{ 
                 fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                m: 0, p: 2, bgcolor: theme.palette.grey[50], borderRadius: 1,
+                m: 0, p: 2, bgcolor: 'action.hover', borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`, maxHeight: 600, overflow: 'auto', ...scrollbarSx
               }}
               dangerouslySetInnerHTML={{ __html: highlightYaml(String(section.content)) }}
@@ -315,7 +321,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
 
   const renderJsonContent = (content: object | unknown[]) => (
     <Box sx={{ 
-      maxWidth: '100%', backgroundColor: theme.palette.grey[50],
+      maxWidth: '100%', backgroundColor: theme.palette.action.hover,
       border: `1px solid ${theme.palette.divider}`, padding: theme.spacing(2),
       maxHeight, overflow: 'auto',
       '& .json-view-wrapper': {

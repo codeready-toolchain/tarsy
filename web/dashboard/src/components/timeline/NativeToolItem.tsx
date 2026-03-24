@@ -1,8 +1,9 @@
 import { useState, useMemo, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, Chip, alpha, useTheme } from '@mui/material';
+import { useColorScheme } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Code, Search, Link as LinkIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { highlightSearchTermNodes } from '../../utils/search';
 
@@ -65,6 +66,8 @@ const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
 function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
   const boxColor = theme.palette.info.main;
 
   const previewSummary = useMemo(() => getPreviewSummary(item), [item]);
@@ -131,7 +134,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       </Typography>
                       <Box
                         sx={{
-                          bgcolor: theme.palette.grey[50],
+                          bgcolor: theme.palette.action.hover,
                           borderRadius: 1,
                           border: `1px solid ${theme.palette.divider}`,
                           overflow: 'auto',
@@ -141,7 +144,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       >
                         <SyntaxHighlighter
                           language={lang}
-                          style={vs}
+                          style={isDark ? vscDarkPlus : vs}
                           customStyle={{
                             margin: 0,
                             padding: '12px',
@@ -198,7 +201,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       </Box>
                       <Box
                         sx={{
-                          bgcolor: theme.palette.grey[50],
+                          bgcolor: theme.palette.action.hover,
                           borderRadius: 1,
                           border: `1px solid ${theme.palette.divider}`,
                           p: 1.5,
@@ -246,7 +249,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 </Typography>
                 <Box
                   sx={{
-                    bgcolor: theme.palette.grey[50],
+                    bgcolor: theme.palette.action.hover,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,
                     overflow: 'auto',
@@ -256,7 +259,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 >
                   <SyntaxHighlighter
                     language={parsed.language || 'python'}
-                    style={vs}
+                    style={isDark ? vscDarkPlus : vs}
                     customStyle={{
                       margin: 0,
                       padding: '12px',
@@ -300,7 +303,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 </Box>
                 <Box
                   sx={{
-                    bgcolor: theme.palette.grey[50],
+                    bgcolor: theme.palette.action.hover,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,
                     p: 1.5,
@@ -329,7 +332,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
         return (
           <Box
             sx={{
-              bgcolor: theme.palette.grey[50],
+              bgcolor: theme.palette.action.hover,
               borderRadius: 1,
               border: `1px solid ${theme.palette.divider}`,
               overflow: 'auto',
@@ -339,7 +342,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           >
             <SyntaxHighlighter
               language="python"
-              style={vs}
+              style={isDark ? vscDarkPlus : vs}
               customStyle={{
                 margin: 0,
                 padding: '12px',
@@ -364,7 +367,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           return (
             <Box
               sx={{
-                bgcolor: theme.palette.grey[50],
+                bgcolor: theme.palette.action.hover,
                 borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,
@@ -411,7 +414,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           return (
             <Box
               sx={{
-                bgcolor: theme.palette.grey[50],
+                bgcolor: theme.palette.action.hover,
                 borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,

@@ -44,10 +44,10 @@ describe('highlightSearchTermNodes', () => {
     expect((markEl as ReactElement<{ children: string }>).props.children).toBe('world');
   });
 
-  it('applies correct mark styles', () => {
+  it('applies search-highlight class', () => {
     const result = highlightSearchTermNodes('test match here', 'match');
-    const markEl = result[1] as ReactElement<{ style: Record<string, string> }>;
-    expect(markEl.props.style).toEqual({ background: '#fff59d', padding: '0 1px' });
+    const markEl = result[1] as ReactElement<{ className: string }>;
+    expect(markEl.props.className).toBe('search-highlight');
   });
 
   it('is case-insensitive', () => {

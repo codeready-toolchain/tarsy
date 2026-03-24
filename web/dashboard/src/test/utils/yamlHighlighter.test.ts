@@ -14,79 +14,78 @@ describe('highlightYaml', () => {
   describe('key-value pairs', () => {
     it('highlights keys', () => {
       const result = highlightYaml('name: nginx');
-      expect(result).toContain('color: #5E81AC');
+      expect(result).toContain('class="yaml-key"');
       expect(result).toContain('name');
     });
 
     it('highlights string values', () => {
       const result = highlightYaml('name: nginx');
-      expect(result).toContain('color: #7FAF6E');
+      expect(result).toContain('class="yaml-string"');
       expect(result).toContain('nginx');
     });
 
     it('highlights quoted string values', () => {
       const result = highlightYaml('name: "nginx"');
-      expect(result).toContain('color: #7FAF6E');
+      expect(result).toContain('class="yaml-string"');
     });
 
     it('highlights single-quoted string values', () => {
       const result = highlightYaml("name: 'nginx'");
-      expect(result).toContain('color: #7FAF6E');
+      expect(result).toContain('class="yaml-string"');
     });
 
     it('highlights numeric values', () => {
       const result = highlightYaml('replicas: 3');
-      expect(result).toContain('color: #9570A0');
+      expect(result).toContain('class="yaml-number"');
       expect(result).toContain('3');
     });
 
     it('highlights negative numeric values', () => {
       const result = highlightYaml('offset: -5');
-      expect(result).toContain('color: #9570A0');
+      expect(result).toContain('class="yaml-number"');
     });
 
     it('highlights float values', () => {
       const result = highlightYaml('ratio: 0.75');
-      expect(result).toContain('color: #9570A0');
+      expect(result).toContain('class="yaml-number"');
     });
 
     it('highlights boolean true', () => {
       const result = highlightYaml('enabled: true');
-      expect(result).toContain('color: #9570A0');
+      expect(result).toContain('class="yaml-boolean"');
     });
 
     it('highlights boolean false', () => {
       const result = highlightYaml('enabled: false');
-      expect(result).toContain('color: #9570A0');
+      expect(result).toContain('class="yaml-boolean"');
     });
 
     it('highlights null values', () => {
       const result = highlightYaml('value: null');
-      expect(result).toContain('color: #BF616A');
+      expect(result).toContain('class="yaml-null"');
     });
 
     it('highlights tilde as null', () => {
       const result = highlightYaml('value: ~');
-      expect(result).toContain('color: #BF616A');
+      expect(result).toContain('class="yaml-null"');
     });
 
     it('does not highlight empty values', () => {
       const result = highlightYaml('key:');
-      // Key is highlighted but no value color
-      expect(result).toContain('color: #5E81AC');
+      expect(result).toContain('class="yaml-key"');
     });
   });
 
   describe('list items', () => {
     it('highlights list marker', () => {
       const result = highlightYaml('- item1');
-      expect(result).toContain('color: #5E9DB8');
+      expect(result).toContain('class="yaml-list-marker"');
       expect(result).toContain('item1');
     });
 
     it('handles indented list items', () => {
       const result = highlightYaml('  - nested');
-      expect(result).toContain('color: #5E9DB8');
+      expect(result).toContain('class="yaml-list-marker"');
       expect(result).toContain('nested');
     });
   });
@@ -94,13 +93,12 @@ describe('highlightYaml', () => {
   describe('comments', () => {
     it('highlights comment lines', () => {
       const result = highlightYaml('# This is a comment');
-      expect(result).toContain('color: #4C566A');
-      expect(result).toContain('font-style: italic');
+      expect(result).toContain('class="yaml-comment"');
     });
 
     it('handles indented comments', () => {
       const result = highlightYaml('  # indented comment');
-      expect(result).toContain('color: #4C566A');
+      expect(result).toContain('class="yaml-comment"');
     });
   });
 

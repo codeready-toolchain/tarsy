@@ -235,7 +235,7 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
             sx={{
               height: 6,
               borderRadius: 3,
-              bgcolor: 'grey.200',
+              bgcolor: 'action.selected',
               mb: 2,
               '& .MuiLinearProgress-bar': {
                 borderRadius: 3,

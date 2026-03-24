@@ -582,7 +582,7 @@ const StageContent: React.FC<StageContentProps> = ({
         )}
 
         {isCancelled && (
-          <Alert severity="info" sx={{ mt: 2, bgcolor: 'grey.100', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
+          <Alert severity="info" sx={{ mt: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
             <Typography variant="body2" color="text.secondary">
               <strong>Execution Cancelled</strong>
               {errorMessage ? `: ${errorMessage}` : ''}

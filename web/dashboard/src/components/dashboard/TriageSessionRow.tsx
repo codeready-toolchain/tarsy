@@ -7,8 +7,17 @@ import {
   IconButton,
   Box,
   Checkbox,
+  Chip,
 } from '@mui/material';
-import { PersonRemove, Replay } from '@mui/icons-material';
+import {
+  PersonRemove,
+  Replay,
+  CallSplit,
+  Hub,
+  BuildOutlined,
+  SwapHoriz,
+  SmsOutlined as ChatIcon,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
@@ -21,6 +30,22 @@ import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
+
+const iconOnlyChipSx = {
+  height: 24,
+  minWidth: 24,
+  '& .MuiChip-label': {
+    px: 0,
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    clipPath: 'inset(50%)',
+    whiteSpace: 'nowrap',
+  },
+  '& .MuiChip-icon': { mx: 0 },
+} as const;
 
 interface TriageSessionRowProps {
   session: DashboardSessionItem;
@@ -84,6 +109,36 @@ export function TriageSessionRow({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} size="small" />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
+        </Box>
+      </TableCell>
+
+      <TableCell sx={{ width: 130, textAlign: 'right', px: 0.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+          {session.has_parallel_stages && (
+            <Tooltip title="Parallel Agents - Multiple agents run in parallel">
+              <Chip icon={<CallSplit sx={{ fontSize: '0.875rem' }} />} label="Parallel" size="small" color="secondary" variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+            </Tooltip>
+          )}
+          {session.has_sub_agents && (
+            <Tooltip title="Orchestrator - Sub-agents dispatched">
+              <Chip icon={<Hub sx={{ fontSize: '0.875rem' }} />} label="Sub-agents" size="small" color="secondary" variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+            </Tooltip>
+          )}
+          {session.has_action_stages && (
+            <Tooltip title={session.actions_executed ? 'Automated remediation actions executed' : 'Action agent ran — no actions taken'}>
+              <Chip icon={<BuildOutlined sx={{ fontSize: '0.875rem' }} />} label="Actions" size="small" color={session.actions_executed ? 'success' : 'default'} variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+            </Tooltip>
+          )}
+          {session.provider_fallback_count > 0 && (
+            <Tooltip title={`Provider fallback${session.provider_fallback_count > 1 ? ` (${session.provider_fallback_count}×)` : ''}`}>
+              <Chip icon={<SwapHoriz sx={{ fontSize: '0.875rem' }} />} label="Fallback" size="small" color="warning" variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+            </Tooltip>
+          )}
+          {session.chat_message_count > 0 && (
+            <Tooltip title={`Follow-up chat active (${session.chat_message_count} message${session.chat_message_count !== 1 ? 's' : ''})`}>
+              <Chip icon={<ChatIcon sx={{ fontSize: '0.875rem' }} />} label="Chat" size="small" color="primary" variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+            </Tooltip>
+          )}
         </Box>
       </TableCell>
 

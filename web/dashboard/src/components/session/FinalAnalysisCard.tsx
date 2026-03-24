@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
 import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
+import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
 import ErrorCard from '../timeline/ErrorCard';
@@ -156,7 +157,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 );
               })()}
               {isNewlyUpdated && (
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'white', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'success.contrastText', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
                   ✨ Updated
                 </Box>
               )}
@@ -201,7 +202,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                   </Box>
                   <CopyButton text={summary} variant="icon" size="small" tooltip="Copy summary" />
                 </Box>
-                <Box sx={executiveSummaryMarkdownStyles}>
+                <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
                   <ReactMarkdown remarkPlugins={remarkPlugins}>{summary}</ReactMarkdown>
                 </Box>
               </Box>
@@ -226,7 +227,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               </Alert>
             )}
 
-            <Paper variant="outlined" sx={{ p: 3, bgcolor: 'grey.100' }}>
+            <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                 <CopyButton text={displayAnalysis} variant="icon" size="small" tooltip="Copy analysis" />
               </Box>

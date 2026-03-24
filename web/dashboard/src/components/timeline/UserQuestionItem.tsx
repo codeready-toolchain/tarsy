@@ -26,22 +26,25 @@ function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
   return (
     <Box data-flow-item-id={item.id} sx={{ mb: 1.5, position: 'relative' }}>
       <Box
-        sx={{
+        sx={(theme) => ({
           position: 'absolute', left: 0, top: 8,
           width: 28, height: 28, borderRadius: '50%',
-          bgcolor: accentColor, display: 'flex',
+          bgcolor: alpha(theme.palette[isTask ? 'secondary' : 'primary'].main, 0.15),
+          border: '2px solid',
+          borderColor: accentColor,
+          display: 'flex',
           alignItems: 'center', justifyContent: 'center', zIndex: 1,
-        }}
+        })}
       >
-        <Icon sx={{ fontSize: isTask ? 18 : 28, color: 'white' }} />
+        <Icon sx={{ fontSize: 18, color: accentColor }} />
       </Box>
 
       <Box
         sx={(theme) => ({
           ml: 4, my: 1, mr: 1, p: 1.5, borderRadius: 1.5,
-          bgcolor: 'grey.50',
+          bgcolor: 'action.hover',
           border: '1px solid',
-          borderColor: alpha(theme.palette.grey[300], 0.4),
+          borderColor: theme.palette.divider,
         })}
       >
         <Typography

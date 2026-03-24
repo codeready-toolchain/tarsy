@@ -24,6 +24,7 @@ import {
   CircularProgress,
   IconButton,
   Paper,
+  alpha,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -370,9 +371,10 @@ export function ManualAlertForm() {
           >
             <Typography variant="body2">
               <strong>Pre-filled from previous session:</strong>{' '}
-              <code
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.05)',
+              <Box
+                component="code"
+                sx={{
+                  bgcolor: 'action.hover',
                   padding: '2px 6px',
                   borderRadius: '4px',
                   fontFamily: 'monospace',
@@ -380,7 +382,7 @@ export function ManualAlertForm() {
                 }}
               >
                 {sourceSessionId.slice(-12)}
-              </code>
+              </Box>
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               You can modify any fields before submitting.
@@ -532,7 +534,7 @@ export function ManualAlertForm() {
             </Box>
 
             <Collapse in={slackExpanded} timeout={200}>
-              <Box sx={{ mt: 1, pl: 2, borderLeft: '3px solid #009688' }}>
+              <Box sx={{ mt: 1, pl: 2, borderLeft: '3px solid', borderLeftColor: 'info.main' }}>
                 <TextField
                   fullWidth
                   label="Slack Message Fingerprint"
@@ -560,7 +562,7 @@ export function ManualAlertForm() {
           />
 
           {/* Input Method Tabs */}
-          <Box sx={{ px: 4, py: 2, bgcolor: 'rgba(25, 118, 210, 0.04)' }}>
+          <Box sx={(theme) => ({ px: 4, py: 2, bgcolor: alpha(theme.palette.primary.main, 0.04) })}>
             <Typography
               variant="overline"
               sx={{
@@ -592,10 +594,10 @@ export function ManualAlertForm() {
                   bgcolor: mode === 1 ? 'primary.main' : 'transparent',
                   color: mode === 1 ? 'primary.contrastText' : 'text.primary',
                   border: '2px solid',
-                  borderColor: mode === 1 ? 'primary.main' : 'grey.300',
+                  borderColor: mode === 1 ? 'primary.main' : 'divider',
                   '&:hover': {
                     bgcolor: mode === 1 ? 'primary.dark' : 'action.hover',
-                    borderColor: mode === 1 ? 'primary.dark' : 'grey.400',
+                    borderColor: mode === 1 ? 'primary.dark' : 'text.disabled',
                   },
                 }}
               >
@@ -625,10 +627,10 @@ export function ManualAlertForm() {
                   bgcolor: mode === 0 ? 'primary.main' : 'transparent',
                   color: mode === 0 ? 'primary.contrastText' : 'text.primary',
                   border: '2px solid',
-                  borderColor: mode === 0 ? 'primary.main' : 'grey.300',
+                  borderColor: mode === 0 ? 'primary.main' : 'divider',
                   '&:hover': {
                     bgcolor: mode === 0 ? 'primary.dark' : 'action.hover',
-                    borderColor: mode === 0 ? 'primary.dark' : 'grey.400',
+                    borderColor: mode === 0 ? 'primary.dark' : 'text.disabled',
                   },
                 }}
               >
@@ -703,7 +705,7 @@ export function ManualAlertForm() {
                       borderRadius: 1,
                       border: '1px solid',
                       borderColor: 'divider',
-                      bgcolor: 'grey.50',
+                      bgcolor: 'action.hover',
                       transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                       '&:hover': {
                         borderColor: 'primary.light',
@@ -808,7 +810,7 @@ export function ManualAlertForm() {
                   borderRadius: 1,
                   border: '1px solid',
                   borderColor: 'divider',
-                  bgcolor: 'grey.50',
+                  bgcolor: 'action.hover',
                   p: 0.5,
                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                   '&:hover': { borderColor: 'primary.light', bgcolor: 'background.paper' },

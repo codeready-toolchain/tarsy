@@ -154,7 +154,7 @@ export default function SubAgentTabs({ subAgents, session }: SubAgentTabsProps) 
         sx={{ pt: 2 }}
       >
         {currentOverview && (
-          <Box sx={{ p: 2, mb: 2, bgcolor: 'grey.50', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+          <Box sx={{ p: 2, mb: 2, bgcolor: 'action.hover', border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Stack spacing={1}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">

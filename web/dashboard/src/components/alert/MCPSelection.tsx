@@ -24,6 +24,7 @@ import {
   Alert as MuiAlert,
   CircularProgress,
   Divider,
+  alpha,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -357,16 +358,16 @@ export function MCPSelection({
         onChange={(_, isExpanded) => setExpanded(isExpanded)}
         disabled={disabled}
         sx={{
-          boxShadow: expanded ? '0 1px 4px rgba(0, 0, 0, 0.08)' : 'none',
+          boxShadow: expanded ? 1 : 'none',
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
-          bgcolor: 'rgba(25, 118, 210, 0.04)',
+          bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
           transition: 'all 0.2s ease-in-out',
           '&:before': { display: 'none' },
           '&:hover': {
             borderColor: 'primary.light',
-            bgcolor: 'rgba(25, 118, 210, 0.06)',
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06),
           },
         }}
       >
@@ -380,7 +381,7 @@ export function MCPSelection({
             bgcolor: 'transparent',
             transition: 'background-color 0.2s ease-in-out',
             '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1.5 },
-            '&:hover': { bgcolor: 'rgba(25, 118, 210, 0.06)' },
+            '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06) },
           }}
         >
           <Box
@@ -392,7 +393,7 @@ export function MCPSelection({
               height: 36,
               borderRadius: '8px',
               bgcolor: 'primary.main',
-              color: 'white',
+              color: 'primary.contrastText',
             }}
           >
             <SettingsIcon sx={{ fontSize: 20 }} />
@@ -469,7 +470,7 @@ export function MCPSelection({
                   <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
                     {hasChanges ? (
                       <>
-                        <strong style={{ color: '#ed6c02' }}>Custom configuration active.</strong>{' '}
+                        <Box component="strong" sx={{ color: 'warning.main' }}>Custom configuration active.</Box>{' '}
                         Your changes will override provider defaults.
                       </>
                     ) : (
@@ -506,7 +507,7 @@ export function MCPSelection({
                         border: '1px solid',
                         borderColor: isSelected ? 'primary.main' : 'divider',
                         borderRadius: 2,
-                        bgcolor: isSelected ? 'rgba(25, 118, 210, 0.04)' : 'background.paper',
+                        bgcolor: isSelected ? (theme) => alpha(theme.palette.primary.main, 0.04) : 'background.paper',
                         transition: 'all 0.2s',
                       }}
                     >
@@ -589,7 +590,7 @@ export function MCPSelection({
                                   mt: 2,
                                   ml: 4,
                                   p: 2,
-                                  bgcolor: 'rgba(0, 0, 0, 0.02)',
+                                  bgcolor: 'action.hover',
                                   borderRadius: 1,
                                   border: '1px solid',
                                   borderColor: 'divider',
@@ -712,7 +713,7 @@ export function MCPSelection({
                         sx={{
                           mt: 2,
                           p: 2,
-                          bgcolor: 'rgba(0, 0, 0, 0.02)',
+                          bgcolor: 'action.hover',
                           borderRadius: 1,
                           border: '1px solid',
                           borderColor: 'divider',

@@ -59,9 +59,9 @@ function TypingIndicator({
         display: 'flex', alignItems: 'center', gap: 2, maxWidth: 'fit-content',
         animation: 'breathe 3s ease-in-out infinite',
         '@keyframes breathe': {
-          '0%': { boxShadow: `0 0 5px ${alpha('#1976d2', 0.2)}`, transform: 'scale(1)' },
-          '50%': { boxShadow: `0 0 20px ${alpha('#1976d2', 0.3)}`, transform: 'scale(1.02)' },
-          '100%': { boxShadow: `0 0 5px ${alpha('#1976d2', 0.2)}`, transform: 'scale(1)' }
+          '0%': { boxShadow: (theme) => `0 0 5px ${alpha(theme.palette.primary.main, 0.2)}`, transform: 'scale(1)' },
+          '50%': { boxShadow: (theme) => `0 0 20px ${alpha(theme.palette.primary.main, 0.3)}`, transform: 'scale(1.02)' },
+          '100%': { boxShadow: (theme) => `0 0 5px ${alpha(theme.palette.primary.main, 0.2)}`, transform: 'scale(1)' }
         }
       }}
     >

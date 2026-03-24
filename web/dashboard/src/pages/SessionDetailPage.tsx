@@ -1443,7 +1443,7 @@ export function SessionDetailPage() {
         <SharedHeader title={headerTitle} showBackButton>
           {/* Session info */}
           {session && !loading && (
-            <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'white' }}>
+            <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'common.white' }}>
               {session.stages?.length || 0} stages &bull; {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
             </Typography>
           )}

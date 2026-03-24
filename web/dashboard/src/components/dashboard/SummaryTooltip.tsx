@@ -7,6 +7,7 @@ import {
   Typography,
   Divider,
 } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { Summarize } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
@@ -43,11 +44,11 @@ export function SummaryTooltip({ summary }: SummaryTooltipProps) {
           fontSize: '0.75rem',
           fontWeight: 500,
           transition: 'all 0.2s ease-in-out',
-          '&:hover': (theme) => ({
-            backgroundColor: `${theme.palette.grey[700]} !important`,
-            color: `${theme.palette.common.white} !important`,
-            borderColor: `${theme.palette.grey[700]} !important`,
-          }),
+          '&:hover': {
+            backgroundColor: 'text.secondary',
+            color: 'background.paper',
+            borderColor: 'text.secondary',
+          },
         }}
       />
       <Popover
@@ -71,7 +72,7 @@ export function SummaryTooltip({ summary }: SummaryTooltipProps) {
             </Typography>
           </Box>
           <Divider sx={{ mb: 1.5 }} />
-          <Box sx={executiveSummaryMarkdownStyles}>
+          <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
             <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{summary}</ReactMarkdown>
           </Box>
         </Card>

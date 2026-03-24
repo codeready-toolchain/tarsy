@@ -174,7 +174,7 @@ function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
                       color: theme.palette.text.secondary,
-                      bgcolor: theme.palette.grey[50],
+                      bgcolor: theme.palette.action.hover,
                       border: `1px solid ${theme.palette.divider}`,
                       borderRadius: 1,
                       maxHeight: 250,

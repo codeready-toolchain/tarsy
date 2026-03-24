@@ -203,7 +203,7 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
             sx={{
               p: 2,
               mb: 2,
-              bgcolor: 'grey.50',
+              bgcolor: 'action.hover',
               border: 1,
               borderColor: 'divider',
               borderRadius: 1,

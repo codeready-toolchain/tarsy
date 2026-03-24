@@ -21,9 +21,9 @@ const ContentCard = forwardRef<HTMLDivElement, ContentCardProps>(
       ref={ref}
       sx={(theme) => ({
         position: 'relative',
-        bgcolor: alpha(theme.palette.grey[300], 0.15),
+        bgcolor: theme.palette.action.hover,
         border: '1px solid',
-        borderColor: alpha(theme.palette.grey[400], 0.2),
+        borderColor: theme.palette.divider,
         borderRadius: 1,
         p: 1.5,
         overflowY: 'auto',
@@ -32,9 +32,9 @@ const ContentCard = forwardRef<HTMLDivElement, ContentCardProps>(
         '&::-webkit-scrollbar': { width: '8px' },
         '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
         '&::-webkit-scrollbar-thumb': {
-          bgcolor: alpha(theme.palette.grey[500], 0.3),
+          bgcolor: alpha(theme.palette.text.disabled, 0.3),
           borderRadius: '4px',
-          '&:hover': { bgcolor: alpha(theme.palette.grey[500], 0.5) },
+          '&:hover': { bgcolor: alpha(theme.palette.text.disabled, 0.5) },
         },
       })}
     >

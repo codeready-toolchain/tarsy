@@ -14,6 +14,7 @@ import {
   TableRow,
   Checkbox,
   Button,
+  Tooltip,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -23,7 +24,13 @@ import {
   AssignmentTurnedIn,
   CheckCircleOutline,
   Close,
+  CallSplit,
+  Hub,
+  BuildOutlined,
+  SwapHoriz,
+  SmsOutlined as ChatIcon,
 } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
 import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
@@ -44,13 +51,15 @@ interface TriageGroupedListProps {
   actionLoading?: boolean;
 }
 
+type PaletteColorKey = 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+
 interface GroupConfig {
   key: TriageGroupName;
   label: string;
   dataKey: TriageGroupKey;
   icon: React.ReactElement;
   defaultOpen: boolean;
-  color: string;
+  color: PaletteColorKey;
   accentBorder?: boolean;
 }
 
@@ -61,7 +70,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'investigating',
     icon: <SearchIcon sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#1976d2',
+    color: 'primary',
   },
   {
     key: 'needs_review',
@@ -69,7 +78,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'needs_review',
     icon: <RateReview sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#ed6c02',
+    color: 'warning',
     accentBorder: true,
   },
   {
@@ -78,7 +87,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'in_progress',
     icon: <AssignmentTurnedIn sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#0288d1',
+    color: 'info',
   },
   {
     key: 'reviewed',
@@ -86,7 +95,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'reviewed',
     icon: <CheckCircleOutline sx={{ fontSize: 18 }} />,
     defaultOpen: false,
-    color: '#2e7d32',
+    color: 'success',
   },
 ];
 
@@ -116,6 +125,7 @@ export function TriageGroupedList({
   onBulkReopen,
   actionLoading,
 }: TriageGroupedListProps) {
+  const theme = useTheme();
   const STORAGE_KEY = 'triage-open-sections';
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
@@ -205,7 +215,7 @@ export function TriageGroupedList({
                   '&:hover': { backgroundColor: 'action.hover' },
                 }}
               >
-                <Box sx={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                   {group.icon}
                 </Box>
                 <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
@@ -237,9 +247,10 @@ export function TriageGroupedList({
             variant="outlined"
             sx={{
               overflow: 'hidden',
-              borderLeft: group.accentBorder && !isEmpty
-                ? `3px solid ${group.color}`
-                : undefined,
+              ...(group.accentBorder && !isEmpty && {
+                borderLeft: '3px solid',
+                borderLeftColor: `${group.color}.main`,
+              }),
             }}
           >
             {/* Group header */}
@@ -259,7 +270,7 @@ export function TriageGroupedList({
                 '&:hover': { backgroundColor: 'action.hover' },
               }}
             >
-              <Box sx={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                 {group.icon}
               </Box>
               <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
@@ -273,8 +284,12 @@ export function TriageGroupedList({
                   minWidth: 28,
                   fontSize: '0.75rem',
                   fontWeight: 600,
-                  backgroundColor: isEmpty ? 'action.disabledBackground' : group.color,
-                  color: isEmpty ? 'text.disabled' : '#fff',
+                  backgroundColor: isEmpty
+                    ? 'action.disabledBackground'
+                    : theme.palette[group.color].main,
+                  color: isEmpty
+                    ? 'text.disabled'
+                    : theme.palette.getContrastText(theme.palette[group.color].main),
                 }}
               />
               <IconButton size="small" sx={{ ml: 0.5 }}>
@@ -401,6 +416,25 @@ export function TriageGroupedList({
                             </TableCell>
                           )}
                           <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                          <TableCell sx={{ width: 130, px: 0.5, textAlign: 'right' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                              <Tooltip title="Parallel Agents" arrow>
+                                <CallSplit aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Orchestrator / Sub-agents" arrow>
+                                <Hub aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Automated Action" arrow>
+                                <BuildOutlined aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'success.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Provider Fallback" arrow>
+                                <SwapHoriz aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'warning.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Follow-up Chats" arrow>
+                                <ChatIcon aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'primary.main', cursor: 'help' }} />
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>

@@ -380,7 +380,7 @@ export default function SessionHeader({
                       fontSize: '0.875rem',
                       py: 1,
                       px: 2,
-                      backgroundColor: 'white',
+                      backgroundColor: 'background.paper',
                       color: 'error.main',
                       borderColor: 'error.main',
                       borderWidth: 1.5,
@@ -388,7 +388,7 @@ export default function SessionHeader({
                       '&:hover': {
                         backgroundColor: 'error.main',
                         borderColor: 'error.main',
-                        color: 'white',
+                        color: 'error.contrastText',
                         borderWidth: 1.5,
                       },
                     }}
@@ -414,7 +414,7 @@ export default function SessionHeader({
                       fontSize: '0.95rem',
                       py: 1,
                       px: 2.5,
-                      backgroundColor: 'white',
+                      backgroundColor: 'background.paper',
                       color: 'info.main',
                       borderColor: 'info.main',
                       borderWidth: 1.5,
@@ -422,7 +422,7 @@ export default function SessionHeader({
                       '&:hover': {
                         backgroundColor: 'info.main',
                         borderColor: 'info.main',
-                        color: 'white',
+                        color: 'info.contrastText',
                       },
                     }}
                   >

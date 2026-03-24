@@ -2,13 +2,18 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -706,4 +711,126 @@ func collectIDs(items []models.DashboardSessionItem) []string {
 		ids[i] = item.ID
 	}
 	return ids
+}
+
+func TestGetTriageGroup_SessionIndicators(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Create a session with full indicator data via seedDashboardSession (creates
+	// a completed session with stage + execution), then move it into triage.
+	indicatorID := seedDashboardSession(t, client.Client,
+		"Indicator test", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	client.AlertSession.UpdateOneID(indicatorID).
+		SetReviewStatus(alertsession.ReviewStatusNeedsReview).
+		ExecX(ctx)
+
+	// Look up the stage and execution created by the seed helper.
+	stages := client.Stage.Query().Where(stage.SessionID(indicatorID)).AllX(ctx)
+	require.Len(t, stages, 1)
+	stageID := stages[0].ID
+
+	execs := client.AgentExecution.Query().Where(agentexecution.SessionID(indicatorID)).AllX(ctx)
+	require.Len(t, execs, 1)
+	parentExecID := execs[0].ID
+
+	// Parallel stage.
+	client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(indicatorID).
+		SetStageName("parallel-analysis").
+		SetStageIndex(2).
+		SetExpectedAgentCount(2).
+		SetParallelType(stage.ParallelTypeMultiAgent).
+		SetStatus(stage.StatusCompleted).
+		SaveX(ctx)
+
+	// Sub-agent execution (parent_execution_id set).
+	client.AgentExecution.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(indicatorID).
+		SetStageID(stageID).
+		SetAgentName("SubAgent").
+		SetAgentIndex(1).
+		SetLlmBackend(string(config.LLMBackendLangChain)).
+		SetStartedAt(time.Now()).
+		SetStatus("completed").
+		SetParentExecutionID(parentExecID).
+		SaveX(ctx)
+
+	// Action stage with actions_executed=true.
+	client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(indicatorID).
+		SetStageName("remediation").
+		SetStageIndex(3).
+		SetStageType(stage.StageTypeAction).
+		SetActionsExecuted(true).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		SaveX(ctx)
+
+	// Provider fallback timeline events (×2).
+	for i := range 2 {
+		client.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(indicatorID).
+			SetStageID(stageID).
+			SetExecutionID(parentExecID).
+			SetSequenceNumber(100 + i).
+			SetEventType(timelineevent.EventTypeProviderFallback).
+			SetStatus(timelineevent.StatusCompleted).
+			SetContent(fmt.Sprintf("Fallback %d", i+1)).
+			SaveX(ctx)
+	}
+
+	// Chat with 3 user messages.
+	chatID := uuid.New().String()
+	client.Chat.Create().
+		SetID(chatID).
+		SetSessionID(indicatorID).
+		SetChainID("k8s-analysis").
+		SetCreatedBy("test@test.com").
+		SaveX(ctx)
+	for i := range 3 {
+		client.ChatUserMessage.Create().
+			SetID(uuid.New().String()).
+			SetChatID(chatID).
+			SetContent(fmt.Sprintf("message %d", i+1)).
+			SetAuthor("test@test.com").
+			SaveX(ctx)
+	}
+
+	// Plain session with no indicators as control.
+	plainID := seedReviewSession(t, service, "needs_review", "")
+
+	result, err := service.GetTriageGroup(ctx, models.TriageGroupNeedsReview,
+		models.TriageGroupParams{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+
+	var foundIndicator, foundPlain bool
+	for _, s := range result.Sessions {
+		if s.ID == indicatorID {
+			foundIndicator = true
+			assert.True(t, s.HasParallelStages, "should detect parallel stages")
+			assert.True(t, s.HasSubAgents, "should detect sub-agents")
+			assert.True(t, s.HasActionStages, "should detect action stages")
+			require.NotNil(t, s.ActionsExecuted)
+			assert.True(t, *s.ActionsExecuted, "should report actions were executed")
+			assert.Equal(t, 2, s.ProviderFallbackCount, "should count fallback events")
+			assert.Equal(t, 3, s.ChatMessageCount, "should count chat messages")
+		}
+		if s.ID == plainID {
+			foundPlain = true
+			assert.False(t, s.HasParallelStages)
+			assert.False(t, s.HasSubAgents)
+			assert.False(t, s.HasActionStages)
+			assert.Nil(t, s.ActionsExecuted)
+			assert.Equal(t, 0, s.ProviderFallbackCount)
+			assert.Equal(t, 0, s.ChatMessageCount)
+		}
+	}
+	require.True(t, foundIndicator, "indicator session should be in results")
+	require.True(t, foundPlain, "plain session should be in results")
 }

@@ -96,7 +96,7 @@ function ResponseItem({
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <CollapsibleItemHeader
             headerText={headerText}
-            headerColor="#2e7d32"
+            headerColor="success.main"
             headerTextTransform="uppercase"
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}

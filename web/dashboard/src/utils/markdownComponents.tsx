@@ -5,10 +5,11 @@
 
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useColorScheme } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import CopyButton from '../components/shared/CopyButton';
@@ -43,86 +44,98 @@ export const hasMarkdownSyntax = (text: string): boolean => {
  * Shared CSS-based markdown styles for executive summaries and hover cards
  * Used by FinalAnalysisCard and AlertListItem for consistent lightweight rendering
  */
-export const executiveSummaryMarkdownStyles = (theme: Theme) => ({
-  // Ensure markdown content renders inline properly
-  '& p': {
-    margin: 0,
-    marginBottom: 1,
-    lineHeight: 1.7,
-    fontSize: '0.95rem',
-    color: 'text.primary',
-    '&:last-child': { marginBottom: 0 },
-  },
-  '& strong': {
-    fontWeight: 'bold',
-  },
-  '& em': {
-    fontStyle: 'italic',
-  },
-  // Inline code styling - using native CSS for proper inline behavior
-  '& code': {
-    fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
-    fontSize: '0.875em',
-    backgroundColor: alpha(theme.palette.grey[900], 0.08),
-    color: 'error.main',
-    padding: '1px 6px',
-    borderRadius: '4px',
-    border: '1px solid',
-    borderColor: alpha(theme.palette.grey[900], 0.12),
-    whiteSpace: 'nowrap',
-    verticalAlign: 'baseline',
-  },
-  // Block code
-  '& pre': {
-    display: 'block',
-    fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
-    fontSize: '0.875em',
-    backgroundColor: alpha(theme.palette.grey[900], 0.06),
-    padding: 1.5,
-    borderRadius: 1,
-    overflowX: 'auto',
-    margin: '8px 0',
-    '& code': {
-      backgroundColor: 'transparent',
-      border: 'none',
-      padding: 0,
-      whiteSpace: 'pre',
+export const executiveSummaryMarkdownStyles = (theme: Theme) => {
+  const lightOverlay = theme.palette.grey[900];
+  const darkOverlay = theme.palette.grey[100];
+
+  return {
+    '& p': {
+      margin: 0,
+      marginBottom: 1,
+      lineHeight: 1.7,
+      fontSize: '0.95rem',
+      color: 'text.primary',
+      '&:last-child': { marginBottom: 0 },
     },
-  },
-  // Lists
-  '& ul, & ol': {
-    paddingLeft: 2.5,
-    margin: '8px 0',
-  },
-  '& li': {
-    marginBottom: 0.5,
-    lineHeight: 1.6,
-  },
-  // Tables — wrapper provides horizontal scroll for narrow containers
-  '& table': {
-    display: 'block',
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    maxWidth: '100%',
-    borderCollapse: 'collapse',
-    margin: '12px 0',
-    fontSize: '0.9rem',
-  },
-  '& th': {
-    textAlign: 'left',
-    fontWeight: 600,
-    padding: '8px 12px',
-    borderBottom: '2px solid',
-    borderColor: alpha(theme.palette.divider, 0.8),
-    backgroundColor: alpha(theme.palette.grey[900], 0.04),
-    whiteSpace: 'nowrap',
-  },
-  '& td': {
-    padding: '6px 12px',
-    borderBottom: '1px solid',
-    borderColor: alpha(theme.palette.divider, 0.4),
-  },
-});
+    '& strong': {
+      fontWeight: 'bold',
+    },
+    '& em': {
+      fontStyle: 'italic',
+    },
+    '& code': {
+      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
+      fontSize: '0.875em',
+      backgroundColor: alpha(lightOverlay, 0.08),
+      color: theme.palette.error.main,
+      padding: '1px 6px',
+      borderRadius: '4px',
+      border: '1px solid',
+      borderColor: alpha(lightOverlay, 0.12),
+      whiteSpace: 'nowrap',
+      verticalAlign: 'baseline',
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.12),
+        color: theme.palette.warning.light,
+        borderColor: alpha(darkOverlay, 0.2),
+      }),
+    },
+    '& pre': {
+      display: 'block',
+      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
+      fontSize: '0.875em',
+      backgroundColor: alpha(lightOverlay, 0.06),
+      padding: 1.5,
+      borderRadius: 1,
+      overflowX: 'auto',
+      margin: '8px 0',
+      '& code': {
+        backgroundColor: 'transparent',
+        border: 'none',
+        padding: 0,
+        color: 'inherit',
+        whiteSpace: 'pre',
+      },
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.1),
+      }),
+    },
+    '& ul, & ol': {
+      paddingLeft: 2.5,
+      margin: '8px 0',
+    },
+    '& li': {
+      marginBottom: 0.5,
+      lineHeight: 1.6,
+    },
+    '& table': {
+      display: 'block',
+      overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
+      maxWidth: '100%',
+      borderCollapse: 'collapse',
+      margin: '12px 0',
+      fontSize: '0.9rem',
+    },
+    '& th': {
+      textAlign: 'left',
+      fontWeight: 600,
+      padding: '8px 12px',
+      borderBottom: '2px solid',
+      borderColor: alpha(theme.palette.divider, 0.8),
+      backgroundColor: alpha(lightOverlay, 0.04),
+      whiteSpace: 'nowrap',
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.08),
+      }),
+    },
+    '& td': {
+      padding: '6px 12px',
+      borderBottom: '1px solid',
+      borderColor: alpha(theme.palette.divider, 0.4),
+    },
+  };
+};
 
 interface TableStyleOptions {
   tableMarginY: number;
@@ -224,7 +237,7 @@ const thoughtTableRenderers = createTableRenderers({
   tableMarginY: 1,
   fontSize: '0.9em',
   thPadding: '6px 10px',
-  thBgColor: 'grey.100',
+  thBgColor: 'action.hover',
   tdPadding: '4px 10px',
 });
 
@@ -316,16 +329,15 @@ export const finalAnswerMarkdownComponents = {
   // Block code wrapper: uses a plain <div> so that SyntaxHighlighter (which
   // renders its own <pre>) doesn't cause nested <pre> elements. For plain
   // code blocks without a language, the inner <code> element renders the
-  // block styling. The `& code` selector resets inline code styles.
+  // block styling. The `& > code` selector resets inline code styles.
   pre: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (
       <Box
         component="div"
-        sx={{
+        sx={(theme) => ({
           my: 1,
           '& > code': {
-            // Plain block code without language — style as pre block
             display: 'block',
             backgroundColor: 'rgba(0, 0, 0, 0.06)',
             padding: '12px',
@@ -335,11 +347,13 @@ export const finalAnswerMarkdownComponents = {
             fontSize: '0.85rem',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            // Reset inline code styles
             color: 'inherit',
             border: 'none',
+            ...theme.applyStyles('dark', {
+              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            }),
           },
-        }}
+        })}
         {...safeProps}
       >
         {children}
@@ -348,9 +362,11 @@ export const finalAnswerMarkdownComponents = {
   },
   // Code element: handles both inline code and fenced code with language.
   // When inside a <pre> wrapper (block code without language), the parent's
-  // `& > code` selector applies block styling. This avoids the <pre>-inside-<p>
-  // nesting issue that caused hydration errors.
+  // `& > code` selector applies block styling. Uses useColorScheme() to switch
+  // syntax highlighter theme between light and dark modes.
   code: (props: MdProps) => {
+    const { mode, systemMode } = useColorScheme();
+    const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
     const { node: _node, inline: _inline, className, children, ...safeProps } = props;
 
     // Fenced code block with language — render with syntax highlighting
@@ -365,7 +381,7 @@ export const finalAnswerMarkdownComponents = {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              bgcolor: 'grey.200',
+              bgcolor: 'action.selected',
               px: 1.5,
               py: 0.5,
               borderRadius: '4px 4px 0 0',
@@ -380,7 +396,7 @@ export const finalAnswerMarkdownComponents = {
           </Box>
           <SyntaxHighlighter
             language={language}
-            style={vs}
+            style={isDark ? vscDarkPlus : vs}
             customStyle={{
               margin: 0,
               padding: '12px',
@@ -402,11 +418,11 @@ export const finalAnswerMarkdownComponents = {
       <Box
         component="code"
         sx={{
-          backgroundColor: 'rgba(0, 0, 0, 0.08)',
-          color: 'error.main',
+          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+          color: isDark ? 'warning.light' : 'error.main',
           padding: '2px 6px',
           border: '1px solid',
-          borderColor: 'rgba(0, 0, 0, 0.1)',
+          borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
           borderRadius: '4px',
           fontFamily: 'monospace',
           fontSize: '0.85rem',
@@ -486,7 +502,7 @@ export const thoughtMarkdownComponents = {
       <Box
         component="pre"
         sx={{
-          bgcolor: 'grey.100',
+          bgcolor: 'action.hover',
           padding: '12px',
           borderRadius: 1,
           overflowX: 'auto',
@@ -519,7 +535,7 @@ export const thoughtMarkdownComponents = {
       <Box
         component="code"
         sx={{
-          bgcolor: 'grey.100',
+          bgcolor: 'action.hover',
           px: 0.5,
           py: 0.25,
           borderRadius: 0.5,

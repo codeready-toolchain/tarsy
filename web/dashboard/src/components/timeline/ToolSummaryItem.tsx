@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Box, Collapse, Typography } from '@mui/material';
+import { Box, Collapse, Typography, alpha } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
@@ -62,7 +62,7 @@ function ToolSummaryItem({
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <CollapsibleItemHeader
           headerText="TOOL RESULT SUMMARY"
-          headerColor="rgba(237, 108, 2, 0.9)"
+          headerColor="warning.main"
           headerTextTransform="uppercase"
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}
@@ -71,7 +71,7 @@ function ToolSummaryItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <Box sx={{ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: '2px solid rgba(237, 108, 2, 0.2)' }}>
+            <Box sx={(theme) => ({ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: `2px solid ${alpha(theme.palette.warning.main, 0.2)}` })}>
               {hasMarkdown ? (
                 <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' }, color: 'text.secondary' }}>
                   <ReactMarkdown components={thoughtMarkdownComponents} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} skipHtml>

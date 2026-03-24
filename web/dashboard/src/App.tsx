@@ -47,8 +47,8 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeProvider theme={theme} defaultMode="light">
+      <CssBaseline enableColorScheme />
       <VersionProvider>
         <AuthProvider>
           <VersionUpdateBanner />

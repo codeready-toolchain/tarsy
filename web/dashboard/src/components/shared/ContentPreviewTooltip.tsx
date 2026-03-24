@@ -49,15 +49,15 @@ export default function ContentPreviewTooltip({
             maxWidth: 800, 
             maxHeight: 600, 
             overflow: 'auto',
-            bgcolor: 'grey.100',
-            color: 'grey.900',
+            bgcolor: 'background.paper',
+            color: 'text.primary',
             border: '2px solid',
             borderColor: 'primary.main',
             '& p, & li, & span': {
-              color: 'grey.900'
+              color: 'text.primary'
             },
             '& code': {
-              bgcolor: 'grey.200',
+              bgcolor: 'action.selected',
               color: 'primary.dark'
             }
           }}

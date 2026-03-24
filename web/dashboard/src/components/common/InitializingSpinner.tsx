@@ -1,4 +1,5 @@
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography, alpha, useTheme } from '@mui/material';
+import { useColorScheme } from '@mui/material/styles';
 
 type ColorVariant = 'primary' | 'warning';
 
@@ -9,19 +10,6 @@ interface InitializingSpinnerProps {
   color?: ColorVariant;
 }
 
-const COLORS: Record<ColorVariant, { ring: string; gradient: string }> = {
-  primary: {
-    ring: 'rgba(25, 118, 210, 0.15)',
-    gradient:
-      'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
-  },
-  warning: {
-    ring: 'rgba(237, 108, 2, 0.15)',
-    gradient:
-      'linear-gradient(90deg, rgba(237,108,2,0.5) 0%, rgba(237,108,2,0.7) 40%, rgba(237,108,2,0.9) 50%, rgba(237,108,2,0.7) 60%, rgba(237,108,2,0.5) 100%)',
-  },
-};
-
 /**
  * Pulsing ring spinner with shimmer text.
  * Used while a session is queued or initializing, before the first timeline
@@ -31,7 +19,18 @@ export default function InitializingSpinner({
   message = 'Initializing investigation...',
   color = 'primary',
 }: InitializingSpinnerProps) {
-  const palette = COLORS[color];
+  const theme = useTheme();
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
+  const colorValue = theme.palette[color].main;
+  const ring = alpha(colorValue, 0.15);
+
+  const useColorGradient = color === 'warning';
+  const gradient = useColorGradient
+    ? `linear-gradient(90deg, ${alpha(colorValue, 0.5)} 0%, ${alpha(colorValue, 0.7)} 40%, ${alpha(colorValue, 0.9)} 50%, ${alpha(colorValue, 0.7)} 60%, ${alpha(colorValue, 0.5)} 100%)`
+    : isDark
+      ? 'linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.7) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.7) 60%, rgba(255,255,255,0.5) 100%)'
+      : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)';
 
   return (
     <Box
@@ -43,7 +42,6 @@ export default function InitializingSpinner({
         gap: 3,
       }}
     >
-      {/* Pulsing ring spinner */}
       <Box
         sx={{
           position: 'relative',
@@ -62,7 +60,7 @@ export default function InitializingSpinner({
             height: 64,
             borderRadius: '50%',
             border: '2px solid',
-            borderColor: palette.ring,
+            borderColor: ring,
             animation: 'init-pulse 2s ease-in-out infinite',
             '@keyframes init-pulse': {
               '0%, 100%': { transform: 'scale(1)', opacity: 0.6 },
@@ -72,14 +70,13 @@ export default function InitializingSpinner({
         />
       </Box>
 
-      {/* Shimmer text */}
       <Typography
         variant="body1"
         sx={{
           fontSize: '1.1rem',
           fontWeight: 500,
           fontStyle: 'italic',
-          background: palette.gradient,
+          background: gradient,
           backgroundSize: '200% 100%',
           backgroundClip: 'text',
           WebkitBackgroundClip: 'text',

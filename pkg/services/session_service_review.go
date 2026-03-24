@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
@@ -474,6 +475,12 @@ type triageRow struct {
 	QualityRating         *string    `sql:"quality_rating"`
 	ActionTaken           *string    `sql:"action_taken"`
 	InvestigationFeedback *string    `sql:"investigation_feedback"`
+	HasParallel           int        `sql:"has_parallel"`
+	HasSubAgents          int        `sql:"has_sub_agents"`
+	HasActionStages       int        `sql:"has_action_stages"`
+	ActionsExecuted       *bool      `sql:"actions_executed"`
+	ChatMsgCount          int        `sql:"chat_msg_count"`
+	FallbackCount         int        `sql:"fallback_count"`
 	LatestScore           *int       `sql:"latest_score"`
 	ScoringStatus         *string    `sql:"scoring_status"`
 }
@@ -542,6 +549,31 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			)
 
 			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND parallel_type IS NOT NULL) THEN 1 ELSE 0 END)", sid),
+				"has_parallel",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM agent_executions WHERE session_id = %s AND parent_execution_id IS NOT NULL) THEN 1 ELSE 0 END)", sid),
+				"has_sub_agents",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = '%s' AND actions_executed IS NOT NULL) THEN 1 ELSE 0 END)", sid, stage.StageTypeAction),
+				"has_action_stages",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT bool_or(actions_executed) FROM stages WHERE session_id = %s AND stage_type = '%s' AND actions_executed IS NOT NULL)", sid, stage.StageTypeAction),
+				"actions_executed",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM chat_user_messages WHERE chat_id IN (SELECT chat_id FROM chats WHERE session_id = %s))", sid),
+				"chat_msg_count",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT COUNT(*) FROM timeline_events WHERE session_id = %s AND event_type = 'provider_fallback')", sid),
+				"fallback_count",
+			)
+
+			sel.AppendSelectAs(
 				fmt.Sprintf("(SELECT total_score FROM session_scores WHERE session_id = %s AND status = 'completed' ORDER BY started_at DESC LIMIT 1)", sid),
 				"latest_score",
 			)
@@ -579,6 +611,12 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			QualityRating:         row.QualityRating,
 			ActionTaken:           row.ActionTaken,
 			InvestigationFeedback: row.InvestigationFeedback,
+			HasParallelStages:     row.HasParallel != 0,
+			HasSubAgents:          row.HasSubAgents != 0,
+			HasActionStages:       row.HasActionStages != 0,
+			ActionsExecuted:       row.ActionsExecuted,
+			ChatMessageCount:      row.ChatMsgCount,
+			ProviderFallbackCount: row.FallbackCount,
 			LatestScore:           row.LatestScore,
 			ScoringStatus:         row.ScoringStatus,
 		})

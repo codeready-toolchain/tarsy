@@ -44,7 +44,7 @@ function getMessageStyle(role: string) {
       return { bgcolor: 'warning.main', color: 'warning.contrastText', label: 'Tool' };
     default:
       return {
-        bgcolor: 'grey.500',
+        bgcolor: 'text.disabled',
         color: 'common.white',
         label: role.charAt(0).toUpperCase() + role.slice(1),
       };
@@ -96,7 +96,7 @@ function ConversationMessageView({ message, index }: { message: ConversationMess
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
           p: 1.5,
-          bgcolor: 'grey.50',
+          bgcolor: 'action.hover',
           borderRadius: 1,
           border: 1,
           borderColor: 'divider',
@@ -122,7 +122,7 @@ function ConversationMessageView({ message, index }: { message: ConversationMess
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   p: 1,
-                  bgcolor: 'grey.50',
+                  bgcolor: 'action.hover',
                   borderRadius: 1,
                   maxHeight: 150,
                   overflow: 'auto',
@@ -182,7 +182,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 p: 1.5,
-                bgcolor: 'grey.50',
+                bgcolor: 'action.hover',
                 borderRadius: 1,
                 border: 1,
                 borderColor: 'error.main',
@@ -250,7 +250,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 p: 1.5,
-                bgcolor: 'rgba(33, 150, 243, 0.08)',
+                bgcolor: 'action.hover',
                 borderRadius: 1,
                 border: 1,
                 borderColor: 'info.light',
