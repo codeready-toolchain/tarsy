@@ -78,6 +78,21 @@ No runbook available.
 **Agent:** SkillInvestigator (google-native, test-provider)
 **Status**: completed
 
+**Pre-loaded Skill: kubernetes-basics**
+
+
+# Kubernetes Basics
+
+## Pods
+A pod is the smallest deployable unit in Kubernetes.
+
+## Deployments
+Deployments manage ReplicaSets and provide declarative updates.
+
+## Services
+Services expose pods to network traffic via stable endpoints.
+
+
 **Internal Reasoning:**
 
 Let me load the networking skill for this investigation.
