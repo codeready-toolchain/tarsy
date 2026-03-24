@@ -419,19 +419,19 @@ export function TriageGroupedList({
                           <TableCell sx={{ width: 130, px: 0.5, textAlign: 'right' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                               <Tooltip title="Parallel Agents" arrow>
-                                <CallSplit sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                                <CallSplit aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
                               </Tooltip>
                               <Tooltip title="Orchestrator / Sub-agents" arrow>
-                                <Hub sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
+                                <Hub aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
                               </Tooltip>
                               <Tooltip title="Automated Action" arrow>
-                                <BuildOutlined sx={{ fontSize: '1.1rem', color: 'success.main', cursor: 'help' }} />
+                                <BuildOutlined aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'success.main', cursor: 'help' }} />
                               </Tooltip>
                               <Tooltip title="Provider Fallback" arrow>
-                                <SwapHoriz sx={{ fontSize: '1.1rem', color: 'warning.main', cursor: 'help' }} />
+                                <SwapHoriz aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'warning.main', cursor: 'help' }} />
                               </Tooltip>
                               <Tooltip title="Follow-up Chats" arrow>
-                                <ChatIcon sx={{ fontSize: '1.1rem', color: 'primary.main', cursor: 'help' }} />
+                                <ChatIcon aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'primary.main', cursor: 'help' }} />
                               </Tooltip>
                             </Box>
                           </TableCell>

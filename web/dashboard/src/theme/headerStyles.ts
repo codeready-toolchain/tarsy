@@ -1,15 +1,16 @@
-import type { Theme } from '@mui/material/styles';
+import { alpha, type Theme } from '@mui/material/styles';
 import type { SxProps } from '@mui/system';
 
 export function appBarSx(theme: Theme) {
+  const primary = theme.palette.primary;
   return {
     borderRadius: 1,
-    background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-    boxShadow: '0 4px 16px rgba(25, 118, 210, 0.3)',
+    background: `linear-gradient(135deg, ${primary.main} 0%, ${primary.dark} 100%)`,
+    boxShadow: `0 4px 16px ${alpha(primary.main, 0.3)}`,
     border: '1px solid rgba(255, 255, 255, 0.1)',
     ...theme.applyStyles('dark', {
-      background: 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)',
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+      background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.95)} 0%, ${theme.palette.background.default} 100%)`,
+      boxShadow: `0 4px 16px ${alpha(theme.palette.common.black, 0.4)}`,
     }),
   } as const;
 }
