@@ -222,9 +222,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
                 <Box sx={(theme) => ({
                   maxHeight: 400, overflow: 'auto',
                   p: 1.5, borderRadius: 1,
-                  bgcolor: theme.palette.action.hover,
+                  bgcolor: '#fff',
                   border: `1px solid ${theme.palette.divider}`,
                   fontSize: '0.85rem',
+                  ...theme.applyStyles('dark', {
+                    bgcolor: 'rgba(255, 255, 255, 0.06)',
+                  }),
                   '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
                   '& h2': { fontSize: '1rem', mt: 1.5, mb: 0.75 },
                   '& h3': { fontSize: '0.9rem', mt: 1, mb: 0.5 },

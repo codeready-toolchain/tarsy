@@ -110,16 +110,7 @@ function TimelineItem({
       return <ProviderFallbackItem item={item} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.SKILL_LOADED:
-      return (
-        <SkillLoadedItem
-          item={item}
-          isAutoCollapsed={isAutoCollapsed}
-          onToggleAutoCollapse={handleToggle}
-          expandAll={expandAll}
-          isCollapsible={isCollapsible}
-          searchTerm={searchTerm}
-        />
-      );
+      return <SkillLoadedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container
