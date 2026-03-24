@@ -13662,6 +13662,7 @@ type StageMutation struct {
 	duration_ms               *int
 	addduration_ms            *int
 	error_message             *string
+	actions_executed          *bool
 	clearedFields             map[string]struct{}
 	session                   *string
 	clearedsession            bool
@@ -14519,6 +14520,55 @@ func (m *StageMutation) ResetReferencedStageID() {
 	delete(m.clearedFields, stage.FieldReferencedStageID)
 }
 
+// SetActionsExecuted sets the "actions_executed" field.
+func (m *StageMutation) SetActionsExecuted(b bool) {
+	m.actions_executed = &b
+}
+
+// ActionsExecuted returns the value of the "actions_executed" field in the mutation.
+func (m *StageMutation) ActionsExecuted() (r bool, exists bool) {
+	v := m.actions_executed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActionsExecuted returns the old "actions_executed" field's value of the Stage entity.
+// If the Stage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StageMutation) OldActionsExecuted(ctx context.Context) (v *bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActionsExecuted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActionsExecuted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActionsExecuted: %w", err)
+	}
+	return oldValue.ActionsExecuted, nil
+}
+
+// ClearActionsExecuted clears the value of the "actions_executed" field.
+func (m *StageMutation) ClearActionsExecuted() {
+	m.actions_executed = nil
+	m.clearedFields[stage.FieldActionsExecuted] = struct{}{}
+}
+
+// ActionsExecutedCleared returns if the "actions_executed" field was cleared in this mutation.
+func (m *StageMutation) ActionsExecutedCleared() bool {
+	_, ok := m.clearedFields[stage.FieldActionsExecuted]
+	return ok
+}
+
+// ResetActionsExecuted resets all changes to the "actions_executed" field.
+func (m *StageMutation) ResetActionsExecuted() {
+	m.actions_executed = nil
+	delete(m.clearedFields, stage.FieldActionsExecuted)
+}
+
 // ClearSession clears the "session" edge to the AlertSession entity.
 func (m *StageMutation) ClearSession() {
 	m.clearedsession = true
@@ -15039,7 +15089,7 @@ func (m *StageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *StageMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 16)
 	if m.session != nil {
 		fields = append(fields, stage.FieldSessionID)
 	}
@@ -15085,6 +15135,9 @@ func (m *StageMutation) Fields() []string {
 	if m.referenced_stage != nil {
 		fields = append(fields, stage.FieldReferencedStageID)
 	}
+	if m.actions_executed != nil {
+		fields = append(fields, stage.FieldActionsExecuted)
+	}
 	return fields
 }
 
@@ -15123,6 +15176,8 @@ func (m *StageMutation) Field(name string) (ent.Value, bool) {
 		return m.ChatUserMessageID()
 	case stage.FieldReferencedStageID:
 		return m.ReferencedStageID()
+	case stage.FieldActionsExecuted:
+		return m.ActionsExecuted()
 	}
 	return nil, false
 }
@@ -15162,6 +15217,8 @@ func (m *StageMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldChatUserMessageID(ctx)
 	case stage.FieldReferencedStageID:
 		return m.OldReferencedStageID(ctx)
+	case stage.FieldActionsExecuted:
+		return m.OldActionsExecuted(ctx)
 	}
 	return nil, fmt.Errorf("unknown Stage field %s", name)
 }
@@ -15276,6 +15333,13 @@ func (m *StageMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetReferencedStageID(v)
 		return nil
+	case stage.FieldActionsExecuted:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActionsExecuted(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Stage field %s", name)
 }
@@ -15372,6 +15436,9 @@ func (m *StageMutation) ClearedFields() []string {
 	if m.FieldCleared(stage.FieldReferencedStageID) {
 		fields = append(fields, stage.FieldReferencedStageID)
 	}
+	if m.FieldCleared(stage.FieldActionsExecuted) {
+		fields = append(fields, stage.FieldActionsExecuted)
+	}
 	return fields
 }
 
@@ -15412,6 +15479,9 @@ func (m *StageMutation) ClearField(name string) error {
 		return nil
 	case stage.FieldReferencedStageID:
 		m.ClearReferencedStageID()
+		return nil
+	case stage.FieldActionsExecuted:
+		m.ClearActionsExecuted()
 		return nil
 	}
 	return fmt.Errorf("unknown Stage nullable field %s", name)
@@ -15465,6 +15535,9 @@ func (m *StageMutation) ResetField(name string) error {
 		return nil
 	case stage.FieldReferencedStageID:
 		m.ResetReferencedStageID()
+		return nil
+	case stage.FieldActionsExecuted:
+		m.ResetActionsExecuted()
 		return nil
 	}
 	return fmt.Errorf("unknown Stage field %s", name)

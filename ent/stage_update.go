@@ -308,6 +308,26 @@ func (_u *StageUpdate) ClearReferencedStageID() *StageUpdate {
 	return _u
 }
 
+// SetActionsExecuted sets the "actions_executed" field.
+func (_u *StageUpdate) SetActionsExecuted(v bool) *StageUpdate {
+	_u.mutation.SetActionsExecuted(v)
+	return _u
+}
+
+// SetNillableActionsExecuted sets the "actions_executed" field if the given value is not nil.
+func (_u *StageUpdate) SetNillableActionsExecuted(v *bool) *StageUpdate {
+	if v != nil {
+		_u.SetActionsExecuted(*v)
+	}
+	return _u
+}
+
+// ClearActionsExecuted clears the value of the "actions_executed" field.
+func (_u *StageUpdate) ClearActionsExecuted() *StageUpdate {
+	_u.mutation.ClearActionsExecuted()
+	return _u
+}
+
 // AddAgentExecutionIDs adds the "agent_executions" edge to the AgentExecution entity by IDs.
 func (_u *StageUpdate) AddAgentExecutionIDs(ids ...string) *StageUpdate {
 	_u.mutation.AddAgentExecutionIDs(ids...)
@@ -730,6 +750,12 @@ func (_u *StageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(stage.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.ActionsExecuted(); ok {
+		_spec.SetField(stage.FieldActionsExecuted, field.TypeBool, value)
+	}
+	if _u.mutation.ActionsExecutedCleared() {
+		_spec.ClearField(stage.FieldActionsExecuted, field.TypeBool)
 	}
 	if _u.mutation.AgentExecutionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1426,6 +1452,26 @@ func (_u *StageUpdateOne) ClearReferencedStageID() *StageUpdateOne {
 	return _u
 }
 
+// SetActionsExecuted sets the "actions_executed" field.
+func (_u *StageUpdateOne) SetActionsExecuted(v bool) *StageUpdateOne {
+	_u.mutation.SetActionsExecuted(v)
+	return _u
+}
+
+// SetNillableActionsExecuted sets the "actions_executed" field if the given value is not nil.
+func (_u *StageUpdateOne) SetNillableActionsExecuted(v *bool) *StageUpdateOne {
+	if v != nil {
+		_u.SetActionsExecuted(*v)
+	}
+	return _u
+}
+
+// ClearActionsExecuted clears the value of the "actions_executed" field.
+func (_u *StageUpdateOne) ClearActionsExecuted() *StageUpdateOne {
+	_u.mutation.ClearActionsExecuted()
+	return _u
+}
+
 // AddAgentExecutionIDs adds the "agent_executions" edge to the AgentExecution entity by IDs.
 func (_u *StageUpdateOne) AddAgentExecutionIDs(ids ...string) *StageUpdateOne {
 	_u.mutation.AddAgentExecutionIDs(ids...)
@@ -1878,6 +1924,12 @@ func (_u *StageUpdateOne) sqlSave(ctx context.Context) (_node *Stage, err error)
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(stage.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.ActionsExecuted(); ok {
+		_spec.SetField(stage.FieldActionsExecuted, field.TypeBool, value)
+	}
+	if _u.mutation.ActionsExecutedCleared() {
+		_spec.ClearField(stage.FieldActionsExecuted, field.TypeBool)
 	}
 	if _u.mutation.AgentExecutionsCleared() {
 		edge := &sqlgraph.EdgeSpec{

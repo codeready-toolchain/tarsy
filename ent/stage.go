@@ -50,6 +50,8 @@ type Stage struct {
 	ChatUserMessageID *string `json:"chat_user_message_id,omitempty"`
 	// FK to another stage in the same session (e.g. synthesis -> investigation)
 	ReferencedStageID *string `json:"referenced_stage_id,omitempty"`
+	// Whether the action agent executed any remediation tools (null for non-action stages)
+	ActionsExecuted *bool `json:"actions_executed,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the StageQuery when eager-loading is set.
 	Edges        StageEdges `json:"edges"`
@@ -197,6 +199,8 @@ func (*Stage) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case stage.FieldActionsExecuted:
+			values[i] = new(sql.NullBool)
 		case stage.FieldStageIndex, stage.FieldExpectedAgentCount, stage.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
 		case stage.FieldID, stage.FieldSessionID, stage.FieldStageName, stage.FieldParallelType, stage.FieldSuccessPolicy, stage.FieldStageType, stage.FieldStatus, stage.FieldErrorMessage, stage.FieldChatID, stage.FieldChatUserMessageID, stage.FieldReferencedStageID:
@@ -322,6 +326,13 @@ func (_m *Stage) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ReferencedStageID = new(string)
 				*_m.ReferencedStageID = value.String
+			}
+		case stage.FieldActionsExecuted:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field actions_executed", values[i])
+			} else if value.Valid {
+				_m.ActionsExecuted = new(bool)
+				*_m.ActionsExecuted = value.Bool
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -475,6 +486,11 @@ func (_m *Stage) String() string {
 	if v := _m.ReferencedStageID; v != nil {
 		builder.WriteString("referenced_stage_id=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ActionsExecuted; v != nil {
+		builder.WriteString("actions_executed=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteByte(')')
 	return builder.String()

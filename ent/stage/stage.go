@@ -44,6 +44,8 @@ const (
 	FieldChatUserMessageID = "chat_user_message_id"
 	// FieldReferencedStageID holds the string denoting the referenced_stage_id field in the database.
 	FieldReferencedStageID = "referenced_stage_id"
+	// FieldActionsExecuted holds the string denoting the actions_executed field in the database.
+	FieldActionsExecuted = "actions_executed"
 	// EdgeSession holds the string denoting the session edge name in mutations.
 	EdgeSession = "session"
 	// EdgeAgentExecutions holds the string denoting the agent_executions edge name in mutations.
@@ -177,6 +179,7 @@ var Columns = []string{
 	FieldChatID,
 	FieldChatUserMessageID,
 	FieldReferencedStageID,
+	FieldActionsExecuted,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -376,6 +379,11 @@ func ByChatUserMessageID(opts ...sql.OrderTermOption) OrderOption {
 // ByReferencedStageID orders the results by the referenced_stage_id field.
 func ByReferencedStageID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldReferencedStageID, opts...).ToFunc()
+}
+
+// ByActionsExecuted orders the results by the actions_executed field.
+func ByActionsExecuted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActionsExecuted, opts...).ToFunc()
 }
 
 // BySessionField orders the results by session field.

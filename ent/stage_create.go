@@ -207,6 +207,20 @@ func (_c *StageCreate) SetNillableReferencedStageID(v *string) *StageCreate {
 	return _c
 }
 
+// SetActionsExecuted sets the "actions_executed" field.
+func (_c *StageCreate) SetActionsExecuted(v bool) *StageCreate {
+	_c.mutation.SetActionsExecuted(v)
+	return _c
+}
+
+// SetNillableActionsExecuted sets the "actions_executed" field if the given value is not nil.
+func (_c *StageCreate) SetNillableActionsExecuted(v *bool) *StageCreate {
+	if v != nil {
+		_c.SetActionsExecuted(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *StageCreate) SetID(v string) *StageCreate {
 	_c.mutation.SetID(v)
@@ -504,6 +518,10 @@ func (_c *StageCreate) createSpec() (*Stage, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(stage.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
+	}
+	if value, ok := _c.mutation.ActionsExecuted(); ok {
+		_spec.SetField(stage.FieldActionsExecuted, field.TypeBool, value)
+		_node.ActionsExecuted = &value
 	}
 	if nodes := _c.mutation.SessionIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

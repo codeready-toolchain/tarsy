@@ -120,6 +120,11 @@ func ReferencedStageID(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldEQ(FieldReferencedStageID, v))
 }
 
+// ActionsExecuted applies equality check predicate on the "actions_executed" field. It's identical to ActionsExecutedEQ.
+func ActionsExecuted(v bool) predicate.Stage {
+	return predicate.Stage(sql.FieldEQ(FieldActionsExecuted, v))
+}
+
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
 func SessionIDEQ(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldEQ(FieldSessionID, v))
@@ -878,6 +883,26 @@ func ReferencedStageIDEqualFold(v string) predicate.Stage {
 // ReferencedStageIDContainsFold applies the ContainsFold predicate on the "referenced_stage_id" field.
 func ReferencedStageIDContainsFold(v string) predicate.Stage {
 	return predicate.Stage(sql.FieldContainsFold(FieldReferencedStageID, v))
+}
+
+// ActionsExecutedEQ applies the EQ predicate on the "actions_executed" field.
+func ActionsExecutedEQ(v bool) predicate.Stage {
+	return predicate.Stage(sql.FieldEQ(FieldActionsExecuted, v))
+}
+
+// ActionsExecutedNEQ applies the NEQ predicate on the "actions_executed" field.
+func ActionsExecutedNEQ(v bool) predicate.Stage {
+	return predicate.Stage(sql.FieldNEQ(FieldActionsExecuted, v))
+}
+
+// ActionsExecutedIsNil applies the IsNil predicate on the "actions_executed" field.
+func ActionsExecutedIsNil() predicate.Stage {
+	return predicate.Stage(sql.FieldIsNull(FieldActionsExecuted))
+}
+
+// ActionsExecutedNotNil applies the NotNil predicate on the "actions_executed" field.
+func ActionsExecutedNotNil() predicate.Stage {
+	return predicate.Stage(sql.FieldNotNull(FieldActionsExecuted))
 }
 
 // HasSession applies the HasEdge predicate on the "session" edge.

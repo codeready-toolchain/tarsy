@@ -593,6 +593,7 @@ var (
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "actions_executed", Type: field.TypeBool, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "chat_id", Type: field.TypeString, Nullable: true},
 		{Name: "chat_user_message_id", Type: field.TypeString, Unique: true, Nullable: true},
@@ -606,25 +607,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "stages_alert_sessions_stages",
-				Columns:    []*schema.Column{StagesColumns[12]},
+				Columns:    []*schema.Column{StagesColumns[13]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "stages_chats_stages",
-				Columns:    []*schema.Column{StagesColumns[13]},
+				Columns:    []*schema.Column{StagesColumns[14]},
 				RefColumns: []*schema.Column{ChatsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "stages_chat_user_messages_stage",
-				Columns:    []*schema.Column{StagesColumns[14]},
+				Columns:    []*schema.Column{StagesColumns[15]},
 				RefColumns: []*schema.Column{ChatUserMessagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "stages_stages_referencing_stages",
-				Columns:    []*schema.Column{StagesColumns[15]},
+				Columns:    []*schema.Column{StagesColumns[16]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -633,7 +634,7 @@ var (
 			{
 				Name:    "stage_session_id_stage_index",
 				Unique:  true,
-				Columns: []*schema.Column{StagesColumns[12], StagesColumns[2]},
+				Columns: []*schema.Column{StagesColumns[13], StagesColumns[2]},
 			},
 		},
 	}
