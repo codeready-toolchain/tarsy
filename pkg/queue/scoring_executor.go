@@ -15,7 +15,6 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/event"
-	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
@@ -53,9 +52,8 @@ type ScoringExecutor struct {
 	messageService     *services.MessageService
 	runbookService     *runbook.Service
 
-	memoryService  *memory.Service
-	memoryConfig   *config.MemoryConfig
-	reflector      *memory.Reflector
+	memoryService *memory.Service
+	memoryConfig  *config.MemoryConfig
 
 	mu            sync.RWMutex
 	wg            sync.WaitGroup
@@ -79,10 +77,8 @@ func NewScoringExecutor(
 	msgService := services.NewMessageService(dbClient)
 
 	var memCfg *config.MemoryConfig
-	var refl *memory.Reflector
 	if memoryService != nil {
 		memCfg = config.ResolvedMemoryConfig(cfg.Defaults)
-		refl = &memory.Reflector{}
 	}
 
 	return &ScoringExecutor{
@@ -99,7 +95,6 @@ func NewScoringExecutor(
 		runbookService:     runbookService,
 		memoryService:      memoryService,
 		memoryConfig:       memCfg,
-		reflector:          refl,
 		activeCancels:      make(map[string]context.CancelFunc),
 	}
 }
@@ -450,7 +445,7 @@ func (e *ScoringExecutor) runMemoryExtraction(
 	ctx context.Context,
 	session *ent.AlertSession,
 	investigationContext string,
-	result *agent.ExecutionResult,
+	scoringResult *agent.ExecutionResult,
 	agentExecCtx *agent.ExecutionContext,
 ) {
 	logger := slog.With("session_id", session.ID)
@@ -462,16 +457,14 @@ func (e *ScoringExecutor) runMemoryExtraction(
 
 	e.publishScoreUpdated(session.ID, events.ScoringStatusMemorizing)
 
-	// Parse the scoring result from the agent's FinalAnalysis JSON.
-	var scoringResult controller.ScoringResult
-	if err := json.Unmarshal([]byte(result.FinalAnalysis), &scoringResult); err != nil {
+	var parsedScore controller.ScoringResult
+	if err := json.Unmarshal([]byte(scoringResult.FinalAnalysis), &parsedScore); err != nil {
 		logger.Warn("Failed to parse scoring result for reflector", "error", err)
 		return
 	}
 
 	project := "default"
 
-	// Fetch existing memories for dedup context.
 	existingMemories, err := e.memoryService.FindSimilar(
 		ctx, project, *session.FinalAnalysis, e.memoryConfig.ReflectorMemoryLimit,
 	)
@@ -480,28 +473,31 @@ func (e *ScoringExecutor) runMemoryExtraction(
 		existingMemories = nil
 	}
 
-	reflectorInput := memory.ReflectorInput{
+	reflectorCtrl := memory.NewReflectorController(memory.ReflectorInput{
 		InvestigationContext: investigationContext,
-		ScoringResult:       scoringResult,
+		ScoringResult:       parsedScore,
 		ExistingMemories:    existingMemories,
 		AlertType:           session.AlertType,
 		ChainID:             session.ChainID,
-		LLMClient:           e.llmClient,
-		Config:              agentExecCtx.Config,
-		SessionID:           session.ID,
-		ExecutionID:         agentExecCtx.ExecutionID,
-	}
+	})
 
-	output, err := e.reflector.Run(ctx, reflectorInput)
+	reflectorResult, err := reflectorCtrl.Run(ctx, agentExecCtx, "")
 	if err != nil {
 		logger.Warn("Reflector failed", "error", err)
 		return
 	}
 
-	// Record the Reflector LLM interaction for observability.
-	e.recordReflectorInteraction(ctx, agentExecCtx, output)
+	parsed, ok := memory.ParseReflectorResponse(reflectorResult.FinalAnalysis)
+	if !ok {
+		logger.Warn("Reflector output could not be parsed — no memories extracted",
+			"response_length", len(reflectorResult.FinalAnalysis))
+		return
+	}
+	if parsed.IsEmpty() {
+		logger.Info("Reflector found no new learnings")
+		return
+	}
 
-	// Apply memory actions.
 	var alertTypePtr *string
 	if session.AlertType != "" {
 		alertTypePtr = &session.AlertType
@@ -509,58 +505,16 @@ func (e *ScoringExecutor) runMemoryExtraction(
 	chainIDPtr := &session.ChainID
 
 	if applyErr := e.memoryService.ApplyReflectorActions(
-		ctx, project, session.ID, alertTypePtr, chainIDPtr, scoringResult.TotalScore, output.Result,
+		ctx, project, session.ID, alertTypePtr, chainIDPtr, parsedScore.TotalScore, parsed,
 	); applyErr != nil {
 		logger.Warn("Failed to apply reflector actions",
 			"error", applyErr, "project", project, "session_id", session.ID)
 	}
 
-	if output.Result != nil {
-		logger.Info("Memory extraction completed",
-			"created", len(output.Result.Create),
-			"reinforced", len(output.Result.Reinforce),
-			"deprecated", len(output.Result.Deprecate))
-	}
-}
-
-// recordReflectorInteraction saves an LLMInteraction record for the Reflector call.
-func (e *ScoringExecutor) recordReflectorInteraction(ctx context.Context, execCtx *agent.ExecutionContext, output *memory.ReflectorOutput) {
-	if output == nil || execCtx.Services == nil || execCtx.Services.Interaction == nil {
-		return
-	}
-
-	durationMs := int(output.Duration.Milliseconds())
-	var inputTokens, outputTokens, totalTokens *int
-	if output.Usage != nil {
-		inputTokens = &output.Usage.InputTokens
-		outputTokens = &output.Usage.OutputTokens
-		totalTokens = &output.Usage.TotalTokens
-	}
-
-	if _, err := e.interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
-		SessionID:       execCtx.SessionID,
-		StageID:         &execCtx.StageID,
-		ExecutionID:     &execCtx.ExecutionID,
-		InteractionType: string(llminteraction.InteractionTypeMemoryExtraction),
-		ModelName:       execCtx.Config.LLMProvider.Model,
-		LLMRequest:      map[string]interface{}{"type": "reflector"},
-		LLMResponse:     map[string]interface{}{"text": output.Text},
-		InputTokens:     inputTokens,
-		OutputTokens:    outputTokens,
-		TotalTokens:     totalTokens,
-		DurationMs:      &durationMs,
-		ThinkingContent: nilIfEmpty(output.Thinking),
-	}); err != nil {
-		slog.Warn("Failed to record reflector LLM interaction",
-			"session_id", execCtx.SessionID, "error", err)
-	}
-}
-
-func nilIfEmpty(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
+	logger.Info("Memory extraction completed",
+		"created", len(parsed.Create),
+		"reinforced", len(parsed.Reinforce),
+		"deprecated", len(parsed.Deprecate))
 }
 
 // publishScoreUpdated notifies the global sessions channel that scoring

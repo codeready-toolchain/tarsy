@@ -4,10 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBuildReflectorSystemPrompt(t *testing.T) {
@@ -84,49 +82,4 @@ func TestBuildReflectorUserPrompt_ContainsOutputSchema(t *testing.T) {
 	assert.True(t, strings.Contains(prompt, `"reinforce"`))
 	assert.True(t, strings.Contains(prompt, `"deprecate"`))
 	assert.True(t, strings.Contains(prompt, `"memory_id"`))
-}
-
-func TestCollectReflectorStream(t *testing.T) {
-	t.Run("text and thinking chunks", func(t *testing.T) {
-		ch := make(chan agent.Chunk, 4)
-		ch <- &agent.ThinkingChunk{Content: "Let me think..."}
-		ch <- &agent.TextChunk{Content: `{"create`}
-		ch <- &agent.TextChunk{Content: `":[],"reinforce":[],"deprecate":[]}`}
-		ch <- &agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150}
-		close(ch)
-
-		text, thinking, usage, err := collectReflectorStream(ch)
-		require.NoError(t, err)
-		assert.Equal(t, `{"create":[],"reinforce":[],"deprecate":[]}`, text)
-		assert.Equal(t, "Let me think...", thinking)
-		require.NotNil(t, usage)
-		assert.Equal(t, 100, usage.InputTokens)
-		assert.Equal(t, 50, usage.OutputTokens)
-		assert.Equal(t, 150, usage.TotalTokens)
-	})
-
-	t.Run("error chunk stops collection", func(t *testing.T) {
-		ch := make(chan agent.Chunk, 3)
-		ch <- &agent.TextChunk{Content: "partial"}
-		ch <- &agent.ErrorChunk{Message: "rate limited", Code: "429", Retryable: true}
-		ch <- &agent.TextChunk{Content: "never seen"}
-		close(ch)
-
-		_, _, _, err := collectReflectorStream(ch)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "rate limited")
-		assert.Contains(t, err.Error(), "429")
-		assert.Contains(t, err.Error(), "retryable=true")
-	})
-
-	t.Run("empty stream", func(t *testing.T) {
-		ch := make(chan agent.Chunk)
-		close(ch)
-
-		text, thinking, usage, err := collectReflectorStream(ch)
-		require.NoError(t, err)
-		assert.Empty(t, text)
-		assert.Empty(t, thinking)
-		assert.Nil(t, usage)
-	})
 }

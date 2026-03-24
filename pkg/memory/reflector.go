@@ -1,112 +1,38 @@
 package memory
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
-	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 )
 
-// ReflectorInput carries all context needed for the Reflector LLM call.
+// ReflectorInput carries the data needed to build Reflector prompts.
 type ReflectorInput struct {
 	InvestigationContext string
 	ScoringResult       controller.ScoringResult
 	ExistingMemories    []Memory
 	AlertType           string
 	ChainID             string
-
-	LLMClient agent.LLMClient
-	Config    *agent.ResolvedAgentConfig
-
-	SessionID   string
-	ExecutionID string
 }
 
-// ReflectorOutput wraps the parsed result and token usage from a Reflector call.
-type ReflectorOutput struct {
-	Result    *ReflectorResult
-	Text      string
-	Thinking  string
-	Usage     *agent.TokenUsage
-	StartTime time.Time
-	Duration  time.Duration
-}
-
-// Reflector runs a separate LLM conversation to extract memories from a scored investigation.
-type Reflector struct{}
-
-// Run executes the Reflector as a fresh 2-message LLM conversation.
-func (r *Reflector) Run(ctx context.Context, input ReflectorInput) (*ReflectorOutput, error) {
-	systemPrompt := buildReflectorSystemPrompt()
-	userPrompt := buildReflectorUserPrompt(input)
-
-	messages := []agent.ConversationMessage{
-		{Role: agent.RoleSystem, Content: systemPrompt},
-		{Role: agent.RoleUser, Content: userPrompt},
-	}
-
-	start := time.Now()
-	stream, err := input.LLMClient.Generate(ctx, &agent.GenerateInput{
-		SessionID:   input.SessionID,
-		ExecutionID: input.ExecutionID,
-		Messages:    messages,
-		Config:      input.Config.LLMProvider,
-		Backend:     input.Config.LLMBackend,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("reflector LLM call failed: %w", err)
-	}
-
-	text, thinking, usage, err := collectReflectorStream(stream)
-	duration := time.Since(start)
-	if err != nil {
-		return nil, fmt.Errorf("reflector stream collection failed: %w", err)
-	}
-
-	result, ok := ParseReflectorResponse(text)
-	if !ok {
-		slog.Warn("Reflector output could not be parsed — proceeding with no memories",
-			"session_id", input.SessionID,
-			"response_length", len(text))
-	}
-
-	return &ReflectorOutput{
-		Result:    result,
-		Text:      text,
-		Thinking:  thinking,
-		Usage:     usage,
-		StartTime: start,
-		Duration:  duration,
-	}, nil
-}
-
-func collectReflectorStream(stream <-chan agent.Chunk) (text, thinking string, usage *agent.TokenUsage, err error) {
-	var textBuf, thinkingBuf strings.Builder
-
-	for chunk := range stream {
-		switch c := chunk.(type) {
-		case *agent.TextChunk:
-			textBuf.WriteString(c.Content)
-		case *agent.ThinkingChunk:
-			thinkingBuf.WriteString(c.Content)
-		case *agent.UsageChunk:
-			usage = &agent.TokenUsage{
-				InputTokens:    c.InputTokens,
-				OutputTokens:   c.OutputTokens,
-				TotalTokens:    c.TotalTokens,
-				ThinkingTokens: c.ThinkingTokens,
+// NewReflectorController creates a SingleShotController configured for memory extraction.
+// The returned controller uses the standard infrastructure: retries, fallback,
+// metrics, timeline events, message persistence, and LLM interaction recording.
+func NewReflectorController(input ReflectorInput) *controller.SingleShotController {
+	return controller.NewSingleShotController(controller.SingleShotConfig{
+		BuildMessages: func(_ *agent.ExecutionContext, _ string) []agent.ConversationMessage {
+			return []agent.ConversationMessage{
+				{Role: agent.RoleSystem, Content: buildReflectorSystemPrompt()},
+				{Role: agent.RoleUser, Content: buildReflectorUserPrompt(input)},
 			}
-		case *agent.ErrorChunk:
-			return "", "", nil, fmt.Errorf("LLM error (code=%s, retryable=%t): %s", c.Code, c.Retryable, c.Message)
-		}
-	}
-
-	return textBuf.String(), thinkingBuf.String(), usage, nil
+		},
+		ThinkingFallback: true,
+		InteractionLabel: llminteraction.InteractionTypeMemoryExtraction,
+	})
 }
 
 func buildReflectorSystemPrompt() string {
