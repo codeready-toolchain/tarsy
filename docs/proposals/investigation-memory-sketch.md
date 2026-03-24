@@ -69,7 +69,7 @@ Currently, after a session reaches terminal status:
 2. **Scoring stage** — multi-turn LLM evaluation producing score, analysis, failure tags, tool improvement report
 3. **Review workflow** — human claims and completes review (asynchronous, may happen hours/days later)
 
-Memory extraction is **embedded in the scoring stage** as a third LLM turn — see [Q5 decision](investigation-memory-questions.md). It runs for every scored investigation (see [Q8 decision](investigation-memory-questions.md)).
+Memory extraction is **embedded in the scoring stage** as a separate LLM conversation triggered by the `ScoringExecutor` after the scoring controller completes — see [Q5 decision](investigation-memory-questions.md). It runs for every scored investigation (see [Q8 decision](investigation-memory-questions.md)).
 
 ## Key Concepts
 
@@ -156,7 +156,7 @@ The Reflector produces structured memory entries, each with:
 - **Confidence** — derived from investigation score and evidence quality
 - **Source** — session ID and stage that produced this memory
 
-Memory extraction is **embedded in the scoring stage** as a third LLM turn (see [Q5 decision](investigation-memory-questions.md)). The scorer already has the full investigation context and produces the critique that extraction needs — adding "what should be remembered?" is the most token-efficient approach with zero new infrastructure.
+Memory extraction is **embedded in the scoring stage** as a separate LLM conversation (see [Q5 decision](investigation-memory-questions.md)). The `ScoringExecutor` already has the full investigation context and produces the critique that extraction needs — the Reflector receives this as explicit context in a fresh conversation with its own "memory extraction specialist" system prompt. Near-zero marginal cost with zero new infrastructure.
 
 ### Memory lifecycle
 

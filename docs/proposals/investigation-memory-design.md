@@ -12,7 +12,7 @@ This document turns the [investigation memory sketch](investigation-memory-sketc
 
 1. **Memory is a light touch.** Complementary hints for specific/repeating situations, not a playbook. The LLM's investigative creativity is preserved.
 2. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Investigation scope metadata (`alert_type`, `chain_id`) is a soft boost, never a hard filter. Infrastructure-specific context (service names, clusters, regions) lives in the memory content itself and is matched via semantic search. Project is the only hard filter (security boundary).
-3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The 3-5 auto-inject cap is the noise control.
+3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The `max_inject` cap (default: 5) is the noise control.
 4. **Embedded extraction.** Memory extraction runs as a separate LLM call within the scoring stage — triggered by the `ScoringExecutor` after the scoring controller completes. No new infrastructure, near-zero marginal cost.
 5. **In-prompt dedup.** The Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass.
 6. **Future-proof for multi-tenancy.** `project` field from day one, hard-filtered on every query.
@@ -92,6 +92,8 @@ Embedding is configurable via `defaults.memory` in `tarsy.yaml`. The built-in de
 defaults:
   memory:
     enabled: true
+    max_inject: 5                              # max memories auto-injected into system prompt (default: 5)
+    reflector_memory_limit: 20                 # max existing memories shown to Reflector for dedup (default: 20)
     embedding:
       provider: "google"                       # google | openai
       model: "gemini-embedding-2-preview"      # model name
@@ -104,8 +106,10 @@ defaults:
 
 ```go
 type MemoryConfig struct {
-    Enabled   bool            `yaml:"enabled"`
-    Embedding EmbeddingConfig `yaml:"embedding,omitempty"`
+    Enabled              bool            `yaml:"enabled"`
+    MaxInject            int             `yaml:"max_inject,omitempty"`            // default: 5
+    ReflectorMemoryLimit int             `yaml:"reflector_memory_limit,omitempty"` // default: 20
+    Embedding            EmbeddingConfig `yaml:"embedding,omitempty"`
 }
 
 type EmbeddingConfig struct {
@@ -130,7 +134,7 @@ func defaultEmbeddingConfig() EmbeddingConfig {
 }
 ```
 
-**Embedding pipeline:** The Go backend calls the provider's embedding API directly via HTTP — one POST per embedding. No Python service involvement (embedding is a simple stateless operation, unlike the multi-turn LLM calls that justify the gRPC service). The `Embedder` interface dispatches to the correct API format based on `provider`:
+**Embedding pipeline:** The Go backend calls the provider's embedding API directly via HTTP — one POST per embedding. No Python service involvement (embedding is a simple stateless operation, unlike the multi-turn LLM calls that justify the gRPC service). When the Reflector creates multiple memories in one pass, each needs a separate embedding call. **Future optimization:** Google's `batchEmbedContents` endpoint accepts multiple texts per request, reducing round trips. Not required for v1 (Reflector typically produces 1-5 memories per investigation), but worth adding if extraction volume grows. The `Embedder` interface dispatches to the correct API format based on `provider`:
 
 ```go
 // pkg/memory/embedder.go
@@ -285,8 +289,14 @@ ScoringExecutor.runScoring()
 ├─ scoringResult := scoringAgent.Execute(ctx, execCtx, investigationContext)
 │     └─ ScoringController.Run() — turns 1 & 2, returns ScoringResult
 │
-├─ existingMemories := memoryService.FindSimilar(ctx, project, finalAnalysis, limit)
-│     └─ pgvector query filtered by project
+│  // project: "default" until session-authorization lands (then session.Project)
+│  // queryText: session's investigation conclusion — used to find semantically
+│  //   similar existing memories for the Reflector's dedup context
+│  project := "default"
+│  queryText := session.FinalAnalysis   (nillable — skip Reflector if nil)
+│
+├─ existingMemories := memoryService.FindSimilar(ctx, project, queryText, memoryConfig.ReflectorMemoryLimit)
+│     └─ pgvector cosine similarity, filtered by project, returns top N
 │
 └─ reflectorResult := reflector.Run(ctx, ReflectorInput{
 │     InvestigationContext: investigationContext,   // reused, no extra DB call
@@ -297,7 +307,7 @@ ScoringExecutor.runScoring()
 │  })
 │     └─ Builds fresh messages[0..1], calls LLM, parses JSON response
 │
-└─ memoryService.ApplyReflectorActions(ctx, reflectorResult)
+└─ memoryService.ApplyReflectorActions(ctx, project, session.ID, reflectorResult)
       └─ Creates / reinforces / deprecates memories in DB
 ```
 
@@ -357,9 +367,10 @@ Each learning falls into one category:
 - Ground every learning in **specific evidence** from the investigation — tool call results,
   agent reasoning, or scoring critique. Do not extract generic SRE knowledge the agent already
   has.
-- **Do not duplicate skill content.** The investigation timeline includes the agent's
-  pre-loaded skills. If a learning is already covered by a skill (e.g., classification
-  criteria, report format, environment facts), do not extract it — the agent already knows it.
+- **Do not duplicate skill content.** The investigation timeline includes the agent's skills —
+  both pre-loaded (at the start of the timeline) and dynamically loaded via `load_skill` tool
+  calls. If a learning is already covered by a skill (e.g., classification criteria, report
+  format, environment facts), do not extract it — the agent already knows it.
 - Prefer **specific and actionable** over vague and general. "Check PgBouncer health before
   blaming the database" is better than "Consider all components in the request path."
 - Negative learnings from mistakes are especially valuable — they prevent repeating errors.
@@ -442,6 +453,8 @@ Respond with a JSON object (and nothing else):
 }
 ```
 
+Note: the Reflector does **not** output a `confidence` value. Initial confidence is derived by the executor from the investigation's score (see [Confidence Model](#confidence-model)). This keeps the Reflector prompt focused on content extraction; the executor owns the numerical quality signal.
+
 **Parse strategy:** Lenient parsing with silent fallback. Try strict JSON first, then strip markdown fences and extract JSON by bracket depth. If both fail, log a warning and proceed with "no memories" — extraction never blocks scoring. See [Q3 decision](investigation-memory-design-questions.md#q3-how-should-reflector-parse-failures-be-handled).
 
 ### Changes to `ScoringExecutor`
@@ -449,13 +462,24 @@ Respond with a JSON object (and nothing else):
 Memory extraction runs in the `ScoringExecutor` (not the `ScoringController`) — after the scoring controller returns, the executor triggers the Reflector as a separate LLM call.
 
 ```go
-// In ScoringExecutor.runScoring(), after scoringAgent.Execute() returns:
+// In ScoringExecutor.executeScoring(), after scoringAgent.Execute() returns:
 
-// investigationContext is already available — built earlier for the scoring call
-// scoringResult is the ScoringResult returned by ScoringController.Run()
+// investigationContext is already available — built earlier for the scoring call.
+// scoringResult is the ScoringResult returned by ScoringController.Run().
+// project is "default" until session-authorization lands (then session.Project).
+
+project := "default" // hard-coded until session-authorization adds a project field
+
+// Skip Reflector if there is no final analysis to use as a query vector
+if session.FinalAnalysis == nil {
+    logger.Info("no final analysis — skipping memory extraction")
+    return
+}
 
 // 1. Fetch existing memories for dedup context
-existingMemories, err := memoryService.FindSimilar(ctx, projectID, finalAnalysis, reflectorMemoryLimit)
+existingMemories, err := memoryService.FindSimilar(
+    ctx, project, *session.FinalAnalysis, memoryConfig.ReflectorMemoryLimit,
+)
 if err != nil {
     logger.Warn("failed to fetch existing memories for reflector", "error", err)
     existingMemories = nil // proceed without dedup context
@@ -468,7 +492,7 @@ reflectorResult, err := reflector.Run(ctx, reflector.Input{
     InvestigationContext: investigationContext,  // reused from buildScoringContext()
     ScoringResult:       scoringResult,          // score, analysis, tool report, failure tags
     ExistingMemories:    existingMemories,
-    AlertType:           session.Edges.Alert.AlertType,
+    AlertType:           session.AlertType,
     ChainID:             session.ChainID,
     LLMClient:           e.llmClient,
     Config:              resolvedConfig,
@@ -476,17 +500,52 @@ reflectorResult, err := reflector.Run(ctx, reflector.Input{
 if err != nil {
     logger.Warn("reflector failed", "error", err)
 } else {
-    memoryService.ApplyReflectorActions(ctx, projectID, sessionID, reflectorResult)
+    memoryService.ApplyReflectorActions(ctx, project, sessionID, reflectorResult)
 }
 ```
 
 The `reflector.Run()` function builds a fresh 2-message conversation (system + user), calls the LLM, and parses the JSON response. It is completely independent of the scoring LLM conversation.
 
-**Progress status:** The Reflector call emits a **"Memorizing..."** progress status visible in the UI/streaming output, distinguishing it from the scoring turns. Code-level names (`ScoringController`, `defaults.scoring`, etc.) remain unchanged — memory extraction is a natural extension of the scoring stage, not a separate stage.
+**Progress status:** Before calling the Reflector, the executor publishes a `ScoringStatusMemorizing` stage event via `publishStageStatus` — the same WebSocket event mechanism used for `ScoringStatusStarted` and `ScoringStatusCompleted`. The frontend displays this as **"Memorizing..."** in the scoring progress indicator, distinguishing it from the scoring turns. Code-level names (`ScoringController`, `defaults.scoring`, etc.) remain unchanged — memory extraction is a natural extension of the scoring stage, not a separate stage.
+
+### Observability: Tracking Memory Extraction Calls
+
+The Reflector LLM call and embedding API calls are tracked through existing observability mechanisms — no new infrastructure needed.
+
+**Reflector LLM call:**
+
+- **`LLMInteraction` record** with new `InteractionTypeMemoryExtraction` — tracks model, token usage, latency, same as scoring turns. Recorded by the executor using `recordLLMInteraction()` after the Reflector call returns. This is the primary audit trail — distinguishes "this was a memory extraction call" from scoring turns.
+- **Standard timeline events** — the Reflector call goes through `callLLMWithStreaming` like scoring turns, so it automatically produces `llm_thinking` and `llm_response` events through the existing streaming pipeline. No new event type needed — the standard events show the call happened, and the `LLMInteraction` type provides the semantic distinction. This avoids complicating the streaming dedup logic.
+- **Errors** — LLM errors and parse failures are logged via `slog.Warn` (same as the existing `logger.Warn("reflector failed", ...)` in the pseudocode). Extraction never blocks scoring, so errors don't produce `EventTypeError` timeline events — they're operational noise, not investigation failures.
+
+**Embedding API calls:**
+
+- Standard structured logging (`slog`) with model, dimensions, latency, and error status. No timeline events — too granular (multiple embedding calls per extraction, one per memory).
+- Embedding failures during memory creation are logged as warnings. The individual memory that failed to embed is skipped; other memories from the same Reflector pass still get stored. This is a best-effort pipeline.
+
+**Feedback Reflector** (async, triggered by human review): Same pattern — `LLMInteraction` record with `InteractionTypeMemoryExtraction` plus standard streaming timeline events on the original session's timeline.
 
 ### Memory Retrieval (Auto-Injection)
 
-At investigation start, the session executor retrieves the top N memories and passes them to the prompt builder.
+At investigation start, the session executor retrieves the top `max_inject` memories (default: 5) and passes them to the prompt builder.
+
+**Retrieval query shape:**
+
+```sql
+SELECT memory_id, content, category, valence, confidence,
+       1 - (embedding <=> $query_embedding) AS similarity
+FROM investigation_memories
+WHERE project = $project              -- hard security filter (always enforced)
+  AND deprecated = false
+ORDER BY
+  similarity
+  + CASE WHEN alert_type = $alert_type THEN 0.05 ELSE 0 END
+  + CASE WHEN chain_id  = $chain_id  THEN 0.03 ELSE 0 END
+  DESC
+LIMIT $max_inject;
+```
+
+`<=>` is pgvector's cosine distance operator. `alert_type` and `chain_id` provide minor soft boosts — same-alert-type and same-chain memories rank slightly higher, but cross-cutting knowledge always surfaces if semantically relevant. The `recall_past_investigations` tool uses the same query shape (with a different limit).
 
 **Changes to `ExecutionContext`:**
 
@@ -601,7 +660,7 @@ Responses include all memory fields except the raw embedding vector. List endpoi
 
 Two new sections on the session detail page:
 
-1. **"Injected Memories" card** — shown above the timeline, after the alert card. Lists the 3-5 memories that were auto-injected into this investigation's prompt. Only visible for sessions where memory was active.
+1. **"Injected Memories" card** — shown above the timeline, after the alert card. Lists the memories that were auto-injected into this investigation's prompt (up to `max_inject`, default 5). Only visible for sessions where memory was active.
 
 2. **"Extracted Learnings" card** — shown near the final analysis card (after scoring). Lists memories that the Reflector extracted from this investigation, with category/valence badges. Shows "No new learnings" if the Reflector found nothing novel.
 
@@ -640,9 +699,13 @@ To show "which memories were injected" on the session detail page and to exclude
 
 ```go
 // alertsession.go
+edge.To("memories", InvestigationMemory.Type).
+    Annotations(entsql.OnDelete(entsql.Cascade))
 edge.To("injected_memories", InvestigationMemory.Type)
 
-// investigationmemory.go
+// investigationmemory.go (both back-references)
+edge.From("source_session", AlertSession.Type).
+    Ref("memories").Field("source_session_id").Unique().Required()
 edge.From("injected_into_sessions", AlertSession.Type).Ref("injected_memories")
 ```
 
@@ -667,7 +730,8 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 5. Startup validation: verify configured dimensions match pgvector column size
 6. Reflector prompt builder + lenient JSON parser in `pkg/memory/reflector.go` and `pkg/memory/parser.go`
 7. Reflector LLM call in `ScoringExecutor` (after scoring controller returns) with "Memorizing..." progress status
-8. `ScoringResult` extended with memory extraction output
+8. `InteractionTypeMemoryExtraction` — new `LLMInteraction` type for the Reflector call (timeline events are automatic via streaming pipeline)
+9. `ScoringResult` extended with memory extraction output
 
 **Result:** Memories are extracted and stored after every scored investigation.
 
