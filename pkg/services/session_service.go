@@ -846,9 +846,9 @@ type dashboardRow struct {
 	CompletedStages       int     `sql:"completed_stages"`
 	HasParallel           int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
 	HasSubAgents          int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages       int    `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ActionsExecuted       *bool  `sql:"actions_executed"`
-	ChatMsgCount          int    `sql:"chat_msg_count"`
+	HasActionStages       int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ActionsExecuted       *bool   `sql:"actions_executed"`
+	ChatMsgCount          int     `sql:"chat_msg_count"`
 	FallbackCount         int     `sql:"fallback_count"`
 	MatchedInContent      int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
 	LatestScore           *int    `sql:"latest_score"`
