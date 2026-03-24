@@ -30,6 +30,7 @@ linters:
       - proto/         # Exclude generated protobuf code
       - github.com/    # Exclude vendored/copied code
       - temp/          # Exclude temporary/vendored code
+      - node_modules/  # Exclude npm dependencies
     rules:
       # Exclude some linters from running on test files
       - path: _test\.go

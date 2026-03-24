@@ -17,6 +17,8 @@ type stubCounter struct {
 	pendingErr      error
 	review          ReviewCounts
 	reviewErr       error
+	actionOutcomes  []ActionOutcomeRow
+	actionErr       error
 }
 
 func (s *stubCounter) ActiveCount(context.Context) (int, error) {
@@ -31,12 +33,20 @@ func (s *stubCounter) ReviewCountsByRating(context.Context) (ReviewCounts, error
 	return s.review, s.reviewErr
 }
 
+func (s *stubCounter) ActionOutcomesByAgent(context.Context) ([]ActionOutcomeRow, error) {
+	return s.actionOutcomes, s.actionErr
+}
+
 func TestGaugeCollector_Poll(t *testing.T) {
 	t.Run("sets gauges from counter", func(t *testing.T) {
 		sc := &stubCounter{
 			active:  3,
 			pending: 7,
 			review:  ReviewCounts{Accurate: 10, Partial: 5, Inaccurate: 2},
+			actionOutcomes: []ActionOutcomeRow{
+				{AgentName: "RemediationAgent", ActionsExecuted: true, Count: 8},
+				{AgentName: "RemediationAgent", ActionsExecuted: false, Count: 3},
+			},
 		}
 		gc := NewGaugeCollector(sc)
 
@@ -47,6 +57,8 @@ func TestGaugeCollector_Poll(t *testing.T) {
 		assert.Equal(t, float64(10), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("accurate")))
 		assert.Equal(t, float64(5), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("partially_accurate")))
 		assert.Equal(t, float64(2), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("inaccurate")))
+		assert.Equal(t, float64(8), testutil.ToFloat64(ActionStageOutcomesTotal.WithLabelValues("RemediationAgent", "yes")))
+		assert.Equal(t, float64(3), testutil.ToFloat64(ActionStageOutcomesTotal.WithLabelValues("RemediationAgent", "no")))
 	})
 
 	t.Run("active error leaves gauge unchanged", func(t *testing.T) {
@@ -79,6 +91,16 @@ func TestGaugeCollector_Poll(t *testing.T) {
 		gc.poll(t.Context())
 
 		assert.Equal(t, float64(88), testutil.ToFloat64(SessionsReviewedTotal.WithLabelValues("accurate")))
+	})
+
+	t.Run("action outcomes error leaves gauges unchanged", func(t *testing.T) {
+		ActionStageOutcomesTotal.WithLabelValues("TestAgent", "yes").Set(55)
+		sc := &stubCounter{active: 1, pending: 1, actionErr: fmt.Errorf("db down")}
+		gc := NewGaugeCollector(sc)
+
+		gc.poll(t.Context())
+
+		assert.Equal(t, float64(55), testutil.ToFloat64(ActionStageOutcomesTotal.WithLabelValues("TestAgent", "yes")))
 	})
 }
 

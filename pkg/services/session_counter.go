@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
 
@@ -62,4 +64,46 @@ func (c *SessionCounter) ReviewCountsByRating(ctx context.Context) (metrics.Revi
 		}
 	}
 	return rc, nil
+}
+
+// ActionOutcomesByAgent returns counts of action stages grouped by
+// agent name and whether actions were executed.
+func (c *SessionCounter) ActionOutcomesByAgent(ctx context.Context) ([]metrics.ActionOutcomeRow, error) {
+	stages, err := c.client.Stage.Query().
+		Where(
+			stage.StageTypeEQ(stage.StageTypeAction),
+			stage.ActionsExecutedNotNil(),
+		).
+		WithAgentExecutions(func(q *ent.AgentExecutionQuery) {
+			q.Where(agentexecution.ParentExecutionIDIsNil()).
+				Select(agentexecution.FieldAgentName)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("action outcomes query: %w", err)
+	}
+
+	type key struct {
+		agentName       string
+		actionsExecuted bool
+	}
+	counts := make(map[key]int)
+	for _, stg := range stages {
+		executed := stg.ActionsExecuted != nil && *stg.ActionsExecuted
+		agentName := stg.StageName
+		if execs := stg.Edges.AgentExecutions; len(execs) > 0 {
+			agentName = execs[0].AgentName
+		}
+		counts[key{agentName, executed}]++
+	}
+
+	rows := make([]metrics.ActionOutcomeRow, 0, len(counts))
+	for k, count := range counts {
+		rows = append(rows, metrics.ActionOutcomeRow{
+			AgentName:       k.agentName,
+			ActionsExecuted: k.actionsExecuted,
+			Count:           count,
+		})
+	}
+	return rows, nil
 }

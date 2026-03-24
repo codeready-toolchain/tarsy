@@ -17,11 +17,19 @@ type ReviewCounts struct {
 	Accurate, Partial, Inaccurate int
 }
 
+// ActionOutcomeRow holds one (agent_name, actions_executed) count.
+type ActionOutcomeRow struct {
+	AgentName       string
+	ActionsExecuted bool
+	Count           int
+}
+
 // SessionCounter abstracts the DB queries needed for gauge polling.
 type SessionCounter interface {
 	PendingCount(ctx context.Context) (int, error)
 	ActiveCount(ctx context.Context) (int, error)
 	ReviewCountsByRating(ctx context.Context) (ReviewCounts, error)
+	ActionOutcomesByAgent(ctx context.Context) ([]ActionOutcomeRow, error)
 }
 
 // GaugeCollector periodically polls the database to update global session
@@ -93,5 +101,18 @@ func (g *GaugeCollector) poll(ctx context.Context) {
 		SessionsReviewedTotal.WithLabelValues("accurate").Set(float64(rc.Accurate))
 		SessionsReviewedTotal.WithLabelValues("partially_accurate").Set(float64(rc.Partial))
 		SessionsReviewedTotal.WithLabelValues("inaccurate").Set(float64(rc.Inaccurate))
+	}
+
+	if rows, err := g.counter.ActionOutcomesByAgent(ctx); err != nil {
+		slog.Warn("metrics: failed to poll action outcome counts", "error", err)
+	} else {
+		ActionStageOutcomesTotal.Reset()
+		for _, row := range rows {
+			executed := "no"
+			if row.ActionsExecuted {
+				executed = "yes"
+			}
+			ActionStageOutcomesTotal.WithLabelValues(row.AgentName, executed).Set(float64(row.Count))
+		}
 	}
 }
